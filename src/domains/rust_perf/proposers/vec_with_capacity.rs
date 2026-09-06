@@ -1,8 +1,9 @@
 //! `vec-with-capacity` — `Vec::new()`/`vec![]` + push loop → `Vec::with_capacity(n)`.
 //!
 //! Pattern: a `let mut v = Vec::new();` (or `vec![]`) binding followed, in
-//! the same block, by a `for` loop that pushes to `v`. The capacity hint is
-//! inferred from the loop header:
+//! the same block OR ANY NESTED STATEMENT BLOCK of the remaining region
+//! (Plan 097 T3 — the gen-7 probe found both shapes silent), by a `for` loop
+//! that pushes to `v`. The capacity hint is inferred from the loop header:
 //!
 //! | Loop header | Capacity |
 //! |---|---|
@@ -13,7 +14,19 @@
 //!
 //! `while` loops + unknown iterator expressions are skipped (no capacity
 //! source). A shadowing re-`let` of `v` between binding and loop stops the
-//! scan — the pushes may belong to the shadow.
+//! scan — the pushes may belong to the shadow (per level, including inside
+//! the descended blocks).
+//!
+//! ## Nested-block coverage (Plan 097 T3)
+//!
+//! Two shapes the flat scan missed, both probe-measured silent at Plan 096:
+//! (A) the binding AND the loop both inside an `if`/match-arm block — the
+//! scan now recurses into nested statement blocks (nested `fn` items and
+//! closure bodies stay excluded); (B) the binding at fn level with the loop
+//! one block deeper — the later-scan descends block-bearing statements,
+//! first-hit in document order. Idents bound in nested blocks join the
+//! scope gate (out of scope at the init position; also declines a capacity
+//! source naming a param shadowed inside the descended block).
 //!
 //! ## Parse-only safety gates (Plan 005 T6.2 / Bench 019 G5)
 //!
@@ -76,15 +89,23 @@ pub(crate) fn collect_edits_opts(
 ) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     super::for_each_fn(file, |sig, block| {
-        collect_block_edits(source, sig, block, &mut edits, opts);
+        collect_block_edits(source, sig, block, block, &mut edits, opts);
     });
     edits
 }
 
+/// Scan one block for the `let v = Vec::new()` + push-loop pattern, then
+/// recurse into the block's nested statement blocks (Plan 097 T3, shape A:
+/// the collection itself created inside an `if`/match arm block). `root` is
+/// the owning fn's body block — the temp-binding collision domain stays
+/// fn-wide (conservative superset). Nested `fn` items are NOT recursed here
+/// (`for_each_fn` visits their bodies separately) and neither are closure
+/// bodies (their params are invisible to `usize_typed_params`).
 fn collect_block_edits(
     source: &str,
     sig: &Signature,
     block: &syn::Block,
+    root: &syn::Block,
     edits: &mut Vec<SourceEdit>,
     opts: ProposerOpts,
 ) {
@@ -94,11 +115,16 @@ fn collect_block_edits(
         let Stmt::Local(local) = stmt else { continue };
         let Some(ident) = fresh_vec_binding(local) else { continue };
         // Idents let-bound at this block level after the vec binding: none of
-        // them are in scope at the init position (scope gate).
-        let later_bound: Vec<String> = stmts[i + 1..]
+        // them are in scope at the init position (scope gate). Plan 097 T3:
+        // extended with every ident bound in the NESTED blocks of the
+        // remaining region — they are equally out of scope at the init
+        // position, and a nested re-bind of a usize param name must not
+        // vouch for the param's type.
+        let mut later_bound: Vec<String> = stmts[i + 1..]
             .iter()
             .filter_map(stmt_local_ident)
             .collect();
+        collect_nested_locals(&stmts[i + 1..], &mut later_bound);
         // P2 extension (2026-08-28): the immediately-following statement is
         // a for loop whose iterable is a BARE ARRAY LITERAL (the katgpt-rs
         // bench_120/test_120_toast shape — multi-line `[..]` with non-Copy
@@ -110,31 +136,71 @@ fn collect_block_edits(
         // reordering across side-effectful code, identical name resolution.
         if i + 1 < stmts.len() {
             if let Some((fl, arr)) = array_iter_push_loop(&stmts[i + 1], ident) {
-                if let Some(pair) = temp_binding_edits(source, local, arr, fl, block) {
+                if let Some(pair) = temp_binding_edits(source, local, arr, fl, root) {
                     edits.push(pair.0);
                     edits.push(pair.1);
                     continue;
                 }
             }
         }
-        for later in stmts.iter().skip(i + 1) {
-            // Stop at a shadowing re-bind of the same ident: pushes after it
-            // may belong to the shadow, not the binding we'd rewrite.
-            if stmt_binds_ident(later, ident) {
-                break;
-            }
-            if let Some(cap) = loop_capacity(later, ident) {
-                if let Some(replacement) =
-                    cap_replacement(source, &cap, &usize_params, &later_bound, opts)
-                {
-                    if let Some(init) = &local.init {
-                        edits.push(edit(&init.expr, replacement));
-                    }
+        // Plan 097 T3 (shape B): the pushing loop may live one or more
+        // blocks DEEPER than the binding (the flat scan saw only the
+        // block-bearing stmt and skipped over it). First-hit semantics
+        // preserved: the first capacity-bearing loop in document order
+        // wins, even if `cap_replacement` then declines it.
+        if let Some(cap) = find_loop_capacity(&stmts[i + 1..], ident) {
+            if let Some(replacement) =
+                cap_replacement(source, &cap, &usize_params, &later_bound, opts)
+            {
+                if let Some(init) = &local.init {
+                    edits.push(edit(&init.expr, replacement));
                 }
-                break;
             }
         }
     }
+    // Shape A: recurse into the nested statement blocks so locals created
+    // INSIDE them are scanned with this block's own gates.
+    for stmt in &block.stmts {
+        for nested in super::stmt_nested_blocks(stmt) {
+            collect_block_edits(source, sig, nested, root, edits, opts);
+        }
+    }
+}
+
+/// Every ident let-bound at any nesting depth under these statements
+/// (excluding the statements' own top level — the caller collects that
+/// directly). Feeds the scope gate for shape-B capacity sources.
+fn collect_nested_locals(stmts: &[Stmt], out: &mut Vec<String>) {
+    for stmt in stmts {
+        for nested in super::stmt_nested_blocks(stmt) {
+            for s in &nested.stmts {
+                if let Some(id) = stmt_local_ident(s) {
+                    out.push(id);
+                }
+            }
+            collect_nested_locals(&nested.stmts, out);
+        }
+    }
+}
+
+/// First capacity-bearing push loop for `ident` in document order,
+/// descending through block-bearing statements; a shadow re-bind of
+/// `ident` stops the scan at its level.
+fn find_loop_capacity(stmts: &[Stmt], ident: &syn::Ident) -> Option<Cap> {
+    for stmt in stmts {
+        if stmt_binds_ident(stmt, ident) {
+            return None;
+        }
+        if let Some(cap) = loop_capacity(stmt, ident) {
+            return Some(cap);
+        }
+        for nested in super::stmt_nested_blocks(stmt) {
+            if let Some(cap) = find_loop_capacity(&nested.stmts, ident) {
+                return Some(cap);
+            }
+        }
+    }
+    None
 }
 
 /// If `stmt` is a `for` loop whose iterable is a BARE array literal and
@@ -501,6 +567,10 @@ impl<'ast> Visit<'ast> for PushScan<'_> {
 mod tests {
     use super::super::propose_fix;
 
+    fn parses(out: &str) {
+        assert!(syn::parse_file(out).is_ok(), "output does not parse: {out}");
+    }
+
     fn squash(s: &str) -> String {
         s.split_whitespace().collect::<String>()
     }
@@ -578,6 +648,48 @@ mod tests {
         )
         .expect("pattern matched");
         assert!(squash(&out).contains("with_capacity"), "{out}");
+    }
+
+    /// Plan 097 T3 shape A — the binding AND the loop both inside an
+    /// if-block (the gen-7 probe found this silent: only fn-body top-level
+    /// statements were scanned).
+    #[test]
+    fn nested_block_local_and_loop_get_capacity() {
+        let out = propose_fix(
+            "vec-with-capacity",
+            "pub fn cap_a(items: &[u32]) -> usize {\n    let total = if !items.is_empty() {\n    \
+             let mut v = Vec::new();\n        for it in items.iter() { v.push(*it); }\n        v.len()\n    } else {\n        0\n    };\n    total\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains(&squash("Vec::with_capacity(items.len())")), "{out}");
+        parses(&out);
+    }
+
+    /// Plan 097 T3 shape B — the binding at fn level, the pushing loop one
+    /// block deeper (the flat later-scan saw only the if-statement).
+    #[test]
+    fn outer_local_nested_loop_gets_capacity() {
+        let out = propose_fix(
+            "vec-with-capacity",
+            "pub fn cap_b(items: &[u32]) -> usize {\n    let mut v = Vec::new();\n    if !items.is_empty() {\n    \
+             for it in items.iter() { v.push(*it); }\n    }\n    v.len()\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains(&squash("Vec::with_capacity(items.len())")), "{out}");
+        parses(&out);
+    }
+
+    /// Plan 097 T3 — a nested re-bind of a usize param name inside the
+    /// descended block must not vouch for the param's type: the capacity
+    /// source `n` may resolve to the shadow, so the rewrite declines.
+    #[test]
+    fn nested_param_shadow_declines_capacity() {
+        let out = propose_fix(
+            "vec-with-capacity",
+            "pub fn cap_s(n: usize, items: &[u32]) -> usize {\n    let mut v = Vec::new();\n    if n > 0 {\n    \
+             let n = n * 2;\n        for x in 0..n { v.push(x); }\n    }\n    v.len()\n}",
+        );
+        assert!(out.is_none(), "shadowed param capacity must decline: {out:?}");
     }
 
     #[test]

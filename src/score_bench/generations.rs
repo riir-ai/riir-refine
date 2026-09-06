@@ -3070,12 +3070,13 @@ pub fn pick(kind: Option<u8>) -> u8 {
 "#,
     ),
     (
-        // Created-chain subtype: the outer rewrite substitutes `names[i]` →
-        // `__elem`, and the CREATED bare-ident arg is what uninlined_format_
-        // args fires on (the original index expression cannot be inlined —
-        // the freeze fence measured exactly that). Label = the outer member;
-        // the chain depth is still 2 (the created edit refires on pass 2).
-        "gen7-d2-nrl-format",
+        "gen7-flat-nrl-format",
+        // Formerly gen7-d2-nrl-format, the CREATED-chain subtype: the bare
+        // `__elem` arg was what uninlined_format_args fired on. Plan 097
+        // T1's universal deref splice emits `*__elem` (a Unary, not a bare
+        // ident), so the created firing site no longer exists — the subtype
+        // is DISSOLVED and the fixture is retained as its regression pin
+        // (expected passes 1).
         r#"pub fn announce(names: &[String]) {
     for i in 0..names.len() {
         println!("{}", names[i]);
@@ -3124,6 +3125,22 @@ pub fn pick(kind: Option<u8>) -> u8 {
         Some(v) => Some(v * 1),
         None => None,
     }
+}
+"#,
+    ),
+    (
+        // Formerly gen7-ref-nrl-nrl (the collision-guard persist): Plan 097
+        // T2's fresh-binding uniquing lets level 2 heal with `__elem2` at
+        // pass 2 — the persist became a real 2-pass chain.
+        "gen7-d2-nrl-nrl",
+        r#"pub fn grid(outer: &[u32], inner: &[u32]) -> u32 {
+    let mut acc = 0;
+    for i in 0..outer.len() {
+        for j in 0..inner.len() {
+            acc += outer[i] * inner[j];
+        }
+    }
+    acc
 }
 "#,
     ),
@@ -3239,15 +3256,19 @@ pub fn pick(kind: Option<u8>) -> u8 {
     ),
     // ── refused (a guard refusal under overlap pressure) ──
     (
-        // Nested needless_range_loop: level 1's rewrite introduces `__elem`
-        // into level 2's body and level 2's collision guard then refuses —
-        // 1 pass, needless_range_loop persists.
-        "gen7-ref-nrl-nrl",
-        r#"pub fn grid(outer: &[u32], inner: &[u32]) -> u32 {
+        // Formerly gen7-ref-nrl-nrl: the collision-guard persist Plan 097
+        // T2 FIXED (level 2 now heals with `__elem2` — it moved to the
+        // chain territory as gen7-d2-nrl-nrl). The refused territory keeps
+        // a member through the place-write refusal: the inner loop writes
+        // through its slot (`inner[j] += 1`), the place-write guard refuses
+        // REGARDLESS of uniquing — 1 pass, needless_range_loop persists.
+        "gen7-ref-nrl-write",
+        r#"pub fn tally(outer: &[u32], inner: &mut [u32]) -> u32 {
     let mut acc = 0;
     for i in 0..outer.len() {
         for j in 0..inner.len() {
-            acc += outer[i] * inner[j];
+            acc += outer[i];
+            inner[j] += 1;
         }
     }
     acc
@@ -3261,12 +3282,13 @@ pub fn pick(kind: Option<u8>) -> u8 {
 const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
     ("gen7-flat-nrl-identity", &["needless_range_loop", "identity_op"]),
     ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),
+    ("gen7-flat-nrl-format", &["needless_range_loop"]),
     ("gen7-d2-nrl-identity", &["needless_range_loop", "identity_op"]),
-    ("gen7-d2-nrl-format", &["needless_range_loop"]),
     ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),
     ("gen7-d2-nrl-dblparen", &["needless_range_loop", "double_parens"]),
     ("gen7-d2-smx-identity", &["single_match_else", "identity_op"]),
     ("gen7-d2-mm-identity", &["manual_map", "identity_op"]),
+    ("gen7-d2-nrl-nrl", &["needless_range_loop"]),
     // The distance-sq member is a rust_perf rule — invisible to the clippy
     // oracle (Plan 096 §4).
     ("gen7-d2-sme-distsq", &["single_match_else"]),
@@ -3275,7 +3297,7 @@ const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
     ("gen7-d4-cif5", &["collapsible_if"]),
     ("gen7-cap-cif6", &["collapsible_if"]),
     ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]),
-    ("gen7-ref-nrl-nrl", &["needless_range_loop"]),
+    ("gen7-ref-nrl-write", &["needless_range_loop"]),
 ];
 
 /// The generation-7 spec ladder: one spec per authored chain atom, k = the
@@ -3356,30 +3378,28 @@ pub fn v7_expected_k(spec_id: &str) -> usize {
 pub static EXCLUDED_IDS_V7: &[&str] = &[];
 
 /// The generation-7 frozen labels (spec id → vocabulary lints the BENCH
-/// instrument fired at freeze time) — landed by the freeze e2e.
-// Landed by tests/generation_v7_freeze.rs --ignored (2026-09-06): 15/15
-// verified, 0 exclusions, 0 relabels; chain 10 / capped 2 / flat 2 /
-// refused 1. Freeze cost 2.0 s (15 single-snippet oracle runs, release).
-// d2-nrl-format's label is the CREATED-chain subtype: the outer rewrite
-// manufactures uninlined_format_args's firing site (an index expression
-// cannot be inlined; the created bare ident can), so the pre-heal label is
-// the outer member only.
+/// instrument fired at freeze time) — landed by the freeze e2e, RE-LANDED
+/// by Plan 097 T5 (the P11 proposer fixes moved two ids: the collision
+/// persist became chain d2, the created-chain subtype dissolved to flat —
+/// see the atom comments). 16 specs, 0 exclusions; chain 10 / flat 3 /
+/// capped 2 / refused 1.
 pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[
     ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]),  // depth=4
     ("gen7-cap-cif6", &["collapsible_if"]),  // depth=4
     ("gen7-d2-cif3", &["collapsible_if"]),  // depth=2
     ("gen7-d2-mm-identity", &["identity_op", "manual_map"]),  // depth=2
     ("gen7-d2-nrl-dblparen", &["double_parens", "needless_range_loop"]),  // depth=2
-    ("gen7-d2-nrl-format", &["needless_range_loop"]),  // depth=2
     ("gen7-d2-nrl-identity", &["identity_op", "needless_range_loop"]),  // depth=2
+    ("gen7-d2-nrl-nrl", &["needless_range_loop"]),  // depth=2
     ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),  // depth=2
     ("gen7-d2-sme-distsq", &["single_match_else"]),  // depth=2
     ("gen7-d2-smx-identity", &["identity_op", "single_match_else"]),  // depth=2
     ("gen7-d3-cif4", &["collapsible_if"]),  // depth=3
     ("gen7-d4-cif5", &["collapsible_if"]),  // depth=4
     ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),  // depth=1
+    ("gen7-flat-nrl-format", &["needless_range_loop"]),  // depth=1
     ("gen7-flat-nrl-identity", &["identity_op", "needless_range_loop"]),  // depth=1
-    ("gen7-ref-nrl-nrl", &["needless_range_loop"]),  // depth=1
+    ("gen7-ref-nrl-write", &["needless_range_loop"]),  // depth=1
 ];
 
 /// Freeze readiness for generation 7 — Err until the freeze e2e lands the
@@ -4139,10 +4159,10 @@ mod tests {
                     if *id == "gen7-cap-cif5-identity" {
                         assert!(healed.contains("* 1"), "cap-cif5-identity lost its persist shape");
                     }
-                    if *id == "gen7-ref-nrl-nrl" {
+                    if *id == "gen7-ref-nrl-write" {
                         assert!(
-                            healed.contains("0..inner.len()") && healed.contains("inner[j]"),
-                            "ref-nrl-nrl lost its refusal shape"
+                            healed.contains("0..inner.len()") && healed.contains("inner[j] += 1"),
+                            "ref-nrl-write lost its refusal shape"
                         );
                     }
                     if *id == "gen7-cap-cif6" {

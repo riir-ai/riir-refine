@@ -5,8 +5,27 @@
 //! replacement is the loop's original text with three substitution kinds
 //! spliced in — the loop pat (`i` → the fresh binding), the iterable
 //! (`0..v.len()` → the collection, by-reference form chosen by param
-//! resolution), and each exact `v[i]` index expression (→ the fresh
-//! binding). All replacement fragments are ORIGINAL source text.
+//! resolution), and each exact `v[i]` index expression (→ `*__elem`, the
+//! universal deref splice, Plan 097 T1). All replacement fragments are
+//! ORIGINAL source text.
+//!
+//! ## The slot splice (Plan 097 T1 — the P11 comparison-slot class)
+//!
+//! The reference binding `__elem: &T` fails E0308 in more positions than
+//! one might expect — measured (clippy 1.98.1 probe): comparison operands
+//! (`if __elem > 2`), typed lets (`let x: u32 = __elem`), AND value-arg
+//! method receivers (`__elem.max(3)` — `&T: Ord` resolves on the reference
+//! and the value argument mismatches). The universal splice `*__elem` is
+//! DESUGAR-IDENTICAL to `v[i]` (`*Index::index(&v, i)`) in every rvalue
+//! context, so it is correct wherever the original compiled. Parenthesized
+//! `(*__elem)` ONLY where the slot is the direct base of a postfix
+//! expression (method receiver, field base, call func — `*` binds looser
+//! than `.`); everywhere else parenless (bare parens trigger rustc's
+//! `unused_parens` at assigned-value positions, probe-measured). Known
+//! remaining classes, documented-not-fixed (the `--verify` compile gate
+//! auto-reverts them): `&mut`-method receivers through the slot on a shared
+//! iteration (undecidable parse-only) and `assert_eq!(v[i], 2)` (the macro
+//! takes references).
 //!
 //! ## Atomicity (Issue 032)
 //!
@@ -38,9 +57,10 @@
 //!   `total > exact` and blocks the rewrite);
 //! - `complex` — any `Expr::Index` whose index mentions the ident without
 //!   being the bare ident itself (`v[i + 1]`, `v[v[i]]`);
-//! - `blocked` — an exact slot is written through (`v[i] = x`, `v[i] += x`)
-//!   or has its address taken (`&v[i]`, `&mut v[i]`): the element binding
-//!   is a shared reference and cannot stand in for a place expression.
+//! - `blocked` — an exact slot is written through (`v[i] = x`, `v[i] += x`,
+//!   including through a field/index place chain — `v[i].field = x`) or has
+//!   its address taken (`&v[i]`, `&mut v[i]`): the element binding is a
+//!   shared reference and cannot stand in for a place expression.
 //!
 //! The rewrite fires iff `exact >= 1 && total == exact && !complex && !blocked`.
 //!
@@ -64,9 +84,19 @@
 //!   groups); a standalone `i` ident token ANYWHERE refuses. Conservative —
 //!   opaque stays refused, it just gets SEEN now.
 //!
-//! The `__elem` collision check (`body_mentions_prefix`) walks macro tokens
-//! too — a `{__elem_x}` capture or `__elem`-prefixed token inside any macro
-//! would be shadowed by the fresh binding (pre-existing hole, same class).
+//! ## Fresh-binding uniquing (Plan 097 T2 — the P11 nested-loop persist)
+//!
+//! The old binary guard refused whenever the body mentioned ANY
+//! `__elem`-prefixed identifier — which made a nested `needless_range_loop` a
+//! hard persist: level 1's rewrite introduces `__elem`, and level 2 (whose
+//! body references it) refused forever. The guard is now a TAKEN-SET
+//! enumeration over the family `__elem` | `__elem<digits>` (path idents,
+//! pattern bindings, macro token idents) plus the format-family template
+//! literals (an implicit `{__elem}` capture re-binds to our fresh name —
+//! each candidate is checked against the template words). The rewrite picks
+//! the smallest free suffix, so level 2 becomes `__elem2` and heals at the
+//! next fixpoint pass. Nonfamily prefix mentions (`__elem_x`) are distinct
+//! identifiers and no longer block (the old guard was over-broad).
 //!
 //! ## Iterable form (param resolution)
 //!
@@ -77,14 +107,20 @@
 
 use super::uninlined_format_args::post_template_expr_args;
 use super::{apply_edits, edit, for_each_fn, src, SourceEdit};
+use std::collections::BTreeSet;
 use proc_macro2::TokenTree;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprForLoop, ExprLit, ExprMacro, ExprRange, File, Lit, Signature};
 
-/// Fresh binding introduced by the rewrite. The loop is skipped entirely if
-/// the body already mentions any identifier with this prefix.
+/// Fresh binding introduced by the rewrite. The binding NAME is uniqued
+/// against the family `__elem` | `__elem<digits>` (Plan 097 T2): a nested
+/// loop whose body already mentions an outer rewrite's binding picks the
+/// next free suffix instead of refusing.
 const FRESH_PREFIX: &str = "__elem";
+/// Uniquing bound: past this many candidate suffixes something is deeply
+/// wrong — refuse rather than emit an opaque name.
+const FRESH_NAME_LIMIT: u32 = 64;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -137,10 +173,10 @@ impl Collector<'_, '_> {
             return None;
         }
 
-        // Fresh binding must not collide with anything the body mentions.
-        if body_mentions_prefix(&fl.body) {
-            return None;
-        }
+        // Fresh binding: uniqued against the family, not a binary refuse —
+        // the nested-loop case (level 1's `__elem` visible in level 2's body)
+        // now picks `__elem2` instead of persisting (Plan 097 T2).
+        let fresh = fresh_binding_name(&fl.body)?;
 
         // Iterable form: resolve the collection against the fn params —
         // a `&`-typed param iterates bare, an owned param by reference.
@@ -162,11 +198,21 @@ impl Collector<'_, '_> {
         let span = fl.span().byte_range();
         let loop_text = self.source.get(span.start..span.end)?;
         let mut subs = vec![
-            edit(&fl.pat, FRESH_PREFIX.to_string()),
+            edit(&fl.pat, fresh.clone()),
             edit(&fl.expr, iter_text),
         ];
         for (start, end) in usage.exact {
-            subs.push(SourceEdit { start, end, replacement: FRESH_PREFIX.to_string() });
+            // Universal deref splice (Plan 097 T1): `*__elem` is
+            // desugar-identical to `v[i]` in every rvalue context (the bare
+            // reference binding fails E0308 on comparison operands, typed
+            // lets, and value-arg method receivers). Parens only where the
+            // slot is a postfix base — `*` binds looser than `.`.
+            let replacement = if usage.paren.contains(&(start, end)) {
+                format!("(*{fresh})")
+            } else {
+                format!("*{fresh}")
+            };
+            subs.push(SourceEdit { start, end, replacement });
         }
         let replacement = apply_edits(
             loop_text,
@@ -224,12 +270,18 @@ struct IndexUsage {
     /// not AST refs: slots inside format-family macro args live in locally
     /// parsed `Expr`s (different lifetime than the loop body).
     exact: Vec<(usize, usize)>,
+    /// Slot ranges that are the direct base of a postfix expression (method
+    /// receiver, field base, call func) — those need the parenthesized
+    /// `(*__elem)` form; every other slot takes parenless `*__elem` (Plan
+    /// 097 T1).
+    paren: BTreeSet<(usize, usize)>,
     /// Every bare `Expr::Path` that IS the loop ident in the body.
     total: usize,
     /// An index expression mentions the ident without being the bare ident.
     complex: bool,
-    /// An exact slot is written through, has its address taken, or a macro
-    /// mentions the ident somewhere descent cannot account for.
+    /// An exact slot is written through (directly or through a field/index
+    /// place chain), has its address taken, or a macro mentions the ident
+    /// somewhere descent cannot account for.
     blocked: bool,
 }
 
@@ -247,7 +299,13 @@ fn analyze_index_usage(
     let mut scan = Scan {
         collection,
         idx,
-        usage: IndexUsage { exact: Vec::new(), total: 0, complex: false, blocked: false },
+        usage: IndexUsage {
+            exact: Vec::new(),
+            paren: BTreeSet::new(),
+            total: 0,
+            complex: false,
+            blocked: false,
+        },
     };
     scan.visit_block(body);
     scan.usage
@@ -292,27 +350,61 @@ impl<'ast> Visit<'ast> for Scan<'_> {
 
     // `v[i] = x` — the slot is a place expression; the element binding
     // is a shared reference and cannot be assigned through.
+    // Plan 097 T1: the guard extends to place CHAINS — `v[i].field = x`
+    // (and `v[i][j] = x`) write through the slot just the same.
     fn visit_expr_assign(&mut self, e: &'ast syn::ExprAssign) {
         syn::visit::visit_expr_assign(self, e);
-        if self.is_exact_slot(&e.left) {
+        if self.place_chain_contains_slot(&e.left) {
             self.usage.blocked = true;
         }
     }
 
-    // `v[i] += x` etc. — compound assigns are place writes too.
+    // `v[i] += x` etc. — compound assigns are place writes too (chains
+    // included).
     fn visit_expr_binary(&mut self, e: &'ast syn::ExprBinary) {
         syn::visit::visit_expr_binary(self, e);
-        if is_assign_op(&e.op) && self.is_exact_slot(&e.left) {
+        if is_assign_op(&e.op) && self.place_chain_contains_slot(&e.left) {
             self.usage.blocked = true;
         }
+        // Comparison operands are not place writes — no marking needed
+        // under the universal deref (the splice is type-identical to the
+        // index everywhere).
     }
 
     // `&v[i]` / `&mut v[i]` — address-of through the slot changes the
-    // referent (`&T` → `&&T`).
+    // referent (`&T` → `&&T` under the deref splice it would become
+    // `&*__elem` = the same `&&T` shape change).
     fn visit_expr_reference(&mut self, e: &'ast syn::ExprReference) {
         syn::visit::visit_expr_reference(self, e);
         if self.is_exact_slot(&e.expr) {
             self.usage.blocked = true;
+        }
+    }
+
+    // Postfix bases need the parenthesized splice: `v[i].len()` →
+    // `(*__elem).len()` (bare `*__elem.len()` would deref the RESULT).
+    fn visit_expr_method_call(&mut self, e: &'ast syn::ExprMethodCall) {
+        syn::visit::visit_expr_method_call(self, e);
+        if self.is_exact_slot(&e.receiver) {
+            let r = e.receiver.span().byte_range();
+            self.usage.paren.insert((r.start, r.end));
+        }
+    }
+
+    fn visit_expr_field(&mut self, e: &'ast syn::ExprField) {
+        syn::visit::visit_expr_field(self, e);
+        if self.is_exact_slot(&e.base) {
+            let r = e.base.span().byte_range();
+            self.usage.paren.insert((r.start, r.end));
+        }
+    }
+
+    // `v[i](args)` — an element holding a callable: same postfix rule.
+    fn visit_expr_call(&mut self, e: &'ast syn::ExprCall) {
+        syn::visit::visit_expr_call(self, e);
+        if self.is_exact_slot(&e.func) {
+            let r = e.func.span().byte_range();
+            self.usage.paren.insert((r.start, r.end));
         }
     }
 
@@ -339,6 +431,24 @@ impl Scan<'_> {
         matches!(e, Expr::Index(ix)
             if matches!(&*ix.index, Expr::Path(p) if p.path.is_ident(self.idx))
                 && matches!(&*ix.expr, Expr::Path(p) if paths_equal(p, self.collection)))
+    }
+
+    /// Does this PLACE chain (`v[i].field`, `v[i][j]`, direct `v[i]`)
+    /// contain an exact slot anywhere along the base chain? Place writes
+    /// through the slot must refuse — the deref splice is an rvalue.
+    fn place_chain_contains_slot(&self, e: &Expr) -> bool {
+        let mut cur = e;
+        loop {
+            if self.is_exact_slot(cur) {
+                return true;
+            }
+            match cur {
+                Expr::Field(f) => cur = &f.base,
+                Expr::Index(ix) => cur = &ix.expr,
+                Expr::Paren(p) => cur = &p.expr,
+                _ => return false,
+            }
+        }
     }
 
     /// `false` = this macro mentions the idx somewhere substitution cannot
@@ -469,51 +579,123 @@ fn expr_mentions_ident(e: &Expr, idx: &syn::Ident) -> bool {
     m.found
 }
 
-/// Does the body mention any identifier starting with the fresh prefix —
-/// including inside macro token streams (a `{__elem_x}` capture or
-/// `__elem`-prefixed token would be shadowed by the fresh binding)?
-fn body_mentions_prefix(body: &syn::Block) -> bool {
-    struct P<'b> {
-        prefix: &'b str,
-        found: bool,
+/// Pick the fresh binding name for the rewrite: the smallest name in the
+/// family `__elem` | `__elem<2..>` not taken by the body (Plan 097 T2).
+/// "Taken" = a path ident or macro token ident in the family, or the exact
+/// candidate word inside a format-family template literal (an implicit
+/// `{__elem}` / `{__elem2}` capture would silently re-bind to our fresh
+/// binding — the per-candidate template check closes that hole). Returns
+/// None past the uniquing bound.
+fn fresh_binding_name(body: &syn::Block) -> Option<String> {
+    let (taken, templates) = body_family_names(body);
+    for k in 1..=FRESH_NAME_LIMIT {
+        let name = fresh_name_for(k);
+        if !taken.contains(&k) && !templates.iter().any(|t| str_mentions_word(t, &name)) {
+            return Some(name);
+        }
     }
-    impl<'ast> Visit<'ast> for P<'_> {
+    None
+}
+
+fn fresh_name_for(k: u32) -> String {
+    if k == 1 {
+        FRESH_PREFIX.to_string()
+    } else {
+        format!("{FRESH_PREFIX}{k}")
+    }
+}
+
+/// The body's occupied family suffix indices + the format-family template
+/// texts (for the per-candidate implicit-capture check).
+type BodyNames = (BTreeSet<u32>, Vec<String>);
+
+fn body_family_names(body: &syn::Block) -> BodyNames {
+    struct P {
+        taken: BTreeSet<u32>,
+        templates: Vec<String>,
+    }
+    impl<'ast> Visit<'ast> for P {
+        fn visit_pat(&mut self, p: &'ast syn::Pat) {
+            if let syn::Pat::Ident(pi) = p {
+                if let Some(idx) = family_index(Some(&pi.ident)) {
+                    self.taken.insert(idx);
+                }
+            }
+            syn::visit::visit_pat(self, p);
+        }
+
         fn visit_expr_path(&mut self, p: &'ast syn::ExprPath) {
-            if p.path.get_ident().is_some_and(|id| id.to_string().starts_with(self.prefix)) {
-                self.found = true;
+            if let Some(idx) = family_index(p.path.get_ident()) {
+                self.taken.insert(idx);
             }
             syn::visit::visit_expr_path(self, p);
         }
 
         fn visit_expr_macro(&mut self, m: &'ast ExprMacro) {
-            if tokens_mention_prefix(m.mac.tokens.clone().into_iter(), self.prefix) {
-                self.found = true;
+            collect_token_indices(m.mac.tokens.clone().into_iter(), &mut self.taken);
+            if let Some(t) = template_literal(&m.mac) {
+                self.templates.push(t);
+            }
+            // Descend into the macro's parsed args — a nested macro inside
+            // an arg carries its own template.
+            if let Some(args) = post_template_expr_args(&m.mac) {
+                for arg in args {
+                    if let Ok(expr) = syn::parse2::<Expr>(arg.toks.iter().cloned().collect()) {
+                        self.visit_expr(&expr);
+                    }
+                }
             }
         }
 
         fn visit_stmt_macro(&mut self, m: &'ast syn::StmtMacro) {
-            if tokens_mention_prefix(m.mac.tokens.clone().into_iter(), self.prefix) {
-                self.found = true;
+            collect_token_indices(m.mac.tokens.clone().into_iter(), &mut self.taken);
+            if let Some(t) = template_literal(&m.mac) {
+                self.templates.push(t);
+            }
+            if let Some(args) = post_template_expr_args(&m.mac) {
+                for arg in args {
+                    if let Ok(expr) = syn::parse2::<Expr>(arg.toks.iter().cloned().collect()) {
+                        self.visit_expr(&expr);
+                    }
+                }
             }
         }
     }
-    let mut p = P { prefix: FRESH_PREFIX, found: false };
+    let mut p = P { taken: BTreeSet::new(), templates: Vec::new() };
     p.visit_block(body);
-    p.found
+    (p.taken, p.templates)
 }
 
-/// Does the token stream contain any ident starting with `prefix`?
-fn tokens_mention_prefix(toks: impl Iterator<Item = TokenTree>, prefix: &str) -> bool {
+/// `__elem` → 1, `__elem2` → 2; other identifiers (including
+/// `__elem_x`-style nonfamily prefixes) → None — they are distinct
+/// identifiers and cannot be captured by the rewrite.
+fn family_index(ident: Option<&syn::Ident>) -> Option<u32> {
+    let id = ident?;
+    let s = id.to_string();
+    let suffix = s.strip_prefix(FRESH_PREFIX)?;
+    if suffix.is_empty() {
+        return Some(1);
+    }
+    if !suffix.bytes().all(|b| b.is_ascii_digit()) || suffix.len() > 9 {
+        return None;
+    }
+    suffix.parse::<u32>().ok().filter(|n| *n >= 2)
+}
+
+fn collect_token_indices(toks: impl Iterator<Item = TokenTree>, taken: &mut BTreeSet<u32>) {
     for t in toks {
         match t {
-            TokenTree::Ident(id) if id.to_string().starts_with(prefix) => return true,
-            TokenTree::Group(g) if tokens_mention_prefix(g.stream().into_iter(), prefix) => {
-                return true;
+            TokenTree::Ident(id) => {
+                if let Some(idx) = family_index(Some(&id)) {
+                    taken.insert(idx);
+                }
+            }
+            TokenTree::Group(g) => {
+                collect_token_indices(g.stream().into_iter(), taken);
             }
             _ => {}
         }
     }
-    false
 }
 
 fn paths_equal(a: &syn::ExprPath, b: &syn::ExprPath) -> bool {
@@ -536,7 +718,7 @@ mod tests {
         let input = "fn double_all(v: &Vec<i32>) -> Vec<i32> {\n    let mut out = Vec::new();\n    for i in 0..v.len() { out.push(v[i] * 2); }\n    out\n}";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(
-            out.contains("for __elem in v { out.push(__elem * 2); }"),
+            out.contains("for __elem in v { out.push(*__elem * 2); }"),
             "ref-param iter loop not produced: {out}"
         );
         assert!(!out.contains("0.."), "range not removed: {out}");
@@ -546,7 +728,7 @@ mod tests {
     fn converts_range_loop_owned_param_ref_iter() {
         let input = "fn sum(v: Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in &v { s += __elem; }"), "{out}");
+        assert!(out.contains("for __elem in &v { s += *__elem; }"), "{out}");
     }
 
     #[test]
@@ -554,6 +736,7 @@ mod tests {
         let input = "fn sum(v: &[i32]) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("for __elem in v {"), "{out}");
+        assert!(out.contains("s += *__elem;"), "{out}");
     }
 
     #[test]
@@ -636,15 +819,71 @@ mod tests {
         let input = "fn go(v: &[i32], minimum: i32) -> i32 { let mut s = 0; for i in 0..v.len() { if v[i] > minimum { s += v[i]; } } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("for __elem in v {"), "{out}");
-        assert!(out.contains("if __elem > minimum"), "{out}");
-        assert!(out.contains("s += __elem"), "{out}");
+        assert!(out.contains("if *__elem > minimum"), "{out}");
+        assert!(out.contains("s += *__elem"), "{out}");
     }
 
+    /// Plan 097 T1 — the P11 headline class: the comparison slot now emits
+    /// the deref splice (`if *__elem > 2`), which COMPILES — the bare
+    /// reference binding was E0308 here (`&u32` vs the integer literal).
     #[test]
-    fn fresh_prefix_collision_skips() {
+    fn comparison_slot_splices_deref() {
+        let input = "pub fn measure(hits: &[u32]) -> u32 { let mut n = 0; for i in 0..hits.len() { if hits[i] > 2 { n += hits[i]; } } n }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("if *__elem > 2"), "{out}");
+        assert!(out.contains("n += *__elem;"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// Plan 097 T1 — typed-let slots splice parenless (the deref binds
+    /// tighter than the type ascription; probe: zero clippy lints) while a
+    /// postfix receiver keeps required parens (`*` binds looser than `.`).
+    #[test]
+    fn typed_let_parenless_postfix_parenthesized() {
+        let input = "pub fn stats(v: &[u32]) -> u32 { let mut t = 0u32; for i in 0..v.len() { let x: u32 = v[i]; t += v[i].max(x); } t }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("let x: u32 = *__elem;"), "{out}");
+        assert!(out.contains("(*__elem).max(x)"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// Plan 097 T2 — a body that already binds `__elem` no longer refuses:
+    /// the rewrite picks the next free family suffix (`__elem2`) and the
+    /// pre-existing binding keeps its meaning.
+    #[test]
+    fn fresh_prefix_collision_uniques_fresh_name() {
         let input = "fn go(v: &[i32]) -> i32 { let mut s = 0; let __elem = 1; for i in 0..v.len() { s += v[i] + __elem; } s }";
-        let out = propose_fix("needless_range_loop", input);
-        assert!(out.is_none(), "fresh-name collision must skip: {out:?}");
+        let out = propose_fix("needless_range_loop", input).expect("uniqued rewrite");
+        assert!(out.contains("for __elem2 in v"), "{out}");
+        assert!(out.contains("s += *__elem2 + __elem;"), "{out}");
+    }
+
+    /// Plan 097 T2 — the nested-loop persist: level 1 introduces `__elem`,
+    /// level 2's body references it; level 2 now heals with `__elem2` at the
+    /// next fixpoint pass instead of persisting (the former gen7-ref-nrl-nrl
+    /// shape, now gen7-d2-nrl-nrl).
+    #[test]
+    fn nested_range_loop_uniques_fresh_binding() {
+        let input = "pub fn grid(outer: &[u32], inner: &[u32]) -> u32 { let mut acc = 0; for i in 0..outer.len() { for j in 0..inner.len() { acc += outer[i] * inner[j]; } } acc }";
+        let healed = fixpoint_over(&["needless_range_loop"], input);
+        assert!(healed.contains("for __elem in outer"), "{healed}");
+        assert!(healed.contains("for __elem2 in inner"), "{healed}");
+        assert!(healed.contains("acc += *__elem * *__elem2;"), "{healed}");
+        assert!(!healed.contains("outer["), "{healed}");
+        assert!(!healed.contains("inner["), "{healed}");
+        syn::parse_file(&healed).expect("re-parses");
+    }
+
+    /// Plan 097 T2 — a `{__elem}` implicit capture in a template would
+    /// re-bind to the fresh name: the candidate is checked against the
+    /// template words and the rewrite bumps to `__elem2`.
+    #[test]
+    fn template_implicit_capture_bumps_name() {
+        let input = "pub fn go(v: &[i32]) { for __elem in v { for i in 0..v.len() { println!(\"{__elem}: {}\", v[i]); } } }";
+        let healed = fixpoint_over(&["needless_range_loop"], input);
+        assert!(healed.contains("for __elem2 in v"), "{healed}");
+        assert!(healed.contains("println!(\"{__elem}: {}\", *__elem2)"), "{healed}");
+        syn::parse_file(&healed).expect("re-parses");
     }
 
     #[test]
@@ -660,7 +899,17 @@ mod tests {
     fn impl_method_param_resolves() {
         let input = "struct S;\nimpl S {\n    fn total(&self, v: &Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }\n}";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in v { s += __elem; }"), "{out}");
+        assert!(out.contains("for __elem in v { s += *__elem; }"), "{out}");
+    }
+
+    /// Plan 097 T1 — a place write through a FIELD chain on the slot
+    /// (`v[i].field = x`) must refuse: the deref splice is an rvalue, and
+    /// `(*__elem).field = x` is E0594.
+    #[test]
+    fn slot_field_write_refuses() {
+        let input = "struct P { f: u32 }\nfn go(v: Vec<P>) { for i in 0..v.len() { v[i].f = 1; } }";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "slot field write must refuse: {out:?}");
     }
 
     // ── Issue 032: same-pass composition must not half-apply the rewrite ──
@@ -682,7 +931,7 @@ mod tests {
             "for i in 0..hits.len() {\n        total += hits[i];\n    }",
             "the one edit must span the whole loop");
         assert_eq!(e.replacement,
-            "for __elem in hits {\n        total += __elem;\n    }",
+            "for __elem in hits {\n        total += *__elem;\n    }",
             "replacement carries header + slot rewrites together");
     }
 
@@ -721,7 +970,7 @@ mod tests {
         let input = "pub fn describe_all(names: &[String]) -> Vec<String> {\n    let mut out = Vec::new();\n    for i in 0..names.len() {\n        out.push(format!(\"{}\", names[i]));\n    }\n    out\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
         assert!(out.contains("for __elem in names"), "header rewritten: {out}");
-        assert!(out.contains("format!(\"{}\", __elem)"), "macro slot substituted: {out}");
+        assert!(out.contains("format!(\"{}\", *__elem)"), "macro slot substituted: {out}");
         assert!(!out.contains("names["), "dangling index survived: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -731,7 +980,7 @@ mod tests {
         // Statement-position macro (StmtMacro) with the slot inside.
         let input = "pub fn dump(v: &[u32]) {\n    for i in 0..v.len() {\n        println!(\"{}\", v[i]);\n    }\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
-        assert!(out.contains("println!(\"{}\", __elem)"), "slot substituted: {out}");
+        assert!(out.contains("println!(\"{}\", *__elem)"), "slot substituted: {out}");
         assert!(!out.contains("v["), "{out}");
     }
 
@@ -763,12 +1012,14 @@ mod tests {
     }
 
     #[test]
-    fn fresh_prefix_collision_inside_macro_refuses() {
-        // The `{__elem_x}` capture would be shadowed by the fresh binding —
-        // the collision check now walks macro tokens too.
+    fn nonfamily_prefix_mention_no_longer_blocks() {
+        // `__elem_x` is a DISTINCT identifier (not in the `__elem<digits>`
+        // family) — the old binary guard refused on any prefix mention; the
+        // enumeration ignores it and the rewrite heals.
         let input = "pub fn show(names: &[String]) -> String {\n    let mut out = String::new();\n    for i in 0..names.len() {\n        out.push_str(&format!(\"{}\", { let __elem_x = names[i]; __elem_x }));\n    }\n    out\n}\n";
-        let out = propose_fix("needless_range_loop", input);
-        assert!(out.is_none(), "__elem collision inside macro must refuse: {out:?}");
+        let out = propose_fix("needless_range_loop", input).expect("nonfamily mention must not block");
+        assert!(out.contains("let __elem_x = *__elem; __elem_x"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     /// The production fixpoint shape from `src/bin/heal.rs` / `score_bench`'s

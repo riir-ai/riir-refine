@@ -38,11 +38,22 @@
 //!
 //! Out of scope: turbofish/qualified `HashMap::new()` forms (the
 //! span-preserving splice would have to rewrite the path — kept
-//! conservative), `HashMap::default()`, and a `for` living as a non-
-//! first mention below nested blocks.
+//! conservative) and `HashMap::default()`.
+//!
+//! ## Nested-block first mention (Plan 097 T4)
+//!
+//! The gen-7 probe found the shape where the loop lives one block DEEPER
+//! than the map binding silent: the first same-block mention of VAR was the
+//! block-bearing statement (the `if` itself), and the first-mention gate
+//! broke. The first-mention walk now descends into block-bearing
+//! statements with the same per-level gates (re-bind stops, first mention
+//! must be the loop), and collects every pre-loop local bind across levels
+//! for the use-before-decl gate — a root bound anywhere along the walked
+//! region still refuses (the katgpt-rs bomber_17 E0425 class, one level
+//! deeper).
 
 use syn::visit::Visit;
-use syn::{Block, Expr, File, Local, Pat, Path, Stmt};
+use syn::{Block, Expr, ExprForLoop, File, Local, Pat, Path, Stmt};
 
 use super::{edit, span_range, src, SourceEdit};
 
@@ -72,68 +83,111 @@ impl BlockScan<'_> {
             let Some(var) = fresh_hashmap_binding(local) else { continue };
             let Some(init) = &local.init else { continue };
 
-            for (j, later) in stmts.iter().enumerate().skip(i + 1) {
-                if stmt_binds_ident(later, &var) {
-                    break; // shadowing re-bind — stop the scan
+            // Plan 097 T4: the first mention of VAR may be a block-bearing
+            // statement (the loop living one block deeper — the gen-7 probe
+            // found this silent). The walker descends with the SAME
+            // first-mention gates per level and collects every local bind
+            // along the walked region; a bind of the iterable root between
+            // the map creation and the (possibly nested) loop is the
+            // use-before-decl gate below.
+            let mut bound_locals: Vec<String> = Vec::new();
+            let Some(fl) = self.find_first_insert_loop(&stmts[i + 1..], &var, &mut bound_locals)
+            else {
+                continue;
+            };
+            // Body must insert into VAR (word-boundary `VAR.insert`).
+            let (bs, be) = span_range(&fl.body);
+            let Some(body_txt) = self.source.get(bs..be) else { continue };
+            if !contains_ident_word(body_txt, &format!("{var}.insert")) {
+                continue;
+            }
+            // Iterable must yield a len.
+            let Some(len_expr) = len_expr_text(&fl.expr, self.source) else { continue };
+            // The iterable's root local must be in scope AT the new()
+            // site: `root_bound` (tracked by the walker across levels)
+            // replaces the old same-level `(i + 1..j)` scan — a `let` of
+            // the root between the map creation and the (possibly nested)
+            // loop makes the emitted `with_capacity(base.len())` a
+            // use-before-declaration (E0425; katgpt-rs bomber_17 class).
+            if let Some(root) = iterable_root_ident(&fl.expr) {
+                if bound_locals.iter().any(|n| n == &root) {
+                    continue;
                 }
-                if !self.stmt_mentions(later, &var) {
-                    continue; // unrelated statement — skip over
-                }
-                let Stmt::Expr(Expr::ForLoop(fl), _) = later else { break };
-                // Body must insert into VAR (word-boundary `VAR.insert`).
-                let (bs, be) = span_range(&fl.body);
-                let Some(body_txt) = self.source.get(bs..be) else { break };
-                if !contains_ident_word(body_txt, &format!("{var}.insert")) {
-                    break;
-                }
-                // Iterable must yield a len.
-                let Some(len_expr) = len_expr_text(&fl.expr, self.source) else { break };
-                // The iterable's root local must be in scope AT the new()
-                // site: a `let` binding it between the map creation and the
-                // loop makes the emitted `with_capacity(base.len())` a
-                // use-before-declaration (E0425). Found live in katgpt-rs
-                // bomber_17_feedback_goat — `all_names` first-bound after
-                // the three `HashMap::new()`s, looped over further down;
-                // unrelated-statement skipping had sailed past its `let`.
-                if let Some(root) = iterable_root_ident(&fl.expr) {
-                    if (i + 1..j).any(|k| stmt_binds_ident(&stmts[k], &root)) {
-                        break;
-                    }
-                    // A bare-path root bound by a same-block `let` with an
-                    // OPAQUE init may not expose `.len()` at all: rusqlite's
-                    // `let rows = stmt.query_map(..)?` yields `MappedRows`, an
-                    // iterator with no `len()` — the emitted
-                    // `with_capacity(rows.len())` is E0599 (found live in
-                    // seal-game-editor editor-data, 9 reverts in one sweep).
-                    // Parse-only can't type the init, so any non-whitelisted
-                    // init shape refuses; params/outer-scope bindings stay
-                    // permissive (the `--verify` compile gate backstops them).
-                    if len_expr_is_bare_ident(&fl.expr) {
-                        let same_block_binding = (0..i).rev().find_map(|k| match &stmts[k] {
-                            Stmt::Local(l) => {
-                                let mut pat = &l.pat;
-                                while let Pat::Type(pt) = pat {
-                                    pat = &pt.pat;
-                                }
-                                (matches!(pat, Pat::Ident(pi) if pi.ident == root))
-                                    .then_some(l)
+                // A bare-path root bound by a same-block `let` with an
+                // OPAQUE init may not expose `.len()` at all: rusqlite's
+                // `let rows = stmt.query_map(..)?` yields `MappedRows`, an
+                // iterator with no `len()` — the emitted
+                // `with_capacity(rows.len())` is E0599 (found live in
+                // seal-game-editor editor-data, 9 reverts in one sweep).
+                // Parse-only can't type the init, so any non-whitelisted
+                // init shape refuses; params/outer-scope bindings stay
+                // permissive (the `--verify` compile gate backstops them).
+                if len_expr_is_bare_ident(&fl.expr) {
+                    let same_block_binding = (0..i).rev().find_map(|k| match &stmts[k] {
+                        Stmt::Local(l) => {
+                            let mut pat = &l.pat;
+                            while let Pat::Type(pt) = pat {
+                                pat = &pt.pat;
                             }
-                            _ => None,
-                        });
-                        if let Some(local) = same_block_binding {
-                            if !init_is_known_len(local) {
-                                break;
-                            }
+                            (matches!(pat, Pat::Ident(pi) if pi.ident == root))
+                                .then_some(l)
+                        }
+                        _ => None,
+                    });
+                    if let Some(local) = same_block_binding {
+                        if !init_is_known_len(local) {
+                            continue;
                         }
                     }
                 }
-                self.edits.push(edit(
-                    &init.expr,
-                    format!("HashMap::with_capacity({len_expr})"),
-                ));
-                break;
             }
+            self.edits.push(edit(
+                &init.expr,
+                format!("HashMap::with_capacity({len_expr})"),
+            ));
         }
+    }
+
+    /// First mention of `var` in document order, descending into
+    /// block-bearing statements (Plan 097 T4). At each level the gates are
+    /// the original ones: a re-bind of `var` stops the scan; the first
+    /// mention must BE the insert loop. `bound_locals` collects every
+    /// let-bound name along the walked region (all levels, pre-loop only —
+    /// the walk returns at the loop) for the use-before-decl gate.
+    fn find_first_insert_loop<'a>(
+        &self,
+        stmts: &'a [Stmt],
+        var: &str,
+        bound_locals: &mut Vec<String>,
+    ) -> Option<&'a ExprForLoop> {
+        for stmt in stmts {
+            if stmt_binds_ident(stmt, var) {
+                return None; // shadowing re-bind — stop the scan
+            }
+            if let Some(name) = stmt_local_bind_name(stmt) {
+                bound_locals.push(name);
+            }
+            if !self.stmt_mentions(stmt, var) {
+                continue; // unrelated statement — skip over
+            }
+            if let Stmt::Expr(Expr::ForLoop(fl), _) = stmt {
+                return Some(fl);
+            }
+            // First mention is a block-bearing statement: descend. The
+            // nested level's own first-mention gate applies; if the nested
+            // mention chain does not resolve to an acceptable loop, the
+            // original break semantics hold (the len association is
+            // muddied).
+            for nested in super::stmt_nested_blocks(stmt) {
+                if let Some(fl) =
+                    self.find_first_insert_loop(&nested.stmts, var, bound_locals)
+                {
+                    return Some(fl);
+                }
+            }
+            return None;
+        }
+        None
     }
 
     /// Word-boundary mention of `var` anywhere in the stmt's source text.
@@ -223,6 +277,25 @@ fn stmt_binds_ident(stmt: &Stmt, ident: &str) -> bool {
             matches!(pat, Pat::Ident(pi) if pi.ident == ident)
         }
         _ => false,
+    }
+}
+
+/// The bound name when this stmt is a `let` (Plan 097 T4: the walker's
+/// use-before-decl collection — any local bound between the map creation
+/// and the loop is checked against the iterable root).
+fn stmt_local_bind_name(stmt: &Stmt) -> Option<String> {
+    match stmt {
+        Stmt::Local(local) => {
+            let mut pat = &local.pat;
+            while let Pat::Type(pt) = pat {
+                pat = &pt.pat;
+            }
+            match pat {
+                Pat::Ident(pi) => Some(pi.ident.to_string()),
+                _ => None,
+            }
+        }
+        _ => None,
     }
 }
 
@@ -653,6 +726,83 @@ mod tests {
             "use std::collections::HashMap;\nfn f() -> HashMap<u32, u32> {\n    \
              let mut m = HashMap::new();\n    let items = vec![1u32, 2];\n    \
              for it in &items {\n        m.insert(*it, 1);\n    }\n    m\n}",
+        )
+        .is_none());
+    }
+
+    /// Plan 097 T4 — the map at fn level, the insert loop one block deeper
+    /// (the gen-7 probe found this silent: the first mention was the
+    /// if-statement and the gate broke).
+    #[test]
+    fn nested_first_mention_loop_fires() {
+        let out = propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\npub fn cap_hb(items: &[u32]) -> usize {\n    \
+             let mut m = HashMap::new();\n    if !items.is_empty() {\n        \
+             for it in items {\n                m.insert(*it, 1usize);\n            }\n    }\n    m.len()\n}",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("HashMap::with_capacity(items.len())"), "{out}");
+        parses(&out);
+    }
+
+    /// Plan 097 T4 — the shape-A regression pin: the map AND the loop in
+    /// the same nested block (probe-measured FIRING before this unit —
+    /// pinned here so the descent does not regress it).
+    #[test]
+    fn same_nested_block_map_and_loop_fires() {
+        let out = propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\npub fn cap_h(items: &[u32]) -> usize {\n    \
+             let total = if !items.is_empty() {\n        let mut m = HashMap::new();\n        \
+             for it in items { m.insert(*it, 1usize); }\n        m.len()\n    } else {\n    \
+             0\n    };\n    total\n}",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("HashMap::with_capacity(items.len())"), "{out}");
+        parses(&out);
+    }
+
+    /// Plan 097 T4 — a nested shadow re-bind of the map stops the OUTER
+    /// scan (the outer map gets no edit), while the nested map + loop pair
+    /// itself legitimately fires (shape A).
+    #[test]
+    fn nested_shadow_outer_stops_nested_fires() {
+        let out = propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\npub fn cap_hs(items: &[u32]) -> usize {\n    \
+             let mut m = HashMap::new();\n    if !items.is_empty() {\n        let mut m = HashMap::new();\n        \
+             for it in items { m.insert(*it, 1usize); }\n    }\n    m.len()\n}",
+        )
+        .expect("the nested pair fires");
+        assert_eq!(out.matches("HashMap::with_capacity").count(), 1, "{out}");
+        assert!(out.contains("let mut m = HashMap::new();\n    if"), "outer map must stay: {out}");
+        parses(&out);
+    }
+
+    /// Plan 097 T4 — a nested non-loop first mention (an intervening
+    /// insert) keeps the break semantics.
+    #[test]
+    fn nested_non_loop_first_mention_breaks() {
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\npub fn cap_hn(items: &[u32]) -> usize {\n    \
+             let mut m = HashMap::new();\n    if !items.is_empty() {\n        m.insert(0u32, 1usize);\n        \
+             for it in items { m.insert(*it, 1usize); }\n    }\n    m.len()\n}",
+        )
+        .is_none());
+    }
+
+    /// Plan 097 T4 — the use-before-decl gate across levels: a bind of the
+    /// iterable root at the OUTER level (between map and the descended
+    /// loop) still refuses (the bomber_17 E0425 class, one level deeper).
+    #[test]
+    fn root_bound_across_levels_still_refuses() {
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\npub fn cap_hr(items: &[u32]) -> usize {\n    \
+             let mut m = HashMap::new();\n    let items2 = items.to_vec();\n    if !items2.is_empty() {\n    \
+             for it in &items2 { m.insert(*it, 1usize); }\n    }\n    m.len()\n}",
         )
         .is_none());
     }

@@ -98,7 +98,7 @@
 //! - Since T6.4 the clippy_lints proposers use the same edit-splice emitter
 //!   (they were mutation-based + whole-file `ToTokens` re-emission before).
 
-use syn::File;
+use syn::{Expr, File, Stmt};
 
 pub mod bool_to_bitpack;
 pub mod collect_append_to_extend;
@@ -145,6 +145,49 @@ pub(crate) fn count_ident_occurrences(source: &str, ident: &str) -> usize {
         from = end;
     }
     count
+}
+
+/// Direct nested statement blocks of one statement (Plan 097 T3/T4 — the
+/// capacity proposers' nested-block descent). `Item` statements (nested
+/// fns — visited separately via `for_each_fn`) and macro statements return
+/// empty; closure bodies are not block statements here.
+pub(crate) fn stmt_nested_blocks(stmt: &Stmt) -> Vec<&syn::Block> {
+    match stmt {
+        Stmt::Local(local) => match &local.init {
+            Some(init) => expr_nested_blocks(&init.expr),
+            None => Vec::new(),
+        },
+        Stmt::Expr(e, _) => expr_nested_blocks(e),
+        Stmt::Item(_) | Stmt::Macro(_) => Vec::new(),
+    }
+}
+
+pub(crate) fn expr_nested_blocks(e: &Expr) -> Vec<&syn::Block> {
+    let mut out = Vec::new();
+    collect_expr_blocks(e, &mut out);
+    out
+}
+
+fn collect_expr_blocks<'a>(e: &'a Expr, out: &mut Vec<&'a syn::Block>) {
+    match e {
+        Expr::Block(b) => out.push(&b.block),
+        Expr::Unsafe(u) => out.push(&u.block),
+        Expr::If(i) => {
+            out.push(&i.then_branch);
+            if let Some((_, else_e)) = &i.else_branch {
+                collect_expr_blocks(else_e, out);
+            }
+        }
+        Expr::Loop(l) => out.push(&l.body),
+        Expr::While(w) => out.push(&w.body),
+        Expr::ForLoop(fl) => out.push(&fl.body),
+        Expr::Match(m) => {
+            for arm in &m.arms {
+                collect_expr_blocks(&arm.body, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn is_ident_byte(b: u8) -> bool {
