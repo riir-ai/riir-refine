@@ -23,9 +23,21 @@
 
 ## Corpus
 
-102 rules across 12 categories (rust-optimize skill checklist +
+105 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 102 rules — Batch 118 (2026-09-06,
+profiling guide, Research 032; **now 105 rules — Batch 121 (2026-09-07,
+Research 144 / Plan 101 — the ds4 PR #991 IQ2 delta distill, commit
+`c5ae2eb5`) added three io rules, all NotBenchable-annotated:
+`resume-revalidates-provenance-before-reuse` (a resumable multi-part build
+revalidates source + calibration + TOOL hashes against the manifest and
+re-digests each cached part before reuse — presence is not identity),
+`write-verify-readback-before-publish` (hidden-path write, independent-reader
+hash verify per part, atomic-rename publish + sidecar manifest,
+refuse-existing, template guards before byte one), and
+`ab-isolate-one-component-by-baseline-byte-copy` (measurement honesty — A/B
+on one component byte-copies the baseline for everything else, paired diffs,
+confounded variants out of the headline, un-instrumented memory counters
+labelled as partial budgets). Batch 118 (2026-09-06,
 Research 142 / Plan 097 — the antirez/ds4 PR #991 PLE-gather distill) added
 `parallel-disjoint-pread-hides-cold-page-latency` (io; REGIME-ANNOTATED
 NotBenchable per the B94 precedent — N known DISJOINT byte ranges →

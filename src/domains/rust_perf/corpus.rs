@@ -9,14 +9,18 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 102 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 6, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 15 are honestly
+//! 105 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 9, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 18 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
 //! 94) + the measurement-honesty axis itself (Batch 109 — a timing gate
-//! whose work folds away has no nonzero baseline to ratio).
+//! whose work folds away has no nonzero baseline to ratio) + the PLE-gather
+//! workload annotation (Batch 118) + the two build-integrity annotations
+//! and the A/B-design annotation (Batch 121 — resume provenance, write-
+//! verify-publish, one-variable A/B; correctness-of-provenance and
+//! experimental-design content, not speed).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -123,7 +127,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (87/102):
+//! Currently benchable (87/105):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -241,6 +245,18 @@
 //!   disjoint-vs-near regime split vs coalesce-nearby-reads: DISJOINT far
 //!   ranges overlap cold page-ins across threads, warm is neutral; Batch 118,
 //!   ds4 PLE gather)
+//! - `resume-revalidates-provenance-before-reuse` (build-integrity annotation
+//!   — a resumable multi-part build revalidates source + calibration + TOOL
+//!   hashes against the manifest and re-digests each cached part before
+//!   reuse; presence-is-not-identity; Batch 121, ds4 IQ2 tool)
+//! - `write-verify-readback-before-publish` (build-integrity annotation —
+//!   hidden-path write, independent-reader hash verify per part, atomic-rename
+//!   publish + sidecar manifest, refuse-existing, template guards before
+//!   byte one; Batch 121, ds4 IQ2 tool)
+//! - `ab-isolate-one-component-by-baseline-byte-copy` (measurement-honesty —
+//!   A/B on one component byte-copies the baseline for everything else,
+//!   paired diffs, confounded variants out of the headline, un-instrumented
+//!   memory counters labelled as partial budgets; Batch 121, ds4 IQ2 quality)
 //! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
 //!   a timing gate whose work folds away under LTO has no nonzero baseline to
 //!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
@@ -279,7 +295,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 101 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 105 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
@@ -2716,6 +2732,55 @@ PerfRule {
             context_notes: Some("MEASURED ParetoDominant on BOTH arches. aarch64 (M3 Max, rustc 1.97.0, macOS 26.6.2): 2/0/0 -- 1.23x/1.22x at 10K/1M dispatches on the LCG-random (unpredictable) stream, band 1.19-1.23x across 3 runs, alloc axis EXACT 0/0, alloc-det stable x3; raw probe LC 0.837-0.840 = fixed wins ~16-19%, verdict-stable x3. x86_64 (4090 box, i7-13700K, windows-msvc, quiet-window re-gate 2026-09-04, verdict-stable x2): 3/0/0 -- 2.69-2.73x at 1K / 1.09-1.10x at 100K / 1.07-1.08x at 1M, alloc 0/0, alloc-det stable -- the Plan-069 expected-Tie REFUTED: the lea-rip no-in-loop-load analysis belonged to Batch 99's KNOWN-ITEMS fixture (compile-time code pointers); this rule's fixture is a RUNTIME TABLE, so x86 must also load the handler pointer in-loop and the hoist eliminates it on both arches. REGIME (measured, three stream shapes, aarch64): the win exists ONLY on unpredictable streams -- period-16 0.988-1.004 and alternation 0.990-1.003 read Tie (a learnable stream lets the single indirect site's predictor hide the load), so consumers on patterned dispatch streams gain nothing; the x86 cells ran the LCG-random stream only (the regime boundary is predictor-mechanical and expected arch-independent, but the structured-stream cells were not re-measured on x86 -- noted honestly). MECHANISM (asm-pinned on aarch64, not inferred): the merged form keeps an IN-LOOP indexed load (`csel x8, xzr, x22, ne; ldr x8, [x19, x8]; blr x8` -- DestProp's merged-load shape; the classic HANDLERS[op](..) idiom is the buggy form) and the hoist eliminates it. DEDUP vs mir-destprop-branch-site-merge (Batch 99): distinct mechanism AND fixture shape -- that rule = compile-time-KNOWN fn items + tail-call shape + the SPLIT transform (two direct jmp sites, per-site predictor history; x86-verified no-re-merge); this rule = runtime TABLE + value-returning handlers + the HOIST transform (register-resident select; on aarch64 the split re-merges structurally, so Batch 99's fix does not transfer to this shape -- and Batch 99's runtime-opaque NEGATIVE CONTROL covers splitting on unpredictable streams, not hoisting). The two compose in the dispatch family: known items -> split (B99); runtime table -> hoist (this). Suggestion-only (a parse-only proposer cannot see codegen shapes). Source: the wasmi v2.0 distill's parallel-session lane, Research 119 §Parallel-session addendum (probe-only evidence, queued unnumbered, promoted Batch 101 / Plan 069); x86 re-gate 2026-09-04 (Batch 101 FU).".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(dispatch_handler_pair_hoist_bench_spec()),
+        },
+        // -- io: a RESUMABLE multi-part artifact build trusts its on-disk
+        // cache -------------------------------------------------------------
+        // Batch 121 (2026-09-07, Research 144 / Plan 101 -- the ds4 PR #991
+        // IQ2 delta distill, commit c5ae2eb5). A long quantize/build job that
+        // caches per-part outputs + a manifest for resume must REVALIDATE
+        // every identity input (source payload, calibration data, the TOOL
+        // binary itself) against the manifest BEFORE reusing cached parts,
+        // and re-verify each cached part's stored digest before skipping its
+        // work. A stale-tool or swapped-source resume otherwise "succeeds"
+        // and silently mixes outputs across tool versions.
+        // Suggestion-only (build orchestration -- not a parse-only rewrite).
+        PerfRule {
+            rule_id: "resume-revalidates-provenance-before-reuse".to_string(),
+            name: "resumable multi-part build reuses cached parts on manifest presence -> revalidate every identity input (source + calibration + tool hashes) against the manifest, and re-digest each cached part, before any reuse; mismatch refuses".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// A long build caches per-part outputs + a manifest and SKIPS any\n// part already present -- but never checks that the SOURCE, the\n// calibration data, or the TOOL binary still match what produced the\n// cache. After a tool upgrade or a source swap the resume\n// \"succeeds\" and the artifact silently mixes parts from two tool\n// versions.\nfn build_part(dir: &Path, name: &str, src: &Input) -> PathBuf {\n    let out = dir.join(name);\n    if out.exists() {\n        return out; // presence = trust: nothing revalidated\n    }\n    let bytes = quantize(src);\n    std::fs::write(&out, bytes).unwrap();\n    out\n}".to_string(),
+            fixed_code: "// The manifest records the build IDENTITY (source + calibration +\n// tool hashes). Resume compares EVERY identity field first -- any\n// mismatch refuses the whole run -- then re-digests each cached part\n// before skipping it. Partial cache from a DIFFERENT identity is a\n// liability, not a speedup.\n#[derive(serde::Serialize, serde::Deserialize)]\nstruct Manifest { source: String, calib: String, tool: String, parts: Vec<Part> }\n\nfn resume_or_build(dir: &Path, id: &Identity) -> Vec<PathBuf> {\n    let path = dir.join(\"manifest.json\");\n    if let Ok(m) = std::fs::read_to_string(&path) {\n        let m: Manifest = serde_json::from_str(&m).unwrap();\n        assert_eq!(m.source, id.source, \"resume provenance mismatch: source\");\n        assert_eq!(m.calib, id.calib, \"resume provenance mismatch: calib\");\n        assert_eq!(m.tool, id.tool, \"resume provenance mismatch: tool\");\n    }\n    // per-part: re-digest before reuse\n    for part in &parts {\n        let p = dir.join(&part.name);\n        if digest(&p) == part.sha256 { continue; } // verified reuse\n        write_part_atomic(&p, part);\n    }\n    parts\n}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source runs the quantize stage in ~minutes-per-tensor on a 48-layer trunk; resume-cost avoided is a full re-quantize; honestly NotBenchable here -- correctness-of-resume, not speed). THE FAILURE CLASS: a resumable build whose cache key is PRESENCE instead of IDENTITY mixes outputs across tool/source versions after any upgrade or swap -- the artifact builds \"successfully\" and the mixed provenance is invisible until a quality or hash comparison fails downstream. The identity tuple is THREE-WAY and all three are load-bearing: source payload (a swapped checkpoint), calibration data (a different imatrix changes every quantized byte), and the TOOL ITSELF (a new quantizer library produces different encodings from identical inputs -- its hash belongs in the identity). Per-part reuse re-digests the cached file (guards against truncated/tampered cache files, not just manifest drift); identity mismatch refuses the WHOLE run rather than silently rebuilding (a partial rebuild under a new identity would still mix). Composes with atomic-part-writes (.tmp + rename, the next rule): a crash mid-write must leave NO parseable part for the next resume to trust. Distinct from cache-invalidation-by-content-hash patterns (key a memo by input hash -- this is the BUILD-level identity of a multi-artifact pipeline incl. the tool), from commitment-hashing shapes (what goes INTO a digest -- this is what a resume must CHECK), and from checkpoint/resume of long COMPUTES (same instinct, different artifact: intermediate state vs published parts). Suggestion-only (build orchestration; a parse-only proposer cannot see the cache-identity coupling). Source: ivanfioravanti/ds4-metal PR #991 commit c5ae2eb5 (MIT) -- gguf-tools/qwen4_iq2.py:29-46 (identity dict {source, imatrix provenance, library_sha256} + 'Resume provenance mismatch' refuse), :49-52 (per-tensor digest re-verify before 'verified existing tensors' skip), :58-61 (per-part .tmp write + replace + manifest save after EVERY tensor). Batch 121 / Research 144 / Plan 101.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io: a multi-part artifact becomes visible the moment the last
+        // part is written, BEFORE anything is verified ----------------------
+        // Batch 121 (same distill). Write to a hidden path, RE-READ every
+        // payload through an independent reader, hash-compare against the
+        // plan, THEN atomic-rename publish + sidecar manifest; refuse
+        // existing outputs; template/guard checks run BEFORE any byte.
+        PerfRule {
+            rule_id: "write-verify-readback-before-publish".to_string(),
+            name: "multi-part artifact assembly publishes on last write -> write hidden (.incomplete), re-read every payload via an independent reader + hash-compare, then atomic-rename publish with a sidecar manifest; refuse existing outputs".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// Assemble N parts into one artifact, publishing as you go: a crash\n// or a bad disk leaves a HALF-WRITTEN artifact at the real path,\n// indistinguishable from a complete one -- and nothing re-reads what\n// was written, so a silent corruption ships.\nfn assemble(parts: &[Part], out: &Path) -> std::io::Result<()> {\n    let mut f = std::fs::File::create(out)?; // REAL path from byte one\n    for p in parts {\n        f.write_all(&p.payload)?; // no read-back, no per-part digest\n    }\n    Ok(()) // published before verified\n}".to_string(),
+            fixed_code: "// Three gates before the artifact exists: (1) pre-flight template\n// checks + refuse-existing (before ANY byte); (2) write to a hidden\n// .incomplete path; (3) re-read every payload through an INDEPENDENT\n// reader and hash-compare against the plan, then atomic-rename\n// publish + a sidecar manifest recording per-part digests.\nfn assemble(parts: &[Part], out: &Path) -> Result<(), AssembleError> {\n    if out.exists() || incomplete_path(out).exists() {\n        return Err(AssembleError::Exists); // never clobber\n    }\n    check_template(parts)?; // guards BEFORE any byte is written\n    let tmp = incomplete_path(out);\n    write_all_parts(&tmp, parts)?;\n    let mut reader = IndependentReader::open(&tmp)?; // NOT the write buffer\n    for p in parts {\n        if reader.digest(p.name)? != p.expected_sha {\n            return Err(AssembleError::Verify(p.name)); // refuse, do not fix\n        }\n    }\n    std::fs::rename(&tmp, out)?; // atomic publish\n    write_sidecar_manifest(out, parts)?;\n    Ok(())\n}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's validation read back 1,255 written tensors; assembly refuses existing outputs and 'verifies every written tensor before publishing'; honestly NotBenchable here -- artifact integrity, not speed). WHY AN INDEPENDENT READER: verifying through the same buffered writer/reader that produced the payload can confirm what the CACHE holds, not what the DISK holds; the source opens a fresh Reader on the .incomplete file and seeks per-tensor (an O(1) extra pass over data already destined for disk -- the verify cost is one sequential read of the artifact). WHY ATOMIC-RENAME: consumers key on the artifact PATH; a visible half-artifact is worse than no artifact (crash-consistency: rename is the only publish step that cannot be observed half-done on POSIX). Refuse-existing beats clobber: a re-run into a live path must not destroy the previous artifact before the new one is proven. Template guards run BEFORE byte one (architecture/metadata keys, part count, per-part kind+dims, external-contract keys) -- a mis-planned assembly should cost zero I/O. The sidecar manifest (per-part digest + sizes + total SHA) makes the artifact auditable AFTER publish and gives the NEXT resume its identity inputs (composes with resume-revalidates-provenance-before-reuse: the manifest this rule publishes is the manifest that rule consumes). Distinct from write-tmp-then-rename crash-safety idioms (rename alone without the read-back verifies the RENAME, not the CONTENT), from backup-verify-restore cycles (post-hoc; this gates the publish itself), and from incremental-checkpoint-resume (mid-compute state -- this is the final publish gate). Suggestion-only (I/O orchestration; a parse-only proposer cannot see reader independence or rename atomicity). Source: ivanfioravanti/ds4-metal PR #991 commit c5ae2eb5 (MIT) -- gguf-tools/qwen4_iq2.py:78-80 (refuse existing .out + .incomplete), :82-90 (template guards before any write: arch kv, block count, external-PLE key absent, per-part kind/dims), :91-127 (plan + .incomplete write, per-part .tmp+replace on the quantize side), :129-152 (fresh Reader read-back + 'Written tensor mismatch' refuse), :153-160 (rename publish + sidecar JSON manifest with total sha256). Batch 121 / Research 144 / Plan 101.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io (measurement honesty): an A/B on ONE changed component that\n// rebuilds everything else differently is confounded -----------------
+        // Batch 121 (same distill). To measure one component's precision\n// change, byte-copy every OTHER component from the baseline artifact\n// and replace ONLY the under-test set; keep confounded recipes out\n// of the headline; report PAIRED differences; memory counters that\n// cannot see mmap-backed device pages are partial budgets, named\n// as such.
+        PerfRule {
+            rule_id: "ab-isolate-one-component-by-baseline-byte-copy".to_string(),
+            name: "A/B on one changed component rebuilt alongside other deltas -> byte-copy every other component from the baseline artifact, replace ONLY the under-test set, report paired diffs; confounded variants stay out of the headline; un-instrumented memory counters are partial budgets, labelled".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// Measuring the gate/up precision change by building an IQ2 model\n// \"from scratch\": every tensor re-derives, so the diff vs the Q4_K\n// baseline mixes the gate/up change with fresh MXFP4/MTP/control\n// re-encodes -- the comparison cannot attribute a quality delta to\n// the one variable it names.\nfn build_iq2(src: &Checkpoint, calib: &Imatrix) -> Model {\n    let mut m = Model::new();\n    for t in src.tensors() {\n        m.set(t.name, quantize(t, pick_dtype(t), calib)); // EVERYTHING re-quantized\n    }\n    m\n}".to_string(),
+            fixed_code: "// Copy every tensor BYTE-IDENTICALLY from the baseline artifact and\n// replace ONLY the under-test set (the 96 trunk gate/up tensors):\n// the artifact diff IS the variable. Paired per-case diffs (test-only\n// passes vs baseline-only passes) replace raw pass counts; confounded\n// recipes stay out of the headline; un-instrumented memory counters\n// are reported as PARTIAL budgets.\nfn build_iq2(src: &Checkpoint, calib: &Imatrix, baseline: &Model) -> Model {\n    let mut m = baseline.clone(); // byte-identical: diff = the variable\n    for layer in 0..48 {\n        for part in [\"gate\", \"up\"] {\n            let name = format!(\"blk.{layer}.ffn_{part}_exps.weight\");\n            let t = quantize_exact(src.tensor(&name), DType::Iq2Xxs, calib);\n            m.replace_verified(&name, t); // digest-checked replacement\n        }\n    }\n    m\n}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's own numbers demonstrate the trap it avoids: headline hard-suite passes are FLAT across recipes -- IQ2 36/50 vs Q4_K 35/50 -- while the paired BF16 drift is 3-6x worse: NLL 0.27828 vs 0.21287, top-1 agreement 91.32% vs 96.57%, logprob MAE 0.13992 vs 0.04307; honestly NotBenchable here -- experimental design, not speed). FOUR load-bearing halves: (1) ISOLATION BY BASELINE BYTE-COPY -- every non-under-test tensor is copied verbatim from the baseline artifact so the artifact diff IS the variable (the source copies all non-expert tensors from the combined Q4_K GGUF incl. MXFP4 down projections, MTP, dense/control, and swaps only the 96 trunk gate/up tensors, digest-verified); (2) PAIRED differences over raw counts -- report exact per-case disagreements (test-only-passed vs baseline-only-passed: 2/1, 2/1, 3/1), which survive small samples where pass totals do not; (3) CONFOUNDED variants stay out of the headline -- Q8 (also changes down weights) and Q4_0 (an earlier complete recipe) are named as such; 'the most controlled quantization comparison is IQ2 versus Q4_K-imatrix'; (4) UN-INSTRUMENTED counters are PARTIAL budgets, labelled -- peak RSS/footprint 'do not reliably account for all mmap-backed GPU weights and must not be interpreted as the total model memory requirement'; file size + tracked runtime allocations + resident external sidecar pages = a partial budget, and the test box's capacity 'does not validate' another machine's headroom. RIDER (calibration provenance): reuse the SAME pinned calibration/imatrix as the baseline recipe (six zero-count entries take a deterministic weight-energy fallback) so the precision change is not confounded with a calibration change; per-tensor source hashes retained. Distinct from measurement-honesty timing rules (dead-result-timing-loop-eliminated-under-lto -- instrument the TIMING loop; this isolates the VARIABLE under test), from paired-median-of-ratios interleaving (same-box timing A/B methodology -- this is artifact-level A/B design where the baseline itself is the control), and from the lossy-surface promotion rule (deployed-path retention gates -- this is how to BUILD the comparison that informs such a gate). Suggestion-only (experimental design; a parse-only proposer cannot see artifact provenance). Source: ivanfioravanti/ds4-metal PR #991 commit c5ae2eb5 (MIT) -- gguf-tools/README.md IQ2 section ('It then copies every other tensor from an existing combined Q4_K qwen4exp GGUF ... This isolates the gate/up precision change for a quality comparison'), speed-bench/qwen38-iq2-quality.md:37 (confounded recipes + the controlled-comparison line), :25-32 (paired disagreement table), :52 (the mmap/RSS partial-budget caveat), :58 (pinned imatrix + zero-count fallback). Batch 121 / Research 144 / Plan 101.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
         },
     ])
 }
@@ -8024,7 +8089,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 102); // Batch 118 (ds4 PR #991) 101 → 102
+        assert_eq!(corpus.entries.len(), 105); // Batch 121 (ds4 IQ2 delta) 102 → 105
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9616,8 +9681,11 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 45, "expected 45 context-annotated rules (Batch 118 added the ds4 disjoint-pread io annotation)");
+        assert_eq!(annotated.len(), 48, "expected 48 context-annotated rules (Batch 121 added the three ds4 IQ2 build-integrity + A/B-design annotations)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
+        assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
+        assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
+        assert!(annotated.contains(&"ab-isolate-one-component-by-baseline-byte-copy")); // Batch 121 — the A/B-design + memory-honesty annotation
         assert!(annotated.contains(&"dead-result-timing-loop-folded-under-lto")); // Batch 109 — the NotBenchable measurement-honesty axis
         assert!(annotated.contains(&"hot-byval-move-over-memcpy-threshold")); // Batch 112 — the arch-regime Mixed annotation
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
@@ -9683,7 +9751,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 45);
+        assert_eq!(annotated, 48); // Batch 121: 45 → 48
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9717,7 +9785,7 @@ mod tests {
 
         // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 45, "expected 45 annotated rules");
+        assert_eq!(annotated.len(), 48, "expected 48 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10430,6 +10498,100 @@ mod tests {
 
         assert_eq!(global_total, block_total);
         assert_eq!(global_total, UPS as u64);
+    }
+
+    /// Batch 121 — the three new rules are present.
+    #[test]
+    fn batch121_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for id in [
+            "resume-revalidates-provenance-before-reuse",
+            "write-verify-readback-before-publish",
+            "ab-isolate-one-component-by-baseline-byte-copy",
+        ] {
+            assert!(ids.contains(&id), "{id} missing from corpus");
+        }
+    }
+
+    /// Batch 121 — every new rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch121_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in [
+            "resume-revalidates-provenance-before-reuse",
+            "write-verify-readback-before-publish",
+            "ab-isolate-one-component-by-baseline-byte-copy",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    /// Batch 121 — the load-bearing concepts survive into the corpus text
+    /// (retrieval discriminators), the NotBenchable annotations are honest
+    /// (context_notes carry the annotation), and the source quotes' key
+    /// phrases are pinned.
+    #[test]
+    fn batch121_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let find = |id: &str| {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing"))
+        };
+        let resume = find("resume-revalidates-provenance-before-reuse");
+        let resume_text = format!("{}\n{}\n{}", resume.name, resume.buggy_code, resume.fixed_code);
+        for needle in ["manifest", "identity", "tool", "digest", "reuse"] {
+            assert!(resume_text.contains(needle), "resume concept {needle:?} missing");
+        }
+        assert!(
+            resume.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            "resume rule must carry the NotBenchable annotation"
+        );
+        let publish = find("write-verify-readback-before-publish");
+        let publish_text = format!("{}\n{}\n{}", publish.name, publish.buggy_code, publish.fixed_code);
+        for needle in ["incomplete", "rename", "hash", "reader", "refuse"] {
+            assert!(publish_text.contains(needle), "publish concept {needle:?} missing");
+        }
+        let ab = find("ab-isolate-one-component-by-baseline-byte-copy");
+        let ab_text = format!("{}\n{}\n{}", ab.name, ab.buggy_code, ab.fixed_code);
+        for needle in ["baseline", "byte", "paired", "partial budget"] {
+            assert!(ab_text.contains(needle), "ab concept {needle:?} missing");
+        }
+        // The memory-honesty rider (mmap-backed weights / partial budget)
+        // must live in the A/B rule's context notes.
+        let notes = ab.context_notes.as_deref().unwrap_or("");
+        assert!(
+            notes.contains("mmap-backed") && notes.contains("partial budget"),
+            "the memory-honesty rider must be recorded in the A/B rule's notes"
+        );
+        // The pinned source phrases (quote re-verification at the pin).
+        assert!(
+            notes.contains("must not be interpreted as the total"),
+            "the source's own memory caveat must be pinned verbatim"
+        );
+        assert!(
+            resume.context_notes.as_deref().unwrap_or("").contains("Resume provenance mismatch"),
+            "the resume refuse phrase must be pinned"
+        );
+        assert!(
+            publish
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("Written tensor mismatch"),
+            "the publish refuse phrase must be pinned"
+        );
     }
 }
 
