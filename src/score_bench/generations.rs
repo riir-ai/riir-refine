@@ -2994,6 +2994,379 @@ pub fn generation_v6() -> Vec<BenchFixture> {
     generation_fixtures(specs_v6(), 6, FROZEN_LABELS_V6, EXCLUDED_IDS_V6)
 }
 
+// ── generation 7 (Plan 096): the overlap-edit-chain ladder ─────────────
+//
+// Bench 069 candidate #3: composites whose proposers' edits overlap (the
+// fixpoint's drop-and-refire semantics), forcing multi-pass convergence past
+// MAX_FIX_PASSES = 4. Generations 2/3/5 compose disjoint atoms; generation 6
+// mined organic interference; THIS generation manufactures maximal overlap.
+//
+// The mechanism (Plan 096 §2, probe-confirmed): `apply_edits_traced`
+// selection is outer-first — an edit starting inside an already-selected
+// region is dropped and its lint re-fires on the next pass. A spec is a
+// CHAIN iff `heal_fixpoint`'s pass count ≥ 2; the depth = the pass count.
+// The k dimension is the PRE-REGISTERED expected pass depth (not composition
+// width): flat/ref = 1, d2 = 2, d3 = 3, d4 = 4 (converges AT the cap),
+// cap = 5 (the depth the chain WOULD need — the pass cap stops it at 4).
+//
+// Atoms are authored claims adjudicated by the T1 probe (passes measured
+// cargo-less) and the freeze e2e (labels measured with real clippy). The
+// full probe record — including the two dropped atoms (question_mark's lack
+// of match-form support, iter_next_loop's header-only edit) and the mined
+// capacity-hint nested-block blind spot — lives in Plan 096 §T1 addendum.
+pub static RAW_ATOMS_V7: &[(&str, &str)] = &[
+    // ── flat (the control: same lints, disjoint — expected 1 pass) ──
+    (
+        "gen7-flat-nrl-identity",
+        r#"pub fn sum_all(hits: &[u32]) -> u32 {
+    let mut total = 0;
+    for i in 0..hits.len() {
+        total += hits[i];
+    }
+    total
+}
+
+pub fn twice(v: u32) -> u32 {
+    v * 1
+}
+"#,
+    ),
+    (
+        "gen7-flat-cif-smx",
+        r#"pub fn gate(a: bool, b: bool) -> u32 {
+    let mut n = 0;
+    if a {
+        if b {
+            n += 1;
+        }
+    }
+    n
+}
+
+pub fn pick(kind: Option<u8>) -> u8 {
+    match kind {
+        Some(k) => k + 1,
+        _ => { let fallback = 2; fallback }
+    }
+}
+"#,
+    ),
+    // ── chain d2 (the outer atomic rewrite drops the inner edit; it
+    //    re-fires on pass 2) ──
+    (
+        // The Issue-032 canonical case.
+        "gen7-d2-nrl-identity",
+        r#"pub fn weighted(hits: &[u32]) -> u32 {
+    let mut total = 0;
+    for i in 0..hits.len() {
+        total += hits[i] * 1;
+    }
+    total
+}
+"#,
+    ),
+    (
+        "gen7-d2-nrl-format",
+        r#"pub fn announce(names: &[String]) {
+    for i in 0..names.len() {
+        println!("{}", names[i]);
+    }
+}
+"#,
+    ),
+    (
+        "gen7-d2-nrl-semi",
+        r#"pub fn measure(hits: &[u32]) -> usize {
+    let mut n = 0;
+    for i in 0..hits.len() {
+        if hits[i] > 2 {
+            n += hits[i]
+        }
+    }
+    n
+}
+"#,
+    ),
+    (
+        "gen7-d2-nrl-dblparen",
+        r#"pub fn scaled(hits: &[u32], k: u32) -> u32 {
+    let mut total = 0;
+    for i in 0..hits.len() {
+        total += ((hits[i] * k));
+    }
+    total
+}
+"#,
+    ),
+    (
+        "gen7-d2-smx-identity",
+        r#"pub fn pick(kind: Option<u8>) -> u8 {
+    match kind {
+        Some(k) => k * 1,
+        _ => { let fallback = 2; fallback }
+    }
+}
+"#,
+    ),
+    (
+        "gen7-d2-mm-identity",
+        r#"pub fn half(x: Option<i32>) -> Option<i32> {
+    match x {
+        Some(v) => Some(v * 1),
+        None => None,
+    }
+}
+"#,
+    ),
+    (
+        // Cross-domain (single_match_else outer, distance-sq inner): the
+        // distance-sq member is a rust_perf rule — invisible to the clippy
+        // oracle, so only the clippy member is scored. The probe measured
+        // the CHAIN (2 passes: whole-match rewrite, then the inner refire).
+        "gen7-d2-sme-distsq",
+        r#"pub fn near(kind: Option<(f64, f64, f64)>) -> bool {
+    match kind {
+        Some((x, y, r)) => (x * x + y * y).sqrt() < r,
+        _ => { let eps = 0.5; eps < r }
+    }
+}
+"#,
+    ),
+    (
+        "gen7-d2-cif3",
+        r#"pub fn gates(a: bool, b: bool, c: bool) -> u32 {
+    let mut n = 0;
+    if a {
+        if b {
+            if c {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+"#,
+    ),
+    // ── chain d3 / d4 (one collapsible pair merges per pass) ──
+    (
+        "gen7-d3-cif4",
+        r#"pub fn gates(a: bool, b: bool, c: bool, d: bool) -> u32 {
+    let mut n = 0;
+    if a {
+        if b {
+            if c {
+                if d {
+                    n += 1;
+                }
+            }
+        }
+    }
+    n
+}
+"#,
+    ),
+    (
+        // Converges EXACTLY at the cap: 4 merges, 4 passes.
+        "gen7-d4-cif5",
+        r#"pub fn gates(a: bool, b: bool, c: bool, d: bool, e: bool) -> u32 {
+    let mut n = 0;
+    if a {
+        if b {
+            if c {
+                if d {
+                    if e {
+                        n += 1;
+                    }
+                }
+            }
+        }
+    }
+    n
+}
+"#,
+    ),
+    // ── capped (the depth the chain needs exceeds MAX_FIX_PASSES = 4) ──
+    (
+        "gen7-cap-cif6",
+        r#"pub fn gates(a: bool, b: bool, c: bool, d: bool, e: bool, f: bool) -> u32 {
+    let mut n = 0;
+    if a {
+        if b {
+            if c {
+                if d {
+                    if e {
+                        if f {
+                            n += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    n
+}
+"#,
+    ),
+    (
+        // The 4 merges consume the cap; the identity member needs pass 5 —
+        // collapsible_if resolves, identity_op persists (1/2).
+        "gen7-cap-cif5-identity",
+        r#"pub fn layered(a: bool, b: bool, c: bool, d: bool, e: bool) -> u32 {
+    let mut n = 3;
+    if a {
+        if b {
+            if c {
+                if d {
+                    if e {
+                        n = n * 1;
+                    }
+                }
+            }
+        }
+    }
+    n
+}
+"#,
+    ),
+    // ── refused (a guard refusal under overlap pressure) ──
+    (
+        // Nested needless_range_loop: level 1's rewrite introduces `__elem`
+        // into level 2's body and level 2's collision guard then refuses —
+        // 1 pass, needless_range_loop persists.
+        "gen7-ref-nrl-nrl",
+        r#"pub fn grid(outer: &[u32], inner: &[u32]) -> u32 {
+    let mut acc = 0;
+    for i in 0..outer.len() {
+        for j in 0..inner.len() {
+            acc += outer[i] * inner[j];
+        }
+    }
+    acc
+}
+"#,
+    ),
+];
+
+/// The pre-freeze label CLAIMS (the T1 probe + the sweep record); the freeze
+/// e2e adjudicates both directions and the fresh verdict wins at bench time.
+const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
+    ("gen7-flat-nrl-identity", &["needless_range_loop", "identity_op"]),
+    ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),
+    ("gen7-d2-nrl-identity", &["needless_range_loop", "identity_op"]),
+    ("gen7-d2-nrl-format", &["needless_range_loop", "uninlined_format_args"]),
+    ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),
+    ("gen7-d2-nrl-dblparen", &["needless_range_loop", "double_parens"]),
+    ("gen7-d2-smx-identity", &["single_match_else", "identity_op"]),
+    ("gen7-d2-mm-identity", &["manual_map", "identity_op"]),
+    // The distance-sq member is a rust_perf rule — invisible to the clippy
+    // oracle (Plan 096 §4).
+    ("gen7-d2-sme-distsq", &["single_match_else"]),
+    ("gen7-d2-cif3", &["collapsible_if"]),
+    ("gen7-d3-cif4", &["collapsible_if"]),
+    ("gen7-d4-cif5", &["collapsible_if"]),
+    ("gen7-cap-cif6", &["collapsible_if"]),
+    ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]),
+    ("gen7-ref-nrl-nrl", &["needless_range_loop"]),
+];
+
+/// The generation-7 spec ladder: one spec per authored chain atom, k = the
+/// expected pass depth (the depth ladder, NOT composition width). Byte-stable
+/// — pinned by test.
+#[must_use]
+pub fn specs_v7() -> Vec<GenSpec> {
+    RAW_ATOMS_V7
+        .iter()
+        .map(|(id, code)| GenSpec {
+            id: (*id).to_string(),
+            k: v7_expected_k(id),
+            expect_lints: EXPECTED_LINTS_V7
+                .iter()
+                .find(|(i, _)| *i == *id)
+                .map_or_else(Vec::new, |(_, l)| l.iter().map(ToString::to_string).collect()),
+            code: (*code).to_string(),
+        })
+        .collect()
+}
+
+/// The territory of a generation-7 spec id: `flat` (the disjoint control),
+/// `chain` (overlap, expected 2..=4 passes), `capped` (the depth exceeds
+/// MAX_FIX_PASSES — pass 4 is the last), `refused` (a guard refusal leaves
+/// the shape in place after 1 pass).
+#[must_use]
+pub fn v7_territory(spec_id: &str) -> &'static str {
+    if spec_id.contains("-flat-") {
+        "flat"
+    } else if spec_id.contains("-cap-") {
+        "capped"
+    } else if spec_id.contains("-ref-") {
+        "refused"
+    } else {
+        "chain"
+    }
+}
+
+/// The expected `heal_fixpoint` pass count for a spec id (the T1-probe
+/// pre-registration the always-on chain-truth gate asserts): flat/ref = 1,
+/// d2 = 2, d3 = 3, d4 = 4 (converges AT the cap), cap = 4 (the cap itself).
+/// k (the depth ladder's rung label) differs for capped specs: the depth the
+/// chain WOULD need is 5.
+#[must_use]
+pub fn v7_expected_passes(spec_id: &str) -> usize {
+    if spec_id.contains("-d2-") {
+        2
+    } else if spec_id.contains("-d3-") {
+        3
+    } else if spec_id.contains("-d4-") {
+        4
+    } else {
+        // flat, ref, cap — all measure 1, 1, and the 4-pass cap respectively.
+        if spec_id.contains("-cap-") {
+            4
+        } else {
+            1
+        }
+    }
+}
+
+/// The depth-ladder rung for a spec id (= expected passes, except capped
+/// specs sit on the k=5 rung — the depth the chain would need).
+#[must_use]
+pub fn v7_expected_k(spec_id: &str) -> usize {
+    if spec_id.contains("-cap-") {
+        5
+    } else {
+        v7_expected_passes(spec_id)
+    }
+}
+
+/// Spec ids the generation-7 freeze run EXCLUDED — landed by the freeze e2e
+/// (`tests/generation_v7_freeze.rs` --ignored).
+pub static EXCLUDED_IDS_V7: &[&str] = &[];
+
+/// The generation-7 frozen labels (spec id → vocabulary lints the BENCH
+/// instrument fired at freeze time) — landed by the freeze e2e.
+pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[];
+
+/// Freeze readiness for generation 7 — Err until the freeze e2e lands the
+/// record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels.
+pub fn v7_freeze_status() -> Result<usize, String> {
+    freeze_status_for(&specs_v7(), 7, "generation_v7_freeze", FROZEN_LABELS_V7, EXCLUDED_IDS_V7)
+}
+
+/// The admitted generation-7 fixture set.
+///
+/// # Panics
+///
+/// Only on a freeze-record hole — callers check [`v7_freeze_status`] first.
+#[must_use]
+pub fn generation_v7() -> Vec<BenchFixture> {
+    generation_fixtures(specs_v7(), 7, FROZEN_LABELS_V7, EXCLUDED_IDS_V7)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3649,6 +4022,171 @@ mod tests {
                 );
                 if labeled.contains(s.id.as_str()) {
                     let frozen = FROZEN_LABELS_V6
+                        .iter()
+                        .find(|(id, _)| *id == s.id)
+                        .map_or(&[] as &[&str], |(_, l)| *l);
+                    let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
+                    let got: BTreeSet<&str> = frozen.iter().copied().collect();
+                    assert_eq!(want, got, "frozen label drift on {}", s.id);
+                }
+            }
+        }
+    }
+
+    // ── generation 7 (Plan 096): the overlap-edit-chain ladder ─────────
+
+    /// G1 — every atom parses standalone, and every spec's claimed label set
+    /// is non-empty and in-vocabulary (the claims are the freeze e2e's
+    /// input; a dead claim never reaches the bench silently).
+    #[test]
+    fn v7_atoms_parse_and_claims_are_vocabulary() {
+        let vocab = super::super::vocabulary();
+        assert_eq!(RAW_ATOMS_V7.len(), EXPECTED_LINTS_V7.len(), "atom/claim tables aligned");
+        for (id, code) in RAW_ATOMS_V7 {
+            assert!(syn::parse_file(code).is_ok(), "atom {id} does not parse standalone");
+            let claims = EXPECTED_LINTS_V7
+                .iter()
+                .find(|(i, _)| i == id)
+                .map_or(&[] as &[&str], |(_, l)| *l);
+            assert!(!claims.is_empty(), "atom {id} claims no lints");
+            for c in claims {
+                assert!(vocab.contains(*c), "atom {id} claims non-vocabulary lint {c}");
+            }
+        }
+    }
+
+    /// G3 CHAIN-truth — the load-bearing always-on gate: `heal_fixpoint`
+    /// (cargo-less, the production loop) measures EXACTLY the expected pass
+    /// count per spec. flat/ref = 1, chain d2/d3/d4 = 2/3/4, capped = 4 (the
+    /// cap). A drift here means a proposer changed shape — re-adjudicate the
+    /// roster (the gen-3 discipline: the freeze record is re-landed, never
+    /// silently stale).
+    #[test]
+    fn v7_chain_truth_passes_match_the_pre_registration() {
+        for (id, code) in RAW_ATOMS_V7 {
+            let (_healed, _edits, passes) = super::super::heal_fixpoint(code);
+            assert_eq!(
+                passes,
+                v7_expected_passes(id),
+                "chain-truth drift on {id}: measured {passes} passes"
+            );
+        }
+    }
+
+    /// The probe-verified chain property for the non-flat territories: the
+    /// healed output must be CLEANER than the input for chain specs (the
+    /// refire actually resolved the inner member) and must RETAIN the
+    /// persisting shape for capped/refused specs. Pure-textual assertions on
+    /// the probe-measured outcomes — no oracle needed.
+    #[test]
+    fn v7_refire_resolves_chains_and_retains_refusals() {
+        for (id, code) in RAW_ATOMS_V7 {
+            let (healed, _edits, _passes) = super::super::heal_fixpoint(code);
+            match v7_territory(id) {
+                "chain" | "flat" => {
+                    assert_ne!(healed, *code, "chain/flat spec {id} healed to identity");
+                    assert!(
+                        syn::parse_file(&healed).is_ok(),
+                        "chain/flat spec {id} healed to a non-parsing file"
+                    );
+                }
+                "capped" | "refused" => {
+                    assert!(
+                        syn::parse_file(&healed).is_ok(),
+                        "capped/refused spec {id} healed to a non-parsing file"
+                    );
+                    // cap-cif5-identity retains `* 1`; ref-nrl-nrl retains the
+                    // inner `0..inner.len()` + `inner[j]`; cap-cif6 retains the
+                    // innermost `if f` pair (still a nested if under a merged
+                    // outer). The textual needles pin the PERSIST half of the
+                    // territory claim cargo-less; the clippy after-verdict is
+                    // the bench-time authority.
+                    if *id == "gen7-cap-cif5-identity" {
+                        assert!(healed.contains("* 1"), "cap-cif5-identity lost its persist shape");
+                    }
+                    if *id == "gen7-ref-nrl-nrl" {
+                        assert!(
+                            healed.contains("0..inner.len()") && healed.contains("inner[j]"),
+                            "ref-nrl-nrl lost its refusal shape"
+                        );
+                    }
+                    if *id == "gen7-cap-cif6" {
+                        assert!(
+                            healed.contains("if f {"),
+                            "cap-cif6 lost its uncapped innermost pair"
+                        );
+                    }
+                }
+                _ => unreachable!("unknown territory"),
+            }
+        }
+    }
+
+    /// Curation floors (Plan 096 §6): population, territory mix, class
+    /// diversity, and the depth-ladder rung coverage (every rung 1–5 has
+    /// members — the ladder IS the generation's axis).
+    #[test]
+    fn v7_atom_set_meets_the_floors() {
+        let chains = RAW_ATOMS_V7
+            .iter()
+            .filter(|(id, _)| matches!(v7_territory(id), "chain" | "capped"))
+            .count();
+        let flat = RAW_ATOMS_V7.iter().filter(|(id, _)| v7_territory(id) == "flat").count();
+        let refused =
+            RAW_ATOMS_V7.iter().filter(|(id, _)| v7_territory(id) == "refused").count();
+        let classes: BTreeSet<&str> = EXPECTED_LINTS_V7
+            .iter()
+            .flat_map(|(_, l)| l.iter().copied())
+            .collect();
+        let rungs: BTreeSet<usize> = RAW_ATOMS_V7.iter().map(|(id, _)| v7_expected_k(id)).collect();
+        assert!(RAW_ATOMS_V7.len() >= 14, "chain population too thin: {}", RAW_ATOMS_V7.len());
+        assert!(chains >= 10, "chain+capped rung lost: {chains} (floor 10)");
+        assert!(flat >= 2, "flat control lost: {flat} (floor 2)");
+        assert!(refused >= 1, "refused territory lost: {refused} (floor 1)");
+        assert!(classes.len() >= 7, "lint classes: {} (floor 7)", classes.len());
+        assert_eq!(rungs, BTreeSet::from([1, 2, 3, 4, 5]), "depth-ladder rungs: {rungs:?}");
+    }
+
+    /// ids unique including generation 7, and no collision with any earlier
+    /// generation's spec ids or v1's fixtures (`gen7-` prefix is disjoint by
+    /// construction; the assert keeps it true if a prefix is ever renamed).
+    #[test]
+    fn v7_ids_are_disjoint_from_earlier_generations() {
+        let v7: BTreeSet<&str> = RAW_ATOMS_V7.iter().map(|(id, _)| *id).collect();
+        assert_eq!(v7.len(), RAW_ATOMS_V7.len(), "duplicate gen-7 atom ids");
+        let earlier_specs: Vec<Vec<GenSpec>> =
+            vec![specs(), specs_v3(), specs_v5(), specs_v6()];
+        let earlier: Vec<&str> = earlier_specs
+            .iter()
+            .flatten()
+            .map(|s| s.id.as_str())
+            .collect();
+        for id in earlier {
+            assert!(!v7.contains(id), "gen-7 id collides with an earlier spec: {id}");
+        }
+        for f in crate::score_bench::fixtures::fixtures() {
+            assert!(!v7.contains(f.id), "gen-7 id collides with a v1 fixture: {}", f.id);
+        }
+    }
+
+    #[test]
+    fn v7_freeze_status_holes_are_loud() {
+        let excluded: BTreeSet<&str> = EXCLUDED_IDS_V7.iter().copied().collect();
+        let labeled: BTreeSet<&str> = FROZEN_LABELS_V7.iter().map(|(id, _)| *id).collect();
+        if excluded.is_empty() && labeled.is_empty() {
+            assert!(
+                v7_freeze_status().is_err(),
+                "pre-freeze must not claim readiness"
+            );
+        } else {
+            for s in specs_v7() {
+                assert!(
+                    excluded.contains(s.id.as_str()) || labeled.contains(s.id.as_str()),
+                    "spec {} is neither labeled nor excluded",
+                    s.id
+                );
+                if labeled.contains(s.id.as_str()) {
+                    let frozen = FROZEN_LABELS_V7
                         .iter()
                         .find(|(id, _)| *id == s.id)
                         .map_or(&[] as &[&str], |(_, l)| *l);

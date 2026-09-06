@@ -689,6 +689,14 @@ required-features = ["score_bench"]
 name = "generation_v6_freeze"
 required-features = ["score_bench"]
 
+# Generation-7 freeze (Plan 096): the overlap-edit-chain ladder. Spawns the
+# real single-snippet oracle per atom (the G2 label fence) — the `#![cfg]` in
+# the file protects the count; this row protects the reader (713-T3). The
+# cargo-less chain-truth gate (G3) lives in generations.rs module tests.
+[[test]]
+name = "generation_v7_freeze"
+required-features = ["score_bench"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

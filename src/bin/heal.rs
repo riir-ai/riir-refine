@@ -1646,7 +1646,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states). A NEW generation's first append is admitted ONLY\n                    if it measures harder than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -2027,15 +2027,15 @@ fn parse_args() -> Args {
             }
             "--generation" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, or 6)");
+                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, 6, or 7)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if !(1..=6).contains(&g) {
-                    eprintln!("--generation accepts 1, 2, 3, 4, 5, or 6, got {g}");
+                if !(1..=7).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, 3, 4, 5, 6, or 7, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
@@ -2522,6 +2522,16 @@ fn run_score_bench(generation: u8) {
                 std::process::exit(1);
             }
         },
+        7 => match sb::generations::v7_freeze_status() {
+            Ok(admitted) => {
+                println!("generation v7: {admitted} admitted fixture(s) (freeze record present)");
+                (sb::generations::generation_v7(), "generation-v7 overlap-edit-chain ladder")
+            }
+            Err(e) => {
+                eprintln!("generation v7: {e}");
+                std::process::exit(1);
+            }
+        },
         _ => (sb::fixtures::fixtures(), "frozen v1 set"),
     };
     println!(
@@ -2535,6 +2545,9 @@ fn run_score_bench(generation: u8) {
     }
     if generation == 6 {
         print_v6_territory_rates(&fixture_list, &score);
+    }
+    if generation == 7 {
+        print_v7_chain_tables(&fixture_list, &score);
     }
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
@@ -2627,6 +2640,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         4 => sb::report::HISTORY_SVG_V4,
         5 => sb::report::HISTORY_SVG_V5,
         6 => sb::report::HISTORY_SVG_V6,
+        7 => sb::report::HISTORY_SVG_V7,
         _ => sb::report::HISTORY_SVG,
     };
     let v1_series = gen_series(1);
@@ -2634,7 +2648,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
     let mut written_svgs = vec![sb::report::HISTORY_SVG];
-    for g in [2_u8, 3, 4, 5, 6] {
+    for g in [2_u8, 3, 4, 5, 6, 7] {
         let series = gen_series(g);
         if !series.is_empty() {
             let path = svg_path(g);
@@ -2645,7 +2659,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         }
     }
     println!(
-        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}, gen-6 {}) → {}{}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}, gen-6 {}, gen-7 {}) → {}{}",
         history.len(),
         v1_series.len(),
         gen_series(2).len(),
@@ -2653,6 +2667,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         gen_series(4).len(),
         gen_series(5).len(),
         gen_series(6).len(),
+        gen_series(7).len(),
         sb::report::HISTORY_JSONL,
         written_svgs
             .iter()
@@ -3102,6 +3117,62 @@ fn print_v6_territory_rates(
         let pct = (*r as f64) / (*t as f64) * 100.0;
         println!("{terr}: {r}/{t} = {pct:.1}%");
     }
+}
+
+/// The generation-7 difficulty tables (Plan 096 §7): per-depth resolution
+/// (the k rung = the pre-registered expected pass depth; the capped rung k=5
+/// is where the pass cap bites), per-territory resolution (flat control vs
+/// chain vs capped vs refused), and the passes distribution per spec. All
+/// reported, never asserted — the M5 admission gate carries the decision.
+#[cfg(feature = "score_bench")]
+fn print_v7_chain_tables(
+    fixtures: &[riir_clippy::score_bench::BenchFixture],
+    score: &riir_clippy::score_bench::BenchScore,
+) {
+    use riir_clippy::score_bench as sb;
+    use std::collections::BTreeMap;
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> = score
+        .outcomes
+        .iter()
+        .map(|o| (o.id.as_str(), o))
+        .collect();
+    let mut depth_resolved: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut depth_total: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut terr_resolved: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut terr_total: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut passes_hist: BTreeMap<usize, usize> = BTreeMap::new();
+    for f in fixtures {
+        let Some(o) = by_id.get(f.id) else { continue };
+        if !o.ran {
+            continue;
+        }
+        let k = sb::generations::v7_expected_k(f.id);
+        *depth_total.entry(k).or_default() += o.vocab_before.len();
+        *depth_resolved.entry(k).or_default() += o.resolved();
+        let terr = sb::generations::v7_territory(f.id);
+        *terr_total.entry(terr).or_default() += o.vocab_before.len();
+        *terr_resolved.entry(terr).or_default() += o.resolved();
+        *passes_hist.entry(o.passes).or_default() += 1;
+    }
+    #[allow(clippy::cast_precision_loss)] // counts < 10⁴ over f64
+    let pct = |r: usize, t: usize| (r as f64) / (t as f64) * 100.0;
+    println!("\n─ generation-7 chain tables (up = solved) ──────────────");
+    println!("per-depth (k = the pre-registered expected pass depth):",);
+    for (k, t) in &depth_total {
+        let r = depth_resolved.get(k).copied().unwrap_or(0);
+        println!("  depth {k}: {r}/{t} = {:.1}%", pct(r, *t));
+    }
+    println!("per-territory (never blended — the corpus's own stratification rule):");
+    for terr in ["flat", "chain", "capped", "refused"] {
+        let Some(t) = terr_total.get(terr) else { continue };
+        let r = terr_resolved.get(terr).copied().unwrap_or(0);
+        println!("  {terr}: {r}/{t} = {:.1}%", pct(r, *t));
+    }
+    println!("passes-to-quiet distribution (specs):");
+    for (p, n) in &passes_hist {
+        println!("  {p} pass(es): {n} spec(s)");
+    }
+    println!("───────────────────────────────────────────");
 }
 
 // ── Issue 050 T2: --corpus-stats / --import-series / --json ────────────

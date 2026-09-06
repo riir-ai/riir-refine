@@ -71,6 +71,9 @@ pub const HISTORY_SVG_V5: &str = ".benchmarks/score_history_v5.svg";
 /// The generation-6 curve (Plan 095, the real-repo shape ladder) — rendered
 /// only when v6 rows exist.
 pub const HISTORY_SVG_V6: &str = ".benchmarks/score_history_v6.svg";
+/// The generation-7 curve (Plan 096, the overlap-edit-chain ladder) —
+/// rendered only when v7 rows exist.
+pub const HISTORY_SVG_V7: &str = ".benchmarks/score_history_v7.svg";
 
 /// The M5 saturation window: marginal gain = rate[last] − rate[last − N].
 /// R = 5 ≈ the observed spacing between step changes in the 45-run history
