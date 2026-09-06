@@ -2379,6 +2379,32 @@ could not parse at HEAD; `--misses --limit` errored on the never-set
 repaired and live-verified. Next axes: the rustc-errors-side ladder or
 vocabulary extension to rust_perf rules (both in Bench 070 §What remains);
 v3's rate is a permanent DESIGN floor, not a frontier.
+**REOPEN (1) EXECUTED AGAIN 2026-09-06 (Bench 071, Plan 093): generation 4 =
+the rustc-errors-side ladder (Bench 069 candidate #4, the removed Plan-091
+duplicate's salvaged T2/T3) — composite `corpus_gen` cases at k∈{1..4}
+measured through the `--fix-compile` driver: a different oracle (rustc
+coded-error reduction, exact) and a different repair domain; the label
+shape reused `(spec_id, codes)` so the whole freeze engine ran UNCHANGED.
+Frozen 76/76 (zero exclusions, zero drift), **ADMITTED** (gen-4 54.3% < v1
+96.2%), deterministic ×2, rows #48/#49 + `score_history_v4.svg`. The
+territory split is the headline: uncontested 100% (60/60 — the templates'
+home turf at every width) vs contested 20% (only the E0505 template; the
+delegate-only E0596/E0382/E0507/E0373 families are the structural persist
+rows — the floor moves only when a template family ships, a floor-harness
+gate). **Two instrument catches en route, both loud-by-design:** (1) the
+freeze's first run caught `cargo check --all-targets` DOUBLE-compiling the
+lib (every diagnostic twice) — fixed by `(code, line)` dedupe (the
+driver's own `dedupe_by_site` class); (2) the bench's first live run
+measured an INCOHERENT 45.7% (uncontested 0/60 — a code cannot reduce
+without a template) — the scoring predicate in
+`composite::finalize_attribution` was INVERTED (presence counted as
+reduced; an empty final set counted as all-unproven); the instrument was
+repaired and the garbage row REMOVED from the JSONL before the corrected
+run became the series' first row. Lesson: a freeze label fence cannot see
+a scoring-semantics defect — the first live bench run is itself a gate,
+and an incoherent GREEN is a finding. The M5 admission gate + the
+append/SVG/saturation tail are now ONE shared implementation exercised by
+both runners (the v2 refusal re-verified byte-identical through it).
 **En-route catches:** (1) the pair row initially carried a wall-clock
 `created_unix` — the idempotence test flaked when two imports crossed a
 second boundary (the full-suite run caught it; the field is REMOVED —

@@ -1,6 +1,10 @@
 # Plan 093 — generation 4: the rustc-errors-side ladder (Bench 069 reopen #4)
 
-**Status:** IN PROGRESS — design pre-registered before the first freeze run; implementation next.
+**Status:** RECORD — landed 2026-09-06; gen-4 frozen 76/76 (zero exclusions, zero
+drift), ADMITTED at 54.3% (< v1 96.2%), deterministic ×2.
+[Bench 071](../.benchmarks/071_generation4_rustc_error_ladder.md) is the record.
+Headline finding: the scoring inversion caught by the bench's first live run
+(uncontested 0/60 was physically incoherent — repair the instrument first).
 
 **Source:** [Bench 069](../.benchmarks/069_issue072_t5_t6_generations.md) reopen candidate #4 +
 [Bench 070](../.benchmarks/070_generation3_persist_stratified_ladder.md) §What remains.
@@ -72,35 +76,44 @@ different repair domain than the clippy bench.
 
 ## Tasks
 
-- [ ] T0 — This plan committed BEFORE any implementation (plan-first discipline).
-- [ ] T1 — `src/domains/rustc_errors/composite.rs` (new, rustc_errors-domain):
+- [x] T0 — This plan committed BEFORE any implementation (plan-first discipline).
+- [x] T1 — `src/domains/rustc_errors/composite.rs` (new, rustc_errors-domain):
   region extraction (`module_regions`, brace-matched, format-independent), scaffold
   helper, `check_composite_labels` (freeze entry), `measure_composite` (bench entry),
-  attribution + guards; unit tests for the pure parts (no cargo).
-- [ ] T2 — `src/score_bench/generations.rs`: `GEN4_ATOM_TARGET`, `v4_atoms()`
+  attribution + guards; unit tests for the pure parts (no cargo). En-route: the
+  `(code, line)` dedupe for the `--all-targets` double-compile artifact (caught by
+  the freeze's first run) + the reduction-predicate inversion fix (caught by the
+  bench's first run).
+- [x] T2 — `src/score_bench/generations.rs`: `GEN4_ATOM_TARGET`, `v4_atoms()`
   (stride slice + code interleave), `specs_v4()`, `v4_member_codes(id)`,
   `FROZEN_LABELS_V4`/`EXCLUDED_IDS_V4` (landed post-freeze), `v4_freeze_status()`;
   the v4 section cfg-gated on `rustc_errors` (score_bench does not imply it);
   always-on tests mirror the v3 set (dual-mode holes test, determinism, ladder shape,
   family/territory coverage, id uniqueness across all three generations).
-- [ ] T3 — `src/score_bench/report.rs`: `HISTORY_SVG_V4`. `src/bin/heal.rs`:
+- [x] T3 — `src/score_bench/report.rs`: `HISTORY_SVG_V4`. `src/bin/heal.rs`:
   `--generation` range 1..=4 + help text; the gen-4 dispatch arm (freeze gate →
   compile bench); `run_score_bench_compile` (aggregate CompositeOutcomes →
   BenchScore, per-k + per-territory printing, per-spec progress lines); the M5
   admission block EXTRACTED into one helper shared by both paths (byte-identical
-  messages); SVG loop `[2, 3, 4]` + the history line's gen counts.
-- [ ] T4 — `tests/generation_v4_freeze.rs`: the `#[ignore]`d label-fence e2e
+  messages — v2 refusal re-verified through it); SVG loop `[2, 3, 4]` + the history
+  line's gen counts.
+- [x] T4 — `tests/generation_v4_freeze.rs`: the `#[ignore]`d label-fence e2e
   (one real check per spec; cascade exclusions; drift gate; per-k/per-family/per-territory
   label tables; paste-ready literals) + the always-on table-properties test.
   `Cargo.toml` `[[test]]` row with `required-features = ["score_bench",
   "rustc_errors"]` (the 713-T3 reader axis).
-- [ ] T5 — Freeze run → land the tables → re-run (drift green, dual-mode flips).
-- [ ] T6 — The bench: `--score-bench --generation 4` → admission verdict → row
+- [x] T5 — Freeze run → land the tables → re-run (drift green, dual-mode flips).
+- [x] T6 — The bench: `--score-bench --generation 4` → admission verdict → row
   appended → `score_history_v4.svg` → per-k + per-territory tables into the record.
-- [ ] T7 — `.benchmarks/071_generation4_rustc_error_ladder.md` (highwater 70→71) +
+  En-route: the first run's garbage row (45.7%, broken scoring instrument) was
+  REMOVED from the JSONL; the corrected run (#48) + its determinism re-run (#49)
+  are the landed series.
+- [x] T7 — `.benchmarks/071_generation4_rustc_error_ladder.md` (highwater 70→71) +
   Bench 070 pointer + AGENTS.md Issue-072 row update.
-- [ ] T8 — Full validation: lib default + union states, clippy on every touched
-  line, freeze e2e ×2 (drift), the v1/v2/v3 CLI surfaces re-verified unchanged.
+- [x] T8 — Full validation: lib default 1129/0 + union 1313/0/8i, clippy zero on
+  every touched line, freeze e2e ×2 (drift), the v1/v2/v3 CLI surfaces re-verified
+  (v2 refusal byte-identical through the shared gate; `--generation 5` validation;
+  `--score-report` re-render).
 
 ## Non-goals
 

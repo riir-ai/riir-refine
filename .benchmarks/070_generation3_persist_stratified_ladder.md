@@ -126,7 +126,9 @@ function-level conflict review.
   - **the rustc-errors-side ladder** (Bench 069 candidate #4, the salvaged
     design): compose `corpus_gen` cases at k and measure the `--fix-compile`
     driver per k — a different oracle (per-sub-lint reduction, exact by
-    construction) and a different repair domain; or
+    construction) and a different repair domain; **EXECUTED 2026-09-06 —
+    generation 4, ADMITTED at 54.3%:
+    [`.benchmarks/071_generation4_rustc_error_ladder.md`](071_generation4_rustc_error_ladder.md)**; or
   - **vocabulary extension to rust_perf rules** (candidate #1b): the
     rust_perf divergence classes (array-literal vec-with-capacity, dep-gated
     proposers) are open frontier but changing `vocabulary()` re-baselines

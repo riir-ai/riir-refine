@@ -288,11 +288,15 @@ fn finalize_attribution(out: &mut CompositeOutcome, expect_codes: &[&str], final
     let mut persist: BTreeMap<&str, usize> = BTreeMap::new();
     out.member_reduced = vec![false; expect_codes.len()];
     for (i, expected) in expect_codes.iter().enumerate() {
-        let cleared = owners
+        // Reduced iff NO final diagnostic of the member's expected code
+        // attributes to its region — an error-free final check reduces every
+        // member (the vacuous-`any` trap: an empty final code set must read
+        // as all-fixed, not all-unproven).
+        let still_present = owners
             .iter()
             .zip(&out.final_codes)
             .any(|(owner, (code, _))| *owner == Some(i) && code == expected);
-        if cleared {
+        if !still_present {
             out.members_reduced += 1;
             out.member_reduced[i] = true;
         } else {

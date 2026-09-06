@@ -2025,15 +2025,15 @@ fn parse_args() -> Args {
             }
             "--generation" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1, 2, or 3)");
+                    eprintln!("--generation requires a value (1, 2, 3, or 4)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if !(1..=3).contains(&g) {
-                    eprintln!("--generation accepts 1, 2, or 3, got {g}");
+                if !(1..=4).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, 3, or 4, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
@@ -2767,20 +2767,18 @@ fn run_score_bench_compile() {
     println!("\n─ generation-4 difficulty tables ──────────────");
     println!("per-k member-reduction (reported, not asserted — Plan 093 pre-registration):");
     for (k, total) in &k_total {
+        let reduced = k_reduced.get(k).copied().unwrap_or(0);
         println!(
-            "  k={k}: {:.1}% ({}/{})",
-            rate(k_reduced[k], *total) * 100.0,
-            k_reduced[k],
-            total
+            "  k={k}: {:.1}% ({reduced}/{total})",
+            rate(reduced, *total) * 100.0,
         );
     }
     println!("per-territory (never blended — the corpus's own stratification rule):");
     for (terr, total) in &terr_total {
+        let reduced = terr_reduced.get(terr).copied().unwrap_or(0);
         println!(
-            "  {terr}: {:.1}% ({}/{})",
-            rate(terr_reduced[terr], *total) * 100.0,
-            terr_reduced[terr],
-            total
+            "  {terr}: {:.1}% ({reduced}/{total})",
+            rate(reduced, *total) * 100.0,
         );
     }
     println!("───────────────────────────────────────────────");

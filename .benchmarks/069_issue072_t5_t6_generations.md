@@ -127,6 +127,11 @@ admission gate re-armed. v1 floors stay pinned forever either way.
 **EXECUTED same day: candidate #1 (persist-shape stratification) landed as
 generation 3 and was ADMITTED (87.5% < v1 96.2%) — record:
 [`.benchmarks/070_generation3_persist_stratified_ladder.md`](070_generation3_persist_stratified_ladder.md).**
+**EXECUTED 2026-09-06 (later session): candidate #4 (the rustc-errors-side ladder)
+landed as generation 4 and was ADMITTED (54.3% < v1 96.2%, deterministic ×2;
+uncontested 100% / contested 20% — the delegate-only families are the structural
+misses) — record:
+[`.benchmarks/071_generation4_rustc_error_ladder.md`](071_generation4_rustc_error_ladder.md).**
 
 ## Validation
 
