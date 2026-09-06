@@ -617,7 +617,14 @@ def collect_cf_daily(days: int = 14) -> list[dict]:
 # settlement row with covers_unix set to the day it settles (the Issue 044
 # T12 rule — never bucket by append time).
 #
-# Idempotency: settled-day detection reads the LEDGER FILE ITSELF, so an
+# Idempotency + convergence: a settled day is skipped only while it MATCHES
+# analytics — the tolerance IS the duplicate guard. A settled day that still
+# disagrees gets a CORRECTION row instead of a silent skip: a one-shot
+# settlement could otherwise lock an under-count in as PERMANENT drift
+# (analytics lag at settle time attributes fewer neurons than final billing,
+# and the skip made the day un-settleable forever). Corrections converge —
+# each row moves the day's ledger total onto the then-current analytics
+# value, so the next run finds |diff| <= tol and appends nothing. An
 # appended-but-uncommitted row still blocks a duplicate on the next run; the
 # nightly's commit merely makes it durable.
 SETTLE_ARMS = {"settlement", "reconciliation"}  # "reconciliation" = the two hand-appended T12 rows
@@ -644,8 +651,6 @@ def settle_reconciliation() -> int:
         day = g["date"]
         if day >= today:
             continue  # incomplete day — analytics still growing
-        if day in settled_days:
-            continue
         target = g["neurons"]
         have = (led["per_day"].get(day) or {}).get("neurons") or 0.0
         diff = target - have
@@ -655,8 +660,17 @@ def settle_reconciliation() -> int:
             log(f"settlement: {day} already reconciled "
                 f"(ledger {have:.2f} vs analytics {target:.2f})")
             continue
+        correction = day in settled_days
         covers = int(datetime.strptime(day, "%Y-%m-%d")
                      .replace(tzinfo=timezone.utc).timestamp())
+        head = (
+            "settlement CORRECTION (issue 057 convergent re-settle): a prior "
+            "settlement under/over-counted (analytics lag at settle time); the "
+            "day is still covered by analytics, so correct rather than lock "
+            "the drift in"
+            if correction else
+            "automated settlement (issue 057): GraphQL account-day total"
+        )
         row = {
             "ts_unix": int(time.time()),
             "covers_unix": covers,
@@ -679,8 +693,7 @@ def settle_reconciliation() -> int:
                 "free_alloc_pct_of_daily_10k": round(diff / 10_000.0 * 100.0, 1),
             },
             "kat": None,
-            "note": (f"automated settlement (issue 057): GraphQL account-day total "
-                     f"{target:.2f} n vs ledger-attributed {have:.2f} n at settle time; "
+            "note": (f"{head} {target:.2f} n vs ledger-attributed {have:.2f} n at settle time; "
                      "aggregate remainder — aiInferenceAdaptiveGroups has NO model "
                      "dimension, per-model attribution is not derivable"),
         }
@@ -688,7 +701,8 @@ def settle_reconciliation() -> int:
             f.write(json.dumps(row) + "\n")
         appended += 1
         log(f"settlement: {day} appended {diff:+.2f} n "
-            f"(analytics {target:.2f} - ledger {have:.2f})")
+            f"({'CORRECTION' if correction else 'settlement'}: "
+            f"analytics {target:.2f} - ledger {have:.2f})")
     if not appended:
         log("settlement: nothing to settle")
     return appended
