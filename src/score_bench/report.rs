@@ -47,6 +47,22 @@ pub struct HistoryRecord {
 pub const HISTORY_JSONL: &str = ".benchmarks/score_history.jsonl";
 pub const HISTORY_SVG: &str = ".benchmarks/score_history.svg";
 
+/// Saturation-window length (Plan 091 T4): the detector compares the LAST
+/// run against the mean of the preceding `SATURATION_WINDOW` runs. The
+/// score bench improves in ROOT-CAUSE STEPS, not smoothly (module docs),
+/// so a one-run delta is noise — the window mean is the "no real movement"
+/// reference. R = 5 ≈ the observed spacing between step changes in the
+/// 45-run history; re-pin only with the runs cited.
+pub const SATURATION_WINDOW: usize = 5;
+
+/// Saturation threshold (Plan 091 T4): a `heal_rate` delta below this many
+/// percentage points over the window means no measurable movement → the
+/// bench is saturated at the current fixture set and the generation-v2
+/// ratchet (T5) is the named resolution. ε = 0.5pp: half the smallest
+/// step the bench has ever printed (runs quote whole tenths; 1.0pp is a
+/// real step, 0.1pp is print noise).
+pub const SATURATION_EPSILON_PP: f32 = 0.5;
+
 /// Append one record (creates the file + parent dir on first write).
 ///
 /// # Errors
@@ -214,7 +230,66 @@ pub fn print_report(score: &super::BenchScore) {
     if drifted > 0 {
         println!("drift warnings: {drifted} fixture(s) — frozen labels stale vs this toolchain");
     }
+    let records = load_history(std::path::Path::new(HISTORY_JSONL));
+    let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
+    match sat {
+        SaturationVerdict::Saturated { delta_pp } => {
+            println!(
+                "saturation: SATURATED (heal_rate Δ{delta_pp:+.1}pp over the last {SATURATION_WINDOW} runs) — the fixture set has stopped measuring; generation-v2 admission (Plan 091 T5) is the resolution"
+            );
+        }
+        SaturationVerdict::Moving { delta_pp } => {
+            println!(
+                "saturation: moving (heal_rate Δ{delta_pp:+.1}pp over the last {SATURATION_WINDOW} runs)"
+            );
+        }
+        SaturationVerdict::InsufficientHistory => {
+            // Fewer than window+1 runs: nothing to compare — stay quiet.
+        }
+    }
     println!("───────────────────────────────────────────────────────");
+}
+
+/// Saturation verdict over the score history (Plan 091 T4 — Research 450
+/// M5's detector half).
+///
+/// The bench improves in ROOT-CAUSE STEPS, so "saturated" means: the last
+/// run's `heal_rate` is within `epsilon_pp` of the MEAN of the preceding
+/// `window` runs — no step has landed inside the window. The comparison is
+/// signed (a REGRESSION also reads `Moving` — movement is movement; the
+/// SVG curve is the regression surface, this detector only answers "is
+/// the fixture set still measuring anything").
+#[derive(Debug, Clone, PartialEq)]
+pub enum SaturationVerdict {
+    /// Δ within ε of the window mean → the set is saturated.
+    Saturated {
+        /// last − window-mean, in percentage points.
+        delta_pp: f32,
+    },
+    /// |Δ| beyond ε in either direction → still measuring.
+    Moving {
+        /// last − window-mean, in percentage points.
+        delta_pp: f32,
+    },
+    /// Fewer than `window + 1` runs — nothing to compare yet.
+    InsufficientHistory,
+}
+
+/// Classify the history (pure; `records` in file order, oldest first).
+#[must_use]
+pub fn saturation(records: &[HistoryRecord], epsilon_pp: f32, window: usize) -> SaturationVerdict {
+    if records.len() < window + 1 {
+        return SaturationVerdict::InsufficientHistory;
+    }
+    let last = records[records.len() - 1].heal_rate;
+    let win = &records[records.len() - 1 - window .. records.len() - 1];
+    let mean = win.iter().map(|r| r.heal_rate).sum::<f32>() / window as f32;
+    let delta_pp = (last - mean) * 100.0;
+    if delta_pp.abs() < epsilon_pp {
+        SaturationVerdict::Saturated { delta_pp }
+    } else {
+        SaturationVerdict::Moving { delta_pp }
+    }
 }
 
 /// Chart geometry constants (860×400, y ∈ [0,1] from percent).
@@ -455,5 +530,83 @@ mod tests {
         let loaded = load_history(&path);
         assert_eq!(loaded, recs);
         let _ = std::fs::remove_file(&path);
+    }
+
+    // ── saturation detector (Plan 091 T4.1 — both directions) ─────────
+
+    #[test]
+    fn saturation_flat_history_flags_saturated() {
+        // 5 window runs at ~the same rate + a last run within ε → Saturated.
+        let mut records: Vec<HistoryRecord> = (0..5)
+            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.962))
+            .collect();
+        records.push(rec("2026-09-06T10:00:00", 0.962));
+        let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
+        match sat {
+            SaturationVerdict::Saturated { delta_pp } => assert!(delta_pp.abs() < 0.05),
+            other => panic!("expected Saturated, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn saturation_improving_tail_does_not_flag() {
+        // A real step (+1.2pp) on the last run → Moving.
+        let mut records: Vec<HistoryRecord> = (0..5)
+            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.950))
+            .collect();
+        records.push(rec("2026-09-06T10:00:00", 0.962));
+        let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
+        match sat {
+            SaturationVerdict::Moving { delta_pp } => assert!(delta_pp > 1.0),
+            other => panic!("expected Moving, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn saturation_regression_is_also_movement() {
+        // A signed comparison: a real DROP is movement, not saturation —
+        // this detector only answers "is the set still measuring".
+        let mut records: Vec<HistoryRecord> = (0..5)
+            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.962))
+            .collect();
+        records.push(rec("2026-09-06T10:00:00", 0.940));
+        let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
+        match sat {
+            SaturationVerdict::Moving { delta_pp } => assert!(delta_pp < -1.0),
+            other => panic!("expected Moving (regression), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn saturation_short_history_is_insufficient() {
+        let records: Vec<HistoryRecord> = (0..SATURATION_WINDOW)
+            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.962))
+            .collect();
+        assert_eq!(
+            saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW),
+            SaturationVerdict::InsufficientHistory
+        );
+        assert_eq!(
+            saturation(&[], SATURATION_EPSILON_PP, SATURATION_WINDOW),
+            SaturationVerdict::InsufficientHistory
+        );
+    }
+
+    #[test]
+    fn saturation_delta_is_against_the_window_mean_not_the_prior_run() {
+        // Noisy window (0.90, 0.92, 0.94, 0.96, 0.98; mean 0.94) + last at
+        // the mean → Saturated EVEN THOUGH the prior single run is 0.04
+        // away. Pins the mean (not prev-run) comparison.
+        let rates = [0.90_f32, 0.92, 0.94, 0.96, 0.98];
+        let mut records: Vec<HistoryRecord> = rates
+            .iter()
+            .enumerate()
+            .map(|(i, r)| rec(&format!("2026-09-01T0{i}:00:00"), *r))
+            .collect();
+        records.push(rec("2026-09-06T10:00:00", 0.94));
+        assert!(matches!(
+            saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW),
+            SaturationVerdict::Saturated { .. }
+        ));
     }
 }

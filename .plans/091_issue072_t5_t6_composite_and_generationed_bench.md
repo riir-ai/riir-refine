@@ -74,15 +74,22 @@ G8 becomes measurable)."
     (`eval_fixtures_composite.rs`): the scorer's verdicts agree with the oracle labels
     on ≥95% of a K-sample (the fence-e2e pattern — `#[ignore]`d real-cargo arm +
     always-on arithmetic gates; labeled by the oracle, never by hand).
-- [ ] T4 — Saturation detector (M5 detector half):
-  - [ ] T4.1 `score_bench/report.rs`: `saturation(records, epsilon, window) ->
+- [x] T4 — Saturation detector (M5 detector half):
+  - [x] T4.1 `score_bench/report.rs`: `saturation(records, epsilon, window) ->
     SaturationVerdict` — marginal heal-rate gain over the last R runs < ε →
     `Saturated`; wired into `print_report` beside the dispersion/vacuous line. Unit
     gates BOTH directions (planted flat history flags; an improving tail does not) +
     ε/R as named consts with derivation comments (start ε = 0.5pp, R = 5; the first
     measured run confirms or re-pins with the numbers recorded).
-  - [ ] T4.2 Report line `saturation: <verdict> (Δ<eps> over <R>)` — advisory until
-    T5 consumes it.
+    **DONE 2026-09-06:** signed comparison (a regression is ALSO `Moving` — this
+    detector answers "is the set still measuring", the SVG curve owns regressions);
+    window-MEAN reference not prior-run (pinned by
+    `saturation_delta_is_against_the_window_mean_not_the_prior_run`); 5 gates +
+    clippy 0 under `score_bench`. REAL-history verdict: SATURATED (Δ −0.0pp over
+    the last 5 of 45 runs) — the bench has sat at 96.2 since run #3, which is
+    exactly the motivation for T5's ratchet.
+  - [x] T4.2 Report line `saturation: <verdict> (Δ<eps> over <R>)` — advisory until
+    T5 consumes it. (Insufficient-history runs stay quiet; both live verdicts print.)
 - [ ] T5 — Generationed bench ratchet (M5 ratchet half):
   - [ ] T5.1 Generation-v2 fixture set: ~30–40 composites (T2 generator, stratified
     over codes × k), construction-labeled, G1-validated (T2.2), oracle-sampled
