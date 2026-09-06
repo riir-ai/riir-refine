@@ -668,6 +668,13 @@ required-features = ["score_bench"]
 name = "generation_v3_freeze"
 required-features = ["score_bench"]
 
+# Generation-4 freeze (Plan 093): the rustc-errors-side k-ladder. Same
+# reader-axis shape as v3's row, plus the domain feature the atom factory
+# reads through (score_bench does not imply rustc_errors).
+[[test]]
+name = "generation_v4_freeze"
+required-features = ["score_bench", "rustc_errors"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

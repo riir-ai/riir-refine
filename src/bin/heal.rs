@@ -1646,7 +1646,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth). A NEW generation's first append is admitted ONLY\n                    if it measures harder than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -1830,11 +1830,13 @@ struct Args {
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
     /// score history, re-render the SVG. Standalone mode — no paths.
     score_bench: bool,
-    /// `--generation <1|2|3>` (Plan 092 M5 + Bench 069 reopen #1): which
-    /// bench generation to run. Absent = 1 (the frozen v1 set, unchanged).
-    /// 2 = the construction-built generation-v2 k-ladder (issue 072 T5);
-    /// 3 = the persist-stratified generation-v3 ladder (Bench 069 reopen
-    /// #1). A NEW generation's first append is gated on non-vacuity — a
+    /// `--generation <1|2|3|4>` (Plan 092 M5 + Bench 069 reopen #1 + Plan
+    /// 093): which bench generation to run. Absent = 1 (the frozen v1 set,
+    /// unchanged). 2 = the construction-built generation-v2 k-ladder (issue
+    /// 072 T5); 3 = the persist-stratified generation-v3 ladder (Bench 069
+    /// reopen #1); 4 = the rustc-errors-side k-ladder (Plan 093 — measures
+    /// the `--fix-compile` driver against rustc coded-error ground truth).
+    /// A NEW generation's first append is gated on non-vacuity — a
     /// generation that is not harder than v1 is refused, never appended.
     generation: Option<u8>,
     /// `--score-report`: re-render the SVG from the existing history JSONL.
@@ -2462,6 +2464,22 @@ fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
 fn run_score_bench(generation: u8) {
     use riir_clippy::score_bench as sb;
 
+    // Generation 4 (Plan 093) is the compile-domain runner — it does not use
+    // the clippy oracle at all. Dispatch before the oracle availability
+    // check so a clippy-less invocation of gen 4 still works.
+    if generation == 4 {
+        #[cfg(feature = "rustc_errors")]
+        {
+            run_score_bench_compile();
+            return;
+        }
+        #[cfg(not(feature = "rustc_errors"))]
+        {
+            eprintln!("--generation 4 requires the rustc_errors feature");
+            std::process::exit(1);
+        }
+    }
+
     let oracle = sb::draft_oracle();
     if !oracle.is_available() {
         eprintln!("score_bench: cargo not on PATH — cannot derive ground truth");
@@ -2503,42 +2521,69 @@ fn run_score_bench(generation: u8) {
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
     let history_before = sb::report::load_history(jsonl);
 
-    // M5 non-vacuity admission: the FIRST row of a NEW generation (≥ 2)
-    // must measure harder than v1 — a new generation that isn't harder isn't
-    // a generation, it's the same measurement with a bigger denominator.
-    // Nothing is appended on a refusal (the generation is deterministic; the
-    // failed admission is reproducible — the .benchmarks doc records the
-    // verdict instead).
-    if generation >= 2 && !history_before.iter().any(|r| r.generation == generation) {
-        let Some(v1_rate) = history_before
-            .iter()
-            .rev()
-            .find(|r| r.generation == 1)
-            .map(|r| r.heal_rate)
-        else {
-            eprintln!(
-                "generation v{generation} admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
-                sb::report::HISTORY_JSONL
-            );
-            std::process::exit(1);
-        };
-        if score.heal_rate >= v1_rate {
-            eprintln!(
-                "generation v{generation} admission REFUSED (non-vacuity, M5): v{generation} heal_rate {:.4} >= v1 {:.4}. \
-                 A new generation that is not harder is not admitted; nothing appended \
-                 (the generation is deterministic — record the verdict in its .benchmarks doc).",
-                score.heal_rate, v1_rate
-            );
-            std::process::exit(1);
-        }
-        println!(
-            "generation v{generation} ADMITTED: heal_rate {:.4} < v1 {:.4} — the generation is harder, floors begin",
-            score.heal_rate, v1_rate
-        );
+    // M5 non-vacuity admission (the shared gate — see [`admission_gate`]).
+    if let Err(refusal) = admission_gate(generation, &score, &history_before) {
+        eprintln!("{refusal}");
+        std::process::exit(1);
     }
 
+    finish_score_bench(generation, &score);
+}
+
+/// The M5 non-vacuity admission gate, shared by the clippy and compile
+/// runners: the FIRST row of a NEW generation (≥ 2) must measure strictly
+/// harder than v1's latest heal_rate — a new generation that isn't harder
+/// isn't a generation, it's the same measurement with a bigger denominator.
+/// Returns `Err(refusal message)` — the caller prints + exits 1; nothing is
+/// appended on a refusal (the generation is deterministic; the failed
+/// admission is reproducible — the .benchmarks doc records the verdict
+/// instead).
+#[cfg(feature = "score_bench")]
+fn admission_gate(
+    generation: u8,
+    score: &riir_clippy::score_bench::BenchScore,
+    history_before: &[riir_clippy::score_bench::report::HistoryRecord],
+) -> Result<(), String> {
+    if generation < 2 || history_before.iter().any(|r| r.generation == generation) {
+        return Ok(());
+    }
+    let Some(v1_rate) = history_before
+        .iter()
+        .rev()
+        .find(|r| r.generation == 1)
+        .map(|r| r.heal_rate)
+    else {
+        return Err(format!(
+            "generation v{generation} admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
+            riir_clippy::score_bench::report::HISTORY_JSONL
+        ));
+    };
+    if score.heal_rate >= v1_rate {
+        return Err(format!(
+            "generation v{generation} admission REFUSED (non-vacuity, M5): v{generation} heal_rate {:.4} >= v1 {:.4}. \
+             A new generation that is not harder is not admitted; nothing appended \
+             (the generation is deterministic — record the verdict in its .benchmarks doc).",
+            score.heal_rate, v1_rate
+        ));
+    }
+    println!(
+        "generation v{generation} ADMITTED: heal_rate {:.4} < v1 {:.4} — the generation is harder, floors begin",
+        score.heal_rate, v1_rate
+    );
+    Ok(())
+}
+
+/// The shared post-measurement tail: append the row, dual-write the store,
+/// re-render every per-generation SVG (v1 always; v2/v3/v4 when non-empty),
+/// print the history line, and report saturation telemetry. One
+/// implementation for both runners — the ratchet invariants live here.
+#[cfg(feature = "score_bench")]
+fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchScore) {
+    use riir_clippy::score_bench as sb;
+
+    let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
     let rec =
-        sb::report::HistoryRecord::from_score(&score, sb::report::git_sha()).with_generation(generation);
+        sb::report::HistoryRecord::from_score(score, sb::report::git_sha()).with_generation(generation);
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
@@ -2549,7 +2594,7 @@ fn run_score_bench(generation: u8) {
     sb::report::record_store_best_effort(&rec);
     let history = sb::report::load_history(jsonl);
     // Per-generation SVG curves (M5): v1 → score_history.svg, v2 → _v2.svg,
-    // v3 → _v3.svg.
+    // v3 → _v3.svg, v4 → _v4.svg.
     let gen_series = |g: u8| {
         history
             .iter()
@@ -2560,6 +2605,7 @@ fn run_score_bench(generation: u8) {
     let svg_path = |g: u8| match g {
         2 => sb::report::HISTORY_SVG_V2,
         3 => sb::report::HISTORY_SVG_V3,
+        4 => sb::report::HISTORY_SVG_V4,
         _ => sb::report::HISTORY_SVG,
     };
     let v1_series = gen_series(1);
@@ -2567,7 +2613,7 @@ fn run_score_bench(generation: u8) {
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
     let mut written_svgs = vec![sb::report::HISTORY_SVG];
-    for g in [2_u8, 3] {
+    for g in [2_u8, 3, 4] {
         let series = gen_series(g);
         if !series.is_empty() {
             let path = svg_path(g);
@@ -2578,11 +2624,12 @@ fn run_score_bench(generation: u8) {
         }
     }
     println!(
-        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}) → {}{}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}) → {}{}",
         history.len(),
         v1_series.len(),
         gen_series(2).len(),
         gen_series(3).len(),
+        gen_series(4).len(),
         sb::report::HISTORY_JSONL,
         written_svgs
             .iter()
@@ -2593,6 +2640,161 @@ fn run_score_bench(generation: u8) {
     // instrument over the per-generation series.
     let verdict = sb::report::detect_saturation(&history, generation);
     println!("{}", sb::report::saturation_line(&verdict, generation));
+}
+
+/// The generation-4 bench runner (Plan 093): the rustc-errors-side k-ladder.
+/// Each spec is a composite of k `corpus_gen` cases (each in its own `mod
+/// gen_{i}`); the measurement scaffolds the composed broken file, runs the
+/// production `--fix-compile` driver (write mode), and scores per-member
+/// coded-error reduction against rustc's own diagnostics — exact by
+/// construction, no oracle. Metrics map onto the shared row schema:
+/// heal_rate = Σ reduced / Σ members (per-member, NOT per-lint — the
+/// admission gate's v1 anchor is a cross-domain non-vacuity floor, recorded
+/// as such in the plan).
+#[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
+fn run_score_bench_compile() {
+    use riir_clippy::domains::rustc_errors::composite;
+    use riir_clippy::domains::rustc_errors::corpus_gen::{territory_of, Territory};
+    use riir_clippy::score_bench as sb;
+    use std::collections::BTreeMap;
+
+    let specs = match sb::generations::v4_freeze_status() {
+        Ok(admitted) => {
+            println!("generation v4: {admitted} admitted spec(s) (freeze record present)");
+            sb::generations::specs_v4()
+        }
+        Err(e) => {
+            eprintln!("generation v4: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!(
+        "compile-bench: {} composite spec(s) [generation-v4 rustc-error ladder], real-rustc ground truth…",
+        specs.len()
+    );
+
+    let work_root = std::env::temp_dir().join("riir_clippy_score_bench_gen4");
+    let _ = std::fs::create_dir_all(&work_root);
+
+    let mut members_total = 0usize;
+    let mut members_reduced = 0usize;
+    let mut created_total = 0usize;
+    let mut ran_specs = 0usize;
+    let mut parse_unsafe_specs = 0usize;
+    let mut edits_total = 0usize;
+    let mut persist: BTreeMap<String, usize> = BTreeMap::new();
+    let mut k_total: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut k_reduced: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut terr_total: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut terr_reduced: BTreeMap<&str, usize> = BTreeMap::new();
+
+    for spec in &specs {
+        let Some(codes) = sb::generations::v4_member_codes(&spec.id) else {
+            eprintln!("gen4: member codes unresolvable for {}", spec.id);
+            std::process::exit(1);
+        };
+        let code_refs: Vec<&str> = codes.iter().map(String::as_str).collect();
+        let outcome = composite::measure_composite(&spec.id, &code_refs, &spec.code, &work_root);
+        if outcome.ran {
+            ran_specs += 1;
+        }
+        if outcome.parse_unsafe {
+            parse_unsafe_specs += 1;
+        }
+        members_total += outcome.members_total;
+        members_reduced += outcome.members_reduced;
+        created_total += outcome.created_total;
+        edits_total += outcome.edits;
+        for (code, n) in &outcome.persist {
+            *persist.entry(code.clone()).or_insert(0) += n;
+        }
+        *k_total.entry(spec.k).or_insert(0) += outcome.members_total;
+        *k_reduced.entry(spec.k).or_insert(0) += outcome.members_reduced;
+        // Per-member territory: territory is a member property and a
+        // composite can mix — read the aligned per-member flags.
+        for (code, reduced) in codes.iter().zip(&outcome.member_reduced) {
+            let terr = match territory_of(code) {
+                Territory::Uncontested => "uncontested",
+                Territory::Contested => "contested",
+            };
+            *terr_total.entry(terr).or_insert(0) += 1;
+            if *reduced {
+                *terr_reduced.entry(terr).or_insert(0) += 1;
+            }
+        }
+        println!(
+            "gen4 {} : k={} reduced {}/{} created {} edits {}{}",
+            spec.id,
+            spec.k,
+            outcome.members_reduced,
+            outcome.members_total,
+            outcome.created_total,
+            outcome.edits,
+            if outcome.label_ok { "" } else { " [LABEL-MISMATCH]" },
+        );
+    }
+
+    let rate = |reduced: usize, total: usize| {
+        if total == 0 {
+            0.0
+        } else {
+            reduced as f32 / total as f32
+        }
+    };
+    let score = sb::BenchScore {
+        n_total: specs.len(),
+        n_ran: ran_specs,
+        n_excluded: 0,
+        n_clean: 0,
+        heal_rate: rate(members_reduced, members_total),
+        created_total,
+        created_rate: rate(created_total, members_total),
+        parse_safety: if ran_specs == 0 {
+            1.0
+        } else {
+            1.0 - rate(parse_unsafe_specs, ran_specs)
+        },
+        // The ladder has no clean fixtures — the decline axis is vacuously
+        // correct (same convention the clippy runner uses when none exist).
+        decline_correctness: 1.0,
+        edits_total,
+        vocab_size: members_total,
+        persist: persist.into_iter().collect(),
+        outcomes: Vec::new(),
+    };
+    sb::report::print_report(&score);
+
+    println!("\n─ generation-4 difficulty tables ──────────────");
+    println!("per-k member-reduction (reported, not asserted — Plan 093 pre-registration):");
+    for (k, total) in &k_total {
+        println!(
+            "  k={k}: {:.1}% ({}/{})",
+            rate(k_reduced[k], *total) * 100.0,
+            k_reduced[k],
+            total
+        );
+    }
+    println!("per-territory (never blended — the corpus's own stratification rule):");
+    for (terr, total) in &terr_total {
+        println!(
+            "  {terr}: {:.1}% ({}/{})",
+            rate(terr_reduced[terr], *total) * 100.0,
+            terr_reduced[terr],
+            total
+        );
+    }
+    println!("───────────────────────────────────────────────");
+
+    let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
+    let history_before = sb::report::load_history(jsonl);
+
+    // M5 non-vacuity admission (the shared gate — see [`admission_gate`]).
+    if let Err(refusal) = admission_gate(4, &score, &history_before) {
+        eprintln!("{refusal}");
+        std::process::exit(1);
+    }
+
+    finish_score_bench(4, &score);
 }
 
 /// The M4 difficulty measurement: per-k solve rates over the ladder

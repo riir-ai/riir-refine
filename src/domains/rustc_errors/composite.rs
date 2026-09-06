@@ -59,6 +59,10 @@ pub struct CompositeOutcome {
     pub final_codes: Vec<(String, usize)>,
     /// Per-code unreduced member counts (BTreeMap-stable order).
     pub persist: Vec<(String, usize)>,
+    /// Per-member reduced flags, aligned with the caller's `expect_codes`
+    /// order (member i ↔ region i). The bench's per-territory split reads
+    /// this — territory is a per-member property and a composite can mix.
+    pub member_reduced: Vec<bool>,
 }
 
 /// Extract the `mod gen_{index} { ... }` regions of a composed source.
@@ -150,6 +154,7 @@ pub fn measure_composite(
         initial_codes: Vec::new(),
         final_codes: Vec::new(),
         persist: full_persist(expect_codes),
+        member_reduced: vec![false; k],
     };
 
     // Scaffold; a write failure means nothing ran.
@@ -281,6 +286,7 @@ fn finalize_attribution(out: &mut CompositeOutcome, expect_codes: &[&str], final
     }
 
     let mut persist: BTreeMap<&str, usize> = BTreeMap::new();
+    out.member_reduced = vec![false; expect_codes.len()];
     for (i, expected) in expect_codes.iter().enumerate() {
         let cleared = owners
             .iter()
@@ -288,6 +294,7 @@ fn finalize_attribution(out: &mut CompositeOutcome, expect_codes: &[&str], final
             .any(|(owner, (code, _))| *owner == Some(i) && code == expected);
         if cleared {
             out.members_reduced += 1;
+            out.member_reduced[i] = true;
         } else {
             *persist.entry(expected).or_insert(0) += 1;
         }

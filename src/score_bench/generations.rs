@@ -620,6 +620,125 @@ pub fn generation_v3() -> Vec<BenchFixture> {
     generation_fixtures(specs_v3(), 3, FROZEN_LABELS_V3, EXCLUDED_IDS_V3)
 }
 
+// ── Generation 4: the rustc-errors-side ladder (Plan 093, Bench 069 reopen
+//    #4) ──────────────────────────────────────────────────────────────────
+// cfg(`rustc_errors`): `score_bench` does not imply the domain — the atom
+// factory reads `corpus_gen` through it, and the whole section compiles to
+// nothing without the feature (a `--features score_bench` build stays
+// green; the CLI arm errors cleanly instead).
+
+/// Deterministic atom-slice target out of `generate_corpus()` (n ≥ 200 →
+/// stride 5 → ~40 atoms, family-proportional because the corpus is
+/// family-ordered). Sized so the ladder matches the clippy generations
+/// (40 + 16 + 12 + 8 = 76 specs) while each spec costs a real `cargo check`.
+#[cfg(feature = "rustc_errors")]
+pub const GEN4_ATOM_TARGET: usize = 40;
+
+/// The generation-4 atom table: a stride slice of the generated compile-error
+/// corpus (`broken` half — the driver's repair subject), round-robin
+/// interleaved by expected code so the stride windows compose MIXED-code
+/// composites (raw corpus order is family-clustered; name order would be
+/// too). Deterministic — no RNG, no environment reads.
+#[cfg(feature = "rustc_errors")]
+#[must_use]
+pub fn v4_atoms() -> Vec<V3Atom> {
+    use crate::domains::rustc_errors::corpus_gen::GeneratedCase;
+
+    let corpus = crate::domains::rustc_errors::corpus_gen::generate_corpus();
+    let stride = (corpus.len() / GEN4_ATOM_TARGET).max(1);
+    let sliced: Vec<&GeneratedCase> =
+        corpus.iter().step_by(stride).take(GEN4_ATOM_TARGET).collect();
+
+    // Round-robin interleave by expected code: one atom per code group per
+    // pass, groups in sorted-code order, within-group order preserved —
+    // adjacent atoms differ in code until groups exhaust at the tail.
+    let mut groups: BTreeMap<&str, Vec<&GeneratedCase>> = BTreeMap::new();
+    for case in &sliced {
+        groups.entry(case.expect_code).or_default().push(case);
+    }
+    let keys: Vec<&str> = groups.keys().copied().collect();
+    let mut cursors: BTreeMap<&str, usize> = keys.iter().map(|k| (*k, 0)).collect();
+    let mut order: Vec<&GeneratedCase> = Vec::with_capacity(sliced.len());
+    while order.len() < sliced.len() {
+        let mut progressed = false;
+        for key in &keys {
+            let cur = cursors[key];
+            if cur < groups[key].len() {
+                order.push(groups[key][cur]);
+                cursors.insert(key, cur + 1);
+                progressed = true;
+            }
+        }
+        if !progressed {
+            break; // unreachable while order.len() < sliced.len()
+        }
+    }
+
+    order
+        .into_iter()
+        .map(|c| V3Atom {
+            id: c.name.clone(),
+            expect: vec![c.expect_code.to_string()],
+            code: c.broken.clone(),
+        })
+        .collect()
+}
+
+/// The generation-4 spec ladder: corpus-strided atoms (k=1) + the same
+/// stride-window composites (k=2..4) over the code-interleaved atom list.
+/// Byte-stable — pinned by test.
+#[cfg(feature = "rustc_errors")]
+#[must_use]
+pub fn specs_v4() -> Vec<GenSpec> {
+    let atom_list = v4_atoms();
+    specs_over_atoms("gen4", &atom_list)
+}
+
+/// Member i's expected error code for a generation-4 spec id, in the
+/// composite's `mod gen_{i}` order (with duplicates — the per-member
+/// multiset, not the distinct union in [`GenSpec::expect_lints`]). The
+/// measurement runner attributes final-check diagnostics to member regions
+/// through this ordering.
+#[cfg(feature = "rustc_errors")]
+#[must_use]
+pub fn v4_member_codes(spec_id: &str) -> Option<Vec<String>> {
+    let rest = spec_id.strip_prefix("gen4-k")?;
+    let (k, names) = rest.split_once('-')?;
+    let k: usize = k.parse().ok()?;
+    let names: Vec<&str> = names.split('+').collect();
+    if names.len() != k {
+        return None;
+    }
+    let atoms = v4_atoms();
+    let by_name: BTreeMap<&str, &V3Atom> = atoms.iter().map(|a| (a.id.as_str(), a)).collect();
+    names
+        .iter()
+        .map(|n| by_name.get(n).map(|a| a.expect[0].clone()))
+        .collect()
+}
+
+/// Spec ids the generation-4 freeze run EXCLUDED (composed codes ≠ the union
+/// of member codes on a real `cargo check` — the composition-interference
+/// class) — landed by the freeze e2e. Empty pre-freeze (the dual-mode gate
+/// then asserts the un-frozen Err).
+pub static EXCLUDED_IDS_V4: &[&str] = &[];
+
+/// The generation-4 frozen labels (spec id → the DISTINCT member error-code
+/// set real rustc produced on the composed broken file at freeze time) —
+/// landed by the freeze e2e. Empty pre-freeze.
+pub static FROZEN_LABELS_V4: &[(&str, &[&str])] = &[];
+
+/// Freeze readiness for generation 4 — Err until the freeze e2e lands the
+/// record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels.
+#[cfg(feature = "rustc_errors")]
+pub fn v4_freeze_status() -> Result<usize, String> {
+    freeze_status_for(&specs_v4(), 4, "generation_v4_freeze", FROZEN_LABELS_V4, EXCLUDED_IDS_V4)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,14 +806,6 @@ mod tests {
             }
             let mods = s.code.matches("mod gen_").count();
             assert_eq!(mods, s.k, "composite {} wraps k atoms", s.id);
-        }
-    }
-
-    #[test]
-    fn ids_are_unique_across_the_generation() {
-        for (name, list) in [("gen2", specs()), ("gen3", specs_v3())] {
-            let ids: BTreeSet<&str> = list.iter().map(|x| x.id.as_str()).collect();
-            assert_eq!(ids.len(), list.len(), "duplicate {name} generation ids");
         }
     }
 
@@ -825,6 +936,150 @@ mod tests {
                     assert_eq!(want, got, "frozen label drift on {}", s.id);
                 }
             }
+        }
+    }
+
+    // ── generation 4 (rustc_errors-gated: the atom factory reads corpus_gen)
+
+    #[test]
+    #[cfg(feature = "rustc_errors")]
+    fn v4_atom_table_slices_the_corpus_deterministically() {
+        use crate::domains::rustc_errors::corpus_gen::{generate_corpus, territory_of, Territory};
+
+        let a1 = v4_atoms();
+        let a2 = v4_atoms();
+        assert_eq!(a1, a2, "gen4 atom table must be byte-stable");
+        let corpus = generate_corpus();
+        let by_name: BTreeMap<&str, &crate::domains::rustc_errors::corpus_gen::GeneratedCase> =
+            corpus.iter().map(|c| (c.name.as_str(), c)).collect();
+        assert!(!a1.is_empty(), "gen4 atom table empty");
+        assert!(a1.len() <= GEN4_ATOM_TARGET, "gen4 slice overshot its target");
+        for a in &a1 {
+            let case = by_name.get(a.id.as_str()).unwrap_or_else(|| panic!("gen4 atom {} is not a corpus case", a.id));
+            assert_eq!(a.code, case.broken, "gen4 atom {} must carry the broken half", a.id);
+            assert_eq!(a.expect, vec![case.expect_code.to_string()]);
+            assert!(!a.code.contains("mod gen_"), "gen4 atom {} carries the wrapper", a.id);
+        }
+        // The stride slice must span both territories — the bench reports
+        // them separately, and a single-territory ladder would blend by
+        // omission.
+        let uncontested = a1
+            .iter()
+            .any(|a| matches!(territory_of(&a.expect[0]), Territory::Uncontested));
+        let contested = a1
+            .iter()
+            .any(|a| matches!(territory_of(&a.expect[0]), Territory::Contested));
+        assert!(uncontested && contested, "gen4 slice lost a territory");
+    }
+
+    #[test]
+    #[cfg(feature = "rustc_errors")]
+    fn v4_specs_are_deterministic_and_ladder_shaped() {
+        use crate::domains::rustc_errors::corpus_gen::territory_of;
+
+        let s1 = specs_v4();
+        let s2 = specs_v4();
+        assert_eq!(s1, s2, "gen4 specs must be byte-stable");
+        let ids: BTreeSet<&str> = s1.iter().map(|x| x.id.as_str()).collect();
+        assert_eq!(ids.len(), s1.len(), "duplicate gen4 generation ids");
+        let n = v4_atoms().len();
+        let k1 = s1.iter().filter(|s| s.k == 1).count();
+        assert_eq!(k1, count_for_k(1, n));
+        for &k in &LADDER_KS[1..] {
+            for s in s1.iter().filter(|s| s.k == k) {
+                let mods = s.code.matches("mod gen_").count();
+                assert_eq!(mods, s.k, "gen4 composite {} wraps k atoms", s.id);
+                assert!(
+                    s.id.starts_with(&format!("gen4-k{k}-")),
+                    "gen4 id encodes the generation + k: {}",
+                    s.id
+                );
+                // expect_lints is the DISTINCT code set (≤ k — same-code
+                // atoms can co-window); the per-member multiset is k.
+                assert!(
+                    !s.expect_lints.is_empty() && s.expect_lints.len() <= k,
+                    "gen4 composite {} union size vs k",
+                    s.id
+                );
+            }
+            // Territory mix at every composite rung — both territories must
+            // be reachable, or the per-territory report would be vacuous.
+            let codes: BTreeSet<&str> = s1
+                .iter()
+                .filter(|s| s.k == k)
+                .flat_map(|s| s.expect_lints.iter().map(String::as_str))
+                .collect();
+            let has_uncontested = codes.iter().any(|c| matches!(territory_of(c), crate::domains::rustc_errors::corpus_gen::Territory::Uncontested));
+            let has_contested = codes.iter().any(|c| matches!(territory_of(c), crate::domains::rustc_errors::corpus_gen::Territory::Contested));
+            assert!(has_uncontested && has_contested, "k={k} rung lost a territory");
+        }
+        // Every distinct code appears in at least one k≥2 composite.
+        let composite_codes: BTreeSet<&str> = s1
+            .iter()
+            .filter(|s| s.k >= 2)
+            .flat_map(|s| s.expect_lints.iter().map(String::as_str))
+            .collect();
+        for a in v4_atoms() {
+            let code = a.expect[0].clone();
+            assert!(
+                composite_codes.contains(code.as_str()),
+                "code {code} absent from every gen4 composite"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "rustc_errors")]
+    fn v4_member_codes_resolves_the_per_member_multiset() {
+        let specs = specs_v4();
+        for s in &specs {
+            let codes = v4_member_codes(&s.id)
+                .unwrap_or_else(|| panic!("member codes unresolvable for {}", s.id));
+            assert_eq!(codes.len(), s.k, "member multiset size vs k: {}", s.id);
+            let distinct: BTreeSet<&str> = codes.iter().map(String::as_str).collect();
+            let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
+            assert_eq!(distinct, want, "member distinct set vs union gold: {}", s.id);
+        }
+        assert_eq!(v4_member_codes("gen4-"), None);
+        assert_eq!(v4_member_codes("gen2-k1-identity_op"), None);
+        assert_eq!(v4_member_codes("gen4-k2-nonexistent+also_missing"), None);
+    }
+
+    #[test]
+    #[cfg(feature = "rustc_errors")]
+    fn v4_freeze_status_holes_are_loud() {
+        let excluded: BTreeSet<&str> = EXCLUDED_IDS_V4.iter().copied().collect();
+        let labeled: BTreeSet<&str> = FROZEN_LABELS_V4.iter().map(|(id, _)| *id).collect();
+        if excluded.is_empty() && labeled.is_empty() {
+            assert!(
+                v4_freeze_status().is_err(),
+                "pre-freeze must not claim readiness"
+            );
+        } else {
+            for s in specs_v4() {
+                assert!(
+                    excluded.contains(s.id.as_str()) || labeled.contains(s.id.as_str()),
+                    "spec {} is neither labeled nor excluded",
+                    s.id
+                );
+                if labeled.contains(s.id.as_str()) {
+                    let frozen = FROZEN_LABELS_V4
+                        .iter()
+                        .find(|(id, _)| *id == s.id)
+                        .map_or(&[] as &[&str], |(_, l)| *l);
+                    let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
+                    let got: BTreeSet<&str> = frozen.iter().copied().collect();
+                    assert_eq!(want, got, "frozen label drift on {}", s.id);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ids_are_unique_across_the_generation() {
+        for (name, list) in [("gen2", specs()), ("gen3", specs_v3())] {
+            let ids: BTreeSet<&str> = list.iter().map(|x| x.id.as_str()).collect();
+            assert_eq!(ids.len(), list.len(), "duplicate {name} generation ids");
         }
     }
 }

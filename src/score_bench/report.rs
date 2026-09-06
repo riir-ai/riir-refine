@@ -62,6 +62,9 @@ pub const HISTORY_SVG_V2: &str = ".benchmarks/score_history_v2.svg";
 /// The generation-3 curve (Bench 069 reopen #1) — rendered only when v3 rows
 /// exist.
 pub const HISTORY_SVG_V3: &str = ".benchmarks/score_history_v3.svg";
+/// The generation-4 curve (Plan 093, the rustc-errors-side ladder) — rendered
+/// only when v4 rows exist.
+pub const HISTORY_SVG_V4: &str = ".benchmarks/score_history_v4.svg";
 
 /// The M5 saturation window: marginal gain = rate[last] − rate[last − N].
 /// R = 5 ≈ the observed spacing between step changes in the 45-run history
