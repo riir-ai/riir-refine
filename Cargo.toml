@@ -675,6 +675,13 @@ required-features = ["score_bench"]
 name = "generation_v4_freeze"
 required-features = ["score_bench", "rustc_errors"]
 
+# Generation-5 freeze (Plan 094): the rust_perf vocabulary ladder. CARGO-LESS
+# (the oracle is the bench-owned mechanical shape detector set). rust_perf
+# rides score_bench, so a single feature protects the reader here.
+[[test]]
+name = "generation_v5_freeze"
+required-features = ["score_bench"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

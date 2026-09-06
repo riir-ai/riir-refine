@@ -118,8 +118,10 @@ to a suspicious-green as much as to a suspicious-red.
 ## What remains
 
 - **Saturation telemetry on gen-4** activates at 6 rows (currently 2).
-- **The next difficulty axes** (Bench 070 §What remains, unchanged): vocabulary
-  extension to rust_perf rules (candidate #1b — re-baselines v1, its own plan);
+- **The next difficulty axes** (Bench 070 §What remains): vocabulary
+  extension to rust_perf rules (candidate #1b — **EXECUTED 2026-09-06 as
+  generation 5, ADMITTED at 69.2%:
+  [`.benchmarks/072_generation5_rust_perf_ladder.md`](072_generation5_rust_perf_ladder.md)**);
   real-repo interference spans (#2); overlap-edit chains (#3). The real-G8
   conversion A/B stays data-gated (`.heal/misses/` empty).
 - **A template family for a delegate-only code** would move the gen-4 floor —

@@ -1646,7 +1646,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth). A NEW generation's first append is admitted ONLY\n                    if it measures harder than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -1830,12 +1830,14 @@ struct Args {
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
     /// score history, re-render the SVG. Standalone mode — no paths.
     score_bench: bool,
-    /// `--generation <1|2|3|4>` (Plan 092 M5 + Bench 069 reopen #1 + Plan
-    /// 093): which bench generation to run. Absent = 1 (the frozen v1 set,
-    /// unchanged). 2 = the construction-built generation-v2 k-ladder (issue
-    /// 072 T5); 3 = the persist-stratified generation-v3 ladder (Bench 069
-    /// reopen #1); 4 = the rustc-errors-side k-ladder (Plan 093 — measures
-    /// the `--fix-compile` driver against rustc coded-error ground truth).
+    /// `--generation <1|2|3|4|5>` (Plan 092 M5 + Bench 069 reopen #1 + Plan
+    /// 093 + Plan 094): which bench generation to run. Absent = 1 (the
+    /// frozen v1 set, unchanged). 2 = the construction-built generation-v2
+    /// k-ladder (issue 072 T5); 3 = the persist-stratified generation-v3
+    /// ladder (Bench 069 reopen #1); 4 = the rustc-errors-side k-ladder
+    /// (Plan 093 — measures the `--fix-compile` driver against rustc
+    /// coded-error ground truth); 5 = the rust_perf vocabulary ladder (Plan
+    /// 094 — the mechanical shape oracle over the FIXABLE perf vocabulary).
     /// A NEW generation's first append is gated on non-vacuity — a
     /// generation that is not harder than v1 is refused, never appended.
     generation: Option<u8>,
@@ -2025,15 +2027,15 @@ fn parse_args() -> Args {
             }
             "--generation" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1, 2, 3, or 4)");
+                    eprintln!("--generation requires a value (1, 2, 3, 4, or 5)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if !(1..=4).contains(&g) {
-                    eprintln!("--generation accepts 1, 2, 3, or 4, got {g}");
+                if !(1..=5).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, 3, 4, or 5, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
@@ -2464,9 +2466,9 @@ fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
 fn run_score_bench(generation: u8) {
     use riir_clippy::score_bench as sb;
 
-    // Generation 4 (Plan 093) is the compile-domain runner — it does not use
-    // the clippy oracle at all. Dispatch before the oracle availability
-    // check so a clippy-less invocation of gen 4 still works.
+    // Generations 4 (Plan 093) and 5 (Plan 094) are the compile-domain and
+    // perf-domain runners — neither uses the clippy oracle. Dispatch before
+    // the oracle availability check so a clippy-less invocation still works.
     if generation == 4 {
         #[cfg(feature = "rustc_errors")]
         {
@@ -2478,6 +2480,10 @@ fn run_score_bench(generation: u8) {
             eprintln!("--generation 4 requires the rustc_errors feature");
             std::process::exit(1);
         }
+    }
+    if generation == 5 {
+        run_score_bench_perf();
+        return;
     }
 
     let oracle = sb::draft_oracle();
@@ -2606,6 +2612,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         2 => sb::report::HISTORY_SVG_V2,
         3 => sb::report::HISTORY_SVG_V3,
         4 => sb::report::HISTORY_SVG_V4,
+        5 => sb::report::HISTORY_SVG_V5,
         _ => sb::report::HISTORY_SVG,
     };
     let v1_series = gen_series(1);
@@ -2613,7 +2620,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
     let mut written_svgs = vec![sb::report::HISTORY_SVG];
-    for g in [2_u8, 3, 4] {
+    for g in [2_u8, 3, 4, 5] {
         let series = gen_series(g);
         if !series.is_empty() {
             let path = svg_path(g);
@@ -2624,12 +2631,13 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         }
     }
     println!(
-        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}) → {}{}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}) → {}{}",
         history.len(),
         v1_series.len(),
         gen_series(2).len(),
         gen_series(3).len(),
         gen_series(4).len(),
+        gen_series(5).len(),
         sb::report::HISTORY_JSONL,
         written_svgs
             .iter()
@@ -2793,6 +2801,208 @@ fn run_score_bench_compile() {
     }
 
     finish_score_bench(4, &score);
+}
+
+/// The generation-5 bench runner (Plan 094): the rust_perf vocabulary
+/// ladder. CARGO-LESS end to end — the oracle is the bench-owned set of
+/// per-rule mechanical shape detectors (Plan 094 §2, pre-registered), each
+/// already validated by the always-on discrimination fence; the freeze
+/// gates run in `tests/generation_v5_freeze.rs`. Each spec heals through
+/// the production `heal_fixpoint` loop (both proposer domains, the
+/// fxhashmap stub-context skip, MAX_FIX_PASSES = 4), the healed file
+/// re-parses, and member i's verdict reads module `gen_{i}`'s region.
+/// Per-member resolution (not per-lint): the admission gate's v1 anchor is
+/// a cross-domain non-vacuity floor, recorded as such in the plan.
+#[cfg(feature = "score_bench")]
+fn run_score_bench_perf() {
+    use riir_clippy::score_bench as sb;
+    use std::collections::BTreeMap;
+
+    let specs = match sb::generations::v5_freeze_status() {
+        Ok(admitted) => {
+            println!("generation v5: {admitted} admitted spec(s) (freeze record present)");
+            sb::generations::specs_v5()
+        }
+        Err(e) => {
+            eprintln!("generation v5: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!(
+        "perf-bench: {} composite spec(s) [generation-v5 rust_perf ladder], mechanical shape oracle…",
+        specs.len()
+    );
+
+    // The removal-polarity rule set for the created axis, hoisted once (the
+    // atom table rebuilds the whole perf corpus — never inside the spec
+    // loop).
+    let removal_rules: Vec<String> = sb::generations::v5_atoms()
+        .into_iter()
+        .map(|a| a.expect[0].clone())
+        .collect::<std::collections::BTreeSet<String>>()
+        .into_iter()
+        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .collect();
+
+    let mut members_total = 0usize;
+    let mut members_resolved = 0usize;
+    let mut created_total = 0usize;
+    let mut ran_specs = 0usize;
+    let mut parse_unsafe_specs = 0usize;
+    let mut edits_total = 0usize;
+    let mut persist: BTreeMap<String, usize> = BTreeMap::new();
+    let mut k_total: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut k_resolved: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut terr_total: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut terr_resolved: BTreeMap<&str, usize> = BTreeMap::new();
+
+    for spec in &specs {
+        let Some(rules) = sb::generations::v5_member_rules(&spec.id) else {
+            eprintln!("gen5: member rules unresolvable for {}", spec.id);
+            std::process::exit(1);
+        };
+        // Member NAMES from the spec id (territory is an atom-id property,
+        // and fxhashmap legitimately carries two atoms — context-gate vs
+        // Gate-0 design-gate — so rule→atom lookup would be ambiguous).
+        let member_names: Vec<&str> = spec
+            .id
+            .strip_prefix("gen5-k")
+            .and_then(|rest| rest.split_once('-'))
+            .map(|(_, names)| names.split('+').collect())
+            .unwrap_or_default();
+        assert_eq!(member_names.len(), rules.len(), "member names/rules aligned on {}", spec.id);
+        // Pre-heal regions: the created axis needs each member's BEFORE
+        // marker state, read from the composed spec itself.
+        let before_regions: Vec<Option<String>> =
+            (0..rules.len()).map(|i| sb::generations::v5_module_region(&spec.code, i)).collect();
+
+        let (healed, edits, _passes) = sb::heal_fixpoint(&spec.code);
+        edits_total += edits;
+        let parsed_ok = syn::parse_file(&healed).is_ok();
+        if parsed_ok {
+            ran_specs += 1;
+        } else {
+            parse_unsafe_specs += 1;
+        }
+
+        members_total += rules.len();
+        *k_total.entry(spec.k).or_insert(0) += rules.len();
+        let mut spec_resolved = 0usize;
+        if parsed_ok {
+            for (i, rule) in rules.iter().enumerate() {
+                let Some(region) = sb::generations::v5_module_region(&healed, i) else {
+                    // Region lost to the heal — score the member unreduced,
+                    // never clean (the parse-guard convention).
+                    parse_unsafe_specs += 1;
+                    *persist.entry(rule.clone()).or_insert(0) += 1;
+                    continue;
+                };
+                let resolved = !sb::generations::v5_persists(rule, &region);
+                if resolved {
+                    spec_resolved += 1;
+                } else {
+                    *persist.entry(rule.clone()).or_insert(0) += 1;
+                }
+                // Created: removal-polarity markers of OTHER rules newly
+                // present in this member's region (Plan 094 §5 — the
+                // compound shrink predicate is excluded: an inserted
+                // `shrink_to_fit` is a fix, not a created problem).
+                for other in &removal_rules {
+                    if other == rule {
+                        continue;
+                    }
+                    let after = sb::generations::v5_persists(other, &region);
+                    let before = before_regions[i]
+                        .as_ref()
+                        .map(|r| sb::generations::v5_persists(other, r))
+                        .unwrap_or(false);
+                    if after && !before {
+                        created_total += 1;
+                        eprintln!(
+                            "gen5 {}: created marker {other} in member {i} ({rule})",
+                            spec.id
+                        );
+                    }
+                }
+                let terr = sb::generations::v5_territory(member_names[i]);
+                *terr_total.entry(terr).or_insert(0) += 1;
+                if resolved {
+                    *terr_resolved.entry(terr).or_insert(0) += 1;
+                }
+            }
+            members_resolved += spec_resolved;
+            *k_resolved.entry(spec.k).or_insert(0) += spec_resolved;
+        }
+        println!(
+            "gen5 {} : k={} resolved {}/{} edits {}{}",
+            spec.id,
+            spec.k,
+            if parsed_ok { spec_resolved } else { 0 },
+            rules.len(),
+            edits,
+            if parsed_ok { "" } else { " [PARSE-UNSAFE]" },
+        );
+    }
+
+    let rate = |done: usize, total: usize| {
+        if total == 0 {
+            0.0
+        } else {
+            done as f32 / total as f32
+        }
+    };
+    let score = sb::BenchScore {
+        n_total: specs.len(),
+        n_ran: ran_specs,
+        n_excluded: 0,
+        n_clean: 0,
+        heal_rate: rate(members_resolved, members_total),
+        created_total,
+        created_rate: rate(created_total, members_total),
+        parse_safety: if ran_specs == 0 {
+            1.0
+        } else {
+            1.0 - rate(parse_unsafe_specs, ran_specs)
+        },
+        // The ladder has no clean fixtures — the decline axis is vacuously
+        // correct (the gens-3/4 convention).
+        decline_correctness: 1.0,
+        edits_total,
+        vocab_size: members_total,
+        persist: persist.into_iter().collect(),
+        outcomes: Vec::new(),
+    };
+    sb::report::print_report(&score);
+
+    println!("\n─ generation-5 difficulty tables ──────────────");
+    println!("per-k member-resolution (reported, not asserted — Plan 094 pre-registration):");
+    for (k, total) in &k_total {
+        let resolved = k_resolved.get(k).copied().unwrap_or(0);
+        println!(
+            "  k={k}: {:.1}% ({resolved}/{total})",
+            rate(resolved, *total) * 100.0,
+        );
+    }
+    println!("per-territory (never blended — the corpus's own stratification rule):");
+    for (terr, total) in &terr_total {
+        let resolved = terr_resolved.get(terr).copied().unwrap_or(0);
+        println!(
+            "  {terr}: {:.1}% ({resolved}/{total})",
+            rate(resolved, *total) * 100.0,
+        );
+    }
+    println!("───────────────────────────────────────────");
+
+    let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
+    let history_before = sb::report::load_history(jsonl);
+
+    // M5 non-vacuity admission (the shared gate — see [`admission_gate`]).
+    if let Err(refusal) = admission_gate(5, &score, &history_before) {
+        eprintln!("{refusal}");
+        std::process::exit(1);
+    }
+
+    finish_score_bench(5, &score);
 }
 
 /// The M4 difficulty measurement: per-k solve rates over the ladder

@@ -31,6 +31,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use syn::spanned::Spanned;
+
 use super::BenchFixture;
 
 // ── the atom factory (M4, construction-first) ───────────────────────────
@@ -620,6 +622,257 @@ pub fn generation_v3() -> Vec<BenchFixture> {
     generation_fixtures(specs_v3(), 3, FROZEN_LABELS_V3, EXCLUDED_IDS_V3)
 }
 
+// ── Generation 5: the rust_perf vocabulary ladder (Plan 094, Bench 070
+//    §What remains candidate #1b) ────────────────────────────────────────
+// No cfg gating beyond the crate's own features: `score_bench` implies
+// `rust_perf` (Cargo.toml), and `rust_perf` is default-on — the atom
+// factory and the detectors are always available in a score_bench build.
+// The whole freeze is CARGO-LESS (pure textual + syn): rust_perf rules have
+// no external detector (clippy does not ship them — that absence is why the
+// domain exists), so the oracle here is a bench-owned set of per-rule
+// MECHANICAL SHAPE DETECTORS (Plan 094 §2, pre-registered), validated at
+// freeze by buggy-vs-fixed discrimination and never consulted for
+// addressable-atom solve behavior (that is the bench's measurement).
+
+/// One authored persist-shape atom for generation 5.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistAtomV5 {
+    /// Stable id (namespaced `persist_*` — disjoint from corpus rule ids).
+    pub id: &'static str,
+    /// The divergence class + the record that measured the silence.
+    pub note: &'static str,
+    /// The shape (parses standalone as a file).
+    pub code: &'static str,
+    /// The rule whose persist predicate the freeze must confirm.
+    pub expect: &'static [&'static str],
+}
+
+pub static PERSIST_ATOMS_V5: &[PersistAtomV5] = &[
+    PersistAtomV5 {
+        id: "persist_ref_array_capacity",
+        note: "reference-array-literal iterable guard (vec-with-capacity): `for x in &[..]` — the P2 temp-binding rewrite binds the ARRAY and would change the iteration mode (by-value vs by-reference), so the guard keeps it silent (test-pinned array_literal_reference_iterable_skipped). Bench 070's 'array-literal vec-with-capacity' class survives as this REFERENCE form; the direct `[..]` form was SOLVED by the 2026-08-28 temp-binding extension",
+        code: "fn persist_ref_array_capacity() -> Vec<u32> {\n    let mut v = Vec::new();\n    for x in &[\n        1u32, 2, 3,\n        4, 5, 6,\n    ] {\n        v.push(*x);\n    }\n    v\n}",
+        expect: &["vec-with-capacity"],
+    },
+    PersistAtomV5 {
+        id: "persist_coldstart_fxhashmap",
+        note: "fxhashmap Gate-0 cold start: the proposer refuses any file without an existing rustc_hash import — a span-preserving splice can rewrite uses but cannot add the rustc-hash dependency to Cargo.toml, so first-file adoption stays manual (the proposer's honest-scope limit; the game-sdk E0432 smoke that forced Gate 0). Persists in PRODUCTION, not only in the bench. The bare-path iterable keeps hashmap-with-capacity's bare-path guard between the atom and a capacity cross-heal, so the persist surface stays single-class",
+        code: "fn persist_coldstart_fxhashmap(pairs: &[(u32, u32)]) -> std::collections::HashMap<u32, u32> {\n    use std::collections::HashMap;\n    let mut m = HashMap::new();\n    for (k, v) in pairs {\n        m.insert(*k, *v);\n    }\n    m\n}",
+        expect: &["fxhashmap"],
+    },
+    PersistAtomV5 {
+        id: "persist_caller_gate_str",
+        note: "static-str caller gate: the signature-changing rewrite (String -> &'static str) is refused when the fn ident occurs more than once in the file — a live call site would break (the action_hoare.rs E0308 lesson encoded as count_ident_occurrences > 1 -> refuse). The single-definition corpus shape heals; the called shape persists",
+        code: "fn persist_caller_gate() -> String {\n    let label = stage_label();\n    format!(\"[{label}]\")\n}\n\nfn stage_label() -> String {\n    \"ready\".to_string()\n}",
+        expect: &["static-str"],
+    },
+];
+
+/// The per-rule persist predicates (the generation-5 oracle — Plan 094 §2).
+/// TRUE means the rule's problem shape is STILL PRESENT in the region text.
+/// Pure textual, deterministic, tool-agnostic: any edit that removes the
+/// shape credits, whoever authored it. Never calls a proposer.
+///
+/// `shrink-to-fit-after-build` is COMPOUND for a measured reason: its own
+/// fix is additive (keeps `Vec::new()`, inserts `shrink_to_fit()`), and the
+/// mutual-exclusion contract with `vec-with-capacity` (the exact-capacity
+/// complement) means a `with_capacity(n)` fix ALSO resolves the
+/// over-allocation hazard (exact capacity => no excess). A token-addition
+/// detector would falsely mark vwc-healed regions unresolved.
+#[must_use]
+pub fn v5_persists(rule: &str, region: &str) -> bool {
+    match rule {
+        "vec-with-capacity" => region.contains("Vec::new()"),
+        "entry-vs-contains-insert" => region.contains("contains_key("),
+        "static-str" => region.contains("\".to_string("),
+        "bool-to-bitpack" => region.contains(".filter(|&&"),
+        "fxhashmap" => region.contains("std::collections::HashMap"),
+        "hashset-insert-bool-return" => {
+            region.contains(".contains(&") && region.contains(".insert(")
+        }
+        "collect-append-to-extend" => region.contains(".append(&mut"),
+        "vec-macro-zero-fill" => region.contains(".resize("),
+        "distance-sq-no-sqrt" => region.contains(".sqrt()"),
+        "hashmap-with-capacity" => region.contains("HashMap::new()"),
+        "shrink-to-fit-after-build" => {
+            region.contains("Vec::new()")
+                && region.contains(".push(")
+                && !region.contains("shrink_to_fit")
+        }
+        _ => false,
+    }
+}
+
+/// Rules whose persist predicate is a plain REMOVAL shape (used by the
+/// created axis: an inserted `shrink_to_fit` is a fix, not a created
+/// problem, so the compound rule is excluded from created counting).
+#[must_use]
+pub fn v5_is_removal_rule(rule: &str) -> bool {
+    !matches!(rule, "shrink-to-fit-after-build")
+}
+
+/// The generation-5 atom table: persist atoms FIRST (the gen-3 convention —
+/// stride windows cover the list head, so a persist shape sits in every
+/// k>=2 rung), then the corpus atoms in sorted rule order. The corpus
+/// factory takes, per FIXABLE rule, the perf-seed entry whose `buggy_code`
+/// parses standalone (the corpus carries exactly one entry per rule id).
+#[must_use]
+pub fn v5_atoms() -> Vec<V3Atom> {
+    let vocab: BTreeSet<String> = crate::domains::rust_perf::proposers::FIXABLE_RULES
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    let mut best: BTreeMap<String, String> = BTreeMap::new();
+    for e in crate::build_perf_seed_corpus().entries {
+        if !vocab.contains(e.rule_id.as_str()) || syn::parse_file(&e.buggy_code).is_err() {
+            continue;
+        }
+        match best.get(&e.rule_id) {
+            Some(existing) if *existing <= e.buggy_code => {}
+            _ => {
+                best.insert(e.rule_id.clone(), e.buggy_code.clone());
+            }
+        }
+    }
+    let mut out: Vec<V3Atom> = Vec::with_capacity(PERSIST_ATOMS_V5.len() + best.len());
+    out.extend(PERSIST_ATOMS_V5.iter().map(|p| V3Atom {
+        id: p.id.to_string(),
+        expect: p.expect.iter().map(ToString::to_string).collect(),
+        code: p.code.to_string(),
+    }));
+    out.extend(best.into_iter().map(|(rule, code)| V3Atom {
+        expect: vec![rule.clone()], // the rule is its own gold
+        id: rule,
+        code,
+    }));
+    out
+}
+
+/// The generation-5 spec ladder: persist-stratified atoms (k=1) + the same
+/// stride-window composites (k=2..4). Byte-stable — pinned by test.
+#[must_use]
+pub fn specs_v5() -> Vec<GenSpec> {
+    let atom_list = v5_atoms();
+    specs_over_atoms("gen5", &atom_list)
+}
+
+/// Member i's rule for a generation-5 spec id, in the composite's
+/// `mod gen_{i}` order (the measurement runner attributes region verdicts
+/// through this ordering).
+#[must_use]
+pub fn v5_member_rules(spec_id: &str) -> Option<Vec<String>> {
+    let rest = spec_id.strip_prefix("gen5-k")?;
+    let (k, names) = rest.split_once('-')?;
+    let k: usize = k.parse().ok()?;
+    let names: Vec<&str> = names.split('+').collect();
+    if names.len() != k {
+        return None;
+    }
+    let atoms = v5_atoms();
+    let by_name: BTreeMap<&str, &V3Atom> = atoms.iter().map(|a| (a.id.as_str(), a)).collect();
+    names
+        .iter()
+        .map(|n| by_name.get(n).map(|a| a.expect[0].clone()))
+        .collect()
+}
+
+/// The territory of a generation-5 atom (pre-registered — Plan 094 §3).
+/// `persist` = the authored divergence classes + the corpus fxhashmap atom
+/// (bench-context dep gate); `addressable` = the rule's own fixture-pinned
+/// shape. Reported side by side in the bench, never blended into the
+/// headline decision.
+#[must_use]
+pub fn v5_territory(atom_id: &str) -> &'static str {
+    if atom_id.starts_with("persist_") || atom_id == "fxhashmap" {
+        "persist"
+    } else {
+        "addressable"
+    }
+}
+
+/// The text of `mod gen_{index}`'s items in `source` (syn-span based — the
+/// proposers' own `span().byte_range()` pattern; robust to braces inside
+/// string literals, which a brace matcher would miscount).
+///
+/// # Errors
+///
+/// `None` when `source` does not parse or carries no `gen_{index}` module.
+#[must_use]
+pub fn v5_module_region(source: &str, index: usize) -> Option<String> {
+    let file = syn::parse_file(source).ok()?;
+    let name = format!("gen_{index}");
+    for item in &file.items {
+        if let syn::Item::Mod(m) = item {
+            if m.ident == name {
+                let (_, items) = m.content.as_ref()?;
+                let first = items.first()?;
+                let last = items.last()?;
+                let start = first.span().byte_range().start;
+                let end = last.span().byte_range().end;
+                return Some(source[start..end].to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Spec ids the generation-5 freeze run EXCLUDED — landed by the freeze e2e
+/// (a member's shape destroyed or shadowed by composition). Landed empty:
+/// regions are isolated modules and every marker lives inside its own
+/// member's code — zero composition interference measured (tests/
+/// generation_v5_freeze.rs --ignored, 2026-09-06).
+pub static EXCLUDED_IDS_V5: &[&str] = &[];
+
+/// The generation-5 frozen labels (spec id → the DISTINCT member rule set
+/// verified present by the freeze oracle at freeze time) — landed by the
+/// freeze e2e.
+// Landed by tests/generation_v5_freeze.rs --ignored (2026-09-06): 28/28
+// verified (11 corpus atoms + 3 persist atoms + all k>=2 composites),
+// zero exclusions, zero bad atoms; the marker-discrimination fence (buggy
+// TRUE / fixed FALSE) and the persist stratification gate (the production
+// heal leaves every persist shape in place) both PASS. Freeze is CARGO-LESS:
+// 0.05 s (gens 2-4 spawn a real oracle per spec).
+pub static FROZEN_LABELS_V5: &[(&str, &[&str])] = &[
+    ("gen5-k1-bool-to-bitpack", &["bool-to-bitpack"]),  // k=1
+    ("gen5-k1-collect-append-to-extend", &["collect-append-to-extend"]),  // k=1
+    ("gen5-k1-distance-sq-no-sqrt", &["distance-sq-no-sqrt"]),  // k=1
+    ("gen5-k1-entry-vs-contains-insert", &["entry-vs-contains-insert"]),  // k=1
+    ("gen5-k1-fxhashmap", &["fxhashmap"]),  // k=1
+    ("gen5-k1-hashmap-with-capacity", &["hashmap-with-capacity"]),  // k=1
+    ("gen5-k1-hashset-insert-bool-return", &["hashset-insert-bool-return"]),  // k=1
+    ("gen5-k1-persist_caller_gate_str", &["static-str"]),  // k=1
+    ("gen5-k1-persist_coldstart_fxhashmap", &["fxhashmap"]),  // k=1
+    ("gen5-k1-persist_ref_array_capacity", &["vec-with-capacity"]),  // k=1
+    ("gen5-k1-shrink-to-fit-after-build", &["shrink-to-fit-after-build"]),  // k=1
+    ("gen5-k1-static-str", &["static-str"]),  // k=1
+    ("gen5-k1-vec-macro-zero-fill", &["vec-macro-zero-fill"]),  // k=1
+    ("gen5-k1-vec-with-capacity", &["vec-with-capacity"]),  // k=1
+    ("gen5-k2-collect-append-to-extend+distance-sq-no-sqrt", &["collect-append-to-extend", "distance-sq-no-sqrt"]),  // k=2
+    ("gen5-k2-entry-vs-contains-insert+fxhashmap", &["entry-vs-contains-insert", "fxhashmap"]),  // k=2
+    ("gen5-k2-hashmap-with-capacity+hashset-insert-bool-return", &["hashmap-with-capacity", "hashset-insert-bool-return"]),  // k=2
+    ("gen5-k2-persist_caller_gate_str+bool-to-bitpack", &["bool-to-bitpack", "static-str"]),  // k=2
+    ("gen5-k2-persist_ref_array_capacity+persist_coldstart_fxhashmap", &["fxhashmap", "vec-with-capacity"]),  // k=2
+    ("gen5-k2-shrink-to-fit-after-build+static-str", &["shrink-to-fit-after-build", "static-str"]),  // k=2
+    ("gen5-k2-vec-macro-zero-fill+vec-with-capacity", &["vec-macro-zero-fill", "vec-with-capacity"]),  // k=2
+    ("gen5-k3-bool-to-bitpack+collect-append-to-extend+distance-sq-no-sqrt", &["bool-to-bitpack", "collect-append-to-extend", "distance-sq-no-sqrt"]),  // k=3
+    ("gen5-k3-entry-vs-contains-insert+fxhashmap+hashmap-with-capacity", &["entry-vs-contains-insert", "fxhashmap", "hashmap-with-capacity"]),  // k=3
+    ("gen5-k3-hashset-insert-bool-return+shrink-to-fit-after-build+static-str", &["hashset-insert-bool-return", "shrink-to-fit-after-build", "static-str"]),  // k=3
+    ("gen5-k3-persist_ref_array_capacity+persist_coldstart_fxhashmap+persist_caller_gate_str", &["fxhashmap", "static-str", "vec-with-capacity"]),  // k=3
+    ("gen5-k4-collect-append-to-extend+distance-sq-no-sqrt+entry-vs-contains-insert+fxhashmap", &["collect-append-to-extend", "distance-sq-no-sqrt", "entry-vs-contains-insert", "fxhashmap"]),  // k=4
+    ("gen5-k4-hashmap-with-capacity+hashset-insert-bool-return+shrink-to-fit-after-build+static-str", &["hashmap-with-capacity", "hashset-insert-bool-return", "shrink-to-fit-after-build", "static-str"]),  // k=4
+    ("gen5-k4-persist_ref_array_capacity+persist_coldstart_fxhashmap+persist_caller_gate_str+bool-to-bitpack", &["bool-to-bitpack", "fxhashmap", "static-str", "vec-with-capacity"]),  // k=4
+];
+
+/// Freeze readiness for generation 5 — Err until the freeze e2e lands the
+/// record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels.
+pub fn v5_freeze_status() -> Result<usize, String> {
+    freeze_status_for(&specs_v5(), 5, "generation_v5_freeze", FROZEN_LABELS_V5, EXCLUDED_IDS_V5)
+}
+
 // ── Generation 4: the rustc-errors-side ladder (Plan 093, Bench 069 reopen
 //    #4) ──────────────────────────────────────────────────────────────────
 // cfg(`rustc_errors`): `score_bench` does not imply the domain — the atom
@@ -1159,5 +1412,223 @@ mod tests {
             let ids: BTreeSet<&str> = list.iter().map(|x| x.id.as_str()).collect();
             assert_eq!(ids.len(), list.len(), "duplicate {name} generation ids");
         }
+    }
+
+    // ── generation 5 (Plan 094) — always-on structural pins ────────────
+
+    #[test]
+    fn v5_atom_table_covers_the_fixable_vocabulary_deterministically() {
+        let a1 = v5_atoms();
+        let a2 = v5_atoms();
+        assert_eq!(a1, a2, "gen5 atom table must be byte-stable");
+        let by_id: BTreeMap<&str, &V3Atom> = a1.iter().map(|a| (a.id.as_str(), a)).collect();
+        assert_eq!(by_id.len(), a1.len(), "duplicate gen5 atom ids");
+        // Full FIXABLE vocabulary coverage: every rule has a corpus atom
+        // (exactly one — the rule's own fixture-pinned shape); persist rows
+        // may claim an ALREADY-covered rule (persist_coldstart_fxhashmap
+        // sits beside the corpus fxhashmap atom — context-gate vs Gate-0
+        // design-gate, two different claim classes over one rule).
+        let fixable = crate::domains::rust_perf::proposers::FIXABLE_RULES;
+        let mut covered: BTreeSet<String> = BTreeSet::new();
+        for a in &a1 {
+            assert_eq!(a.expect.len(), 1, "gen5 atoms are single-rule: {}", a.id);
+            assert!(
+                fixable.contains(&a.expect[0].as_str()),
+                "atom {} claims non-vocabulary rule {}",
+                a.id,
+                a.expect[0]
+            );
+            if !a.id.starts_with("persist_") {
+                assert!(!a.id.starts_with("persist_") && covered.insert(a.expect[0].clone()),
+                    "corpus rule {} covered twice", a.expect[0]);
+            }
+        }
+        for r in fixable {
+            assert!(covered.contains(*r), "FIXABLE rule {r} has no gen5 atom");
+        }
+        // Persist atoms first (the stride-window head convention).
+        for (i, a) in a1.iter().enumerate() {
+            let is_persist = a.id.starts_with("persist_");
+            if i < PERSIST_ATOMS_V5.len() {
+                assert!(is_persist, "atom {} must precede the corpus atoms", a.id);
+            } else if is_persist {
+                panic!("persist atom {} escaped the head block", a.id);
+            }
+        }
+        // Both territories, with the pre-registered membership.
+        assert_eq!(v5_territory("persist_coldstart_fxhashmap"), "persist");
+        assert_eq!(v5_territory("fxhashmap"), "persist");
+        assert_eq!(v5_territory("vec-with-capacity"), "addressable");
+        assert!(
+            a1.iter().any(|a| v5_territory(&a.id) == "persist"),
+            "no persist territory atoms"
+        );
+    }
+
+    #[test]
+    fn v5_ladder_shape_and_territory_mix() {
+        let specs = specs_v5();
+        let atoms = v5_atoms();
+        let n = atoms.len();
+        let want: Vec<usize> = LADDER_KS.iter().map(|&k| count_for_k(k, n)).collect();
+        let got_per_k: BTreeMap<usize, usize> = {
+            let mut m: BTreeMap<usize, usize> = BTreeMap::new();
+            for s in &specs {
+                *m.entry(s.k).or_default() += 1;
+            }
+            m
+        };
+        for (k, want_n) in LADDER_KS.iter().zip(&want) {
+            assert_eq!(got_per_k.get(k), Some(want_n), "k={k} rung size");
+        }
+        let ids: BTreeSet<&str> = specs.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids.len(), specs.len(), "duplicate gen5 spec ids");
+        // Every atom appears in at least one k>=2 composite.
+        for a in &atoms {
+            assert!(
+                specs.iter().any(|s| s.k >= 2 && s.id.contains(&a.id)),
+                "atom {} never composed",
+                a.id
+            );
+        }
+        // Both territories at every k>=2 rung.
+        for k in [2, 3, 4] {
+            let mut terrs: BTreeSet<&str> = BTreeSet::new();
+            let by_id: BTreeMap<&str, &V3Atom> = atoms.iter().map(|a| (a.id.as_str(), a)).collect();
+            for s in specs.iter().filter(|s| s.k == k) {
+                let members = v5_member_rules(&s.id).unwrap_or_else(|| panic!("member rules unresolvable for {}", s.id));
+                assert_eq!(members.len(), s.k, "member count on {}", s.id);
+                for (i, name) in s.id.strip_prefix("gen5-k").unwrap().split_once('-').unwrap().1.split('+').enumerate() {
+                    let atom = by_id.get(name).unwrap_or_else(|| panic!("atom {name} missing"));
+                    assert_eq!(atom.expect[0], members[i], "member order on {}", s.id);
+                    terrs.insert(v5_territory(name));
+                }
+            }
+            assert!(terrs.contains("persist"), "k={k} rung lacks a persist atom");
+            assert!(terrs.contains("addressable"), "k={k} rung lacks an addressable atom");
+        }
+    }
+
+    /// The G2 marker-discrimination fence, always-on (pure textual, no
+    /// cargo): every corpus atom's persist predicate is TRUE on buggy and
+    /// FALSE on fixed; every persist atom's predicate is TRUE (the class is
+    /// present) and its id is not shadowed by a corpus atom.
+    #[test]
+    fn v5_markers_discriminate_buggy_from_fixed() {
+        let atoms = v5_atoms();
+        let corpus = crate::build_perf_seed_corpus();
+        let fixed_by_rule: BTreeMap<&str, &str> = corpus
+            .entries
+            .iter()
+            .map(|e| (e.rule_id.as_str(), e.fixed_code.as_str()))
+            .collect();
+        for a in &atoms {
+            let rule = &a.expect[0];
+            assert!(
+                v5_persists(rule, &a.code),
+                "marker for {rule} absent from its own buggy atom {}",
+                a.id
+            );
+            if a.id.starts_with("persist_") {
+                continue; // persist atoms have no fixed_code by definition
+            }
+            let fixed = fixed_by_rule.get(rule.as_str()).unwrap_or_else(|| panic!("rule {rule} missing from corpus"));
+            assert!(
+                !v5_persists(rule, fixed),
+                "marker for {rule} survives its own fixed_code (falsified claim)"
+            );
+            assert!(
+                syn::parse_file(&a.code).is_ok(),
+                "atom {} does not parse standalone",
+                a.id
+            );
+        }
+    }
+
+    /// The G3 stratification fence, always-on: the production heal loop
+    /// (both domains, the fxhashmap skip, `MAX_FIX_PASSES=4`) must leave every
+    /// persist atom's shape in place. This is the CLASS claim — the
+    /// gen-3 discipline that adjudicates persist records, and the tripwire
+    /// that fires the day a proposer extension closes one of these classes.
+    #[test]
+    fn v5_persist_atoms_resolve_zero_through_the_production_heal() {
+        for p in PERSIST_ATOMS_V5 {
+            let rule = p.expect[0];
+            let (healed, _edits, _passes) = super::super::heal_fixpoint(p.code);
+            assert!(
+                syn::parse_file(&healed).is_ok(),
+                "persist atom {} healed to a non-parsing file",
+                p.id
+            );
+            assert!(
+                v5_persists(rule, &healed),
+                "persist claim FALSIFIED: the heal resolves {} on {} — reshape or drop the atom (the gen-3 discipline) and re-record",
+                rule,
+                p.id
+            );
+        }
+    }
+
+    #[test]
+    fn v5_region_extractor_aligns_member_order() {
+        let specs = specs_v5();
+        let s = specs
+            .iter()
+            .find(|s| s.k == 2)
+            .expect("k=2 rung exists");
+        for i in 0..s.k {
+            let region = v5_module_region(&s.code, i)
+                .unwrap_or_else(|| panic!("region gen_{i} missing in {}", s.id));
+            let rule = &v5_member_rules(&s.id).unwrap()[i];
+            assert!(
+                v5_persists(rule, &region),
+                "member {i} ({rule}) marker missing from its own region in {}",
+                s.id
+            );
+        }
+    }
+
+    #[test]
+    fn v5_freeze_status_holes_are_loud() {
+        let excluded: BTreeSet<&str> = EXCLUDED_IDS_V5.iter().copied().collect();
+        let labeled: BTreeSet<&str> = FROZEN_LABELS_V5.iter().map(|(id, _)| *id).collect();
+        if excluded.is_empty() && labeled.is_empty() {
+            assert!(
+                v5_freeze_status().is_err(),
+                "pre-freeze must not claim readiness"
+            );
+        } else {
+            for s in specs_v5() {
+                assert!(
+                    excluded.contains(s.id.as_str()) || labeled.contains(s.id.as_str()),
+                    "spec {} is neither labeled nor excluded",
+                    s.id
+                );
+                if labeled.contains(s.id.as_str()) {
+                    let frozen = FROZEN_LABELS_V5
+                        .iter()
+                        .find(|(id, _)| *id == s.id)
+                        .map_or(&[] as &[&str], |(_, l)| *l);
+                    let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
+                    let got: BTreeSet<&str> = frozen.iter().copied().collect();
+                    assert_eq!(want, got, "frozen label drift on {}", s.id);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ids_are_unique_across_all_five_generations() {
+        #[cfg(feature = "rustc_errors")]
+        let gen4_specs = specs_v4();
+        #[cfg(not(feature = "rustc_errors"))]
+        let gen4_specs: Vec<GenSpec> = Vec::new();
+        let lists = [specs(), specs_v3(), gen4_specs, specs_v5()];
+        let mut all: Vec<&str> = Vec::new();
+        for list in &lists {
+            all.extend(list.iter().map(|x| x.id.as_str()));
+        }
+        let set: BTreeSet<&str> = all.iter().copied().collect();
+        assert_eq!(set.len(), all.len(), "spec ids must be unique across generations");
     }
 }

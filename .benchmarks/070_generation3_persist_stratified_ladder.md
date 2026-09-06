@@ -132,7 +132,10 @@ function-level conflict review.
   - **vocabulary extension to rust_perf rules** (candidate #1b): the
     rust_perf divergence classes (array-literal vec-with-capacity, dep-gated
     proposers) are open frontier but changing `vocabulary()` re-baselines
-    v1 — its own plan.
+    v1 — its own plan. **EXECUTED 2026-09-06 — generation 5, ADMITTED at
+    69.2% (addressable 100% / persist 0%), as a SEPARATE generation via the
+    gen-4 pattern (v1 NOT re-baselined):
+    [`.benchmarks/072_generation5_rust_perf_ladder.md`](072_generation5_rust_perf_ladder.md)**; or
 - **Real-G8 conversion A/B**: still data-gated (`.heal/misses/` empty).
 - Saturation telemetry on gen-3 starts reporting once 6 gen-3 rows exist.
 

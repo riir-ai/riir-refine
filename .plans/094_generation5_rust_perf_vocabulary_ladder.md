@@ -1,6 +1,11 @@
 # Plan 094 — generation 5: the rust_perf vocabulary ladder (Bench 070 candidate #1b)
 
-**Status:** IN FLIGHT — design pre-registered before the first freeze run.
+**Status:** RECORD — landed 2026-09-06. Gen-5 frozen 28/28 (zero exclusions, zero
+drift, freeze 0.05 s — cargo-less), **ADMITTED at 69.2%** (< v1 96.2%), deterministic
+×3. Territory split: addressable 100.0% (36/36) vs persist 0.0% (0/16).
+[Bench 072](../.benchmarks/072_generation5_rust_perf_ladder.md) is the record.
+One pre-registered projection was falsified by measurement (the persist_coldstart
+capacity cross-heal — see the addendum at the bottom).
 
 **Source:** [Bench 070](../.benchmarks/070_generation3_persist_stratified_ladder.md)
 §What remains candidate #1b + [Bench 071](../.benchmarks/071_generation4_rustc_error_ladder.md)
@@ -146,7 +151,8 @@ re-baselines v1 — its own plan."
    capacity` (its module doc names exactly this fallback regime) and
    hashmap-with-capacity's bare-path guard keeps
    `persist_coldstart_fxhashmap` single-class — neither flips a persist
-   label.
+   label. **(The second half was FALSIFIED by the bench — see the
+   Addendum.)**
 
 7. **Scope**: generation 5 covers the FIXABLE vocabulary (11 rules). The
    90 suggestion-only rules are NOT vocabulary (no fix path exists —
@@ -156,16 +162,16 @@ re-baselines v1 — its own plan."
 
 ## Tasks
 
-- [ ] T0 — This plan committed BEFORE any implementation (plan-first
+- [x] T0 — This plan committed BEFORE any implementation (plan-first
   discipline).
-- [ ] T1 — `src/score_bench/generations.rs` gen-5 section:
+- [x] T1 — `src/score_bench/generations.rs` gen-5 section:
   `PERSIST_ATOMS_V5`, `perf_atoms()` (the corpus factory),
   `v5_atoms()`/`specs_v5()`/`v5_member_rules()`, `v5_territory()`,
   `FROZEN_LABELS_V5`/`EXCLUDED_IDS_V5`, `v5_freeze_status()`, the
   detector table + pure predicate helpers, the syn-based
   `module_region()` extractor. cfg-gating: none beyond `score_bench`
   (rust_perf is a default feature AND score_bench implies it).
-- [ ] T2 — always-on tests in the generations tests module: atom-table
+- [x] T2 — always-on tests in the generations tests module: atom-table
   determinism + full-FIXABLE-vocabulary coverage (every rule exactly one
   atom or persist row); ladder shape (28 specs, k counts, id uniqueness
   across ALL five generations); both territories present at every k≥2
@@ -173,31 +179,53 @@ re-baselines v1 — its own plan."
   fence as an always-on pin — pure textual, no cargo); persist-claim
   stratification via `heal_fixpoint` (the G3 fence, also always-on);
   `v5_freeze_status` holes-are-loud (dual-mode, mirror v4).
-- [ ] T3 — `src/score_bench/report.rs`: `HISTORY_SVG_V5`.
+- [x] T3 — `src/score_bench/report.rs`: `HISTORY_SVG_V5`.
   `src/bin/heal.rs`: `--generation` range 1..=5 + help text; the gen-5
   dispatch arm BEFORE the oracle-availability check (cargo-less runner);
   `run_score_bench_perf()` (per-spec measurement + per-k/per-territory
   tables + BenchScore + the shared `admission_gate`/`finish_score_bench`
   tail); the finish tail's SVG loop `[2,3,4]` → `[2,3,4,5]`, the
   `svg_path` arm, the history line's gen-5 count.
-- [ ] T4 — `tests/generation_v5_freeze.rs`: the `#[ignore]`d freeze e2e
+- [x] T4 — `tests/generation_v5_freeze.rs`: the `#[ignore]`d freeze e2e
   (cargo-less; runs G1–G5, prints the paste-ready label/exclusion tables,
   lands the record) + the always-on table-properties test.
   `Cargo.toml` `[[test]]` row with `required-features = ["score_bench"]`
   (the 713-T3 reader axis; rust_perf rides score_bench).
-- [ ] T5 — Freeze run → land the tables → re-run (drift green, dual-mode
-  flips). Adjudicate any falsified persist claim per the gen-3 discipline
-  (reshape or drop + record, never pin).
-- [ ] T6 — The bench: `--score-bench --generation 5` → admission verdict →
-  rows appended (determinism ×2) → `score_history_v5.svg` → per-k +
+- [x] T5 — Freeze run → land the tables → re-run (drift green, dual-mode
+  flips). Adjudicated: ZERO falsified claims — 28/28 verified, zero
+  exclusions, zero bad atoms, stratification PASS, 0.05 s (cargo-less).
+- [x] T6 — The bench: `--score-bench --generation 5` → ADMITTED at 69.2%
+  (< v1 96.2%) → 3 identical rows appended (determinism ×3; the third run
+  was an output-recapture re-run) → `score_history_v5.svg` → per-k +
   per-territory tables into the record.
-- [ ] T7 — `.benchmarks/072_generation5_rust_perf_ladder.md` (highwater
+- [x] T7 — `.benchmarks/072_generation5_rust_perf_ladder.md` (highwater
   71→72) + Bench 070/071 §What remains pointers + AGENTS.md Issue-072 row
   update.
-- [ ] T8 — Full validation: lib default + union counts, clippy zero on
-  every touched line, the CLI surfaces re-verified (gen-5 admission ×2,
-  `--generation 6` validation error, v2 refusal still byte-identical
-  through the shared gate, `--score-report` re-render).
+- [x] T8 — Full validation: lib default 1129/0 (the gen-4 baseline,
+  unchanged) · lib union (score_bench) 1320/0/8i (+7 gen-5 tests); clippy
+  zero findings on every touched line (three pre-existing warnings outside
+  this unit's hunks — composite.rs needless-not, evolve.rs needless-borrow,
+  heal.rs manual-checked-division — noted, not absorbed); CLI surfaces
+  re-verified: gen-5 admission ×3 deterministic, `--generation 6` →
+  validation error (exit 2), v2 refusal byte-identical through the shared
+  gate (exit 1, nothing appended), `--score-report` re-render.
+
+## Addendum — the one falsified projection (measured, not cited)
+
+The §3 note on `persist_coldstart_fxhashmap` claimed "a bare-path iterable keeps
+hashmap-with-capacity's bare-path guard between the atom and a capacity
+cross-heal". FALSIFIED at the first bench run: the coldstart atom took **1 edit**
+— `HashMap::with_capacity(pairs.len())`. The VWC bare-path guard
+(`bare_path_iterable_unchanged`: "the binding could be an iterator without
+.len()") is VWC-only; `hashmap_with_capacity` is deliberately PERMISSIVE for
+param/outer-scope bare-path roots ("params/outer-scope bindings stay permissive —
+the `--verify` compile gate backstops them", hashmap_with_capacity.rs L109-110).
+The persist VERDICT was unaffected and was measured, not assumed: the
+fully-qualified return type keeps `std::collections::HashMap` in the region after
+the capacity fix, so the fxhashmap shape persists (stratification gate PASS, bench
+persist 0/16). The atom now demonstrates the marker design's discriminating power
+(a capacity cross-heal that does NOT false-credit the fxhashmap label) — kept as
+is.
 
 ## Non-goals
 

@@ -2430,6 +2430,32 @@ complementary** (the era-split G8 instrument: `WIRED_STRATEGIES` baseline /
 inventory-equality ratchet test); the unified CLI surface is their
 `--misses [--limit]` (this unit's frontier table) + `--misses --report`
 (their ledger). Full adjudication: Plan 092 §collision + Bench 069.
+**REOPEN (1) EXECUTED A THIRD TIME 2026-09-06 (Bench 072, Plan 094): generation
+5 = the rust_perf vocabulary ladder (Bench 070 candidate #1b) — the FIXABLE
+perf vocabulary (11 rules) as 14 atoms (10 corpus addressable + 4 persist:
+`persist_ref_array_capacity` = the surviving REFERENCE-array-literal vec-guard
+class, `persist_coldstart_fxhashmap` = the Gate-0 no-rustc_hash-import class
+that persists in PRODUCTION, `persist_caller_gate_str` = the static-str caller
+gate, + the corpus fxhashmap atom persist-by-context). The oracle is a
+bench-owned set of 11 per-rule MECHANICAL SHAPE DETECTORS (pure textual, never
+a proposer call; compound polarity for shrink-to-fit because the vwc
+exact-capacity fix also resolves its hazard) — rust_perf rules have NO external
+detector, so independence is from the HEAL LANE, pre-registered as the
+domain-shaped limit. Executed as a SEPARATE generation via the gen-4 pattern —
+NOT a v1 re-baseline (mutating `vocabulary()` would corrupt the v1 series that
+anchors admission + saturation). Frozen 28/28 (zero exclusions, zero drift) in
+**0.05 s — the first CARGO-LESS freeze** (G2 discrimination + G3 stratification
+run as always-on module tests). **ADMITTED at 69.2%** (36/52 members < v1
+96.2%), deterministic ×3, rows #50-#52 + `score_history_v5.svg`. Territory
+split matches the projection exactly: addressable 100% (36/36) vs persist 0%
+(0/16); persist map fxhashmap ×8 / static-str ×4 / vec-with-capacity ×4. One
+pre-registered projection FALSIFIED by measurement (the coldstart atom took a
+`with_capacity(pairs.len())` cross-heal — hashmap-with-capacity is deliberately
+permissive for param-bound bare-path roots, unlike VWC's stricter guard; the
+persist verdict held because the fully-qualified return type keeps
+`std::collections::HashMap` in the region). The persist frontier is now
+MEASURED and pinned: a proposer extension that closes any class moves the
+gen-5 rate and the ratchet sees it.
 
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`
