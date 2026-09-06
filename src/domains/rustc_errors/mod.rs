@@ -24,6 +24,7 @@
 //! imports only `std` + `serde`; its `latent_retrieval` implication is a
 //! CLI-surface artifact, not a code dependency.
 
+pub mod composite;
 pub mod corpus_gen;
 pub mod diag;
 pub mod driver;
