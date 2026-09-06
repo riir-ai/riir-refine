@@ -495,6 +495,14 @@ required-features = ["ruliology_search"]
 name = "score_bench_mine"
 required-features = ["score_bench"]
 
+# Bench 069 candidate #2 salvage (Plan 095): the file-header-carve miner —
+# batch-oracle discovery + tiered carve + census over a sibling repo at a
+# given rev. Needs the real-clippy oracle (score_bench) AND the draft
+# module (latent_retrieval) for `draft::ClippyOracle`.
+[[example]]
+name = "score_bench_mine_v6"
+required-features = ["score_bench", "latent_retrieval"]
+
 # Issue 008: real-world validation of self_evolve via cargo clippy ground truth.
 # Requires both self_evolve + clippy_verify. SLOW — spawns cargo clippy dozens of times.
 [[example]]

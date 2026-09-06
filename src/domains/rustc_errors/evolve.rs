@@ -708,7 +708,7 @@ mod tests {
             tier: crate::memory::EvidenceTier::Withdrawn as u8,
             last_seen_unix: 5_000,
         }];
-        let report = conversion_report(&inventory, &wired, &frontier_dummy(), &signals);
+        let report = conversion_report(&inventory, &wired, frontier_dummy(), &signals);
         assert_eq!(report.baseline_certified, 0);
         let row = &report.rows[0];
         assert!(!row.certified);

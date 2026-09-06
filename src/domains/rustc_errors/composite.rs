@@ -296,11 +296,11 @@ fn finalize_attribution(out: &mut CompositeOutcome, expect_codes: &[&str], final
             .iter()
             .zip(&out.final_codes)
             .any(|(owner, (code, _))| *owner == Some(i) && code == expected);
-        if !still_present {
+        if still_present {
+            *persist.entry(expected).or_insert(0) += 1;
+        } else {
             out.members_reduced += 1;
             out.member_reduced[i] = true;
-        } else {
-            *persist.entry(expected).or_insert(0) += 1;
         }
     }
     out.persist = persist
