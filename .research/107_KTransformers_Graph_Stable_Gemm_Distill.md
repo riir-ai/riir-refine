@@ -10,6 +10,8 @@ dedup/bar grounds or routed to the Plan 548 intel lane. The ktransformers lane i
 CLOSED. Plan 548 lanes + the league ledger fed. Read-only mining; raw clone at
 `.raw/ktransformers` (gitignored, disposable -- the clone is not the record, this note is).
 
+> **PASS-Redirects (synthesis):** Shen et al. [arXiv:2607.16100 "Every Microsecond Matters: Achieving Near Speed-of-Light Latency in GPU Collectives"] — Marlin's per-column counting-semaphore (B92) is the barrier-class sync this paper eliminates; its sentinel / LL flag-in-data / LL128-atomic sync-mode taxonomy + SoL floor methodology (L = 2·L2RTT + remote-store, __threadfence as L2-RTT probe) recorded as kernel_opt intake candidates — corpus-MARGINAL, conversation verdict 2026-09-06, no lane mapping (our league lanes are single-GPU; zero collective surface).
+
 ## Source
 
 - `kvcache-ai/ktransformers` @ `21095b9912f844b4cf1a55097f9f66c0bbbd3de5` (2026-08-31, HEAD at
