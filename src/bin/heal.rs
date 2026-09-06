@@ -1646,7 +1646,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5;\n                    the first v2 append is admitted ONLY if it measures harder than v1).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -1830,11 +1830,12 @@ struct Args {
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
     /// score history, re-render the SVG. Standalone mode — no paths.
     score_bench: bool,
-    /// `--generation <1|2>` (Plan 092 M5): which bench generation to run.
-    /// Absent = 1 (the frozen v1 set, unchanged). 2 = the construction-built
-    /// generation-v2 ladder (issue 072 T5); the FIRST v2 append is gated on
-    /// non-vacuity — a v2 that is not harder than v1 is refused, never
-    /// appended.
+    /// `--generation <1|2|3>` (Plan 092 M5 + Bench 069 reopen #1): which
+    /// bench generation to run. Absent = 1 (the frozen v1 set, unchanged).
+    /// 2 = the construction-built generation-v2 k-ladder (issue 072 T5);
+    /// 3 = the persist-stratified generation-v3 ladder (Bench 069 reopen
+    /// #1). A NEW generation's first append is gated on non-vacuity — a
+    /// generation that is not harder than v1 is refused, never appended.
     generation: Option<u8>,
     /// `--score-report`: re-render the SVG from the existing history JSONL.
     score_report: bool,
@@ -2012,21 +2013,29 @@ fn parse_args() -> Args {
             "--report" => args.misses_report = true,
             "--limit" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1 or 2)");
+                    eprintln!("--limit requires a value");
+                    usage();
+                };
+                args.misses_limit = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--limit expects a number, got {value:?}");
+                    usage();
+                }));
+            }
+            "--generation" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--generation requires a value (1, 2, or 3)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if g != 1 && g != 2 {
-                    eprintln!("--generation accepts 1 or 2, got {g}");
+                if !(1..=3).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, or 3, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
             }
-            "--score-report" => args.score_report = true,
-            "--memory-stats" => args.memory_stats = true,
             "--recompute-elo" => args.recompute_elo = true,
             "--collapse-report" => args.collapse_report = true,
             "--corpus-stats" => args.corpus_stats = true,
@@ -2444,10 +2453,11 @@ fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
 
 /// Plan 014: run the clippy-bench, append the score history, re-render the
 /// SVG. Feature-gated `score_bench`. `generation` selects the fixture set
-/// (Plan 092 M5): 1 = the frozen v1 set, 2 = the construction-built
-/// generation-v2 k-ladder (issue 072 T5) behind the non-vacuity admission
-/// gate — a first v2 run that is not harder than v1 is refused, never
-/// appended.
+/// (Plan 092 M5 + Bench 069 reopen #1): 1 = the frozen v1 set, 2 = the
+/// construction-built generation-v2 k-ladder (issue 072 T5), 3 = the
+/// persist-stratified generation-v3 ladder — each new generation behind the
+/// non-vacuity admission gate: a first run that is not harder than v1 is
+/// refused, never appended.
 #[cfg(feature = "score_bench")]
 fn run_score_bench(generation: u8) {
     use riir_clippy::score_bench as sb;
@@ -2457,8 +2467,8 @@ fn run_score_bench(generation: u8) {
         eprintln!("score_bench: cargo not on PATH — cannot derive ground truth");
         std::process::exit(1);
     }
-    let (fixture_list, label) = if generation == 2 {
-        match sb::generations::v2_freeze_status() {
+    let (fixture_list, label) = match generation {
+        2 => match sb::generations::v2_freeze_status() {
             Ok(admitted) => {
                 println!("generation v2: {admitted} admitted fixture(s) (freeze record present)");
                 (sb::generations::generation_v2(), "generation-v2 k-ladder")
@@ -2467,9 +2477,18 @@ fn run_score_bench(generation: u8) {
                 eprintln!("generation v2: {e}");
                 std::process::exit(1);
             }
-        }
-    } else {
-        (sb::fixtures::fixtures(), "frozen v1 set")
+        },
+        3 => match sb::generations::v3_freeze_status() {
+            Ok(admitted) => {
+                println!("generation v3: {admitted} admitted fixture(s) (freeze record present)");
+                (sb::generations::generation_v3(), "generation-v3 persist-stratified ladder")
+            }
+            Err(e) => {
+                eprintln!("generation v3: {e}");
+                std::process::exit(1);
+            }
+        },
+        _ => (sb::fixtures::fixtures(), "frozen v1 set"),
     };
     println!(
         "clippy-bench: {} fixture(s) [{label}], real-clippy ground truth…",
@@ -2477,19 +2496,20 @@ fn run_score_bench(generation: u8) {
     );
     let score = sb::run_bench(&oracle, &fixture_list);
     sb::report::print_report(&score);
-    if generation == 2 {
+    if generation >= 2 {
         print_per_k_solve_rates(&fixture_list, &score);
     }
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
     let history_before = sb::report::load_history(jsonl);
 
-    // M5 non-vacuity admission: the FIRST v2 row must measure harder than
-    // v1 — a new generation that isn't harder isn't a generation, it's the
-    // same measurement with a bigger denominator. Nothing is appended on a
-    // refusal (the generation is deterministic; the failed admission is
-    // reproducible — the .benchmarks doc records the verdict instead).
-    if generation == 2 && !history_before.iter().any(|r| r.generation == 2) {
+    // M5 non-vacuity admission: the FIRST row of a NEW generation (≥ 2)
+    // must measure harder than v1 — a new generation that isn't harder isn't
+    // a generation, it's the same measurement with a bigger denominator.
+    // Nothing is appended on a refusal (the generation is deterministic; the
+    // failed admission is reproducible — the .benchmarks doc records the
+    // verdict instead).
+    if generation >= 2 && !history_before.iter().any(|r| r.generation == generation) {
         let Some(v1_rate) = history_before
             .iter()
             .rev()
@@ -2497,23 +2517,22 @@ fn run_score_bench(generation: u8) {
             .map(|r| r.heal_rate)
         else {
             eprintln!(
-                "generation v2 admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
+                "generation v{generation} admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
                 sb::report::HISTORY_JSONL
             );
             std::process::exit(1);
         };
         if score.heal_rate >= v1_rate {
             eprintln!(
-                "generation v2 admission REFUSED (non-vacuity, M5): v2 heal_rate {:.4} >= v1 {:.4}. \
-                 A new generation that is not harder is not admitted; nothing appended. \
-                 Pre-registered branch (B) of .plans/092: the k-ladder needs a difficulty axis \
-                 (persist-shape stratification / interference composition).",
+                "generation v{generation} admission REFUSED (non-vacuity, M5): v{generation} heal_rate {:.4} >= v1 {:.4}. \
+                 A new generation that is not harder is not admitted; nothing appended \
+                 (the generation is deterministic — record the verdict in its .benchmarks doc).",
                 score.heal_rate, v1_rate
             );
             std::process::exit(1);
         }
         println!(
-            "generation v2 ADMITTED: heal_rate {:.4} < v1 {:.4} — the ladder is harder, floors begin",
+            "generation v{generation} ADMITTED: heal_rate {:.4} < v1 {:.4} — the generation is harder, floors begin",
             score.heal_rate, v1_rate
         );
     }
@@ -2529,28 +2548,46 @@ fn run_score_bench(generation: u8) {
     #[cfg(feature = "latent_retrieval")]
     sb::report::record_store_best_effort(&rec);
     let history = sb::report::load_history(jsonl);
-    // Per-generation SVG curves (M5): v1 → score_history.svg, v2 → _v2.svg.
-    let v1_series: Vec<_> = history.iter().filter(|r| r.generation == 1).cloned().collect();
+    // Per-generation SVG curves (M5): v1 → score_history.svg, v2 → _v2.svg,
+    // v3 → _v3.svg.
+    let gen_series = |g: u8| {
+        history
+            .iter()
+            .filter(|r| r.generation == g)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let svg_path = |g: u8| match g {
+        2 => sb::report::HISTORY_SVG_V2,
+        3 => sb::report::HISTORY_SVG_V3,
+        _ => sb::report::HISTORY_SVG,
+    };
+    let v1_series = gen_series(1);
     let svg = sb::report::render_svg(&v1_series);
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
-    let v2_series: Vec<_> = history.iter().filter(|r| r.generation == 2).cloned().collect();
-    if !v2_series.is_empty() {
-        let svg2 = sb::report::render_svg(&v2_series);
-        std::fs::write(sb::report::HISTORY_SVG_V2, &svg2)
-            .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+    let mut written_svgs = vec![sb::report::HISTORY_SVG];
+    for g in [2_u8, 3] {
+        let series = gen_series(g);
+        if !series.is_empty() {
+            let path = svg_path(g);
+            let svg_g = sb::report::render_svg(&series);
+            std::fs::write(path, &svg_g)
+                .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+            written_svgs.push(path);
+        }
     }
     println!(
-        "history: {} run(s) (gen-1 {}, gen-2 {}) → {}{}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}) → {}{}",
         history.len(),
         v1_series.len(),
-        v2_series.len(),
+        gen_series(2).len(),
+        gen_series(3).len(),
         sb::report::HISTORY_JSONL,
-        if v2_series.is_empty() {
-            format!(" + {}", sb::report::HISTORY_SVG)
-        } else {
-            format!(" + {} + {}", sb::report::HISTORY_SVG, sb::report::HISTORY_SVG_V2)
-        }
+        written_svgs
+            .iter()
+            .map(|p| format!(" + {p}"))
+            .collect::<String>()
     );
     // Saturation telemetry (issue 072 T3/T4) — the standing non-vacuity
     // instrument over the per-generation series.

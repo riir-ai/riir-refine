@@ -101,9 +101,9 @@ fn mod_wrap(index: usize, code: &str) -> String {
     format!("mod gen_{index} {{\n{code}\n}}\n")
 }
 
-/// One rung of the ladder, fully determined by the atom table.
+/// One rung of a generation ladder, fully determined by its atom table.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Gen2Spec {
+pub struct GenSpec {
     pub id: String,
     pub k: usize,
     /// The union-of-atoms gold (expected, NOT yet oracle-verified).
@@ -111,34 +111,37 @@ pub struct Gen2Spec {
     pub code: String,
 }
 
-/// The deterministic generation: atoms (k=1) + stride-window composites
-/// (k=2..4). Byte-stable — pinned by test.
+/// The shared ladder builder behind [`specs`] (v2) and [`specs_v3`] (gen 3):
+/// atoms (k=1) + stride-window composites (k=2..4) over a sorted atom-id
+/// list, ids `{prefix}-k{k}-{ids joined +}`. Byte-stable — pinned by test.
 ///
 /// # Panics
 ///
-/// Only if the atom table loses a lint between the map build and the lookup
-/// (cannot happen — both derive from the same `atoms()` call; the `expect`
+/// Only if the atom table loses an id between the list build and the lookup
+/// (cannot happen — both derive from the same atom list; the `expect`
 /// documents the invariant instead of silently skipping).
 #[must_use]
-pub fn specs() -> Vec<Gen2Spec> {
-    let atom_list = atoms();
-    let lints: Vec<String> = atom_list.iter().map(|a| a.lint.clone()).collect();
-    let by_lint: BTreeMap<&str, &Atom> =
-        atom_list.iter().map(|a| (a.lint.as_str(), a)).collect();
-    let n = lints.len();
+fn specs_over_atoms(prefix: &str, atom_list: &[V3Atom]) -> Vec<GenSpec> {
+    let ids: Vec<String> = atom_list.iter().map(|a| a.id.clone()).collect();
+    let by_id: BTreeMap<&str, &V3Atom> =
+        atom_list.iter().map(|a| (a.id.as_str(), a)).collect();
+    let n = ids.len();
     let mut out = Vec::new();
     for &k in &LADDER_KS {
         let count = count_for_k(k, n);
         for i in 0..count {
-            let picks = lints_for_composite(k, i, &lints);
-            let id = format!("gen2-k{k}-{}", picks.join("+"));
+            let picks = lints_for_composite(k, i, &ids);
+            let id = format!("{prefix}-k{k}-{}", picks.join("+"));
             let mut code = String::new();
-            for (index, lint) in picks.iter().enumerate() {
-                let atom = by_lint.get(lint.as_str()).expect("lint drawn from the atom table");
+            for (index, atom_id) in picks.iter().enumerate() {
+                let atom = by_id.get(atom_id.as_str()).expect("atom id drawn from the atom table");
                 code.push_str(&mod_wrap(index, &atom.code));
             }
-            let expect_lints: BTreeSet<String> = picks.into_iter().collect();
-            out.push(Gen2Spec {
+            let expect_lints: BTreeSet<String> = picks
+                .iter()
+                .flat_map(|a| by_id[a.as_str()].expect.iter().cloned())
+                .collect();
+            out.push(GenSpec {
                 id,
                 k,
                 expect_lints: expect_lints.into_iter().collect(),
@@ -147,6 +150,17 @@ pub fn specs() -> Vec<Gen2Spec> {
         }
     }
     out
+}
+
+/// The generation-2 spec ladder (corpus atoms keyed by lint — byte-identical
+/// to the pre-generalization builder).
+#[must_use]
+pub fn specs() -> Vec<GenSpec> {
+    let atom_list: Vec<V3Atom> = atoms()
+        .into_iter()
+        .map(|a| V3Atom { id: a.lint.clone(), expect: vec![a.lint], code: a.code })
+        .collect();
+    specs_over_atoms("gen2", &atom_list)
 }
 
 // ── the freeze record (M5 — landed by the freeze e2e, 2026-09-06) ──────
@@ -247,17 +261,18 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k4-single_match+single_match_else+uninlined_format_args+unnecessary_lazy_evaluations",
 ];
 
-/// Freeze readiness: Ok(admitted count) when every spec is labeled or
-/// excluded, Err(reason) while the freeze e2e has not landed its record.
-///
-/// # Errors
-///
-/// The un-frozen state: how many specs lack oracle labels (or which
-/// exclusion rows no longer match the corpus-derived specs).
-pub fn v2_freeze_status() -> Result<usize, String> {
-    let all = specs();
-    let excluded: BTreeSet<&str> = EXCLUDED_IDS.iter().copied().collect();
-    let labeled: BTreeSet<&str> = FROZEN_LABELS.iter().map(|(id, _)| *id).collect();
+/// Freeze readiness for one generation: Ok(admitted count) when every spec
+/// is labeled or excluded, Err(reason) while the generation's freeze e2e has
+/// not landed its record.
+fn freeze_status_for(
+    all: &[GenSpec],
+    gen: u8,
+    test_name: &str,
+    labels: &[(&'static str, &'static [&'static str])],
+    excluded: &[&'static str],
+) -> Result<usize, String> {
+    let excluded: BTreeSet<&str> = excluded.iter().copied().collect();
+    let labeled: BTreeSet<&str> = labels.iter().map(|(id, _)| *id).collect();
     let missing: Vec<&str> = all
         .iter()
         .filter(|s| !excluded.contains(s.id.as_str()) && !labeled.contains(s.id.as_str()))
@@ -277,39 +292,42 @@ pub fn v2_freeze_status() -> Result<usize, String> {
         Ok(labeled.len())
     } else {
         Err(format!(
-            "generation v2 is not frozen: {} spec(s) lack oracle labels — run \
-             `cargo test --features score_bench --test generation_v2_freeze -- --ignored \
-             --test-threads=1` and land FROZEN_LABELS/EXCLUDED_IDS",
+            "generation v{gen} is not frozen: {} spec(s) lack oracle labels — run \
+             `cargo test --features score_bench --test {test_name} -- --ignored \
+             --test-threads=1` and land the freeze record",
             missing.len()
         ))
     }
 }
 
-/// The admitted generation-v2 fixture set (the M5 ratchet's bench input).
-///
-/// Leaks the fixture strings once per call by design — `BenchFixture` is
-/// `&'static`-shaped and this runs once per `--generation 2` invocation.
+/// The admitted fixture set for one generation (the M5 ratchet's bench
+/// input). Leaks the fixture strings once per call by design —
+/// `BenchFixture` is `&'static`-shaped and this runs once per
+/// `--generation <N>` invocation.
 ///
 /// # Panics
 ///
-/// Only on a freeze-record hole — callers check [`v2_freeze_status`] first
-/// and print its error instead.
-#[must_use]
-pub fn generation_v2() -> Vec<BenchFixture> {
-    let excluded: BTreeSet<&str> = EXCLUDED_IDS.iter().copied().collect();
-    let labels: BTreeMap<&str, &[&str]> = FROZEN_LABELS.iter().map(|(id, l)| (*id, *l)).collect();
-    specs()
-        .into_iter()
+/// Only on a freeze-record hole — callers check the generation's
+/// `*_freeze_status` first and print its error instead.
+fn generation_fixtures(
+    all: Vec<GenSpec>,
+    gen: u8,
+    labels: &[(&'static str, &'static [&'static str])],
+    excluded: &[&'static str],
+) -> Vec<BenchFixture> {
+    let excluded: BTreeSet<&str> = excluded.iter().copied().collect();
+    let label_map: BTreeMap<&str, &[&str]> = labels.iter().map(|(id, l)| (*id, *l)).collect();
+    all.into_iter()
         .filter(|s| !excluded.contains(s.id.as_str()))
         .map(|s| {
-            let expect: &[&str] = labels
+            let expect: &[&str] = label_map
                 .get(s.id.as_str())
                 .copied()
-                .unwrap_or_else(|| panic!("spec {} frozen but unlabeled — v2_freeze_status hole", s.id));
+                .unwrap_or_else(|| panic!("spec {} frozen but unlabeled — freeze_status hole", s.id));
             BenchFixture {
                 id: Box::leak(s.id.clone().into_boxed_str()),
                 provenance: Box::leak(
-                    format!("construction:gen2:k{}:{}", s.k, s.expect_lints.join("+"))
+                    format!("construction:gen{gen}:k{}:{}", s.k, s.expect_lints.join("+"))
                         .into_boxed_str(),
                 ),
                 code: Box::leak(s.code.into_boxed_str()),
@@ -320,12 +338,286 @@ pub fn generation_v2() -> Vec<BenchFixture> {
         .collect()
 }
 
-/// The ladder k of a fixture id (`gen2-k3-...` → 3); `None` for non-gen2 ids.
+/// Freeze readiness: Ok(admitted count) when every spec is labeled or
+/// excluded, Err(reason) while the freeze e2e has not landed its record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels (or which
+/// exclusion rows no longer match the corpus-derived specs).
+pub fn v2_freeze_status() -> Result<usize, String> {
+    freeze_status_for(&specs(), 2, "generation_v2_freeze", FROZEN_LABELS, EXCLUDED_IDS)
+}
+
+/// The admitted generation-v2 fixture set (the M5 ratchet's bench input).
+///
+/// # Panics
+///
+/// Only on a freeze-record hole — callers check [`v2_freeze_status`] first
+/// and print its error instead.
+#[must_use]
+pub fn generation_v2() -> Vec<BenchFixture> {
+    generation_fixtures(specs(), 2, FROZEN_LABELS, EXCLUDED_IDS)
+}
+
+/// The ladder k of a generation fixture id (`gen2-k3-…` → 3,
+/// `gen3-k2-…` → 2); `None` for non-generation ids.
 #[must_use]
 pub fn k_of(id: &str) -> Option<usize> {
-    let rest = id.strip_prefix("gen2-k")?;
+    let rest = id.strip_prefix("gen")?;
+    let (_gen, rest) = rest.split_once('-')?;
+    let rest = rest.strip_prefix('k')?;
     let k: String = rest.chars().take_while(char::is_ascii_digit).collect();
     k.parse().ok()
+}
+
+// ── generation 3 — persist-shape stratification (Bench 069 reopen #1) ──
+//
+// The corpus-atom ladder (generation 2) measured 100% at every k: shapes
+// the corpus teaches are shapes the proposers solve. Generation 3
+// stratifies the atom table with AUTHORED persist-shape atoms — real-code
+// shapes where a vocabulary lint FIRES and the heal lane DELIBERATELY stays
+// silent, each a documented parse-only divergence class with the record
+// that measured the silence. These give the bench measurement headroom the
+// saturated corpus ladder lacks: when a proposer extension ever lands
+// (macro-arg descent past a nested macro, the named-arg rename rewrite, a
+// further array-literal relaxation), the generation's rate MOVES and the
+// ratchet sees it.
+//
+// Pre-registered at authoring (`.benchmarks/070`), BEFORE the freeze run:
+// the v2 M4 k-decay gate does NOT carry to gen 3 — its difficulty axis is
+// per-atom strata, not k-composition, and the prefix-window geometry makes
+// strict monotonicity a sampling artifact. The binding checks are the
+// stratification gate (every persist atom resolves 0) and the M5 admission
+// gate (aggregate rate strictly below v1's latest).
+//
+// The stratification gate already caught two stale atoms on the FIRST
+// freeze run (the loop working as designed):
+// - a named-arg-with-rename shape (`println!("{iters}", iters = ITERS)`)
+//   RESOLVED — the P3 rename rewrite closed the class after the bench_337
+//   record was written; the atom was replaced.
+// - a second-level macro-nesting shape now fires clippy 1.98's NEW
+//   `format_in_format_args` instead of `uninlined_format_args` — the class
+//   moved off-vocabulary (labels move between toolchains, the oracle's
+//   own caveat); the atom was dropped.
+
+/// One authored persist-shape atom.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistAtom {
+    /// Stable id (namespaced `persist_*` — disjoint from corpus lint ids).
+    pub id: &'static str,
+    /// The divergence class + the record that measured the silence.
+    pub note: &'static str,
+    /// The shape (parses standalone as a file; compiles in the stub crate).
+    pub code: &'static str,
+    /// The vocabulary lints the freeze oracle must confirm (the atom's gold).
+    pub expect: &'static [&'static str],
+}
+
+pub static PERSIST_ATOMS: &[PersistAtom] = &[
+    PersistAtom {
+        id: "persist_array_default",
+        note: "array-literal map_or guard: real clippy's own MachineApplicable rewrite E0308s in a plain-let position (map_or's U unifies from the array literal first), so the proposer refuses — the slice_pinned relaxation (P2, 2026-08-28) fires only when a `&[T]` annotation forces the type, which this plain let deliberately lacks (measured at forward step.rs:196)",
+        code: r"fn persist_array_default(o: Option<&str>) -> Vec<u8> {
+    let bytes = o.map(|s| s.as_bytes()).unwrap_or(&[]);
+    bytes.to_vec()
+}",
+        expect: &["map_unwrap_or"],
+    },
+    PersistAtom {
+        id: "persist_comment_arm",
+        note: "comment-guarded match rewrite: real clippy fires single_match_else on the corpus's own Some/block-fallback shape, but the interior comment would be displaced by the if-let rewrite and the drops_interior_comment guard refuses — the healer is SAFER than clippy there (guards from Issue 027/029; measured at transposition.rs:67)",
+        code: r"fn score2(g: u8) -> u8 {
+    g * 2
+}
+
+fn persist_comment_arm(kind: Option<u8>) -> u8 {
+    match kind {
+        // The fallback block is the documented shape.
+        Some(k) => score2(k),
+        _ => {
+            let fallback = 2;
+            score2(fallback)
+        }
+    }
+}",
+        expect: &["single_match_else"],
+    },
+    PersistAtom {
+        id: "persist_comment_hoist",
+        note: "comment-guarded item hoist: real clippy fires items_after_statements on the fn-after-statement shape, but hoisting the item above the statement would displace the interior comment and the leading-gap guard refuses (the Batch-90 comment guards; corpus note cites the class)",
+        code: r"fn persist_comment_hoist() -> i32 {
+    let x = 1;
+    // The helper stays below this note.
+    fn h(v: i32) -> i32 {
+        v * 2
+    }
+    h(x)
+}",
+        expect: &["items_after_statements"],
+    },
+    PersistAtom {
+        id: "persist_useless_format",
+        note: "the type-boundary terminal: real clippy fires useless_format on the String-typed named-capture form, but the terminal fix (clone vs to_string) needs the arg's TYPE — the single-positional proposer form deliberately does not fire, and firing would trade the persist for a created implicit_clone (measured on the composite-range_loop_plus_format_args fixture, run #3 triage)",
+        code: r#"fn persist_useless_format() {
+    let elem: String = "payload".to_string();
+    let s: String = format!("{elem}");
+    println!("{s}");
+}"#,
+        expect: &["useless_format"],
+    },
+];
+
+/// One generation-3 atom: a corpus-derived solvable atom (id = its lint) or
+/// an authored persist-shape atom (id = `persist_*`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct V3Atom {
+    pub id: String,
+    /// The atom's gold (union member of every composite containing it).
+    pub expect: Vec<String>,
+    pub code: String,
+}
+
+/// The generation-3 atom table: the five persist atoms FIRST (the stride
+/// windows cover the list head at k≥2, so declaring the stratification up
+/// front puts a persist shape in every composite rung), then the corpus
+/// atoms in their sorted-lint order. Order is load-bearing and pinned.
+#[must_use]
+pub fn v3_atoms() -> Vec<V3Atom> {
+    let mut out: Vec<V3Atom> = Vec::with_capacity(PERSIST_ATOMS.len() + 40);
+    out.extend(PERSIST_ATOMS.iter().map(|p| V3Atom {
+        id: p.id.to_string(),
+        expect: p.expect.iter().map(ToString::to_string).collect(),
+        code: p.code.to_string(),
+    }));
+    out.extend(atoms().into_iter().map(|a| V3Atom {
+        id: a.lint.clone(),
+        expect: vec![a.lint],
+        code: a.code,
+    }));
+    out
+}
+
+/// The generation-3 spec ladder: persist-stratified atoms (k=1) + the same
+/// stride-window composites (k=2..4). Byte-stable — pinned by test.
+#[must_use]
+pub fn specs_v3() -> Vec<GenSpec> {
+    let atom_list = v3_atoms();
+    specs_over_atoms("gen3", &atom_list)
+}
+
+/// Spec ids the generation-3 freeze run EXCLUDED (real-clippy labels ≠ the
+/// union-of-atom gold) — landed by the freeze e2e.
+// Landed by tests/generation_v3_freeze.rs --ignored (2026-09-06): the 2 known
+// corpus double-fire atoms (needless_match, uninlined_format_args) + their 4
+// cascade composites. Zero independent interference measured.
+pub static EXCLUDED_IDS_V3: &[&str] = &[
+    "gen3-k1-needless_match",
+    "gen3-k1-uninlined_format_args",
+    "gen3-k2-needless_lifetimes+needless_match",
+    "gen3-k3-needless_bool_assign+needless_lifetimes+needless_match",
+    "gen3-k3-single_match_else+uninlined_format_args+unnecessary_lazy_evaluations",
+    "gen3-k4-needless_bool+needless_bool_assign+needless_lifetimes+needless_match",
+];
+
+/// The generation-3 frozen labels (spec id → vocabulary lints real clippy
+/// fired at freeze time) — landed by the freeze e2e.
+// Landed by tests/generation_v3_freeze.rs --ignored (2026-09-06): 72 verified
+// specs (38 corpus atoms + 4 persist atoms, and all k>=2 composites),
+// oracle labels == union-of-atom gold 72/72 against real clippy.
+pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
+    ("gen3-k1-byte_char_slices", &["byte_char_slices"]),  // k=1
+    ("gen3-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1
+    ("gen3-k1-collapsible_if", &["collapsible_if"]),  // k=1
+    ("gen3-k1-deref_addrof", &["deref_addrof"]),  // k=1
+    ("gen3-k1-double_parens", &["double_parens"]),  // k=1
+    ("gen3-k1-filter_next", &["filter_next"]),  // k=1
+    ("gen3-k1-identity_op", &["identity_op"]),  // k=1
+    ("gen3-k1-items_after_statements", &["items_after_statements"]),  // k=1
+    ("gen3-k1-iter_next_loop", &["iter_next_loop"]),  // k=1
+    ("gen3-k1-iter_nth_zero", &["iter_nth_zero"]),  // k=1
+    ("gen3-k1-manual_let_else", &["manual_let_else"]),  // k=1
+    ("gen3-k1-manual_map", &["manual_map"]),  // k=1
+    ("gen3-k1-manual_slice_fill", &["manual_slice_fill"]),  // k=1
+    ("gen3-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1
+    ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1
+    ("gen3-k1-match_bool", &["match_bool"]),  // k=1
+    ("gen3-k1-needless_bool", &["needless_bool"]),  // k=1
+    ("gen3-k1-needless_bool_assign", &["needless_bool_assign"]),  // k=1
+    ("gen3-k1-needless_lifetimes", &["needless_lifetimes"]),  // k=1
+    ("gen3-k1-needless_range_loop", &["needless_range_loop"]),  // k=1
+    ("gen3-k1-needless_return", &["needless_return"]),  // k=1
+    ("gen3-k1-persist_array_default", &["map_unwrap_or"]),  // k=1
+    ("gen3-k1-persist_comment_arm", &["single_match_else"]),  // k=1
+    ("gen3-k1-persist_comment_hoist", &["items_after_statements"]),  // k=1
+    ("gen3-k1-persist_useless_format", &["useless_format"]),  // k=1
+    ("gen3-k1-question_mark", &["question_mark"]),  // k=1
+    ("gen3-k1-range_plus_one", &["range_plus_one"]),  // k=1
+    ("gen3-k1-redundant_field_names", &["redundant_field_names"]),  // k=1
+    ("gen3-k1-redundant_pattern_matching", &["redundant_pattern_matching"]),  // k=1
+    ("gen3-k1-redundant_static_lifetimes", &["redundant_static_lifetimes"]),  // k=1
+    ("gen3-k1-semicolon_if_nothing_returned", &["semicolon_if_nothing_returned"]),  // k=1
+    ("gen3-k1-single_match", &["single_match"]),  // k=1
+    ("gen3-k1-single_match_else", &["single_match_else"]),  // k=1
+    ("gen3-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1
+    ("gen3-k1-unnecessary_sort_by", &["unnecessary_sort_by"]),  // k=1
+    ("gen3-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1
+    ("gen3-k1-unused_unit", &["unused_unit"]),  // k=1
+    ("gen3-k1-use_self", &["use_self"]),  // k=1
+    ("gen3-k1-useless_format", &["useless_format"]),  // k=1
+    ("gen3-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),  // k=1
+    ("gen3-k2-byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if"]),  // k=2
+    ("gen3-k2-collapsible_if+deref_addrof", &["collapsible_if", "deref_addrof"]),  // k=2
+    ("gen3-k2-double_parens+filter_next", &["double_parens", "filter_next"]),  // k=2
+    ("gen3-k2-identity_op+items_after_statements", &["identity_op", "items_after_statements"]),  // k=2
+    ("gen3-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2
+    ("gen3-k2-manual_let_else+manual_map", &["manual_let_else", "manual_map"]),  // k=2
+    ("gen3-k2-manual_slice_fill+manual_unwrap_or", &["manual_slice_fill", "manual_unwrap_or"]),  // k=2
+    ("gen3-k2-map_unwrap_or+match_bool", &["map_unwrap_or", "match_bool"]),  // k=2
+    ("gen3-k2-needless_bool+needless_bool_assign", &["needless_bool", "needless_bool_assign"]),  // k=2
+    ("gen3-k2-needless_range_loop+needless_return", &["needless_range_loop", "needless_return"]),  // k=2
+    ("gen3-k2-persist_array_default+persist_comment_arm", &["map_unwrap_or", "single_match_else"]),  // k=2
+    ("gen3-k2-persist_comment_hoist+persist_useless_format", &["items_after_statements", "useless_format"]),  // k=2
+    ("gen3-k2-question_mark+range_plus_one", &["question_mark", "range_plus_one"]),  // k=2
+    ("gen3-k2-redundant_field_names+redundant_pattern_matching", &["redundant_field_names", "redundant_pattern_matching"]),  // k=2
+    ("gen3-k2-redundant_static_lifetimes+semicolon_if_nothing_returned", &["redundant_static_lifetimes", "semicolon_if_nothing_returned"]),  // k=2
+    ("gen3-k3-collapsible_if+deref_addrof+double_parens", &["collapsible_if", "deref_addrof", "double_parens"]),  // k=3
+    ("gen3-k3-filter_next+identity_op+items_after_statements", &["filter_next", "identity_op", "items_after_statements"]),  // k=3
+    ("gen3-k3-iter_next_loop+iter_nth_zero+manual_let_else", &["iter_next_loop", "iter_nth_zero", "manual_let_else"]),  // k=3
+    ("gen3-k3-manual_map+manual_slice_fill+manual_unwrap_or", &["manual_map", "manual_slice_fill", "manual_unwrap_or"]),  // k=3
+    ("gen3-k3-map_unwrap_or+match_bool+needless_bool", &["map_unwrap_or", "match_bool", "needless_bool"]),  // k=3
+    ("gen3-k3-needless_range_loop+needless_return+question_mark", &["needless_range_loop", "needless_return", "question_mark"]),  // k=3
+    ("gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist", &["items_after_statements", "map_unwrap_or", "single_match_else"]),  // k=3
+    ("gen3-k3-persist_useless_format+byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if", "useless_format"]),  // k=3
+    ("gen3-k3-range_plus_one+redundant_field_names+redundant_pattern_matching", &["range_plus_one", "redundant_field_names", "redundant_pattern_matching"]),  // k=3
+    ("gen3-k3-redundant_static_lifetimes+semicolon_if_nothing_returned+single_match", &["redundant_static_lifetimes", "semicolon_if_nothing_returned", "single_match"]),  // k=3
+    ("gen3-k4-byte_char_slices+collapsible_else_if+collapsible_if+deref_addrof", &["byte_char_slices", "collapsible_else_if", "collapsible_if", "deref_addrof"]),  // k=4
+    ("gen3-k4-double_parens+filter_next+identity_op+items_after_statements", &["double_parens", "filter_next", "identity_op", "items_after_statements"]),  // k=4
+    ("gen3-k4-iter_next_loop+iter_nth_zero+manual_let_else+manual_map", &["iter_next_loop", "iter_nth_zero", "manual_let_else", "manual_map"]),  // k=4
+    ("gen3-k4-manual_slice_fill+manual_unwrap_or+map_unwrap_or+match_bool", &["manual_slice_fill", "manual_unwrap_or", "map_unwrap_or", "match_bool"]),  // k=4
+    ("gen3-k4-needless_range_loop+needless_return+question_mark+range_plus_one", &["needless_range_loop", "needless_return", "question_mark", "range_plus_one"]),  // k=4
+    ("gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format", &["items_after_statements", "map_unwrap_or", "single_match_else", "useless_format"]),  // k=4
+    ("gen3-k4-redundant_field_names+redundant_pattern_matching+redundant_static_lifetimes+semicolon_if_nothing_returned", &["redundant_field_names", "redundant_pattern_matching", "redundant_static_lifetimes", "semicolon_if_nothing_returned"]),  // k=4
+];
+
+/// Freeze readiness for generation 3 — Err until the freeze e2e lands the
+/// record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels.
+pub fn v3_freeze_status() -> Result<usize, String> {
+    freeze_status_for(&specs_v3(), 3, "generation_v3_freeze", FROZEN_LABELS_V3, EXCLUDED_IDS_V3)
+}
+
+/// The admitted generation-v3 fixture set.
+///
+/// # Panics
+///
+/// Only on a freeze-record hole — callers check [`v3_freeze_status`] first.
+#[must_use]
+pub fn generation_v3() -> Vec<BenchFixture> {
+    generation_fixtures(specs_v3(), 3, FROZEN_LABELS_V3, EXCLUDED_IDS_V3)
 }
 
 #[cfg(test)]
@@ -400,17 +692,107 @@ mod tests {
 
     #[test]
     fn ids_are_unique_across_the_generation() {
-        let s = specs();
-        let ids: BTreeSet<&str> = s.iter().map(|x| x.id.as_str()).collect();
-        assert_eq!(ids.len(), s.len(), "duplicate generation ids");
+        for (name, list) in [("gen2", specs()), ("gen3", specs_v3())] {
+            let ids: BTreeSet<&str> = list.iter().map(|x| x.id.as_str()).collect();
+            assert_eq!(ids.len(), list.len(), "duplicate {name} generation ids");
+        }
     }
 
     #[test]
-    fn k_of_parses_gen2_ids_only() {
+    fn freeze_status_holes_are_loud_v3() {
+        let excluded: BTreeSet<&str> = EXCLUDED_IDS_V3.iter().copied().collect();
+        let labeled: BTreeSet<&str> = FROZEN_LABELS_V3.iter().map(|(id, _)| *id).collect();
+        if excluded.is_empty() && labeled.is_empty() {
+            // Pre-freeze: every spec is missing → Err (a silently-empty
+            // generation must never reach the bench).
+            assert!(
+                v3_freeze_status().is_err(),
+                "pre-freeze must not claim readiness"
+            );
+        } else {
+            // Post-freeze: the always-on coverage gate — labels ∪ excluded
+            // covers every spec, and each label equals the spec's union gold.
+            for s in specs_v3() {
+                assert!(
+                    excluded.contains(s.id.as_str()) || labeled.contains(s.id.as_str()),
+                    "spec {} is neither labeled nor excluded",
+                    s.id
+                );
+                if labeled.contains(s.id.as_str()) {
+                    let frozen = FROZEN_LABELS_V3
+                        .iter()
+                        .find(|(id, _)| *id == s.id)
+                        .map_or(&[] as &[&str], |(_, l)| *l);
+                    let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
+                    let got: BTreeSet<&str> = frozen.iter().copied().collect();
+                    assert_eq!(want, got, "frozen label drift on {}", s.id);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn k_of_parses_generation_ids() {
         assert_eq!(k_of("gen2-k3-a+b+c"), Some(3));
         assert_eq!(k_of("gen2-k1-identity_op"), Some(1));
+        assert_eq!(k_of("gen3-k2-persist_array_default+map_unwrap_or"), Some(2));
         assert_eq!(k_of("composite-return_plus_identity_op"), None);
         assert_eq!(k_of("gen2-"), None);
+        assert_eq!(k_of("gen-"), None);
+    }
+
+    #[test]
+    fn persist_atom_table_parses_and_is_namespaced() {
+        let vocab = super::super::vocabulary();
+        assert!(!PERSIST_ATOMS.is_empty(), "persist table empty");
+        for p in PERSIST_ATOMS {
+            assert!(p.id.starts_with("persist_"), "persist id {} not namespaced", p.id);
+            assert!(!p.expect.is_empty(), "persist atom {} expects nothing", p.id);
+            for l in p.expect {
+                assert!(vocab.contains(*l), "persist atom {} expects non-vocabulary lint {l}", p.id);
+            }
+            assert!(
+                syn::parse_file(p.code).is_ok(),
+                "persist atom {} does not parse standalone",
+                p.id
+            );
+            assert!(!p.code.contains("mod gen_"), "persist atom {} carries the wrapper", p.id);
+        }
+    }
+
+    #[test]
+    fn v3_specs_are_deterministic_and_ladder_shaped() {
+        let s1 = specs_v3();
+        let s2 = specs_v3();
+        assert_eq!(s1, s2, "gen3 specs must be byte-stable");
+        let n = v3_atoms().len();
+        assert!(n > PERSIST_ATOMS.len(), "gen3 atom table lost its corpus half");
+        let k1 = s1.iter().filter(|s| s.k == 1).count();
+        assert_eq!(k1, count_for_k(1, n));
+        // The stratification contract: the persist atoms sit at the list
+        // head, so every composite rung samples them.
+        for &k in &LADDER_KS[1..] {
+            let covered = count_for_k(k, n) * k;
+            assert!(
+                covered >= PERSIST_ATOMS.len(),
+                "k={k} windows ({covered} slots) cannot reach all {} persist atoms",
+                PERSIST_ATOMS.len()
+            );
+            for s in s1.iter().filter(|s| s.k == k) {
+                let mods = s.code.matches("mod gen_").count();
+                assert_eq!(mods, s.k, "gen3 composite {} wraps k atoms", s.id);
+                assert!(
+                    s.id.starts_with(&format!("gen3-k{k}-")),
+                    "gen3 id encodes the generation + k: {}",
+                    s.id
+                );
+            }
+        }
+        // Every persist atom appears in at least one k=2 composite.
+        let k2_code: String = s1.iter().filter(|s| s.k == 2).map(|s| s.code.as_str()).collect();
+        for p in PERSIST_ATOMS {
+            assert!(k2_code.contains(p.code), "persist atom {} absent from every k=2 composite", p.id);
+        }
     }
 
     #[test]

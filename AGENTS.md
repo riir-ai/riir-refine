@@ -2364,6 +2364,21 @@ re-enters through the same freeze discipline, never a silent v2 rewrite);
 (2) the real-G8 A/B — author N templates from the frontier-top of
 `--misses-report`, compare Certified-conversion vs the historical FIFO
 baseline; reopens when the queue has ≥3 entries + ≥1 authored template.
+**REOPEN (1) EXECUTED same day (Bench 070): generation 3 = the
+persist-stratified ladder — 4 authored persist-shape atoms (array-literal
+map_or, comment-guarded match + hoist, the useless_format String terminal)
+stratifying the 38 corpus atoms; the stratification gate (persist atoms
+resolve 0) FALSIFIED two of five authored atoms on the FIRST freeze run
+(the P3 rename rewrite had closed one class; clippy 1.98's new
+`format_in_format_args` moved another off-vocabulary) and the replacements
+landed; frozen 72 specs, **ADMITTED** (gen-3 87.5% < v1 96.2%), run #47
+appended + `score_history_v3.svg`. En-route CLI find: the collision-salvage
+merge had left `--generation` parsing inside the `--limit` arm (the flag
+could not parse at HEAD; `--misses --limit` errored on the never-set
+`misses_limit`) + duplicated `--score-report`/`--memory-stats` arms — all
+repaired and live-verified. Next axes: the rustc-errors-side ladder or
+vocabulary extension to rust_perf rules (both in Bench 070 §What remains);
+v3's rate is a permanent DESIGN floor, not a frontier.
 **En-route catches:** (1) the pair row initially carried a wall-clock
 `created_unix` — the idempotence test flaked when two imports crossed a
 second boundary (the full-suite run caught it; the field is REMOVED —

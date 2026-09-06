@@ -59,6 +59,9 @@ pub const HISTORY_JSONL: &str = ".benchmarks/score_history.jsonl";
 pub const HISTORY_SVG: &str = ".benchmarks/score_history.svg";
 /// The generation-2 curve (Plan 092 M5) — rendered only when v2 rows exist.
 pub const HISTORY_SVG_V2: &str = ".benchmarks/score_history_v2.svg";
+/// The generation-3 curve (Bench 069 reopen #1) — rendered only when v3 rows
+/// exist.
+pub const HISTORY_SVG_V3: &str = ".benchmarks/score_history_v3.svg";
 
 /// The M5 saturation window: marginal gain = rate[last] − rate[last − N].
 /// R = 5 ≈ the observed spacing between step changes in the 45-run history
