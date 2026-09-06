@@ -29,7 +29,7 @@ Expected yield after falsification: 2–3 rules + 1 rider. All build-orchestrati
 
 ### T1 — dedup + adjudication
 
-- [ ] Corpus greps for each candidate concept (resume/provenance/readback/publish/atomic/isolate/mmap-RSS) — DONE at T0, recorded above; final per-entry vocabulary probes at authoring time.
+- [x] Corpus greps for each candidate concept (resume/provenance/readback/publish/atomic/isolate/mmap-RSS) — DONE at T0, recorded above; final per-entry vocabulary probes at authoring time.
 - [x] Adjudicate rule count (3 rules + 1 rider folded into rule 3's notes; no drop-table kills — all candidates survived the dedup).
 
 ### T2 — entry authoring
@@ -55,7 +55,7 @@ Expected yield after falsification: 2–3 rules + 1 rider. All build-orchestrati
 - [x] League intel recorded in Research 144 + the snapshot (named-not-edited; no league manifest edits).
 - [x] Commit + push on `develop`; `rm -rf .raw/ds4-metal` at landing.
 - [x] Plan → RECORD (this flip).
-- [ ] Plan → RECORD.
+- [x] Plan → RECORD.
 
 ## Non-goals
 

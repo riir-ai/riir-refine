@@ -133,15 +133,15 @@ non-goal #2, explicitly deferred to a separate generation). Record:
   harness, deleted after), record passes + refire behavior + persist; amend
   the roster here (addendum) BEFORE the freeze lands. The cif one-pair-per-
   pass assumption is the primary probe question.
-- [ ] T2 — `src/score_bench/generations.rs` gen-7 section: `RAW_ATOMS_V7`
+- [x] T2 — `src/score_bench/generations.rs` gen-7 section: `RAW_ATOMS_V7`
   (the authored table), `specs_v7()`, `v7_territory()`, `v7_expected_passes()`,
   `FROZEN_LABELS_V7`, `EXCLUDED_IDS_V7`, `v7_freeze_status()`; always-on
   tests (G1 parse, G3 chain-truth via `heal_fixpoint`, floors, id uniqueness
   across generations 1–7).
-- [ ] T3 — `tests/generation_v7_freeze.rs` (the `#[ignore]`d e2e: G2 label
+- [x] T3 — `tests/generation_v7_freeze.rs` (the `#[ignore]`d e2e: G2 label
   fence + drift, paste-ready record) + `Cargo.toml` `[[test]]` row with
   `required-features = ["score_bench"]` (the 713-T3 reader axis).
-- [ ] T4 — CLI: `--generation 7` arm (the v6 clippy-runner path), parse range
+- [x] T4 — CLI: `--generation 7` arm (the v6 clippy-runner path), parse range
   1..=7, help text, `print_v7_chain_tables` (per-depth + per-territory +
   passes distribution), `HISTORY_SVG_V7`, `finish_score_bench` arms (svg_path
   7, the per-generation SVG loop, the history line).
