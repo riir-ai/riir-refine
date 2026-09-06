@@ -1305,6 +1305,10 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
   </div>
   <div class="card"><h2>ledger spend by model (USD est, client)</h2>
     <div id="modelSpend"></div>
+    <div class="sub" style="margin-top:8px">rows are per-run LEDGER HISTORY — closed bench arms included. The live
+      serving default is <code>@cf/zai-org/glm-5.3-flash</code> (owner pivot 2026-08-28: no llama, no 4.7) with the
+      groq free leg on <code>qwen/qwen3.8-27b</code>; every llama entry here is a finished Bench-049/051/068
+      fixer-regate arm, not a serving choice.</div>
   </div>
   <div class="card"><h2>neurons by model — ledger (server)</h2>
     <div id="modelNeurons"></div>
@@ -1591,10 +1595,20 @@ if (D.cf_daily && D.cf_daily.length) {
   // Tolerance: committed reconciliation rows are rounded to 2dp, so an exact
   // match is not achievable — 0.5% (floor 1 neuron) is the drift threshold.
   const tol = (a) => Math.max(1, Math.abs(a) * 0.005);
+  // The settle loop (issue 057) refuses the still-open UTC day, so the newest
+  // day can read 0.00-vs-partial at generation time without being drift — its
+  // settlement row lands on the NEXT nightly run (observed 2026-09-05: the
+  // 18:23 UTC run published ledger 0.00 vs analytics 1232.18 as "DRIFT 100%"
+  // for a day that settled green 24h later). Distinguish that timing artifact
+  // (warn PENDING) from real drift (crit).
+  const genDay = (D.generated_utc||'').slice(0,10);
+  const settled = new Set((D.ledger.rows||[])
+    .filter(r=>r.arm==='settlement'||r.arm==='reconciliation')
+    .map(r=>new Date(((r.covers_unix||r.ts_unix)||0)*1000).toISOString().slice(0,10)));
   if (!days.length) {
     $('recon').innerHTML = '<div class="sub">no ledger or analytics days yet</div>';
   } else {
-    let drift = 0;
+    let drift = 0, pending = 0;
     $('recon').innerHTML = tableHTML(
       ['account day','ledger n (client)','analytics n (server)','diff','verdict'],
       days,
@@ -1608,6 +1622,9 @@ if (D.cf_daily && D.cf_daily.length) {
           else { cls = 'color:var(--warn)'; drift++; }
         } else if (Math.abs(l - a) <= tol(a)) {
           v = 'RECONCILED'; cls = 'color:var(--accent2)';
+        } else if (genDay && d >= genDay && !settled.has(d)) {
+          v = 'PENDING · day open at generation — next nightly settles';
+          cls = 'color:var(--warn)'; pending++;
         } else {
           v = 'DRIFT · ' + fmt.pct(Math.abs(l - a) / (a || 1)) + ' unreconciled';
           cls = 'color:var(--crit)'; drift++;
@@ -1622,6 +1639,12 @@ if (D.cf_daily && D.cf_daily.length) {
       $('recon').innerHTML += '<div class="sub" style="color:var(--crit);margin-top:8px">'
         + drift + ' day(s) need reconciliation — append a settlement row with '
         + 'covers_unix set to the window it settles.</div>';
+    }
+    if (pending) {
+      $('recon').innerHTML += '<div class="sub" style="color:var(--warn);margin-top:8px">'
+        + pending + ' day(s) pending settlement — the UTC day was still open at '
+        + 'generation and per-run server fields read 0.0 under analytics lag; '
+        + 'the next nightly appends the difference (issue 057).</div>';
     }
   }
 }
