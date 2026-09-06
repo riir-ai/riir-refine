@@ -273,6 +273,37 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // fixpoint ping-pong with our own FIXABLE proposer. No corpus entry.
 ];
 
+/// One-line semantic-shift annotations for the fixable lints whose rewrite
+/// is bounded-but-real behavior-adjacent (Issue 074 T2). Printed by the
+/// `--fix` review as `⚠ semantic change: {note}` so the CLI has ONE
+/// annotation dialect with the `rustc_errors` renderer. Mechanical classes
+/// (`format-args`, `identity_op`, `semicolon`, ...) are deliberately absent — an
+/// annotation that fires on 90% of fixes is warning fatigue (Issue 074
+/// scope guard).
+#[must_use]
+pub fn context_note(rule_id: &str) -> Option<&'static str> {
+    match rule_id {
+        // The Some-arm body moves into a NEW closure: ?/return/break/
+        // continue/await/yield arms change propagation there and are
+        // refused (the manual_map control-flow guard).
+        "manual_map" => Some("control-flow capture — the Some-arm body moves into a closure; ?/return/break/continue arms are refused"),
+        // Borrow shape is resolved against fn params without a type
+        // checker: indexed writes / address-of slots refuse, and the
+        // iterable form (&v vs v) rides param-resolution.
+        "needless_range_loop" => Some("borrow shape — indexed writes and &v[i]/&mut v[i] slots refuse; the iterable form resolves against fn params, not types"),
+        // Option-only short-circuit: rewrites `return None` shapes to
+        // try; reference scrutinees re-emit via .as_ref() to satisfy the
+        // by-value move the ? operator needs.
+        "question_mark" => Some("short-circuit scope — Option/None return shapes only; reference scrutinees re-emit via .as_ref()"),
+        // map_or infers U from BOTH args, so unsize coercions that fired
+        // through unwrap_or's pre-fixed Option param no longer fire
+        // (E0308 on trait-object/array-literal defaults) — those shapes
+        // are skipped (the P9 divergence).
+        "map_unwrap_or" => Some("inference shape — map_or infers the default's type from both args; unsize-coercion defaults (trait-object/array literal) are refused"),
+        _ => None,
+    }
+}
+
 /// Lints attempted ONLY under `cargo heal --fix --verify` (Issue 015) —
 /// type-blind rewrites whose failure mode (E0631/E0599) the
 /// [`crate::fix_verify`] loop auto-reverts. `redundant_closure` was demoted

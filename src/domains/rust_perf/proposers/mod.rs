@@ -247,6 +247,26 @@ pub fn collect_edits_opts(
         .collect()
 }
 
+/// One-line semantic-shift annotations for the signature-visible fixables
+/// (Issue 074 T2) — printed by the `--fix` review as
+/// `⚠ semantic change: {note}`. The other nine FIXABLE_RULES are
+/// semantics-preserving by construction and stay un-annotated (an
+/// annotation that fires on most fixes is warning fatigue).
+#[must_use]
+pub fn context_note(rule_id: &str) -> Option<&'static str> {
+    match rule_id {
+        // Return type String -> &'static str: callers expecting an owned
+        // String must now clone/allocate at the call site (the module
+        // caveat, "Signature-visible change").
+        "static-str" => Some("signature-visible — returns &'static str (borrowed literal), not an owned String; callers expecting String need .to_string()"),
+        // &[bool] param -> packed &[u64]: callers must pass packed bits
+        // (pack_bools at the boundary); fires only when the fn has no
+        // live in-file caller (the caller gate).
+        "bool-to-bitpack" => Some("signature-visible — the &[bool] param becomes packed &[u64]; callers must pack at the boundary (fires only with no live in-file caller)"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

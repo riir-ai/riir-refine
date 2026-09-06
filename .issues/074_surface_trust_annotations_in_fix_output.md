@@ -1,6 +1,6 @@
 # Issue 074: Surface the trust annotations in `--fix` output — the `⚠ semantic change` / `context_notes` channels stop at the rustc_errors domain
 
-**Status:** Open — T1–T3 actionable (display-only, modelless); T4 defer with the DRY constraint
+**Status:** T1–T3 LANDED (display-only, modelless; see tasks for validation) — T4 defer with the DRY constraint, reopen on consumer ask
 **Source:** external review (Gemini, owner-relayed 2026-09-06) — two of its three points verified against the tree and accepted with mechanism corrections; point 3 (corpus densification) routed to its existing trackers, not this issue
 **Filed:** 2026-09-06
 
@@ -18,9 +18,9 @@ The correction to the external framing, recorded so it is not re-derived: there 
 
 ## Tasks
 
-- [ ] **T1 — render the annotation in general `--fix` output**: in `heal.rs`'s edit-emitter reporting (dry-run review sections + `--write` applied lines), print the annotation when present — `context_notes` from `DraftedFix` (truncated to its first line; full text stays in `--explain`-style verbose mode if that exists, else the first line only) + the same `⚠ semantic change:` vocabulary as the rustc_errors renderer so the CLI has ONE annotation dialect. Zero behavior change when notes are absent (the common case — the renderer's default must be byte-identical, pinned by a test).
-- [ ] **T2 — author the notes**: add `context_notes`/semantic notes to the semantics-adjacent clippy_lints proposers listed above (the corpus entries and/or the proposer-level constant — whichever surface the `DraftedFix` path actually reads; verify with a grep that the chosen surface flows to the emitter). Keep each note one line, named-class form ("⚠ semantic change: evaluation order — default arm now evaluated lazily"), never prose paragraphs. Scope guard: do NOT annotate unconditional-win mechanical classes (format-args, identity_op, semicolon) — an annotation that fires on 90% of fixes is warning fatigue and *erodes* the trust axis this issue serves.
-- [ ] **T3 — gates**: (a) fixture-purity — the annotated fixtures still fire their own proposer and only their own; (b) a render test pinning byte-identical output for un-annotated classes and the `⚠` line for annotated ones; (c) run `--score-bench` after landing (standing workflow) and confirm heal/created/safety rates unmoved (display-only change; `created` is the trust axis — any move is a finding).
+- [x] **T1 — render the annotation in general `--fix` output** — DONE 2026-09-06: `rule_context_note(rule_id)` (heal.rs) dispatches to the per-domain `context_note` tables behind the same `#[cfg]` gates as the `collect_edits` call sites; the surviving-edit tuple carries the note and `print_fix_review` renders `⚠ semantic change: {note}` — one dialect with `semantic_note_suffix`. Byte-identical when absent, pinned by `mechanical_classes_stay_silent_byte_identically`. (Surface correction vs the original wording: the general `--fix` path never goes through `DraftedFix` — it runs proposers' `collect_edits` directly, so the note is looked up by rule id at render time, not carried by the drafter.)
+- [x] **T2 — author the notes** — DONE 2026-09-06: clippy_lints (`manual_map` control-flow capture, `needless_range_loop` borrow shape, `question_mark` short-circuit scope, `map_unwrap_or` inference shape) and rust_perf (`static-str` / `bool-to-bitpack` signature-visible) via `pub fn context_note(rule_id) -> Option<&'static str>` per domain. Scope findings recorded: none of the 11 fixable rust_perf rules carried corpus `context_notes` (the 44 annotated rules are retrieval-only, not proposer-backed), so the two signature-visible fixables needed fresh notes; `unwrap_or_else` has no fix proposer (named in the problem statement — nothing to annotate). Every note is grounded in the proposer's own documented gates; `every_annotated_rule_is_fixable` pins the table ↔ FIXABLE lockstep.
+- [x] **T3 — gates** — DONE 2026-09-06: (a) fixture purity = the existing per-proposer suites (1245 lib tests pass unchanged); (b) render pins = `fix_review_note_tests` (annotated fires the ⚠ line; mechanical classes byte-identical; table ↔ FIXABLE lockstep); (c) `--score-bench` on the working tree: heal 96.2% / **created 1.9% (unmoved — the trust axis)** / parse 100% / decline 100% (run 58; within the gen-1 saturation band; miss map unchanged). Clippy: the diff's warning profile is IDENTICAL to HEAD's (stash-probe verified) — zero new warnings; the residual warnings (composite.rs, evolve.rs, heal.rs `era_line`, generations.rs, lib.rs docs) are pre-existing under this feature combo and belong to a future heal-pass unit, not this issue. Live `--fix` smoke: `needless_range_loop` renders its ⚠ line; un-annotated `manual_unwrap_or` stays clean.
 - [ ] **T4 (defer with constraint) — `--suggest` instantiated display**: the suggestion text should be the **proposer's own output** (the instantiation re-ranker already runs `propose_fix` visitors over the span under `RerankMode::Structural`), NOT a hand-bound presentation-layer template — a parallel binder can emit a plausible-but-noncompiling instantiation, which is the exact "suggestion that lies" failure the verbatim-corpus-text design prevents. Reopen when T1–T3 land and there is a consumer ask for instantiated suggest text.
 
 ## Non-goals
@@ -30,8 +30,8 @@ The correction to the external framing, recorded so it is not re-derived: there 
 
 ## References
 
-- `src/bin/heal.rs` `semantic_note_suffix` + the rustc_errors `AppliedRecord`/`PlannedRecord.semantic_note` threading (the dialect to reuse)
+- `src/bin/heal.rs` `semantic_note_suffix` + the rustc_errors `AppliedRecord`/`PlannedRecord.semantic_note` threading (the dialect to reuse); `rule_context_note` + `print_fix_review` (the new render surface)
 - `src/domain.rs` `HealEntry::context_notes` → `DraftedFix::context_notes` (the propagation that already exists)
 - `src/domains/rust_perf/corpus.rs` (44 annotated rules — the count pin test lives there)
 - Plan 005 T3.5.4/T3.5.5 (instantiation re-ranker — the T4 machinery)
-- Score-bench run #3 (heal 98.1% · created 1.9% — the baseline T3 must hold)
+- Score-bench run #3 (heal 98.1% · created 1.9% — the baseline T3 must hold); run #58 (this validation)
