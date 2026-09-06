@@ -12,10 +12,10 @@
 | File | Scope |
 |---|---|
 | [`heal_domain_trait.md`](heal_domain_trait.md) | `HealDomain` + `HealEntry` traits — the one new abstraction |
-| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 39-rule seed corpus + `PerfVerifier` (`cargo test`); Phase 4: top-5 `syn` AST proposers (`--fix` upgrade) |
+| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + seed corpus (now 101 rules — measured-GOAT + external distills, per-batch ledger inside) + `PerfVerifier` (`cargo test`); Phase 4: top-5 `syn` AST proposers (`--fix` upgrade) |
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
-| [`sec.md`](sec.md) | Plan 018: `SecDomain` + `SecRule` + the geiger-taxonomy unsafe counter + the banned-list boundary gate + 6-rule Phase-1 corpus (4 proposers) |
-| [`docker.md`](docker.md) | Plan 030: `DockerDomain` + `DockerRule` + the stanza scanner (no `syn`) + the hadolint oracle tier + the DL3059-refusal gate + 27-rule Phase-1 corpus (14 bounded fixes) |
+| [`sec.md`](sec.md) | Plan 018: `SecDomain` + `SecRule` + the geiger-taxonomy unsafe counter + the banned-list boundary gate + 12 rules across three intake waves (6 proposers) |
+| [`docker.md`](docker.md) | Plan 030: `DockerDomain` + `DockerRule` + the stanza scanner (no `syn`) + the hadolint oracle tier (incl. the Tier-2 `docker build --check` oracle) + the DL3059-refusal gate + 31 rules (14 bounded fixes) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 
 ## Source

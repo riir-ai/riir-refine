@@ -43,7 +43,14 @@ callq memcpy` per iteration (wall: 136 B = 1.32-1.35x the 48 B
 loop per iter on x86 vs 1.00-1.13x on the M3). Suggestion-only. Riders:
 `usize-index-to-u32` += the #158720 cache-line-boundary confirmation;
 `sort-key-cache-precompute-out-of-lock` += the #157179 short-sort-key
-confirmation.) Batch 109 (2026-09-05,
+confirmation.) Batch 113 (2026-09-05, Research 137 / Plan 086 — the llama.cpp
+v0.4.0 delta re-mine) added NO new rust_perf rules — two name-field riders:
+`eager-pointer-collect-lazy-fetch` += the `--lazy-mode` app-layer lazy-fetch
+posture (llama.cpp loads model tensors on demand behind a flag — the same
+fetch-only-what-is-needed contract one layer up);
+`channel-send-batching-unpark` += the quantizer row-slab stream (#27830 —
+quantized rows flow to the GPU as batched slabs, not per-row sends).
+Batch 109 (2026-09-05,
 Plan 080 — the post-mining P10 measurement-honesty distill from the
 katgpt-rs Issue 723 Class A2 evidence) added
 `dead-result-timing-loop-folded-under-lto` (complexity; NotBenchable — the
