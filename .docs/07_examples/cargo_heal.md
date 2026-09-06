@@ -132,6 +132,33 @@ without `kernel_heal`).
   [Bench 018](../../.benchmarks/018_plan005_latent_suggest_goat.md) and
   [`../03_drafter/latent_suggest.md`](../03_drafter/latent_suggest.md).
 
+## Score bench + the authoring queue (Plan 014; Issue 072 T5/T6 — Plan 091/092)
+
+- `--score-bench` — run the frozen real-code healing bench (34+ fixtures,
+  real `cargo clippy` ground truth), append to
+  `.benchmarks/score_history.jsonl`, re-render the SVG. No paths needed.
+  Run after every proposer/corpus change so the history accumulates; the
+  run is dual-written into the Warm-tier store under `latent_retrieval`
+  (Issue 050).
+- `--score-bench --generation 2` — run the M4 construction-built k-ladder
+  (issue 072 T5) behind the non-vacuity admission gate: the first v2 append
+  is admitted ONLY if it measures harder than v1 (refusals exit non-zero,
+  nothing appended — the honest-ratchet contract). Generation 1 (default)
+  is the frozen v1 set; pre-092 history rows read as generation 1.
+- `--misses [--limit N]` — print the `.heal/misses/` authoring queue in
+  FRONTIER order (Plan 091 T1.2): dispersion-informative error codes first
+  (resolving THOSE converts uncertain candidates), then unobserved /
+  regenerate / saturated. Standalone + read-only; without
+  `latent_retrieval` the order degenerates to code-sorted.
+- `--misses --report` — the conversion ledger instead of the queue
+  (Plan 091 T1.3): conversion-per-authored-rule split by authoring era
+  (the FIFO baseline vs the frontier landings) against the wiring commit.
+- Saturation (Plan 092 M5): every bench run prints the per-generation
+  saturation verdict (5-run window, strict marginal); a saturated
+  generation refuses a same-difficulty v2 append — difficulty for a
+  generation 3 re-enters through the freeze discipline, never a silent
+  rewrite. See [Bench 069](../../.benchmarks/069_issue072_t5_t6_generations.md).
+
 ## KAT subcommands (Proposal 005 / 007 / 008 — `kat_service`, submit legs `kat_transport`)
 
 Beyond healing, the same binary carries the KAT metered-service client
