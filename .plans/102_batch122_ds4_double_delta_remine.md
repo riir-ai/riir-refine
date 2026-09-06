@@ -1,6 +1,6 @@
 # Plan 102 — Batch 122: the ds4 double-delta re-mine (PR vision branch + upstream main surge)
 
-**Status:** IN FLIGHT — triggers verified fired 2026-09-07 05:55 +07, delta surveyed, clone staged; mine not started.
+**Status:** RECORD 2026-09-07 — Part A (Batch 122) landed: rust_perf io +3 (105 → 108), all gates green (lib 1162/0, retrieval floors held byte-identical, score-bench FLAT 96.2/1.9), Research 145. Part B = Batch 123 (queued).
 
 ## Triggers (both fired, verified by ls-remote 2026-09-07 05:52)
 
@@ -32,10 +32,10 @@ GLM attention/rope rework + NEW Metal SSD-experts machinery + session-state + SS
 ## Tasks
 
 - [x] T0 — verify triggers + stage clone + survey deltas (this plan; done at write time)
-- [ ] T1 — Part A: author 3–4 entries (re-verify every quoted line against `.raw/ds4-metal` at entry time)
-- [ ] T2 — extend the standing parse gate (`batch122_pseudocode_parses`)
-- [ ] T3 — count pins: rust_perf io 9 → N, total 105 → N, annotated 48 → N; walk every manifest/doc line
-- [ ] T4 — GOAT: batch gates FIRST-SHOT + lib default/kernel_heal/kernel_heal+latent + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
-- [ ] T5 — Research 145 note + AGENTS.md corpus count + `.docs/11_domains/` + snapshot row (same commit)
-- [ ] T6 — remove `.raw/ds4-metal`; commit `feat: batch 122: ...` + push
+- [x] T1 — Part A: author 3–4 entries (re-verify every quoted line against `.raw/ds4-metal` at entry time)
+- [x] T2 — extend the standing parse gate (`batch122_pseudocode_parses`)
+- [x] T3 — count pins: rust_perf io 9 → N, total 105 → N, annotated 48 → N; walk every manifest/doc line
+- [x] T4 — GOAT: batch gates FIRST-SHOT + lib default/kernel_heal/kernel_heal+latent + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
+- [x] T5 — Research 145 note + AGENTS.md corpus count + `.docs/11_domains/` + snapshot row (same commit)
+- [x] T6 — remove `.raw/ds4-metal`; commit `feat: batch 122: ...` + push
 - [ ] T7 — Part B re-scan: after Batch 122 lands, re-check `c0a6119f` for movement; open Plan 123 if still current

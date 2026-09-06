@@ -23,11 +23,20 @@
 
 ## Corpus
 
-105 rules across 12 categories (rust-optimize skill checklist +
+108 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 105 rules — Batch 121 (2026-09-07,
-Research 144 / Plan 101 — the ds4 PR #991 IQ2 delta distill, commit
-`c5ae2eb5`) added three io rules, all NotBenchable-annotated:
+profiling guide, Research 032; **now 108 rules — Batch 122 (2026-09-07,
+Research 145 / Plan 102 — the ds4 PR vision delta, commit `69c38d2`)
+added three io rules, all NotBenchable-annotated:
+`model-aware-format-over-hand-assembled-tokens` (one model-aware formatter
+owns a structured transcript turn; hand-pushed token sequences drift from
+the chat template silently), `implemented-surface-requires-provisioning-
+target` (a feature needing an external artifact ships its fetch target in
+the same change), `diagnostics-not-just-exit-code` (a multi-turn session
+regression scans captured stderr for per-turn failure patterns alongside
+the exit code, saves full transcripts, does not grade content). Batch 121
+(Research 144 / Plan 101 — the ds4 IQ2 delta, commit `c5ae2eb5`) had added
+three io rules, all NotBenchable-annotated:
 `resume-revalidates-provenance-before-reuse` (a resumable multi-part build
 revalidates source + calibration + TOOL hashes against the manifest and
 re-digests each cached part before reuse — presence is not identity),

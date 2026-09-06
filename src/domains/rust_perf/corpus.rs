@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 105 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 9, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 18 are honestly
+//! 108 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 12, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 21 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -20,7 +20,10 @@
 //! workload annotation (Batch 118) + the two build-integrity annotations
 //! and the A/B-design annotation (Batch 121 — resume provenance, write-
 //! verify-publish, one-variable A/B; correctness-of-provenance and
-//! experimental-design content, not speed).
+//! experimental-design content, not speed) + the three vision-delta
+//! annotations (Batch 122 — template-governed emission, provisioning
+//! completeness, per-turn diagnostics; correctness-of-emission and
+//! test-honesty content, not speed).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -127,7 +130,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (87/105):
+//! Currently benchable (87/108):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -257,6 +260,18 @@
 //!   A/B on one component byte-copies the baseline for everything else,
 //!   paired diffs, confounded variants out of the headline, un-instrumented
 //!   memory counters labelled as partial budgets; Batch 121, ds4 IQ2 quality)
+//! - `model-aware-format-over-hand-assembled-tokens` (emission-correctness
+//!   annotation — structured transcript turns go through ONE model-aware
+//!   formatter; hand-pushed token sequences drift from the chat template
+//!   silently; Batch 122, ds4 vision delta)
+//! - `implemented-surface-requires-provisioning-target` (provisioning
+//!   completeness — a feature needing an external artifact ships its fetch
+//!   target in the same change; load-time errors NAME the target; Batch 122,
+//!   ds4 vision delta)
+//! - `diagnostics-not-just-exit-code` (measurement-honesty — a multi-turn
+//!   session regression scans captured stderr for per-turn failure patterns
+//!   alongside the exit code and saves full transcripts; Batch 122, ds4
+//!   vision delta)
 //! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
 //!   a timing gate whose work folds away under LTO has no nonzero baseline to
 //!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
@@ -2779,6 +2794,92 @@ PerfRule {
             buggy_code: "// Measuring the gate/up precision change by building an IQ2 model\n// \"from scratch\": every tensor re-derives, so the diff vs the Q4_K\n// baseline mixes the gate/up change with fresh MXFP4/MTP/control\n// re-encodes -- the comparison cannot attribute a quality delta to\n// the one variable it names.\nfn build_iq2(src: &Checkpoint, calib: &Imatrix) -> Model {\n    let mut m = Model::new();\n    for t in src.tensors() {\n        m.set(t.name, quantize(t, pick_dtype(t), calib)); // EVERYTHING re-quantized\n    }\n    m\n}".to_string(),
             fixed_code: "// Copy every tensor BYTE-IDENTICALLY from the baseline artifact and\n// replace ONLY the under-test set (the 96 trunk gate/up tensors):\n// the artifact diff IS the variable. Paired per-case diffs (test-only\n// passes vs baseline-only passes) replace raw pass counts; confounded\n// recipes stay out of the headline; un-instrumented memory counters\n// are reported as PARTIAL budgets.\nfn build_iq2(src: &Checkpoint, calib: &Imatrix, baseline: &Model) -> Model {\n    let mut m = baseline.clone(); // byte-identical: diff = the variable\n    for layer in 0..48 {\n        for part in [\"gate\", \"up\"] {\n            let name = format!(\"blk.{layer}.ffn_{part}_exps.weight\");\n            let t = quantize_exact(src.tensor(&name), DType::Iq2Xxs, calib);\n            m.replace_verified(&name, t); // digest-checked replacement\n        }\n    }\n    m\n}".to_string(),
             context_notes: Some("REGIME-ANNOTATED, source-reported (the source's own numbers demonstrate the trap it avoids: headline hard-suite passes are FLAT across recipes -- IQ2 36/50 vs Q4_K 35/50 -- while the paired BF16 drift is 3-6x worse: NLL 0.27828 vs 0.21287, top-1 agreement 91.32% vs 96.57%, logprob MAE 0.13992 vs 0.04307; honestly NotBenchable here -- experimental design, not speed). FOUR load-bearing halves: (1) ISOLATION BY BASELINE BYTE-COPY -- every non-under-test tensor is copied verbatim from the baseline artifact so the artifact diff IS the variable (the source copies all non-expert tensors from the combined Q4_K GGUF incl. MXFP4 down projections, MTP, dense/control, and swaps only the 96 trunk gate/up tensors, digest-verified); (2) PAIRED differences over raw counts -- report exact per-case disagreements (test-only-passed vs baseline-only-passed: 2/1, 2/1, 3/1), which survive small samples where pass totals do not; (3) CONFOUNDED variants stay out of the headline -- Q8 (also changes down weights) and Q4_0 (an earlier complete recipe) are named as such; 'the most controlled quantization comparison is IQ2 versus Q4_K-imatrix'; (4) UN-INSTRUMENTED counters are PARTIAL budgets, labelled -- peak RSS/footprint 'do not reliably account for all mmap-backed GPU weights and must not be interpreted as the total model memory requirement'; file size + tracked runtime allocations + resident external sidecar pages = a partial budget, and the test box's capacity 'does not validate' another machine's headroom. RIDER (calibration provenance): reuse the SAME pinned calibration/imatrix as the baseline recipe (six zero-count entries take a deterministic weight-energy fallback) so the precision change is not confounded with a calibration change; per-tensor source hashes retained. Distinct from measurement-honesty timing rules (dead-result-timing-loop-eliminated-under-lto -- instrument the TIMING loop; this isolates the VARIABLE under test), from paired-median-of-ratios interleaving (same-box timing A/B methodology -- this is artifact-level A/B design where the baseline itself is the control), and from the lossy-surface promotion rule (deployed-path retention gates -- this is how to BUILD the comparison that informs such a gate). Suggestion-only (experimental design; a parse-only proposer cannot see artifact provenance). Source: ivanfioravanti/ds4-metal PR #991 commit c5ae2eb5 (MIT) -- gguf-tools/README.md IQ2 section ('It then copies every other tensor from an existing combined Q4_K qwen4exp GGUF ... This isolates the gate/up precision change for a quality comparison'), speed-bench/qwen38-iq2-quality.md:37 (confounded recipes + the controlled-comparison line), :25-32 (paired disagreement table), :52 (the mmap/RSS partial-budget caveat), :58 (pinned imatrix + zero-count fallback). Batch 121 / Research 144 / Plan 101.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io: a structured transcript turn is assembled by hand-pushing
+// individual tokens -------------------------------------------------
+        // Batch 122 (2026-09-07, Plan 102 -- the ds4 PR vision delta,
+        // commit 69c38d2). The CLI built an image turn by pushing a user
+        // token, a vision span, a newline, then the text -- and image
+        // turns broke: the hand assembly drifted from the model's own
+        // chat template. The fix routes the turn through ONE model-aware
+        // multimodal formatter.
+        PerfRule {
+            rule_id: "model-aware-format-over-hand-assembled-tokens".to_string(),
+            name: "structured transcript turn assembled by hand-pushing tokens (role token + special span + separator + text) -> emit through ONE model-aware formatter that owns the template; hand assembly drifts silently".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// An image turn is assembled piecemeal: user token, vision span,\n// separator, then the text tokens. Each piece is right in isolation --\n// but the sequence drifts from the model's chat template (which role\n// marker wraps the image? where does the text go?), and the model\n// just answers WRONG. No error, no warning: the transcript looks\n// plausible.\nfn add_image_turn(t: &mut Transcript, img: &Image, text: &str) {
+    t.push(token_user());              // role marker, hand-picked
+    t.push_vision_span(img);           // special tokens, hand-placed
+    if !text.is_empty() {
+        t.push_str(\"\\n\");             // separator, hand-picked
+        t.push_text(text);             // text AFTER the image... or before?
+    }
+}".to_string(),
+            fixed_code: "// ONE model-aware formatter owns the turn: role, image span, and\n// text placement are the TEMPLATE's decisions, not the caller's. The\n// same entry point serves text-only turns; a format failure rolls the\n// whole turn back atomically (nothing half-enters the transcript).\nfn add_image_turn(t: &mut Transcript, img: &Image, text: &str) -> Result<(), TurnError> {
+    let rollback = t.len();
+    let span = t.add_image(img)?;
+    t.append_multimodal_message(\"user\", &[\"\", text], img, span) // template owns the layout
+        .map_err(|e| { t.truncate(rollback); e })?;  // atomic: nothing half-enters
+    Ok(())
+}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's fix history IS the failure: image turns worked under the template-aware API and broke under the hand assembly -- the CLI pushed token_user + vision span + newline + text separately, then 69c38d2 replaced all of it with one model-aware multimodal append; honestly NotBenchable here -- correctness of emission, not speed). THE FAILURE CLASS: template drift is SILENT -- the transcript still tokenizes, the model still answers, and nothing downstream can tell the role/span/separator layout stopped matching what the model was trained on; the only witness is answer quality. The formatter must be MODEL-AWARE (the same turn serializes differently per model family/template version) and ATOMIC (a failed span reservation rolls back the whole turn -- a half-turn is a poisoned transcript). Composes with write-verify-readback-before-publish (the transcript IS an artifact being assembled) and resume-revalidates-provenance (the template version is part of the build identity). Distinct from string-formatting-vs-structured-apis (display concerns; this is a SEMANTIC wire format the consumer is a trained model), from escape/encoding rules (character-level; this is turn-structure-level), and from prompt-template-bypass audits (they find the drift; this prevents writing it). Suggestion-only (a parse-only proposer cannot see that pushed tokens form a template-governed sequence). Source: ivanfioravanti/ds4-metal PR #991 commit 69c38d2 (MIT) -- ds4_cli.c:1536-1553 (the hand assembly removed: token_user + repl_chat_add_image + newline + text pushes -> one ds4_chat_append_multimodal_message with rollback_len/rollback_images guard arms). Batch 122 / Plan 102.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io: a feature needs an external artifact and ships without
+// the provisioning step ---------------------------------------------
+        // Batch 122 (same distill, commit 9f4313d). The Qwen vision tower,
+// its Metal kernel, and the make target all LANDED -- but the
+// downloader never fetched the encoder, so --vision was dead out of
+// the box. The fix adds the download target following the existing
+// GLM pattern.
+        PerfRule {
+            rule_id: "implemented-surface-requires-provisioning-target".to_string(),
+            name: "feature requires an external artifact it does not vend -> ship the fetch/provision target in the SAME change; an implemented-but-unprovisioned feature is dead out of the box".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The feature is COMPLETE: parser accepts --vision, the kernel is\n// wired, tests exist behind it. But the weights live in a registry\n// the setup script never fetches -- every user hits 'file not found'\n// on first run.\nfn main() {
+    let args = parse_args();
+    if let Some(vision) = &args.vision {
+        let encoder = load_encoder(vision)?; // shipped; nothing downloads it
+        run(args.model, encoder)?;
+    }
+    Ok(())
+}".to_string(),
+            fixed_code: "// The same change that lands the feature lands its provisioning:\n// a named setup target (following the existing per-artifact pattern),\n// a clear on-disk location, a load-time error that NAMES the missing\n// target, and a --check that reports provisioned vs missing.\nfn main() -> Result<(), SetupError> {
+    let args = parse_args();
+    if let Some(vision) = &args.vision {
+        let encoder = match load_encoder(vision) {
+            Ok(e) => e,
+            Err(_) if !provisioned(VISION_TARGET)? => {
+                return Err(SetupError::MissingArtifact { target: VISION_TARGET, hint: format!(\"run: ./setup.sh {VISION_TARGET}\") });
+            }
+            Err(e) => return Err(e.into()),
+        };
+        run(args.model, encoder)?;
+    }
+    Ok(())
+}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's own commit message: 'Vision for Qwen3.8-Flash-Next is implemented ... but the downloader never fetched the encoder, so --vision could not be used out of the box. Follow the GLM 5.3 pattern: a standalone qwen38-vision target'; honestly NotBenchable here -- provisioning completeness, not speed). THE FAILURE CLASS: the gap is invisible in review (every diff hunk is a working feature) and invisible in CI (tests skip or fake the artifact) -- it surfaces only on a fresh machine, which is exactly the onboarding path. The rule has THREE parts: the provision target EXISTS and is named per-artifact (not a monolithic download-everything); the load-time failure NAMES the target that would have provided it (the error is the setup doc); a --check-style probe reports provisioned-vs-missing without side effects. Composes with resume-revalidates-provenance-before-reuse (the provisioned artifact's hash joins the identity) and model-aware-format-over-hand-assembled-tokens (both are feature-completeness axes that review cannot see). Distinct from vendoring-vs-downloading policy (this is the GAP the policy must close, whatever the policy), from error-message-quality rules (this is provisioning toplogy: the error is one part of three), and from docker-layer-provisioning rules (same instinct, container-scoped). Suggestion-only (a parse-only proposer cannot see which CLI flags require which external files). Source: ivanfioravanti/ds4-metal PR #991 commit 9f4313d (MIT) -- download_model.sh:37 (QWEN38_MMPROJ_REPO=ggml-org/Qwen3.8-Flash-Next-GGUF), :167 (QWEN38_VISION_FILE=mmproj-Qwen3.8-Flash-Next-Q8_0.gguf), :184-168 (the qwen38-vision target: 'about 0.6 GB on disk. Load it with --vision; this target does not update ./ds4flash.gguf'). Batch 122 / Plan 102.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io (measurement honesty): a multi-turn REPL regression that
+// trusts the process exit code ---------------------------------------
+        // Batch 122 (same distill, commit 69c38d2's regression). A REPL
+// session can FAIL one turn and still exit zero if a later turn
+// succeeds -- the exit code aggregates the SESSION, not the turns.
+// The regression must scan the captured diagnostics for per-turn
+// failure patterns alongside the exit code, and save full transcripts
+// for inspection instead of grading content.
+        PerfRule {
+            rule_id: "diagnostics-not-just-exit-code".to_string(),
+            name: "multi-turn session regression gated on process exit code -> also scan captured stderr for per-turn failure patterns; exit code aggregates the session, not the turns; save full transcripts for inspection".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// Drive a REPL through several turns in one subprocess; assert on\n// the exit code. Turn 2 fails (logged to stderr), turns 3-4 succeed,\n// the process exits 0 -- the regression passes with a broken turn\n// inside it.\nfn run_session(repl: &str, session: &str) -> anyhow::Result<()> {\n    let out = Command::new(repl).stdin(session).output()?;\n    assert!(out.status.success(), \"session failed\");\n    Ok(())\n}".to_string(),
+            fixed_code: "// The exit code is the LAST gate, not the only one: scan the\n// captured stderr for per-turn failure patterns (turn-scoped),\n// verify the success markers the tool itself prints, and save the\n// full transcript for human inspection -- do not try to grade\n// content in the harness.\nfn run_session(repl: &str, session: &str, transcript_path: &str) -> anyhow::Result<()> {\n    let out = Command::new(repl).stdin(session).output()?;\n    let diag = String::from_utf8_lossy(&out.stderr);\n    let turn_failures = scan_failures(&diag, &[\"failed\", \"outside the vocabulary\"]);\n    assert!(turn_failures.is_empty(), \"turn failures: {turn_failures:?}\");\n    assert!(markers_present(&out.stdout), \"turn success markers missing\");\n    std::fs::write(transcript_path, &out.stdout)?; // save, don't grade\n    assert!(out.status.success(), \"session failed\");\n    Ok(())\n}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's regression comment: 'The REPL can return zero after an image turn fails if a later text turn succeeds. Check diagnostics as well as the process exit code'; the scan is a turn-scoped regex over captured stderr: 'failed|outside the vocabulary', plus the success marker 'ds4: image WxH, N image tokens' proving the encoder actually ran; honestly NotBenchable here -- test honesty, not speed). WHY THE EXIT CODE LIES: a REPL is a session aggregate -- any per-turn failure that the tool recovers from (or that only kills one turn) is invisible in the final status; the failure pattern must be scoped tightly enough to stay a FAILURE signal (the source's pattern also catches a benign 'outside the vocabulary' diag only because that diag IS a failure there). SAVE-DON'T-GRADE: the harness persists full stdout/stderr per mode for human inspection instead of asserting on model output content -- grading content makes the test flaky; grading DIAGNOSTICS keeps it deterministic. Both decode modes run (ordinary + speculative) so the failure class cannot hide behind one path. Distinct from assert-on-stderr-string rules (fragile matching; this ASSERTS on scanned failure patterns and saves everything), from golden-output regression (content-pinned; this is deliberately content-free), and from exit-code-only CI gates (the anti-shape itself). Suggestion-only (a parse-only proposer cannot see that the subprocess is a multi-turn session). Source: ivanfioravanti/ds4-metal PR #991 commit 69c38d2 (MIT) -- tests/test_qwen4_cli_vision.py:46-48 ('The REPL can return zero after an image turn fails if a later text turn succeeds' + the failure scan), :49-51 (the success marker + transcripts saved, 'it does not grade image content'). Batch 122 / Plan 102.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8089,7 +8190,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 105); // Batch 121 (ds4 IQ2 delta) 102 → 105
+        assert_eq!(corpus.entries.len(), 108); // Batch 122 (ds4 vision delta) 105 → 108
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9681,7 +9782,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 48, "expected 48 context-annotated rules (Batch 121 added the three ds4 IQ2 build-integrity + A/B-design annotations)");
+        assert_eq!(annotated.len(), 51, "expected 51 context-annotated rules (Batch 122 added the three ds4 vision-delta annotations: model-aware format, provisioning target, per-turn diagnostics)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -9751,7 +9852,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 48); // Batch 121: 45 → 48
+        assert_eq!(annotated, 51); // Batch 122: 48 → 51
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9785,7 +9886,7 @@ mod tests {
 
         // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 48, "expected 48 annotated rules");
+        assert_eq!(annotated.len(), 51, "expected 51 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10593,6 +10694,94 @@ mod tests {
             "the publish refuse phrase must be pinned"
         );
     }
+
+    /// Batch 122 — the three new rules are present.
+    #[test]
+    fn batch122_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for id in [
+            "model-aware-format-over-hand-assembled-tokens",
+            "implemented-surface-requires-provisioning-target",
+            "diagnostics-not-just-exit-code",
+        ] {
+            assert!(ids.contains(&id), "{id} missing from corpus");
+        }
+    }
+
+    /// Batch 122 — every new rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch122_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in [
+            "model-aware-format-over-hand-assembled-tokens",
+            "implemented-surface-requires-provisioning-target",
+            "diagnostics-not-just-exit-code",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    /// Batch 122 — the load-bearing concepts survive into the corpus text
+    /// (retrieval discriminators), the NotBenchable annotations are honest,
+    /// and the source quotes' key phrases are pinned.
+    #[test]
+    fn batch122_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let find = |id: &str| {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing"))
+        };
+        let format = find("model-aware-format-over-hand-assembled-tokens");
+        let format_text = format!("{}\n{}\n{}", format.name, format.buggy_code, format.fixed_code);
+        for needle in ["template", "multimodal", "rollback", "drift"] {
+            assert!(format_text.contains(needle), "format concept {needle:?} missing");
+        }
+        assert!(
+            format.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            "format rule must carry the NotBenchable annotation"
+        );
+        let provision = find("implemented-surface-requires-provisioning-target");
+        let provision_text = format!(
+            "{}\n{}\n{}",
+            provision.name, provision.buggy_code, provision.fixed_code
+        );
+        for needle in ["provision", "target", "MissingArtifact"] {
+            assert!(provision_text.contains(needle), "provision concept {needle:?} missing");
+        }
+        let diag = find("diagnostics-not-just-exit-code");
+        let diag_text = format!("{}\n{}\n{}", diag.name, diag.buggy_code, diag.fixed_code);
+        for needle in ["stderr", "exit", "transcript"] {
+            assert!(diag_text.contains(needle), "diag concept {needle:?} missing");
+        }
+        // The pinned source phrases (quote re-verification at the pin).
+        assert!(
+            diag.context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("The REPL can return zero after an image turn fails"),
+            "the source's exit-code lie must be pinned verbatim"
+        );
+        assert!(
+            provision
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("could not be used out of the box"),
+            "the source's provisioning-gap phrasing must be pinned verbatim"
+        );
+    }
 }
 
 /// Bench spec for `bitplane-transpose-repeated-predicate-scan` (Batch 83,
@@ -11269,3 +11458,4 @@ pub fn run_fixed(input: &Input) {
         .to_string(),
     }
 }
+
