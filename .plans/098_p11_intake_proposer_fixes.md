@@ -1,6 +1,7 @@
-# Plan 097: P11 intake proposer fixes — the nrl deref splice, fresh-binding uniquing, capacity nested-block descent
+# Plan 098: P11 intake proposer fixes — the nrl deref splice, fresh-binding uniquing, capacity nested-block descent
 
-Status: RECORD — all tasks complete 2026-09-06; implementation `ef2129a`, records in Bench 075
+Status: RECORD — all tasks complete 2026-09-06; implementation `766da16`, records in Bench 075
+**Numbering note (the 848 class, live):** authored as Plan 097 from a pre-push highwater read while a sibling session concurrently allocated Plan 097 (Batch 118 / Research 142, pushed first). Push-wins tie-breaker: the sibling keeps 097; this plan renumbered → 098 before pushing. Commit messages citing "plan 097 T1-T5" refer to THIS plan.
 
 **Source:** `.distill/001_mining_queue_snapshot.md` §Post-mining intake P11 (filed by Bench 074 / Plan 096 gen-7): three measured classes, all pre-existing, none gen-7-caused. Protocol C (post-mining sweep) unit — probe first, fix the proposer at root cause, fixture regression test, re-run the moving series.
 

@@ -1089,7 +1089,9 @@ Queues empty after this entry → idle report.
 One open class (below); the standing divergence (P4 residual) has no action planned.
 
 - [x] **2026-09-06 P11 NEW — gen-7 bench yields, three classes (Bench 074; all
-  pre-existing, none gen-7-caused): LANDED 2026-09-06 (Plan 097 / Bench 075;
+  pre-existing, none gen-7-caused): LANDED 2026-09-06 (Plan 098 — authored 097,
+  renumbered per the 848-class collision with the sibling's Batch-118 plan — /
+  Bench 075;
   implementation `ef2129a`).** (1) the `needless_range_loop` rewrite
   produces NON-COMPILING output when a substituted slot sits in a comparison
   context (`if __elem > 2` E0308 — the fresh `&u32` binding vs an integer
@@ -1120,7 +1122,7 @@ One open class (below); the standing divergence (P4 residual) has no action plan
   subtype dissolved and retained as regression pin; NEW `gen7-ref-nrl-write`
   keeps the refused territory honest). Record: Bench 075.
 
-- [ ] **2026-09-06 P12 NEW — derived during Plan 097 T0, documented-not-fixed
+- [ ] **2026-09-06 P12 NEW — derived during Plan 098 T0, documented-not-fixed
   (parse-only undecidable; `--verify` auto-reverts in production):** (1)
   `&mut`-method receivers through a slot on a SHARED iteration (`v[i].push(x)`
   with owned `v` → E0596 — the `&mut`-param bare-iter form is fine,
