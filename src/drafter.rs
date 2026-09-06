@@ -277,10 +277,12 @@ impl TernaryDrafter {
     }
 }
 
-/// Logistic sigmoid (never softmax per AGENTS.md rule).
+/// Confidence is the katgpt-core sigmoid (the ndb Issue-611 delegation class:
+/// one production scalar copy per workspace; katgpt-core is a non-optional dep
+/// here, so the delegation is free and keeps the formula single-sourced).
 #[inline]
 fn sigmoid(x: f32) -> f32 {
-    1.0 / (1.0 + (-x).exp())
+    katgpt_core::sigmoid(x)
 }
 
 /// Whether `buggy` + `fix` share at least one Rust identifier token.
