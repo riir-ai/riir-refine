@@ -518,6 +518,93 @@ fn indent4(text: &str) -> String {
     text.lines().map(|l| format!("    {l}")).collect::<Vec<_>>().join("\n")
 }
 
+// ── Issue 073 T3: the Bt8 anchor-ledger arm ──────────────────────────────
+
+/// The discrete identity fields of one fix target, rendered as a verbatim
+/// anchor ledger (`XBridge` role separation: the DISCRETE anchor channel
+/// determines WHICH entities the fixer works on; the module prose is the
+/// continuous channel that shapes HOW it reasons). Bench 868 measured the
+/// pure-compression alternative (`Bt7`/`Bt7Neg` dense gists) as a LOSS on
+/// every axis — the anchor ledger is the complementary arm: keep the prose,
+/// restate the identity fields discretely so they survive inattentive
+/// reading.
+#[derive(Debug, Clone, Default)]
+pub struct FixAnchors {
+    /// The lint/rule id the fix is filed under (e.g. `ptr_arg`).
+    pub rule_id: Option<String>,
+    /// The rustc error code when the miss is compile-driven (e.g. `E0599`).
+    pub error_code: Option<String>,
+    /// Symbol names the fix must preserve/touch, in display order.
+    pub symbols: Vec<String>,
+    /// The source span, carried as the caller's verbatim string
+    /// (line/byte form is the caller's convention).
+    pub span: Option<String>,
+}
+
+impl FixAnchors {
+    /// True when nothing is set — the anchor ledger then renders to "" and
+    /// [`prompt_anchor_ledger`] degrades byte-identically to arm B.
+    fn is_empty(&self) -> bool {
+        self.rule_id.is_none()
+            && self.error_code.is_none()
+            && self.symbols.is_empty()
+            && self.span.is_none()
+    }
+
+    /// One anchor per line, verbatim, deterministic order (rule, error,
+    /// symbols, span). Empty fields are omitted, never rendered as blanks.
+    fn render(&self) -> String {
+        use std::fmt::Write as _;
+        let mut s = String::new();
+        s.push_str("Identity anchors (verbatim — these fields identify the exact fix target):\n");
+        if let Some(r) = &self.rule_id {
+            let _ = writeln!(s, "  rule: {r}");
+        }
+        if let Some(e) = &self.error_code {
+            let _ = writeln!(s, "  error code: {e}");
+        }
+        if !self.symbols.is_empty() {
+            let _ = write!(s, "  symbols: {}", self.symbols.join(", "));
+            s.push('\n');
+        }
+        if let Some(sp) = &self.span {
+            let _ = writeln!(s, "  span: {sp}");
+        }
+        s
+    }
+}
+
+/// Issue 073 T3 arm Bt8 prompt: the arm-B pre-pass ([`prompt_prepass`]) + a
+/// DISCRETE anchor ledger placed BEFORE the code module (condition-first —
+/// the arm-G' placement finding, `[z, C]` not `[C, z]`). The A/B this arms:
+/// plain prose baseline (arm B) vs prose + anchor ledger, on the pinned
+/// corpus, under the Bench-868 protocol — identity fields crossing only
+/// inside prose is the measured failure class; this builder gives the A/B
+/// its anchor arm without forking the arm-B body.
+///
+/// Degradation contract (the house pattern): empty [`FixAnchors`] ⇒
+/// byte-identical to [`prompt_prepass`] — pinned by test.
+#[must_use]
+pub fn prompt_anchor_ledger(
+    module: &str,
+    modelless: Option<&str>,
+    fewshots: &[FewShot],
+    anchors: &FixAnchors,
+) -> String {
+    if anchors.is_empty() {
+        return prompt_prepass(module, modelless, fewshots);
+    }
+    let mut s = String::new();
+    s.push_str(TRAINED_INSTRUCTION);
+    s.push_str("\n\n");
+    // Condition-first: the anchor ledger sits between the instruction header
+    // and the code module, matching arm G''s `[z, C]` placement.
+    s.push_str(&anchors.render());
+    s.push('\n');
+    push_prepass_body(&mut s, module, modelless, fewshots);
+    s
+}
+
 // ── Edit application (the v2edit "only the corrected lines" contract) ──────
 
 /// Compute the brace depth before each line of `src`.
@@ -2470,6 +2557,76 @@ mod tests {
             assert!(p.contains("--- ptr_arg [Certified: 3 ok / 0 failed] ---"), "channel lint-key anchor position");
             assert!(p.contains("ptr_arg: 3/4 attempts kept (75%)"), "failure-pattern rule anchor position");
         }
+        // Bt8 (Issue 073 T3): the anchor ledger restates the identity fields
+        // VERBATIM, one per line, in its own block — the discrete channel.
+        let anchors = FixAnchors {
+            rule_id: Some("ptr_arg".into()),
+            error_code: Some("E0599".into()),
+            symbols: vec!["greedy_path".into(), "marginals".into()],
+            span: Some("bytes 120..246".into()),
+        };
+        let bt8 = prompt_anchor_ledger(module, Some(candidate), &fs, &anchors);
+        assert!(bt8.contains("  rule: ptr_arg\n"), "rule anchor verbatim");
+        assert!(bt8.contains("  error code: E0599\n"), "error-code anchor verbatim");
+        assert!(bt8.contains("  symbols: greedy_path, marginals\n"), "symbol anchors verbatim");
+        assert!(bt8.contains("  span: bytes 120..246\n"), "span anchor verbatim");
+        // Placement: header < anchor ledger < module < candidate block.
+        let hdr = bt8.find(TRAINED_INSTRUCTION).expect("instruction header");
+        let ledger = bt8.find("Identity anchors").expect("ledger present");
+        let mod_pos = bt8.find("greedy_path").expect("module symbol present");
+        let cand = bt8.find("A static modelless analyzer").expect("candidate block");
+        assert!(hdr < ledger && ledger < mod_pos && mod_pos < cand, "condition-first: header < ledger < module < candidate");
+        // Arm B's body intact + exactly one respond-line.
+        assert!(bt8.contains("--- example (manual_map) before ---"));
+        assert_eq!(bt8.matches("Respond with ONLY").count(), 1);
+        // Deterministic.
+        assert_eq!(bt8, prompt_anchor_ledger(module, Some(candidate), &fs, &anchors));
+    }
+
+    #[test]
+    fn anchor_ledger_empty_anchors_degrade_byte_identically_to_arm_b() {
+        let module = issue073_module();
+        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        assert_eq!(
+            prompt_anchor_ledger(module, None, &fs, &FixAnchors::default()),
+            prompt_prepass(module, None, &fs),
+            "empty anchors = arm B byte-for-byte (the degradation contract)",
+        );
+        // Partial anchors omit their blank lines — never render empty rows.
+        let partial = FixAnchors { rule_id: Some("ptr_arg".into()), ..FixAnchors::default() };
+        let p = prompt_anchor_ledger(module, None, &fs, &partial);
+        assert!(p.contains("  rule: ptr_arg\n"));
+        assert!(!p.contains("error code:"), "unset fields omitted");
+        assert!(!p.contains("  symbols:"), "unset fields omitted");
+        assert!(!p.contains("  span:"), "unset fields omitted");
+    }
+
+    #[test]
+    fn anchor_ledger_perturbation_flips_exactly_the_anchor_lines() {
+        let module = issue073_module();
+        let twin = perturb_symbol(module, "greedy_path", "greedy_route");
+        let anchors = FixAnchors {
+            rule_id: Some("ptr_arg".into()),
+            error_code: Some("E0599".into()),
+            symbols: vec!["greedy_path".into(), "marginals".into()],
+            span: Some("bytes 120..246".into()),
+        };
+        let anchors_twin = FixAnchors {
+            rule_id: Some("ptr_arg".into()),
+            error_code: Some("E0599".into()),
+            symbols: vec!["greedy_route".into(), "marginals".into()],
+            span: Some("bytes 120..246".into()),
+        };
+        let orig = prompt_anchor_ledger(module, None, &[], &anchors);
+        let twin_prompt = prompt_anchor_ledger(&twin, None, &[], &anchors_twin);
+        assert!(twin_prompt.contains("greedy_route"), "swapped symbol rides the discrete ledger");
+        assert!(twin_prompt.contains("  symbols: greedy_route, marginals\n"), "ledger line flips");
+        assert!(!twin_prompt.contains("greedy_path"));
+        // The flip is EXACTLY the entity swap — inverting it on the twin
+        // prompt reproduces the original byte-for-byte (the ledger
+        // paraphrases nothing around the anchors).
+        let inverted = twin_prompt.replace("greedy_route", "greedy_path");
+        assert_eq!(inverted, orig, "the flip is exactly the entity swap");
     }
 
     #[test]
