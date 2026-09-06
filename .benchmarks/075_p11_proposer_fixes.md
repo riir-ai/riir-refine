@@ -1,6 +1,6 @@
 # Bench 075 — P11 intake proposer fixes: the nrl deref splice, fresh-binding uniquing, capacity nested-block descent
 
-**Status:** RECORD — all three P11 classes closed; Plan 098 executed (authored 097, renumbered per the 848-class collision — see the plan's numbering note); the moving series re-measured
+**Status:** RECORD — all three P11 classes closed; Plan 099 executed (authored 097, renumbered twice per the 848-class collision — the sibling's Batch-118/119 plans pushed first — see the plan's numbering note); the moving series re-measured
 **Date:** 2026-09-06 · **Box:** 4090/shikuwa (Windows, quiet) · **Unit:** Protocol C post-mining sweep (queue item 14)
 
 ## The classes (from `.distill/001_mining_queue_snapshot.md` §P11, filed by Bench 074)
@@ -35,7 +35,7 @@ gate broke on the block-bearing stmt). Probe-fixture note: the vec shapes as fir
 iterable (`for it in items`), which vec's capacity source never accepted (hashmap does; vec requires
 `&items`/`items.iter()`/ranges) — two stacked causes for vec's silence, both recorded here.
 
-## Fixes (Plan 098 T1–T4)
+## Fixes (Plan 099 T1–T4)
 
 - **T1** `needless_range_loop`: universal `*__elem` splice, `(*__elem)` only at postfix bases (`IndexUsage.paren`
   marked in `visit_expr_method_call`/`visit_expr_field`/`visit_expr_call`); the place-write guard extended to
@@ -99,5 +99,5 @@ auto-reverts them in production:
 
 ## Records
 
-Plan 098 (RECORD) · snapshot P11 → DONE with hashes · this file. Commits: implementation, gen-7 series,
+Plan 099 (RECORD) · snapshot P11 → DONE with hashes · this file. Commits: implementation, gen-7 series,
 docs — see `git log --grep 097`.
