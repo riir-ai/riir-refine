@@ -721,12 +721,90 @@ pub fn v4_member_codes(spec_id: &str) -> Option<Vec<String>> {
 /// of member codes on a real `cargo check` — the composition-interference
 /// class) — landed by the freeze e2e. Empty pre-freeze (the dual-mode gate
 /// then asserts the un-frozen Err).
-pub static EXCLUDED_IDS_V4: &[&str] = &[];
+pub static EXCLUDED_IDS_V4: &[&str] = &[
+];
 
 /// The generation-4 frozen labels (spec id → the DISTINCT member error-code
 /// set real rustc produced on the composed broken file at freeze time) —
 /// landed by the freeze e2e. Empty pre-freeze.
-pub static FROZEN_LABELS_V4: &[(&str, &[&str])] = &[];
+pub static FROZEN_LABELS_V4: &[(&str, &[&str])] = &[
+    ("gen4-k1-gen_e0373_str_00_hello", &["E0373"]),  // k=1
+    ("gen4-k1-gen_e0373_str_05_box", &["E0373"]),  // k=1
+    ("gen4-k1-gen_e0373_sum_00_u32", &["E0373"]),  // k=1
+    ("gen4-k1-gen_e0373_sum_05_i64", &["E0373"]),  // k=1
+    ("gen4-k1-gen_e0373_sum_10_i32", &["E0373"]),  // k=1
+    ("gen4-k1-gen_e0382_clone_00_u8", &["E0382"]),  // k=1
+    ("gen4-k1-gen_e0382_clone_05_u8", &["E0382"]),  // k=1
+    ("gen4-k1-gen_e0382_clone_10_i32", &["E0382"]),  // k=1
+    ("gen4-k1-gen_e0382_clone_15_u16", &["E0382"]),  // k=1
+    ("gen4-k1-gen_e0499_flat_00_00_u8", &["E0499"]),  // k=1
+    ("gen4-k1-gen_e0499_flat_01_00_i32", &["E0499"]),  // k=1
+    ("gen4-k1-gen_e0499_flat_02_00_u64", &["E0499"]),  // k=1
+    ("gen4-k1-gen_e0499_flat_03_00_i16", &["E0499"]),  // k=1
+    ("gen4-k1-gen_e0499_flat_04_00_u32", &["E0499"]),  // k=1
+    ("gen4-k1-gen_e0502_copy_00_u8", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0502_copy_05_i32", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0502_copy_10_u16", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0502_copy_15_u32", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0502_len_00", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0502_len_05", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0502_len_10", &["E0502"]),  // k=1
+    ("gen4-k1-gen_e0505_clone_00_u8", &["E0505"]),  // k=1
+    ("gen4-k1-gen_e0505_clone_05_u8", &["E0505"]),  // k=1
+    ("gen4-k1-gen_e0505_clone_10_i32", &["E0505"]),  // k=1
+    ("gen4-k1-gen_e0505_clone_15_u64", &["E0505"]),  // k=1
+    ("gen4-k1-gen_e0507_field_00_v_u8", &["E0507"]),  // k=1
+    ("gen4-k1-gen_e0507_field_05_w_u16", &["E0507"]),  // k=1
+    ("gen4-k1-gen_e0507_field_10_items_u8", &["E0507"]),  // k=1
+    ("gen4-k1-gen_e0596_mut_00_u8", &["E0596"]),  // k=1
+    ("gen4-k1-gen_e0596_mut_05_i32", &["E0596"]),  // k=1
+    ("gen4-k1-gen_e0596_mut_10_u32", &["E0596"]),  // k=1
+    ("gen4-k1-gen_e0596_str_00", &["E0596"]),  // k=1
+    ("gen4-k1-gen_e0597_as_str_00_alpha", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_fmt_00", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_slice_00_u8", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_slice_05_u16", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_str_borrow_00_hello", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_str_borrow_05_lifetime", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_str_idx_00", &["E0597"]),  // k=1
+    ("gen4-k1-gen_e0597_str_idx_05", &["E0597"]),  // k=1
+    ("gen4-k2-gen_e0373_str_00_hello+gen_e0382_clone_00_u8", &["E0373", "E0382"]),  // k=2
+    ("gen4-k2-gen_e0373_str_05_box+gen_e0382_clone_05_u8", &["E0373", "E0382"]),  // k=2
+    ("gen4-k2-gen_e0373_sum_00_u32+gen_e0382_clone_10_i32", &["E0373", "E0382"]),  // k=2
+    ("gen4-k2-gen_e0373_sum_05_i64+gen_e0382_clone_15_u16", &["E0373", "E0382"]),  // k=2
+    ("gen4-k2-gen_e0499_flat_00_00_u8+gen_e0502_copy_00_u8", &["E0499", "E0502"]),  // k=2
+    ("gen4-k2-gen_e0499_flat_01_00_i32+gen_e0502_copy_05_i32", &["E0499", "E0502"]),  // k=2
+    ("gen4-k2-gen_e0499_flat_02_00_u64+gen_e0502_copy_10_u16", &["E0499", "E0502"]),  // k=2
+    ("gen4-k2-gen_e0499_flat_03_00_i16+gen_e0502_copy_15_u32", &["E0499", "E0502"]),  // k=2
+    ("gen4-k2-gen_e0505_clone_00_u8+gen_e0507_field_00_v_u8", &["E0505", "E0507"]),  // k=2
+    ("gen4-k2-gen_e0505_clone_05_u8+gen_e0507_field_05_w_u16", &["E0505", "E0507"]),  // k=2
+    ("gen4-k2-gen_e0505_clone_10_i32+gen_e0507_field_10_items_u8", &["E0505", "E0507"]),  // k=2
+    ("gen4-k2-gen_e0505_clone_15_u64+gen_e0596_str_00", &["E0505", "E0596"]),  // k=2
+    ("gen4-k2-gen_e0596_mut_00_u8+gen_e0597_str_borrow_00_hello", &["E0596", "E0597"]),  // k=2
+    ("gen4-k2-gen_e0596_mut_05_i32+gen_e0597_str_borrow_05_lifetime", &["E0596", "E0597"]),  // k=2
+    ("gen4-k2-gen_e0596_mut_10_u32+gen_e0597_slice_00_u8", &["E0596", "E0597"]),  // k=2
+    ("gen4-k2-gen_e0597_slice_05_u16+gen_e0373_sum_10_i32", &["E0373", "E0597"]),  // k=2
+    ("gen4-k3-gen_e0373_str_00_hello+gen_e0382_clone_00_u8+gen_e0499_flat_00_00_u8", &["E0373", "E0382", "E0499"]),  // k=3
+    ("gen4-k3-gen_e0373_sum_05_i64+gen_e0382_clone_15_u16+gen_e0499_flat_03_00_i16", &["E0373", "E0382", "E0499"]),  // k=3
+    ("gen4-k3-gen_e0382_clone_05_u8+gen_e0499_flat_01_00_i32+gen_e0502_copy_05_i32", &["E0382", "E0499", "E0502"]),  // k=3
+    ("gen4-k3-gen_e0499_flat_02_00_u64+gen_e0502_copy_10_u16+gen_e0505_clone_10_i32", &["E0499", "E0502", "E0505"]),  // k=3
+    ("gen4-k3-gen_e0502_copy_00_u8+gen_e0505_clone_00_u8+gen_e0507_field_00_v_u8", &["E0502", "E0505", "E0507"]),  // k=3
+    ("gen4-k3-gen_e0502_copy_15_u32+gen_e0505_clone_15_u64+gen_e0596_str_00", &["E0502", "E0505", "E0596"]),  // k=3
+    ("gen4-k3-gen_e0502_len_00+gen_e0597_as_str_00_alpha+gen_e0502_len_05", &["E0502", "E0597"]),  // k=3
+    ("gen4-k3-gen_e0505_clone_05_u8+gen_e0507_field_05_w_u16+gen_e0596_mut_05_i32", &["E0505", "E0507", "E0596"]),  // k=3
+    ("gen4-k3-gen_e0507_field_10_items_u8+gen_e0596_mut_10_u32+gen_e0597_slice_00_u8", &["E0507", "E0596", "E0597"]),  // k=3
+    ("gen4-k3-gen_e0596_mut_00_u8+gen_e0597_str_borrow_00_hello+gen_e0373_str_05_box", &["E0373", "E0596", "E0597"]),  // k=3
+    ("gen4-k3-gen_e0597_slice_05_u16+gen_e0373_sum_10_i32+gen_e0499_flat_04_00_u32", &["E0373", "E0499", "E0597"]),  // k=3
+    ("gen4-k3-gen_e0597_str_borrow_05_lifetime+gen_e0373_sum_00_u32+gen_e0382_clone_10_i32", &["E0373", "E0382", "E0597"]),  // k=3
+    ("gen4-k4-gen_e0373_str_00_hello+gen_e0382_clone_00_u8+gen_e0499_flat_00_00_u8+gen_e0502_copy_00_u8", &["E0373", "E0382", "E0499", "E0502"]),  // k=4
+    ("gen4-k4-gen_e0373_str_05_box+gen_e0382_clone_05_u8+gen_e0499_flat_01_00_i32+gen_e0502_copy_05_i32", &["E0373", "E0382", "E0499", "E0502"]),  // k=4
+    ("gen4-k4-gen_e0373_sum_00_u32+gen_e0382_clone_10_i32+gen_e0499_flat_02_00_u64+gen_e0502_copy_10_u16", &["E0373", "E0382", "E0499", "E0502"]),  // k=4
+    ("gen4-k4-gen_e0373_sum_05_i64+gen_e0382_clone_15_u16+gen_e0499_flat_03_00_i16+gen_e0502_copy_15_u32", &["E0373", "E0382", "E0499", "E0502"]),  // k=4
+    ("gen4-k4-gen_e0505_clone_00_u8+gen_e0507_field_00_v_u8+gen_e0596_mut_00_u8+gen_e0597_str_borrow_00_hello", &["E0505", "E0507", "E0596", "E0597"]),  // k=4
+    ("gen4-k4-gen_e0505_clone_05_u8+gen_e0507_field_05_w_u16+gen_e0596_mut_05_i32+gen_e0597_str_borrow_05_lifetime", &["E0505", "E0507", "E0596", "E0597"]),  // k=4
+    ("gen4-k4-gen_e0505_clone_10_i32+gen_e0507_field_10_items_u8+gen_e0596_mut_10_u32+gen_e0597_slice_00_u8", &["E0505", "E0507", "E0596", "E0597"]),  // k=4
+    ("gen4-k4-gen_e0505_clone_15_u64+gen_e0596_str_00+gen_e0597_slice_05_u16+gen_e0373_sum_10_i32", &["E0373", "E0505", "E0596", "E0597"]),  // k=4
+];
 
 /// Freeze readiness for generation 4 — Err until the freeze e2e lands the
 /// record.

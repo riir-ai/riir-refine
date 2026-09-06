@@ -313,9 +313,26 @@ fn nonzero(line: usize) -> Option<usize> {
 /// Coded diagnostics of a check's JSON, as `(code, primary line)`; line 0
 /// = no primary span (the count stays exact for the label fence).
 fn coded_lines(json: &str) -> Vec<(String, usize)> {
-    parse_error_diags(json)
+    dedupe_pairs(
+        parse_error_diags(json)
+            .into_iter()
+            .map(|d| (d.code, d.primary.map_or(0, |(_, line)| line)))
+            .collect(),
+    )
+}
+
+/// Collapse exact `(code, line)` duplicates, first occurrence wins.
+///
+/// `cargo check --all-targets` compiles the lib TWICE (normal + the `--test`
+/// harness profile), so every error is reported twice — the same artifact
+/// the driver itself handles with `diag::dedupe_by_site`. Within one member
+/// region a same-(code, line) pair is the same logical error; distinct
+/// members sit at distinct lines, so the composite multiset is preserved.
+fn dedupe_pairs(pairs: Vec<(String, usize)>) -> Vec<(String, usize)> {
+    let mut seen: std::collections::HashSet<(String, usize)> = std::collections::HashSet::new();
+    pairs
         .into_iter()
-        .map(|d| (d.code, d.primary.map_or(0, |(_, line)| line)))
+        .filter(|p| seen.insert(p.clone()))
         .collect()
 }
 
