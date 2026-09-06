@@ -3,7 +3,7 @@
 Status: **COMPLETE (2026-09-02)** — every task landed and validated; see §Landed.
 Branch: `develop` (per global rule — no feature branches)
 Issue: 061 T0.2b + T1.4 (the tracker was resolved + removed 2026-09-05; record in
-riir-clippy AGENTS.md "Issues 061 + 068" + git history)
+riir-clippy HISTORY.md "Issues 061 + 068" + git history)
 Proposal: [`011`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md)
 (§8.3/§8.5 for the welcome gate + history; §1 "Bit-exact recheck before
 display" for T1.4; **caveat #3** — the re-encode pin rides the `qrcode` crate

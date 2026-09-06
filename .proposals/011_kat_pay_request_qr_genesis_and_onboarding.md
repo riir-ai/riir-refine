@@ -2,7 +2,7 @@
 
 Status: **draft**
 **RE-TIERED 2026-09-04 — OWNER DECISION (riir-clippy Issue 068 — resolved + removed
-2026-09-05; the tier digest lives in riir-clippy AGENTS.md "Issues 061 + 068" + git
+2026-09-05; the tier digest lives in riir-clippy HISTORY.md "Issues 061 + 068" + git
 history): Tier 0 (devnet + testnet, operator-owned accounts only, no fiat, no custody) is AUTHORIZED and needs no counsel; Tier 1 (non-operator accounts, or the operator loop on mainnet) carries one narrow counsel question plus 005 caveat #7's Phase-1 exit list; Tier 2 (live USDC custody, live Stripe) is not proposed. Caveat #1 below is NARROWED accordingly — this proposal framed the initial surface as "the closed-loop bar→foo operator network" without naming a network, and the decision pins Tier 0 to devnet/testnet so the posture question cannot be asked of it. Phase 2 gains T2.0, an agent-executable DEVNET ceremony rung that rehearses the owner's one-shot testnet act.**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned

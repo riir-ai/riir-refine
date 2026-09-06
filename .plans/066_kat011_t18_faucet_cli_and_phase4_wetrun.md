@@ -8,7 +8,7 @@ closed**; **T4.4 stays deferred** — a testnet wet-run needs the
 owner-executed genesis ceremony (061 T2.2/T2.3).
 Branch: `develop`
 Issue: 061 (the tracker was resolved + removed 2026-09-05; record in riir-clippy
-AGENTS.md "Issues 061 + 068" + git history)
+HISTORY.md "Issues 061 + 068" + git history)
 Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md) §7 / §8.1 / G-WET
 Blocked-by (named, NOT papered over): riir-dapps
 `Issue 010`
