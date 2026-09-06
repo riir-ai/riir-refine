@@ -1611,7 +1611,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 538-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 539-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2208,7 +2208,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "warm-reachable-dispatch-signatures-before-timed-window",
         ],
     ),
-    // N: dtype + alignment specialization (35 rules)
+    // N: dtype + alignment specialization (36 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2247,6 +2247,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shader-fastdiv-mulhi",
             "exhaustive-domain-input-patch-bit-identity",
             "activation-bitplane-popcount-word-dot",
+            "swar-lane-widened-base3-dp4a-dot",
         ],
     ),
     // O: IR strength reduction (4 rules)

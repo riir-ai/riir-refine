@@ -77,3 +77,16 @@ vendor binary at `e311ed38f`, never maintained.
   782 fork policy; a re-pin is an owner call with its own fairness-manifest bump.
 - No GPU measurement (sibling training run owns the GPU; every number cited in
   entries is the source's own, marked source-reported).
+
+
+## COLLISION NOTE + ADDENDUM (2026-09-06)
+
+A parallel M3 session authored the same batch concurrently (Issue-665 class).
+The landed batch (this plan, `e895da6`) owns Batch 116 per push-wins; the
+duplicate was yielded before commit. The salvage — 1 rule
+(`swar-lane-widened-base3-dp4a-dot`), 2 riders (LUT-vs-arithmetic split +
+format-retention registration on the new entry; the guard-side mirror face on
+dispatcher-eligibility), and 2 standing numeric gates (the exhaustive
+mantissa-bound incl. the radix-11 falsifiable negative; the SWAR lane/pair
+sweep) — landed as **Batch 116 ADDENDUM, corpus 538 -> 539**, recorded in
+Research 140 landing addendum 2.

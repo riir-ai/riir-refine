@@ -116,3 +116,44 @@ snippet (the syn-parse gate doing its job). Count pins walked: tests.rs
 (total ×2 + comment, expected array A/D/E/N, sum, grouped, batch-list line),
 router.rs expert total, mod.rs (doc line, module decl, entries.extend, 4
 category comments, 4 list tails).
+
+
+## Landing addendum 2 (2026-09-06, the collision salvage — the concurrent M3 session)
+
+A parallel M3 session ran the SAME batch from the same 09-06 watch entry
+concurrently (the Issue-665 class, second occurrence at corpus scale). Their
+landing `e895da6` (6 rules + 3 riders, corpus 532 -> 538) owns Batch 116 per
+push-wins; the duplicate was yielded before commit. The SALVAGE — the content
+the landed batch genuinely lacks — landed as this addendum: **1 rule + 2
+riders + 2 standing numeric gates, corpus 538 -> 539 (N 35 -> 36).**
+
+- **`swar-lane-widened-base3-dp4a-dot` (N)** — the int8 dp4a CONSUME family of
+  the same base-3 codec (the landed batch owns the float-pipe extraction family:
+  byte-owning rule + the B98 telescope rider). 16-bit lane widening so the radix
+  multiply cannot carry between bytes; answers the packing rule's documented
+  "dp4a can't consume base-3" limitation. Riders on the entry: the
+  digit-LUT-vs-arithmetic per-path split (contiguous-element contracts take the
+  exhaustive LUT; byte-owned inner loops take floors/widened lanes; the 142.1 vs
+  143.5 dependent-load negative) + coarse-scale format retention with the FOUR-
+  surface new-type registration completeness (traits / quantize dispatch / ftype
+  map / row validation — four different failure modes).
+- **Guard-side mirror rider** on dispatcher-eligibility: an assert widened to
+  admit F16 lost its downstream buffer-layout conjunct (~3.8x wdata overrun if
+  reached) — the face their 4 inverse-direction instances do not cover; plus the
+  admission-unreachable-guard invisibility note.
+- **`batch116_addendum_base3_mantissa_bound_exhaustive`** — turns the landed
+  rider's prose criterion (floor(R^k * b/2^m) exact iff R^pos * max_code < 2^24)
+  into a pinned gate: exhaustive radix-3 over all 256 bytes x 5 positions, the
+  radix-7 within-bound control, AND the radix-11 falsifiable negative (violates
+  the bound, MUST diverge — the gate that cannot fail is not a gate).
+- **`batch116_addendum_swar_lanes_exhaustive`** — the per-lane exhaustive sweep
+  (all 256 bytes x 4 lane positions x adversarial neighbors) + the exhaustive
+  adjacent-pair sweep (the only carry channel).
+
+Salvage that was NOT needed: the duplicate session's fold-CSE, ratio-cutover,
+multi-column, popcount, scratch-predicate, and byte-owning candidates were all
+covered by the landed batch (several more completely than the duplicate's
+versions — e.g. the landed fold-memo rule carries the key-completeness
+debug_assert the duplicate lacked). The yielded duplicate's full corpus text is
+preserved at `target/batch116/mine/` (gitignored, ephemeral) — cited here per
+the B115-addendum provenance discipline.

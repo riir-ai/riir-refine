@@ -59,5 +59,58 @@ pub fn entries() -> Vec<KernelRule> {
             ref_shape: "// naive: every folded weight builds its own transform for the same input\nfn build_lora_mm(&mut self, w: Tensor, cur: Tensor, s: Fold) -> Tensor {\n    let t = build_transform(cur, s.rot);   // sign-multiply + FWHT, AGAIN:\n    // ffn_gate, ffn_up, q, k, v all rebuild the identical transform\n    hadamard_matmul(w, t, s)\n}\n".to_string(),
             opt_pattern: "// optimized: memo the transform per (input, rotation); one node, N consumers\nfn build_lora_mm(&mut self, w: Tensor, cur: Tensor, s: Fold) -> Tensor {\n    let key = (cur.id(), s.rot.id());\n    let t = match self.hadamard_memo.get(&key) {\n        Some(t) => *t,                       // shared subgraph node\n        None => {\n            debug_assert_eq!(s.rot.width(), expected_width(&cur)); // key-completeness\n            let t = build_transform(cur, s.rot);\n            self.hadamard_memo.insert(key, t); // lifetime: ONE graph build\n            t\n        }\n    };\n    hadamard_matmul(w, t, s)\n}\n".to_string(),
         },
+
+// ============================================================
+// -- swar-lane-widened-base3-dp4a-dot -- Batch 116 ADDENDUM /
+// Research 140 addendum 2. (N) --
+// Source: PrismML fork @ 7113f6462 (MIT), vecdotq.cuh dp4a path —
+// 16-bit lane widening so the radix multiply cannot carry between
+// bytes; answers the packing rule's dp4a incompatibility note.
+// Collision salvage: the sibling Batch 116 landing (e895da6) did
+// not include this rule; exhaustive SWAR gate in tests.rs.
+// ============================================================
+        KernelRule {
+            rule_id: "swar-lane-widened-base3-dp4a-dot".to_string(),
+            gpu_concept: "Consume mixed-radix (base-3) packed digits on an int8 dp4a dot by WIDENING each packed byte into its own 16-bit lane so the radix multiply cannot carry between bytes: scatter the four bytes into two 16-bit-lane words (byte_perm 0x4140/0x4342 — zero high halves), per step multiply by the radix then mask each lane back to a byte (& 0x00FF00FF — a lane's value stays <= 255*3 = 765 < 2^16, so no cross-lane borrow exists), gather the per-lane HIGH bytes with one byte_perm (the shifted-out bits ARE the digits), subtract the digit bias PER LANE with a SIMD vector subtract (vsub4 vs 0x01010101 — a scalar subtract would borrow across lanes), and feed the four int8 lanes straight into dp4a. The non-bitfield radix acquires the same per-cycle 4-digit throughput as a 2-bit bitfield format — this ANSWERS base-3-trit-packing-5-per-byte's documented CUDA limitation ('dp4a can't consume base-3 trits directly'): with lane widening it can. Distinct from prmt-int8-to-half2-dequant / lop3-int4-to-half2-dequant (B92): those extract positional BITFIELDS (2/4-bit nibbles divide by shifts); base-3 has no bitfield decomposition, so multiply-and-mask in widened lanes IS the mechanism — and from byte-owning-threads-non-positional-digit-codes (the float-pipe extraction family; this is the int8 dp4a consume family of the SAME codec — compose, they do not overlap: one feeds a float dot, the other an int dot). Consumption alignment: digit emission order must track the codec's staged traversal (in-source e = t*16 + 4*g then e = 80 + t*8 + 4*g) so dp4a lanes line up with the q8 lanes, and the whole 128-block per call keeps the byte walk uniform (4 chunks per call, not the per-32 convention — base-3 leaves no byte-aligned run inside a 32-chunk). Gates: exhaustive integer equivalence over all 256 bytes x 5 digit positions per lane AND the exhaustive adjacent-pair sweep (the only interaction channel) vs the reference recurrence — pinned by batch116_addendum_swar_lanes (the B59 ported-numeric mandate); signed-sum error measured against the SUM OF TERM MAGNITUDES, never raw relative error — a near-zero signed reference reads 7.062e-05 and looks like failure when the true error is 2.399e-08 (cancellation cannot distort the magnitude denominator). Fork-reported: 20,000-block exact host check, zero mismatches; 1283/1283 backend MUL_MAT cases incl. 45 PTQ1_0 — after the honest catch that the surface initially shipped NEVER COMPILED ('compilation was the only gate that would find this' — the host tests were already green; the parse-only fixture lesson at corpus scale). RIDER (digit-LUT-vs-arithmetic per-path split): the same codec ships extraction as an exhaustive 256-entry LUT (five 2-bit trits per entry, generated from and verified against the reference decode for all 256 bytes x 5 positions) on the dequantize/mm path — its contract there is 16 CONTIGUOUS elements, where one cached table read amortizes 5 trits and extraction reaches 2-bit-format cost — while the byte-owned matvec inner loop keeps arithmetic (a dependent load per byte LOST in-source: LUT 142.1 vs recurrence 143.5). The split is measured, not stylistic: contiguous-element contracts take the LUT; byte-owned ALU-bound inner loops take floors or widened lanes. RIDER (coarse-scale format retention): re-quantizing a checkpoint whose scales are per-128-group into a format carrying ONE scale per 256 computes amax over the wider group, so the smaller-alpha group reconstructs at the larger alpha — fork-measured 6.43% multiplicative weight error that passes into activations at full strength; keep one scale per ORIGINAL group as a NEW wire type (reinterpreting the old type's block width would silently misread every existing file), and expect the registration to touch FOUR independent surfaces — traits, quantize dispatch, ftype map, row validation — whose failures differ (abort + truncated output file / silent ftype mis-map / loud refuse / refuse-at-load). Source: PrismML-Eng/llama.cpp @ 7113f6462 (MIT), vecdotq.cuh dp4a path. Batch 116 ADDENDUM / Research 140 addendum 2.".to_string(),
+            ref_shape: "// naive: scalar per-digit recurrence, one digit per op — no dp4a width
+fn digits_scalar(b: u8) -> [i32; 5] {
+    let mut v = b as u32;
+    let mut out = [0i32; 5];
+    for slot in out.iter_mut() {
+        let w = v * 3;
+        *slot = ((w >> 8) & 0xFF) as i32 - 1;
+        v = w & 0xFF;
+    }
+    out
+}
+// dot: 5 scalar multiply-accumulates per byte, one digit at a time
+fn dot_scalar(b: u8, q: [i8; 5]) -> i32 {
+    let d = digits_scalar(b);
+    let mut sum = 0;
+    for n in 0..5 {
+        sum += d[n] * q[n] as i32; // 1 digit per instruction
+    }
+    sum
+}".to_string(),
+            opt_pattern: "// optimized: widen bytes into 16-bit lanes so *3 cannot carry between
+// bytes; per-lane mask keeps lanes <= 765 < 2^16; high bytes ARE digits.
+fn digits_lanes(word: u32) -> [[i32; 5]; 4] {
+    // byte_perm scatter (0x4140 / 0x4342): widen each byte's low half
+    let mut v_lo = (word & 0xFF) | ((word >> 8 & 0xFF) << 16); // bytes 0,1
+    let mut v_hi = ((word >> 16) & 0xFF) | ((word >> 24 & 0xFF) << 16); // 2,3
+    let mut out = [[0i32; 5]; 4]; // [lane][step]
+    for step in 0..5 {
+        let w_lo = v_lo.wrapping_mul(3);
+        let w_hi = v_hi.wrapping_mul(3);
+        v_lo = w_lo & 0x00FF_00FF;
+        v_hi = w_hi & 0x00FF_00FF;
+        out[0][step] = ((w_lo >> 8) & 0xFF) as i32 - 1; // per-lane bias subtract
+        out[1][step] = ((w_lo >> 24) & 0xFF) as i32 - 1;
+        out[2][step] = ((w_hi >> 8) & 0xFF) as i32 - 1;
+        out[3][step] = ((w_hi >> 24) & 0xFF) as i32 - 1;
+    }
+    out // 4 digit streams -> feed dp4a lanes directly
+}".to_string(),
+        },
     ]
 }

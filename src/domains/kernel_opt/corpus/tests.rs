@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 538)
+    // Total: 209. // (historical batch-30 snapshot; current 539)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -80,8 +80,8 @@ fn seed_corpus_has_expected_entry_count() {
         // Batch 116 (6): PrismML fork ternary + verify-batch distill (Research 140 / Plan 089) -- activation-bitplane-popcount-word-dot (N +1: activation int8 bit-planes consumed by AND+popcount -- 32 weights per instruction pair ~0.8 ops/weight/col vs ~3 for select-per-weight; the fork's own ablation removed ONLY the bit test and ran 1.7x faster = extraction-bound diagnosis; LOSSY, ships default-off upstream, behavior-axis gated), scratch-sizing-shares-dispatch-eligibility-predicate (D +1: tail-carved scratch -- the allocator's size helper and the encoder are two statements of one path predicate; ONE predicate both consume, drift is benign-waste one way and OOB the other), byte-owning-threads-non-positional-digit-codes (A +1: non-positional multi-digit packings must map threads to whole BYTES -- element-span ownership reloads every packed byte per digit index, 29.8 -> 136.4 tok/s source-reported; the fork's own negative-results ledger rides in-rule: contiguous byte ownership WORSE, 'fewer ops beat more ILP'), fwht-wide-block-row-per-threadgroup-exchange-ladder (E +1: past the N/32 register wall -- one row per THREADGROUP, three exchange tiers by partner distance, same host kernel names, dispatch-side threadgroup-max assert; fills the register-resident butterfly rule's named beyond-budget arm), shader-shape-cutover-keys-on-resource-block-ratio (D +1: subgroup/registers vs staged shape cutover must be a TWO-TERM disjunction n > ABS_MAX || n/subgroup_size > MAX_EL_PER_LANE -- width alone admits the register wall on narrow subgroups; creation-time resource guards + recorded specialization geometry + null-pipeline fallback), same-input-folded-transform-memo-per-build (D +1: graph-build CSE of folded transform nodes keyed (input, rotation), one-build lifetime, key-completeness invariant source-asserted-by-comment -- the sharpest port edge; 36% duplicate transforms, +3.5% pp512 source-reported) + 3 riders (telescoped-digit += radix-general mantissa-bound exactness + single-trit two-floor form + float-pipe motivation, bridge-rung += register-budget sizing + exact-fit nr1 + per-type mv/mm crossover, dispatcher-eligibility += four inverse-direction instances in one PR window incl. head-truncated-grep transcription); source PrismML-Eng/llama.cpp origin/prism @ 7113f6462 (Apache-2.0, 12 commits past the league pin e311ed38f; quotes via git show, vendor checkout untouched).
     assert_eq!(
         corpus.entries.len(),
-        538,
-        "kernel batches through Batch 116 should have 538 rules"
+        539,
+        "kernel batches through Batch 116 + addendum should have 539 rules"
     );
 }
 
@@ -5300,7 +5300,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 538-rule corpus must appear in exactly one category.
+    // Every rule_id in the 539-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5358,7 +5358,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 9),
         (KernelCategory::ConvGemmLayout, 13),
         (KernelCategory::KernelPolymorphism, 17),
-        (KernelCategory::DtypeAlignment, 35),
+        (KernelCategory::DtypeAlignment, 36),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5373,9 +5373,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 538.
+    // Sum must equal 539.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 538, "Plan 003: category totals must sum to 538");
+    assert_eq!(total, 539, "Plan 003: category totals must sum to 539");
 }
 
 #[test]
@@ -5386,8 +5386,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 538,
-        "Plan 003: grouped corpus has {total} rules, expected 538"
+        total, 539,
+        "Plan 003: grouped corpus has {total} rules, expected 539"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9403,8 +9403,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        538,
-        "Batch 116: corpus should have 538 rules"
+        539,
+        "Batch 116 + addendum: corpus should have 539 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -9537,5 +9537,202 @@ fn batch116_pseudocode_parses() {
             opt_verdict.parses,
             "batch-116 opt_pattern for '{id}' must parse"
         );
+    }
+}
+
+
+// ── Batch 116 ADDENDUM gates (the collision salvage — Research 140 addendum 2) ──
+
+#[test]
+fn batch116_addendum_rules_present_and_concepts() {
+    let corpus = build_kernel_seed_corpus();
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "swar-lane-widened-base3-dp4a-dot")
+        .expect("addendum rule missing from corpus");
+    for n in [
+        "cannot carry between bytes",
+        "765 < 2^16",
+        "SUM OF TERM MAGNITUDES",
+        "NEVER COMPILED",
+        "no byte-aligned run inside a 32-chunk",
+        "FOUR independent surfaces",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(n),
+            "addendum concept lost the mandated phrase: {n}"
+        );
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch116_addendum_pseudocode_parses() {
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "swar-lane-widened-base3-dp4a-dot")
+        .expect("addendum rule missing");
+    assert!(
+        KernelOptDomain::validate("swar", entry.buggy_code()).parses,
+        "addendum ref_shape must parse"
+    );
+    assert!(
+        KernelOptDomain::validate("swar", entry.fixed_code()).parses,
+        "addendum opt_pattern must parse"
+    );
+}
+
+#[test]
+fn batch116_addendum_base3_mantissa_bound_exhaustive() {
+    // Pins the exactness claim the Batch 116 rider on
+    // telescoped-digit-coefficients-byte-fma-dot makes in prose: floor
+    // extraction of a base-r fraction of 2^m is bit-exact vs the integer
+    // recurrence IFF r^positions * max_code < 2^24. Exhaustive over all
+    // 256 bytes x 5 positions at radix 3 (the PTQ1_0 codec), PLUS the
+    // falsifiable boundary: radix 11 violates the bound and MUST
+    // diverge -- a gate that cannot fail is not a gate.
+    fn reference_digits(b: u32, radix: u32, positions: usize) -> Vec<i32> {
+        let mut v = b;
+        let mut out = Vec::with_capacity(positions);
+        for _ in 0..positions {
+            let w = v * radix;
+            out.push((w >> 8).cast_signed());
+            v = w & 0xFF;
+        }
+        out
+    }
+    // The floor arm's casts are the algorithm under test: b <= 255 fits f32
+    // exactly, and the int cast consumes a provably-integral floor (within
+    // the bound) or a deliberately-out-of-bound value (the radix-11 control,
+    // where divergence is the assertion) -- the B59 algorithm-is-the-cast
+    // allow, per-line justification.
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    fn floor_digits(b: u32, radix: u32, positions: usize) -> Vec<i32> {
+        let u = (b as f32) * (1.0f32 / 256.0);
+        let radix_f = radix as f32;
+        let mut g_prev = 0.0f32;
+        let mut out = Vec::with_capacity(positions);
+        for k in 1..=positions {
+            let g_next = (radix.pow(u32::try_from(k).unwrap()) as f32 * u).floor();
+            out.push((g_next - radix_f * g_prev) as i32);
+            g_prev = g_next;
+        }
+        out
+    }
+    // radix 3, 5 positions: 3^5 * 255 = 61965 < 2^24 -- exact everywhere
+    for b in 0..=255u32 {
+        assert_eq!(
+            floor_digits(b, 3, 5),
+            reference_digits(b, 3, 5),
+            "radix-3 floor extraction diverged at byte {b}"
+        );
+    }
+    // radix 11, 5 positions: 11^5 * 255 = 40_552_605 > 2^24 -- the bound
+    // is violated, and at least one byte MUST diverge (the criterion is
+    // the mantissa bound, not the radix being odd)
+    let diverged = (0..=255u32).any(|b| floor_digits(b, 11, 5) != reference_digits(b, 11, 5));
+    assert!(
+        diverged,
+        "radix-11 control never diverged -- the mantissa-bound gate is vacuous"
+    );
+    // and the boundary itself: radix 7, 5 positions = 7^5 * 255 = 4_279_485
+    // < 2^24 -- still exact, proving the bound is the right criterion
+    for b in 0..=255u32 {
+        assert_eq!(
+            floor_digits(b, 7, 5),
+            reference_digits(b, 7, 5),
+            "radix-7 (within-bound) extraction diverged at byte {b}"
+        );
+    }
+}
+
+#[test]
+fn batch116_addendum_swar_lanes_exhaustive() {
+    // Exhaustive: the lane-widened SWAR form reproduces the per-byte
+    // reference recurrence for every byte value in every lane position,
+    // under adversarial neighbor lanes (all-00 / all-FF / mixed) — the
+    // widened-lane multiply cannot carry between bytes because each
+    // lane's product is <= 765 < 2^16. Plus the exhaustive adjacent-pair
+    // sweep (the only interaction channel).
+    fn reference_digits(b: u8) -> [i32; 5] {
+        let mut v = u32::from(b);
+        let mut out = [0i32; 5];
+        for slot in &mut out {
+            let w = v * 3;
+            *slot = (w >> 8).cast_signed();
+            v = w & 0xFF;
+        }
+        out
+    }
+    // byte_perm scatter (0x4140 / 0x4342): bytes 0,1 -> v_lo lanes,
+    // bytes 2,3 -> v_hi lanes, each widened with a zero high half.
+    // Returns [step][lane] biased digits {-1,0,+1}.
+    fn swar_word_digits(word: u32) -> [[i32; 4]; 5] {
+        let mut v_lo = (word & 0xFF) | (((word >> 8) & 0xFF) << 16);
+        let mut v_hi = ((word >> 16) & 0xFF) | (((word >> 24) & 0xFF) << 16);
+        let mut steps = [[0i32; 4]; 5];
+        for row in &mut steps {
+            let w_lo = v_lo.wrapping_mul(3);
+            let w_hi = v_hi.wrapping_mul(3);
+            v_lo = w_lo & 0x00FF_00FF;
+            v_hi = w_hi & 0x00FF_00FF;
+            *row = [
+                ((w_lo >> 8) & 0xFF).cast_signed() - 1,
+                ((w_lo >> 24) & 0xFF).cast_signed() - 1,
+                ((w_hi >> 8) & 0xFF).cast_signed() - 1,
+                ((w_hi >> 24) & 0xFF).cast_signed() - 1,
+            ];
+        }
+        steps
+    }
+    fn word_from(b0: u8, b1: u8, b2: u8, b3: u8) -> u32 {
+        u32::from(b0)
+            | (u32::from(b1) << 8)
+            | (u32::from(b2) << 16)
+            | (u32::from(b3) << 24)
+    }
+    fn assert_stream(
+        got: &[[i32; 4]; 5],
+        lane: usize,
+        reference: &[i32; 5],
+        ctx: &str,
+    ) {
+        for (step, row) in got.iter().enumerate() {
+            assert_eq!(
+                row[lane] + 1,
+                reference[step],
+                "{ctx}: lane {lane} diverged at step {step}"
+            );
+        }
+    }
+    for b in 0..=255u8 {
+        let rb = reference_digits(b);
+        for pattern in [0x00u8, 0xFF, 0xAA] {
+            let got = swar_word_digits(word_from(b, pattern, pattern, pattern));
+            assert_stream(&got, 0, &rb, "lane0 sweep");
+            let got2 = swar_word_digits(word_from(pattern, b, 0x55, pattern));
+            assert_stream(&got2, 1, &rb, "lane1 sweep");
+            let got3 = swar_word_digits(word_from(0x33, 0x77, b, pattern));
+            assert_stream(&got3, 2, &rb, "lane2 sweep");
+            let got4 = swar_word_digits(word_from(0x11, 0x22, 0x44, b));
+            assert_stream(&got4, 3, &rb, "lane3 sweep");
+        }
+    }
+    for a in 0..=255u8 {
+        for c in 0..=255u8 {
+            let got = swar_word_digits(word_from(a, c, 0, 0));
+            let ra = reference_digits(a);
+            let rc = reference_digits(c);
+            assert_stream(&got, 0, &ra, "pair sweep a");
+            assert_stream(&got, 1, &rc, "pair sweep c");
+        }
     }
 }
