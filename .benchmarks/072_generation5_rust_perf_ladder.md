@@ -123,8 +123,11 @@ cross-heal is honest and the marker design demonstrably does not false-credit it
   temp-binding for vec-with-capacity; a dep-adoption path for fxhashmap; a
   caller-aware rewrite for static-str) MOVES the gen-5 rate and the ratchet
   sees it — the same property gen 3 bought for the clippy lane.
-- **Next difficulty axes** (Bench 070 §What remains, unchanged): real-repo
-  interference spans (#2); overlap-edit chains (#3). The real-G8 conversion A/B
+- **Next difficulty axes** (Bench 070 §What remains): real-repo
+  interference spans (#2) — **EXECUTED 2026-09-06: premise falsified by
+  mining, the real-shape salvage ADMITTED as generation 6 (95.2% < v1):
+  [`.benchmarks/073_generation6_real_repo_shape_ladder.md`](073_generation6_real_repo_shape_ladder.md)**;
+  overlap-edit chains (#3) remains open. The real-G8 conversion A/B
   stays data-gated (`.heal/misses/` empty).
 
 ## Validation

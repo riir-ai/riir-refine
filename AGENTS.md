@@ -2456,6 +2456,33 @@ persist verdict held because the fully-qualified return type keeps
 `std::collections::HashMap` in the region). The persist frontier is now
 MEASURED and pinned: a proposer extension that closes any class moves the
 gen-5 rate and the ratchet sees it.
+**REOPEN (1) EXECUTED A FOURTH TIME 2026-09-06 (Bench 073, Plan 095): generation
+6 = the real-repo shape ladder (Bench 069 candidate #2, SALVAGED) — candidate
+#2's premise (organic multi-lint spans minable at the bare-stub filter) was
+FALSIFIED by mining across three extraction granularities (1,247 lone fns → 0
+multi; adjacency runs → 1 same-class pair; file-header carves over 8 sweeps →
+4) — the binding constraint is the v1 scope limit: ~90% of real fns reference
+crate-internal types and never compile standalone, and the compilable crust is
+lint-free (ndb 80 compiled / 0 lints; game-sdk HEAD 17/0). The SALVAGE mechanized
+v1's own provenance note ("trait scaffolding added, lint spans verbatim") as the
+FILE-HEADER CARVE (each candidate ships with its file's own use+type+const
+context, tiered +macros+impls then +sibling fns), landing 17 real spans (13
+single-lint + 4 organic multi, 6 classes, 4 repos) mined at the PARENT of each
+repo's first heal sweep. Freeze: 17/17 verified at the BENCH instrument
+(single-snippet), 0 exclusions — batch and single instruments agree on every
+vocabulary label — drift PASS. **ADMITTED: gen-6 95.2% < v1 96.2%, deterministic
+×3 + a 4th byte-stability run after a delimiter-only re-land.** Territory:
+single 13/13 = 100% (real single-lint shapes solve at parity — generalization
+measured, the "single < v1" prediction REFUTED); multi 7/8 = 87.5% — the one
+miss is `single_match_else` in `gen6-transposition-impl1-000`, root-caused by
+manual probe as the Issue-028 interior-comment guard (a DESIGN refusal re-found
+organically — the exact thing a difficulty axis is for). Standing: the multi
+rung is anecdote-sized (4 spans) until v1-Phase-3-class per-fixture manifests
+land (the next rung = per-fixture path-dep manifests compiling the sibling at
+the mining sha — owner-gated on the series justifying it). New tool:
+`examples/score_bench_mine_v6.rs` (batch-oracle discovery + tiered carve +
+census). CLI: `--generation 6` + `score_history_v6.svg`. Record: Plan 095
+(§1a falsification table + §1b salvage) + Bench 073.
 
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`

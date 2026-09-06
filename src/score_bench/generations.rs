@@ -1070,6 +1070,1930 @@ pub fn v4_freeze_status() -> Result<usize, String> {
     freeze_status_for(&specs_v4(), 4, "generation_v4_freeze", FROZEN_LABELS_V4, EXCLUDED_IDS_V4)
 }
 
+
+// ── Generation 6: the real-repo shape ladder (Plan 095, Bench 069 reopen
+//    candidate #2 — SALVAGED, see §1a/§1b of the plan) ────────────────────
+//
+// Candidate #2's premise — organically multi-lint spans are minable from
+// sibling repos at the bare-stub filter — was FALSIFIED by measurement
+// (the plan's mining table: 5 extraction runs, ~1,100 fn candidates, ONE
+// organic multi). The SALVAGE is the real-SHAPE rung: spans carved from
+// pre-heal sibling states (the parent of each repo's sweep commit), the
+// file's own header context making crate-internal lint spans compile
+// VERBATIM — the v1 provenance discipline ("trait scaffolding added, lint
+// spans verbatim") mechanized. Four ORGANIC multi-lint carves did survive
+// and carry the interference axis as a best-effort rung.
+//
+// `expect` labels are mining-time (batch-oracle) CLAIMS — the freeze e2e
+// adjudicates them with the bench instrument; disagreement is a loud
+// exclusion or label correction (the gen-3 flow).
+
+/// One real-repo span carved from a pre-heal sibling state (generation 6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawSpanV6 {
+    /// Stable id (`gen6-<stem>-<kind><n>-<idx>`).
+    pub id: &'static str,
+    /// `repo@sha:path (file-header carve)` — the mining provenance.
+    pub provenance: &'static str,
+    /// The span source, verbatim (the carve's header context rides INSIDE
+    /// the code, so the bench/freeze wrap is the plain `wrap()`).
+    pub code: &'static str,
+    /// Mining-time vocabulary-lint claims (freeze-adjudicated).
+    pub expect: &'static [&'static str],
+}
+
+pub static RAW_SPANS_V6: &[RawSpanV6] = &[
+    // gen6-svr-fn3-000 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
+    RawSpanV6 {
+        id: "gen6-svr-fn3-000",
+        provenance: "riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs",
+        code: r#"/// Discrete verdict parsed from the model's self-check output (paper §3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Verdict {
+    /// Model asserts the candidate is correct.
+    Correct = 0,
+    /// Model asserts the candidate is incorrect.
+    Incorrect = 1,
+    /// Model is uncertain.
+    Unsure = 2,
+}
+/// One turn of an SVR trajectory — the unit the reward function scores.
+#[derive(Clone, Debug)]
+pub struct SvrTurn {
+    /// Ground-truth correctness label `y_t` (training-only; `true` if correct).
+    pub correct: bool,
+    /// Parsed verdict `v_t`.
+    pub verdict: Verdict,
+    /// Parsed confidence `c_t ∈ [0,1]`.
+    pub confidence: f32,
+    /// Completion length `ℓ_t` (tokens). Used for length shaping.
+    pub completion_len: u32,
+    /// Truncation flag `q_t`: `true` if generation was truncated (hit max
+    /// tokens without EOS).
+    pub truncated: bool,
+    /// Format reward `r_fmt,t` flag: `true` if both task-answer +
+    /// self-check tags were present.
+    pub format_ok: bool,
+}
+/// Reward coefficients (paper Table 6). [`SvrRewardConfig::default`] ships the
+/// paper's exact values.
+#[derive(Clone, Copy, Debug)]
+pub struct SvrRewardConfig {
+    /// `λ_abs` — absolute correctness reward.
+    pub lambda_abs: f32,
+    /// `λ_Δ` — turn-to-turn improvement weight.
+    pub lambda_delta: f32,
+    /// `α` — completion-length shaping strength.
+    pub alpha: f32,
+    /// `λ_keep` — correct-answer preservation bonus `φ(1,1)`.
+    pub lambda_keep: f32,
+    /// `λ_reg` — correct→incorrect regression penalty `φ(1,0)`.
+    pub lambda_reg: f32,
+    /// `λ_fail` — repeated-failure penalty `φ(0,0)`.
+    pub lambda_fail: f32,
+    /// `λ_trunc` — generation-truncation penalty.
+    pub lambda_trunc: f32,
+    /// `λ_cal` — Brier-style calibration reward.
+    pub lambda_cal: f32,
+    /// `λ_over` — asymmetric overconfidence penalty.
+    pub lambda_over: f32,
+    /// `λ_detect` — explicit error-detection reward.
+    pub lambda_detect: f32,
+    /// `λ_ready` — stop-readiness reward.
+    pub lambda_ready: f32,
+    /// `λ_fmt` — format weight.
+    pub lambda_fmt: f32,
+    /// `L_len` — completion-length cap for shaping.
+    pub len_cap: u32,
+}
+/// Output of [`parse_self_check`]: parsed verdict + confidence.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParsedSelfCheck {
+    pub verdict: Verdict,
+    pub confidence: f32,
+}
+/// First-order refinement branch, classified from the previous turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefinementBranch {
+    /// Previous generation was truncated — ask the model to restart fresh.
+    Truncated,
+    /// Previous verdict was Correct — ask the model to verify once more.
+    Correct,
+    /// Previous verdict was Incorrect or Unsure — ask the model to fix.
+    IncorrectOrUnsure,
+}
+/// Adaptive inference scheduler implementing the stop rule (Eq. 4).
+///
+/// Deployment/inference only. During training the scheduler is DISABLED and
+/// the trajectory continues for the forced `T_tr = 3` turns.
+///
+/// ```text
+/// t̂_γ = min ( { t ∈ {1..T_max} : q_t = 0 ∧ v_t = C ∧ c_t ≥ γ } ∪ {T_max} )
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AdaptiveScheduler {
+    /// `γ` — single global confidence threshold (default 0.85).
+    pub gamma: f32,
+    /// `T_max` — deployment turn budget (default 10).
+    pub t_max: usize,
+}
+/// `r_solve,t` (Eq. 15): absolute + length-shaped correctness, plus a
+/// turn-to-turn progress term and a truncation penalty.
+///
+/// `t` is 1-indexed (the turn number within the trajectory).
+/// `prev` is the previous turn (`None` for the first turn).
+pub fn r_solve(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRewardConfig) -> f32 {
+    let r_abs = cfg.lambda_abs * y_hat(cur, cfg);
+    let r_prog = match (t, prev) {
+        (1, _) => 0.0, // first turn has no previous state
+        (_, Some(p)) => cfg.lambda_delta * (cur.y() - p.y()) + phi(p.correct, cur.correct, cfg),
+        // Defensive: t ≥ 2 with no prev (malformed trajectory) degrades to
+        // the first-turn case — the progress term is undefined without a
+        // previous label.
+        (_, None) => 0.0,
+    };
+    r_abs + r_prog - cfg.lambda_trunc * cur.q()
+}
+impl Verdict {
+    /// Lowercase canonical word used in refinement prompts.
+    pub fn as_word(self) -> &'static str {
+        match self {
+            Verdict::Correct => "correct",
+            Verdict::Incorrect => "incorrect",
+            Verdict::Unsure => "unsure",
+        }
+    }
+}
+impl SvrTurn {
+    /// `y_t` as f32 (1.0 if correct, else 0.0).
+    #[inline]
+    fn y(&self) -> f32 {
+        match self.correct {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+
+    /// `q_t` as f32 (1.0 if truncated, else 0.0).
+    #[inline]
+    fn q(&self) -> f32 {
+        match self.truncated {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+}
+impl Default for SvrRewardConfig {
+    fn default() -> Self {
+        Self {
+            lambda_abs: 1.0,
+            lambda_delta: 0.3,
+            alpha: 0.5,
+            lambda_keep: 0.3,
+            lambda_reg: 0.5,
+            lambda_fail: 0.3,
+            lambda_trunc: 0.5,
+            lambda_cal: 0.5,
+            lambda_over: 0.8,
+            lambda_detect: 0.2,
+            lambda_ready: 0.3,
+            lambda_fmt: 0.4,
+            len_cap: 1024,
+        }
+    }
+}
+impl Default for AdaptiveScheduler {
+    fn default() -> Self {
+        Self {
+            gamma: 0.85,
+            t_max: 10,
+        }
+    }
+}
+impl AdaptiveScheduler {
+    /// Decide whether to stop at turn `t` (1-indexed) given the just-produced
+    /// turn.
+    ///
+    /// Stop iff: not truncated AND verdict = Correct AND confidence ≥ γ. Also
+    /// returns `true` when `t >= t_max` (budget exhausted) — the scheduler
+    /// never asks for an 11th turn.
+    pub fn should_stop(&self, t: usize, turn: &SvrTurn) -> bool {
+        if t >= self.t_max {
+            return true;
+        }
+        !turn.truncated && turn.verdict == Verdict::Correct && turn.confidence >= self.gamma
+    }
+
+    /// Run the scheduler over a full trajectory, returning the stop turn
+    /// index (1-indexed).
+    ///
+    /// Mirrors Eq. 4: returns the index of the first turn satisfying the stop
+    /// rule, else `t_max`. The trajectory length is what was actually
+    /// generated; if no turn satisfies the rule, the deployment budget `t_max`
+    /// is returned regardless of trajectory length (the scheduler models the
+    /// deployment budget, not the supplied sample).
+    pub fn stop_turn(&self, turns: &[SvrTurn]) -> usize {
+        for (i, turn) in turns.iter().enumerate() {
+            let t = i + 1;
+            if self.should_stop(t, turn) {
+                return t;
+            }
+        }
+        self.t_max
+    }
+}
+/// Length-shaped correctness reward `ŷ_t` (Eq. 15 inner term).
+///
+/// `ŷ_t = y_t · (1 − α · min(ℓ_t, L_len) / L_len)`
+///
+/// At `ℓ_t = 0` the shaping leaves the raw label intact (`ŷ_t = y_t`); at
+/// `ℓ_t ≥ L_len` the shaping reaches its maximum reduction factor of
+/// `(1 − α)`.
+#[inline]
+fn y_hat(turn: &SvrTurn, cfg: &SvrRewardConfig) -> f32 {
+    let len = turn.completion_len.min(cfg.len_cap) as f32;
+    let cap = cfg.len_cap as f32;
+    let shaping = 1.0 - cfg.alpha * (len / cap);
+    turn.y() * shaping
+}
+/// Turn-to-turn transition term `φ(y_{t-1}, y_t)` (Eq. 15).
+///
+/// - `φ(1,1) = +λ_keep`  — preserve correct
+/// - `φ(1,0) = −λ_reg`   — regress (correct → incorrect)
+/// - `φ(0,0) = −λ_fail`  — repeated failure
+/// - `φ(0,1) = 0`        — wrong → correct improvement
+fn phi(prev_correct: bool, cur_correct: bool, cfg: &SvrRewardConfig) -> f32 {
+    match (prev_correct, cur_correct) {
+        (true, true) => cfg.lambda_keep,
+        (true, false) => -cfg.lambda_reg,
+        (false, false) => -cfg.lambda_fail,
+        (false, true) => 0.0,
+    }
+}
+/// `r_verify,t` (Eq. 16): the joint verdict–confidence self-verification reward.
+///
+/// The whole block is gated by `(1 − q_t)` — a truncated turn scores zero
+/// self-verification, because the parsed verdict/confidence is unreliable when
+/// generation did not reach EOS.
+pub fn r_verify(cur: &SvrTurn, cfg: &SvrRewardConfig) -> f32 {
+    let one_minus_q = 1.0 - cur.q();
+    // Eq. 16 indicators.
+    let i_over = match cur.verdict == Verdict::Correct && !cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let i_detect = match cur.verdict == Verdict::Incorrect && !cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let i_ready = match cur.verdict == Verdict::Correct && cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let y = cur.y();
+    let c = cur.confidence;
+    let brier = 1.0 - (c - y) * (c - y);
+    one_minus_q
+        * (cfg.lambda_cal * brier
+            - cfg.lambda_over * c * i_over
+            + cfg.lambda_detect * i_detect
+            + cfg.lambda_ready * c * i_ready)
+}
+/// `r_fmt,t` (Eq. 17/18): 1.0 if both task-answer + self-check tags were
+/// present, else 0.0.
+#[inline]
+pub fn r_fmt(cur: &SvrTurn) -> f32 {
+    match cur.format_ok {
+        true => 1.0,
+        false => 0.0,
+    }
+}
+/// Per-turn reward `r_t = r_solve,t + r_verify,t + λ_fmt · r_fmt,t` (Eq. 7
+/// per-turn term, WITHOUT the `1/T_tr` averaging — the caller does averaging).
+///
+/// `t` is 1-indexed.
+pub fn turn_reward(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRewardConfig) -> f32 {
+    r_solve(t, cur, prev, cfg) + r_verify(cur, cfg) + cfg.lambda_fmt * r_fmt(cur)
+}
+/// Full trajectory reward (Eq. 7): `(1/T_tr) · Σ r_t` over `T_tr` turns.
+///
+/// `turns` is the trajectory; `T_tr = turns.len()`. An empty trajectory
+/// returns 0.0.
+pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
+    if turns.is_empty() {
+        return 0.0;
+    }
+    let mut sum = 0.0_f32;
+    for (i, turn) in turns.iter().enumerate() {
+        let t = i + 1;
+        let prev = if i == 0 { None } else { Some(&turns[i - 1]) };
+        sum += turn_reward(t, turn, prev, cfg);
+    }
+    sum / turns.len() as f32
+}
+"#,
+        expect: &["match_bool", "use_self"],
+    },
+
+    // gen6-svr-fn6-001 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
+    RawSpanV6 {
+        id: "gen6-svr-fn6-001",
+        provenance: "riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs",
+        code: r#"/// Discrete verdict parsed from the model's self-check output (paper §3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Verdict {
+    /// Model asserts the candidate is correct.
+    Correct = 0,
+    /// Model asserts the candidate is incorrect.
+    Incorrect = 1,
+    /// Model is uncertain.
+    Unsure = 2,
+}
+/// One turn of an SVR trajectory — the unit the reward function scores.
+#[derive(Clone, Debug)]
+pub struct SvrTurn {
+    /// Ground-truth correctness label `y_t` (training-only; `true` if correct).
+    pub correct: bool,
+    /// Parsed verdict `v_t`.
+    pub verdict: Verdict,
+    /// Parsed confidence `c_t ∈ [0,1]`.
+    pub confidence: f32,
+    /// Completion length `ℓ_t` (tokens). Used for length shaping.
+    pub completion_len: u32,
+    /// Truncation flag `q_t`: `true` if generation was truncated (hit max
+    /// tokens without EOS).
+    pub truncated: bool,
+    /// Format reward `r_fmt,t` flag: `true` if both task-answer +
+    /// self-check tags were present.
+    pub format_ok: bool,
+}
+/// Reward coefficients (paper Table 6). [`SvrRewardConfig::default`] ships the
+/// paper's exact values.
+#[derive(Clone, Copy, Debug)]
+pub struct SvrRewardConfig {
+    /// `λ_abs` — absolute correctness reward.
+    pub lambda_abs: f32,
+    /// `λ_Δ` — turn-to-turn improvement weight.
+    pub lambda_delta: f32,
+    /// `α` — completion-length shaping strength.
+    pub alpha: f32,
+    /// `λ_keep` — correct-answer preservation bonus `φ(1,1)`.
+    pub lambda_keep: f32,
+    /// `λ_reg` — correct→incorrect regression penalty `φ(1,0)`.
+    pub lambda_reg: f32,
+    /// `λ_fail` — repeated-failure penalty `φ(0,0)`.
+    pub lambda_fail: f32,
+    /// `λ_trunc` — generation-truncation penalty.
+    pub lambda_trunc: f32,
+    /// `λ_cal` — Brier-style calibration reward.
+    pub lambda_cal: f32,
+    /// `λ_over` — asymmetric overconfidence penalty.
+    pub lambda_over: f32,
+    /// `λ_detect` — explicit error-detection reward.
+    pub lambda_detect: f32,
+    /// `λ_ready` — stop-readiness reward.
+    pub lambda_ready: f32,
+    /// `λ_fmt` — format weight.
+    pub lambda_fmt: f32,
+    /// `L_len` — completion-length cap for shaping.
+    pub len_cap: u32,
+}
+/// Output of [`parse_self_check`]: parsed verdict + confidence.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParsedSelfCheck {
+    pub verdict: Verdict,
+    pub confidence: f32,
+}
+/// First-order refinement branch, classified from the previous turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefinementBranch {
+    /// Previous generation was truncated — ask the model to restart fresh.
+    Truncated,
+    /// Previous verdict was Correct — ask the model to verify once more.
+    Correct,
+    /// Previous verdict was Incorrect or Unsure — ask the model to fix.
+    IncorrectOrUnsure,
+}
+/// Adaptive inference scheduler implementing the stop rule (Eq. 4).
+///
+/// Deployment/inference only. During training the scheduler is DISABLED and
+/// the trajectory continues for the forced `T_tr = 3` turns.
+///
+/// ```text
+/// t̂_γ = min ( { t ∈ {1..T_max} : q_t = 0 ∧ v_t = C ∧ c_t ≥ γ } ∪ {T_max} )
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AdaptiveScheduler {
+    /// `γ` — single global confidence threshold (default 0.85).
+    pub gamma: f32,
+    /// `T_max` — deployment turn budget (default 10).
+    pub t_max: usize,
+}
+/// Per-turn reward `r_t = r_solve,t + r_verify,t + λ_fmt · r_fmt,t` (Eq. 7
+/// per-turn term, WITHOUT the `1/T_tr` averaging — the caller does averaging).
+///
+/// `t` is 1-indexed.
+pub fn turn_reward(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRewardConfig) -> f32 {
+    r_solve(t, cur, prev, cfg) + r_verify(cur, cfg) + cfg.lambda_fmt * r_fmt(cur)
+}
+impl Verdict {
+    /// Lowercase canonical word used in refinement prompts.
+    pub fn as_word(self) -> &'static str {
+        match self {
+            Verdict::Correct => "correct",
+            Verdict::Incorrect => "incorrect",
+            Verdict::Unsure => "unsure",
+        }
+    }
+}
+impl SvrTurn {
+    /// `y_t` as f32 (1.0 if correct, else 0.0).
+    #[inline]
+    fn y(&self) -> f32 {
+        match self.correct {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+
+    /// `q_t` as f32 (1.0 if truncated, else 0.0).
+    #[inline]
+    fn q(&self) -> f32 {
+        match self.truncated {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+}
+impl Default for SvrRewardConfig {
+    fn default() -> Self {
+        Self {
+            lambda_abs: 1.0,
+            lambda_delta: 0.3,
+            alpha: 0.5,
+            lambda_keep: 0.3,
+            lambda_reg: 0.5,
+            lambda_fail: 0.3,
+            lambda_trunc: 0.5,
+            lambda_cal: 0.5,
+            lambda_over: 0.8,
+            lambda_detect: 0.2,
+            lambda_ready: 0.3,
+            lambda_fmt: 0.4,
+            len_cap: 1024,
+        }
+    }
+}
+impl Default for AdaptiveScheduler {
+    fn default() -> Self {
+        Self {
+            gamma: 0.85,
+            t_max: 10,
+        }
+    }
+}
+impl AdaptiveScheduler {
+    /// Decide whether to stop at turn `t` (1-indexed) given the just-produced
+    /// turn.
+    ///
+    /// Stop iff: not truncated AND verdict = Correct AND confidence ≥ γ. Also
+    /// returns `true` when `t >= t_max` (budget exhausted) — the scheduler
+    /// never asks for an 11th turn.
+    pub fn should_stop(&self, t: usize, turn: &SvrTurn) -> bool {
+        if t >= self.t_max {
+            return true;
+        }
+        !turn.truncated && turn.verdict == Verdict::Correct && turn.confidence >= self.gamma
+    }
+
+    /// Run the scheduler over a full trajectory, returning the stop turn
+    /// index (1-indexed).
+    ///
+    /// Mirrors Eq. 4: returns the index of the first turn satisfying the stop
+    /// rule, else `t_max`. The trajectory length is what was actually
+    /// generated; if no turn satisfies the rule, the deployment budget `t_max`
+    /// is returned regardless of trajectory length (the scheduler models the
+    /// deployment budget, not the supplied sample).
+    pub fn stop_turn(&self, turns: &[SvrTurn]) -> usize {
+        for (i, turn) in turns.iter().enumerate() {
+            let t = i + 1;
+            if self.should_stop(t, turn) {
+                return t;
+            }
+        }
+        self.t_max
+    }
+}
+/// Length-shaped correctness reward `ŷ_t` (Eq. 15 inner term).
+///
+/// `ŷ_t = y_t · (1 − α · min(ℓ_t, L_len) / L_len)`
+///
+/// At `ℓ_t = 0` the shaping leaves the raw label intact (`ŷ_t = y_t`); at
+/// `ℓ_t ≥ L_len` the shaping reaches its maximum reduction factor of
+/// `(1 − α)`.
+#[inline]
+fn y_hat(turn: &SvrTurn, cfg: &SvrRewardConfig) -> f32 {
+    let len = turn.completion_len.min(cfg.len_cap) as f32;
+    let cap = cfg.len_cap as f32;
+    let shaping = 1.0 - cfg.alpha * (len / cap);
+    turn.y() * shaping
+}
+/// Turn-to-turn transition term `φ(y_{t-1}, y_t)` (Eq. 15).
+///
+/// - `φ(1,1) = +λ_keep`  — preserve correct
+/// - `φ(1,0) = −λ_reg`   — regress (correct → incorrect)
+/// - `φ(0,0) = −λ_fail`  — repeated failure
+/// - `φ(0,1) = 0`        — wrong → correct improvement
+fn phi(prev_correct: bool, cur_correct: bool, cfg: &SvrRewardConfig) -> f32 {
+    match (prev_correct, cur_correct) {
+        (true, true) => cfg.lambda_keep,
+        (true, false) => -cfg.lambda_reg,
+        (false, false) => -cfg.lambda_fail,
+        (false, true) => 0.0,
+    }
+}
+/// `r_solve,t` (Eq. 15): absolute + length-shaped correctness, plus a
+/// turn-to-turn progress term and a truncation penalty.
+///
+/// `t` is 1-indexed (the turn number within the trajectory).
+/// `prev` is the previous turn (`None` for the first turn).
+pub fn r_solve(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRewardConfig) -> f32 {
+    let r_abs = cfg.lambda_abs * y_hat(cur, cfg);
+    let r_prog = match (t, prev) {
+        (1, _) => 0.0, // first turn has no previous state
+        (_, Some(p)) => cfg.lambda_delta * (cur.y() - p.y()) + phi(p.correct, cur.correct, cfg),
+        // Defensive: t ≥ 2 with no prev (malformed trajectory) degrades to
+        // the first-turn case — the progress term is undefined without a
+        // previous label.
+        (_, None) => 0.0,
+    };
+    r_abs + r_prog - cfg.lambda_trunc * cur.q()
+}
+/// `r_verify,t` (Eq. 16): the joint verdict–confidence self-verification reward.
+///
+/// The whole block is gated by `(1 − q_t)` — a truncated turn scores zero
+/// self-verification, because the parsed verdict/confidence is unreliable when
+/// generation did not reach EOS.
+pub fn r_verify(cur: &SvrTurn, cfg: &SvrRewardConfig) -> f32 {
+    let one_minus_q = 1.0 - cur.q();
+    // Eq. 16 indicators.
+    let i_over = match cur.verdict == Verdict::Correct && !cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let i_detect = match cur.verdict == Verdict::Incorrect && !cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let i_ready = match cur.verdict == Verdict::Correct && cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let y = cur.y();
+    let c = cur.confidence;
+    let brier = 1.0 - (c - y) * (c - y);
+    one_minus_q
+        * (cfg.lambda_cal * brier
+            - cfg.lambda_over * c * i_over
+            + cfg.lambda_detect * i_detect
+            + cfg.lambda_ready * c * i_ready)
+}
+/// `r_fmt,t` (Eq. 17/18): 1.0 if both task-answer + self-check tags were
+/// present, else 0.0.
+#[inline]
+pub fn r_fmt(cur: &SvrTurn) -> f32 {
+    match cur.format_ok {
+        true => 1.0,
+        false => 0.0,
+    }
+}
+/// Full trajectory reward (Eq. 7): `(1/T_tr) · Σ r_t` over `T_tr` turns.
+///
+/// `turns` is the trajectory; `T_tr = turns.len()`. An empty trajectory
+/// returns 0.0.
+pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
+    if turns.is_empty() {
+        return 0.0;
+    }
+    let mut sum = 0.0_f32;
+    for (i, turn) in turns.iter().enumerate() {
+        let t = i + 1;
+        let prev = if i == 0 { None } else { Some(&turns[i - 1]) };
+        sum += turn_reward(t, turn, prev, cfg);
+    }
+    sum / turns.len() as f32
+}
+"#,
+        expect: &["match_bool", "use_self"],
+    },
+
+    // gen6-svr-fn7-002 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
+    RawSpanV6 {
+        id: "gen6-svr-fn7-002",
+        provenance: "riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs",
+        code: r#"/// Discrete verdict parsed from the model's self-check output (paper §3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Verdict {
+    /// Model asserts the candidate is correct.
+    Correct = 0,
+    /// Model asserts the candidate is incorrect.
+    Incorrect = 1,
+    /// Model is uncertain.
+    Unsure = 2,
+}
+/// One turn of an SVR trajectory — the unit the reward function scores.
+#[derive(Clone, Debug)]
+pub struct SvrTurn {
+    /// Ground-truth correctness label `y_t` (training-only; `true` if correct).
+    pub correct: bool,
+    /// Parsed verdict `v_t`.
+    pub verdict: Verdict,
+    /// Parsed confidence `c_t ∈ [0,1]`.
+    pub confidence: f32,
+    /// Completion length `ℓ_t` (tokens). Used for length shaping.
+    pub completion_len: u32,
+    /// Truncation flag `q_t`: `true` if generation was truncated (hit max
+    /// tokens without EOS).
+    pub truncated: bool,
+    /// Format reward `r_fmt,t` flag: `true` if both task-answer +
+    /// self-check tags were present.
+    pub format_ok: bool,
+}
+/// Reward coefficients (paper Table 6). [`SvrRewardConfig::default`] ships the
+/// paper's exact values.
+#[derive(Clone, Copy, Debug)]
+pub struct SvrRewardConfig {
+    /// `λ_abs` — absolute correctness reward.
+    pub lambda_abs: f32,
+    /// `λ_Δ` — turn-to-turn improvement weight.
+    pub lambda_delta: f32,
+    /// `α` — completion-length shaping strength.
+    pub alpha: f32,
+    /// `λ_keep` — correct-answer preservation bonus `φ(1,1)`.
+    pub lambda_keep: f32,
+    /// `λ_reg` — correct→incorrect regression penalty `φ(1,0)`.
+    pub lambda_reg: f32,
+    /// `λ_fail` — repeated-failure penalty `φ(0,0)`.
+    pub lambda_fail: f32,
+    /// `λ_trunc` — generation-truncation penalty.
+    pub lambda_trunc: f32,
+    /// `λ_cal` — Brier-style calibration reward.
+    pub lambda_cal: f32,
+    /// `λ_over` — asymmetric overconfidence penalty.
+    pub lambda_over: f32,
+    /// `λ_detect` — explicit error-detection reward.
+    pub lambda_detect: f32,
+    /// `λ_ready` — stop-readiness reward.
+    pub lambda_ready: f32,
+    /// `λ_fmt` — format weight.
+    pub lambda_fmt: f32,
+    /// `L_len` — completion-length cap for shaping.
+    pub len_cap: u32,
+}
+/// Output of [`parse_self_check`]: parsed verdict + confidence.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParsedSelfCheck {
+    pub verdict: Verdict,
+    pub confidence: f32,
+}
+/// First-order refinement branch, classified from the previous turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefinementBranch {
+    /// Previous generation was truncated — ask the model to restart fresh.
+    Truncated,
+    /// Previous verdict was Correct — ask the model to verify once more.
+    Correct,
+    /// Previous verdict was Incorrect or Unsure — ask the model to fix.
+    IncorrectOrUnsure,
+}
+/// Adaptive inference scheduler implementing the stop rule (Eq. 4).
+///
+/// Deployment/inference only. During training the scheduler is DISABLED and
+/// the trajectory continues for the forced `T_tr = 3` turns.
+///
+/// ```text
+/// t̂_γ = min ( { t ∈ {1..T_max} : q_t = 0 ∧ v_t = C ∧ c_t ≥ γ } ∪ {T_max} )
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AdaptiveScheduler {
+    /// `γ` — single global confidence threshold (default 0.85).
+    pub gamma: f32,
+    /// `T_max` — deployment turn budget (default 10).
+    pub t_max: usize,
+}
+/// Full trajectory reward (Eq. 7): `(1/T_tr) · Σ r_t` over `T_tr` turns.
+///
+/// `turns` is the trajectory; `T_tr = turns.len()`. An empty trajectory
+/// returns 0.0.
+pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
+    if turns.is_empty() {
+        return 0.0;
+    }
+    let mut sum = 0.0_f32;
+    for (i, turn) in turns.iter().enumerate() {
+        let t = i + 1;
+        let prev = if i == 0 { None } else { Some(&turns[i - 1]) };
+        sum += turn_reward(t, turn, prev, cfg);
+    }
+    sum / turns.len() as f32
+}
+impl Verdict {
+    /// Lowercase canonical word used in refinement prompts.
+    pub fn as_word(self) -> &'static str {
+        match self {
+            Verdict::Correct => "correct",
+            Verdict::Incorrect => "incorrect",
+            Verdict::Unsure => "unsure",
+        }
+    }
+}
+impl SvrTurn {
+    /// `y_t` as f32 (1.0 if correct, else 0.0).
+    #[inline]
+    fn y(&self) -> f32 {
+        match self.correct {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+
+    /// `q_t` as f32 (1.0 if truncated, else 0.0).
+    #[inline]
+    fn q(&self) -> f32 {
+        match self.truncated {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+}
+impl Default for SvrRewardConfig {
+    fn default() -> Self {
+        Self {
+            lambda_abs: 1.0,
+            lambda_delta: 0.3,
+            alpha: 0.5,
+            lambda_keep: 0.3,
+            lambda_reg: 0.5,
+            lambda_fail: 0.3,
+            lambda_trunc: 0.5,
+            lambda_cal: 0.5,
+            lambda_over: 0.8,
+            lambda_detect: 0.2,
+            lambda_ready: 0.3,
+            lambda_fmt: 0.4,
+            len_cap: 1024,
+        }
+    }
+}
+impl Default for AdaptiveScheduler {
+    fn default() -> Self {
+        Self {
+            gamma: 0.85,
+            t_max: 10,
+        }
+    }
+}
+impl AdaptiveScheduler {
+    /// Decide whether to stop at turn `t` (1-indexed) given the just-produced
+    /// turn.
+    ///
+    /// Stop iff: not truncated AND verdict = Correct AND confidence ≥ γ. Also
+    /// returns `true` when `t >= t_max` (budget exhausted) — the scheduler
+    /// never asks for an 11th turn.
+    pub fn should_stop(&self, t: usize, turn: &SvrTurn) -> bool {
+        if t >= self.t_max {
+            return true;
+        }
+        !turn.truncated && turn.verdict == Verdict::Correct && turn.confidence >= self.gamma
+    }
+
+    /// Run the scheduler over a full trajectory, returning the stop turn
+    /// index (1-indexed).
+    ///
+    /// Mirrors Eq. 4: returns the index of the first turn satisfying the stop
+    /// rule, else `t_max`. The trajectory length is what was actually
+    /// generated; if no turn satisfies the rule, the deployment budget `t_max`
+    /// is returned regardless of trajectory length (the scheduler models the
+    /// deployment budget, not the supplied sample).
+    pub fn stop_turn(&self, turns: &[SvrTurn]) -> usize {
+        for (i, turn) in turns.iter().enumerate() {
+            let t = i + 1;
+            if self.should_stop(t, turn) {
+                return t;
+            }
+        }
+        self.t_max
+    }
+}
+/// Length-shaped correctness reward `ŷ_t` (Eq. 15 inner term).
+///
+/// `ŷ_t = y_t · (1 − α · min(ℓ_t, L_len) / L_len)`
+///
+/// At `ℓ_t = 0` the shaping leaves the raw label intact (`ŷ_t = y_t`); at
+/// `ℓ_t ≥ L_len` the shaping reaches its maximum reduction factor of
+/// `(1 − α)`.
+#[inline]
+fn y_hat(turn: &SvrTurn, cfg: &SvrRewardConfig) -> f32 {
+    let len = turn.completion_len.min(cfg.len_cap) as f32;
+    let cap = cfg.len_cap as f32;
+    let shaping = 1.0 - cfg.alpha * (len / cap);
+    turn.y() * shaping
+}
+/// Turn-to-turn transition term `φ(y_{t-1}, y_t)` (Eq. 15).
+///
+/// - `φ(1,1) = +λ_keep`  — preserve correct
+/// - `φ(1,0) = −λ_reg`   — regress (correct → incorrect)
+/// - `φ(0,0) = −λ_fail`  — repeated failure
+/// - `φ(0,1) = 0`        — wrong → correct improvement
+fn phi(prev_correct: bool, cur_correct: bool, cfg: &SvrRewardConfig) -> f32 {
+    match (prev_correct, cur_correct) {
+        (true, true) => cfg.lambda_keep,
+        (true, false) => -cfg.lambda_reg,
+        (false, false) => -cfg.lambda_fail,
+        (false, true) => 0.0,
+    }
+}
+/// `r_solve,t` (Eq. 15): absolute + length-shaped correctness, plus a
+/// turn-to-turn progress term and a truncation penalty.
+///
+/// `t` is 1-indexed (the turn number within the trajectory).
+/// `prev` is the previous turn (`None` for the first turn).
+pub fn r_solve(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRewardConfig) -> f32 {
+    let r_abs = cfg.lambda_abs * y_hat(cur, cfg);
+    let r_prog = match (t, prev) {
+        (1, _) => 0.0, // first turn has no previous state
+        (_, Some(p)) => cfg.lambda_delta * (cur.y() - p.y()) + phi(p.correct, cur.correct, cfg),
+        // Defensive: t ≥ 2 with no prev (malformed trajectory) degrades to
+        // the first-turn case — the progress term is undefined without a
+        // previous label.
+        (_, None) => 0.0,
+    };
+    r_abs + r_prog - cfg.lambda_trunc * cur.q()
+}
+/// `r_verify,t` (Eq. 16): the joint verdict–confidence self-verification reward.
+///
+/// The whole block is gated by `(1 − q_t)` — a truncated turn scores zero
+/// self-verification, because the parsed verdict/confidence is unreliable when
+/// generation did not reach EOS.
+pub fn r_verify(cur: &SvrTurn, cfg: &SvrRewardConfig) -> f32 {
+    let one_minus_q = 1.0 - cur.q();
+    // Eq. 16 indicators.
+    let i_over = match cur.verdict == Verdict::Correct && !cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let i_detect = match cur.verdict == Verdict::Incorrect && !cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let i_ready = match cur.verdict == Verdict::Correct && cur.correct {
+        true => 1.0,
+        false => 0.0,
+    };
+    let y = cur.y();
+    let c = cur.confidence;
+    let brier = 1.0 - (c - y) * (c - y);
+    one_minus_q
+        * (cfg.lambda_cal * brier
+            - cfg.lambda_over * c * i_over
+            + cfg.lambda_detect * i_detect
+            + cfg.lambda_ready * c * i_ready)
+}
+/// `r_fmt,t` (Eq. 17/18): 1.0 if both task-answer + self-check tags were
+/// present, else 0.0.
+#[inline]
+pub fn r_fmt(cur: &SvrTurn) -> f32 {
+    match cur.format_ok {
+        true => 1.0,
+        false => 0.0,
+    }
+}
+/// Per-turn reward `r_t = r_solve,t + r_verify,t + λ_fmt · r_fmt,t` (Eq. 7
+/// per-turn term, WITHOUT the `1/T_tr` averaging — the caller does averaging).
+///
+/// `t` is 1-indexed.
+pub fn turn_reward(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRewardConfig) -> f32 {
+    r_solve(t, cur, prev, cfg) + r_verify(cur, cfg) + cfg.lambda_fmt * r_fmt(cur)
+}
+"#,
+        expect: &["match_bool", "use_self"],
+    },
+
+    // gen6-transposition-impl1-000 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/transposition.rs
+    RawSpanV6 {
+        id: "gen6-transposition-impl1-000",
+        provenance: "riir-ai@1e050442a~1:crates/riir-engine/src/fourier/transposition.rs",
+        code: r"use std::cell::Cell;
+use std::collections::HashMap;
+/// Entry in the Fourier MCTS transposition table.
+///
+/// Stores accumulated search statistics for a spatial state shape.
+/// Multiple visits to the same tactical shape (at different board positions)
+/// contribute to the same entry.
+#[derive(Clone, Copy, Debug)]
+pub struct TransEntry {
+    /// Accumulated reward from all visits to this state shape.
+    pub total_reward: f32,
+    /// Number of times this state shape was visited.
+    pub visits: u32,
+    /// Best action found so far for this state shape.
+    pub best_action: Option<usize>,
+    /// Maximum depth this state was explored to.
+    pub max_depth: usize,
+    /// Whether this entry has been verified (not just from heuristic rollout).
+    pub verified: bool,
+}
+/// Statistics returned after a search with the transposition table.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TranspositionStats {
+    /// Number of cache hits (reuse of existing entries).
+    pub hits: u64,
+    /// Number of cache misses (new exploration).
+    pub misses: u64,
+    /// Number of entries evicted during search.
+    pub evictions: u64,
+    /// Final number of entries in the table.
+    pub entries: usize,
+}
+/// Transposition table for MCTS with Fourier spatial hashing.
+///
+/// # Usage
+///
+/// ```ignore
+/// let mut table = TranspositionTable::new(10_000);
+///
+/// // On select/expand: check table
+/// if let Some(entry) = table.lookup(hash) {
+///     // Warm-start from existing statistics
+/// }
+///
+/// // On backpropagate: update table
+/// table.update(hash, reward, best_action, depth, verified);
+/// ```
+pub struct TranspositionTable {
+    /// The hash map storing entries indexed by Fourier spatial hash.
+    table: HashMap<u64, TransEntry>,
+    /// Maximum entries before eviction kicks in.
+    max_entries: usize,
+    /// Number of hits (reuse) since creation or last reset.
+    hits: Cell<u64>,
+    /// Number of misses (new exploration) since creation or last reset.
+    misses: Cell<u64>,
+    /// Total evictions performed.
+    evictions: Cell<u64>,
+    /// Pre-allocated eviction buffer to avoid O(n) allocation per eviction (Issue 041).
+    eviction_buf: Vec<(u64, u32)>,
+}
+impl TransEntry {
+    /// Create a new entry with a single visit's data.
+    pub fn new(reward: f32, action: Option<usize>, depth: usize, verified: bool) -> Self {
+        Self {
+            total_reward: reward,
+            visits: 1,
+            best_action: action,
+            max_depth: depth,
+            verified,
+        }
+    }
+
+    /// Average reward (Q-value) for this state shape.
+    #[inline]
+    pub fn avg_reward(&self) -> f32 {
+        if self.visits == 0 {
+            return 0.0;
+        }
+        self.total_reward / self.visits as f32
+    }
+
+    /// Update this entry with new visit data.
+    pub fn update(&mut self, reward: f32, action: Option<usize>, depth: usize, verified: bool) {
+        self.total_reward += reward;
+        self.visits += 1;
+        if depth > self.max_depth {
+            self.max_depth = depth;
+        }
+        if verified {
+            self.verified = true;
+        }
+        // Update best action if this visit has higher reward
+        if let Some(a) = action {
+            match self.best_action {
+                None => self.best_action = Some(a),
+                Some(_) => {
+                    // Keep existing best_action — it was found over multiple visits
+                    // The best_action is updated only when we have higher confidence
+                }
+            }
+        }
+    }
+
+    /// Merge another entry into this one (for combining results).
+    pub fn merge(&mut self, other: &TransEntry) {
+        self.total_reward += other.total_reward;
+        self.visits += other.visits;
+        if other.max_depth > self.max_depth {
+            self.max_depth = other.max_depth;
+        }
+        if other.verified {
+            self.verified = true;
+        }
+        if self.best_action.is_none() {
+            self.best_action = other.best_action;
+        }
+    }
+}
+",
+        expect: &["single_match_else", "use_self"],
+    },
+
+    // gen6-channel_draft_generator-fn1-002 | riir-ai@1e050442a~1:crates/riir-engine/src/channel_draft_generator.rs
+    RawSpanV6 {
+        id: "gen6-channel_draft_generator-fn1-002",
+        provenance: "riir-ai@1e050442a~1:crates/riir-engine/src/channel_draft_generator.rs",
+        code: r"/// Channel prediction alongside a draft token.
+#[derive(Clone, Debug)]
+pub struct ChannelDraftToken<T> {
+    /// The draft token from the base generator.
+    pub token: T,
+    /// Predicted channel activations for this token's position.
+    /// `None` when channel prediction is disabled (backward compat).
+    pub channel_predictions: Option<Vec<f32>>,
+}
+/// Result of channel-aware draft verification.
+#[derive(Clone, Copy, Debug)]
+pub struct ChannelVerifyResult {
+    /// Whether the draft was accepted (token match + channel alignment).
+    pub accepted: bool,
+    /// Channel alignment score (0.0 = no alignment, 1.0 = perfect).
+    pub alignment_score: f32,
+    /// Whether channel prediction was used (false when disabled).
+    pub channel_used: bool,
+}
+/// Configuration for channel-aware draft generation.
+#[derive(Clone, Copy, Debug)]
+pub struct ChannelDraftConfig {
+    /// Whether to enable channel prediction in draft output.
+    pub enabled: bool,
+    /// Threshold for channel alignment acceptance (0.0-1.0).
+    pub alignment_threshold: f32,
+    /// Whether to use conservative mode (channel prediction only REJECTS, never accepts).
+    pub conservative: bool,
+}
+/// Verify channel alignment for a draft token.
+///
+/// Returns acceptance result based on predicted vs actual channel activations.
+/// In conservative mode, channel mismatch can only REJECT (never accept on match alone).
+pub fn verify_draft_channels(
+    predicted: &Option<Vec<f32>>,
+    actual: &[f32],
+    config: &ChannelDraftConfig,
+) -> ChannelVerifyResult {
+    if !config.enabled {
+        return ChannelVerifyResult {
+            accepted: true,
+            alignment_score: 1.0,
+            channel_used: false,
+        };
+    }
+
+    let predicted = match predicted {
+        Some(p) => p,
+        None => {
+            return ChannelVerifyResult {
+                accepted: true,
+                alignment_score: 1.0,
+                channel_used: false,
+            };
+        }
+    };
+
+    // Compute alignment score as 1 - MSE (bounded to [0,1])
+    // Manual `*` beats `.powi(2)` (avoid powi overhead on hot path).
+    let n = predicted.len();
+    let mut sum_sq = 0.0f32;
+    for i in 0..n {
+        let d = predicted[i] - actual[i];
+        sum_sq += d * d;
+    }
+    let mse = sum_sq / n.max(1) as f32;
+
+    let alignment_score = (1.0 - mse).max(0.0);
+    let aligned = alignment_score >= config.alignment_threshold;
+
+    ChannelVerifyResult {
+        accepted: aligned,
+        alignment_score,
+        channel_used: true,
+    }
+}
+",
+        expect: &["manual_let_else"],
+    },
+
+    // gen6-economy-impl3-000 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs
+    RawSpanV6 {
+        id: "gen6-economy-impl3-000",
+        provenance: "riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs",
+        code: r"use std::f32::consts::PI;
+/// Named market cycles with approximate periods in days.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CycleName {
+    /// Period ≈ 1 day — daily server reset.
+    DailyReset,
+    /// Period ≈ 7 days — weekly maintenance.
+    WeeklyReset,
+    /// Period ≈ 30 days — monthly event rotation.
+    MonthlyEvent,
+    /// Period ≈ 90 days — major patch cycle.
+    PatchCycle,
+    /// Unrecognized cycle period.
+    Unknown,
+}
+/// A single frequency component from price decomposition.
+#[derive(Clone, Copy, Debug)]
+pub struct FrequencyComponent {
+    /// Frequency in cycles per sample period.
+    pub frequency: f32,
+    /// Amplitude — how strong this cycle is.
+    pub amplitude: f32,
+    /// Phase offset in radians.
+    pub phase: f32,
+    /// Named cycle classification, if recognized.
+    pub name: Option<CycleName>,
+}
+/// Price history encoded as Fourier frequency components.
+#[derive(Clone, Debug)]
+pub struct FourierPriceModel {
+    /// Frequency components sorted by amplitude descending.
+    pub components: Vec<FrequencyComponent>,
+    /// DC component (mean price).
+    pub base_price: f32,
+    /// Number of price data points used to fit.
+    pub data_points: usize,
+    /// Goodness of fit (0.0 to 1.0, higher is better).
+    pub r_squared: f32,
+}
+/// Encodes price histories as Fourier frequency models.
+pub struct PriceEncoder {
+    /// Maximum frequency to analyze (cycles per sample).
+    max_frequency: f32,
+    /// Minimum amplitude threshold — filters noise.
+    min_amplitude: f32,
+}
+/// Detects market cycles in price history.
+pub struct CycleDetector {
+    encoder: PriceEncoder,
+}
+/// Forecasts prices using Fourier decomposition.
+pub struct PredictivePricer {
+    encoder: PriceEncoder,
+}
+impl CycleName {
+    /// Expected period in days for this cycle.
+    fn expected_period(self) -> f32 {
+        match self {
+            Self::DailyReset => 1.0,
+            Self::WeeklyReset => 7.0,
+            Self::MonthlyEvent => 30.0,
+            Self::PatchCycle => 90.0,
+            Self::Unknown => f32::MAX,
+        }
+    }
+
+    /// All known cycle names (excludes `Unknown`).
+    fn known() -> &'static [CycleName] {
+        &[
+            CycleName::DailyReset,
+            CycleName::WeeklyReset,
+            CycleName::MonthlyEvent,
+            CycleName::PatchCycle,
+        ]
+    }
+
+    /// Classify a period (in days) to the nearest named cycle.
+    fn from_period(period: f32) -> Self {
+        let tolerance = 0.11; // ~10% tolerance band (0.9→Daily passes, 100→Patch fails)
+        for &cycle in Self::known() {
+            let expected = cycle.expected_period();
+            if (period - expected).abs() / expected <= tolerance {
+                return cycle;
+            }
+        }
+        Self::Unknown
+    }
+}
+",
+        expect: &["use_self"],
+    },
+
+    // katgpt-rs-pruner_04_product_policy-fn | katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs
+    RawSpanV6 {
+        id: "gen6-pruner_04_product_policy-12",
+        provenance: "katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs",
+        code: r"/// Compute Shannon entropy of a probability distribution (in bits).
+fn entropy(probs: &[f32]) -> f32 {
+    let mut h = 0.0_f32;
+    for &p in probs {
+        if p > 0.0 {
+            h -= p * p.log2();
+        }
+    }
+    h
+}
+/// Find the argmax (most probable token).
+fn argmax(probs: &[f32]) -> usize {
+    probs
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}",
+        expect: &["map_unwrap_or"],
+    },
+
+    // katgpt-rs-pruner_04_product_policy-fn | katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs
+    RawSpanV6 {
+        id: "gen6-pruner_04_product_policy-13",
+        provenance: "katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs",
+        code: r"/// Find the argmax (most probable token).
+fn argmax(probs: &[f32]) -> usize {
+    probs
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}",
+        expect: &["map_unwrap_or"],
+    },
+
+    // katgpt-rs-pruner_04_product_policy-fn | katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs
+    RawSpanV6 {
+        id: "gen6-pruner_04_product_policy-8",
+        provenance: "katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs",
+        code: r"/// Compute Shannon entropy of a probability distribution (in bits).
+fn entropy(probs: &[f32]) -> f32 {
+    let mut h = 0.0_f32;
+    for &p in probs {
+        if p > 0.0 {
+            h -= p * p.log2();
+        }
+    }
+    h
+}
+/// Find the argmax (most probable token).
+fn argmax(probs: &[f32]) -> usize {
+    probs
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}",
+        expect: &["map_unwrap_or"],
+    },
+
+    // gen6-bridge_cap-impl5-001 | riir-chain@7421245a~1:src/economics/bridge_cap.rs
+    RawSpanV6 {
+        id: "gen6-bridge_cap-impl5-001",
+        provenance: "riir-chain@7421245a~1:src/economics/bridge_cap.rs",
+        code: r"/// Bridge cap state — tracks total exposure and enforces deposit limits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeCap {
+    /// Maximum exposure ratio (e.g., 0.5 = bridge can hold 50% of (stake - reserve)).
+    pub cap_ratio: f32,
+    /// Total bridge exposure (sum of all deposits not yet withdrawn).
+    pub total_exposure: u64,
+    /// Maximum deposits per epoch.
+    pub rate_limit_per_epoch: u64,
+    /// Deposits this epoch.
+    pub deposits_this_epoch: u64,
+}
+/// Error when bridge deposit exceeds cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeCapExceeded {
+    pub requested: u64,
+    pub max_allowed: u64,
+    pub total_exposure: u64,
+}
+/// Error when epoch rate limit is exceeded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EpochRateLimitExceeded {
+    pub requested: u64,
+    pub deposits_this_epoch: u64,
+    pub rate_limit: u64,
+}
+impl BridgeCap {
+    /// Create a new bridge cap with the given ratio and per-epoch rate limit.
+    pub fn new(cap_ratio: f32, rate_limit_per_epoch: u64) -> Self {
+        Self {
+            cap_ratio,
+            total_exposure: 0,
+            rate_limit_per_epoch,
+            deposits_this_epoch: 0,
+        }
+    }
+
+    /// Current maximum exposure allowed.
+    ///
+    /// `max_exposure = cap_ratio × (total_stake - treasury_reserve)`
+    /// Clamped to 0 if reserve exceeds stake.
+    pub fn max_exposure(&self, total_stake: u64, treasury_reserve: u64) -> u64 {
+        let effective_stake = total_stake.saturating_sub(treasury_reserve);
+        // f64 intermediate preserves precision for effective_stake > 2^24 (f32 limit).
+        // This is a security-critical cap — precision loss could allow over-exposure.
+        ((self.cap_ratio as f64) * (effective_stake as f64)) as u64
+    }
+
+    /// Check if a deposit of `amount` is allowed under the exposure cap.
+    ///
+    /// Returns `Ok(())` if `total_exposure + amount <= max_exposure`.
+    pub fn check_deposit(
+        &self,
+        amount: u64,
+        total_stake: u64,
+        treasury_reserve: u64,
+    ) -> Result<(), BridgeCapExceeded> {
+        let max = self.max_exposure(total_stake, treasury_reserve);
+        let new_exposure = self.total_exposure.saturating_add(amount);
+
+        match new_exposure <= max {
+            true => Ok(()),
+            false => Err(BridgeCapExceeded {
+                requested: amount,
+                max_allowed: max.saturating_sub(self.total_exposure),
+                total_exposure: self.total_exposure,
+            }),
+        }
+    }
+
+    /// Check if a deposit respects the per-epoch rate limit.
+    pub fn check_epoch_rate(&self, amount: u64) -> Result<(), EpochRateLimitExceeded> {
+        let new_deposits = self.deposits_this_epoch.saturating_add(amount);
+
+        match new_deposits <= self.rate_limit_per_epoch {
+            true => Ok(()),
+            false => Err(EpochRateLimitExceeded {
+                requested: amount,
+                deposits_this_epoch: self.deposits_this_epoch,
+                rate_limit: self.rate_limit_per_epoch,
+            }),
+        }
+    }
+
+    /// Record a successful deposit — increases exposure and epoch counter.
+    pub fn record_deposit(&mut self, amount: u64) {
+        self.total_exposure = self.total_exposure.saturating_add(amount);
+        self.deposits_this_epoch = self.deposits_this_epoch.saturating_add(amount);
+    }
+
+    /// Record a withdrawal — reduces exposure.
+    pub fn record_withdrawal(&mut self, amount: u64) {
+        self.total_exposure = self.total_exposure.saturating_sub(amount);
+    }
+
+    /// Reset epoch counter (call at epoch boundary).
+    pub fn reset_epoch(&mut self) {
+        self.deposits_this_epoch = 0;
+    }
+}
+",
+        expect: &["match_bool"],
+    },
+
+    // gen6-economy-impl4-001 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs
+    RawSpanV6 {
+        id: "gen6-economy-impl4-001",
+        provenance: "riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs",
+        code: r"use std::f32::consts::PI;
+/// Named market cycles with approximate periods in days.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CycleName {
+    /// Period ≈ 1 day — daily server reset.
+    DailyReset,
+    /// Period ≈ 7 days — weekly maintenance.
+    WeeklyReset,
+    /// Period ≈ 30 days — monthly event rotation.
+    MonthlyEvent,
+    /// Period ≈ 90 days — major patch cycle.
+    PatchCycle,
+    /// Unrecognized cycle period.
+    Unknown,
+}
+/// A single frequency component from price decomposition.
+#[derive(Clone, Copy, Debug)]
+pub struct FrequencyComponent {
+    /// Frequency in cycles per sample period.
+    pub frequency: f32,
+    /// Amplitude — how strong this cycle is.
+    pub amplitude: f32,
+    /// Phase offset in radians.
+    pub phase: f32,
+    /// Named cycle classification, if recognized.
+    pub name: Option<CycleName>,
+}
+/// Price history encoded as Fourier frequency components.
+#[derive(Clone, Debug)]
+pub struct FourierPriceModel {
+    /// Frequency components sorted by amplitude descending.
+    pub components: Vec<FrequencyComponent>,
+    /// DC component (mean price).
+    pub base_price: f32,
+    /// Number of price data points used to fit.
+    pub data_points: usize,
+    /// Goodness of fit (0.0 to 1.0, higher is better).
+    pub r_squared: f32,
+}
+/// Encodes price histories as Fourier frequency models.
+pub struct PriceEncoder {
+    /// Maximum frequency to analyze (cycles per sample).
+    max_frequency: f32,
+    /// Minimum amplitude threshold — filters noise.
+    min_amplitude: f32,
+}
+/// Detects market cycles in price history.
+pub struct CycleDetector {
+    encoder: PriceEncoder,
+}
+/// Forecasts prices using Fourier decomposition.
+pub struct PredictivePricer {
+    encoder: PriceEncoder,
+}
+impl FrequencyComponent {
+    /// Period of this component in sample units.
+    #[inline]
+    pub fn period(&self) -> f32 {
+        match self.frequency > 0.0 {
+            true => 1.0 / self.frequency,
+            false => f32::MAX,
+        }
+    }
+
+    /// Reconstruct this component's contribution at sample index `t` given `n` total samples.
+    pub fn reconstruct_at(&self, t: usize, _n: usize) -> f32 {
+        let t_f = t as f32;
+        self.amplitude * (2.0 * PI * self.frequency * t_f + self.phase).cos()
+    }
+}
+",
+        expect: &["match_bool"],
+    },
+
+    // gen6-mod-fn1-006 | riir-train@e6084429~1:crates/riir-train-engine/src/rosetta/mod.rs
+    RawSpanV6 {
+        id: "gen6-mod-fn1-006",
+        provenance: "riir-train@e6084429~1:crates/riir-train-engine/src/rosetta/mod.rs",
+        code: r#"use std::collections::HashMap;
+/// A best-buddy pair: two neurons across adapters with high Pearson correlation.
+///
+/// Mutual nearest neighbors — neuron_a's most correlated partner in B is neuron_b,
+/// AND neuron_b's most correlated partner in A is neuron_a.
+#[derive(Clone, Debug)]
+pub struct LoraNeuronPair {
+    /// Domain name of adapter A (e.g., "bomber").
+    pub domain_a: String,
+    /// LoRA neuron index in adapter A.
+    pub neuron_idx_a: usize,
+    /// Domain name of adapter B (e.g., "go").
+    pub domain_b: String,
+    /// LoRA neuron index in adapter B.
+    pub neuron_idx_b: usize,
+    /// Pearson r correlation between the two neurons' activation patterns.
+    pub correlation: f32,
+}
+/// A clustered universal concept shared across game adapters.
+///
+/// Groups neurons from different adapters that express the same latent concept
+/// (e.g., threat detection, spatial navigation, resource management).
+#[derive(Clone, Debug)]
+pub struct GameConcept {
+    /// Unique concept identifier.
+    pub id: usize,
+    /// All neurons across adapters expressing this concept: (domain, neuron_index).
+    pub neurons: Vec<(String, usize)>,
+    /// Centroid activation pattern — mean of all member activation vectors.
+    pub centroid: Vec<f32>,
+}
+/// The Rosetta LoRA dictionary: cross-game neuron correspondences.
+///
+/// Built from best-buddy pairs and self-clustered into universal concepts.
+/// Used for warm-start initialization, training diagnostics, and rank allocation.
+#[derive(Clone, Debug, Default)]
+pub struct RosettaLoraDictionary {
+    /// All best-buddy pairs across adapter pairs.
+    pub pairs: Vec<LoraNeuronPair>,
+    /// Clustered universal concepts mined from transitive best-buddy chains.
+    pub universal_concepts: Vec<GameConcept>,
+}
+/// Mines cross-game LoRA neuron correlations and builds alignment dictionaries.
+///
+/// Usage:
+/// 1. `register_adapter()` for each trained LoRA adapter
+/// 2. `set_probe_activations()` with forward-pass activations on shared probe states
+/// 3. `mine_correlations()` → best-buddy pairs
+/// 4. `build_dictionary()` → clustered dictionary
+pub struct RosettaLoraMiner {
+    /// Domain → flat LoRA weights (for dimension validation).
+    adapters: HashMap<String, Vec<f32>>,
+    /// Domain → per-probe-state activation vectors [n_states × n_neurons].
+    probe_activations: HashMap<String, Vec<Vec<f32>>>,
+    /// Minimum Pearson r to consider a pair as best buddies.
+    correlation_threshold: f32,
+}
+/// Per-checkpoint activation snapshot.
+#[derive(Clone, Debug)]
+pub struct CheckpointSnapshot {
+    /// Training step number.
+    pub step: usize,
+    /// Activation patterns for probe states (n_neurons × n_states).
+    pub activations: Vec<Vec<f32>>,
+    /// Cross-game correlations at this checkpoint.
+    pub rosetta_correlations: Vec<f32>,
+}
+/// Track concept stability across training checkpoints (Plan 233 T4).
+///
+/// Neurons maintaining >threshold correlation across checkpoints are "universal".
+/// Neurons that drift are "frontier" (game-specific adaptations).
+#[derive(Clone, Debug)]
+pub struct ConceptEvolutionTracker {
+    /// Per-checkpoint activation snapshots.
+    checkpoint_activations: Vec<CheckpointSnapshot>,
+    /// Neurons maintaining >threshold correlation across checkpoints.
+    stable_neurons: Vec<usize>,
+    /// Neurons still evolving.
+    frontier_neurons: Vec<usize>,
+    /// Threshold for "stable" (default: 0.9 correlation).
+    stability_threshold: f32,
+}
+const ROSETTA_MAGIC: &[u8; 4] = b"RSTD";
+const ROSETTA_VERSION: u32 = 1;
+/// Header size: magic(4) + version(4) + n_pairs(4) + n_concepts(4) = 16 bytes.
+const HEADER_SIZE: usize = 16;
+/// blake3 hash trailer size.
+const HASH_SIZE: usize = 32;
+/// Compute Pearson correlation coefficient between two activation vectors.
+///
+/// r = cov(a, b) / (std(a) · std(b))
+///
+/// Returns 0.0 for degenerate cases (empty, zero variance, length mismatch).
+pub fn pearson_correlation(a: &[f32], b: &[f32]) -> f32 {
+    match (a.is_empty(), b.is_empty(), a.len() != b.len()) {
+        (true, _, _) | (_, true, _) => return 0.0,
+        (_, _, true) => return 0.0,
+        _ => {}
+    }
+
+    let n = a.len() as f64;
+    let sum_a: f64 = a.iter().map(|&x| x as f64).sum();
+    let sum_b: f64 = b.iter().map(|&x| x as f64).sum();
+    let mean_a = sum_a / n;
+    let mean_b = sum_b / n;
+
+    // Single-element vectors have zero variance.
+    if n < 2.0 {
+        return 0.0;
+    }
+
+    let mut cov = 0.0_f64;
+    let mut var_a = 0.0_f64;
+    let mut var_b = 0.0_f64;
+
+    for (&xa, &xb) in a.iter().zip(b.iter()) {
+        let da = xa as f64 - mean_a;
+        let db = xb as f64 - mean_b;
+        cov += da * db;
+        var_a += da * da;
+        var_b += db * db;
+    }
+
+    let denom = var_a.sqrt() * var_b.sqrt();
+    match denom > 1e-12 {
+        true => (cov / denom) as f32,
+        false => 0.0,
+    }
+}
+"#,
+        expect: &["match_bool"],
+    },
+
+    // gen6-resource_credits-impl1-002 | riir-chain@7421245a~1:src/economics/resource_credits.rs
+    RawSpanV6 {
+        id: "gen6-resource_credits-impl1-002",
+        provenance: "riir-chain@7421245a~1:src/economics/resource_credits.rs",
+        code: r"/// Resource credit state per account.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResourceCredits {
+    /// Free credits per tick (for non-staked accounts).
+    pub free_credits_per_tick: u64,
+    /// Credits per stake unit.
+    pub credits_per_stake_unit: u64,
+    /// Current available credits.
+    pub available: u64,
+    /// Maximum credit accumulation (burst cap).
+    pub max_credits: u64,
+    /// Last tick when credits were refilled.
+    pub last_refill_tick: u64,
+}
+impl ResourceCredits {
+    /// Create a new resource credit tracker.
+    ///
+    /// Starts with full credits available (`max_credits`).
+    pub fn new(free_credits: u64, credits_per_stake: u64, max_credits: u64) -> Self {
+        Self {
+            free_credits_per_tick: free_credits,
+            credits_per_stake_unit: credits_per_stake,
+            available: max_credits,
+            max_credits,
+            last_refill_tick: 0,
+        }
+    }
+
+    /// Create with empty credits (for testing refill logic).
+    pub fn empty(free_credits: u64, credits_per_stake: u64, max_credits: u64) -> Self {
+        Self {
+            free_credits_per_tick: free_credits,
+            credits_per_stake_unit: credits_per_stake,
+            available: 0,
+            max_credits,
+            last_refill_tick: 0,
+        }
+    }
+
+    /// Refill credits based on elapsed ticks and stake.
+    ///
+    /// `credits_added = elapsed_ticks × (free_credits_per_tick + stake × credits_per_stake_unit)`
+    /// Clamped to `max_credits`. No-op if `current_tick <= last_refill_tick`.
+    pub fn refill(&mut self, current_tick: u64, stake: u64) {
+        if current_tick <= self.last_refill_tick {
+            return;
+        }
+
+        let elapsed = current_tick - self.last_refill_tick;
+
+        // stake credits: elapsed × stake × credits_per_stake_unit
+        let stake_credits = self
+            .credits_per_stake_unit
+            .saturating_mul(stake)
+            .saturating_mul(elapsed);
+
+        // free credits: elapsed × free_credits_per_tick
+        let free_credits = self.free_credits_per_tick.saturating_mul(elapsed);
+
+        let total_refill = stake_credits.saturating_add(free_credits);
+        let new_available = self.available.saturating_add(total_refill);
+
+        self.available = new_available.min(self.max_credits);
+        self.last_refill_tick = current_tick;
+    }
+
+    /// Try to consume credits for a transaction.
+    ///
+    /// Returns `true` if credits were available and deducted, `false` otherwise.
+    pub fn try_consume(&mut self, cost: u64) -> bool {
+        match self.available >= cost {
+            true => {
+                self.available -= cost;
+                true
+            }
+            false => false,
+        }
+    }
+
+    /// Compute cost for a transaction type.
+    pub fn tx_cost(tx_type: u8) -> u64 {
+        match tx_type {
+            0 => 100,  // transfer
+            1 => 500,  // swap
+            2 => 2000, // shard write
+            3 => 5000, // bridge
+            _ => 1000, // default
+        }
+    }
+
+    /// Effective refill rate per tick for a given stake.
+    pub fn refill_rate(&self, stake: u64) -> u64 {
+        self.free_credits_per_tick
+            .saturating_add(self.credits_per_stake_unit.saturating_mul(stake))
+    }
+
+    /// Rate-limiter variant: try to acquire `credits` at `current_tick`.
+    ///
+    /// Combines refill + consume in one call. Returns `true` if the
+    /// operation succeeded (credits were refilled and consumed).
+    /// This is the drop-in replacement for gas-based rate limiting.
+    pub fn try_acquire(&mut self, credits: u64, current_tick: u64, stake: u64) -> bool {
+        self.refill(current_tick, stake);
+        self.try_consume(credits)
+    }
+
+    /// Compute credits per tick using the canonical formula:
+    /// `FREE_CREDITS + (stake × CREDITS_PER_STAKE)`
+    ///
+    /// Convenience constructor from constants.
+    pub fn from_constants(_stake: u64) -> Self {
+        const FREE_CREDITS: u64 = 100;
+        const CREDITS_PER_STAKE: u64 = 1;
+        const MAX_CREDITS: u64 = 100_000;
+        Self::new(FREE_CREDITS, CREDITS_PER_STAKE, MAX_CREDITS)
+    }
+}
+",
+        expect: &["match_bool"],
+    },
+
+    // katgpt-rs-attn_match_head_budget-fn | katgpt-rs@5b2d42970~1:examples/attn_match_head_budget.rs
+    RawSpanV6 {
+        id: "gen6-attn_match_head_budget-0",
+        provenance: "katgpt-rs@5b2d42970~1:examples/attn_match_head_budget.rs",
+        code: r#"/// Format a BLAKE3 hash as a short hex prefix for display.
+fn hex_short(hash: &[u8; 32]) -> String {
+    let mut s = String::with_capacity(16);
+    for b in &hash[..7] {
+        s.push_str(&format!("{:02x}", b));
+    }
+    s.push('…');
+    s
+}"#,
+        expect: &["uninlined_format_args"],
+    },
+
+    // katgpt-rs-bandit_01_basic-fn | katgpt-rs@5b2d42970~1:examples/bandit_01_basic.rs
+    RawSpanV6 {
+        id: "gen6-bandit_01_basic-1",
+        provenance: "katgpt-rs@5b2d42970~1:examples/bandit_01_basic.rs",
+        code: r#"fn print_regret_comparison(results: &[(String, Vec<f32>, Vec<f32>)]) {
+    println!();
+    println!("╔══════════════════════════════════════════════════════════════╗");
+    println!("║              Cumulative Regret Comparison                   ║");
+    println!("╚══════════════════════════════════════════════════════════════╝");
+    println!();
+
+    let checkpoints: [usize; 6] = [50, 100, 250, 500, 750, 1000];
+    let checkpoint_labels = checkpoints.map(|c| format!("{c}"));
+
+    // Header
+    print!("{:<20}", "Episode");
+    for label in &checkpoint_labels {
+        print!("{:>10}", label);
+    }
+    println!();
+    println!("{}", "─".repeat(20 + checkpoint_labels.len() * 10));
+
+    for (name, regret_curve, _) in results {
+        print!("{name:<20}");
+        for &cp in &checkpoints {
+            let idx = cp.saturating_sub(1);
+            if idx < regret_curve.len() {
+                print!("{:>10.1}", regret_curve[idx]);
+            } else {
+                print!("{:>10}", "—");
+            }
+        }
+        println!();
+    }
+}"#,
+        expect: &["uninlined_format_args"],
+    },
+
+    // katgpt-rs-bandit_01_basic-fn | katgpt-rs@5b2d42970~1:examples/bandit_01_basic.rs
+    RawSpanV6 {
+        id: "gen6-bandit_01_basic-2",
+        provenance: "katgpt-rs@5b2d42970~1:examples/bandit_01_basic.rs",
+        code: r#"fn print_reward_comparison(results: &[(String, Vec<f32>, Vec<f32>)]) {
+    println!();
+    println!("╔══════════════════════════════════════════════════════════════╗");
+    println!("║            Average Reward Over Time                         ║");
+    println!("╚══════════════════════════════════════════════════════════════╝");
+    println!();
+
+    let checkpoints: [usize; 6] = [50, 100, 250, 500, 750, 1000];
+    let checkpoint_labels = checkpoints.map(|c| format!("{c}"));
+
+    print!("{:<20}", "Episode");
+    for label in &checkpoint_labels {
+        print!("{:>10}", label);
+    }
+    println!();
+    println!("{}", "─".repeat(20 + checkpoint_labels.len() * 10));
+
+    for (name, _, reward_curve) in results {
+        print!("{name:<20}");
+        for &cp in &checkpoints {
+            let idx = cp.saturating_sub(1);
+            if idx < reward_curve.len() && cp > 0 {
+                let avg = reward_curve[idx] / cp as f32;
+                print!("{:>10.4}", avg);
+            } else {
+                print!("{:>10}", "—");
+            }
+        }
+        println!();
+    }
+}"#,
+        expect: &["uninlined_format_args"],
+    },
+
+    // katgpt-rs-clr_minimal-fn | katgpt-rs@5b2d42970~1:examples/clr_minimal.rs
+    RawSpanV6 {
+        id: "gen6-clr_minimal-3",
+        provenance: "katgpt-rs@5b2d42970~1:examples/clr_minimal.rs",
+        code: r#"fn label_str(o: u8) -> String {
+    format!("answer-{}", o)
+}"#,
+        expect: &["uninlined_format_args"],
+    },
+
+
+];
+
+/// The territory of a generation-6 span: `multi` (k≥2 — the organic
+/// interference rung) vs `single` (k=1 — the real-shape rung). Reported
+/// side by side, never blended (the v5 territory discipline).
+#[must_use]
+pub fn v6_territory(spec_id: &str) -> &'static str {
+    for s in RAW_SPANS_V6 {
+        if s.id == spec_id {
+            return if s.expect.len() >= 2 { "multi" } else { "single" };
+        }
+    }
+    "single"
+}
+
+/// The generation-6 spec ladder: one spec per mined span (no composition —
+/// the spans ARE the organic material; k = the span's distinct-vocabulary-
+/// lint count). Byte-stable — pinned by test.
+#[must_use]
+pub fn specs_v6() -> Vec<GenSpec> {
+    RAW_SPANS_V6
+        .iter()
+        .map(|s| GenSpec {
+            id: s.id.to_string(),
+            k: s.expect.len(),
+            expect_lints: s.expect.iter().map(ToString::to_string).collect(),
+            code: s.code.to_string(),
+        })
+        .collect()
+}
+
+/// Spec ids the generation-6 freeze run EXCLUDED — landed by the freeze
+/// e2e (`tests/generation_v6_freeze.rs` --ignored, 2026-09-06: 17/17 verified
+/// at the BENCH instrument — single-snippet `lints_for` — with ZERO
+/// exclusions; the batch and single instruments agree on every vocabulary
+/// label).
+pub static EXCLUDED_IDS_V6: &[&str] = &[];
+
+/// The generation-6 frozen labels (spec id → vocabulary lints the BENCH
+/// instrument fired at freeze time) — landed by the freeze e2e.
+// Landed by tests/generation_v6_freeze.rs --ignored (2026-09-06): 17/17
+// verified, 0 exclusions, 0 relabels; multi territory 4 (the organic
+// interference rung), single territory 13. Freeze cost 3.35 s (17
+// single-snippet oracle runs, release).
+pub static FROZEN_LABELS_V6: &[(&str, &[&str])] = &[
+    ("gen6-attn_match_head_budget-0", &["uninlined_format_args"]),  // k=1
+    ("gen6-bandit_01_basic-1", &["uninlined_format_args"]),  // k=1
+    ("gen6-bandit_01_basic-2", &["uninlined_format_args"]),  // k=1
+    ("gen6-bridge_cap-impl5-001", &["match_bool"]),  // k=1
+    ("gen6-channel_draft_generator-fn1-002", &["manual_let_else"]),  // k=1
+    ("gen6-clr_minimal-3", &["uninlined_format_args"]),  // k=1
+    ("gen6-economy-impl3-000", &["use_self"]),  // k=1
+    ("gen6-economy-impl4-001", &["match_bool"]),  // k=1
+    ("gen6-mod-fn1-006", &["match_bool"]),  // k=1
+    ("gen6-pruner_04_product_policy-12", &["map_unwrap_or"]),  // k=1
+    ("gen6-pruner_04_product_policy-13", &["map_unwrap_or"]),  // k=1
+    ("gen6-pruner_04_product_policy-8", &["map_unwrap_or"]),  // k=1
+    ("gen6-resource_credits-impl1-002", &["match_bool"]),  // k=1
+    ("gen6-svr-fn3-000", &["match_bool", "use_self"]),  // k=2
+    ("gen6-svr-fn6-001", &["match_bool", "use_self"]),  // k=2
+    ("gen6-svr-fn7-002", &["match_bool", "use_self"]),  // k=2
+    ("gen6-transposition-impl1-000", &["single_match_else", "use_self"]),  // k=2
+];
+
+/// Freeze readiness for generation 6 — Err until the freeze e2e lands the
+/// record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels.
+pub fn v6_freeze_status() -> Result<usize, String> {
+    freeze_status_for(&specs_v6(), 6, "generation_v6_freeze", FROZEN_LABELS_V6, EXCLUDED_IDS_V6)
+}
+
+/// The admitted generation-6 fixture set.
+///
+/// # Panics
+///
+/// Only on a freeze-record hole — callers check [`v6_freeze_status`] first.
+#[must_use]
+pub fn generation_v6() -> Vec<BenchFixture> {
+    generation_fixtures(specs_v6(), 6, FROZEN_LABELS_V6, EXCLUDED_IDS_V6)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1630,5 +3554,109 @@ mod tests {
         }
         let set: BTreeSet<&str> = all.iter().copied().collect();
         assert_eq!(set.len(), all.len(), "spec ids must be unique across generations");
+    }
+
+    // ── generation 6 (Plan 095): real-repo shape ladder ────────────────
+
+    /// Curation floors, amended per Plan 095 §1b (the crust yields what it
+    /// yields — the original ≥24-single floor assumed singles were the
+    /// CONTROL territory; here they ARE the population).
+    #[test]
+    fn v6_span_set_meets_the_amended_floors() {
+        let multi = RAW_SPANS_V6.iter().filter(|s| s.expect.len() >= 2).count();
+        let classes: BTreeSet<&str> =
+            RAW_SPANS_V6.iter().flat_map(|s| s.expect.iter().copied()).collect();
+        let repos: BTreeSet<&str> = RAW_SPANS_V6
+            .iter()
+            .filter_map(|s| s.provenance.split('@').next())
+            .collect();
+        assert!(
+            RAW_SPANS_V6.len() >= 16,
+            "real-shape population too thin: {} (floor 16)",
+            RAW_SPANS_V6.len()
+        );
+        assert!(multi >= 4, "organic multi rung lost: {multi} (floor 4 — the measured yield)");
+        assert!(classes.len() >= 6, "lint classes: {} (floor 6)", classes.len());
+        assert!(repos.len() >= 4, "source repos: {repos:?} (floor 4)");
+        // ≤4 fixtures per (repo, class) — the v1 diversity discipline.
+        let mut per: BTreeSet<(&str, &str)> = BTreeSet::new();
+        let mut counts: std::collections::BTreeMap<(&str, &str), usize> =
+            std::collections::BTreeMap::new();
+        for s in RAW_SPANS_V6 {
+            let repo = s.provenance.split('@').next().unwrap_or("?");
+            for c in s.expect {
+                per.insert((repo, c));
+                *counts.entry((repo, c)).or_insert(0) += 1;
+            }
+        }
+        for (k, n) in &counts {
+            assert!(n <= &4, "per-(repo,class) cap blown at {k:?}: {n}");
+        }
+    }
+
+    /// Every span parses standalone (the carve rides inside the code) and
+    /// every territory claim matches the span's own label length.
+    #[test]
+    fn v6_spans_parse_and_territory_is_k_truthful() {
+        for s in RAW_SPANS_V6 {
+            assert!(
+                syn::parse_file(s.code).is_ok(),
+                "span {} does not parse standalone",
+                s.id
+            );
+            let want = if s.expect.len() >= 2 { "multi" } else { "single" };
+            assert_eq!(v6_territory(s.id), want, "territory drift on {}", s.id);
+        }
+    }
+
+    /// ids unique including generation 6, and no id/provenance collision
+    /// with v1's real fixtures (gen-6 ids carry the `gen6-` prefix; v1's
+    /// real fixtures do not).
+    #[test]
+    fn v6_ids_are_disjoint_from_earlier_generations() {
+        let v6: BTreeSet<&str> = RAW_SPANS_V6.iter().map(|s| s.id).collect();
+        assert_eq!(v6.len(), RAW_SPANS_V6.len(), "duplicate gen-6 span ids");
+        let earlier_specs: Vec<Vec<GenSpec>> = vec![specs(), specs_v3(), specs_v5()];
+        let earlier: Vec<&str> = earlier_specs
+            .iter()
+            .flatten()
+            .map(|s| s.id.as_str())
+            .collect();
+        for id in earlier {
+            assert!(!v6.contains(id), "gen-6 id collides with an earlier spec: {id}");
+        }
+        // v1 real fixtures start `<repo>-…`; gen-6 `gen6-…` — prefix disjoint.
+        for f in crate::score_bench::fixtures::fixtures() {
+            assert!(!v6.contains(f.id), "gen-6 id collides with a v1 fixture: {}", f.id);
+        }
+    }
+
+    #[test]
+    fn v6_freeze_status_holes_are_loud() {
+        let excluded: BTreeSet<&str> = EXCLUDED_IDS_V6.iter().copied().collect();
+        let labeled: BTreeSet<&str> = FROZEN_LABELS_V6.iter().map(|(id, _)| *id).collect();
+        if excluded.is_empty() && labeled.is_empty() {
+            assert!(
+                v6_freeze_status().is_err(),
+                "pre-freeze must not claim readiness"
+            );
+        } else {
+            for s in specs_v6() {
+                assert!(
+                    excluded.contains(s.id.as_str()) || labeled.contains(s.id.as_str()),
+                    "spec {} is neither labeled nor excluded",
+                    s.id
+                );
+                if labeled.contains(s.id.as_str()) {
+                    let frozen = FROZEN_LABELS_V6
+                        .iter()
+                        .find(|(id, _)| *id == s.id)
+                        .map_or(&[] as &[&str], |(_, l)| *l);
+                    let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
+                    let got: BTreeSet<&str> = frozen.iter().copied().collect();
+                    assert_eq!(want, got, "frozen label drift on {}", s.id);
+                }
+            }
+        }
     }
 }

@@ -682,6 +682,13 @@ required-features = ["score_bench", "rustc_errors"]
 name = "generation_v5_freeze"
 required-features = ["score_bench"]
 
+# Generation-6 freeze (Plan 095): the real-repo shape ladder. Spawns the real
+# single-snippet oracle per span (the G1/G2 fences) — the `#![cfg]` in the
+# file protects the count; this row protects the reader (713-T3).
+[[test]]
+name = "generation_v6_freeze"
+required-features = ["score_bench"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

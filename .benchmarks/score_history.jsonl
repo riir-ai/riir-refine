@@ -50,3 +50,7 @@
 {"ts":"2026-09-06T11:18:20","sha":"a2ca2df9","n_ran":28,"n_healable":0,"n_clean":0,"heal_rate":0.6923077,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,"vocab_size":52,"generation":5}
 {"ts":"2026-09-06T11:18:43","sha":"a2ca2df9","n_ran":28,"n_healable":0,"n_clean":0,"heal_rate":0.6923077,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,"vocab_size":52,"generation":5}
 {"ts":"2026-09-06T11:18:50","sha":"a2ca2df9","n_ran":28,"n_healable":0,"n_clean":0,"heal_rate":0.6923077,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,"vocab_size":52,"generation":5}
+{"ts":"2026-09-06T12:24:47","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}
+{"ts":"2026-09-06T12:26:04","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}
+{"ts":"2026-09-06T12:26:19","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}
+{"ts":"2026-09-06T12:39:48","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}

@@ -1646,7 +1646,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states). A NEW generation's first append is admitted ONLY\n                    if it measures harder than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -1830,9 +1830,9 @@ struct Args {
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
     /// score history, re-render the SVG. Standalone mode — no paths.
     score_bench: bool,
-    /// `--generation <1|2|3|4|5>` (Plan 092 M5 + Bench 069 reopen #1 + Plan
-    /// 093 + Plan 094): which bench generation to run. Absent = 1 (the
-    /// frozen v1 set, unchanged). 2 = the construction-built generation-v2
+    /// `--generation <1|2|3|4|5|6>` (Plan 092 M5 + Bench 069 reopen #1 +
+    /// Plan 093 + Plan 094 + Plan 095): which bench generation to run.
+    /// Absent = 1 (the frozen v1 set, unchanged). 2 = the construction-built generation-v2
     /// k-ladder (issue 072 T5); 3 = the persist-stratified generation-v3
     /// ladder (Bench 069 reopen #1); 4 = the rustc-errors-side k-ladder
     /// (Plan 093 — measures the `--fix-compile` driver against rustc
@@ -2027,15 +2027,15 @@ fn parse_args() -> Args {
             }
             "--generation" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1, 2, 3, 4, or 5)");
+                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, or 6)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if !(1..=5).contains(&g) {
-                    eprintln!("--generation accepts 1, 2, 3, 4, or 5, got {g}");
+                if !(1..=6).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, 3, 4, 5, or 6, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
@@ -2512,6 +2512,16 @@ fn run_score_bench(generation: u8) {
                 std::process::exit(1);
             }
         },
+        6 => match sb::generations::v6_freeze_status() {
+            Ok(admitted) => {
+                println!("generation v6: {admitted} admitted fixture(s) (freeze record present)");
+                (sb::generations::generation_v6(), "generation-v6 real-repo shape ladder")
+            }
+            Err(e) => {
+                eprintln!("generation v6: {e}");
+                std::process::exit(1);
+            }
+        },
         _ => (sb::fixtures::fixtures(), "frozen v1 set"),
     };
     println!(
@@ -2522,6 +2532,9 @@ fn run_score_bench(generation: u8) {
     sb::report::print_report(&score);
     if generation >= 2 {
         print_per_k_solve_rates(&fixture_list, &score);
+    }
+    if generation == 6 {
+        print_v6_territory_rates(&fixture_list, &score);
     }
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
@@ -2613,6 +2626,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         3 => sb::report::HISTORY_SVG_V3,
         4 => sb::report::HISTORY_SVG_V4,
         5 => sb::report::HISTORY_SVG_V5,
+        6 => sb::report::HISTORY_SVG_V6,
         _ => sb::report::HISTORY_SVG,
     };
     let v1_series = gen_series(1);
@@ -2620,7 +2634,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
     let mut written_svgs = vec![sb::report::HISTORY_SVG];
-    for g in [2_u8, 3, 4, 5] {
+    for g in [2_u8, 3, 4, 5, 6] {
         let series = gen_series(g);
         if !series.is_empty() {
             let path = svg_path(g);
@@ -2631,13 +2645,14 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         }
     }
     println!(
-        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}) → {}{}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}, gen-6 {}) → {}{}",
         history.len(),
         v1_series.len(),
         gen_series(2).len(),
         gen_series(3).len(),
         gen_series(4).len(),
         gen_series(5).len(),
+        gen_series(6).len(),
         sb::report::HISTORY_JSONL,
         written_svgs
             .iter()
@@ -3045,6 +3060,47 @@ fn print_per_k_solve_rates(
         #[allow(clippy::cast_precision_loss)] // counts < 10⁴ over f64
         let pct = (*r as f64) / (*t as f64) * 100.0;
         println!("k={k}: {r}/{t} = {pct:.1}%");
+    }
+}
+
+/// The generation-6 difficulty table: per-territory solve rates (`single` =
+/// the real-shape rung, k=1; `multi` = the organic interference rung, k≥2).
+/// Reported, not asserted (the Plan 095 convention); the multi rung's n is
+/// the measured organic yield, never padded.
+#[cfg(feature = "score_bench")]
+fn print_v6_territory_rates(
+    fixtures: &[riir_clippy::score_bench::BenchFixture],
+    score: &riir_clippy::score_bench::BenchScore,
+) {
+    use riir_clippy::score_bench as sb;
+    use std::collections::BTreeMap;
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> = score
+        .outcomes
+        .iter()
+        .map(|o| (o.id.as_str(), o))
+        .collect();
+    let mut resolved: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut total: BTreeMap<&str, usize> = BTreeMap::new();
+    for f in fixtures {
+        let Some(o) = by_id.get(f.id) else { continue };
+        if !o.ran {
+            continue;
+        }
+        let terr = sb::generations::v6_territory(f.id);
+        *total.entry(terr).or_default() += o.vocab_before.len();
+        *resolved.entry(terr).or_default() += o.resolved();
+    }
+    println!("\n─ generation-6 territory solve rates (up = solved) ──────────────");
+    for terr in ["single", "multi"] {
+        let (Some(r), Some(t)) = (resolved.get(terr), total.get(terr)) else {
+            continue;
+        };
+        if *t == 0 {
+            continue;
+        }
+        #[allow(clippy::cast_precision_loss)] // counts < 10⁴ over f64
+        let pct = (*r as f64) / (*t as f64) * 100.0;
+        println!("{terr}: {r}/{t} = {pct:.1}%");
     }
 }
 

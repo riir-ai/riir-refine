@@ -138,6 +138,10 @@ function-level conflict review.
     [`.benchmarks/072_generation5_rust_perf_ladder.md`](072_generation5_rust_perf_ladder.md)**; or
 - **Real-G8 conversion A/B**: still data-gated (`.heal/misses/` empty).
 - Saturation telemetry on gen-3 starts reporting once 6 gen-3 rows exist.
+- **EXECUTED 2026-09-06 (4090): candidate #2 (real-repo interference
+  spans) — premise FALSIFIED by mining, the real-shape salvage landed as
+  generation 6 and was ADMITTED (95.2% < v1):
+  [`.benchmarks/073_generation6_real_repo_shape_ladder.md`](073_generation6_real_repo_shape_ladder.md)**.
 
 ## Validation
 
