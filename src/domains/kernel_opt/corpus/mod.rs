@@ -1561,6 +1561,7 @@ mod entries_gpu_26;
 mod entries_gpu_27;
 mod entries_gpu_28;
 mod entries_gpu_29;
+mod entries_gpu_30;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1603,6 +1604,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_27::entries());
     entries.extend(entries_gpu_28::entries());
     entries.extend(entries_gpu_29::entries());
+    entries.extend(entries_gpu_30::entries());
     Corpus::new(entries)
 }
 
@@ -1615,7 +1617,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 550-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 552-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1998,7 +2000,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "speculation-scheduler-break-even-flip",
         ],
     ),
-    // E: Parallelism patterns (43 rules)
+    // E: Parallelism patterns (45 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2046,6 +2048,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-parallelism-ladder-split-vs-pack",
             "distinct-index-bitmap-ascending-compaction",
             "fwht-wide-block-row-per-threadgroup-exchange-ladder",
+            "sentinel-readiness-over-separate-flag",
+            "ll-flag-in-data-packed-poll",
         ],
     ),
     // F: Flash-attention tiling (13 rules)

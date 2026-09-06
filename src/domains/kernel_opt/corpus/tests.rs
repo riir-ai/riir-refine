@@ -79,10 +79,12 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 115 (6): qwen-3.8-mtp-challenge submission-diff-history walk (Research 139 / Plan 088) -- ordinal-map-exact-tail-selection (D +1, the strongest intake: replace a reference sort's tail-K EXACTLY by order-encoding the reference's TOTAL order -- stable ties toward the HIGHER index, NaN above all, -0.0 folded -- into a monotone u32 key; then any integer selection reproduces the reference bit-for-bit; same-set + tie-forcing + positive-control gates; 14-dispatch full-argsort stub -> 2), complete-coverage-scatter-collapses-operand-to-dense (D +1: island-row COVERAGE decides dead compute -- a complete-permutation scatter means every packed row is overwritten unread -> one dense matmul + an install-time argSort-inverse reorder; partial keeps the scatter; lazy eligibility when install ordering makes the replaced gate unknowable; the same lens bounds PRUNING -- the measured 49,152 trim REGRESSED accept 1.00 -> 0.877 below committed argmax support), exhaustive-domain-input-patch-bit-identity (N +1: a 16-bit input domain is exhaustively sweepable -- 65,280 finite values -- so patch ONLY the divergent inputs via direct output-word mapping before the lossless expansion, exhaustive zero-mismatch gate + boundary negative control; f32 unsweepable -> tolerance stays), derived-index-from-pinned-checkpoint-is-a-cache (M +1: a warm-time index from pinned tensors alone is CACHE-class -- legality boundary + canonical order (runtime-derived == offline-screened) + fail-loud over silent fallback + one attempt forever; balanced bisection makes empty clusters impossible), warm-reachable-dispatch-signatures-before-timed-window (M +1: JIT backends compile per signature (shape/dtype/input-count/host-device-mix) and an ADAPTIVE schedule reaches a SET -- warm the reachable set with throwaway token-neutral state, the scored EXPRESSION not a call prefix, extend with receipt when the schedule changes), env-gate-reaches-and-arms-the-scored-process (D +1, measurement-honesty #2: sanitizer-allowlist spelling (a gate outside the allowlist runs both arms on the same code), force-set injected defaults into first-use-cached knobs (ambient stock defeats no-overwrite), durable arm witness not stderr, bare-leg no-env receipt; source Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac (Apache-2.0; B100 read the tip TREE, this batch read the ~50-diff HISTORY -- complementary); + 8 riders: B63 boundary-fused residual pair (external confirmation + eval-ladder-both-halves), B96 activation-side digit-fold two-posture exactness, B97 single-rounding-boundary fusion, B38 unconsumed-variant factory skip, B107 workgroup radix + ordinal bitmap tie-cut + bf16 16-bit exact key, B51 quantized-embed dequant-at-use, B82 shapeless-trace Slice-fatal, B77 derived-sum-table member). **ADDENDUM (collision salvage, 2026-09-06):** a parallel session's duplicate Batch 115 (4 rules incl. two shared seeds) yielded per push-wins; the salvage the landed batch lacks landed as 4 rules (dispatch-cliff-bitexact-shape-confinement D, readout-trim-needs-committed-id-coverage D, dead-output-rows-state-append-only-path D, distinct-index-bitmap-ascending-compaction E) + 6 riders (B96 bit-plane in-consumer offset-sum placement -- corrects this batch's claim that the arm was already covered, B97 verbatim-body text-identity construction, B104 x2 DIRECT_NIBBLES + register-cliff / worst-domain 2.3e-4 semantic pruning, B100 host-side grid-trim witness, exhaustive-domain-input-patch += the per-OUTPUT fidelity-exclusion half); batch115_addendum gates 3.
         // Batch 116 (6): PrismML fork ternary + verify-batch distill (Research 140 / Plan 089) -- activation-bitplane-popcount-word-dot (N +1: activation int8 bit-planes consumed by AND+popcount -- 32 weights per instruction pair ~0.8 ops/weight/col vs ~3 for select-per-weight; the fork's own ablation removed ONLY the bit test and ran 1.7x faster = extraction-bound diagnosis; LOSSY, ships default-off upstream, behavior-axis gated), scratch-sizing-shares-dispatch-eligibility-predicate (D +1: tail-carved scratch -- the allocator's size helper and the encoder are two statements of one path predicate; ONE predicate both consume, drift is benign-waste one way and OOB the other), byte-owning-threads-non-positional-digit-codes (A +1: non-positional multi-digit packings must map threads to whole BYTES -- element-span ownership reloads every packed byte per digit index, 29.8 -> 136.4 tok/s source-reported; the fork's own negative-results ledger rides in-rule: contiguous byte ownership WORSE, 'fewer ops beat more ILP'), fwht-wide-block-row-per-threadgroup-exchange-ladder (E +1: past the N/32 register wall -- one row per THREADGROUP, three exchange tiers by partner distance, same host kernel names, dispatch-side threadgroup-max assert; fills the register-resident butterfly rule's named beyond-budget arm), shader-shape-cutover-keys-on-resource-block-ratio (D +1: subgroup/registers vs staged shape cutover must be a TWO-TERM disjunction n > ABS_MAX || n/subgroup_size > MAX_EL_PER_LANE -- width alone admits the register wall on narrow subgroups; creation-time resource guards + recorded specialization geometry + null-pipeline fallback), same-input-folded-transform-memo-per-build (D +1: graph-build CSE of folded transform nodes keyed (input, rotation), one-build lifetime, key-completeness invariant source-asserted-by-comment -- the sharpest port edge; 36% duplicate transforms, +3.5% pp512 source-reported) + 3 riders (telescoped-digit += radix-general mantissa-bound exactness + single-trit two-floor form + float-pipe motivation, bridge-rung += register-budget sizing + exact-fit nr1 + per-type mv/mm crossover, dispatcher-eligibility += four inverse-direction instances in one PR window incl. head-truncated-grep transcription); source PrismML-Eng/llama.cpp origin/prism @ 7113f6462 (Apache-2.0, 12 commits past the league pin e311ed38f; quotes via git show, vendor checkout untouched).
     // Batch 117 (5): antirez/ds4 Metal tensor-prefill delta distill (Plan 090 / Research 141) -- routed-activation-pack-once-shared-operand (L +1: pack the scattered routed activations ONCE per stage into a dense converted device tensor -- all consumers read it plain; f32->half exactly once at the pack; bounded grow-only scratch + derived 256 MiB refusal; bit-exact by conversion-site-only movement; +1.7-3.2% source-reported, MXFP4 arm non-uniform and said so), device-affine-scratch-admission-with-pool-fallback (A +1: three-check admission tuple ptr^device^capacity with the ladder RETAINED -- device affinity captured at SET time is the multi-GPU illegal-access guard; pool-alloc-inside-capture is the motivation (the remove-the-alloc complement of captured-graph-bakes-buffer-addresses); best-effort 96 MiB provisioning; +7.5/6.5/6.4% steady decode source-reported), batch-verify-rows-single-dispatch (C +1: the 2-6-row verify block in ONE launch, partials straight into the TP exchange slab, combine epilogue hoisted and byte-identical for both schedules -- lockstep by construction; +11-23% whole-commit conflated with the seed schedule, said so), row-aware-indexing-reuses-static-single-token-kernel (M +1: widen the existing static kernel's grid mapping (z -> token,slot) + per-token bases and call the static impl VERBATIM rebased -- reuse-instead-of-twin, the static pole of the B92 axis), dense-fast-path-bounded-by-selector-coverage (F +1: dense substitution is legal exactly through top_k + anchor_pool - 1 -- the selector's own reach, never the work-window; converts a tolerance into a proof while enabling the bounded GEMM; ~21 -> ~68 tok/s companion enablement source-reported) + 8 riders (B97 duplicate-pad-at-materialization complement, B35 TP non-owner identity + selector-padding sentinel, B23 byte-size static pin + topology-axis widening, B57 single-pass two-phase twins + four-backend audit, B58 remove-the-alloc-from-capture complement, B103 clamp-to-stay-on-bounded-gemm); source antirez/ds4 main @ 9ab7053 (MIT; Batch 97/98 pin 110afdd + ~14 commits; two read lanes + coordinator spot-verification, line drifts corrected).
+    // Batch 118 (6): antirez/ds4 PR #991 Qwen3.8-Flash-Next distill (Research 142 / Plan 097) -- role-scoped-store-must-match-compute-guard (A, the correctness lead: unguarded store on a role-colliding row_half -> EXACTLY-UNIFORM softmax, invisible four ways, SIX sessions; gate batch118_unguarded_store_yields_uniform_softmax), tile-amplification-precedes-staging-pass (H, converged by both lanes), operand-precision-gated-by-consumer-invariance (N, GOAT-grade pass/fail arms + Q-split null ablation; closure MODEL-SCOPED), compute-role-split-by-accumulator-pressure (A, 2 score + 4 PV simdgroups), speculation-scheduler-break-even-flip (D, +3.8% plain decode -> 202 bypass vs 62; 110% margin doc-only), running-threshold-prune-compaction-aliasing-guard (I, memcmp == 0 survives; in-place compaction aliasing guard) + parallel-disjoint-pread-hides-cold-page-latency (rust_perf io) + 7 riders (B24/B95/B77/B57/stripe-semaphore/block-reduction gate batch118_indexed_shuffle_ladders_must_read_unmutated_partials/smem-envelope); source ivanfioravanti/ds4-metal branch qwen3.8-flash-next @ 236cb2a5 (MIT; force-pushed once, HEAD re-verified == pin).
+    // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        550,
-        "kernel batches through Batch 118 should have 550 rules"
+        552,
+        "kernel batches through Batch 119 should have 552 rules"
     );
 }
 
@@ -5301,7 +5303,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 550-rule corpus must appear in exactly one category.
+    // Every rule_id in the 552-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5344,13 +5346,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 118).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 119).
     let expected = [
         (KernelCategory::MemoryAccess, 116),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 45),
         (KernelCategory::Dispatch, 128),
-        (KernelCategory::Parallelism, 43),
+        (KernelCategory::Parallelism, 45),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 24),
@@ -5374,9 +5376,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 550.
+    // Sum must equal 552.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 550, "Plan 003: category totals must sum to 550");
+    assert_eq!(total, 552, "Plan 003: category totals must sum to 552");
 }
 
 #[test]
@@ -5387,8 +5389,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 550,
-        "Plan 003: grouped corpus has {total} rules, expected 550"
+        total, 552,
+        "Plan 003: grouped corpus has {total} rules, expected 552"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9404,8 +9406,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        550,
-        "Batch 118: corpus should have 550 rules"
+        552,
+        "Batch 119: corpus should have 552 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10161,4 +10163,217 @@ fn batch118_indexed_shuffle_ladders_must_read_unmutated_partials() {
         v.iter().copied().fold(f32::NEG_INFINITY, f32::max),
         "max survives the buggy ladder by idempotence -- sums do NOT"
     );
+}
+
+#[test]
+fn batch119_rules_present() {
+    // Batch 119 (ss16118/low-latency-nccl near-SoL collectives -- Plan 098 /
+    // Research 143): 2 kernel_opt rules mined at the fresh pin 5357eff3
+    // (BSD-3 NVIDIA; the repo names the sentinel POISON and enumerates LL128
+    // as NOT-YET-IMPLEMENTED -- provenance corrections carried in-rule).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "sentinel-readiness-over-separate-flag",
+        "ll-flag-in-data-packed-poll",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-119 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch119_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-119 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("sentinel-readiness-over-separate-flag");
+    assert!(
+        c.contains("User MUST poison buffer before receiving")
+            && c.contains("-327686")
+            && c.contains("RESET-BEFORE-REUSE")
+            && c.contains("PEER-STORE-VISIBILITY")
+            && c.contains("SINGLE-WRITER SLOTS")
+            && c.contains("stripe-sms-l2-semaphore-reduce")
+            && c.contains("mask-sentinel-matches-reduction-identity")
+            && c.contains("5357eff325eddf978137de7140195a5568fa8a11"),
+        "sentinel concept"
+    );
+    let c = concept("ll-flag-in-data-packed-poll");
+    assert!(
+        c.contains("epoch band")
+            && c.contains("Multiple buffering needs to be used")
+            && c.contains("NOT YET IMPLEMENTED")
+            && c.contains("3.8e-6")
+            && c.contains("(flag0 == flag1) ? flag0 : ~0u")
+            && c.contains("stripe-sms-l2-semaphore-reduce")
+            && c.contains("sentinel-readiness-over-separate-flag"),
+        "ll-flag concept"
+    );
+    // The B58 rider's mandated phrases (bidirectional peer-exchange credit).
+    let c = concept("output-buffer-rotation-pool-multi-forward");
+    assert!(
+        c.contains("each receive is implicit permission for the next send")
+            && c.contains("2607.16100")
+            && c.contains("roundRobinFactor")
+            && c.contains("ownership exchange")
+            && c.contains("never un-rotated mid-run"),
+        "B58 rider concept"
+    );
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch119_pseudocode_parses() {
+    // G1 for Batch 119: syn-parse gate (the low-latency-nccl rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "sentinel-readiness-over-separate-flag",
+        "ll-flag-in-data-packed-poll",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-119 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-119 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-119 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::float_cmp)] // the poison compare IS a bit pattern compare;
+// exact f32 equality only ever asserts on from_bits-round-tripped values
+fn batch119_sentinel_never_equal_and_reset_before_reuse() {
+    // The sentinel rule's decision content, pinned executable: (1) the poison
+    // pattern is a NaN so no finite f32 payload can bit-match it; (2) the
+    // int-dtype hazard is REAL -- the source's 4-byte poison IS a
+    // representable i32 payload (-459782), a collision no NaN argument saves;
+    // (3) WITHOUT reset-before-reuse the second round consumes STALE data as
+    // fresh (the ABA the LL epoch band is immune to); WITH reset the reader
+    // waits for the genuinely new value; (4) readiness is ALL-SLOTS.
+    const POISON: u32 = 0xFFFA_FFFA; // the source's 4-byte poison table entry
+    let is_poisoned = |v: f32| v.to_bits() == POISON;
+    // (1) NaN payload: every finite value is deliverable, the poison is not.
+    assert!(f32::from_bits(POISON).is_nan(), "poison must be a NaN pattern");
+    let finite_samples = [0.0f32, -0.0, 1.5, -13.25, f32::MIN, f32::MAX];
+    for v in finite_samples {
+        assert!(
+            !is_poisoned(v),
+            "finite payload {v} must never read as poison"
+        );
+    }
+    assert!(is_poisoned(f32::from_bits(POISON)));
+    // (2) the int-dtype hazard: the same bits are a legitimate i32 payload.
+    assert_eq!(
+        POISON as i32,
+        -327_686,
+        "the source's 4-byte poison IS a representable i32 -- the documented \
+         int-dtype collision hazard, structurally unfixable for integers"
+    );
+    // (3) ABA: round 1 delivers 1.0; round 2 WITHOUT reset delivers the STALE
+    // 1.0 (the reader cannot tell old from new); WITH reset it waits for 2.0.
+    let mut slot: f32;
+    // round 1: writer stores (the init pass poisoned the slot before this),
+    // reader polls non-poison.
+    slot = 1.0;
+    assert!(!is_poisoned(slot), "round-1 value must be ready");
+    assert_eq!(slot, 1.0);
+    // round 2, no reset: the slot STILL reads 1.0 -- stale-as-fresh.
+    assert_eq!(
+        slot, 1.0,
+        "without reset the reader consumes the STALE value as fresh (ABA)"
+    );
+    // round 2, WITH reset: re-poison on consume, then the poll blocks until
+    // the writer's genuinely new value arrives.
+    slot = f32::from_bits(POISON); // the receive path's Reset arm
+    assert!(
+        is_poisoned(slot),
+        "reset reader must wait (slot reads poison again)"
+    );
+    slot = 2.0; // the writer's round-2 store
+    assert!(!is_poisoned(slot) && slot == 2.0, "reset protocol delivers 2.0");
+    // (4) readiness is ALL-SLOTS: one poison slot holds the batch back.
+    let buf = [1.0f32, f32::from_bits(POISON), 3.0];
+    let ready = buf.iter().all(|v| !is_poisoned(*v));
+    assert!(!ready, "one poison slot must hold the batch not-ready");
+    let buf = [1.0f32, 2.0, 3.0];
+    assert!(buf.iter().all(|v| !is_poisoned(*v)), "all-slots ready");
+}
+
+#[test]
+#[allow(clippy::needless_range_loop)] // the epoch ladder is inherently index-structured
+fn batch119_epoch_band_wraps_and_split_slot_matches() {
+    // The LL rule's decision content, pinned executable: (1) the epoch band
+    // cycles 2..=255 and NEVER touches 0/1 (reset writes flag 0); (2) across
+    // a full wrap epoch 2 RECURS -- same-slot flag aliasing exists, which is
+    // exactly why LL REQUIRES the sub-buffer rotation; (3) the rotation offset
+    // changes per epoch, making the aliased copy unreachable; (4) a split
+    // 16-byte payload is ready only when BOTH slot flags match (the ~0u retry
+    // encoding); (5) a stale flag never passes the poll within a wrap.
+    // (1) the source's advanceEpoch arithmetic on a uint8_t.
+    let mut epoch: u8 = 2; // the constructor's initial epoch
+    let mut seen_zero_or_one = false;
+    for _ in 0..1000 {
+        epoch = epoch.wrapping_add(if epoch == 255 { 3 } else { 1 });
+        seen_zero_or_one |= epoch == 0 || epoch == 1;
+    }
+    assert!(
+        !seen_zero_or_one,
+        "the epoch band must reserve 0 and 1 across any number of advances"
+    );
+    // (2) across a full wrap, epoch 2 recurs: the aliasing that demands
+    // multi-buffering (a same-slot stale flag == live epoch).
+    let mut epoch: u8 = 2;
+    for _ in 0..254 {
+        epoch = epoch.wrapping_add(if epoch == 255 { 3 } else { 1 });
+    }
+    assert_eq!(epoch, 2, "the band wraps 2..=255 back to 2 -- flag aliasing");
+    // (3) the rotation: offset = (subBuffer % roundRobinFactor) * pitch
+    // changes every epoch, so the aliased old copy is physically unreachable.
+    let (pitch, rr) = (64usize, 2usize);
+    let mut sub_buffer = 0usize;
+    let mut offsets = Vec::new();
+    for _ in 0..4 {
+        offsets.push((sub_buffer % rr) * pitch);
+        sub_buffer += 1;
+    }
+    assert_eq!(offsets, vec![0, 64, 0, 64], "the rotation alternates sub-buffers");
+    // (4) split-slot both-flags-match with the ~0u retry encoding.
+    const NOT_READY: u32 = !0u32;
+    let split_slot_ready = |f0: u32, f1: u32, _epoch: u32| {
+        if f0 == f1 { f0 } else { NOT_READY }
+    };
+    assert_eq!(split_slot_ready(7, 7, 7), 7, "both flags match -> ready");
+    assert_eq!(
+        split_slot_ready(7, 8, 7),
+        NOT_READY,
+        "mismatched split flags encode retry, never partial delivery"
+    );
+    // (5) a stale flag fails the poll within a wrap; flag 0 (reset) never
+    // passes at any live epoch.
+    let poll = |flag: u32, epoch: u32| flag == epoch;
+    assert!(!poll(5, 6) && poll(6, 6), "stale fails, fresh passes");
+    assert!(!poll(0, 6), "the reset flag 0 never passes any live epoch");
 }
