@@ -1094,7 +1094,7 @@ Queues empty after this entry → idle report.
 
 ## Post-mining intake (compact — full records in `.research/108_mining_queue_snapshot_history.md`)
 
-One open class (below); the standing divergence (P4 residual) has no action planned.
+Zero open classes (P12 CLOSED 2026-09-07 below); the standing divergence (P4 residual) has no action planned.
 
 - [x] **2026-09-06 P11 NEW — gen-7 bench yields, three classes (Bench 074; all
   pre-existing, none gen-7-caused): LANDED 2026-09-06 (Plan 099 — authored 097,
@@ -1130,14 +1130,7 @@ One open class (below); the standing divergence (P4 residual) has no action plan
   subtype dissolved and retained as regression pin; NEW `gen7-ref-nrl-write`
   keeps the refused territory honest). Record: Bench 075.
 
-- [ ] **2026-09-06 P12 NEW — derived during Plan 099 T0, documented-not-fixed
-  (parse-only undecidable; `--verify` auto-reverts in production):** (1)
-  `&mut`-method receivers through a slot on a SHARED iteration (`v[i].push(x)`
-  with owned `v` → E0596 — the `&mut`-param bare-iter form is fine,
-  `__elem: &mut T`); (2) `assert_eq!(v[i], 2)` slots (the macro takes
-  references; the expansion type-mismatches); (3) `let x = v[i]` transitive
-  typed uses (`let x = v[i]; if x > 2` — the comparison is on `x`, not the
-  slot). Fixing any re-runs the gen-7 series (87.5%).
+- [x] **2026-09-06 P12 CLOSED 2026-09-07 (Plan 100 / Bench 077 — T0 FALSIFIED the "parse-only undecidable" premise for every class):** (1) `&mut`-method receivers — FIXED by the mutator header (`MUTATOR_METHODS` trigger + `param_iter_form`; owned-`mut` param emits `&mut v`; consuming methods excluded on purpose — E0507 in every header; custom mutators stay `--verify`-backstopped, the irreducible residual); (2) `assert_eq!` slots — FIXED by template-less family-macro descent (`all_expr_args` when the template position holds no literal; `assert_eq!(*__elem, 2)` compiles — the expansion `&(*__elem)` = `&u32`; message-less `assert!` conds ride the same path); (3) `let x = v[i]` transitive typed uses — ALREADY FIXED by the P11 universal splice (Copy-only input universe: non-Copy `let x = v[i]` is E0507 in the ORIGINAL, never a clippy input) — pinned, not changed. **NEW C4 class found by the T0 probe + fixed:** `&mut` params were folded into "shared" by the old resolver, so the bare iter MOVED the borrow and any non-slot body use (`v.len()`) emitted E0382 — now refused (exclusive-borrow guard: `collection_uses − exact.len()`). Bonus heal: the tracing named-target form now heals (formerly conservative-refused); a named capture hidden in any string literal of a template-less family macro refuses (new load-bearing guard — the old walk never looked inside literals). Series stability EXACTLY as pre-registered: gen-7 ×3 87.5%/12.5%/parse 100% deterministic (unchanged), v1 E4 96.2/1.9/100 holds; lib 1156/0 (floor held), lib+score_bench 1357/0/8i, integration trio 13/0/2i, clippy both states clean (incl. the pre-existing `generations.rs:823` doc-markdown straggler fixed en route). Record: Plan 100 / Bench 077.
 
 - [x] **2026-09-04 P10 NEW — LTO fold-elimination kills timing gates whose work
   **LANDED 2026-09-05 (Batch 109, Plan 080, 4090 box): the rule + TWO gate-refuted draft fix-patterns** (XOR-sink GF(2) cancellation over 0..2^k; wrapping_add balanced-batch collapse to 2^64-2048) — the shipped pattern is CHAINED state + consumer black_box + the loud nonzero-baseline assert; both anti-shapes pinned as assertions in batch109_sink_consumes_per_iteration_data. Corpus 99 → 100, complexity 19, NotBenchable 14, annotated 43. Record: Research 132.
