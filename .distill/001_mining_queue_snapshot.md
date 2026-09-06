@@ -1098,6 +1098,25 @@ One open class (below); the standing divergence (P4 residual) has no action plan
       `tests/bench_gdsd_modelless.rs` header + `tests/rv_gated_routing.rs`
       sink docs.
 
+- [ ] **2026-09-06 NEW — ds4 Metal tensor-prefill pair (external kernel_opt leads;
+      watch-coverage gap closed same day):** the opponent watch tracked only
+      llama.cpp/PrismML/vLLM/MLX — ds4 (antirez; owner of the 250.1 t/s @11709 M3 Max
+      prefill reference row, Batch 97's source repo) had ZERO coverage and landed two
+      Metal tensor-prefill PERF commits on main: `2ea3839` "Reuse routed activations in
+      Metal tensor prefill" (09-04) + `5806d09` "Batch Metal TP DSpark experts and reuse
+      MXFP4 prefill activations" (09-05). Route: kernel_opt external distill, same
+      repo as Batch 97 — local clone still at pin `110afdd`, ~10+ commits behind
+      upstream main, so re-verify every quote at the NEW pin. Mechanism guesses to
+      falsify at mine time: routed-activation reuse is plausibly the same-input family
+      (B58 launch-merge / B63 weight-concat / B77 quantize-memo / B97 staged-tile
+      sibling); MXFP4 prefill-activation reuse pairs with B97's half-domain dequant
+      band + the B56 live-fields-only class. Also in-window: `b42682f` aligned Q8 CUDA
+      decode scratch reuse (A-family candidate, CUDA-side), `0e9cc2d` GLM attention
+      masking fix (quality class, likely no rule). Watch harness now covers ds4 + oMLX
+      (riir-ai `perf_rematch.sh`, both auto-clone + path-filtered), so future movement
+      arrives via the watch. oMLX checked at the same pass: origin/HEAD == `e467261` ==
+      the Batch-114 mining pin — zero movement, pin current.
+
 - [x] **2026-09-05 P9 NEW — clippy 1.98 new-lint corpus candidates** (found by the
       1.98.1 toolchain re-gate sweep across the workspace; measured populations in
       brackets): `chunks_exact_to_as_chunks` [katgpt-rs 12 + 4 chunks_exact_mut,
