@@ -144,9 +144,217 @@ impl EloTable {
     }
 }
 
+/// One ordered preference observation: `winner` beat `loser`. The BT input
+/// (Issue 072 T3 — construction pairs are the first producer; outcome
+/// verdicts could feed the same form later).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PairObservation {
+    pub winner: String,
+    pub loser: String,
+}
+
+/// Bradley–Terry maximum-likelihood fit (Zermelo's iterative form) over a
+/// pair stream, mapped onto the standard Elo scale.
+///
+/// Why not Elo replay over the pairs: Elo is ORDER-DEPENDENT and the pair
+/// stream is an aggregate (construction pairs arrive as a set, not a
+/// history) — the issue's "BT closed form" axis needs the order-free fit.
+/// Zermelo's update `r_i ← W_i / Σ_j n_ij/(r_i + r_j)` — where `n_ij` is
+/// the TOTAL number of games between `i` and `j`, both directions —
+/// monotonically increases the likelihood (Gu & Hunter 2001) and converges
+/// from any positive start; the fix-point Elo conversion is the SAME curve
+/// the module doc already pins for PL (`elo_from_lambda` — strength λ =
+/// the BT strength at the pairwise fixed point).
+///
+/// Scale invariants (pinned by test): only WIN DIRECTION matters, not
+/// multiplicity of identical pairs (one win in k identical observations is
+/// the same likelihood as k); the map to Elo is `base + scale·log10(s)`, so
+/// a player that always loses sits below base and one that always wins
+/// above — the same ordering Elo replay produces, without its order
+/// dependence.
+///
+/// Degenerate inputs: an empty stream answers an empty map; a global sweep
+/// (one player beats everyone) drives the ML to a boundary — the iteration
+/// is capped and the result stays finite via the 1e-10 clamp inside
+/// `elo_from_lambda` (the `katgpt_core` house clamp).
+#[must_use]
+pub fn bradley_terry_elo(
+    pairs: &[PairObservation],
+    iters: usize,
+) -> std::collections::BTreeMap<String, f32> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // Aggregate: wins per player + total games per (player, opponent),
+    // BOTH directions (Zermelo's denominator needs every meeting).
+    // BTreeMaps throughout: the denominator SUM is order-sensitive in f64,
+    // so the fit must iterate in sorted order to stay bit-deterministic
+    // across runs (the store-scan house rule).
+    let mut total_wins: BTreeMap<String, f64> = BTreeMap::new();
+    let mut games: BTreeMap<String, BTreeMap<String, f64>> = BTreeMap::new();
+    let mut players: BTreeSet<String> = BTreeSet::new();
+    for p in pairs {
+        *total_wins.entry(p.winner.clone()).or_insert(0.0) += 1.0;
+        let wrow = games.entry(p.winner.clone()).or_default();
+        *wrow.entry(p.loser.clone()).or_insert(0.0) += 1.0;
+        let lrow = games.entry(p.loser.clone()).or_default();
+        *lrow.entry(p.winner.clone()).or_insert(0.0) += 1.0;
+        players.insert(p.winner.clone());
+        players.insert(p.loser.clone());
+    }
+    let base: f64 = katgpt_core::rating::STANDARD_BASE;
+    let scale: f64 = katgpt_core::rating::STANDARD_SCALE;
+    let mut strength: BTreeMap<String, f64> =
+        players.iter().map(|p| (p.clone(), 1.0)).collect();
+    // Fixed-point iteration (the multiplicative form is the stable one).
+    for _ in 0..iters {
+        let mut next = strength.clone();
+        for name in &players {
+            let r_i = strength.get(name).copied().unwrap_or(1.0);
+            let mut denom = 0.0;
+            if let Some(opp) = games.get(name) {
+                for (o, n_ij) in opp {
+                    let r_j = strength.get(o).copied().unwrap_or(1.0);
+                    denom += n_ij / (r_i + r_j);
+                }
+            }
+            if denom > 0.0 {
+                let w = total_wins.get(name).copied().unwrap_or(0.0);
+                next.insert(name.clone(), (w / denom).max(1e-10));
+            }
+        }
+        strength = next;
+    }
+    strength
+        .into_iter()
+        .map(|(k, s)| {
+            let elo = katgpt_core::rating::elo_from_lambda(s, base, scale);
+            #[allow(clippy::cast_possible_truncation)] // persisted ratings are f32 by contract
+            (k, elo as f32)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod bt {
+        use super::*;
+        use crate::elo::PairObservation;
+
+        fn obs(w: &str, l: &str) -> PairObservation {
+            PairObservation { winner: w.into(), loser: l.into() }
+        }
+
+        #[test]
+        fn empty_stream_answers_empty_map() {
+            assert!(bradley_terry_elo(&[], 50).is_empty());
+        }
+
+        #[test]
+        fn sweep_orders_above_base_and_swept_below() {
+            // a beats everyone: a above base, the swept players below it,
+            // and the swept players TIE each other (identical records).
+            let pairs = vec![obs("a", "b"), obs("a", "c"), obs("a", "d")];
+            let t = bradley_terry_elo(&pairs, 200);
+            assert!(t["a"] > default_elo());
+            assert!(t["b"] < default_elo());
+            // Identical records → identical ML strengths (float_cmp IS the
+            // assertion: exact equality of the two fitted ratings).
+            #[allow(clippy::float_cmp)]
+            {
+                assert_eq!(t["b"], t["c"]);
+                assert_eq!(t["c"], t["d"]);
+            }
+        }
+
+        #[test]
+        fn multiplicity_of_identical_pairs_is_invariant() {
+            // The likelihood only sees win direction — 1 win vs 50 wins
+            // against the same opponent is the same evidence.
+            let one = vec![obs("a", "b")];
+            let many: Vec<_> = std::iter::repeat_n(obs("a", "b"), 50).collect();
+            let t1 = bradley_terry_elo(&one, 200);
+            let t2 = bradley_terry_elo(&many, 200);
+            // Same ML fixed point by construction — exact equality.
+            #[allow(clippy::float_cmp)]
+            {
+                assert_eq!(t1["a"], t2["a"]);
+                assert_eq!(t1["b"], t2["b"]);
+            }
+        }
+
+        #[test]
+        fn direction_is_the_signal_not_order() {
+            // Shuffling the stream must not move the ratings (the
+            // order-freeness the A/B needs from the closed form).
+            let seq = [
+                obs("a", "b"),
+                obs("c", "b"),
+                obs("a", "c"),
+                obs("d", "b"),
+                obs("c", "d"),
+                obs("a", "d"),
+            ];
+            let mut rev = seq.clone();
+            rev.reverse();
+            let t1 = bradley_terry_elo(&seq, 300);
+            let t2 = bradley_terry_elo(&rev, 300);
+            // Order-free fit: bit-stable under reordering (float_cmp IS the
+            // assertion — the closed form must reproduce identical bits).
+            #[allow(clippy::float_cmp)]
+            for p in ["a", "b", "c", "d"] {
+                assert_eq!(t1[p], t2[p], "player {p} moved under reordering");
+            }
+        }
+
+        #[test]
+        fn cyclical_beats_rank_ate_expected_monotone() {
+            // a > b > c > d by every pair among them: the fit must order
+            // them strictly and monotonically.
+            let pairs = vec![
+                obs("a", "b"),
+                obs("b", "c"),
+                obs("c", "d"),
+                obs("a", "c"),
+                obs("b", "d"),
+                obs("a", "d"),
+            ];
+            let t = bradley_terry_elo(&pairs, 300);
+            assert!(t["a"] > t["b"]);
+            assert!(t["b"] > t["c"]);
+            assert!(t["c"] > t["d"]);
+        }
+
+        #[test]
+        fn unconnected_player_keeps_base() {
+            // e never plays: no games row → its strength stays at the
+            // 1.0 prior → exactly base Elo.
+            let pairs = vec![obs("a", "b")];
+            let t = bradley_terry_elo(&pairs, 100);
+            assert!(!t.contains_key("e"));
+        }
+
+        #[test]
+        fn fixed_point_matches_the_elo_expected_score() {
+            // The convergence contract: at the fit point, BT expected
+            // score s_i/(s_i+s_j) equals the Elo expected score the map
+            // produces — the same fixed point the module doc pins for PL.
+            let pairs = vec![obs("a", "b"), obs("a", "b"), obs("b", "a"), obs("a", "b")];
+            let t = bradley_terry_elo(&pairs, 500);
+            let (sa, sb) = (
+                10f64.powf(f64::from((t["a"] - default_elo()) / ELO_SCALE)),
+                10f64.powf(f64::from((t["b"] - default_elo()) / ELO_SCALE)),
+            );
+            let bt_p = sa / (sa + sb);
+            let elo_p = f64::from(expected_score(t["a"], t["b"]));
+            assert!((bt_p - elo_p).abs() < 1e-6, "bt={bt_p} elo={elo_p}");
+            // Observed win rate 3/4 sits between the two players' expected
+            // scores (the MLE property).
+            let observed = 0.75;
+            assert!((bt_p - observed).abs() < 0.2);
+        }
+    }
 
     /// Verbatim f64 transcription of `katgpt-pruners` `EloCalculator`
     /// (arena/types.rs — `expected` + `update`, K=32): the cross-check

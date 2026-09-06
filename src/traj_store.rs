@@ -256,6 +256,40 @@ impl From<&crate::score_bench::report::HistoryRecord> for ScoreRunRow {
     }
 }
 
+/// One construction-labeled preference pair (Issue 072 T1) — the durable
+/// form of a [`crate::frontier_pairs::ConstructionPair`] at rest. SOFT
+/// JUDGE ONLY: these rows feed rating ([`TrajStore::rate_pairs`]) and
+/// coverage measurement — never [`EvidenceTier`], never the outcome
+/// counters, never retrieval. The `pair:` key namespace is disjoint from
+/// trajectories by construction.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct PairRowDoc {
+    /// The planted truth's error code.
+    pub code: String,
+    /// The partner's error code (cross-code by construction — the fence
+    /// asserts it, the A/B asserts it again at ingest).
+    pub bad_code: String,
+    /// The generator case the pair anchors (`gen_...`, the key half).
+    pub case_name: String,
+    /// Winner strategy (reproduces the planted truth).
+    pub good_strategy: String,
+    /// Loser strategy (does not resolve this case).
+    pub bad_strategy: String,
+    /// Winner fix text (the case's seed — self-contained evidence).
+    pub good_fix: String,
+    /// Loser fix text (the partner's seed).
+    pub bad_fix: String,
+    /// The anchored span's shape hash (joins pair evidence to spans).
+    pub span_shape_hash: String,
+    /// Always `"construction"` — the non-circularity marker; a row
+    /// carrying any other provenance must never feed a rating.
+    pub provenance: String,
+    // NO ingest timestamp by design: the row bytes must be construction-
+    // deterministic so re-import is idempotent (a wall-clock field broke
+    // byte-comparison across a second boundary — caught by the full-suite
+    // run; store/git history covers dating).
+}
+
 impl EvidenceTier {
     /// Stable `u8` for the row doc.
     #[must_use]
@@ -900,6 +934,45 @@ impl TrajStore {
         }
         // ── Issue 037 E3: the EMA learn section (see write_learn_section).
         write_learn_section(&mut report, &self.learn_rows());
+        // ── Issue 072 T7: the standing dispersion column — per-rule
+        // outcome entropy (success/fail, the store's two classes; the
+        // driver's 3-class version lives in `dispersion.rs`). A report
+        // over observed rules where EVERY one reads zero entropy is the
+        // vacuous flag: selection tuning over a no-dispersion loop is the
+        // T39 finding, surfaced as standing telemetry instead of a one-off.
+        {
+            let mut by_rule: std::collections::BTreeMap<&str, (u32, u32)> =
+                std::collections::BTreeMap::new();
+            for r in &rows {
+                let e = by_rule.entry(r.lint_key.as_str()).or_insert((0, 0));
+                e.0 += r.success_count;
+                e.1 += r.fail_count;
+            }
+            let mut ents: Vec<(String, f64)> = by_rule
+                .iter()
+                .map(|(rule, (s, f))| {
+                    let outcomes = crate::dispersion::from_counts(*s as usize, *f as usize, 0);
+                    ((*rule).to_string(), crate::dispersion::outcome_entropy(&outcomes))
+                })
+                .collect();
+            ents.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+            let vacuous = !ents.is_empty() && ents.iter().all(|(_, h)| *h <= f64::EPSILON);
+            let _ = writeln!(
+                report,
+                "dispersion: {} rules observed | vacuous window: {} | top: {}",
+                ents.len(),
+                if vacuous {
+                    "YES (no rule shows outcome dispersion — selection tuning is blind)"
+                } else {
+                    "no"
+                },
+                ents.iter()
+                    .take(3)
+                    .map(|(r, h)| format!("{r}={h:.2}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         let _ = writeln!(
             report,
             "{}",
@@ -1260,6 +1333,100 @@ impl TrajStore {
             }
         }
         Ok((seen, written))
+    }
+
+    // ── Issue 072 T1/T3: the construction-pair family ─────────────────
+
+    /// Full row key for one construction pair: `pair:{code}:{case}` — the
+    /// case name is unique per generator case, so the key is 1:1 with the
+    /// pair corpus and a re-import is idempotent by construction.
+    fn pair_key(code: &str, case: &str) -> Vec<u8> {
+        format!("pair:{code}:{case}").into_bytes()
+    }
+
+    /// Ingest construction pairs (Issue 072 T1). SOFT-JUDGE-ONLY by
+    /// contract: pair rows never carry or touch [`EvidenceTier`], never
+    /// bump success/fail counters, and are invisible to `dump()`/retrieval
+    /// (a separate prefix namespace). Idempotent — the same pair corpus
+    /// writes nothing on a second import.
+    ///
+    /// Returns `(rows_seen, rows_written)`.
+    ///
+    /// # Errors
+    ///
+    /// KV put / JSON encode failure.
+    pub fn import_pairs(
+        &self,
+        pairs: &[crate::frontier_pairs::ConstructionPair],
+    ) -> Result<(usize, usize), String> {
+        let (mut seen, mut written) = (0usize, 0usize);
+        for p in pairs {
+            seen += 1;
+            let row = PairRowDoc {
+                code: p.code.to_string(),
+                bad_code: p.bad_code.to_string(),
+                case_name: p.case_name.clone(),
+                good_strategy: p.good_strategy.clone(),
+                bad_strategy: p.bad_strategy.clone(),
+                good_fix: p.good_fix.clone(),
+                bad_fix: p.bad_fix.clone(),
+                span_shape_hash: shape_hash(&p.span_shape),
+                provenance: p.provenance.to_string(),
+            };
+            if self.put_row_if_changed(&Self::pair_key(&row.code, &row.case_name), &row)? {
+                written += 1;
+            }
+        }
+        Ok((seen, written))
+    }
+
+    /// All stored pair rows (key order — `BTreeMap` scan, deterministic).
+    ///
+    /// # Errors
+    ///
+    /// JSON decode failure on a stored row (a corrupt row is named and
+    /// skipped, never fatal — the import-path convention).
+    pub fn pair_rows(&self) -> Result<Vec<PairRowDoc>, String> {
+        let mut out = Vec::new();
+        for (key, bytes) in self.kv.scan_prefix(b"pair:") {
+            match serde_json::from_slice::<PairRowDoc>(&bytes) {
+                Ok(row) => out.push(row),
+                Err(e) => eprintln!(
+                    "traj-store: skipping corrupt pair row {}: {e}",
+                    String::from_utf8_lossy(&key)
+                ),
+            }
+        }
+        Ok(out)
+    }
+
+    /// Issue 072 T3 — the pair-fed rating pass: a Bradley–Terry closed-form
+    /// fit over every stored construction pair, mapped onto the standard
+    /// Elo scale. ALONGSIDE, never replacing, the outcome-fed
+    /// [`Self::recompute_elo`]: this touches NO trajectory row, bumps NO
+    /// counter, and answers from the `pair:` namespace only.
+    ///
+    /// Returns `(fit, pairs_rated)`; the fit maps strategy id → Elo-scale
+    /// rating (the same base/scale the outcome table uses, so the two
+    /// tables are directly comparable and combinable by the consumer).
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`Self::pair_rows`].
+    pub fn rate_pairs(
+        &self,
+        iters: usize,
+    ) -> Result<(std::collections::BTreeMap<String, f32>, usize), String> {
+        let rows = self.pair_rows()?;
+        let obs: Vec<crate::elo::PairObservation> = rows
+            .iter()
+            .map(|r| crate::elo::PairObservation {
+                winner: r.good_strategy.clone(),
+                loser: r.bad_strategy.clone(),
+            })
+            .collect();
+        let n = obs.len();
+        Ok((crate::elo::bradley_terry_elo(&obs, iters), n))
     }
 }
 
@@ -2502,5 +2669,64 @@ mod tests {
         let from_jsonl: ScoreRunRow = serde_json::from_str(&line).unwrap();
         assert_eq!(from_jsonl.recorded_unix, 0, "jsonl shape carries no unix stamp");
         assert_eq!(from_jsonl.ts, rec.ts);
+    }
+
+    // ── Issue 072 T1/T3: the construction-pair family ────────────
+
+    #[test]
+    fn pair_import_is_idempotent_and_never_touches_tiers() {
+        let root = tmp_root("pair_import");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let pairs = crate::frontier_pairs::construction_pairs();
+        let n = pairs.len();
+        let (seen, written) = store.import_pairs(&pairs).unwrap();
+        assert_eq!(seen, n);
+        assert_eq!(written, n);
+        // Re-import: byte-identical rows → nothing written.
+        let (seen2, written2) = store.import_pairs(&pairs).unwrap();
+        assert_eq!(seen2, n);
+        assert_eq!(written2, 0, "second import must be a no-op");
+        // Rows are readable back.
+        let rows = store.pair_rows().unwrap();
+        assert_eq!(rows.len(), n);
+        for r in &rows {
+            assert_eq!(r.provenance, "construction");
+            assert_ne!(r.code, r.bad_code, "cross-code premise is data");
+        }
+        // SOFT-JUDGE-ONLY: pair ingestion must not create trajectory rows
+        // (dump sees nothing) and must not rate any outcome player.
+        assert_eq!(store.dump().len(), 0, "pair import must never create traj rows");
+        assert_eq!(store.elo_table().len(), 0, "pair import must never rate outcome players");
+    }
+
+    #[test]
+    fn rate_pairs_orders_playbook_strategies_above_generator_losers() {
+        let root = tmp_root("rate_pairs");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .import_pairs(&crate::frontier_pairs::construction_pairs())
+            .unwrap();
+        let (fit, n) = store.rate_pairs(300).unwrap();
+        assert!(n >= 200);
+        assert!(!fit.is_empty());
+        // Every rated player sits inside the standard Elo band (the map's
+        // clamp keeps it finite even at sweep boundaries).
+        let base = default_elo();
+        for (id, elo) in &fit {
+            assert!(elo.is_finite(), "{id} not finite");
+            // Within ±400·log10(N_max) — a sanity band, not a tight pin.
+            assert!(elo.abs() < 10_000.0, "{id} = {elo} out of band");
+        }
+        // The strategies the corpus's construction truths name must ALL be
+        // present in the fit (every strategy participates in ≥1 pair).
+        for want in [
+            "e0597-scope-hoist",
+            "e0499-swap-second-decl",
+            "e0502-deref-removal",
+            "e0505-clone-at-move",
+        ] {
+            assert!(fit.contains_key(want), "{want} missing from pair fit");
+        }
+        let _ = base;
     }
 }

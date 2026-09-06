@@ -52,11 +52,13 @@
 pub mod adaptive_drafter;
 pub mod corpus;
 pub mod domain;
+pub mod dispersion;
 pub mod drafter;
 pub mod edit_emitter;
 pub mod elo;
 pub mod embedder;
 pub mod fmt;
+pub mod frontier_pairs;
 pub mod modelability;
 pub mod pruner;
 

@@ -2304,6 +2304,51 @@ accumulates; Phases 2 (perf/format axes) + 3 (real-fraction growth:
 statement-wrap miner, stub manifests, crates.io source, cold/warm
 memory lines) defer-marked in the plan.
 
+**Issue 072 PoC (2026-09-06, Plan 090 — exit criterion MET; issue file
+stays OPEN with T5/T6).** The Frontier-evidence Challenger (J-Zero
+modelless fusion, arXiv:2608.26582 M1/M2/M3/M6) — attacks T39/Research
+135's measured starvation (98.5% of candidates unseen; "the bottleneck
+is evidence volume, not selection math") by densifying pools with
+CONSTRUCTION-labeled preference pairs: labels from the generator's
+intent, never from any evaluator output. Landed: `src/frontier_pairs.rs`
+(200 resolution pairs derived from `corpus_gen` — good = the case's own
+seed/planted truth, bad = a deterministic hash-rotated cross-code partner
+repair; strategy players mapped to playbook ids where the doc-verified
+inverse exists, `gen:{CODE}:{inverse}` elsewhere) + `PairRowDoc` in a
+disjoint `pair:` store namespace (soft-judge ONLY — never EvidenceTier,
+asserted on every outcome surface) + the T2 non-circularity fence
+(`tests/frontier_fence_e2e.rs`, `#[ignore]`d: **RAN 20/20 agree (100.0%)
+vs real rustc** — good arm compiles clean AND the broken form fails with
+exactly `expect_code`) + the Zermelo Bradley–Terry ML fit (`elo.rs::
+bradley_terry_elo`: order-free, bit-deterministic BTreeMap iteration,
+mapped onto the standard base-1200 curve via `elo_from_lambda`; 7 gates
+incl. the fixed-point-expected-score contract) + `src/dispersion.rs`
+(outcome-class Shannon entropy over a fixed-size class table, the
+`regime_of` control law — informative/empty/regenerate/saturated — and
+`frontier_order`; both canaries pinned) + the T7 standing telemetry (the
+`stats_report` dispersion line + vacuous-window flag).
+**Measured (tests/frontier_poc_ab.rs, 4/4):** (a) unseen-candidate
+fraction **0.786 → 0.429** pair-fed vs outcome-fed (outcome covers 3,
+pairs cover 8 of the 14-player universe; 200 pairs, zero cargo) —
+exit axis (a) PASS; (b) G8 PROXY — informative mean rank 2.00 (FIFO) →
+1.00 (frontier) — PASS at the proxy, the real G8 (Certified-conversion
+per authored rule) needs a live authoring loop and stays open with
+T5/T6; (c) retrieval floors GREEN (namespace isolation asserted
+structurally) — PASS. Any two of three → the issue promotes to a plan
+for T5 (composite exactness ladder) + T6 (generationed bench ratchet +
+wiring `frontier_order` into the `.heal/misses/` queue).
+**En-route catches:** (1) the pair row initially carried a wall-clock
+`created_unix` — the idempotence test flaked when two imports crossed a
+second boundary (the full-suite run caught it; the field is REMOVED —
+the row is construction-deterministic, dating lives in git/store
+history); (2) `elo_table()` reads PERSISTED ratings — the A/B's
+outcome-fed baseline needs an explicit `recompute_elo()` first (a
+0-coverage baseline reads as a trivially-won A/B; the assert
+`recompute.matches > 0` now pins the arm is non-vacuous); (3) a 1-0
+outcome pool is SATURATED by the control law (zero-entropy-all-pass),
+not informative — a draft fixture mislabeled it and the assert correctly
+refused, the label now documented in the fixture.
+
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`
 kept as the reproducible artifact).** The Jagged Judges (arXiv:2608.12645 §6.2)
