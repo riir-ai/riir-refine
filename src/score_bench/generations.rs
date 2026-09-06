@@ -819,8 +819,8 @@ pub fn v5_module_region(source: &str, index: usize) -> Option<String> {
 /// Spec ids the generation-5 freeze run EXCLUDED — landed by the freeze e2e
 /// (a member's shape destroyed or shadowed by composition). Landed empty:
 /// regions are isolated modules and every marker lives inside its own
-/// member's code — zero composition interference measured (tests/
-/// generation_v5_freeze.rs --ignored, 2026-09-06).
+/// member's code — zero composition interference measured
+/// (`tests/generation_v5_freeze.rs` `--ignored`, 2026-09-06).
 pub static EXCLUDED_IDS_V5: &[&str] = &[];
 
 /// The generation-5 frozen labels (spec id → the DISTINCT member rule set

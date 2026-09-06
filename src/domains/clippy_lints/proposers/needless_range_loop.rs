@@ -105,7 +105,7 @@
 //! a `&`-typed param iterates as `v`, an owned param as `&v`. Anything the
 //! resolver cannot pin (locals, fields, non-ident paths) skips the rewrite.
 
-use super::uninlined_format_args::post_template_expr_args;
+use super::uninlined_format_args::{all_expr_args, post_template_expr_args, ExprMacroArg};
 use super::{apply_edits, edit, for_each_fn, src, SourceEdit};
 use std::collections::BTreeSet;
 use proc_macro2::TokenTree;
@@ -121,6 +121,65 @@ const FRESH_PREFIX: &str = "__elem";
 /// Uniquing bound: past this many candidate suffixes something is deeply
 /// wrong — refuse rather than emit an opaque name.
 const FRESH_NAME_LIMIT: u32 = 64;
+
+/// Known `&mut self` receiver methods (Plan 100 T1): a slot receiving one of
+/// these needs the mutable-iterable header — `(*__elem).push(x)` behind a
+/// shared iter is E0596. Bounded by design and NON-exhaustive: a custom
+/// `&mut self` method is invisible to a parse-only proposer, so unknown
+/// mutators keep today's shape and stay `--verify`-backstopped. Consuming
+/// methods (`into_iter`, `into_boxed_slice`, …) are deliberately EXCLUDED —
+/// moving out of the deref is E0507 in every header shape.
+const MUTATOR_METHODS: &[&str] = &[
+    "push",
+    "insert",
+    "pop",
+    "remove",
+    "swap",
+    "truncate",
+    "clear",
+    "retain",
+    "retain_mut",
+    "sort",
+    "sort_by",
+    "sort_by_key",
+    "sort_by_cached_key",
+    "sort_unstable",
+    "sort_unstable_by",
+    "sort_unstable_by_key",
+    "dedup",
+    "dedup_by",
+    "dedup_by_key",
+    "dedup_by_key_and_value",
+    "reverse",
+    "resize",
+    "resize_with",
+    "extend",
+    "extend_from_slice",
+    "append",
+    "split_off",
+    "drain",
+    "splice",
+    "push_str",
+    "insert_str",
+    "remove_prefix",
+    "remove_suffix",
+    "replace_range",
+];
+
+/// How the rewrite may iterate the collection (Plan 100 T1). The old
+/// `param_is_reference` collapsed `&mut` params into "shared" — wrong twice:
+/// a bare iter of `&mut` is an EXCLUSIVE borrow (any other body use of the
+/// collection is E0382/E0502 in the output), and it hides the one shape a
+/// mutator receiver can heal under an owned param.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum IterForm {
+    /// `&T` / `&mut T`-through-parens treated conservatively as shared.
+    Shared,
+    /// `&mut T` param — bare iter EXCLUSIVELY borrows the collection.
+    Mut,
+    /// Owned param; `mut_decl` = the `mut v: Vec<T>` form.
+    Owned { mut_decl: bool },
+}
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -179,13 +238,41 @@ impl Collector<'_, '_> {
         let fresh = fresh_binding_name(&fl.body)?;
 
         // Iterable form: resolve the collection against the fn params —
-        // a `&`-typed param iterates bare, an owned param by reference.
-        // Unresolvable collections are skipped (no type checker to ask).
+        // shared-ref params iterate bare, owned by reference. Unresolvable
+        // collections are skipped (no type checker to ask).
         let coll_text = src(self.source, collection_path)?;
-        let iter_text = match self.param_is_reference(collection_path) {
-            Some(true) => coll_text,
-            Some(false) => format!("&{coll_text}"),
-            None => return None,
+        let iter_form = self.param_iter_form(collection_path)?;
+        // Plan 100 T1: non-slot body uses of the collection break a MUTABLE
+        // iter (the exclusive borrow spans the loop — the C4 class). Shared
+        // iters coexist with shared uses, so only the mutable shapes guard.
+        let non_slot_collection_uses = usage.collection_uses - usage.exact.len();
+        let needs_mut_iter = usage.needs_mut || matches!(iter_form, IterForm::Mut);
+        if needs_mut_iter && non_slot_collection_uses > 0 {
+            return None;
+        }
+        let iter_text = match iter_form {
+            IterForm::Shared => {
+                if usage.needs_mut {
+                    // Unreachable as a clippy input (the original would be
+                    // E0596) — refuse defensively rather than emit a broken
+                    // shared iter.
+                    return None;
+                }
+                coll_text
+            }
+            IterForm::Mut => coll_text,
+            IterForm::Owned { mut_decl } => {
+                if usage.needs_mut {
+                    if !mut_decl {
+                        // Unreachable as a clippy input (original E0596);
+                        // refuse defensively.
+                        return None;
+                    }
+                    format!("&mut {coll_text}")
+                } else {
+                    format!("&{coll_text}")
+                }
+            }
         };
 
         // Issue 032: ONE atomic edit spanning the whole loop. The header +
@@ -227,9 +314,12 @@ impl Collector<'_, '_> {
         Some(vec![SourceEdit { start: span.start, end: span.end, replacement }])
     }
 
-    /// Is the single-ident path a fn parameter of reference type?
-    /// `None` = not a resolvable parameter (skip the rewrite).
-    fn param_is_reference(&self, path: &syn::ExprPath) -> Option<bool> {
+    /// How may the rewrite iterate this single-ident collection param?
+    /// `None` = not a resolvable parameter (skip the rewrite). Plan 100 T1
+    /// splits the old boolean: `&mut` params iterate EXCLUSIVELY (bare), and
+    /// owned params carry their `mut` declaration (the mutator header needs
+    /// it).
+    fn param_iter_form(&self, path: &syn::ExprPath) -> Option<IterForm> {
         let ident = path.path.get_ident()?;
         for arg in &self.sig.inputs {
             let syn::FnArg::Typed(pat) = arg else { continue };
@@ -237,7 +327,18 @@ impl Collector<'_, '_> {
             if pi.ident != *ident {
                 continue;
             }
-            return Some(matches!(&*pat.ty, syn::Type::Reference(_) | syn::Type::Paren(_)));
+            // Unwrap one paren layer — `(&Vec<T>)` shapes.
+            let mut ty = &*pat.ty;
+            if let syn::Type::Paren(inner) = ty {
+                ty = &inner.elem;
+            }
+            return Some(match ty {
+                syn::Type::Reference(r) if r.mutability.is_some() => IterForm::Mut,
+                syn::Type::Reference(_) | syn::Type::Paren(_) => IterForm::Shared,
+                _ => IterForm::Owned {
+                    mut_decl: pi.mutability.is_some(),
+                },
+            });
         }
         None
     }
@@ -283,6 +384,14 @@ struct IndexUsage {
     /// place chain), has its address taken, or a macro mentions the ident
     /// somewhere descent cannot account for.
     blocked: bool,
+    /// A slot is the receiver of a known `&mut self` method (Plan 100 T1) —
+    /// the healed loop needs the mutable-iterable header.
+    needs_mut: bool,
+    /// Every body path mention of the collection ident (Plan 100 T1). Exact
+    /// slot bases each contribute exactly 1, so `collection_uses -
+    /// exact.len()` = the NON-slot uses that would break a mutable iter
+    /// (E0382/E0502 — the C4 class).
+    collection_uses: usize,
 }
 
 impl IndexUsage {
@@ -305,6 +414,8 @@ fn analyze_index_usage(
             total: 0,
             complex: false,
             blocked: false,
+            needs_mut: false,
+            collection_uses: 0,
         },
     };
     scan.visit_block(body);
@@ -345,6 +456,13 @@ impl<'ast> Visit<'ast> for Scan<'_> {
         if p.path.is_ident(self.idx) {
             self.usage.total += 1;
         }
+        // Plan 100 T1: the collection's OTHER body uses break a mutable iter
+        // (the exclusive borrow lasts the whole loop). Slot bases are counted
+        // here too — they each pair 1:1 with an exact slot, so the non-slot
+        // count is the difference.
+        if paths_equal(p, self.collection) {
+            self.usage.collection_uses += 1;
+        }
         syn::visit::visit_expr_path(self, p);
     }
 
@@ -383,11 +501,16 @@ impl<'ast> Visit<'ast> for Scan<'_> {
 
     // Postfix bases need the parenthesized splice: `v[i].len()` →
     // `(*__elem).len()` (bare `*__elem.len()` would deref the RESULT).
+    // Plan 100 T1: a known-mutator receiver additionally needs the mutable
+    // header — behind a shared iter, `(*__elem).push(x)` is E0596.
     fn visit_expr_method_call(&mut self, e: &'ast syn::ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, e);
         if self.is_exact_slot(&e.receiver) {
             let r = e.receiver.span().byte_range();
             self.usage.paren.insert((r.start, r.end));
+            if MUTATOR_METHODS.contains(&e.method.to_string().as_str()) {
+                self.usage.needs_mut = true;
+            }
         }
     }
 
@@ -466,11 +589,40 @@ impl Scan<'_> {
             if str_mentions_word(&t, &self.idx.to_string()) {
                 return false;
             }
-        } else {
-            // Template slot not a plain literal (tracing `target:` form) —
-            // fall back to the conservative whole-stream check.
-            return !tokens_mention_ident(mac.tokens.clone().into_iter(), self.idx);
+            // Template present: the post-template args carry the file-relative
+            // spans the substitution needs.
+            return self.scan_parsed_macro_args(args);
         }
+        // Plan 100 T2 — template-LESS family macro: the eq family
+        // (`assert_eq!(v[i], 2)` — template position Third is an optional
+        // message, absent here) and message-less `assert!(v[i] > 2)` shape.
+        // The old path fell back to the conservative whole-stream walk, which
+        // sees the bare `i` and refuses — a missed heal. Every family arg is
+        // an expression operand/condition: descend `all_expr_args` instead.
+        // The universal deref splice keeps the healed operands compiling
+        // (`assert_eq!(*__elem, 2)` expands `&(*__elem)` = `&u32`).
+        // With the template position unusable, a named capture can hide in
+        // ANY string literal (`info!(target: "x", "msg {i}", v[i])`) — the
+        // pat rename would dangle it. Refuse on a word mention inside any
+        // literal token (the old walk never looked inside literals; this
+        // closes that hole at the seam that needs it).
+        for t in mac.tokens.clone() {
+            if let TokenTree::Literal(l) = t {
+                if str_mentions_word(&l.to_string(), &self.idx.to_string()) {
+                    return false;
+                }
+            }
+        }
+        let Some(all) = all_expr_args(mac) else {
+            return false;
+        };
+        self.scan_parsed_macro_args(all)
+    }
+
+    /// Parse each arg token group as an `Expr` and visit it (nested macros
+    /// recurse through this visitor). An unparseable arg mentioning the idx
+    /// is a use substitution cannot cover → `false`.
+    fn scan_parsed_macro_args(&mut self, args: Vec<ExprMacroArg>) -> bool {
         for arg in args {
             let Ok(expr) = syn::parse2::<Expr>(arg.toks.iter().cloned().collect()) else {
                 // Unparseable arg (named `k = v`, …): if it mentions the idx,
@@ -480,9 +632,6 @@ impl Scan<'_> {
                 }
                 continue;
             };
-            // Recursion: the parsed arg may itself contain macros (nested
-            // `println!("{}", format!("{}", i))`) — visit_expr_macro fires
-            // again through this same visitor.
             self.visit_expr(&expr);
         }
         true
@@ -910,6 +1059,163 @@ mod tests {
         let input = "struct P { f: u32 }\nfn go(v: Vec<P>) { for i in 0..v.len() { v[i].f = 1; } }";
         let out = propose_fix("needless_range_loop", input);
         assert!(out.is_none(), "slot field write must refuse: {out:?}");
+    }
+
+    // ── Plan 100 T1: mutator-receiver header + mutable-iter exclusivity ──
+
+    /// C1 (P12): an owned `mut` param whose slot is a known-mutator receiver
+    /// needs the `&mut` header — the old `&v` emission was E0596
+    /// (`(*__elem).push(1)` behind a shared iter).
+    #[test]
+    fn mutator_receiver_owned_mut_param_uses_mut_header() {
+        let input = "fn go(mut v: Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(1); } }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("for __elem in &mut v {"), "{out}");
+        assert!(out.contains("(*__elem).push(1);"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// A mutator receiver on a SHARED-ref param refuses (unreachable as a
+    /// clippy input — the original would be E0596 — but never emit a broken
+    /// shared iter).
+    #[test]
+    fn mutator_receiver_shared_param_refuses() {
+        let input = "fn go(v: &Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(1); } }";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "shared-param mutator must refuse: {out:?}");
+    }
+
+    /// An owned NON-mut param + mutator receiver refuses (same defensive
+    /// posture — the original cannot compile either).
+    #[test]
+    fn owned_unmut_mutator_refuses() {
+        let input = "fn go(v: Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(1); } }";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "non-mut owned mutator must refuse: {out:?}");
+    }
+
+    /// C4 (found in the P12 probes, NOT in the intake): an `&mut` param's
+    /// bare iter EXCLUSIVELY borrows the collection for the whole loop — a
+    /// non-slot body use (`v.len()`) was E0382 in the OUTPUT. Must refuse.
+    #[test]
+    fn mut_param_other_collection_use_refuses() {
+        let input =
+            "fn go(v: &mut Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i] + v.len() as u32; } s }";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "&mut param + non-slot use must refuse: {out:?}");
+    }
+
+    /// C1b: an `&mut` param heals today (bare iter yields `&mut T` elements)
+    /// — pinned so the exclusivity guard never over-refuses this shape.
+    #[test]
+    fn mut_param_mutator_bare_iter_unchanged() {
+        let input = "fn go(v: &mut Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(1); } }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("for __elem in v {"), "{out}");
+        assert!(out.contains("(*__elem).push(1);"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// An owned `mut` param WITHOUT a mutator receiver keeps the plain `&v`
+    /// header (the mut header is trigger-gated, not blanket — output churn
+    /// stays bounded to the broken shapes).
+    #[test]
+    fn owned_mut_param_plain_read_keeps_shared_header() {
+        let input = "fn go(mut v: Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("for __elem in &v {"), "{out}");
+        assert!(!out.contains("&mut v"), "{out}");
+    }
+
+    /// Consuming methods are deliberately NOT in the mutator set — moving
+    /// out of the deref is E0507 in every header shape. The shape keeps
+    /// today's behavior (paren splice, shared header; `--verify` backstops
+    /// the compile) instead of pretending a header fixes it.
+    #[test]
+    fn consuming_method_does_not_trigger_mut_header() {
+        let input = "fn go(mut v: Vec<Vec<u32>>) -> usize { let mut n = 0; for i in 0..v.len() { n += v[i].into_iter().count(); } n }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("for __elem in &v {"), "{out}");
+        assert!(out.contains("(*__elem).into_iter()"), "{out}");
+    }
+
+    /// An owned `mut` param + mutator receiver + ANOTHER collection use in
+    /// the body refuses: the `&mut v` iter is exclusive for the whole loop.
+    #[test]
+    fn mutator_receiver_with_other_collection_use_refuses() {
+        let input = "fn go(mut v: Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(v.len() as u32); } }";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "mut header + non-slot use must refuse: {out:?}");
+    }
+
+    // ── Plan 100 T2: template-less family-macro descent ──
+
+    /// C2 (P12): `assert_eq!` comparands are family args with the template
+    /// position ABSENT — the old conservative walk refused; the descent
+    /// splices the deref form (`assert_eq!(*__elem, 2)` compiles: the
+    /// expansion takes `&($left)`, so `&(*__elem)` = `&u32`).
+    #[test]
+    fn assert_eq_slot_operand_splices_deref() {
+        let input = "fn go(v: &[u32]) { for i in 0..v.len() { assert_eq!(v[i], 2); } }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("assert_eq!(*__elem, 2);"), "{out}");
+        assert!(!out.contains("v["), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// `assert_ne!`/`debug_assert_eq!` ride the same Third-position family.
+    #[test]
+    fn debug_assert_eq_variant_splices_deref() {
+        let input = "fn go(v: &[u32]) { for i in 0..v.len() { debug_assert_eq!(v[i], 2); } }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("debug_assert_eq!(*__elem, 2);"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// C2b: a message-less `assert!` condition is a family arg too.
+    #[test]
+    fn assert_cond_slot_splices_deref() {
+        let input = "fn go(v: &[u32]) { for i in 0..v.len() { assert!(v[i] > 2); } }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("assert!(*__elem > 2);"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// Template-less descent must NOT heal a shape whose string literal
+    /// hides a named capture (`{i}`) — the pat rename would dangle it. The
+    /// old conservative walk never looked inside literals either, but the
+    /// new descent makes the check load-bearing.
+    #[test]
+    fn templateless_macro_with_hidden_capture_refuses() {
+        let input =
+            "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {i}\", ); assert!(v[i] > 2); } }";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "hidden capture must refuse: {out:?}");
+    }
+
+    /// The tracing named-target form with a NORMAL template+slot arg now
+    /// heals (it used to refuse via the conservative walk): the target arg
+    /// fails Expr parsing harmlessly and the slot arg descends.
+    #[test]
+    fn tracing_named_target_slot_arg_heals() {
+        let input =
+            "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {}\", v[i]); } }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("\"at {}\", *__elem"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    /// C3 (P12): the transitive typed use rides the P11 universal splice —
+    /// `let x = *__elem` gives `x: T` by copy, which is EXACT for the only
+    /// compiling input universe (a non-Copy `let x = v[i]` is E0507 in the
+    /// ORIGINAL, so clippy never sees that shape).
+    #[test]
+    fn let_init_transitive_typed_use_splices_deref() {
+        let input = "fn go(v: &[u32]) -> u32 { let mut n = 0; for i in 0..v.len() { let x = v[i]; if x > 2 { n += x; } } n }";
+        let out = propose_fix("needless_range_loop", input).expect("matched");
+        assert!(out.contains("let x = *__elem;"), "{out}");
+        assert!(out.contains("if x > 2"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     // ── Issue 032: same-pass composition must not half-apply the rewrite ──
