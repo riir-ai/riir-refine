@@ -2378,6 +2378,168 @@ mod tests {
         );
     }
 
+    // ── Issue 073 — anchor-primacy + entity perturbation (XBridge) ──
+    //
+    // XBridge (arXiv:2608.11676) role separation: the DISCRETE anchor
+    // channel determines WHICH entities appear in output; the continuous
+    // channel only shapes HOW the receiver reasons about them. Applied to
+    // the fixer builders: identity fields (rule ids, symbol names, the
+    // module itself) must cross as verbatim anchors. Every builder in this
+    // file already does — these tests PIN it, so a refactor toward a
+    // paraphrasing/summarizing builder (the Bench-868 dense-gist failure
+    // class) cannot land silently.
+
+    /// Real frozen fixture code with distinctive symbols (`greedy_path`,
+    /// `marginals`) — the perturbation twin renames `greedy_path`. Inlined
+    /// verbatim from `score_bench::fixtures()` id
+    /// `katgpt-rs-bench_ptrm_width_scaling-002` (mined
+    /// katgpt-rs@9e0e6a57:bench_ptrm_width_scaling.rs) so these pins run
+    /// under `cf_workers_ai` alone; `issue073_fixture_matches_frozen_set`
+    /// tripwires the copy against the frozen set when `score_bench` is on.
+    const ISSUE073_MODULE: &str = "/// Compute greedy argmax path as baseline reference.\nfn greedy_path(marginals: &[Vec<f32>]) -> Vec<usize> {\n    marginals\n        .iter()\n        .map(|m| {\n            m.iter()\n                .enumerate()\n                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))\n                .map(|(i, _)| i)\n                .unwrap_or(0)\n        })\n        .collect()\n}\n";
+
+    fn issue073_module() -> &'static str {
+        ISSUE073_MODULE
+    }
+
+    /// Same-kind rename (ident -> ident) at word boundaries — deterministic,
+    /// no regex dep.
+    fn perturb_symbol(code: &str, from: &str, to: &str) -> String {
+        let mut out = String::with_capacity(code.len() + 16);
+        let mut rest = code;
+        while let Some(pos) = rest.find(from) {
+            let (before, after) = rest.split_at(pos);
+            out.push_str(before);
+            rest = after;
+            let ident_end = rest
+                [from.len()..]
+                .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .map_or(rest.len(), |i| i + from.len());
+            if ident_end == from.len() {
+                out.push_str(to);
+                rest = &rest[from.len()..];
+            } else {
+                out.push_str(&rest[..ident_end]);
+                rest = &rest[ident_end..];
+            }
+        }
+        out.push_str(rest);
+        out
+    }
+
+    #[cfg(feature = "score_bench")]
+    #[test]
+    fn issue073_fixture_matches_frozen_set() {
+        let frozen = crate::score_bench::fixtures::fixtures()
+            .into_iter()
+            .find(|f| f.id == "katgpt-rs-bench_ptrm_width_scaling-002")
+            .expect("frozen fixture present");
+        assert_eq!(issue073_module(), frozen.code, "the inlined 073 fixture drifted from the frozen score-bench set");
+    }
+
+    #[test]
+    fn anchor_primacy_all_builders_transport_identity_fields_verbatim() {
+        let module = issue073_module();
+        assert!(module.contains("greedy_path"), "fixture sanity");
+        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let (traj, patterns) = gprime_channels();
+        let candidate = "-    x.map(f).unwrap_or(false)\n+    x.is_some_and(f)";
+
+        // The whole module verbatim means every symbol in it is verbatim by
+        // transitivity. `prompt_raw` is instruction + module ONLY (no
+        // few-shots, no candidate); the other three carry the few-shot rule
+        // anchor in its dedicated header position and the candidate
+        // verbatim.
+        assert!(prompt_raw(module).contains(module), "arm A: module crosses verbatim");
+        for p in [
+            prompt_prepass(module, Some(candidate), &fs),
+            prompt_growing(module, Some(candidate), &fs, &traj, &patterns),
+            prompt_growing_same_rule(module, Some(candidate), &fs, &traj, &patterns),
+        ] {
+            assert!(p.contains(module), "module crosses verbatim (the anchor block)");
+            assert!(p.contains("--- example (manual_map) before ---"), "few-shot rule anchor position");
+            // The candidate is verbatim per-LINE (the builder indents each
+            // line by 4) — pin every line in its indented form.
+            for line in candidate.lines() {
+                assert!(p.contains(&format!("    {line}")), "candidate line verbatim (indented): {line}");
+            }
+        }
+        let g = prompt_growing(module, Some(candidate), &fs, &traj, &patterns);
+        let gp = prompt_growing_same_rule(module, Some(candidate), &fs, &traj, &patterns);
+        for p in [&g, &gp] {
+            assert!(p.contains("--- ptr_arg [Certified: 3 ok / 0 failed] ---"), "channel lint-key anchor position");
+            assert!(p.contains("ptr_arg: 3/4 attempts kept (75%)"), "failure-pattern rule anchor position");
+        }
+    }
+
+    #[test]
+    fn entity_perturbation_flips_the_anchor_and_nothing_else() {
+        let module = issue073_module();
+        let twin = perturb_symbol(module, "greedy_path", "greedy_route");
+        assert_ne!(module, twin, "perturbation applies");
+        assert!(!twin.contains("greedy_path"), "rename is total on the fixture");
+        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let fs_twin = vec![FewShot { rule_id: "manual_unwrap_or".into(), buggy: "b".into(), fixed: "f".into() }];
+
+        // Both identity axes (module symbol + rule id) flip in the prompt,
+        // and the flip is EXACTLY the perturbation: inverting it on the twin
+        // prompt reproduces the original byte-for-byte, so the builder
+        // transports the swap without paraphrasing anything around it.
+        // `prompt_raw` carries no few-shots (arm A is instruction + module),
+        // so it is asserted on the symbol axis only.
+        let raw_orig = prompt_raw(module);
+        let raw_twin = prompt_raw(&twin);
+        assert!(raw_twin.contains("greedy_route") && !raw_twin.contains("greedy_path"));
+        assert_eq!(raw_twin.replace("greedy_route", "greedy_path"), raw_orig, "arm A: the flip is exactly the symbol swap");
+
+        for build in [
+            |m: &str, f: &[FewShot]| prompt_prepass(m, None, f),
+            |m: &str, f: &[FewShot]| prompt_growing(m, None, f, &[], &[]),
+            |m: &str, f: &[FewShot]| prompt_growing_same_rule(m, None, f, &[], &[]),
+        ] {
+            let orig = build(module, &fs);
+            let twin_prompt = build(&twin, &fs_twin);
+            assert!(twin_prompt.contains("greedy_route"), "swapped symbol rides the anchor");
+            assert!(!twin_prompt.contains("greedy_path"));
+            assert!(twin_prompt.contains("--- example (manual_unwrap_or) before ---"), "few-shot rule anchor flips");
+            let inverted = twin_prompt.replace("greedy_route", "greedy_path").replace("manual_unwrap_or", "manual_map");
+            assert_eq!(inverted, orig, "the flip is exactly the entity swap");
+        }
+    }
+
+    /// The non-vacuity arm: a builder that renders only the module's SHAPE
+    /// (line count, fn count, brace balance) preserves contextual semantics
+    /// while dropping discrete identity — the exact XBridge failure mode.
+    /// It is rename-INVARIANT on the same twins, which is what makes the
+    /// fixture pair a real discriminator: if the real builders ever regress
+    /// to summarizing, `entity_perturbation_flips_the_anchor_and_nothing_else`
+    /// reds; this test holds the other horn (the pair CAN distinguish).
+    fn shape_summary_builder(module: &str, rule_id: &str) -> String {
+        let lines = module.lines().count();
+        let fns = module.matches("fn ").count();
+        let braces = module.matches('{').count();
+        format!("fix this code (rule {rule_id}): {lines} lines, {fns} fns, {braces} blocks")
+    }
+
+    #[test]
+    fn entity_perturbation_distinguishes_anchor_primacy_from_a_summarizing_builder() {
+        let module = issue073_module();
+        let twin = perturb_symbol(module, "greedy_path", "greedy_route");
+        // The naive summarizer does NOT see the entity swap (identity lost,
+        // semantics kept) — the fixture pair is non-vacuous in BOTH
+        // directions.
+        assert_eq!(
+            shape_summary_builder(&twin, "manual_map"),
+            shape_summary_builder(module, "manual_map"),
+            "the summarizing builder is rename-invariant on the twins",
+        );
+        // ...while every real builder flips (asserted by the sibling test).
+        assert_ne!(
+            prompt_prepass(module, None, &[]),
+            prompt_prepass(&twin, None, &[]),
+        );
+    }
+
     #[test]
     fn same_rule_context_excludes_other_rules_and_orders_certified_first() {
         let mut d = std::env::temp_dir();
