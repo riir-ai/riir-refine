@@ -126,7 +126,7 @@ gen-6 non-goal #2, explicitly deferred to a separate generation).
 
 - [x] T0 — This plan committed BEFORE any implementation (plan-first
   discipline).
-- [ ] T1 — The probe: run `heal_fixpoint` over every candidate atom (scratch
+- [x] T1 — The probe: run `heal_fixpoint` over every candidate atom (scratch
   harness, deleted after), record passes + refire behavior + persist; amend
   the roster here (addendum) BEFORE the freeze lands. The cif one-pair-per-
   pass assumption is the primary probe question.
@@ -153,6 +153,77 @@ gen-6 non-goal #2, explicitly deferred to a separate generation).
   line; CLI surfaces re-verified (`--generation 7` admission, `--generation 8`
   → validation error exit 2, the v2 refusal byte-identical through the shared
   gate, `--score-report` re-render).
+
+## T1 addendum — the probe verdict (measured 2026-09-06, before the freeze)
+
+The probe ran `heal_fixpoint` over every candidate atom and adjudicated the
+roster by MEASUREMENT. Confirmed chains: d2-nrl-identity (the Issue-032
+canonical, 2 passes), d2-nrl-format (2), d2-nrl-semi (2), d2-smx-identity
+(2, after reshape), d2-mm-identity (2), d2-nrl-dblparen (2, added),
+d2-sme-distsq (2, the cross-domain replacement), and the collapsible_if
+depth ladder EXACTLY as pre-registered: cif3 → 2, cif4 → 3, cif5 → 4
+(converges AT the cap), cif6 → 4 with the innermost pair persisting (capped),
+cif5+identity → 4 with `n * 1` unfixed (capped). ref-nrl-nrl → 1 pass with
+the inner loop collision-refused (`inner[j]` untouched, nrl persists) — the
+refused territory confirmed. Flat controls → 1 pass, both members applied
+(controls confirmed).
+
+Amendments (each a measured finding, recorded before the freeze):
+1. **`question_mark` has no match-form support** — on
+   `match x { None => return None, Some(v) => Some(v * 1) }` the identity
+   member fixed while the match stood UNTOUCHED (passes=1): the proposer only
+   handles the `if x.is_none() { return None; }` form, whose rewrite does not
+   cover the tail. The qm atom is DROPPED (a qm chain requires match-form
+   support — proposer-extension candidate, not this unit).
+2. **`iter_next_loop`'s edit is HEADER-ONLY, not whole-loop atomic** — on
+   `for x in it.next() { s += x * 1; }` both edits applied in pass 1 (the
+   iterable-span edit does not cover the body). No chain is constructible on
+   it; the atom is DROPPED. Probe finding: not every loop rewrite is atomic.
+3. **`single_match_else` requires a STATEMENT-block second arm** — `_ => { 0 }`
+   is silent (expression-only block), `_ => { let fallback = 2; fallback }`
+   fires; mirrors the Issue-027 real-clippy probe. The three smx atoms were
+   RESHAPED to the corpus's multi-statement block form.
+4. **NEW MINED FINDING — the capacity-hint nested-block blind spot**:
+   `vec-with-capacity` and `hashmap-with-capacity` fire on the STANDALONE
+   `fn build(n: usize) { let mut v = Vec::new(); for i in 0..n { v.push(..); } v }`
+   shape but are SILENT when the identical shape sits inside an `if let`/
+   match-arm block (edits=0 on the post-smx text). The capacity-source
+   derivation appears fn-body-level. The planned `d2-sme-vwc` atom is
+   replaced by `d2-sme-distsq` (distance-sq is expression-level and fires
+   inside the arm); the blind spot itself is a post-mining intake candidate
+   (the miss side, not this unit's to fix).
+5. The cross-domain chain CONFIRMED via distance-sq: smx whole-match rewrite
+   pass 1, the inner expression-level perf-rule edit refires pass 2. Scored
+   member: single_match_else (the clippy oracle cannot see rust_perf rules).
+
+## Freeze-fence amendments (the compile fence + label fence at work, 2026-09-06)
+
+The first freeze run verified 13/15 and EXCLUDED 2 — every exclusion a
+probe-gap finding, recorded before the record landed:
+
+- **`gen7-d2-nrl-semi` failed the G1 compile fence** (E0308): `n` sums u32
+  slice elements but the fn returned `usize`. The T1 probe validated PARSE
+  (`heal_fixpoint` is syn-based); the compile fence is the freeze's own
+  instrument. Repaired (return `u32`), not excluded.
+- **`gen7-d2-sme-distsq` failed the G1 compile fence** (E0425): the `_` arm's
+  `eps < r` referenced `r`, which the OTHER arm's pattern binds. Repaired
+  (`eps < 1.0`), not excluded.
+- **`gen7-d2-nrl-format` label fence: `uninlined_format_args` did not fire** —
+  `println!("{}", names[i])` carries an INDEX expression, which the lint
+  cannot inline; the firing site only EXISTS after pass 1's rewrite creates
+  the bare ident `__elem`. A **created-chain subtype**: the outer edit
+  manufactures the inner lint's firing site. Label relanded as
+  `[needless_range_loop]`; the chain depth is still 2 (probe + freeze
+  both measure it) and the bench's created axis records nothing (the
+  created lint is resolved in the same run).
+
+Final frozen roster: 15/15 (13 first-pass verified + 2 repaired), zero
+standing exclusions.
+
+Final roster: 15 specs — 2 flat, 9 chain (7× d2 + cif3/d3-cif4/d4-cif5),
+2 capped, 1 refused; 8 scored lint classes. Predicted scored members 24,
+persisting 3 (cap-cif6 1, cap-cif5-identity 1 of 2, ref-nrl-nrl 1) →
+predicted heal_rate 21/24 = 87.5% < v1 96.2% → ADMITTED predicted.
 
 ## Non-goals
 

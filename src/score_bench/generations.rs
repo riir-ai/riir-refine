@@ -3066,6 +3066,11 @@ pub fn pick(kind: Option<u8>) -> u8 {
 "#,
     ),
     (
+        // Created-chain subtype: the outer rewrite substitutes `names[i]` →
+        // `__elem`, and the CREATED bare-ident arg is what uninlined_format_
+        // args fires on (the original index expression cannot be inlined —
+        // the freeze fence measured exactly that). Label = the outer member;
+        // the chain depth is still 2 (the created edit refires on pass 2).
         "gen7-d2-nrl-format",
         r#"pub fn announce(names: &[String]) {
     for i in 0..names.len() {
@@ -3076,7 +3081,7 @@ pub fn pick(kind: Option<u8>) -> u8 {
     ),
     (
         "gen7-d2-nrl-semi",
-        r#"pub fn measure(hits: &[u32]) -> usize {
+        r#"pub fn measure(hits: &[u32]) -> u32 {
     let mut n = 0;
     for i in 0..hits.len() {
         if hits[i] > 2 {
@@ -3127,7 +3132,7 @@ pub fn pick(kind: Option<u8>) -> u8 {
         r#"pub fn near(kind: Option<(f64, f64, f64)>) -> bool {
     match kind {
         Some((x, y, r)) => (x * x + y * y).sqrt() < r,
-        _ => { let eps = 0.5; eps < r }
+        _ => { let eps = 0.5; eps < 1.0 }
     }
 }
 "#,
@@ -3253,7 +3258,7 @@ const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
     ("gen7-flat-nrl-identity", &["needless_range_loop", "identity_op"]),
     ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),
     ("gen7-d2-nrl-identity", &["needless_range_loop", "identity_op"]),
-    ("gen7-d2-nrl-format", &["needless_range_loop", "uninlined_format_args"]),
+    ("gen7-d2-nrl-format", &["needless_range_loop"]),
     ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),
     ("gen7-d2-nrl-dblparen", &["needless_range_loop", "double_parens"]),
     ("gen7-d2-smx-identity", &["single_match_else", "identity_op"]),
@@ -3340,12 +3345,38 @@ pub fn v7_expected_k(spec_id: &str) -> usize {
 }
 
 /// Spec ids the generation-7 freeze run EXCLUDED — landed by the freeze e2e
-/// (`tests/generation_v7_freeze.rs` --ignored).
+/// (`tests/generation_v7_freeze.rs` --ignored, 2026-09-06). The FIRST freeze
+/// run excluded 2 atoms (a parse-only probe gap — both repaired and
+/// re-verified: E0308 return-type on d2-nrl-semi, E0425 cross-arm binding on
+/// d2-sme-distsq); the landed record has ZERO standing exclusions.
 pub static EXCLUDED_IDS_V7: &[&str] = &[];
 
 /// The generation-7 frozen labels (spec id → vocabulary lints the BENCH
 /// instrument fired at freeze time) — landed by the freeze e2e.
-pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[];
+// Landed by tests/generation_v7_freeze.rs --ignored (2026-09-06): 15/15
+// verified, 0 exclusions, 0 relabels; chain 10 / capped 2 / flat 2 /
+// refused 1. Freeze cost 2.0 s (15 single-snippet oracle runs, release).
+// d2-nrl-format's label is the CREATED-chain subtype: the outer rewrite
+// manufactures uninlined_format_args's firing site (an index expression
+// cannot be inlined; the created bare ident can), so the pre-heal label is
+// the outer member only.
+pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[
+    ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]),  // depth=4
+    ("gen7-cap-cif6", &["collapsible_if"]),  // depth=4
+    ("gen7-d2-cif3", &["collapsible_if"]),  // depth=2
+    ("gen7-d2-mm-identity", &["identity_op", "manual_map"]),  // depth=2
+    ("gen7-d2-nrl-dblparen", &["double_parens", "needless_range_loop"]),  // depth=2
+    ("gen7-d2-nrl-format", &["needless_range_loop"]),  // depth=2
+    ("gen7-d2-nrl-identity", &["identity_op", "needless_range_loop"]),  // depth=2
+    ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),  // depth=2
+    ("gen7-d2-sme-distsq", &["single_match_else"]),  // depth=2
+    ("gen7-d2-smx-identity", &["identity_op", "single_match_else"]),  // depth=2
+    ("gen7-d3-cif4", &["collapsible_if"]),  // depth=3
+    ("gen7-d4-cif5", &["collapsible_if"]),  // depth=4
+    ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),  // depth=1
+    ("gen7-flat-nrl-identity", &["identity_op", "needless_range_loop"]),  // depth=1
+    ("gen7-ref-nrl-nrl", &["needless_range_loop"]),  // depth=1
+];
 
 /// Freeze readiness for generation 7 — Err until the freeze e2e lands the
 /// record.
