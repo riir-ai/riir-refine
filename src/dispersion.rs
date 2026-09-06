@@ -102,6 +102,19 @@ pub enum Regime {
     Empty,
 }
 
+impl Regime {
+    /// Stable label (telemetry / logs / the misses-queue report).
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Informative => "informative",
+            Self::Saturated => "saturated",
+            Self::Regenerate => "regenerate",
+            Self::Empty => "empty",
+        }
+    }
+}
+
 /// Classify a pool's dispersion regime (the control law from the issue).
 #[must_use]
 pub fn regime_of(outcomes: &[OutcomeClass]) -> Regime {
@@ -185,13 +198,7 @@ pub fn frontier_order(pool: &[PoolEntry]) -> Vec<FrontierVerdict> {
 pub fn dispersion_column(id: &str, outcomes: &[OutcomeClass]) -> String {
     let h = outcome_entropy(outcomes);
     let r = regime_of(outcomes);
-    let rlabel = match r {
-        Regime::Informative => "informative",
-        Regime::Saturated => "saturated",
-        Regime::Regenerate => "regenerate",
-        Regime::Empty => "empty",
-    };
-    format!("{id}: h={h:.3} regime={rlabel} n={}", outcomes.len())
+    format!("{id}: h={h:.3} regime={} n={}", r.label(), outcomes.len())
 }
 
 /// Entropy over a whole window of per-pool entropies — the standing

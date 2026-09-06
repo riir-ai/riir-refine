@@ -1646,7 +1646,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5;\n                    the first v2 append is admitted ONLY if it measures harder than v1).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -1830,6 +1830,12 @@ struct Args {
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
     /// score history, re-render the SVG. Standalone mode — no paths.
     score_bench: bool,
+    /// `--generation <1|2>` (Plan 092 M5): which bench generation to run.
+    /// Absent = 1 (the frozen v1 set, unchanged). 2 = the construction-built
+    /// generation-v2 ladder (issue 072 T5); the FIRST v2 append is gated on
+    /// non-vacuity — a v2 that is not harder than v1 is refused, never
+    /// appended.
+    generation: Option<u8>,
     /// `--score-report`: re-render the SVG from the existing history JSONL.
     score_report: bool,
     /// `--memory-stats` (Issue 037 observability): print the one-command
@@ -1957,6 +1963,7 @@ fn parse_args() -> Args {
         verify_args: None,
         paths: Vec::new(),
         score_bench: false,
+        generation: None,
         score_report: false,
         memory_stats: false,
         misses: false,
@@ -2005,14 +2012,21 @@ fn parse_args() -> Args {
             "--report" => args.misses_report = true,
             "--limit" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--limit requires a value");
+                    eprintln!("--generation requires a value (1 or 2)");
                     usage();
                 };
-                args.misses_limit = Some(value.parse().unwrap_or_else(|_| {
-                    eprintln!("--limit expects a number, got {value:?}");
+                let g: u8 = value.parse().unwrap_or_else(|_| {
+                    eprintln!("--generation expects a number, got {value:?}");
                     usage();
-                }));
+                });
+                if g != 1 && g != 2 {
+                    eprintln!("--generation accepts 1 or 2, got {g}");
+                    usage();
+                }
+                args.generation = Some(g);
             }
+            "--score-report" => args.score_report = true,
+            "--memory-stats" => args.memory_stats = true,
             "--recompute-elo" => args.recompute_elo = true,
             "--collapse-report" => args.collapse_report = true,
             "--corpus-stats" => args.corpus_stats = true,
@@ -2226,6 +2240,10 @@ fn parse_args() -> Args {
         eprintln!("no paths given");
         usage();
     }
+    if args.generation.is_some() && !args.score_bench {
+        eprintln!("--generation requires --score-bench");
+        usage();
+    }
     args
 }
 
@@ -2362,10 +2380,76 @@ fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: 
     }
 }
 
-/// Plan 014: run the frozen clippy-bench, append the score history,
-/// re-render the SVG. Feature-gated `score_bench`.
+/// Plan 091 T1.2 / Plan 092 T5 (the collision merge): the `.heal/misses/`
+/// authoring queue in frontier order — read-only, standalone. Outcomes per
+/// code come from the trajectory store (`latent_retrieval` builds) or the
+/// JSON envelope fallback, so the report works in every default build
+/// (`rustc_errors` is default-on). `limit` caps the rendered rows (the
+/// `--limit` flag; the whole queue is small, so the default prints all).
+#[cfg(feature = "rustc_errors")]
+fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
+    use riir_clippy::domains::rustc_errors::evolve;
+
+    let root = resolve_heal_root(paths);
+    let dir = evolve::misses_dir(&root);
+    let outcomes = load_code_outcomes(&root);
+    let report = evolve::frontier_queue_report(&dir, &outcomes);
+    match limit {
+        // Honor the cap on the table rows: keep the header lines, print at
+        // most `limit` table rows.
+        Some(n) => {
+            let mut in_table = false;
+            let mut shown = 0usize;
+            for line in report.lines() {
+                if line.starts_with("| rank") || line.starts_with("|---") {
+                    in_table = true;
+                    println!("{line}");
+                    continue;
+                }
+                if in_table && line.starts_with("| ") {
+                    if shown < n {
+                        println!("{line}");
+                        shown += 1;
+                    }
+                    continue;
+                }
+                println!("{line}");
+            }
+        }
+        None => print!("{report}"),
+    }
+}
+
+/// Per-code `(kept, reverted)` counts for the misses report: store-first,
+/// envelope fallback (both aggregate through
+/// [`riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows`]).
+#[cfg(feature = "rustc_errors")]
+fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize, usize)> {
+    #[cfg(feature = "latent_retrieval")]
+    if root.join(".heal").join("trajectories.kv").exists() {
+        if let Ok((store, _)) = riir_clippy::traj_store::TrajStore::open(root) {
+            return riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows(
+                store.dump().into_iter().map(|r| (r.lint_key, r.success_count, r.fail_count)),
+            );
+        }
+    }
+    let mut mem = riir_clippy::memory::LatentFixMemory::default();
+    if mem.load(&default_memory_path()).is_err() {
+        return std::collections::BTreeMap::new();
+    }
+    riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows(
+        mem.iter().map(|t| (t.lint_name.clone(), t.success_count, t.fail_count)),
+    )
+}
+
+/// Plan 014: run the clippy-bench, append the score history, re-render the
+/// SVG. Feature-gated `score_bench`. `generation` selects the fixture set
+/// (Plan 092 M5): 1 = the frozen v1 set, 2 = the construction-built
+/// generation-v2 k-ladder (issue 072 T5) behind the non-vacuity admission
+/// gate — a first v2 run that is not harder than v1 is refused, never
+/// appended.
 #[cfg(feature = "score_bench")]
-fn run_score_bench() {
+fn run_score_bench(generation: u8) {
     use riir_clippy::score_bench as sb;
 
     let oracle = sb::draft_oracle();
@@ -2373,16 +2457,69 @@ fn run_score_bench() {
         eprintln!("score_bench: cargo not on PATH — cannot derive ground truth");
         std::process::exit(1);
     }
-    let fixture_list = sb::fixtures::fixtures();
+    let (fixture_list, label) = if generation == 2 {
+        match sb::generations::v2_freeze_status() {
+            Ok(admitted) => {
+                println!("generation v2: {admitted} admitted fixture(s) (freeze record present)");
+                (sb::generations::generation_v2(), "generation-v2 k-ladder")
+            }
+            Err(e) => {
+                eprintln!("generation v2: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        (sb::fixtures::fixtures(), "frozen v1 set")
+    };
     println!(
-        "clippy-bench: {} frozen fixture(s), real-clippy ground truth…",
+        "clippy-bench: {} fixture(s) [{label}], real-clippy ground truth…",
         fixture_list.len()
     );
     let score = sb::run_bench(&oracle, &fixture_list);
     sb::report::print_report(&score);
+    if generation == 2 {
+        print_per_k_solve_rates(&fixture_list, &score);
+    }
 
-    let rec = sb::report::HistoryRecord::from_score(&score, sb::report::git_sha());
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
+    let history_before = sb::report::load_history(jsonl);
+
+    // M5 non-vacuity admission: the FIRST v2 row must measure harder than
+    // v1 — a new generation that isn't harder isn't a generation, it's the
+    // same measurement with a bigger denominator. Nothing is appended on a
+    // refusal (the generation is deterministic; the failed admission is
+    // reproducible — the .benchmarks doc records the verdict instead).
+    if generation == 2 && !history_before.iter().any(|r| r.generation == 2) {
+        let Some(v1_rate) = history_before
+            .iter()
+            .rev()
+            .find(|r| r.generation == 1)
+            .map(|r| r.heal_rate)
+        else {
+            eprintln!(
+                "generation v2 admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
+                sb::report::HISTORY_JSONL
+            );
+            std::process::exit(1);
+        };
+        if score.heal_rate >= v1_rate {
+            eprintln!(
+                "generation v2 admission REFUSED (non-vacuity, M5): v2 heal_rate {:.4} >= v1 {:.4}. \
+                 A new generation that is not harder is not admitted; nothing appended. \
+                 Pre-registered branch (B) of .plans/092: the k-ladder needs a difficulty axis \
+                 (persist-shape stratification / interference composition).",
+                score.heal_rate, v1_rate
+            );
+            std::process::exit(1);
+        }
+        println!(
+            "generation v2 ADMITTED: heal_rate {:.4} < v1 {:.4} — the ladder is harder, floors begin",
+            score.heal_rate, v1_rate
+        );
+    }
+
+    let rec =
+        sb::report::HistoryRecord::from_score(&score, sb::report::git_sha()).with_generation(generation);
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
@@ -2392,15 +2529,76 @@ fn run_score_bench() {
     #[cfg(feature = "latent_retrieval")]
     sb::report::record_store_best_effort(&rec);
     let history = sb::report::load_history(jsonl);
-    let svg = sb::report::render_svg(&history);
+    // Per-generation SVG curves (M5): v1 → score_history.svg, v2 → _v2.svg.
+    let v1_series: Vec<_> = history.iter().filter(|r| r.generation == 1).cloned().collect();
+    let svg = sb::report::render_svg(&v1_series);
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+    let v2_series: Vec<_> = history.iter().filter(|r| r.generation == 2).cloned().collect();
+    if !v2_series.is_empty() {
+        let svg2 = sb::report::render_svg(&v2_series);
+        std::fs::write(sb::report::HISTORY_SVG_V2, &svg2)
+            .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+    }
     println!(
-        "history: {} run(s) → {} + {}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}) → {}{}",
         history.len(),
+        v1_series.len(),
+        v2_series.len(),
         sb::report::HISTORY_JSONL,
-        sb::report::HISTORY_SVG
+        if v2_series.is_empty() {
+            format!(" + {}", sb::report::HISTORY_SVG)
+        } else {
+            format!(" + {} + {}", sb::report::HISTORY_SVG, sb::report::HISTORY_SVG_V2)
+        }
     );
+    // Saturation telemetry (issue 072 T3/T4) — the standing non-vacuity
+    // instrument over the per-generation series.
+    let verdict = sb::report::detect_saturation(&history, generation);
+    println!("{}", sb::report::saturation_line(&verdict, generation));
+}
+
+/// The M4 difficulty measurement: per-k solve rates over the ladder
+/// (resolved vocabulary lints / vocabulary lints before, within each k).
+#[cfg(feature = "score_bench")]
+fn print_per_k_solve_rates(
+    fixtures: &[riir_clippy::score_bench::BenchFixture],
+    score: &riir_clippy::score_bench::BenchScore,
+) {
+    use riir_clippy::score_bench as sb;
+    use std::collections::BTreeMap;
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> = score
+        .outcomes
+        .iter()
+        .map(|o| (o.id.as_str(), o))
+        .collect();
+    let mut resolved: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut total: BTreeMap<usize, usize> = BTreeMap::new();
+    for f in fixtures {
+        let Some(k) = sb::generations::k_of(f.id) else {
+            continue;
+        };
+        let Some(o) = by_id.get(f.id) else {
+            continue;
+        };
+        if !o.ran {
+            continue;
+        }
+        *total.entry(k).or_default() += o.vocab_before.len();
+        *resolved.entry(k).or_default() += o.resolved();
+    }
+    println!("\n─ k-ladder solve rates (M4, up = solved) ──────────────");
+    for k in sb::generations::LADDER_KS {
+        let (Some(r), Some(t)) = (resolved.get(&k), total.get(&k)) else {
+            continue;
+        };
+        if *t == 0 {
+            continue;
+        }
+        #[allow(clippy::cast_precision_loss)] // counts < 10⁴ over f64
+        let pct = (*r as f64) / (*t as f64) * 100.0;
+        println!("k={k}: {r}/{t} = {pct:.1}%");
+    }
 }
 
 // ── Issue 050 T2: --corpus-stats / --import-series / --json ────────────
@@ -2532,99 +2730,6 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
     None
 }
 
-/// Plan 091 T1.2: the `--misses` standalone mode — print the
-/// `.heal/misses/` authoring queue in frontier order.
-///
-/// Pool evidence comes from the trajectory store when the build ships
-/// `latent_retrieval` AND the store exists (per-code Kept/Reverted counts
-/// via [`riir_clippy::dispersion::from_counts`]); otherwise every pool
-/// reads `Empty` and the order degenerates to code-sorted — pinned by the
-/// evolve tests. The queue dir resolves like the dump path writes it: the
-/// CWD's `.heal/misses` (the operator runs from the repo they healed).
-fn run_misses_queue(limit: Option<usize>) {
-    use riir_clippy::domains::rustc_errors::evolve;
-    let root = std::env::current_dir().unwrap_or_default();
-    let dir = evolve::misses_dir(&root);
-    let entries = match evolve::read_misses(&dir) {
-        Ok(e) => e,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            println!("misses: queue empty (no {})", dir.display());
-            return;
-        }
-        Err(e) => {
-            eprintln!("misses: cannot read {}: {e}", dir.display());
-            std::process::exit(1);
-        }
-    };
-    if entries.is_empty() {
-        println!("misses: queue empty ({})", dir.display());
-        return;
-    }
-
-    // Per-code outcome pools (Plan 091 T1.1): store rows keyed
-    // `"{code}:{strategy}"` fold into Kept/Reverted counts. Without the
-    // store the map stays empty — the documented degeneration.
-    let mut outcomes_by_code: std::collections::BTreeMap<
-        String,
-        Vec<riir_clippy::dispersion::OutcomeClass>,
-    > = std::collections::BTreeMap::new();
-    #[cfg(feature = "latent_retrieval")]
-    if root.join(".heal").join("trajectories.kv").exists() {
-        match riir_clippy::traj_store::TrajStore::open(&root) {
-            Ok((store, bad)) => {
-                if bad > 0 {
-                    eprintln!("misses: {bad} corrupt store row(s) skipped");
-                }
-                let mut counts: std::collections::BTreeMap<String, (usize, usize)> =
-                    std::collections::BTreeMap::new();
-                for row in store.dump() {
-                    let code = row.lint_key.split(':').next().unwrap_or("").to_string();
-                    if code.is_empty() {
-                        continue;
-                    }
-                    let e = counts.entry(code).or_default();
-                    e.0 += row.success_count as usize;
-                    e.1 += row.fail_count as usize;
-                }
-                for (code, (kept, reverted)) in counts {
-                    outcomes_by_code
-                        .insert(code, riir_clippy::dispersion::from_counts(kept, reverted, 0));
-                }
-            }
-            Err(e) => eprintln!("misses: store unreadable ({e}) — ordering without evidence"),
-        }
-    }
-
-    let ordered = evolve::frontier_order_misses(&entries, &outcomes_by_code);
-    println!(
-        "misses: {} entr{} across {} code(s) — frontier order (informative first):",
-        ordered.len(),
-        if ordered.len() == 1 { "y" } else { "ies" },
-        ordered.iter().map(|(e, _)| e.code.as_str()).collect::<std::collections::BTreeSet<_>>().len(),
-    );
-    let shown = ordered.iter().take(limit.unwrap_or(ordered.len()));
-    for (i, (e, v)) in shown.enumerate() {
-        let regime = match v.regime {
-            riir_clippy::dispersion::Regime::Informative => "informative",
-            riir_clippy::dispersion::Regime::Saturated => "saturated",
-            riir_clippy::dispersion::Regime::Regenerate => "regenerate",
-            riir_clippy::dispersion::Regime::Empty => "unobserved",
-        };
-        let loc = e
-            .file_line
-            .as_ref()
-            .map_or_else(String::new, |(f, l)| format!(" @ {f}:{l}"));
-        println!(
-            "  {:>3}. [{:<11}] h={:.3} n={:<3} {}{}",
-            i + 1,
-            regime,
-            v.entropy,
-            outcomes_by_code.get(&e.code).map_or(0, Vec::len),
-            e.path.display(),
-            loc
-        );
-    }
-}
 
 /// Plan 091 T1.3: the `--misses --report` mode — the conversion ledger
 /// (the real-G8 instrument). Prints conversion-per-authored-rule split by
@@ -3056,19 +3161,33 @@ fn main() {
             eprintln!("no score history yet — run --score-bench first");
             std::process::exit(1);
         }
-        let svg = riir_clippy::score_bench::report::render_svg(&history);
+        // Per-generation curves (Plan 092 M5): gen-1 → score_history.svg,
+        // gen-2 → score_history_v2.svg (only when v2 rows exist).
+        let v1: Vec<_> = history.iter().filter(|r| r.generation == 1).cloned().collect();
+        let svg = riir_clippy::score_bench::report::render_svg(&v1);
         std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG, &svg)
             .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
         println!(
-            "rendered {} ({} run(s))",
+            "rendered {} ({} gen-1 run(s))",
             riir_clippy::score_bench::report::HISTORY_SVG,
-            history.len()
+            v1.len()
         );
+        let v2: Vec<_> = history.iter().filter(|r| r.generation == 2).cloned().collect();
+        if !v2.is_empty() {
+            let svg2 = riir_clippy::score_bench::report::render_svg(&v2);
+            std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG_V2, &svg2)
+                .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+            println!(
+                "rendered {} ({} gen-2 run(s))",
+                riir_clippy::score_bench::report::HISTORY_SVG_V2,
+                v2.len()
+            );
+        }
         return;
     }
     #[cfg(feature = "score_bench")]
     if args.score_bench {
-        run_score_bench();
+        run_score_bench(args.generation.unwrap_or(1));
         return;
     }
     #[cfg(not(feature = "score_bench"))]
@@ -3121,7 +3240,7 @@ fn main() {
         if args.misses_report {
             run_conversion_report();
         } else {
-            run_misses_queue(args.misses_limit);
+            run_misses_queue(args.misses_limit, &args.paths);
         }
         return;
     }
@@ -3335,6 +3454,8 @@ fn main() {
             std::process::exit(2);
         }
     }
+
+    // ── Issue 072 T5 (Plan 092): the frontier-ordered authoring queue ──
 
     // Plan 019 T1.5: the mode-flag matrix (pinned by
     // `mode_flag_tests` below).

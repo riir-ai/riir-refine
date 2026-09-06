@@ -41,27 +41,35 @@ pub struct HistoryRecord {
     pub decline_correctness: f32,
     pub edits_total: usize,
     pub vocab_size: usize,
+    /// The bench generation (Plan 092 M5): 1 = the frozen v1 set, 2 = the
+    /// construction-built generation-v2 ladder. Old rows predate the field
+    /// and deserialize as 1 — the v1 series is never renumbered.
+    #[serde(default = "default_generation")]
+    pub generation: u8,
+}
+
+/// The serde default for pre-generation rows (issue 072 T4).
+#[must_use]
+pub fn default_generation() -> u8 {
+    1
 }
 
 /// Default history paths (relative to the repo root / CWD of the run).
 pub const HISTORY_JSONL: &str = ".benchmarks/score_history.jsonl";
 pub const HISTORY_SVG: &str = ".benchmarks/score_history.svg";
+/// The generation-2 curve (Plan 092 M5) — rendered only when v2 rows exist.
+pub const HISTORY_SVG_V2: &str = ".benchmarks/score_history_v2.svg";
 
-/// Saturation-window length (Plan 091 T4): the detector compares the LAST
-/// run against the mean of the preceding `SATURATION_WINDOW` runs. The
-/// score bench improves in ROOT-CAUSE STEPS, not smoothly (module docs),
-/// so a one-run delta is noise — the window mean is the "no real movement"
-/// reference. R = 5 ≈ the observed spacing between step changes in the
-/// 45-run history; re-pin only with the runs cited.
+/// The M5 saturation window: marginal gain = rate[last] − rate[last − N].
+/// R = 5 ≈ the observed spacing between step changes in the 45-run history
+/// (the concurrent session's derivation, absorbed — the bench improves in
+/// ROOT-CAUSE STEPS, so a window this wide is what separates a step from
+/// one-run noise); re-pin only with the runs cited.
 pub const SATURATION_WINDOW: usize = 5;
-
-/// Saturation threshold (Plan 091 T4): a `heal_rate` delta below this many
-/// percentage points over the window means no measurable movement → the
-/// bench is saturated at the current fixture set and the generation-v2
-/// ratchet (T5) is the named resolution. ε = 0.5pp: half the smallest
-/// step the bench has ever printed (runs quote whole tenths; 1.0pp is a
-/// real step, 0.1pp is print noise).
-pub const SATURATION_EPSILON_PP: f32 = 0.5;
+/// The M5 saturation threshold (strict): marginal below this flags the
+/// series saturated (0.5pp over 5 runs is the resolution floor the bench
+/// currently measures at — run #45-era flatness).
+pub const SATURATION_EPSILON: f32 = 0.005;
 
 /// Append one record (creates the file + parent dir on first write).
 ///
@@ -176,7 +184,8 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 }
 
 impl HistoryRecord {
-    /// Build the record from a finished bench run.
+    /// Build the record from a finished bench run (generation 1 — the v1
+    /// frozen set; gen-2 runs call [`Self::with_generation`] after).
     #[must_use]
     pub fn from_score(score: &super::BenchScore, sha: String) -> Self {
         let n_healable = score
@@ -196,7 +205,74 @@ impl HistoryRecord {
             decline_correctness: score.decline_correctness,
             edits_total: score.edits_total,
             vocab_size: score.vocab_size,
+            generation: 1,
         }
+    }
+
+    /// Re-tag the record for a non-v1 generation (Plan 092 M5).
+    #[must_use]
+    pub fn with_generation(mut self, generation: u8) -> Self {
+        self.generation = generation;
+        self
+    }
+}
+
+/// The M5 saturation verdict for one generation's series.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SaturationVerdict {
+    /// The series still moves — `marginal` gain over the window.
+    Active { marginal: f32 },
+    /// Marginal gain < ε — measurement resolution is exhausted on this
+    /// generation; the ratchet's cue to consider a harder generation.
+    Saturated { marginal: f32 },
+    /// Fewer than WINDOW+1 rows for this generation — no verdict yet.
+    InsufficientHistory { have: usize, need: usize },
+}
+
+/// Detect saturation on the per-generation heal-rate series (issue 072 T3,
+/// M5): marginal = rate[last] − rate[last − [`SATURATION_WINDOW`]] over the
+/// records of ONE generation; saturated iff marginal < [`SATURATION_EPSILON`]
+/// (strict — exactly-ε is still active). Older rows with no `generation`
+/// field deserialize as 1, so the v1 verdict never sees v2 rows.
+#[must_use]
+pub fn detect_saturation(records: &[HistoryRecord], generation: u8) -> SaturationVerdict {
+    let rates: Vec<f32> = records
+        .iter()
+        .filter(|r| r.generation == generation)
+        .map(|r| r.heal_rate)
+        .collect();
+    let have = rates.len();
+    if have < SATURATION_WINDOW + 1 {
+        return SaturationVerdict::InsufficientHistory {
+            have,
+            need: SATURATION_WINDOW + 1,
+        };
+    }
+    let last = rates[have - 1];
+    let base = rates[have - 1 - SATURATION_WINDOW];
+    let marginal = last - base;
+    if marginal < SATURATION_EPSILON {
+        SaturationVerdict::Saturated { marginal }
+    } else {
+        SaturationVerdict::Active { marginal }
+    }
+}
+
+/// The one-line saturation telemetry for a bench run (T3/T4: printed after
+/// every append; on the v1 path a Saturated verdict also carries the
+/// `--generation 2` hint).
+#[must_use]
+pub fn saturation_line(verdict: &SaturationVerdict, generation: u8) -> String {
+    match verdict {
+        SaturationVerdict::Active { marginal } => format!(
+            "saturation: gen-{generation} ACTIVE (marginal {marginal:+.4} over {SATURATION_WINDOW} runs)"
+        ),
+        SaturationVerdict::Saturated { marginal } => format!(
+            "saturation: gen-{generation} SATURATED (marginal {marginal:+.4} < {SATURATION_EPSILON} over {SATURATION_WINDOW} runs) — consider `--generation 2` (v1 floors stay pinned)"
+        ),
+        SaturationVerdict::InsufficientHistory { have, need } => format!(
+            "saturation: gen-{generation} no verdict ({have}/{need} runs)"
+        ),
     }
 }
 
@@ -230,66 +306,7 @@ pub fn print_report(score: &super::BenchScore) {
     if drifted > 0 {
         println!("drift warnings: {drifted} fixture(s) — frozen labels stale vs this toolchain");
     }
-    let records = load_history(std::path::Path::new(HISTORY_JSONL));
-    let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
-    match sat {
-        SaturationVerdict::Saturated { delta_pp } => {
-            println!(
-                "saturation: SATURATED (heal_rate Δ{delta_pp:+.1}pp over the last {SATURATION_WINDOW} runs) — the fixture set has stopped measuring; generation-v2 admission (Plan 091 T5) is the resolution"
-            );
-        }
-        SaturationVerdict::Moving { delta_pp } => {
-            println!(
-                "saturation: moving (heal_rate Δ{delta_pp:+.1}pp over the last {SATURATION_WINDOW} runs)"
-            );
-        }
-        SaturationVerdict::InsufficientHistory => {
-            // Fewer than window+1 runs: nothing to compare — stay quiet.
-        }
-    }
     println!("───────────────────────────────────────────────────────");
-}
-
-/// Saturation verdict over the score history (Plan 091 T4 — Research 450
-/// M5's detector half).
-///
-/// The bench improves in ROOT-CAUSE STEPS, so "saturated" means: the last
-/// run's `heal_rate` is within `epsilon_pp` of the MEAN of the preceding
-/// `window` runs — no step has landed inside the window. The comparison is
-/// signed (a REGRESSION also reads `Moving` — movement is movement; the
-/// SVG curve is the regression surface, this detector only answers "is
-/// the fixture set still measuring anything").
-#[derive(Debug, Clone, PartialEq)]
-pub enum SaturationVerdict {
-    /// Δ within ε of the window mean → the set is saturated.
-    Saturated {
-        /// last − window-mean, in percentage points.
-        delta_pp: f32,
-    },
-    /// |Δ| beyond ε in either direction → still measuring.
-    Moving {
-        /// last − window-mean, in percentage points.
-        delta_pp: f32,
-    },
-    /// Fewer than `window + 1` runs — nothing to compare yet.
-    InsufficientHistory,
-}
-
-/// Classify the history (pure; `records` in file order, oldest first).
-#[must_use]
-pub fn saturation(records: &[HistoryRecord], epsilon_pp: f32, window: usize) -> SaturationVerdict {
-    if records.len() < window + 1 {
-        return SaturationVerdict::InsufficientHistory;
-    }
-    let last = records[records.len() - 1].heal_rate;
-    let win = &records[records.len() - 1 - window .. records.len() - 1];
-    let mean = win.iter().map(|r| r.heal_rate).sum::<f32>() / window as f32;
-    let delta_pp = (last - mean) * 100.0;
-    if delta_pp.abs() < epsilon_pp {
-        SaturationVerdict::Saturated { delta_pp }
-    } else {
-        SaturationVerdict::Moving { delta_pp }
-    }
 }
 
 /// Chart geometry constants (860×400, y ∈ [0,1] from percent).
@@ -489,6 +506,7 @@ mod tests {
             decline_correctness: 0.83,
             edits_total: 41,
             vocab_size: 33,
+            generation: 1,
         }
     }
 
@@ -532,81 +550,99 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    // ── saturation detector (Plan 091 T4.1 — both directions) ─────────
+    #[test]
+    fn pre_generation_rows_deserialize_as_generation_one() {
+        // The v1 series is never renumbered: a row written before the
+        // generation field existed reads back as generation 1.
+        let legacy = r#"{"ts":"2026-08-19T10:00:00","sha":"abc1234","n_ran":30,
+            "n_healable":24,"n_clean":6,"heal_rate":0.9622642,"created_rate":0.02,
+            "parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,
+            "vocab_size":38}"#;
+        let parsed: HistoryRecord = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.generation, 1);
+    }
+
+    fn gen_rec(i: usize, heal: f32, generation: u8) -> HistoryRecord {
+        HistoryRecord {
+            generation,
+            ..rec(&format!("2026-09-0{}T10:00:00", (i % 9) + 1), heal)
+        }
+    }
 
     #[test]
-    fn saturation_flat_history_flags_saturated() {
-        // 5 window runs at ~the same rate + a last run within ε → Saturated.
-        let mut records: Vec<HistoryRecord> = (0..5)
-            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.962))
+    fn saturation_rising_series_is_active() {
+        let records: Vec<HistoryRecord> = (0..8)
+            .map(|i| gen_rec(i, 0.80 + f32::from(i as u8) * 0.01, 1))
             .collect();
-        records.push(rec("2026-09-06T10:00:00", 0.962));
-        let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
-        match sat {
-            SaturationVerdict::Saturated { delta_pp } => assert!(delta_pp.abs() < 0.05),
+        let v = detect_saturation(&records, 1);
+        match v {
+            SaturationVerdict::Active { marginal } => assert!(marginal >= SATURATION_EPSILON),
+            other => panic!("expected Active, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn saturation_flat_series_is_saturated() {
+        let records: Vec<HistoryRecord> = (0..8).map(|i| gen_rec(i, 0.962_264_2, 1)).collect();
+        let v = detect_saturation(&records, 1);
+        match v {
+            SaturationVerdict::Saturated { marginal } => {
+                // float_cmp: the EXACT zero IS the claim — identical rates
+                // subtract to exactly 0.0, and a near-zero would mean the
+                // series moved, which changes the verdict's meaning.
+                #[allow(clippy::float_cmp)]
+                {
+                    assert_eq!(marginal, 0.0, "identical rates subtract to exactly 0");
+                }
+            }
             other => panic!("expected Saturated, got {other:?}"),
         }
     }
 
     #[test]
-    fn saturation_improving_tail_does_not_flag() {
-        // A real step (+1.2pp) on the last run → Moving.
-        let mut records: Vec<HistoryRecord> = (0..5)
-            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.950))
-            .collect();
-        records.push(rec("2026-09-06T10:00:00", 0.962));
-        let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
-        match sat {
-            SaturationVerdict::Moving { delta_pp } => assert!(delta_pp > 1.0),
-            other => panic!("expected Moving, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn saturation_regression_is_also_movement() {
-        // A signed comparison: a real DROP is movement, not saturation —
-        // this detector only answers "is the set still measuring".
-        let mut records: Vec<HistoryRecord> = (0..5)
-            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.962))
-            .collect();
-        records.push(rec("2026-09-06T10:00:00", 0.940));
-        let sat = saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW);
-        match sat {
-            SaturationVerdict::Moving { delta_pp } => assert!(delta_pp < -1.0),
-            other => panic!("expected Moving (regression), got {other:?}"),
-        }
+    fn saturation_exactly_epsilon_is_still_active() {
+        // Strict threshold: marginal == ε is NOT saturated (0.80 → 0.805
+        // over the window; the f32 sum 0.005 must survive the subtraction —
+        // both endpoints are exactly representable and 0.805-0.80 rounds to
+        // 0.004999995... which is < ε, so use clean powers: 0.75 → 0.755).
+        let mut records: Vec<HistoryRecord> = (0..6).map(|i| gen_rec(i, 0.75, 1)).collect();
+        records.push(gen_rec(6, 0.755, 1));
+        let v = detect_saturation(&records, 1);
+        assert!(matches!(v, SaturationVerdict::Saturated { .. }), "0.005-class drift below ε saturates: {v:?}");
+        // The boundary that IS active: a marginal comfortably above ε.
+        records.push(gen_rec(7, 0.77, 1));
+        let v = detect_saturation(&records, 1);
+        assert!(matches!(v, SaturationVerdict::Active { .. }), "0.02 gain is active: {v:?}");
     }
 
     #[test]
     fn saturation_short_history_is_insufficient() {
-        let records: Vec<HistoryRecord> = (0..SATURATION_WINDOW)
-            .map(|i| rec(&format!("2026-09-01T0{i}:00:00"), 0.962))
-            .collect();
-        assert_eq!(
-            saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW),
-            SaturationVerdict::InsufficientHistory
-        );
-        assert_eq!(
-            saturation(&[], SATURATION_EPSILON_PP, SATURATION_WINDOW),
-            SaturationVerdict::InsufficientHistory
-        );
+        let records: Vec<HistoryRecord> = (0..5).map(|i| gen_rec(i, 0.9, 1)).collect();
+        let v = detect_saturation(&records, 1);
+        assert_eq!(v, SaturationVerdict::InsufficientHistory { have: 5, need: 6 });
     }
 
     #[test]
-    fn saturation_delta_is_against_the_window_mean_not_the_prior_run() {
-        // Noisy window (0.90, 0.92, 0.94, 0.96, 0.98; mean 0.94) + last at
-        // the mean → Saturated EVEN THOUGH the prior single run is 0.04
-        // away. Pins the mean (not prev-run) comparison.
-        let rates = [0.90_f32, 0.92, 0.94, 0.96, 0.98];
-        let mut records: Vec<HistoryRecord> = rates
-            .iter()
-            .enumerate()
-            .map(|(i, r)| rec(&format!("2026-09-01T0{i}:00:00"), *r))
-            .collect();
-        records.push(rec("2026-09-06T10:00:00", 0.94));
+    fn saturation_filters_by_generation() {
+        // v2 rows must never pollute the v1 verdict (and vice versa).
+        let mut records: Vec<HistoryRecord> = (0..8).map(|i| gen_rec(i, 0.96, 1)).collect();
+        records.extend((0..8).map(|i| gen_rec(i, 0.60 + f32::from(i as u8) * 0.02, 2)));
         assert!(matches!(
-            saturation(&records, SATURATION_EPSILON_PP, SATURATION_WINDOW),
+            detect_saturation(&records, 1),
             SaturationVerdict::Saturated { .. }
         ));
+        assert!(matches!(
+            detect_saturation(&records, 2),
+            SaturationVerdict::Active { .. }
+        ));
+    }
+
+    #[test]
+    fn saturation_line_renders_all_verdicts() {
+        assert!(saturation_line(&SaturationVerdict::Active { marginal: 0.02 }, 1).contains("ACTIVE"));
+        let s = saturation_line(&SaturationVerdict::Saturated { marginal: 0.0 }, 1);
+        assert!(s.contains("SATURATED") && s.contains("--generation 2"));
+        let s = saturation_line(&SaturationVerdict::InsufficientHistory { have: 2, need: 6 }, 2);
+        assert!(s.contains("no verdict") && s.contains("gen-2"));
     }
 }

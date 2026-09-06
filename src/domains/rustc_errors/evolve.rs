@@ -29,8 +29,11 @@
 //! excerpt. The `wgsl_mine` precedent — mine fix-pairs out of history;
 //! here history is handed to you pre-packaged.
 
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use crate::dispersion::{frontier_order, from_counts, OutcomeClass, PoolEntry};
 use super::driver::{FixCompileReport, MissRecord};
 use crate::recorder::EvolveRecorder;
 
@@ -161,128 +164,142 @@ pub fn dump_misses(root: &Path, misses: &[MissRecord]) -> (Vec<PathBuf>, Vec<Str
     (written, warnings)
 }
 
-/// One parsed authoring-queue entry (Plan 091 T1.1).
-#[derive(Debug, Clone)]
-pub struct MissEntry {
-    pub path: PathBuf,
-    /// The error code — filename stem up to the last `-<digits>` suffix
-    /// (`E0502-1730000000000000000.md` → `E0502`); the whole stem when no
-    /// digit suffix (hand-authored entries stay queueable).
+// ── Issue 072 T5 (Plan 092): the frontier-ordered authoring queue ───────
+
+/// The error code of a queue file name (`E0502-1690000000.md` → `E0502`).
+/// `None` for the README and anything that does not match the shape.
+#[must_use]
+pub fn parse_miss_code(file_name: &str) -> Option<&str> {
+    let stem = file_name.strip_suffix(".md")?;
+    if stem.eq_ignore_ascii_case("README") {
+        return None;
+    }
+    let idx = stem.rfind('-')?;
+    let code = &stem[..idx];
+    if code.is_empty() { None } else { Some(code) }
+}
+
+/// Aggregate per-code outcome counts from trajectory rows
+/// (`"{code}:{strategy}"` keys → `(kept, reverted)` per code). Pure — the
+/// CLI feeds it from the store (`dump()`) or the JSON envelope (`iter()`).
+#[must_use]
+pub fn code_outcomes_from_rows(
+    rows: impl Iterator<Item = (String, u32, u32)>,
+) -> BTreeMap<String, (usize, usize)> {
+    let mut out: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for (key, success, fail) in rows {
+        let code = key.split(':').next().unwrap_or_default();
+        if code.is_empty() {
+            continue;
+        }
+        let entry = out.entry(code.to_string()).or_default();
+        entry.0 += success as usize;
+        entry.1 += fail as usize;
+    }
+    out
+}
+
+/// One rendered queue row (exposed for tests).
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueueRow {
+    pub rank: usize,
     pub code: String,
-    /// Captured timestamp from the filename suffix, when parseable.
-    pub captured_unix_nanos: Option<u128>,
-    /// `- **file:** {path}:{line}` from the body, when parseable.
-    pub file_line: Option<(String, u32)>,
+    pub misses: usize,
+    pub kept: usize,
+    pub reverted: usize,
+    pub entropy: f64,
+    pub regime: crate::dispersion::Regime,
 }
 
-/// Parse one queue entry. Tolerant by design: any `.md` file that is not
-/// the README is an entry, and unparsable fields degrade to `None` — the
-/// queue is an aid, never a gate. The code is the leading `-`-token of the
-/// stem (rustc codes are `E<digits>`, never containing a dash), so both
-/// the writer's `{code}-{nanos}.md` form and hand-authored
-/// `{code}-note.md` forms pool correctly.
+/// The frontier-ordered authoring queue (issue 072 T4's control law wired
+/// into the `.heal/misses/` loop): each queue code is a candidate pool whose
+/// outcomes are the store's kept/reverted history for `{code}:*` plus ONE
+/// Missed per queue occurrence; [`frontier_order`] puts informative pools
+/// (mixed evidence — resolving them converts the most) first, saturated last.
+/// This is the real-G8 instrument: authoring from the top of this report vs
+/// the historical FIFO order is the Certified-conversion A/B (the gate shape
+/// lives in `.issues/072`; the measurement starts when the queue is
+/// non-empty).
 #[must_use]
-fn parse_miss_entry(path: PathBuf) -> MissEntry {
-    let stem = path
-        .file_stem()
-        .map_or_else(|| "unknown".to_string(), |s| s.to_string_lossy().into_owned());
-    let code = stem.split('-').next().unwrap_or("unknown").to_string();
-    let captured = match stem.rsplit_once('-') {
-        Some((_, tail)) if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) => {
-            tail.parse::<u128>().ok()
-        }
-        _ => None,
-    };
-    let body = std::fs::read_to_string(&path).ok();
-    let file_line = body.as_deref().and_then(|b| {
-        b.lines().find_map(|l| {
-            let rest = l.trim().strip_prefix("- **file:** ")?;
-            let (f, ln) = rest.rsplit_once(':')?;
-            Some((f.to_string(), ln.trim().parse::<u32>().ok()?))
-        })
-    });
-    MissEntry {
-        path,
-        code,
-        captured_unix_nanos: captured,
-        file_line,
-    }
-}
-
-/// Read the whole authoring queue (`.heal/misses/*.md`, README excluded),
-/// filename-sorted for determinism (the ts suffix is sortable).
-///
-/// # Errors
-///
-/// I/O from the directory read — the caller decides loud-vs-skip.
-pub fn read_misses(dir: &Path) -> std::io::Result<Vec<MissEntry>> {
-    let mut entries = Vec::new();
-    for e in std::fs::read_dir(dir)? {
-        let e = e?;
-        let path = e.path();
-        let is_entry = path.extension().is_some_and(|x| x == "md")
-            && path.file_name().is_some_and(|n| n.to_string_lossy() != "README.md");
-        if is_entry {
-            entries.push(parse_miss_entry(path));
+pub fn frontier_queue_report(
+    dir: &Path,
+    code_outcomes: &BTreeMap<String, (usize, usize)>,
+) -> String {
+    // Collect queue occurrences per code (sorted file names → stable order).
+    let mut occurrences: BTreeMap<String, usize> = BTreeMap::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if !name.to_ascii_lowercase().ends_with(".md") {
+                continue;
+            }
+            if let Some(code) = parse_miss_code(&name) {
+                *occurrences.entry(code.to_string()).or_default() += 1;
+            }
         }
     }
-    entries.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(entries)
-}
-
-/// Frontier-order the authoring queue (Plan 091 T1.1) — the real-G8
-/// enabler: informative code-pools first (resolving THOSE codes converts
-/// uncertain candidates), empty next (one probe is cheap), regenerate,
-/// saturated last (the template already always-works or always-fails).
-/// Ties break by code then path, deterministic.
-///
-/// `outcomes_by_code` maps an error code to its observed driver outcomes
-/// (`Kept` = success-verified, `Reverted` = failure, `Missed` = no
-/// candidate kept). The caller builds it from the trajectory store; an
-/// empty map means every pool reads `Empty` and the order degenerates to
-/// code-sorted — byte-equivalent information to today's FIFO listing.
-#[must_use]
-pub fn frontier_order_misses(
-    entries: &[MissEntry],
-    outcomes_by_code: &std::collections::BTreeMap<String, Vec<crate::dispersion::OutcomeClass>>,
-) -> Vec<(MissEntry, crate::dispersion::FrontierVerdict)> {
-    // One verdict per CODE (the pool granularity); entries inherit it.
-    let codes: std::collections::BTreeSet<&str> =
-        entries.iter().map(|e| e.code.as_str()).collect();
-    let pool: Vec<crate::dispersion::PoolEntry> = codes
+    if occurrences.is_empty() {
+        return format!(
+            "# misses queue — frontier order\n\n(empty: no unresolved misses at {})\n",
+            dir.display()
+        );
+    }
+    let pool: Vec<PoolEntry> = occurrences
         .iter()
-        .map(|&c| {
-            crate::dispersion::PoolEntry::new(
-                c.to_string(),
-                outcomes_by_code.get(c).cloned().unwrap_or_default(),
-            )
+        .map(|(code, misses)| {
+            let (kept, reverted) = code_outcomes.get(code).copied().unwrap_or((0, 0));
+            PoolEntry::new(code.clone(), from_counts(kept, reverted, *misses))
         })
         .collect();
-    let verdicts: std::collections::BTreeMap<String, crate::dispersion::FrontierVerdict> =
-        crate::dispersion::frontier_order(&pool)
-            .into_iter()
-            .map(|v| (v.id.clone(), v))
-            .collect();
-    let mut ordered: Vec<(MissEntry, crate::dispersion::FrontierVerdict)> = entries
-        .iter()
-        .filter_map(|e| {
-            verdicts.get(&e.code).map(|v| (e.clone(), v.clone()))
-        })
-        .collect();
-    let rank = |r: crate::dispersion::Regime| match r {
-        crate::dispersion::Regime::Informative => 0_u8,
-        crate::dispersion::Regime::Empty => 1,
-        crate::dispersion::Regime::Regenerate => 2,
-        crate::dispersion::Regime::Saturated => 3,
-    };
-    ordered.sort_by(|(a, va), (b, vb)| {
-        rank(va.regime)
-            .cmp(&rank(vb.regime))
-            .then(vb.entropy.total_cmp(&va.entropy))
-            .then(a.code.cmp(&b.code))
-            .then(a.path.cmp(&b.path))
-    });
-    ordered
+    let ordered = frontier_order(&pool);
+    let by_code: BTreeMap<&str, &PoolEntry> = pool.iter().map(|p| (p.id.as_str(), p)).collect();
+    let mut rows: Vec<QueueRow> = Vec::with_capacity(ordered.len());
+    for (rank, verdict) in ordered.iter().enumerate() {
+        let entry = by_code[verdict.id.as_str()];
+        let (kept, reverted) = code_outcomes
+            .get(verdict.id.as_str())
+            .copied()
+            .unwrap_or((0, 0));
+        rows.push(QueueRow {
+            rank: rank + 1,
+            code: verdict.id.clone(),
+            misses: entry.outcomes.iter().filter(|o| **o == OutcomeClass::Missed).count(),
+            kept,
+            reverted,
+            entropy: verdict.entropy,
+            regime: verdict.regime,
+        });
+    }
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "# misses queue — frontier order ({} code(s))\n",
+        rows.len()
+    );
+    out.push_str(
+        "Author the TOP entry first: informative pools convert the most \
+         uncertain candidates per authored template (issue 072 T4's control \
+         law; the real-G8 A/B vs the FIFO historical order is the conversion \
+         column after each template lands).\n\n",
+    );
+    out.push_str("| rank | code | misses | kept | reverted | entropy | regime | conversion |\n");
+    out.push_str("|---|---|---|---|---|---|---|---|\n");
+    for r in &rows {
+        let conv = if r.kept + r.reverted == 0 {
+            "-".to_string()
+        } else {
+            #[allow(clippy::cast_precision_loss)]
+            let pct = (r.kept as f64) / ((r.kept + r.reverted) as f64) * 100.0;
+            format!("{pct:.0}%")
+        };
+        let regime = r.regime.label();
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {} | {:.3} | {regime} | {conv} |",
+            r.rank, r.code, r.misses, r.kept, r.reverted, r.entropy
+        );
+    }
+    out
 }
 
 // ── Plan 091 T1.3 — the conversion ledger (the real-G8 instrument) ────
@@ -557,88 +574,6 @@ mod tests {
         assert!(!root.exists(), "no dir created for an empty queue");
     }
 
-    // ── Plan 091 T1.1 — read_misses + frontier_order_misses ───────────
-
-    fn seed_queue(dir: &Path, name: &str, body: &str) -> PathBuf {
-        std::fs::create_dir_all(dir).unwrap();
-        let p = dir.join(name);
-        std::fs::write(&p, body).unwrap();
-        p
-    }
-
-    const MISS_BODY: &str = "# E0502 — unresolved by the rustc_errors playbooks\n\
-         - **file:** /x/src/lib.rs:7\n\
-         - **message:** cannot borrow\n";
-
-    #[test]
-    fn read_misses_parses_code_ts_and_file_line_excluding_readme() {
-        let dir = std::env::temp_dir().join(format!("p091_read_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        seed_queue(&dir, "E0502-1730000000000000000.md", MISS_BODY);
-        seed_queue(&dir, "README.md", "the contract");
-        seed_queue(&dir, "E9999-hand-authored.md", "- **file:** /y/a.rs:12\n");
-        seed_queue(&dir, "weird.md", "no structured fields\n");
-        let mut entries = read_misses(&dir).unwrap();
-        assert_eq!(entries.len(), 3, "README excluded");
-        entries.sort_by(|a, b| a.code.cmp(&b.code));
-        let e = entries.iter().find(|e| e.code == "E0502").unwrap();
-        assert_eq!(e.captured_unix_nanos, Some(1_730_000_000_000_000_000));
-        assert_eq!(e.file_line, Some(("/x/src/lib.rs".into(), 7)));
-        let h = entries.iter().find(|e| e.code == "E9999").unwrap();
-        assert_eq!(h.file_line, Some(("/y/a.rs".into(), 12)));
-        let w = entries.iter().find(|e| e.code == "weird").unwrap();
-        assert_eq!(w.captured_unix_nanos, None, "no digit suffix → whole stem");
-        assert_eq!(w.file_line, None, "tolerant of unstructured bodies");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn frontier_order_puts_informative_codes_first_and_orders_within() {
-        use crate::dispersion::OutcomeClass;
-        let dir = std::env::temp_dir().join(format!("p091_ord_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        // Filenames in DELIBERATELY anti-frontier order: saturated code
-        // (all Kept) first, informative second, empty third.
-        seed_queue(&dir, "E0001-1.md", "x");
-        seed_queue(&dir, "E0002-2.md", "x");
-        seed_queue(&dir, "E0003-3.md", "x");
-        let entries = read_misses(&dir).unwrap();
-        let mut outcomes = std::collections::BTreeMap::new();
-        outcomes.insert(
-            "E0001".to_string(),
-            vec![OutcomeClass::Kept, OutcomeClass::Kept],
-        );
-        outcomes.insert(
-            "E0002".to_string(),
-            vec![OutcomeClass::Kept, OutcomeClass::Reverted],
-        );
-        // E0003: no record → Empty.
-        let ordered = frontier_order_misses(&entries, &outcomes);
-        let codes: Vec<&str> = ordered.iter().map(|(e, _)| e.code.as_str()).collect();
-        assert_eq!(codes, vec!["E0002", "E0003", "E0001"], "informative, empty, saturated");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn frontier_order_with_no_evidence_degenerates_to_code_sorted() {
-        let dir = std::env::temp_dir().join(format!("p091_deg_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        seed_queue(&dir, "E0009-1.md", "x");
-        seed_queue(&dir, "E0001-2.md", "x");
-        let entries = read_misses(&dir).unwrap();
-        let empty = std::collections::BTreeMap::new();
-        let ordered = frontier_order_misses(&entries, &empty);
-        let codes: Vec<&str> = ordered.iter().map(|(e, _)| e.code.as_str()).collect();
-        assert_eq!(codes, vec!["E0001", "E0009"], "all Empty → tie-break by code");
-        // Determinism: a second run is identical.
-        let again = frontier_order_misses(&entries, &empty);
-        assert_eq!(
-            ordered.iter().map(|(e, _)| e.path.clone()).collect::<Vec<_>>(),
-            again.iter().map(|(e, _)| e.path.clone()).collect::<Vec<_>>()
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
     #[test]
     fn record_run_buckets_by_code_and_strategy() {
         let mut rec = EvolveRecorder::new();
@@ -812,5 +747,78 @@ mod tests {
         // The production wiring: the derived inventory IS fully accounted
         // (rows carry no Unrecorded era in-tree).
         assert!(a.unrecorded.is_empty(), "in-tree ledger must be complete");
+    }
+
+    // ── Plan 092 T5 (the collision merge) — the frontier queue report ──
+
+    #[test]
+    fn parse_miss_code_reads_the_dump_shape() {
+        assert_eq!(parse_miss_code("E0502-1690000000.md"), Some("E0502"));
+        assert_eq!(parse_miss_code("E0499-42.md"), Some("E0499"));
+        assert_eq!(parse_miss_code("README.md"), None);
+        assert_eq!(parse_miss_code("readme.md"), None);
+        assert_eq!(parse_miss_code("-169.md"), None, "empty code rejected");
+        assert_eq!(parse_miss_code("nodash.txt"), None);
+    }
+
+    #[test]
+    fn code_outcomes_aggregate_by_the_key_prefix() {
+        let rows = [
+            ("E0502:e0502-deref-removal".to_string(), 3, 1),
+            ("E0502:e0502-clone-out".to_string(), 0, 2),
+            ("E0499:swap".to_string(), 1, 0),
+        ];
+        let map = code_outcomes_from_rows(rows.into_iter());
+        assert_eq!(map.get("E0502"), Some(&(3, 3)));
+        assert_eq!(map.get("E0499"), Some(&(1, 0)));
+        assert_eq!(map.len(), 2);
+    }
+
+    #[test]
+    fn frontier_report_orders_informative_first_and_renders_columns() {
+        let root = std::env::temp_dir().join(format!(
+            "riir_p92_miss_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = misses_dir(&root);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("README.md"), "contract").unwrap();
+        std::fs::write(dir.join("E0502-1.md"), "a").unwrap();
+        std::fs::write(dir.join("E0777-2.md"), "b").unwrap();
+        std::fs::write(dir.join("E0999-3.md"), "c").unwrap();
+        // E0502: mixed history (informative — 2 kept + 2 reverted + the queue
+        // miss); E0777: all-kept store history (4 kept + the queue miss →
+        // LOWER entropy but still informative — a fully-saturated pool can
+        // never occur in the queue, every entry IS a miss); E0999: no store
+        // evidence → one Missed = zero-entropy-all-fail = regenerate.
+        let mut outcomes = BTreeMap::new();
+        outcomes.insert("E0502".to_string(), (2usize, 2usize));
+        outcomes.insert("E0777".to_string(), (4usize, 0usize));
+        let report = frontier_queue_report(&dir, &outcomes);
+        assert!(report.contains("frontier order"));
+        assert!(report.contains("3 code(s)"), "README not counted: {report}");
+        // Highest entropy first, then the lower-entropy informative pool,
+        // regenerate (zero-entropy-all-fail) last.
+        let e0502 = report.find("| 1 | E0502").expect("mixed history first");
+        let e0777 = report.find("| 2 | E0777").expect("low-entropy informative second");
+        let e0999 = report.find("| 3 | E0999").expect("regenerate last");
+        assert!(e0502 < e0777 && e0777 < e0999);
+        assert!(report.contains("informative") && report.contains("regenerate"));
+        assert!(report.contains("50%"), "conversion column renders: {report}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn frontier_report_empty_queue_is_honest() {
+        let root = std::env::temp_dir().join(format!(
+            "riir_p92_miss_empty_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let report = frontier_queue_report(&misses_dir(&root), &BTreeMap::new());
+        assert!(report.contains("(empty"), "{report}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

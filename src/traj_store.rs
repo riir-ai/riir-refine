@@ -231,9 +231,20 @@ pub struct ScoreRunRow {
     pub decline_correctness: f32,
     pub edits_total: usize,
     pub vocab_size: usize,
+    /// The bench generation (Plan 092 M5) — mirrors the `HistoryRecord`
+    /// field; pre-generation rows default to 1 (serde) exactly like the
+    /// jsonl shape.
+    #[serde(default = "default_score_generation")]
+    pub generation: u8,
     /// Unix seconds of `ts` (the store-key ordering half; 0 = unparseable).
     #[serde(default)]
     pub recorded_unix: u64,
+}
+
+/// The serde default for pre-generation score rows (Plan 092 T4).
+#[must_use]
+pub fn default_score_generation() -> u8 {
+    1
 }
 
 #[cfg(feature = "score_bench")]
@@ -251,6 +262,7 @@ impl From<&crate::score_bench::report::HistoryRecord> for ScoreRunRow {
             decline_correctness: r.decline_correctness,
             edits_total: r.edits_total,
             vocab_size: r.vocab_size,
+            generation: r.generation,
             recorded_unix: parse_ts_unix(&r.ts),
         }
     }
@@ -2471,6 +2483,7 @@ mod tests {
             decline_correctness: 1.0,
             edits_total: 60,
             vocab_size: 33,
+            generation: 1,
             recorded_unix: unix,
         };
         let (store, _) = TrajStore::open(&root).unwrap();
@@ -2643,6 +2656,7 @@ mod tests {
             decline_correctness: 1.0,
             edits_total: 60,
             vocab_size: 33,
+            generation: 1,
         };
         let row = ScoreRunRow::from(&rec);
         assert_eq!(row.ts, rec.ts);
@@ -2661,6 +2675,7 @@ mod tests {
         }
         assert_eq!(row.edits_total, rec.edits_total);
         assert_eq!(row.vocab_size, rec.vocab_size);
+        assert_eq!(row.generation, rec.generation, "generation rides the row");
         assert_eq!(row.recorded_unix, parse_ts_unix(&rec.ts));
         // And the serialized jsonl line of the record is a PREFIX-shape of
         // the row: deserializing the record's JSON into a ScoreRunRow keeps

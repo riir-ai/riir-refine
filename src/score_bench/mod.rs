@@ -44,6 +44,7 @@
 //!   `expect_lints` prints a loud drift warning; the fresh verdict wins.
 
 pub mod fixtures;
+pub mod generations;
 pub mod report;
 
 use std::collections::BTreeMap;

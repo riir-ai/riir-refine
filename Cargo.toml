@@ -651,6 +651,14 @@ required-features = ["tpr_structure"]
 name = "t062_t6a_counterfactual"
 required-features = ["tpr_structure", "score_bench"]
 
+# Issue 072 T5/T6 (Plan 092) — the generation-v2 freeze/verify e2e. The
+# `#![cfg(feature = "score_bench")]` protects the COUNT; this row protects
+# the READER (naming the target without the feature is an error, not a
+# silent empty binary). The `--ignored` arm spawns real cargo+clippy.
+[[test]]
+name = "generation_v2_freeze"
+required-features = ["score_bench"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

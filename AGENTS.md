@@ -2304,13 +2304,15 @@ accumulates; Phases 2 (perf/format axes) + 3 (real-fraction growth:
 statement-wrap miner, stub manifests, crates.io source, cold/warm
 memory lines) defer-marked in the plan.
 
-**Issue 072 PoC (2026-09-06, Plan 091 — exit criterion MET; issue file
-stays OPEN with T5/T6).** The Frontier-evidence Challenger (J-Zero
+**Issue 072 (2026-09-06, CLOSED + removed per noise-reduction rule; Plans 091
++ 092, [Bench 069](.benchmarks/069_issue072_t5_t6_generations.md)).** The
+Frontier-evidence Challenger (J-Zero
 modelless fusion, arXiv:2608.26582 M1/M2/M3/M6) — attacks T39/Research
 135's measured starvation (98.5% of candidates unseen; "the bottleneck
 is evidence volume, not selection math") by densifying pools with
 CONSTRUCTION-labeled preference pairs: labels from the generator's
-intent, never from any evaluator output. Landed: `src/frontier_pairs.rs`
+intent, never from any evaluator output. **PoC (Plan 091, exit criterion
+MET 2-of-3):** `src/frontier_pairs.rs`
 (200 resolution pairs derived from `corpus_gen` — good = the case's own
 seed/planted truth, bad = a deterministic hash-rotated cross-code partner
 repair; strategy players mapped to playbook ids where the doc-verified
@@ -2331,12 +2333,37 @@ incl. the fixed-point-expected-score contract) + `src/dispersion.rs`
 fraction **0.786 → 0.429** pair-fed vs outcome-fed (outcome covers 3,
 pairs cover 8 of the 14-player universe; 200 pairs, zero cargo) —
 exit axis (a) PASS; (b) G8 PROXY — informative mean rank 2.00 (FIFO) →
-1.00 (frontier) — PASS at the proxy, the real G8 (Certified-conversion
-per authored rule) needs a live authoring loop and stays open with
-T5/T6; (c) retrieval floors GREEN (namespace isolation asserted
-structurally) — PASS. Any two of three → the issue promotes to a plan
-for T5 (composite exactness ladder) + T6 (generationed bench ratchet +
-wiring `frontier_order` into the `.heal/misses/` queue).
+1.00 (frontier) — PASS at the proxy; (c) retrieval floors GREEN — PASS.
+**T5/T6 (Plan 092, Bench 069):** `src/score_bench/generations.rs` — the M4
+k-ladder CONSTRUCTION-FIRST: atoms = the seed corpus's own parse-standalone
+spans (38, one per vocabulary lint), composites wrap each atom in its own
+module (zero interference by construction), deterministic stride selection.
+Freeze vs real clippy: **58/58 verified composites with union-of-atoms gold
+EXACT** (8 exclusions, all cascading from 2 bad atoms — `needless_match`
+also fires `manual_map`, `uninlined_format_args` also fires
+`useless_format`); per-k solve rates **100.0% FLAT at every k** → the
+pre-registered **branch (B)**: a corpus-atom ladder cannot be harder than
+proposers trained on that corpus. `report.rs`: `detect_saturation`
+(WINDOW=5, EPSILON=0.005 strict, per-generation) reads the live history
+**gen-1 SATURATED (marginal +0.0000 < 0.005 over 5 runs)**;
+`--generation 2` runs the ladder behind the non-vacuity admission gate and
+**honestly REFUSED (v2 1.0000 ≥ v1 0.9623, exit 1, nothing appended)** —
+per T6's own spec. `HistoryRecord.generation` (serde default 1 — v1 rows
+never renumbered; `ScoreRunRow` mirrors, schema-identity test extended);
+per-generation SVGs; the saturation line after every bench run;
+`--misses` (the frontier-ordered authoring queue: per-code pools =
+store kept/reverted + Missed × queue occurrences, ordered by
+`frontier_order`, conversion column = the real-G8 measure; `--misses
+--report` = the era-split conversion ledger). In-queue
+insight pinned in-test: a fully-saturated pool can never occur in the
+queue (every entry IS a miss) — all-kept store history reads as LOW-entropy
+informative. **Reopen conditions:** (1) difficulty axis for a generation 3
+(persist-shape stratification / real-repo interference spans /
+overlap-edit chains — Bench 069's ranked list; a harder generation
+re-enters through the same freeze discipline, never a silent v2 rewrite);
+(2) the real-G8 A/B — author N templates from the frontier-top of
+`--misses-report`, compare Certified-conversion vs the historical FIFO
+baseline; reopens when the queue has ≥3 entries + ≥1 authored template.
 **En-route catches:** (1) the pair row initially carried a wall-clock
 `created_unix` — the idempotence test flaked when two imports crossed a
 second boundary (the full-suite run caught it; the field is REMOVED —
@@ -2347,7 +2374,21 @@ outcome-fed baseline needs an explicit `recompute_elo()` first (a
 `recompute.matches > 0` now pins the arm is non-vacuous); (3) a 1-0
 outcome pool is SATURATED by the control law (zero-entropy-all-pass),
 not informative — a draft fixture mislabeled it and the assert correctly
-refused, the label now documented in the fixture.
+refused, the label now documented in the fixture; (4) the `.plans` 090
+dual allocation (this issue's PoC plan vs Batch 117's ds4 plan, landed the
+same window) resolved by citation weight — batch 117 keeps 090 (baked into
+5 corpus concept strings + the batch gate), the PoC plan renumbered 091
+(`b8d30e73`); (5) a FULL same-unit collision with a concurrent session on
+T5/T6 (their `.plans/091_issue072_t5_t6_*` plan + T1.1 queue listing + T4
+detector + T1.3 conversion ledger, three commits on origin mid-unit):
+adjudicated per push-wins + superset — this unit's freeze/ratchet/admission
+is the survivor, their queue listing + detector variant superseded, their
+plan file removed as the duplicate, **their T1.3 conversion ledger KEPT as
+complementary** (the era-split G8 instrument: `WIRED_STRATEGIES` baseline /
+`FRONTIER_LANDINGS` rows / `WIRING_COMMIT` window / the
+inventory-equality ratchet test); the unified CLI surface is their
+`--misses [--limit]` (this unit's frontier table) + `--misses --report`
+(their ledger). Full adjudication: Plan 092 §collision + Bench 069.
 
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`
