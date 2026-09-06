@@ -2304,7 +2304,7 @@ accumulates; Phases 2 (perf/format axes) + 3 (real-fraction growth:
 statement-wrap miner, stub manifests, crates.io source, cold/warm
 memory lines) defer-marked in the plan.
 
-**Issue 072 PoC (2026-09-06, Plan 090 — exit criterion MET; issue file
+**Issue 072 PoC (2026-09-06, Plan 091 — exit criterion MET; issue file
 stays OPEN with T5/T6).** The Frontier-evidence Challenger (J-Zero
 modelless fusion, arXiv:2608.26582 M1/M2/M3/M6) — attacks T39/Research
 135's measured starvation (98.5% of candidates unseen; "the bottleneck

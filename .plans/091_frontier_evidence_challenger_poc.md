@@ -1,4 +1,4 @@
-# Plan 090 — Issue 072 PoC: Frontier-evidence Challenger (construction pairs + BT pair-fed re-rating + dispersion selection)
+# Plan 091 — Issue 072 PoC: Frontier-evidence Challenger (construction pairs + BT pair-fed re-rating + dispersion selection)
 
 **Status:** COMPLETE — PoC executed; exit criterion MET (2 of 3 axes, the third structurally discharged + gate-run green). Commit lands with the issue-file verdict.
 
@@ -73,6 +73,11 @@ regression. Any two of three → promote the rest of issue 072 to a plan.
   outcomes as the conversion oracle (the G8 proxy, honestly labeled a proxy);
   (c) retrieval-floor regression gate re-run (existing gate must stay green).
   Verdict printed; exit criterion evaluated and recorded.
+  **NUMBERING NOTE (2026-09-06): this plan was landed as `090_frontier_*` in the same
+  window a sibling session dual-allocated 090 for Batch 117's ds4 plan; per the
+  citation-weight tie-breaker the batch plan keeps 090 (its number is baked into 5
+  corpus concept strings + the batch gate) and this file renumbered 090 → 091
+  (citations: issue 072 ×3 + `tests/frontier_poc_ab.rs` header).**
 - [x] **T6 — Dispersion telemetry (M6, T7 of the issue).** `stats_report` now
   carries the `dispersion:` line (per-rule outcome entropy, vacuous-window flag). `stats_report` gains a
   dispersion column (outcome-class entropy; zero-for-a-window = vacuous flag) — the

@@ -1,4 +1,4 @@
-//! Issue 072 PoC — the exit-criterion A/B harness (Plan 090 T5).
+//! Issue 072 PoC — the exit-criterion A/B harness (Plan 091 T5).
 //!
 //! The issue's exit criterion: pair-fed + frontier-fed arms vs the
 //! outcome-fed baseline on the three axes —
