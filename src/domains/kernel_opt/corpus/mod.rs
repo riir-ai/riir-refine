@@ -1562,6 +1562,7 @@ mod entries_gpu_27;
 mod entries_gpu_28;
 mod entries_gpu_29;
 mod entries_gpu_30;
+mod entries_gpu_31;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1605,6 +1606,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_28::entries());
     entries.extend(entries_gpu_29::entries());
     entries.extend(entries_gpu_30::entries());
+    entries.extend(entries_gpu_31::entries());
     Corpus::new(entries)
 }
 
@@ -1617,7 +1619,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 552-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 555-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1625,7 +1627,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (116 rules)
+    // A: Memory access patterns (117 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1638,6 +1640,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "masked-boundary-load",
             "offload-cpu-bottleneck-to-gpu-kernel",
             "block-contiguous-weight-layout",
+            "batch-pool-read-makes-serial-readahead-redundant",
             "dequant-once-per-k-tile-into-shared-memory",
             "hoist-group-invariant-scale-out-of-word-loop",
             "row-tile-amortize-input-load",
@@ -2108,7 +2111,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (24 rules)
+    // H: MoE dispatch + backward pass (26 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2137,6 +2140,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "warp-aggregated-atomic-scatter",
             "routing-by-precomputed-lookup",
             "tile-amplification-precedes-staging-pass",
+            "cold-large-prefill-whole-layer-lookahead-over-partial-cache",
+            "static-seed-priority-bounded-to-observed-scale",
         ],
     ),
     // I: NSA block-sparse selection (6 rules)

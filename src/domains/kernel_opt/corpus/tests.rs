@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        552,
-        "kernel batches through Batch 119 should have 552 rules"
+        555,
+        "kernel batches through Batch 123 should have 555 rules"
     );
 }
 
@@ -5303,7 +5303,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 552-rule corpus must appear in exactly one category.
+    // Every rule_id in the 555-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5348,14 +5348,14 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for Batch 119).
     let expected = [
-        (KernelCategory::MemoryAccess, 116),
+        (KernelCategory::MemoryAccess, 117),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 45),
         (KernelCategory::Dispatch, 128),
         (KernelCategory::Parallelism, 45),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
-        (KernelCategory::MoeDispatchBackward, 24),
+        (KernelCategory::MoeDispatchBackward, 26),
         (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 9),
@@ -5376,9 +5376,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 552.
+    // Sum must equal 555.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 552, "Plan 003: category totals must sum to 552");
+    assert_eq!(total, 555, "Plan 003: category totals must sum to 555");
 }
 
 #[test]
@@ -5389,8 +5389,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 552,
-        "Plan 003: grouped corpus has {total} rules, expected 552"
+        total, 555,
+        "Plan 003: grouped corpus has {total} rules, expected 555"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9406,8 +9406,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        552,
-        "Batch 119: corpus should have 552 rules"
+        555,
+        "Batch 123: corpus should have 555 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {

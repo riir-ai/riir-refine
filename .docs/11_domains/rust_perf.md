@@ -25,9 +25,16 @@
 
 108 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 108 rules — Batch 122 (2026-09-07,
-Research 145 / Plan 102 — the ds4 PR vision delta, commit `69c38d2`)
-added three io rules, all NotBenchable-annotated:
+profiling guide, Research 032; **now 110 rules — Batch 123 (2026-09-07,
+Research 146 / Plan 103 — the ds4 upstream surge, commit `c0a6119f`)
+added two io rules, all NotBenchable-annotated:
+`full-vector-bit-identity-over-argmax` (a numeric-regression gate compares
+the FULL float vector bit-exactly with pre-validated artifacts and three
+statuses — identical/drift/invalid — never argmax-only), `renderer-error-
+is-not-capacity-overflow` (a tri-state fit validator keeps render errors
+off the destructive compaction path; only a true capacity overflow may
+compact). Batch 122 (Research 145 / Plan 102 — the ds4 PR vision delta,
+commit `69c38d2`) had added three io rules, all NotBenchable-annotated:
 `model-aware-format-over-hand-assembled-tokens` (one model-aware formatter
 owns a structured transcript turn; hand-pushed token sequences drift from
 the chat template silently), `implemented-surface-requires-provisioning-

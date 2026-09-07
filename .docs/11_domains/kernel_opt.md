@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-119: 552 rules; popcorn COMPLETE; riir-gpu opened Batch 14; external distills B48+ incl. ktransformers/omlx/PrismML/mlx-lm/llama.cpp/ds4/uzu/lily/MTPLX/vLLM/qwen38-mtp/ds4-PR991/low-latency-nccl; in-source campaign resumed B108) | ✅ | Future sources: arxiv walk #8 (time-blocked, see `.distill/001_mining_queue_snapshot.md`), the nnethercote blog after his next post |
+| Seed corpus (Batch 1-123: 555 rules; popcorn COMPLETE; riir-gpu opened Batch 14; external distills B48+ incl. ktransformers/omlx/PrismML/mlx-lm/llama.cpp/ds4/uzu/lily/MTPLX/vLLM/qwen38-mtp/ds4-PR991/low-latency-nccl; in-source campaign resumed B108) | ✅ | Future sources: arxiv walk #8 (time-blocked, see `.distill/001_mining_queue_snapshot.md`), the nnethercote blog after his next post |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |

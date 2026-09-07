@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 108 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 12, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 21 are honestly
+//! 110 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 14, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 23 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -23,7 +23,9 @@
 //! experimental-design content, not speed) + the three vision-delta
 //! annotations (Batch 122 — template-governed emission, provisioning
 //! completeness, per-turn diagnostics; correctness-of-emission and
-//! test-honesty content, not speed).
+//! test-honesty content, not speed) + the two upstream-surge annotations
+//! (Batch 123 — full-vector comparison integrity, tri-state fit
+//! classification; measurement-integrity and robustness content, not speed).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -130,7 +132,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (87/108):
+//! Currently benchable (87/110):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -272,6 +274,13 @@
 //!   session regression scans captured stderr for per-turn failure patterns
 //!   alongside the exit code and saves full transcripts; Batch 122, ds4
 //!   vision delta)
+//! - `full-vector-bit-identity-over-argmax` (measurement-integrity — a
+//!   numeric-regression gate compares the FULL float vector bit-exactly with
+//!   pre-validated artifacts and three statuses, never argmax-only; Batch
+//!   123, ds4 upstream surge)
+//! - `renderer-error-is-not-capacity-overflow` (robustness classification —
+//!   a tri-state fit validator keeps render errors off the destructive
+//!   compaction path; Batch 123, ds4 upstream surge)
 //! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
 //!   a timing gate whose work folds away under LTO has no nonzero baseline to
 //!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
@@ -2880,6 +2889,79 @@ PerfRule {
             buggy_code: "// Drive a REPL through several turns in one subprocess; assert on\n// the exit code. Turn 2 fails (logged to stderr), turns 3-4 succeed,\n// the process exits 0 -- the regression passes with a broken turn\n// inside it.\nfn run_session(repl: &str, session: &str) -> anyhow::Result<()> {\n    let out = Command::new(repl).stdin(session).output()?;\n    assert!(out.status.success(), \"session failed\");\n    Ok(())\n}".to_string(),
             fixed_code: "// The exit code is the LAST gate, not the only one: scan the\n// captured stderr for per-turn failure patterns (turn-scoped),\n// verify the success markers the tool itself prints, and save the\n// full transcript for human inspection -- do not try to grade\n// content in the harness.\nfn run_session(repl: &str, session: &str, transcript_path: &str) -> anyhow::Result<()> {\n    let out = Command::new(repl).stdin(session).output()?;\n    let diag = String::from_utf8_lossy(&out.stderr);\n    let turn_failures = scan_failures(&diag, &[\"failed\", \"outside the vocabulary\"]);\n    assert!(turn_failures.is_empty(), \"turn failures: {turn_failures:?}\");\n    assert!(markers_present(&out.stdout), \"turn success markers missing\");\n    std::fs::write(transcript_path, &out.stdout)?; // save, don't grade\n    assert!(out.status.success(), \"session failed\");\n    Ok(())\n}".to_string(),
             context_notes: Some("REGIME-ANNOTATED, source-reported (the source's regression comment: 'The REPL can return zero after an image turn fails if a later text turn succeeds. Check diagnostics as well as the process exit code'; the scan is a turn-scoped regex over captured stderr: 'failed|outside the vocabulary', plus the success marker 'ds4: image WxH, N image tokens' proving the encoder actually ran; honestly NotBenchable here -- test honesty, not speed). WHY THE EXIT CODE LIES: a REPL is a session aggregate -- any per-turn failure that the tool recovers from (or that only kills one turn) is invisible in the final status; the failure pattern must be scoped tightly enough to stay a FAILURE signal (the source's pattern also catches a benign 'outside the vocabulary' diag only because that diag IS a failure there). SAVE-DON'T-GRADE: the harness persists full stdout/stderr per mode for human inspection instead of asserting on model output content -- grading content makes the test flaky; grading DIAGNOSTICS keeps it deterministic. Both decode modes run (ordinary + speculative) so the failure class cannot hide behind one path. Distinct from assert-on-stderr-string rules (fragile matching; this ASSERTS on scanned failure patterns and saves everything), from golden-output regression (content-pinned; this is deliberately content-free), and from exit-code-only CI gates (the anti-shape itself). Suggestion-only (a parse-only proposer cannot see that the subprocess is a multi-turn session). Source: ivanfioravanti/ds4-metal PR #991 commit 69c38d2 (MIT) -- tests/test_qwen4_cli_vision.py:46-48 ('The REPL can return zero after an image turn fails if a later text turn succeeds' + the failure scan), :49-51 (the success marker + transcripts saved, 'it does not grade image content'). Batch 122 / Plan 102.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io (measurement integrity): a numeric-regression gate that trusts
+// argmax/top-k ID equality or tolerant parsing -----------------------
+        // Batch 123 (2026-09-07, Plan 103 -- the ds4 upstream surge,
+// commits 85a4f0e/5ad935d). The source's own tooling detected FULL-VECTOR
+// drift at 4/4 frontiers where argmax IDs matched; the old comparator
+// silently accepted missing rows, duplicate rows and NaN.
+        PerfRule {
+            rule_id: "full-vector-bit-identity-over-argmax".to_string(),
+            name: "numeric-regression gate compares argmax/top-k IDs or parses measurement artifacts tolerantly -> compare the FULL float vector bit-exactly (canonical spelling, signed zero preserved), pre-validate artifacts (manifest coverage, no duplicate/missing rows, no NaN, internal ratio consistency), and report drift / invalid / identical as THREE statuses".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The comparator trusts partial identity and tolerant parsing: argmax\n// IDs match (a lossy projection -- thousands of logits can drift while\n// the sampled token stays identical), missing rows fold to 0.0, duplicate\n// IDs silently overwrite, NaN parses fine. The drift ships as PASS.\nfn compare(base: &str, cand: &str) -> bool {
+    let rows = load_lenient(base);   // missing key .get(key, 0.0); dup overwrites
+    for case in cases {
+        if argmax(base_logits(case)) != argmax(cand_logits(case)) {
+            return false;            // ID equality = the whole gate
+        }
+    }
+    true
+}".to_string(),
+            fixed_code: "// Three gates BEFORE comparing: (1) artifact validity -- manifest\n// coverage, no duplicate/missing rows, canonical finite spelling (no\n// NaN/Inf/scientific), internal consistency (ratio == num/denom within\n// the producer's half-print unit); (2) full-vector identity -- every\n// float32 bit, signed zero preserved, argmax checked but NOT sufficient;\n// (3) three statuses -- identical / drift (valid but changed) / invalid\n// (untrustworthy), never folded into one boolean.\nfn compare(base: &str, cand: &str) -> Verdict {
+    let (b, c) = (validate(base)?, validate(cand)?); // refuse garbage upfront
+    for case in &b.cases {
+        let (x, y) = (b.full_vector(case), c.full_vector(case));
+        if x.to_bits() != y.to_bits() {        // FULL vector, bit-exact
+            return Verdict::Drift;             // argmax matched -- still drift
+        }
+    }
+    Verdict::Identical
+}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's own commit message: 'The existing comparator silently accepts missing rows, duplicate rows and NaN in reproduced controls; the validator rejects them... The frontier tool detects full-vector drift despite matching argmax IDs at all four measured frontiers' -- a MEASURED failure class, not hypothetical; honestly NotBenchable here -- measurement integrity, not speed). WHY ARGMAX IS A LOSY PROJECTION: a kernel/quantization change can drift thousands of logits while the sampled token stays identical -- ID equality is the compression the gate must NOT trust; the source checks argmax AND the full float32 word vector, with the canonical-spelling round trip preserving signed zero ('argmax_logit: float32 bits do not match logits[argmax_id]' + 'argmax_id: not the first maximum of the complete logit vector'). WHY PRE-VALIDATION: a comparison over garbage is a confident wrong answer -- the validator refuses incomplete manifest coverage ('missing manifest cases'), duplicate case IDs, non-canonical numbers (NaN/Inf/scientific notation/blank refused by a strict regex), and internal inconsistency (ratio must equal numerator/denominator within HALF_PRINT_UNIT -- the producer's own rounding). THREE STATUSES: drift (valid but changed bytes) and invalid (untrustworthy artifact) are different failure classes with different actions -- folding them into one boolean destroys the triage. THE WORKSPACE HOOK: this is the comparison contract our own bit-identity gates (B118/B119's byte-identity logit dumps, the quant-family retention gates) already implement -- the rule generalizes it for corpus completeness; a lossy-ID gate on quant/kernels is exactly the class our lossy-surface promotion rule (deployed-path retention) exists to catch. Distinct from diagnostics-not-just-exit-code (captures failure evidence; this validates SUCCESSFUL artifacts before comparing), write-verify-readback-before-publish (the producer's publish gate; this is the consumer's comparison contract over two already-published artifacts), resume-revalidates-provenance-before-reuse (provenance on resume; this is matched-artifact validity + identity semantics), and ab-isolate-one-component-by-baseline-byte-copy (isolation method; this decides what may COUNT AS IDENTICAL). Suggestion-only (a parse-only proposer cannot see which IDs are lossy projections of which vectors). Source: antirez/ds4 @ c0a6119f (MIT) -- gguf-tools/quality-testing/validate_scores.py:146,152 (duplicate-ID refuse + missing-manifest refuse), :93-95 (the canonical finite-number regex '-?(?:0|[1-9][0-9]{0,308})\\.[0-9]{9}'), :120-123 (Decimal ratio == num/denom within half-print-unit); compare_frontier_logits.py:64-68 (canonical float32 spelling round-trip, signed zero preserved), :129-134 (argmax cross-check + full-vector identity), :194 ('identical' / 'drift' / 'invalid' three-status). Batch 123 / Plan 103 / Research 146.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io (robustness classification): a bool validator that folds\n// error into overflow routes every failure to the destructive path ---
+        // Batch 123 (same distill, commit e1711c2). A rendering/embedding\n// failure classified as "doesn't fit" compacted the live conversation --\n// the most destructive, lossy handler -- on a non-capacity error.
+        PerfRule {
+            rule_id: "renderer-error-is-not-capacity-overflow".to_string(),
+            name: "bool try-fit validator hides build/render ERRORS inside the overflow answer -> tri-state (error / fits / overflow); only a TRUE capacity overflow may fire the destructive fallback (compact/truncate/reset), and the error cause propagates out of the callee".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// bool \"fits\" conflates build failure with doesn't-fit: a rendering\n// error (bad image, tokenizer failure) returns false -> the caller\n// compacts the live transcript -- lossy, irreversible, and caused by\n// nothing the compaction can fix. The error string dies in a stack local.\nfn tool_observation_fits(obs: &Observation, reserve: usize) -> bool {
+    let built = build_observation(obs); // Err swallowed: renderer failure...
+    match built {
+        Ok(text) => projected(text) + reserve < ctx_limit(),
+        Err(_) => false, // ...classified as \"doesn't fit\"
+    }
+}
+// caller:
+fn ingest(obs: &Observation, reserve: usize) {
+    if !tool_observation_fits(&obs, reserve) {
+        compact_conversation(\"tool result would exceed context\"); // WRONG path
+    }
+}".to_string(),
+            fixed_code: "// Tri-state: Error / Fits / Overflow. A build failure propagates its\n// cause and never touches the transcript; only a genuine projected-limit\n// overflow may compact.\nenum Fits { Error(String), Yes, No }
+fn tool_observation_fits(obs: &Observation, reserve: usize) -> Fits {
+    match build_observation(obs) {
+        Err(e) => Fits::Error(e.to_string()), // the cause leaves the callee
+        Ok(text) => {
+            if projected(text) + reserve < ctx_limit() { Fits::Yes } else { Fits::No }
+        }
+    }
+}
+// caller:
+fn ingest(obs: &Observation, reserve: usize) {
+    match tool_observation_fits(&obs, reserve) {
+        Fits::Error(e) => report_observation_error(e),  // report, never compact
+        Fits::No => compact_conversation(\"tool result would exceed context\"),
+        Fits::Yes => append_observation(),
+    }
+}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source changed the validator's return from bool to a tri-state int with the comment '-1 is a rendering/embedding error, not a request to compact the context'; every call site branches 'if (fits < 0) goto observation_error; if (!fits) compact' -- honestly NotBenchable here -- control-flow classification, not speed). THE FAILURE CLASS: a validator whose real domain is {error, fits, overflow} typed as bool collapses error into the ONE answer whose handler is destructive and irreversible (compaction rewrites/summarizes live context); every unrelated failure then surfaces as context loss, and the swallowed error string makes it undiagnosable. THE CONTRACT has three parts: the tri-state return, the destructive handler gated by the ONLY condition that names it (projected tokens exceeding context), and the cause propagated out of the callee (err buffer / error variant) instead of dying in a stack local. Applies to any ingestion loop classifying tool results, attachments, embeddings, or message batches before appending to live state. Distinct from diagnostics-not-just-exit-code (captures failure evidence for later grading; this decides the CONTROL-FLOW classification so a non-capacity error cannot fire a destructive path), from the Result-vs-Option idiom (type-level error propagation generally; this is the specific tri-state where a SUCCESS answer also has a destructive binary split), and from bounded-retry rules (budget conservation; orthogonal axis). Suggestion-only (a parse-only proposer cannot see which false answer routes to which handler). Source: antirez/ds4 @ c0a6119f (MIT) -- ds4_agent.c:9000-9017 (the tri-state signature + the '-1 is a rendering/embedding error' comment), 9911/9929/9944 (call sites: fits < 0 -> observation_error; !fits -> agent_worker_compact), 9972-9976 (the error label frees the observation + returns the real message; the transcript is never touched on -1). Batch 123 / Plan 103 / Research 146.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8190,7 +8272,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 108); // Batch 122 (ds4 vision delta) 105 → 108
+        assert_eq!(corpus.entries.len(), 110); // Batch 123 (ds4 upstream surge) 108 → 110
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9782,7 +9864,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 51, "expected 51 context-annotated rules (Batch 122 added the three ds4 vision-delta annotations: model-aware format, provisioning target, per-turn diagnostics)");
+        assert_eq!(annotated.len(), 53, "expected 53 context-annotated rules (Batch 123 added the ds4 surge annotations: full-vector identity, tri-state fit classification)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -9852,7 +9934,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 51); // Batch 122: 48 → 51
+        assert_eq!(annotated, 53); // Batch 123: 51 → 53
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9886,7 +9968,7 @@ mod tests {
 
         // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 51, "expected 51 annotated rules");
+        assert_eq!(annotated.len(), 53, "expected 53 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10780,6 +10862,82 @@ mod tests {
                 .unwrap_or("")
                 .contains("could not be used out of the box"),
             "the source's provisioning-gap phrasing must be pinned verbatim"
+        );
+    }
+
+    /// Batch 123 — the two new rules are present.
+    #[test]
+    fn batch123_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for id in [
+            "full-vector-bit-identity-over-argmax",
+            "renderer-error-is-not-capacity-overflow",
+        ] {
+            assert!(ids.contains(&id), "{id} missing from corpus");
+        }
+    }
+
+    /// Batch 123 — every new rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch123_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in [
+            "full-vector-bit-identity-over-argmax",
+            "renderer-error-is-not-capacity-overflow",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    /// Batch 123 — the load-bearing concepts survive into the corpus text.
+    #[test]
+    fn batch123_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let find = |id: &str| {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing"))
+        };
+        let vec_id = find("full-vector-bit-identity-over-argmax");
+        let vec_text = format!("{}\n{}\n{}", vec_id.name, vec_id.buggy_code, vec_id.fixed_code);
+        for needle in ["argmax", "bit", "manifest", "drift", "invalid"] {
+            assert!(vec_text.contains(needle), "vec concept {needle:?} missing");
+        }
+        assert!(
+            vec_id.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            "vec rule must carry the NotBenchable annotation"
+        );
+        let tri = find("renderer-error-is-not-capacity-overflow");
+        let tri_text = format!("{}\n{}\n{}", tri.name, tri.buggy_code, tri.fixed_code);
+        for needle in ["Error", "compact", "overflow"] {
+            assert!(tri_text.contains(needle), "tri concept {needle:?} missing");
+        }
+        // The pinned source phrases (quote re-verification at the pin).
+        assert!(
+            tri.context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("not a request to compact the context"),
+            "the source's tri-state comment must be pinned verbatim"
+        );
+        assert!(
+            vec_id
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("despite matching argmax IDs"),
+            "the source's drift-vs-argmax finding must be pinned verbatim"
         );
     }
 }
