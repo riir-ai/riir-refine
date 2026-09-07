@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        565,
-        "kernel batches through Batch 127 should have 565 rules"
+        570,
+        "kernel batches through Batch 128 should have 570 rules"
     );
 }
 
@@ -5303,7 +5303,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 565-rule corpus must appear in exactly one category.
+    // Every rule_id in the 570-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5346,9 +5346,9 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 127).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 128).
     let expected = [
-        (KernelCategory::MemoryAccess, 120),
+        (KernelCategory::MemoryAccess, 121),
         (KernelCategory::Compute, 60),
         (KernelCategory::Fusion, 45),
         (KernelCategory::Dispatch, 130),
@@ -5358,10 +5358,10 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MoeDispatchBackward, 27),
         (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 9),
+        (KernelCategory::AutotuneDispatch, 11),
         (KernelCategory::ConvGemmLayout, 14),
         (KernelCategory::KernelPolymorphism, 18),
-        (KernelCategory::DtypeAlignment, 39),
+        (KernelCategory::DtypeAlignment, 41),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5376,9 +5376,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 565.
+    // Sum must equal 570.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 565, "Plan 003: category totals must sum to 565");
+    assert_eq!(total, 570, "Plan 003: category totals must sum to 570");
 }
 
 #[test]
@@ -5389,8 +5389,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 565,
-        "Plan 003: grouped corpus has {total} rules, expected 565"
+        total, 570,
+        "Plan 003: grouped corpus has {total} rules, expected 570"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9406,8 +9406,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        565,
-        "Batch 127: corpus should have 565 rules"
+        570,
+        "Batch 128: corpus should have 570 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10607,6 +10607,120 @@ fn batch127_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-127 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch128_rules_present() {
+    // Batch 128 (the PrismML llama.cpp Metal/FA distill -- Plan 109 /
+    // Research 150): 5 kernel_opt rules mined at the fresh tip 5ea87dda
+    // (MIT; the same fork Batch 127 mined for the CUDA ternary MMQ mma
+    // slice -- this batch takes the unmined Metal/FA surface, the M3
+    // box's first-priority domain; quotes re-verified at the tip; the
+    // clone removed at landing).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "kv-dequant-materialization-batch-threshold-gate",
+        "offline-device-tuned-table-dispatch",
+        "tuned-config-resource-limit-fallback",
+        "quantize-scale-math-wide-precision-denorm-safe",
+        "extent-clamped-operand-views-partial-k-tile",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-128 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch128_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-128 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("kv-dequant-materialization-batch-threshold-gate");
+    assert!(
+        c.contains("dequant to f16 kv is not always beneficial")
+            && c.contains("ne[1] < 32")
+            && c.contains("always reserve the temp buffer")
+            && c.contains("TODO: tune per device")
+            && c.contains("dequant-once-per-k-tile-into-shared-memory"),
+        "kv dequant gate concept"
+    );
+    let c = concept("offline-device-tuned-table-dispatch");
+    assert!(
+        c.contains("do not hand-edit")
+            && c.contains("re-run the sweep and paste its output")
+            && c.contains("short KV: attention is a small slice of the step")
+            && c.contains("family representative SKU")
+            && c.contains("vec 80 -> 133"),
+        "offline table dispatch concept"
+    );
+    let c = concept("tuned-config-resource-limit-fallback");
+    assert!(
+        c.contains("fall back to baseline (Q=1)")
+            && c.contains("max_theadgroup_memory_size")
+            && c.contains("never half-clamp")
+            && c.contains("smem-envelope-gate-kernel-variant"),
+        "resource limit fallback concept"
+    );
+    let c = concept("quantize-scale-math-wide-precision-denorm-safe");
+    assert!(
+        c.contains("could be a denorm and 1/qd would overflow")
+            && c.contains("const float qd = amax / 127.0f;")
+            && c.contains("per-block-int32-chunk-rescale-fp32-accum"),
+        "denorm-safe quantize concept"
+    );
+    let c = concept("extent-clamped-operand-views-partial-k-tile");
+    assert!(
+        c.contains("min(N_MM_NK_TOTAL, K - loop_k)")
+            && c.contains("section 2.22.2")
+            && c.contains("Assisted-by: pi:llama.cpp/Qwen3.8-27B")
+            && c.contains("pad-tail-to-fixed-tile"),
+        "extent clamp concept"
+    );
+}
+
+#[test]
+fn batch128_pseudocode_parses() {
+    // G1 for Batch 128: syn-parse gate (the PrismML Metal/FA rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "kv-dequant-materialization-batch-threshold-gate",
+        "offline-device-tuned-table-dispatch",
+        "tuned-config-resource-limit-fallback",
+        "quantize-scale-math-wide-precision-denorm-safe",
+        "extent-clamped-operand-views-partial-k-tile",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-128 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-128 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-128 opt_pattern for '{id}' must parse"
         );
     }
 }

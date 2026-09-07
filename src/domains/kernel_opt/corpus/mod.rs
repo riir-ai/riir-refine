@@ -1526,6 +1526,38 @@
 //!   (paper-distilled precedent = B79 itself). Content gate:
 //!   `batch87_state_norm_breaks_associative_scan` (the breaker's
 //!   wrongness pinned materially, non-vacuous).
+//! - **Batch 128 (2026-09-07, the `PrismML` llama.cpp Metal/FA distill,
+//!   Plan 109 / Research 150):** 5 rules, corpus 565 -> 570 (A 120 -> 121,
+//!   K 9 -> 11, N 39 -> 41). Source: `PrismML-Eng/llama.cpp` master @
+//!   `5ea87dda` (MIT; the same fork Batch 127 mined for the CUDA slice —
+//!   this batch takes the unmined Metal/FA surface, the M3 box's
+//!   first-priority domain).
+//!   `kv-dequant-materialization-batch-threshold-gate` (N — the KV
+//!   dequant-to-f16 copy is gated on an amortization threshold, ne[1] <
+//!   32 keeps the quantized cache; the wide-form scratch stays RESERVED
+//!   even on the quantized path so the graph allocator never re-plans),
+//!   `offline-device-tuned-table-dispatch` (K — runtime autotune
+//!   replaced by a generated per-SKU (Q, NE) table keyed with BUCKETED
+//!   context dims, dispatched through exact -> domain-default ->
+//!   family-representative -> baseline; the header IS the regeneration
+//!   contract), `tuned-config-resource-limit-fallback` (K — the tuned
+//!   config re-validated against THIS device's threadgroup-memory limit
+//!   at dispatch; exceed falls back to the known-safe baseline, never
+//!   errors, never half-clamps),
+//!   `quantize-scale-math-wide-precision-denorm-safe` (N — the dynamic
+//!   quantize transform (amax/127, 1/qd, round) computed in fp32 inside
+//!   the fp16 FA kernel: the scale can be a DENORM and its inverse then
+//!   overflows to inf — correctness, no tolerance applies),
+//!   `extent-clamped-operand-views-partial-k-tile` (A — static-tile-K
+//!   Tensor-API matmul read OOB on partial tails; fix = `dynamic_extent`
+//!   with per-iteration operand-view extents clamped to `min(tile, K -
+//!   loop_k)`, degenerating to a handful of integer ops on aligned K).
+//!   Riders/ledger: `3af988fa` bias-fold SKIPPED (epilogue family
+//!   covers), `369e1cd6` row-memcpy SKIPPED
+//!   (`wide-row-copy-tile-rows-across-workgroups` covers), `b615f5b4`
+//!   per-op compile split SKIPPED (build-infra), and the a3027337
+//!   provenance note ('Assisted-by: pi:llama.cpp/Qwen3.8-27B'). Record:
+//!   Research 150 / Plan 109.
 
 use std::collections::HashMap;
 
@@ -1565,6 +1597,7 @@ mod entries_gpu_30;
 mod entries_gpu_31;
 mod entries_gpu_32;
 mod entries_gpu_33;
+mod entries_gpu_34;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1611,6 +1644,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_31::entries());
     entries.extend(entries_gpu_32::entries());
     entries.extend(entries_gpu_33::entries());
+    entries.extend(entries_gpu_34::entries());
     Corpus::new(entries)
 }
 
@@ -1623,7 +1657,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 555-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 570-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1631,7 +1665,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (120 rules)
+    // A: Memory access patterns (121 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1754,7 +1788,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "compute-role-split-by-accumulator-pressure",
             "kv-reuse-prefix-ends-at-last-evaluated-token",
             "sm90a-window-shape-gated-wgmma-dispatch",
-            "streamk-starved-tile-grid-dispatch"
+            "streamk-starved-tile-grid-dispatch",
+            "extent-clamped-operand-views-partial-k-tile"
         ],
     ),
     // B: Compute patterns (60 rules)
@@ -2181,7 +2216,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (9 rules)
+    // K: Autotune dispatch (11 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -2195,6 +2230,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "no-harm-bucket-representative",
             "persistent-kernel-length-bucketed-mechanism-ladder",
             "launch-heuristic-pinned-to-calibration-arch",
+            "offline-device-tuned-table-dispatch",
+            "tuned-config-resource-limit-fallback",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (14 rules)
@@ -2243,7 +2280,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-aware-indexing-reuses-static-single-token-kernel"
         ],
     ),
-    // N: dtype + alignment specialization (39 rules)
+    // N: dtype + alignment specialization (41 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2285,7 +2322,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "swar-lane-widened-base3-dp4a-dot",
             "operand-precision-gated-by-consumer-invariance",
             "fixed-point-parity-needs-reference-rounding",
-            "per-block-int32-chunk-rescale-fp32-accum"
+            "per-block-int32-chunk-rescale-fp32-accum",
+            "kv-dequant-materialization-batch-threshold-gate",
+            "quantize-scale-math-wide-precision-denorm-safe"
         ],
     ),
     // O: IR strength reduction (4 rules)
