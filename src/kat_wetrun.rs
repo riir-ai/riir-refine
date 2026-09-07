@@ -100,7 +100,7 @@ impl Network {
 ///
 /// Loopback and RFC1918 hosts are devnet; anything else unnamed is
 /// [`Network::Unclassifiable`] and therefore refused. The production default
-/// (`kat.heal.gist.rs`) carries no network word, so it lands there — which is
+/// (`heal.gist.rs`) carries no network word, so it lands there — which is
 /// the safe answer, not an oversight: it is the live service, and a wet-run
 /// against it must be an explicit, named choice.
 #[must_use]
@@ -1224,7 +1224,7 @@ mod tests {
             // A host naming BOTH is mainnet: refuse, never admit.
             ("https://testnet-mainnet.gist.rs", Network::Mainnet),
             // The production default carries no network word → refused.
-            ("https://kat.heal.gist.rs", Network::Unclassifiable),
+            ("https://heal.gist.rs", Network::Unclassifiable),
             ("", Network::Unclassifiable),
         ] {
             assert_eq!(classify_service_url(url), want, "{url}");

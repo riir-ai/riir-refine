@@ -1058,7 +1058,7 @@ impl ReheatReport {
 
 /// The service plane's default base URL (the payment page rides the same
 /// host: `<base>/pay?acct=<account_id>`).
-pub const DEFAULT_SERVICE_URL: &str = "https://kat.heal.gist.rs";
+pub const DEFAULT_SERVICE_URL: &str = "https://heal.gist.rs";
 
 /// The payment-page URL for an account (the QR payload).
 #[must_use]
@@ -1884,7 +1884,8 @@ mod tests {
     }
 
     fn leased(epoch: u64, payloads: &[&[u8]]) -> LeasedEpoch {
-        let descs: Vec<LeaseSegmentDesc> = payloads.iter().map(LeaseSegmentDesc::of).collect();
+        let descs: Vec<LeaseSegmentDesc> =
+            payloads.iter().copied().map(LeaseSegmentDesc::of).collect();
         let manifest = LeaseManifest::build(epoch, 1, descs);
         let mut stage = LeaseStage::begin(manifest).unwrap();
         for p in payloads {
@@ -2067,8 +2068,8 @@ mod tests {
     #[test]
     fn payment_url_shape() {
         assert_eq!(
-            payment_url("https://kat.heal.gist.rs", "9f3a"),
-            "https://kat.heal.gist.rs/pay?acct=9f3a"
+            payment_url("https://heal.gist.rs", "9f3a"),
+            "https://heal.gist.rs/pay?acct=9f3a"
         );
         assert_eq!(
             payment_url("https://x.example/", "ab"),
@@ -2132,7 +2133,7 @@ mod tests {
     /// production service base (the T0.3 golden request id).
     #[cfg(feature = "kat_transport")]
     const QR_GOLDEN_URL: &str =
-        "https://kat.heal.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
+        "https://heal.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
 
     /// Axis 2 (MEASURED): the **resolved** `qrcode` version in `Cargo.lock`
     /// is the one [`QRCODE_PINNED_VERSION`] declares, and the `Cargo.toml`
