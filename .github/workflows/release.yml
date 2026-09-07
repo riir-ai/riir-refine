@@ -349,13 +349,19 @@ jobs:
             end
           end
           EOF
-          git init -q .
+          # A PR needs common history with main — clone it and branch off.
+          # `git init` makes an orphan branch; GitHub rejects that PR with
+          # "no history in common" (measured, run 34081938353).
+          git clone -q --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
+          mkdir -p tap/Formula
+          cp Formula/cargo-heal.rb tap/Formula/cargo-heal.rb
+          cd tap
           git config user.name "cargo-heal-release-bot"
           git config user.email "bot@users.noreply.github.com"
           git checkout -q -b "release/${TAG}"
           git add Formula/cargo-heal.rb
           git commit -qm "cargo-heal ${TAG}"
-          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" "HEAD:refs/heads/release/${TAG}"
+          git push -q -f origin "HEAD:refs/heads/release/${TAG}"
           gh pr create -R "$TAP_REPO" --head "release/${TAG}" --base main \
             --title "cargo-heal ${TAG}" \
             --body "Automated formula bump from the release pipeline (Plan 105 T2.4). Verify the sha256 lines against the release's SHA256SUMS, then merge."
@@ -387,13 +393,16 @@ jobs:
               "checkver": "github"
           }
           EOF
-          git init -q .
+          git clone -q --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${BUCKET_REPO}.git" bucket_repo
+          mkdir -p bucket_repo/bucket
+          cp "bucket/cargo-heal.json" "bucket_repo/bucket/cargo-heal.json"
+          cd bucket_repo
           git config user.name "cargo-heal-release-bot"
           git config user.email "bot@users.noreply.github.com"
           git checkout -q -b "release/${TAG}"
           git add "bucket/cargo-heal.json"
           git commit -qm "cargo-heal ${TAG}"
-          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${BUCKET_REPO}.git" "HEAD:refs/heads/release/${TAG}"
+          git push -q -f origin "HEAD:refs/heads/release/${TAG}"
           gh pr create -R "$BUCKET_REPO" --head "release/${TAG}" --base main \
             --title "cargo-heal ${TAG}" \
             --body "Automated manifest bump from the release pipeline (Plan 105 T2.4). Verify the hash against the release's SHA256SUMS, then merge."
