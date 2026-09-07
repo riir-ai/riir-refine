@@ -1564,6 +1564,7 @@ mod entries_gpu_29;
 mod entries_gpu_30;
 mod entries_gpu_31;
 mod entries_gpu_32;
+mod entries_gpu_33;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1609,6 +1610,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_30::entries());
     entries.extend(entries_gpu_31::entries());
     entries.extend(entries_gpu_32::entries());
+    entries.extend(entries_gpu_33::entries());
     Corpus::new(entries)
 }
 
@@ -1629,7 +1631,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (117 rules)
+    // A: Memory access patterns (120 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1750,10 +1752,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "routed-activation-pack-once-shared-operand",
             "role-scoped-store-must-match-compute-guard",
             "compute-role-split-by-accumulator-pressure",
-            "kv-reuse-prefix-ends-at-last-evaluated-token"
+            "kv-reuse-prefix-ends-at-last-evaluated-token",
+            "sm90a-window-shape-gated-wgmma-dispatch",
+            "streamk-starved-tile-grid-dispatch"
         ],
     ),
-    // B: Compute patterns (59 rules)
+    // B: Compute patterns (60 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1817,6 +1821,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-row-scale-folded-into-rhs-staging-tile",
             "rope-pair-partner-via-cross-lane-shuffle",
             "degenerate-selection-falls-back-to-identity-uniform",
+            "lut-free-bit-spread-vadd4-unpack"
         ],
     ),
     // C: Fusion patterns (45 rules)
@@ -1871,7 +1876,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "batch-verify-rows-single-dispatch"
         ],
     ),
-    // D: Dispatch patterns (128 rules)
+    // D: Dispatch patterns (130 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2004,10 +2009,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shader-shape-cutover-keys-on-resource-block-ratio",
             "same-input-folded-transform-memo-per-build",
             "speculation-scheduler-break-even-flip",
-            "new-syntax-family-enumerates-every-keyed-surface"
+            "new-syntax-family-enumerates-every-keyed-surface",
+            "one-time-dense-repack-keyed-sync-publish"
         ],
     ),
-    // E: Parallelism patterns (45 rules)
+    // E: Parallelism patterns (46 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2116,7 +2122,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (26 rules)
+    // H: MoE dispatch + backward pass (27 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2147,6 +2153,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tile-amplification-precedes-staging-pass",
             "cold-large-prefill-whole-layer-lookahead-over-partial-cache",
             "static-seed-priority-bounded-to-observed-scale",
+            "moe-broadcast-quantize-once-scatter",
         ],
     ),
     // I: NSA block-sparse selection (6 rules)
@@ -2236,7 +2243,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-aware-indexing-reuses-static-single-token-kernel"
         ],
     ),
-    // N: dtype + alignment specialization (37 rules)
+    // N: dtype + alignment specialization (39 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2277,7 +2284,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "activation-bitplane-popcount-word-dot",
             "swar-lane-widened-base3-dp4a-dot",
             "operand-precision-gated-by-consumer-invariance",
-            "fixed-point-parity-needs-reference-rounding"
+            "fixed-point-parity-needs-reference-rounding",
+            "per-block-int32-chunk-rescale-fp32-accum"
         ],
     ),
     // O: IR strength reduction (4 rules)

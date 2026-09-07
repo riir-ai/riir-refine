@@ -2908,7 +2908,7 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(sb::generations::v5_is_removal_rule)
+        .filter(|r| sb::generations::v5_is_removal_rule(r))
         .collect();
 
     let mut members_total = 0usize;

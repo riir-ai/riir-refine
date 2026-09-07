@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        559,
-        "kernel batches through Batch 125 should have 559 rules"
+        565,
+        "kernel batches through Batch 127 should have 565 rules"
     );
 }
 
@@ -5303,7 +5303,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 555-rule corpus must appear in exactly one category.
+    // Every rule_id in the 565-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5346,22 +5346,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 125).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 127).
     let expected = [
-        (KernelCategory::MemoryAccess, 118),
-        (KernelCategory::Compute, 59),
+        (KernelCategory::MemoryAccess, 120),
+        (KernelCategory::Compute, 60),
         (KernelCategory::Fusion, 45),
-        (KernelCategory::Dispatch, 129),
+        (KernelCategory::Dispatch, 130),
         (KernelCategory::Parallelism, 46),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
-        (KernelCategory::MoeDispatchBackward, 26),
+        (KernelCategory::MoeDispatchBackward, 27),
         (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 9),
         (KernelCategory::ConvGemmLayout, 14),
         (KernelCategory::KernelPolymorphism, 18),
-        (KernelCategory::DtypeAlignment, 38),
+        (KernelCategory::DtypeAlignment, 39),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5376,9 +5376,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 559.
+    // Sum must equal 565.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 559, "Plan 003: category totals must sum to 559");
+    assert_eq!(total, 565, "Plan 003: category totals must sum to 565");
 }
 
 #[test]
@@ -5389,8 +5389,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 559,
-        "Plan 003: grouped corpus has {total} rules, expected 559"
+        total, 565,
+        "Plan 003: grouped corpus has {total} rules, expected 565"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9406,8 +9406,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        559,
-        "Batch 125: corpus should have 559 rules"
+        565,
+        "Batch 127: corpus should have 565 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10482,6 +10482,131 @@ fn batch125_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-125 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch127_rules_present() {
+    // Batch 127 (the PrismML llama.cpp CUDA ternary MMQ mma distill -- Plan
+    // 108 / Research 149): 6 kernel_opt rules mined at the fresh pin
+    // e311ed38 (MIT; the league opponent's unmined CUDA side -- prior fork
+    // contact B96/B113/B116 was Metal/format lanes). The shared vendor
+    // checkout is NOT at the pin (pin not an ancestor of its HEAD); the
+    // mine used a fresh .raw clone verified HEAD == pin.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "lut-free-bit-spread-vadd4-unpack",
+        "per-block-int32-chunk-rescale-fp32-accum",
+        "one-time-dense-repack-keyed-sync-publish",
+        "sm90a-window-shape-gated-wgmma-dispatch",
+        "streamk-starved-tile-grid-dispatch",
+        "moe-broadcast-quantize-once-scatter",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-127 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch127_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-127 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("lut-free-bit-spread-vadd4-unpack");
+    assert!(
+        c.contains("serialize the constant cache")
+            && c.contains("~1.7x end-to-end")
+            && c.contains("Synthetic uniform test data hides this entirely")
+            && c.contains("mmq-hopper-q1.cu:213-215")
+            && c.contains("byte-perm-lut-via-permutation-immediate"),
+        "lut-free concept"
+    );
+    let c = concept("per-block-int32-chunk-rescale-fp32-accum");
+    assert!(
+        c.contains("acc_f32(e) += float(acc_i32(e))")
+            && c.contains("clear(acc_i32)")
+            && c.contains("family-conditional")
+            && c.contains("per-block-quantized")
+            && c.contains("operand-precision-gated-by-consumer-invariance"),
+        "per-block rescale concept"
+    );
+    let c = concept("one-time-dense-repack-keyed-sync-publish");
+    assert!(
+        c.contains("dense bit words + fp32 scales")
+            && c.contains("publish")
+            && c.contains("cudaStreamSynchronize")
+            && c.contains("mmq-hopper-q1.cu:62-63"),
+        "dense repack concept"
+    );
+    let c = concept("sm90a-window-shape-gated-wgmma-dispatch");
+    assert!(
+        c.contains("cc >= GGML_CUDA_CC_BLACKWELL")
+            && c.contains("no GGML_CUDA_CC_HOPPER macro")
+            && c.contains("tcgen05")
+            && c.contains("streamk-starved-tile-grid-dispatch"),
+        "wgmma dispatch concept"
+    );
+    let c = concept("streamk-starved-tile-grid-dispatch");
+    assert!(
+        c.contains("ntiles < 8 * nsm")
+            && c.contains("fp32-additive atomic flush into zeroed C")
+            && c.contains("stream-k-persistent-cta-mac-segments")
+            && c.contains("NON-DETERMINISTIC"),
+        "streamk starvation concept"
+    );
+    let c = concept("moe-broadcast-quantize-once-scatter");
+    assert!(
+        c.contains("ne11 == 1 && n_expert_used > 1")
+            && c.contains("inverse map (token slot -> compact row)")
+            && c.contains("mmq.cu:194-196"),
+        "moe broadcast concept"
+    );
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch127_pseudocode_parses() {
+    // G1 for Batch 127: syn-parse gate (the PrismML CUDA MMQ rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "lut-free-bit-spread-vadd4-unpack",
+        "per-block-int32-chunk-rescale-fp32-accum",
+        "one-time-dense-repack-keyed-sync-publish",
+        "sm90a-window-shape-gated-wgmma-dispatch",
+        "streamk-starved-tile-grid-dispatch",
+        "moe-broadcast-quantize-once-scatter",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-127 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-127 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-127 opt_pattern for '{id}' must parse"
         );
     }
 }
