@@ -1,6 +1,6 @@
 # Plan 107 — Consumer-facing public surface (dist README economics + mining join + leaderboard)
 
-**Status:** drafted 2026-09-07 — T1 decision gate open (owner); T2–T5 queued behind it; the release e2e itself runs under Plan 105 T3.2 independently.
+**Status:** EXECUTED 2026-09-07 — T1 GO (owner-delegated via "do 107"): v0.1.1 ships `kat_service`; T2 README live on the dist repo; T3/T4 filed as riir-dapps issues 019/020 (implementation + the service-route ops act land there); T5 recorded in Bench 079. Transport deferred to v0.1.2 (license-read + Windows build risk — see Bench 079).
 
 ## Why
 
@@ -49,7 +49,7 @@ missing leaderboard route, and the decision that gates the mining quickstart.
 
 ## Tasks
 
-- [ ] T1 (DECISION GATE, owner) — ship `kat_service` in the release binary?
+- [x] T1 (DECISION GATE, owner) — ship `kat_service` in the release binary? **GO (executed)** — added to the bin's required-features; `release.yml` build + about generate pass the same set; dry run 34087690447 all green (G4 accepted ssh-key); tagged v0.1.1 (run 34088624161). Declining was never on the table after the "do 107" instruction; the transport half DID defer — see the status line.
       **Recommendation: YES.** Mining sync pushes REDACTED batches through
       `RedactionGate` (opt-in; everything stays local until `kat sync`);
       the leak-gated surface is the FIXER and it stays out; `kat_service`
@@ -61,44 +61,15 @@ missing leaderboard route, and the decision that gates the mining quickstart.
       promote on the next tag. Declining = T2.3's quickstart ships as
       roadmap-only ("the mining client ships in a future release") — still
       honest, still useful, decision recorded either way.
-- [ ] T2 — dist README consumer sections (edited in `gist-rs/cargo-heal`;
-      the zero-`.rs` CI guard there is unaffected by `.md` edits):
-  - [ ] T2.1 Feature table with honest per-domain status labels — pin every
-        count from the corpus at write time (AGENTS.md's own role section
-        disagrees with itself: rust_perf "112 rules" vs the feature list's
-        "105 rules" — count, don't quote): clippy_lints (default, GOAT),
-        rust_perf (default, Pareto-promoted), kernel_opt (opt-in, NOT
-        GOAT-gated), docker (default, GOAT Ph0+1), rustc_errors (default,
-        GOAT N=212), sec (opt-in). Plus a "what it is NOT" list: no trained
-        weights, no network calls at heal time, no LLM fixer.
-  - [ ] T2.2 TL;DR (install + use) already leads the README — keep it on
-        top; extend Use with the `kat` quickstart, gated on T1 = GO:
-        `cargo heal kat login` → `kat sync` → `kat account` (+ web wallet
-        link). Gated OFF: one roadmap line instead.
-  - [ ] T2.3 "KAT & the heal network" economics section + the mermaid
-        flywheel (draft at T4): the 1-KAT-per-code-token burn, the free
-        grant, decayed first-come mining rewards, redaction-gated sync,
-        DAO-bounded parameters + never-lever paragraph, devnet status, the
-        no-USD-promise sentence (caveat #7).
-  - [ ] T2.4 "See your contribution" — leaderboard link (T3) + `kat account`
-        output explainer + the web wallet URL (kat-service `/wallet`).
-  - [ ] T2.5 Privacy & data posture: local-first (meter, charge ledger, and
-        self-evolve trajectories live under `.heal/` on the machine);
-        `kat sync` is the ONLY egress and it sends redacted,
-        content-addressed spans under the sync data-license, opt-in;
-        kill-switch `RIIR_HEAL_KAT_METER=0` disables meter + charge.
-  - [ ] T2.6 FAQ / troubleshooting: the documented divergence classes (the
-        healer deliberately declines some fixes — link the cargo-heal skill
-        table's public-safe subset), update + uninstall per install channel,
-        platform matrix (the 5 release triples), where release notes live,
-        support channel (dist repo issues).
-- [ ] T3 (riir-dapps — file the `.issues/NNN` there at execution) —
-      `GET /leaderboard` on kat-service: epoch-scoped rank projected from
-      ledger state (mining credit + grants), pseudonymous account ids, cheap
-      cache headers, no PII, no bearer; optional per-epoch static JSON
-      snapshot mirrored into the dist repo for zero-JS embeds; linked from
-      `/wallet` and the `/` service-info page. The ops dashboard stays admin.
-- [ ] T4 — mermaid draft for T2.3 (GitHub renders mermaid in READMEs):
+- [x] T2 — dist README consumer sections (executed: `gist-rs/cargo-heal@a11c73a`):
+  - [x] T2.1 Feature table with honest per-domain status labels — counts pinned by running the shipping binary's `--corpus-stats --json` (49 / 112 / 559 / 31 / 12); AGENTS.md's stale "105" corrected to 112; "what it is NOT" list included.
+  - [x] T2.2 TL;DR kept on top; the quickstart landed with T1 — measured correction: the CLI surface is TOP-LEVEL (`cargo heal login` / `account`), not `cargo heal kat ...`; `sync`/`claim` printed as "next release" (transport deferred).
+  - [x] T2.3 economics section + mermaid flywheel (solid = live, dashed = mining loop) with never-lever, devnet-honesty, no-USD-promise paragraphs.
+  - [x] T2.4 "See your contribution" — account explainer + service-status table (wallet/service URLs marked bring-up-in-progress; flips live when riir-dapps Issue 020 closes); the leaderboard link attaches when Issue 019 lands its route.
+  - [x] T2.5 privacy & data posture section (offline healing, local `.heal/` + `~/.config/riir-heal/`, opt-in redacted-only egress, `RIIR_HEAL_KAT_METER=0` kill switch).
+  - [x] T2.6 FAQ / troubleshooting (bounded-fix-space skips, `--fix` safety + fmt discipline, `--verify` latency, update + uninstall, unsigned-binary note); divergence-class detail kept generic in the consumer surface (capabilities-not-methods).
+- [x] T3 (riir-dapps) — **filed: `riir-dapps/.issues/019_kat_service_leaderboard_route.md`** (`48452a3`): `GET /leaderboard?epoch=&limit=` projection over the ledger DO, pseudonymous id prefixes, cache headers, consumer-web-only contract note; also **Issue 020** — the service plane is not publicly reachable (workers.dev route disabled / `kat.heal.gist.rs` DNS missing; owner ops act). Implementation + deploy tracked in riir-dapps.
+- [x] T4 — mermaid flywheel shipped in the README (solid/dashed live-vs-roadmap form; draft below superseded):
 
       ```mermaid
       graph LR
@@ -110,9 +81,7 @@ missing leaderboard route, and the decision that gates the mining quickstart.
           F --> A
           E --> G["wallet + leaderboard"]
       ```
-- [ ] T5 — record + sync: bench/doc row for the consumer-surface verdict
-      (final README link, leaderboard link, T1 outcome), doc-sync touch,
-      HISTORY row.
+- [x] T5 — record + sync: **Bench 079** (verdict, measured counts, gate evidence, deferral reasons), AGENTS.md hygiene bullet (real feature set + license-parity warning) + rust_perf "105"→"112" correction; the README status table is the doc-sync touchpoint for Issues 019/020 closure.
 
 ## Non-goals
 
