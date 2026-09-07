@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        555,
-        "kernel batches through Batch 123 should have 555 rules"
+        559,
+        "kernel batches through Batch 125 should have 559 rules"
     );
 }
 
@@ -5346,13 +5346,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 119).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 125).
     let expected = [
-        (KernelCategory::MemoryAccess, 117),
+        (KernelCategory::MemoryAccess, 118),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 45),
-        (KernelCategory::Dispatch, 128),
-        (KernelCategory::Parallelism, 45),
+        (KernelCategory::Dispatch, 129),
+        (KernelCategory::Parallelism, 46),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 26),
@@ -5361,7 +5361,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 9),
         (KernelCategory::ConvGemmLayout, 14),
         (KernelCategory::KernelPolymorphism, 18),
-        (KernelCategory::DtypeAlignment, 37),
+        (KernelCategory::DtypeAlignment, 38),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5376,9 +5376,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 555.
+    // Sum must equal 559.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 555, "Plan 003: category totals must sum to 555");
+    assert_eq!(total, 559, "Plan 003: category totals must sum to 559");
 }
 
 #[test]
@@ -5389,8 +5389,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 555,
-        "Plan 003: grouped corpus has {total} rules, expected 555"
+        total, 559,
+        "Plan 003: grouped corpus has {total} rules, expected 559"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9406,8 +9406,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        555,
-        "Batch 123: corpus should have 555 rules"
+        559,
+        "Batch 125: corpus should have 559 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10376,4 +10376,112 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     let poll = |flag: u32, epoch: u32| flag == epoch;
     assert!(!poll(5, 6) && poll(6, 6), "stale fails, fresh passes");
     assert!(!poll(0, 6), "the reset flag 0 never passes any live epoch");
+}
+
+#[test]
+fn batch125_rules_present() {
+    // Batch 125 (the ds4 PR rebase-surge -- Plan 106 / Research 148): 4
+    // kernel_opt rules mined at the fresh pin ffd85d42 (MIT; the PR line was
+    // REWRITTEN onto upstream main c0a6119f, so the true delta is ~5 tip
+    // commits after subtracting B123's upstream window and the B118/B121/B122
+    // Qwen stack -- see the module doc in entries_gpu_32.rs).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "kv-reuse-prefix-ends-at-last-evaluated-token",
+        "new-syntax-family-enumerates-every-keyed-surface",
+        "interleave-independent-accumulators-only",
+        "fixed-point-parity-needs-reference-rounding",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-125 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch125_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-125 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("kv-reuse-prefix-ends-at-last-evaluated-token");
+    assert!(
+        c.contains("BEFORE the assistant end token")
+            && c.contains("so the next suffix actually evaluates it")
+            && c.contains("Use the decode finish, not the parser's promoted tool_calls status")
+            && c.contains("658b2fc")
+            && c.contains("ffd85d42")
+            && c.contains("prefix-reuse-key-must-mirror-the-restore-predicate"),
+        "kv-reuse concept"
+    );
+    let c = concept("new-syntax-family-enumerates-every-keyed-surface");
+    assert!(
+        c.contains("orphan-ending arm")
+            && c.contains("POSITIVE per-family engagement regression test")
+            && c.contains("ds4_agent.c:1393")
+            && c.contains("4010cc6")
+            && c.contains("implemented-surface-requires-provisioning-target"),
+        "syntax-family concept"
+    );
+    let c = concept("interleave-independent-accumulators-only");
+    assert!(
+        c.contains("combining the chunk dots would change rounding")
+            && c.contains("only independent rows/projections are interleaved")
+            && c.contains("1854-1857")
+            && c.contains("f91e217")
+            && c.contains("operand-precision-gated-by-consumer-invariance"),
+        "interleave concept"
+    );
+    let c = concept("fixed-point-parity-needs-reference-rounding");
+    assert!(
+        c.contains("half-level bias")
+            && c.contains("(crr * 91881 + 32768) >> 16")
+            && c.contains("first CPU-side instance")
+            && c.contains("681b9ce")
+            && c.contains("exhaustive-domain-input-patch-bit-identity"),
+        "fixed-point concept"
+    );
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch125_pseudocode_parses() {
+    // G1 for Batch 125: syn-parse gate (the ds4 rebase-surge rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "kv-reuse-prefix-ends-at-last-evaluated-token",
+        "new-syntax-family-enumerates-every-keyed-surface",
+        "interleave-independent-accumulators-only",
+        "fixed-point-parity-needs-reference-rounding",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-125 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-125 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-125 opt_pattern for '{id}' must parse"
+        );
+    }
 }

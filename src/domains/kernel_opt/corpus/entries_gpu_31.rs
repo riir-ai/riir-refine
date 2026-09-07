@@ -5,12 +5,12 @@
 //! clone read + removed at landing; pin re-verified via ls-remote at stage
 //! time), the upstream half of the Plan-102 double trigger (48 commits, 41
 //! files, +6118/−1100). Lanes: Metal SSD-expert caching + GLM streaming
-//! prefill (this file), ROCm gfx1151 DSpark, CUDA mmq, agent/server tooling
-//! (the last three landed as rust_perf io/methodology rules in the same
+//! prefill (this file), `ROCm` `gfx1151` `DSpark`, `CUDA` mmq, agent/server tooling
+//! (the last three landed as `rust_perf` io/methodology rules in the same
 //! batch), QA score-validation tooling.
 //!
-//! All perf numbers are SOURCE-REPORTED (M5 Max, GLM 5.3 Flash Q4_K 177.77 GiB
-//! / DeepSeek Vision Exp MXFP4 145.26 GiB) -- never cite as ours; the league
+//! All perf numbers are SOURCE-REPORTED (M5 Max, GLM 5.3 Flash `Q4_K` 177.77 GiB
+//! / `DeepSeek` Vision Exp `MXFP4` 145.26 GiB) -- never cite as ours; the league
 //! and the workspace are single-GPU and these rules serve USER code on
 //! hardware we do not own (the B110 precedent). Every commit's correctness
 //! gate is byte-identical output (frontier-logit dumps), which is what makes

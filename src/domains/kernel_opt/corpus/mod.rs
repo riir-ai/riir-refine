@@ -1563,6 +1563,7 @@ mod entries_gpu_28;
 mod entries_gpu_29;
 mod entries_gpu_30;
 mod entries_gpu_31;
+mod entries_gpu_32;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1607,6 +1608,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_29::entries());
     entries.extend(entries_gpu_30::entries());
     entries.extend(entries_gpu_31::entries());
+    entries.extend(entries_gpu_32::entries());
     Corpus::new(entries)
 }
 
@@ -1747,7 +1749,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "byte-owning-threads-non-positional-digit-codes",
             "routed-activation-pack-once-shared-operand",
             "role-scoped-store-must-match-compute-guard",
-            "compute-role-split-by-accumulator-pressure"
+            "compute-role-split-by-accumulator-pressure",
+            "kv-reuse-prefix-ends-at-last-evaluated-token"
         ],
     ),
     // B: Compute patterns (59 rules)
@@ -2001,6 +2004,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shader-shape-cutover-keys-on-resource-block-ratio",
             "same-input-folded-transform-memo-per-build",
             "speculation-scheduler-break-even-flip",
+            "new-syntax-family-enumerates-every-keyed-surface"
         ],
     ),
     // E: Parallelism patterns (45 rules)
@@ -2053,6 +2057,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fwht-wide-block-row-per-threadgroup-exchange-ladder",
             "sentinel-readiness-over-separate-flag",
             "ll-flag-in-data-packed-poll",
+            "interleave-independent-accumulators-only"
         ],
     ),
     // F: Flash-attention tiling (13 rules)
@@ -2272,6 +2277,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "activation-bitplane-popcount-word-dot",
             "swar-lane-widened-base3-dp4a-dot",
             "operand-precision-gated-by-consumer-invariance",
+            "fixed-point-parity-needs-reference-rounding"
         ],
     ),
     // O: IR strength reduction (4 rules)

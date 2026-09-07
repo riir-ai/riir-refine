@@ -23,11 +23,18 @@
 
 ## Corpus
 
-108 rules across 12 categories (rust-optimize skill checklist +
+112 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 111 rules — Batch 124 (2026-09-07,
-Research 146 / Plan 103 — the ds4 upstream surge, commit `c0a6119f`)
-added two io rules, all NotBenchable-annotated:
+profiling guide, Research 032; **now 112 rules — Batch 125 (2026-09-07,
+Research 148 / Plan 106 — the ds4 PR rebase-surge, commit `ffd85d4`)
+added one io rule, NotBenchable-annotated: `control-reproduces-on-baseline-
+trims-overclaim` (a failing parity/regression control is reproduced on the
+untouched baseline FIRST — a reproduction indicts the ORACLE, and the fix
+trims it to consumed outputs under matching compute shape, never widens
+tolerance). Batch 124 (Research 147 / Plan 104 — arXiv:2609.04040) had
+added one io rule: `matched-control-disentangles-policy-from-model`.
+Batch 123 (Research 146 / Plan 103 — the ds4 upstream surge, commit
+`c0a6119f`) had added two io rules, all NotBenchable-annotated:
 `full-vector-bit-identity-over-argmax` (a numeric-regression gate compares
 the FULL float vector bit-exactly with pre-validated artifacts and three
 statuses — identical/drift/invalid — never argmax-only), `renderer-error-

@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 111 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 15, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 24 are honestly
+//! 112 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 16, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 25 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -26,9 +26,12 @@
 //! test-honesty content, not speed) + the two upstream-surge annotations
 //! (Batch 123 — full-vector comparison integrity, tri-state fit
 //! classification; measurement-integrity and robustness content, not speed)
-//! + the evaluation-design annotation (Batch 124 — matched controls,
+//! plus the evaluation-design annotation (Batch 124 — matched controls,
 //! proxy-vs-endpoint, null-arm identity; experimental-design content, not
-//! speed).
+//! speed) plus the oracle-contract annotation (Batch 125 — baseline-
+//! reproduction triage, compute-shape-matched oracles, consumed-outputs
+//! comparison; oracle-contract content, not speed).
+//!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -2987,6 +2990,28 @@ fn ingest(obs: &Observation, reserve: usize) {
             buggy_code: "// The learned prefetcher is compared against a classical one that\n// ALWAYS issues: any accuracy win may come from the confidence gate\n// the learned version bundles, not from learning. And the gate is\n// graded on ACCURACY alone -- a proxy that can improve while endpoint\n// cost (DRAM traffic) does not move.\nfn evaluate(learned: &dyn Predictor, classical: &dyn Predictor) -> Report {\n    let a = run(learned);   // gate bundled inside: model vs policy confounded\n    let b = run(classical); // always-issues: no gate at all\n    Report { win: a.accuracy > b.accuracy, accuracy: a.accuracy }\n}".to_string(),
             fixed_code: "// Matched controls: the SAME admission gate wraps BOTH predictors,\n// so the comparison isolates the MODEL. Three report axes: proxy\n// (accuracy), endpoint (DRAM traffic), and the null-arm identity --\n// gate-closed must reproduce the no-action baseline bit-exactly (a\n// provable no-op, not a mostly-no-op).\nfn evaluate(learned: &dyn Predictor, classical: &dyn Predictor) -> Report {\n    let gate = ConfidenceGate::default();\n    let a = run_gated(learned, &gate);   // model varies, gate fixed\n    let b = run_gated(classical, &gate); // same gate: the control\n    let null_arm = run_gated(&NullPredictor, &gate);\n    debug_assert_eq!(null_arm.endpoint, no_action_endpoint()); // identity\n    Report {\n        model_win: a.endpoint < b.endpoint,  // endpoint, not proxy\n        proxy: a.accuracy,\n        endpoint: a.endpoint,\n    }\n}".to_string(),
             context_notes: Some("REGIME-ANNOTATED, paper-measured (arXiv:2609.04040, SPEC CPU2017 in native ChampSim: the matched-control design made a 257-parameter online MLP INDISTINGUISHABLE from gated stride on random traffic and SLOWER on most regular streams -- the neural advantage was the gate all along; the gate alone removed 35% of prefetches and lifted accuracy 11% -> 15% while DRAM reads changed only 0.07%; honestly NotBenchable here -- evaluation design, not speed). THREE decision contents: (1) MATCHED CONTROLS -- the admission policy is its own variable; wrap the learned model AND the classical baseline in the SAME gate, else the benchmark answers 'is the bundle better?' when it claims to answer 'is learning better?'; (2) PROXY-VS-ENDPOINT -- accuracy (a proxy) improved substantially while the endpoint (DRAM reads) did not move: better proxies do not imply better endpoints, so the report must carry BOTH and the win condition must be the endpoint; (3) NULL-ARM IDENTITY -- gate-closed execution reproduced the no-prefetch baseline exactly, which makes the gate a provable no-op when closed (the admission-gate twin of feature-flag bit-identity: an arm you cannot prove inert when off is an arm that can corrupt the experiment). THE WORKSPACE LAW this paper independently re-derived: gate first, predictor later -- Issue 880's kill-switch (no consumer, no prefetch), evpi_gate, convergence-cadence exits; and its honesty clause is the same one behind the lossy-surface promotion rule (aggregate metrics can be flat while the thing you care about moved). Distinct from ab-isolate-one-component-by-baseline-byte-copy (B121 -- isolates the ARTIFACT under test by byte-copying the baseline; this isolates POLICY from MODEL at evaluation-design level, no artifact copying), from full-vector-bit-identity-over-argmax (Batch 123 -- what may COUNT AS IDENTICAL in a comparison; this decides which COMPARISONS are meaningful at all), from dead-result-timing-loop-folded-under-lto (B109 -- the timing loop's work must not vanish; this is confound removal, not instrument integrity), and from diagnostics-not-just-exit-code (failure evidence; orthogonal stage). Suggestion-only (a parse-only proposer cannot see which benchmark conflates model with policy). Source: arXiv:2609.04040 'Confidence-Gated Admission for Hardware Prefetching: When the Gate Matters More Than the Predictor' (Majdane, Casartelli, Lopedoto, cs.AR/cs.PF, 2026-09-03) -- abstract: matched controls, 257-param MLP vs gated stride, 35% prefetch removal, accuracy 11->15%, DRAM +-0.07%, 'We prove gate-closed execution reproduces the no-prefetch baseline exactly', 'The gate matters more than the predictor, and better proxies do not imply better endpoints'. Batch 124 / Plan 104.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+// -- io (oracle-contract / measurement honesty): when a parity or regression
+// CONTROL fails, reproduce it on the UNTOUCHED baseline FIRST -- a failure
+// that reproduces there indicts the oracle, not the change under test.
+        // Batch 125 (2026-09-07, Plan 106 -- ds4 PR rebase-surge, commit
+// ffd85d4). Two shipped instances: (1) compute-shape overclaim -- comparing
+// a live session's logprobs (last token via the single-token decode step)
+// against a fresh session that prefilled the FULL prefix compares two
+// different FP accumulation orders; the fresh side must replay the same
+// prefill/decode split before the vectors are comparable; (2) unowned-scratch
+// overclaim -- a fused gate/up kernel writes `mid` directly and never
+// populates the gate/up scratch the unfused path leaves as intermediate, so
+// the oracle must compare the outputs the consumer actually reads.
+        PerfRule {
+            rule_id: "control-reproduces-on-baseline-trims-overclaim".to_string(),
+            name: "a failing parity/regression control is first REPRODUCED on the untouched baseline -- a reproduction indicts the ORACLE's contract, and the fix trims the oracle to consumed outputs under matching compute shape; never widen numeric tolerance as the fix".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The parity control fails after a fused kernel lands. The reflex: the\n// fusion regressed -- widen the tolerance or skip the test. But nobody ran\n// the SAME control against the UNTOUCHED baseline.\nfn parity_gate(live: &Session, fresh_prefill: &Session) -> bool {\n    // live: prefill-to-len-1 + single-token decode step for the last token\n    // fresh: FULL-prefix prefill -- a DIFFERENT FP accumulation order\n    max_abs_diff(live.logprobs(), fresh_prefill.logprobs()) < 1e-5 // flaky\n}\n\n// twin: the oracle compares outputs the fused path leaves unowned --\nfn gate_up_parity(unfused_scratch: &Scratch, fused: &Fused) -> bool {\n    unfused_scratch.gate == fused.gate && unfused_scratch.up == fused.up\n    // fused writes `mid` directly; gate/up scratch is never populated\n}".to_string(),
+            fixed_code: "// Triage: reproduce the failure on the pre-change baseline. If it\n// reproduces, the oracle overclaims -- trim it to the contract consumers\n// actually depend on, under the SAME compute shape; never touch tolerance.\nfn parity_gate(live: &Session, reference: &Session) -> bool {\n    // both arms: prefill to len-1, then evaluate the last token via the\n    // SAME single-token decode step -- identical accumulation order\n    debug_assert!(parity_gate_baseline_reproduces()); // triage, one-time\n    max_abs_diff(live.logprobs(), reference.logprobs()) == 0.0 // exact now\n}\n\nfn gate_up_parity(unfused: &Scratch, fused: &Fused) -> bool {\n    // compare the CONSUMED outputs only; unowned scratch is skipped in\n    // BOTH arms (named in a comment so the skip is a decision, not drift)\n    fused.mid == unfused.mid\n}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-shipped (both instances landed in the same QA-hardening commit; honestly NotBenchable here -- oracle-contract correctness, not speed). THE PROTOCOL: (1) reproduce the failing control on the UNTOUCHED baseline -- reproduction splits 'the change regressed' from 'the oracle overclaims' without touching any tolerance; (2) if it reproduces, the oracle asserted a contract the implementation never promised -- trim it to the outputs consumers actually read under the SAME compute shape (chunk boundaries, prefill/decode split, scratch ownership); (3) the fused path may leave optional/unused outputs UNOWNED -- skip them in both arms or compare through the consumer, with the skip named. THE FAILURE CLASS: an oracle that compares across accumulation orders (prefill-computed vs decode-computed) or across ownership boundaries (scratch a fused contract no longer populates) fails FOREVER on correct code -- the suite then either blocks good changes or trains developers to widen tolerances, which destroys the gate for real regressions. Distinct from full-vector-bit-identity-over-argmax (Batch 123 -- comparison STRICTNESS over artifacts: full vector, three statuses; this constructs the comparison so both sides share compute shape + consumed outputs -- the two compose), from ab-isolate-one-component-by-baseline-byte-copy (B121 -- the baseline as ISOLATION mechanism in A/B design; this uses baseline reproduction as the failing-control TRIAGE step), and from diagnostics-not-just-exit-code (B122 -- captures failure evidence; this fixes which CONTRACT the oracle asserts). Suggestion-only (a parse-only proposer cannot see which outputs a consumer reads). Source: ivanfioravanti/ds4-metal @ ffd85d42 (MIT) -- commit ffd85d4 'Preserve Qwen tool handling and validate the main rebase' (tests/ds4_test.c:203-204 'Match the replay's prefill/decode split. A full-prefix prefill uses different floating-point accumulation than the final decode step.' + tests/test_metal_moe_prefill.c:85-87 'Fused gate/up kernels write mid directly. Compare all consumed outputs against the unfused control, not unused scratch.' / 'if (run && i < 2) continue;'). Batch 125 / Plan 106 / Research 148.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8297,7 +8322,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 111); // Batch 124 (2609.04040) 110 → 111
+        assert_eq!(corpus.entries.len(), 112); // Batch 125 (ds4 rebase-surge) 111 → 112
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9889,7 +9914,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 54, "expected 54 context-annotated rules (Batch 124 added the matched-control evaluation-design annotation)");
+        assert_eq!(annotated.len(), 55, "expected 55 context-annotated rules (Batch 125 added the control-reproduces-on-baseline oracle-contract annotation)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -9959,7 +9984,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 54); // Batch 124: 53 → 54
+        assert_eq!(annotated, 55); // Batch 125: 54 → 55
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9993,7 +10018,7 @@ mod tests {
 
         // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 54, "expected 54 annotated rules");
+        assert_eq!(annotated.len(), 55, "expected 55 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10998,6 +11023,39 @@ mod tests {
             "the paper's honesty clause must be pinned verbatim"
         );
     }
+
+    /// Batch 125 — the new rule is present, parses, and carries its concepts.
+    #[test]
+    fn batch125_rule_present_and_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "control-reproduces-on-baseline-trims-overclaim")
+            .expect("control-reproduces rule missing from corpus");
+        assert!(
+            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            "control-reproduces buggy/fixed must both parse"
+        );
+        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+        for needle in ["baseline", "oracle", "tolerance", "compute shape", "scratch"] {
+            assert!(text.contains(needle), "control-reproduces concept {needle:?} missing");
+        }
+        assert!(
+            e.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            "control-reproduces rule must carry the NotBenchable annotation"
+        );
+        // The pinned source phrases (quote re-verification at the pin).
+        let notes = e.context_notes.as_deref().unwrap_or("");
+        assert!(
+            notes.contains("different floating-point accumulation than the final decode step"),
+            "the compute-shape quote must be pinned verbatim"
+        );
+        assert!(
+            notes.contains("Compare all consumed outputs against the unfused control"),
+            "the unowned-scratch quote must be pinned verbatim"
+        );
+    }
 }
 
 /// Bench spec for `bitplane-transpose-repeated-predicate-scan` (Batch 83,
@@ -11674,4 +11732,3 @@ pub fn run_fixed(input: &Input) {
         .to_string(),
     }
 }
-
