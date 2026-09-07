@@ -1,0 +1,31 @@
+# Proposal 003 T2.3 / Plan 105 — THIRD_PARTY_LICENSES.md generation config.
+# Scope = the SHIPPING feature set (default + `latent_retrieval`); the
+# `targets` table keeps windows-/dev-only deps out of the shipped document
+# while covering exactly the five release triples.
+#
+# A dependency whose license is not in `accepted` FAILS generation — that is
+# the compliance gate (loud, not silently skipped). Extend only after a human
+# reads the license.
+accepted = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "OpenSSL",
+]
+
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+]

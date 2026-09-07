@@ -1,0 +1,399 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Proposal 003 / Plan 105 — binary-only release pipeline.
+#
+# Tag push `v*` → 5-target matrix build → leak scan → SHA256SUMS + license
+# doc → `gh release create` on the PUBLIC dist repo (gist-rs/cargo-heal) →
+# Formula / scoop-manifest bump PRs. workflow_dispatch is a DRY RUN:
+# identical build + scan + packaging, no publish, no PRs.
+#
+# Secrets (both must fail LOUD when absent — the expiry-alarm rule):
+#   SIBLING_REPOS_TOKEN — fine-grained PAT cloning gist-rs/riir-ai +
+#                         gist-rs/riir-neuron-db (the same secret rust.yml
+#                         already uses; the workspace cannot resolve without
+#                         those siblings — path deps + [patch] sections).
+#   RELEASE_PAT         — fine-grained PAT, repository access = the three
+#                         PUBLIC source-free dist repos ONLY (cargo-heal,
+#                         homebrew-tap, scoop-bucket), contents read/write.
+#                         Publishes the release and opens the tap/bucket PRs.
+#
+# Deliberate deviations, recorded in Plan 105 (do not "fix" them here):
+#   * No --locked: Cargo.lock is gitignored in this repo (floating siblings
+#     churn it — see rust.yml's cache note). SHA256SUMS is the pin.
+#   * Linux musl rows build with cargo-zigbuild, not `cross`: cross mounts
+#     only the project dir into its container, so the ../katgpt-rs-style
+#     sibling path deps would vanish inside it.
+#   * RUSTFLAGS --remap-path-prefix is REQUIRED, not optional (the proposal's
+#     word): the unremapped binary measured 61 absolute build-machine paths.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BIN: cargo-heal
+  DIST_REPO: gist-rs/cargo-heal
+  TAP_REPO: gist-rs/homebrew-tap
+  BUCKET_REPO: gist-rs/scoop-bucket
+
+jobs:
+  # ── THIRD_PARTY_LICENSES.md from the shipping feature set ──────────────────
+  # cargo-about resolves the same workspace the build jobs resolve (it runs
+  # cargo metadata), so it needs the same sibling layout. The about.toml
+  # `targets` table pins this to exactly the five release triples. Generation
+  # FAILS on any license outside the accepted list — that is the G4 gate.
+  licenses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Check out katgpt-rs (public, develop)
+        uses: actions/checkout@v6
+        with:
+          repository: katopz/katgpt-rs
+          ref: develop
+          path: sibling/katgpt-rs
+
+      - name: Check out private siblings + arrange the layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SIBLING_TOKEN:-}" ]; then
+            echo "::error title=SIBLING_REPOS_TOKEN missing::The workspace cannot resolve without riir-ai + riir-neuron-db. Set/renew the secret (a fine-grained PAT expires ~90 days)."
+            exit 1
+          fi
+          for repo in riir-ai riir-neuron-db; do
+            git clone --depth 1 \
+              "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
+              "sibling/${repo}"
+          done
+          mv sibling/* ..
+        env:
+          SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
+
+      - name: Install cargo-about (pinned — its config schema has drifted across minors)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.2
+
+      - name: Generate THIRD_PARTY_LICENSES.md (fails on any non-accepted license)
+        run: |
+          cargo about generate --config .github/about/about.toml \
+            --features latent_retrieval .github/about/about.hbs \
+            > THIRD_PARTY_LICENSES.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: licenses
+          path: THIRD_PARTY_LICENSES.md
+          if-no-files-found: error
+
+  # ── The 5-target build matrix ───────────────────────────────────────────────
+  # musl rows: cargo-zigbuild + zig (see the header note). macOS x86_64 is a
+  # cross-compile from the arm runner (same OS — plain cargo handles it).
+  # RUSTFLAGS is a per-row string because each host layout needs its own
+  # remap prefix (windows carries both slash conventions).
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            remap: --remap-path-prefix /Users/runner=/build
+          - target: x86_64-apple-darwin
+            os: macos-14
+            remap: --remap-path-prefix /Users/runner=/build
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            remap: --remap-path-prefix /home/runner=/build
+            zigbuild: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            remap: --remap-path-prefix /home/runner=/build
+            zigbuild: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            remap: --remap-path-prefix D:\a=/build --remap-path-prefix D:/a=/build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      RUSTFLAGS: ${{ matrix.remap }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        shell: bash
+        run: rustup toolchain install
+
+      - name: Add the build target
+        shell: bash
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install zig (musl rows only)
+        if: matrix.zigbuild
+        uses: mlugg/setup-zig@v1
+
+      - name: Install cargo-zigbuild (musl rows only)
+        if: matrix.zigbuild
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+
+      - name: Check out katgpt-rs (public, develop)
+        uses: actions/checkout@v6
+        with:
+          repository: katopz/katgpt-rs
+          ref: develop
+          path: sibling/katgpt-rs
+
+      - name: Check out private siblings + arrange the layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SIBLING_TOKEN:-}" ]; then
+            echo "::error title=SIBLING_REPOS_TOKEN missing::The workspace cannot resolve without riir-ai + riir-neuron-db. Set/renew the secret (a fine-grained PAT expires ~90 days)."
+            exit 1
+          fi
+          for repo in riir-ai riir-neuron-db; do
+            git clone --depth 1 \
+              "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
+              "sibling/${repo}"
+          done
+          mv sibling/* ..
+        env:
+          SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
+
+      # Shipping feature set = default + latent_retrieval (the bin's
+      # required-features; Proposal 003 §leak-surface item 4). NEVER
+      # ternary_inference.
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.zigbuild }}" = "true" ]; then
+            cargo zigbuild --release --target ${{ matrix.target }} \
+              --features latent_retrieval --bin cargo-heal
+          else
+            cargo build --release --target ${{ matrix.target }} \
+              --features latent_retrieval --bin cargo-heal
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/cargo-heal
+            target/${{ matrix.target }}/release/cargo-heal.exe
+          if-no-files-found: error
+
+  # ── Package + the G2 gate ───────────────────────────────────────────────────
+  # Archives carry the binary + THIRD_PARTY_LICENSES.md (G4: licenses in
+  # every archive). The leak scan runs on the RAW binaries and fails the job
+  # BEFORE anything could be published.
+  package:
+    needs: [licenses, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage, archive, checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME:-dryrun}"
+          cp artifacts/licenses/THIRD_PARTY_LICENSES.md .
+          mkdir -p dist
+          for d in artifacts/bin-*/; do
+            target="$(basename "$d")"
+            target="${target#bin-}"
+            stage="stage/$target"
+            mkdir -p "$stage"
+            if [ -f "$d/cargo-heal" ]; then
+              cp "$d/cargo-heal" "$stage/cargo-heal"
+            elif [ -f "$d/cargo-heal.exe" ]; then
+              cp "$d/cargo-heal.exe" "$stage/cargo-heal.exe"
+            else
+              echo "::error::no cargo-heal binary in $d"
+              exit 1
+            fi
+            cp THIRD_PARTY_LICENSES.md "$stage/THIRD_PARTY_LICENSES.md"
+            if [ -f "$stage/cargo-heal.exe" ]; then
+              (cd "$stage" && zip -q "../../../dist/cargo-heal-${TAG}-${target}.zip" cargo-heal.exe THIRD_PARTY_LICENSES.md)
+            else
+              tar -czf "dist/cargo-heal-${TAG}-${target}.tar.gz" -C "$stage" cargo-heal THIRD_PARTY_LICENSES.md
+            fi
+          done
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          cp THIRD_PARTY_LICENSES.md dist/
+          ls -la dist/
+
+      - name: Leak scan (Proposal 003 G2 — fails the job before publish)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bins=""
+          for d in artifacts/bin-*/; do
+            for b in "$d/cargo-heal" "$d/cargo-heal.exe"; do
+              [ -f "$b" ] && bins="$bins $b"
+            done
+          done
+          ./scripts/binary_leak_scan.sh $bins
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  # ── Publish (tag pushes ONLY — dispatch is always a dry run) ────────────────
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish the release on the public dist repo
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error title=RELEASE_PAT missing::Publishing requires the robot PAT (Plan 105 T1.3: fine-grained, the three public dist repos only)."
+            exit 1
+          fi
+          TAG="${GITHUB_REF_NAME}"
+          notes="Prebuilt cargo-heal binaries for ${TAG}. Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README."
+          if gh release view "$TAG" -R "$DIST_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" -R "$DIST_REPO" --clobber dist/*
+          else
+            gh release create "$TAG" -R "$DIST_REPO" --title "cargo-heal ${TAG}" --notes "$notes" dist/*
+          fi
+
+      # Manifest bumps go out as PRs — a human merges after eyeballing the
+      # hashes against SHA256SUMS (the tamper discipline, Proposal 003 §risks).
+      - name: Bump the Homebrew formula (PR)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          BASE="https://github.com/${DIST_REPO}/releases/download/${TAG}"
+          arm_sha=$(awk -v f="cargo-heal-${TAG}-aarch64-apple-darwin.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          intel_sha=$(awk -v f="cargo-heal-${TAG}-x86_64-apple-darwin.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          linux_arm_sha=$(awk -v f="cargo-heal-${TAG}-aarch64-unknown-linux-musl.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          linux_sha=$(awk -v f="cargo-heal-${TAG}-x86_64-unknown-linux-musl.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          for sha in "$arm_sha" "$intel_sha" "$linux_arm_sha" "$linux_sha"; do
+            if [ -z "$sha" ]; then
+              echo "::error::a macOS/Linux hash is missing from SHA256SUMS — refusing to write a broken formula"
+              exit 1
+            fi
+          done
+          mkdir -p Formula
+          cat > Formula/cargo-heal.rb <<EOF
+          # Manifest-only formula for the binary-only cargo-heal distribution
+          # (Proposal 003). Generated by the release pipeline — do not edit by hand.
+          class CargoHeal < Formula
+            desc "Modelless code healer: clippy, rust perf, kernel, docker, rustc-error fixes"
+            homepage "https://github.com/${DIST_REPO}"
+            version "${VERSION}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "${BASE}/cargo-heal-${TAG}-aarch64-apple-darwin.tar.gz"
+                sha256 "${arm_sha}"
+              else
+                url "${BASE}/cargo-heal-${TAG}-x86_64-apple-darwin.tar.gz"
+                sha256 "${intel_sha}"
+              end
+            end
+            on_linux do
+              if Hardware::CPU.arm?
+                url "${BASE}/cargo-heal-${TAG}-aarch64-unknown-linux-musl.tar.gz"
+                sha256 "${linux_arm_sha}"
+              else
+                url "${BASE}/cargo-heal-${TAG}-x86_64-unknown-linux-musl.tar.gz"
+                sha256 "${linux_sha}"
+              end
+            end
+
+            def install
+              bin.install "cargo-heal"
+            end
+          end
+          EOF
+          git config user.name "cargo-heal-release-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git init -q .
+          git checkout -q -b "release/${TAG}"
+          git add Formula/cargo-heal.rb
+          git commit -qm "cargo-heal ${TAG}"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" "HEAD:refs/heads/release/${TAG}"
+          gh pr create -R "$TAP_REPO" --head "release/${TAG}" --base main \
+            --title "cargo-heal ${TAG}" \
+            --body "Automated formula bump from the release pipeline (Plan 105 T2.4). Verify the sha256 lines against the release's SHA256SUMS, then merge."
+
+      - name: Bump the Scoop manifest (PR)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          win_sha=$(awk -v f="cargo-heal-${TAG}-x86_64-pc-windows-msvc.zip" '$2==f{print $1}' dist/SHA256SUMS)
+          if [ -z "$win_sha" ]; then
+            echo "::error::the windows hash is missing from SHA256SUMS — refusing to write a broken manifest"
+            exit 1
+          fi
+          mkdir -p bucket
+          cat > "bucket/cargo-heal.json" <<EOF
+          {
+              "version": "${VERSION}",
+              "architecture": {
+                  "64bit": {
+                      "url": "https://github.com/${DIST_REPO}/releases/download/${TAG}/cargo-heal-${TAG}-x86_64-pc-windows-msvc.zip",
+                      "hash": "${win_sha}"
+                  }
+              },
+              "bin": ["cargo-heal.exe"],
+              "checkver": "github"
+          }
+          EOF
+          git config user.name "cargo-heal-release-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git init -q .
+          git checkout -q -b "release/${TAG}"
+          git add "bucket/cargo-heal.json"
+          git commit -qm "cargo-heal ${TAG}"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${BUCKET_REPO}.git" "HEAD:refs/heads/release/${TAG}"
+          gh pr create -R "$BUCKET_REPO" --head "release/${TAG}" --base main \
+            --title "cargo-heal ${TAG}" \
+            --body "Automated manifest bump from the release pipeline (Plan 105 T2.4). Verify the hash against the release's SHA256SUMS, then merge."

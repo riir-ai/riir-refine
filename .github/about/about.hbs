@@ -1,0 +1,34 @@
+# Third-Party Licenses
+
+This file lists the third-party crates distributed inside the `cargo-heal`
+binary, grouped by license, with each license text. It is generated at
+release time by [cargo-about](https://github.com/EmbarkStudios/cargo-about)
+(`.github/about/about.toml` + this template, Proposal 003 T2.3 / Plan 105)
+from the shipping feature set (default + `latent_retrieval`) on the five
+release targets.
+
+The `cargo-heal` binary itself is distributed binary-only; this document
+covers the attribution obligations of the third-party code it contains.
+
+## Overview of licenses
+
+{{#each overview}}
+- [{{name}}](#{{id}}) ({{count}})
+{{/each}}
+
+## All license text
+
+{{#each licenses}}
+### {{name}}
+
+Used by:
+
+{{#each used_by}}
+- [{{crate.name}} {{crate.version}}]({{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}})
+{{/each}}
+
+```
+{{text}}
+```
+
+{{/each}}
