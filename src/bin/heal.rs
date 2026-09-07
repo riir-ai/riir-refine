@@ -1241,7 +1241,12 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
 /// everywhere.
 #[cfg(feature = "kat_service")]
 fn run_kat_wetrun(dry_run: bool) {
-    use riir_clippy::kat_wetrun::{RunMode, Verdict};
+    use riir_clippy::kat_wetrun::RunMode;
+    // Verdict is consumed only by the transport-gated wetrun leg; importing
+    // it unconditionally warns in kat_service-without-kat_transport builds
+    // (the shipping release set).
+    #[cfg(feature = "kat_transport")]
+    use riir_clippy::kat_wetrun::Verdict;
 
     let url = riir_clippy::kat_lease_client::service_url_for_command();
     let network = riir_clippy::kat_wetrun::classify_service_url(&url);

@@ -555,7 +555,7 @@ required-features = ["ternary_inference"]
 [[bin]]
 name = "cargo-heal"
 path = "src/bin/heal.rs"
-required-features = ["latent_retrieval", "rust_perf", "clippy_lints"]
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
 
 # Issue 040 — the fixer re-gate POC runner (arms A/B = CF Workers AI, arm C =
 # the local Bonsai daemon; --dry-run = offline harness validation on planted
