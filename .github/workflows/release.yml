@@ -19,9 +19,11 @@
 # Deliberate deviations, recorded in Plan 105 (do not "fix" them here):
 #   * No --locked: Cargo.lock is gitignored in this repo (floating siblings
 #     churn it — see rust.yml's cache note). SHA256SUMS is the pin.
-#   * Linux musl rows build with cargo-zigbuild, not `cross`: cross mounts
-#     only the project dir into its container, so the ../katgpt-rs-style
-#     sibling path deps would vanish inside it.
+#   * Linux musl rows get their toolchain from
+#     taiki-e/setup-cross-toolchain-action (zig-based linker + C compiler env),
+#     then build with PLAIN cargo — `cross` the tool cannot see the
+#     ../katgpt-rs-style sibling path deps (it mounts only the project dir),
+#     and a raw zig download 404'd on the runners (measured, run 34072493969).
 #   * RUSTFLAGS --remap-path-prefix is REQUIRED, not optional (the proposal's
 #     word): the unremapped binary measured 61 absolute build-machine paths.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -120,11 +122,11 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             remap: --remap-path-prefix /home/runner=/build
-            zigbuild: true
+            cross: true
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             remap: --remap-path-prefix /home/runner=/build
-            zigbuild: true
+            cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             remap: --remap-path-prefix D:\a=/build --remap-path-prefix D:/a=/build
@@ -143,15 +145,11 @@ jobs:
         shell: bash
         run: rustup target add ${{ matrix.target }}
 
-      - name: Install zig (musl rows only)
-        if: matrix.zigbuild
-        uses: mlugg/setup-zig@v1
-
-      - name: Install cargo-zigbuild (musl rows only)
-        if: matrix.zigbuild
-        uses: taiki-e/install-action@v2
+      - name: Set up the musl cross toolchain (musl rows only)
+        if: matrix.cross
+        uses: taiki-e/setup-cross-toolchain-action@v1
         with:
-          tool: cargo-zigbuild
+          target: ${{ matrix.target }}
 
       - name: Check out katgpt-rs (public, develop)
         uses: actions/checkout@v6
@@ -184,13 +182,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ matrix.zigbuild }}" = "true" ]; then
-            cargo zigbuild --release --target ${{ matrix.target }} \
-              --features latent_retrieval --bin cargo-heal
-          else
-            cargo build --release --target ${{ matrix.target }} \
-              --features latent_retrieval --bin cargo-heal
-          fi
+          cargo build --release --target ${{ matrix.target }} \
+            --features latent_retrieval --bin cargo-heal
 
       - uses: actions/upload-artifact@v4
         with:
