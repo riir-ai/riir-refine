@@ -111,27 +111,27 @@ impl Dom {
     /// on the documented cases is the design goal, not a coincidence.
     fn corpus(self) -> Vec<String> {
         match self {
-            Dom::Int { rust } => ["0", "1", "2", "42", "7"]
+            Self::Int { rust } => ["0", "1", "2", "42", "7"]
                 .iter()
                 .map(|v| format!("{v}{rust}"))
                 .chain(std::iter::once(format!("{rust}::MAX")))
                 .chain(std::iter::once(format!("{rust}::MIN")))
                 .collect(),
-            Dom::Bool => vec!["false".into(), "true".into()],
-            Dom::Char => vec!["'a'".into(), "'A'".into(), "'0'".into(), "' '".into()],
-            Dom::Str => [
+            Self::Bool => vec!["false".into(), "true".into()],
+            Self::Char => vec!["'a'".into(), "'A'".into(), "'0'".into(), "' '".into()],
+            Self::Str => [
                 "xyz", "", "a", "ab", "abc", "ba", "abab", "z", "hello", "ab",
             ]
             .iter()
             .map(|s| format!("String::from({s:?})"))
             .collect(),
-            Dom::Bytes => vec![
+            Self::Bytes => vec![
                 "vec![]".into(),
                 "vec![0u8]".into(),
                 "vec![1u8,2,3]".into(),
                 "vec![7u8; 17]".into(),
             ],
-            Dom::OptInt { rust } => vec![
+            Self::OptInt { rust } => vec![
                 "None".into(),
                 format!("Some(0{rust})"),
                 format!("Some(1{rust})"),
@@ -144,12 +144,12 @@ impl Dom {
     /// The owned local's Rust type, so the driver can declare a typed `Vec`.
     fn owned_ty(self) -> String {
         match self {
-            Dom::Int { rust } => rust.to_string(),
-            Dom::Bool => "bool".into(),
-            Dom::Char => "char".into(),
-            Dom::Str => "String".into(),
-            Dom::Bytes => "Vec<u8>".into(),
-            Dom::OptInt { rust } => format!("Option<{rust}>"),
+            Self::Int { rust } => rust.to_string(),
+            Self::Bool => "bool".into(),
+            Self::Char => "char".into(),
+            Self::Str => "String".into(),
+            Self::Bytes => "Vec<u8>".into(),
+            Self::OptInt { rust } => format!("Option<{rust}>"),
         }
     }
 }
@@ -359,6 +359,7 @@ fn build_rows(doms: &[(Dom, Borrow, Borrow)], max_cases: usize) -> Vec<Vec<Strin
         }
     }
     rows.truncate(max_cases.max(1));
+    rows.shrink_to_fit();
     rows
 }
 

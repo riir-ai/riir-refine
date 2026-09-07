@@ -55,11 +55,11 @@ impl SecFamily {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            SecFamily::Ffi => "ffi",
-            SecFamily::DropLeak => "drop-leak",
-            SecFamily::UnsafeHygiene => "unsafe-hygiene",
-            SecFamily::CryptoHygiene => "crypto-hygiene",
-            SecFamily::PanicSafety => "panic-safety",
+            Self::Ffi => "ffi",
+            Self::DropLeak => "drop-leak",
+            Self::UnsafeHygiene => "unsafe-hygiene",
+            Self::CryptoHygiene => "crypto-hygiene",
+            Self::PanicSafety => "panic-safety",
         }
     }
 }

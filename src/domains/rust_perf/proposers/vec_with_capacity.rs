@@ -357,6 +357,7 @@ fn usize_typed_params(sig: &Signature) -> Vec<String> {
             }
         }
     }
+    out.shrink_to_fit();
     out
 }
 

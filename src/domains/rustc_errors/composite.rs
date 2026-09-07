@@ -99,6 +99,7 @@ pub fn module_regions(source: &str) -> Vec<(usize, usize, usize)> {
         i = end;
     }
     regions.sort_unstable_by_key(|(idx, _, _)| *idx);
+    regions.shrink_to_fit();
     regions
 }
 

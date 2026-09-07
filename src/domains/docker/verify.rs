@@ -99,6 +99,7 @@ fn parse_json(stdout: &str) -> Vec<HadolintFinding> {
             out.push(HadolintFinding { code, line });
         }
     }
+    out.shrink_to_fit();
     out
 }
 

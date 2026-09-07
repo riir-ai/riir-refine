@@ -128,7 +128,7 @@ fn specs_over_atoms(prefix: &str, atom_list: &[V3Atom]) -> Vec<GenSpec> {
     let by_id: BTreeMap<&str, &V3Atom> =
         atom_list.iter().map(|a| (a.id.as_str(), a)).collect();
     let n = ids.len();
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(LADDER_KS.len());
     for &k in &LADDER_KS {
         let count = count_for_k(k, n);
         for i in 0..count {
@@ -151,6 +151,7 @@ fn specs_over_atoms(prefix: &str, atom_list: &[V3Atom]) -> Vec<GenSpec> {
             });
         }
     }
+    out.shrink_to_fit();
     out
 }
 

@@ -70,11 +70,11 @@ impl ThermalTier {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            ThermalTier::Plasma => "Plasma (modelless cache)",
-            ThermalTier::Hot => "Hot (Stage 2 adaptive)",
-            ThermalTier::Warm => "Warm (LoRA draft — DEFERRED)",
-            ThermalTier::Cold => "Cold (full validate — DEFERRED)",
-            ThermalTier::Freeze => "Freeze (archive — DEFERRED)",
+            Self::Plasma => "Plasma (modelless cache)",
+            Self::Hot => "Hot (Stage 2 adaptive)",
+            Self::Warm => "Warm (LoRA draft — DEFERRED)",
+            Self::Cold => "Cold (full validate — DEFERRED)",
+            Self::Freeze => "Freeze (archive — DEFERRED)",
         }
     }
 }

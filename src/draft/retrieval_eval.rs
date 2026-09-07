@@ -957,6 +957,7 @@ pub fn run_router_eval() -> Vec<RouterEvalRow> {
             misroutes_fixed,
         });
     }
+    rows.shrink_to_fit();
     rows
 }
 
@@ -995,12 +996,13 @@ pub struct RetrievalSweepRow {
 /// regressing precision.
 #[must_use]
 pub fn run_retrieval_sweep() -> Vec<RetrievalSweepRow> {
-    let mut rows = Vec::new();
-    for tokenizer in [
+    let cap_iter = [
         crate::draft::IndexTokenizer::CodeDefault,
         crate::draft::IndexTokenizer::OpAware,
         crate::draft::IndexTokenizer::OpAwareBigram,
-    ] {
+    ];
+    let mut rows = Vec::with_capacity(cap_iter.len());
+    for tokenizer in cap_iter {
         for latent_weight in [1.0_f32, 0.0] {
             let config = crate::draft::RetrievalConfig {
                 tokenizer,
@@ -1691,7 +1693,7 @@ mod tests {
         assert!(corpus.len() >= 6, "Phase-1 survival count");
         let mut matcher = LatentMatcher::from_enabled_domains()
             .expect("build matcher");
-        let mut misses = Vec::new();
+        let mut misses = Vec::with_capacity(corpus.len());
         for rule in &corpus {
             let probe = mutate_shape(&rule.buggy_code);
             let (_routed, by_domain) = matcher.suggest_span(&probe, 3);

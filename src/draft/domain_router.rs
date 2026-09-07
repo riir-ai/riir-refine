@@ -65,23 +65,23 @@ pub enum DomainId {
 
 impl DomainId {
     /// All domains, in router order.
-    pub const ALL: [DomainId; 5] = [
-        DomainId::Clippy,
-        DomainId::Perf,
-        DomainId::Kernel,
-        DomainId::Sec,
-        DomainId::Docker,
+    pub const ALL: [Self; 5] = [
+        Self::Clippy,
+        Self::Perf,
+        Self::Kernel,
+        Self::Sec,
+        Self::Docker,
     ];
 
     /// Stable label (feature-independent).
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            DomainId::Clippy => "clippy",
-            DomainId::Perf => "perf",
-            DomainId::Kernel => "kernel",
-            DomainId::Sec => "sec",
-            DomainId::Docker => "docker",
+            Self::Clippy => "clippy",
+            Self::Perf => "perf",
+            Self::Kernel => "kernel",
+            Self::Sec => "sec",
+            Self::Docker => "docker",
         }
     }
 }

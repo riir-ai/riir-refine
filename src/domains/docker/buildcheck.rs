@@ -300,6 +300,7 @@ fn parse_checks(stdout: &str) -> Vec<BuildCheckFinding> {
             pending = None;
         }
     }
+    out.shrink_to_fit();
     out
 }
 

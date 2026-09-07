@@ -9117,9 +9117,6 @@ mod tests {
     #[test]
     fn batch91_filter_order_preserves_output_and_render_count() {
         use std::cell::Cell;
-        thread_local! {
-            static RENDER_CALLS: Cell<u64> = const { Cell::new(0) };
-        }
         struct Doc {
             published: bool,
             body: [u64; 4],
@@ -9128,6 +9125,10 @@ mod tests {
         struct Page {
             published: bool,
             score: u64,
+        }
+
+        thread_local! {
+            static RENDER_CALLS: Cell<u64> = const { Cell::new(0) };
         }
         let render = |doc: &Doc| -> Page {
             RENDER_CALLS.with(|c| c.set(c.get() + 1));
@@ -9176,9 +9177,6 @@ mod tests {
     #[allow(clippy::cast_possible_truncation)] // the enumerate-index u32 narrowing IS the fixture (k < 8)
     fn batch91_projection_invariance_and_canonicalize_count() {
         use std::cell::Cell;
-        thread_local! {
-            static CANON_CALLS: Cell<u64> = const { Cell::new(0) };
-        }
         struct Item {
             tags: [u32; 8],
         }
@@ -9186,6 +9184,10 @@ mod tests {
         struct Canonical {
             primary: u32,
             tags: Vec<u32>,
+        }
+
+        thread_local! {
+            static CANON_CALLS: Cell<u64> = const { Cell::new(0) };
         }
         let canonicalize = |item: &Item| -> Canonical {
             CANON_CALLS.with(|c| c.set(c.get() + 1));
@@ -9681,9 +9683,6 @@ mod tests {
             acc: u64,
         }
         type Handler = fn(&mut State, u32);
-        thread_local! {
-            static CALLS: RefCell<(u64, u64)> = const { RefCell::new((0, 0)) };
-        }
         fn handler_add(st: &mut State, x: u32) {
             CALLS.with(|c| c.borrow_mut().0 += 1);
             st.acc = st.acc.wrapping_add(u64::from(x));
@@ -9691,6 +9690,10 @@ mod tests {
         fn handler_mul(st: &mut State, x: u32) {
             CALLS.with(|c| c.borrow_mut().1 += 1);
             st.acc = st.acc.wrapping_mul(31).wrapping_add(u64::from(x));
+        }
+
+        thread_local! {
+            static CALLS: RefCell<(u64, u64)> = const { RefCell::new((0, 0)) };
         }
         // same shapes as the corpus fixtures
         let step_merged = |pick_add: bool, st: &mut State, x: u32| {
@@ -10620,7 +10623,7 @@ mod tests {
 
         fn fixed_run(n: usize, updates: &[(usize, u32)]) -> (u64, Vec<u64>) {
             let mut counts = vec![0u32; n];
-            let mut wide: HashMap<usize, u64> = HashMap::new();
+            let mut wide: HashMap<usize, u64> = HashMap::with_capacity(updates.len());
             for &(i, v) in updates {
                 if let Some(w) = wide.get_mut(&i) {
                     *w += u64::from(v);

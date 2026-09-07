@@ -718,6 +718,7 @@ pub fn parse_clippy_findings(json_stdout: &str) -> Vec<ClippyFinding> {
             });
         }
     }
+    out.shrink_to_fit();
     out
 }
 

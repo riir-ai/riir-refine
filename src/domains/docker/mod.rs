@@ -87,15 +87,15 @@ impl DockerFamily {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            DockerFamily::CachePerf => "cache-perf",
-            DockerFamily::ImageSize => "image-size",
-            DockerFamily::BaseChoice => "base-choice",
-            DockerFamily::PkgHygiene => "pkg-hygiene",
-            DockerFamily::RunCorrectness => "run-correctness",
-            DockerFamily::SignalPid1 => "signal-pid1",
-            DockerFamily::SecretsHygiene => "secrets-hygiene",
-            DockerFamily::MultiPlatform => "multi-platform",
-            DockerFamily::RustIdiom => "rust-idiom",
+            Self::CachePerf => "cache-perf",
+            Self::ImageSize => "image-size",
+            Self::BaseChoice => "base-choice",
+            Self::PkgHygiene => "pkg-hygiene",
+            Self::RunCorrectness => "run-correctness",
+            Self::SignalPid1 => "signal-pid1",
+            Self::SecretsHygiene => "secrets-hygiene",
+            Self::MultiPlatform => "multi-platform",
+            Self::RustIdiom => "rust-idiom",
         }
     }
 }
@@ -123,9 +123,9 @@ impl SyntaxVersion {
     #[must_use]
     pub fn directive(self) -> Option<&'static str> {
         match self {
-            SyntaxVersion::Builtin => None,
-            SyntaxVersion::V1_4 => Some("docker/dockerfile:1.4"),
-            SyntaxVersion::V1_19 => Some("docker/dockerfile:1.19"),
+            Self::Builtin => None,
+            Self::V1_4 => Some("docker/dockerfile:1.4"),
+            Self::V1_19 => Some("docker/dockerfile:1.19"),
         }
     }
 
@@ -136,9 +136,9 @@ impl SyntaxVersion {
     /// (`docker/dockerfile:1`, a custom frontend) yields `Builtin` — the
     /// scanner never *upgrades* a file's declared capability on a guess.
     #[must_use]
-    pub fn from_directive(value: &str) -> SyntaxVersion {
+    pub fn from_directive(value: &str) -> Self {
         let Some((_, tag)) = value.rsplit_once(':') else {
-            return SyntaxVersion::Builtin;
+            return Self::Builtin;
         };
         let digits: String = tag
             .chars()
@@ -162,16 +162,16 @@ impl SyntaxVersion {
         // `missing-syntax-directive` fire on a correct file.
         let Some(minor_tag) = minor_tag else {
             return match major {
-                0 => SyntaxVersion::Builtin,
-                _ => SyntaxVersion::V1_19,
+                0 => Self::Builtin,
+                _ => Self::V1_19,
             };
         };
         let minor: u32 = minor_tag.parse().unwrap_or(0);
         match (major, minor) {
-            (1, m) if m >= 19 => SyntaxVersion::V1_19,
-            (1, m) if m >= 4 => SyntaxVersion::V1_4,
-            (n, _) if n >= 2 => SyntaxVersion::V1_19,
-            _ => SyntaxVersion::Builtin,
+            (1, m) if m >= 19 => Self::V1_19,
+            (1, m) if m >= 4 => Self::V1_4,
+            (n, _) if n >= 2 => Self::V1_19,
+            _ => Self::Builtin,
         }
     }
 }

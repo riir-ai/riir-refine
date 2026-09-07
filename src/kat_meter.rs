@@ -128,20 +128,20 @@ impl KatMeter {
     /// heal run (the `EvolveRecorder` envelope precedent). Opening a meter
     /// counts as one session.
     #[must_use]
-    pub fn open(root: &Path) -> KatMeter {
+    pub fn open(root: &Path) -> Self {
         Self::at_path(root.join(".heal").join(Self::FILE_NAME))
     }
 
     /// Open a meter backed by an exact file path (no `.heal` composition) —
     /// the `RIIR_HEAL_KAT_METER_FILE` override + tests.
     #[must_use]
-    pub fn open_at(path: PathBuf) -> KatMeter {
+    pub fn open_at(path: PathBuf) -> Self {
         Self::at_path(path)
     }
 
     /// Shared constructor: load (or default) the state at `path`, count the
     /// session, start at zero session burn.
-    fn at_path(path: PathBuf) -> KatMeter {
+    fn at_path(path: PathBuf) -> Self {
         let mut state = match std::fs::read_to_string(&path) {
             Ok(text) => match serde_json::from_str::<MeterState>(&text) {
                 Ok(s) if s.version == METER_VERSION => s,
@@ -349,14 +349,14 @@ impl KatCharge {
     /// *at open*) is only correct against a pre-session reading — opened
     /// after recording, it would swallow the session's burn.
     #[must_use]
-    pub fn open(root: &Path, meter: &MeterState) -> KatCharge {
+    pub fn open(root: &Path, meter: &MeterState) -> Self {
         Self::at_path(root.join(".heal").join(Self::FILE_NAME), meter)
     }
 
     /// Open a charge ledger backed by an exact file path (no `.heal`
     /// composition) — the `RIIR_HEAL_KAT_CHARGE_FILE` override + tests.
     #[must_use]
-    pub fn open_at(path: PathBuf, meter: &MeterState) -> KatCharge {
+    pub fn open_at(path: PathBuf, meter: &MeterState) -> Self {
         Self::at_path(path, meter)
     }
 
@@ -373,7 +373,7 @@ impl KatCharge {
     ///   current rate (the mixed-rate history is unrecoverable; whole-at-
     ///   current-rate is the honest approximation, and this path is only
     ///   reachable by file loss — a version bump takes the salvage path).
-    fn at_path(path: PathBuf, meter: &MeterState) -> KatCharge {
+    fn at_path(path: PathBuf, meter: &MeterState) -> Self {
         let mut state = match std::fs::read_to_string(&path) {
             Ok(text) => match serde_json::from_str::<ChargeState>(&text) {
                 Ok(s) if s.charge_version == CHARGE_VERSION => s,

@@ -788,6 +788,7 @@ pub fn merge_triples(base: &[Triple], promoted: &[Triple]) -> Vec<Triple> {
             out.push(t.clone());
         }
     }
+    out.shrink_to_fit();
     out
 }
 

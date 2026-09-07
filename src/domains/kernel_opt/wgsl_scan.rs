@@ -115,6 +115,7 @@ fn scan_single_thread_workgroup(source: &str) -> Vec<WgslFinding> {
             }
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -237,6 +238,7 @@ fn scan_single_slot_staging(source: &str) -> Vec<WgslFinding> {
             excerpt: raw.trim().to_string(),
         });
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -266,6 +268,7 @@ fn scan_declared_max_private_array(source: &str) -> Vec<WgslFinding> {
             }
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -293,7 +296,7 @@ fn scan_cube_size_restatement(source: &str) -> Vec<WgslFinding> {
     if dims.is_empty() {
         return Vec::new();
     }
-    let mut restated = Vec::new();
+    let mut restated = Vec::with_capacity(dims.len());
     for n in &dims {
         let pat = format!(r"let\s+\w+\s*=\s*{n}u?\s*;");
         let re = Regex::new(&pat).expect("valid literal regex");
@@ -308,6 +311,7 @@ fn scan_cube_size_restatement(source: &str) -> Vec<WgslFinding> {
             }
         }
     }
+    restated.shrink_to_fit();
     restated
 }
 
@@ -404,6 +408,7 @@ fn scan_invariant_operand_accumulation(source: &str) -> Vec<WgslFinding> {
             }
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -489,6 +494,7 @@ fn scan_serial_row_dot(source: &str) -> Vec<WgslFinding> {
             }
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -563,6 +569,7 @@ impl WgslScanner {
             }
         }
         out.sort_by(|a, b| (a.line, a.rule_id).cmp(&(b.line, b.rule_id)));
+        out.shrink_to_fit();
         out
     }
 }

@@ -979,15 +979,12 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
     // settle). A supplied amount parses KAT → micro (positive, ≤6 decimals).
     let amount_micro = match amount {
         None | Some("") => None,
-        Some(s) => match payreq::parse_kat_amount(s) {
-            Some(m) => Some(m),
-            None => {
+        Some(s) => if let Some(m) = payreq::parse_kat_amount(s) { Some(m) } else {
                 eprintln!(
                     "pay: --amount expects a positive KAT amount with at most 6 decimals (e.g. 2 or 1.5); omit it for an ANY-amount request"
                 );
                 std::process::exit(2);
-            }
-        },
+            },
     };
     let label = label.unwrap_or("");
     if label.len() > 64 {
@@ -1248,10 +1245,7 @@ fn run_kat_wetrun(dry_run: bool) {
 
     let url = riir_clippy::kat_lease_client::service_url_for_command();
     let network = riir_clippy::kat_wetrun::classify_service_url(&url);
-    let mode = match dry_run {
-        true => RunMode::DryRun,
-        false => RunMode::Full,
-    };
+    let mode = if dry_run { RunMode::DryRun } else { RunMode::Full };
 
     // Admission BEFORE anything else — including before the account load,
     // so a refused mainnet run cannot be confused with a missing key.
@@ -2909,7 +2903,7 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
@@ -2981,9 +2975,7 @@ fn run_score_bench_perf() {
                     }
                     let after = sb::generations::v5_persists(other, &region);
                     let before = before_regions[i]
-                        .as_ref()
-                        .map(|r| sb::generations::v5_persists(other, r))
-                        .unwrap_or(false);
+                        .as_ref().map_or(false, |r| sb::generations::v5_persists(other, r));
                     if after && !before {
                         created_total += 1;
                         eprintln!(
@@ -3451,7 +3443,7 @@ fn run_conversion_report() {
         };
         let seen = r
             .last_seen_unix
-            .map_or_else(String::new, |t| format!(" {}", t));
+            .map_or_else(String::new, |t| format!(" {t}"));
         println!(
             "    {:<6} {:<24} {:<9} {:<3}{}",
             r.code, r.strategy, era, r.certified, seen
@@ -5167,13 +5159,9 @@ fn main() {
     // ── Plan 030 T0.4: the docker lane (the second non-syn surface, and
     // the only one with bounded proposers — so it serves --fix too).
     #[cfg(feature = "docker")]
-    let n_docker = match (args.suggest || args.fix)
+    let n_docker = if (args.suggest || args.fix)
         && args.domain.is_none_or(|d| d == DomainId::Docker)
-        && !dockerfiles.is_empty()
-    {
-        true => run_docker_lane(&dockerfiles, args.suggest, args.fix, args.write),
-        false => 0,
-    };
+        && !dockerfiles.is_empty() { run_docker_lane(&dockerfiles, args.suggest, args.fix, args.write) } else { 0 };
     #[cfg(not(feature = "docker"))]
     let n_docker = 0usize;
     let _ = n_docker;
@@ -5635,11 +5623,12 @@ fn main() {
     // was skipped and why (a suppressed edit keeps its lint firing; the
     // escape hatch is RIIR_HEAL_SUPPRESS_REVERTED=0 for one run).
     if !suppressed_pairs.is_empty() {
+        const MAX_SUPPRESSED_SHOWN: usize = 20;
+
         println!(
             "suppressed {} previously-reverted edit(s) (2+ consecutive compile-gate fails; RIIR_HEAL_SUPPRESS_REVERTED=0 forces retry):",
             suppressed_pairs.len()
         );
-        const MAX_SUPPRESSED_SHOWN: usize = 20;
         for ((rule, restore, _fix), (file, line)) in suppressed_pairs.iter().take(MAX_SUPPRESSED_SHOWN) {
             println!(
                 "  [{rule:<24}] {}:{} — {}",
@@ -5768,10 +5757,7 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
         let ctx = docker_scan_context(path);
         let findings = scan_source_with(&src, &ctx);
         for f in &findings {
-            let kind = match FIXABLE_DOCKER.contains(&f.rule_id) && f.fix.is_some() {
-                true => "fix    ",
-                false => "suggest",
-            };
+            let kind = if FIXABLE_DOCKER.contains(&f.rule_id) && f.fix.is_some() { "fix    " } else { "suggest" };
             println!(
                 "{}:{} [docker {kind}] {:<40} — {}",
                 path.display(),
@@ -5788,20 +5774,17 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
         if fixed == src {
             continue;
         }
-        match write {
-            true => match std::fs::write(path, &fixed) {
+        if write { match std::fs::write(path, &fixed) {
                 Ok(()) => println!("  wrote {}", path.display()),
                 Err(e) => eprintln!("  FAILED to write {}: {e}", path.display()),
-            },
-            false => println!(
+            } } else { println!(
                 "  {} bounded fix(es) available for {} (re-run with --write to apply)",
                 findings
                     .iter()
                     .filter(|f| f.fix.is_some() && FIXABLE_DOCKER.contains(&f.rule_id))
                     .count(),
                 path.display()
-            ),
-        }
+            ); }
     }
     let _ = suggest;
     printed
@@ -5986,6 +5969,8 @@ fn reheat_fix_pass(
     verify_mode: bool,
     fmt_active: bool,
 ) -> usize {
+    const MAX_PASSES: usize = 4;
+
     let Ok(src) = std::fs::read_to_string(path) else {
         return 0;
     };
@@ -5993,7 +5978,6 @@ fn reheat_fix_pass(
     let (run_perf, run_clippy, run_sec) = fix_domain_scopes(domain);
     #[cfg(not(feature = "sec"))]
     let _ = run_sec;
-    const MAX_PASSES: usize = 4;
     let mut current = src.clone();
     let mut total_applied = 0usize;
     let mut changed = false;

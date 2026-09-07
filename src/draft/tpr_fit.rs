@@ -84,21 +84,21 @@ pub enum StateSpace {
 
 impl StateSpace {
     /// Every space this bench runs, in report order.
-    pub const ALL: [StateSpace; 2] = [StateSpace::Latent8, StateSpace::TokenBag256];
+    pub const ALL: [Self; 2] = [Self::Latent8, Self::TokenBag256];
 
     #[must_use]
     pub fn dim(self) -> usize {
         match self {
-            StateSpace::Latent8 => LATENT_DIM,
-            StateSpace::TokenBag256 => TOKEN_BAG_DIM,
+            Self::Latent8 => LATENT_DIM,
+            Self::TokenBag256 => TOKEN_BAG_DIM,
         }
     }
 
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            StateSpace::Latent8 => "latent8",
-            StateSpace::TokenBag256 => "tokenbag256",
+            Self::Latent8 => "latent8",
+            Self::TokenBag256 => "tokenbag256",
         }
     }
 
@@ -116,8 +116,8 @@ impl StateSpace {
     pub fn embed_into(self, code: &str, out: &mut [f32]) {
         assert_eq!(out.len(), self.dim(), "state buffer width");
         match self {
-            StateSpace::Latent8 => out.copy_from_slice(&ModellessEmbedder.embed(code)),
-            StateSpace::TokenBag256 => token_bag_into(code, out),
+            Self::Latent8 => out.copy_from_slice(&ModellessEmbedder.embed(code)),
+            Self::TokenBag256 => token_bag_into(code, out),
         }
     }
 }

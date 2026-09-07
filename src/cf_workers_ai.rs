@@ -672,6 +672,7 @@ fn line_depths(src: &[&str]) -> Vec<i64> {
         }
         depths.push(d);
     }
+    depths.shrink_to_fit();
     depths
 }
 
@@ -701,6 +702,7 @@ fn lcs_align(lhs: &[&str], rhs: &[&str]) -> Vec<(usize, usize)> {
             col += 1;
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -878,10 +880,10 @@ impl MergeStrategy {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            MergeStrategy::Verbatim => "verbatim",
-            MergeStrategy::FnSpans => "fn-spans",
-            MergeStrategy::LcsBounded => "lcs-bounded",
-            MergeStrategy::LcsUnbounded => "lcs-unbounded",
+            Self::Verbatim => "verbatim",
+            Self::FnSpans => "fn-spans",
+            Self::LcsBounded => "lcs-bounded",
+            Self::LcsUnbounded => "lcs-unbounded",
         }
     }
 }
@@ -1564,11 +1566,11 @@ pub enum BehavSummary {
 impl BehavSummary {
     fn from_verdict(v: &Verdict) -> Self {
         match v {
-            Verdict::Equivalent { cases } => BehavSummary::Equivalent { cases: *cases },
-            Verdict::Divergent { input, .. } => BehavSummary::Divergent {
+            Verdict::Equivalent { cases } => Self::Equivalent { cases: *cases },
+            Verdict::Divergent { input, .. } => Self::Divergent {
                 input: input.clone(),
             },
-            Verdict::Unsupported { reason } => BehavSummary::Unsupported {
+            Verdict::Unsupported { reason } => Self::Unsupported {
                 reason: reason.clone(),
             },
         }

@@ -459,6 +459,7 @@ impl PerfBenchValidator {
                 }
             }
         }
+        deps.shrink_to_fit();
         deps
     }
 
@@ -707,6 +708,7 @@ static GLOBAL_COUNTING_ALLOCATOR: CountingAlloc = CountingAlloc;
                 fixed_alloc_bytes,
             });
         }
+        results.shrink_to_fit();
         results
     }
 }

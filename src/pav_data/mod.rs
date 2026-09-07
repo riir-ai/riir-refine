@@ -702,9 +702,10 @@ mod tests {
         const TOL: f64 = 0.015;
         let mut worst_unbiased = 0.0_f64;
         let mut worst_plugin = 0.0_f64;
-        let mut rows = Vec::new();
+        let cap_iter = [4_u32, 5, 8, 16];
+        let mut rows = Vec::with_capacity(cap_iter.len());
 
-        for n in [4_u32, 5, 8, 16] {
+        for n in cap_iter {
             for (qi, q) in [0.05_f64, 0.1, 0.2, 0.3, 0.5, 0.7].into_iter().enumerate() {
                 let truth = 1.0 - (1.0 - q).powi(k_as_i32(BOK_K));
                 let mut state =

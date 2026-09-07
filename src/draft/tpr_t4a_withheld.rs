@@ -109,9 +109,9 @@ impl T4aVerdict {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            T4aVerdict::Pass => "PASS",
-            T4aVerdict::Fail => "FAIL",
-            T4aVerdict::Inconclusive => "INCONCLUSIVE",
+            Self::Pass => "PASS",
+            Self::Fail => "FAIL",
+            Self::Inconclusive => "INCONCLUSIVE",
         }
     }
 }
@@ -492,8 +492,8 @@ pub fn run_t4a_at(
     let spread = filler_role_spread(&corpus.bindings);
     let rpf = roles_per_filler(&corpus);
 
-    let mut trials = Vec::new();
-    let mut skipped = Vec::new();
+    let mut trials = Vec::with_capacity(pool.len());
+    let mut skipped = Vec::with_capacity(pool.len());
     for cand in &pool {
         let (role_id, filler_id) = (cand.roles[0], cand.fillers[0]);
         let role = corpus.vocab.roles[role_id as usize];

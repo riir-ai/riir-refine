@@ -264,6 +264,7 @@ fn parse_clippy_lints(json_output: &str) -> Vec<String> {
         }
     }
 
+    lints.shrink_to_fit();
     lints
 }
 

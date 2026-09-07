@@ -1884,7 +1884,7 @@ mod tests {
     }
 
     fn leased(epoch: u64, payloads: &[&[u8]]) -> LeasedEpoch {
-        let descs: Vec<LeaseSegmentDesc> = payloads.iter().map(|p| LeaseSegmentDesc::of(p)).collect();
+        let descs: Vec<LeaseSegmentDesc> = payloads.iter().map(LeaseSegmentDesc::of).collect();
         let manifest = LeaseManifest::build(epoch, 1, descs);
         let mut stage = LeaseStage::begin(manifest).unwrap();
         for p in payloads {

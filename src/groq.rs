@@ -119,7 +119,7 @@ impl GroqError {
     #[must_use]
     pub fn message(&self) -> &str {
         match self {
-            GroqError::RateLimited(m) | GroqError::Overflow(m) | GroqError::Transport(m) => m,
+            Self::RateLimited(m) | Self::Overflow(m) | Self::Transport(m) => m,
         }
     }
 }
@@ -383,8 +383,8 @@ pub mod router {
         #[must_use]
         pub fn as_str(self) -> &'static str {
             match self {
-                Provider::Groq => "groq",
-                Provider::Cloudflare => "cloudflare",
+                Self::Groq => "groq",
+                Self::Cloudflare => "cloudflare",
             }
         }
     }

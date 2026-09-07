@@ -212,7 +212,7 @@ impl SyncWatermark {
     #[must_use]
     pub fn load_at(path: &Path) -> (Self, Option<String>) {
         match std::fs::read_to_string(path) {
-            Ok(text) => match serde_json::from_str::<SyncWatermark>(&text) {
+            Ok(text) => match serde_json::from_str::<Self>(&text) {
                 Ok(w) if w.sync_state_version == SYNC_STATE_VERSION => (w, None),
                 Ok(w) => {
                     let warn = format!(

@@ -87,15 +87,15 @@ pub enum ShapeClass {
 
 impl ShapeClass {
     /// Fixed order = the classifier's priority order.
-    pub const ALL: [ShapeClass; 8] = [
-        ShapeClass::Macro,
-        ShapeClass::IteratorChain,
-        ShapeClass::Closure,
-        ShapeClass::Generic,
-        ShapeClass::ImplBlock,
-        ShapeClass::Loop,
-        ShapeClass::MultiItem,
-        ShapeClass::PlainFn,
+    pub const ALL: [Self; 8] = [
+        Self::Macro,
+        Self::IteratorChain,
+        Self::Closure,
+        Self::Generic,
+        Self::ImplBlock,
+        Self::Loop,
+        Self::MultiItem,
+        Self::PlainFn,
     ];
 
     /// Stable label — the report key and the atomic-null signature prefix.
@@ -387,6 +387,7 @@ pub fn normalized_tokens(code: &str) -> Vec<String> {
         }
         out.push(format!("op:{}", &code[start..i]));
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -519,6 +520,7 @@ pub fn clippy_population() -> Vec<Binding> {
     for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
         out.push(Binding::clippy(*lint, *code, "fixture"));
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -542,6 +544,7 @@ pub fn rustc_errors_population() -> Vec<Binding> {
         let broken = c.broken().expect("anchor mutation site present");
         out.push(Binding::rustc(c.expect_code, broken, "anchor"));
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -574,6 +577,7 @@ pub fn kernel_opt_population() -> Vec<Binding> {
             });
         }
     }
+    out.shrink_to_fit();
     out
 }
 

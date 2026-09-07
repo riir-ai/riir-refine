@@ -59,10 +59,10 @@ impl Outcome {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            Outcome::Clean => "clean",
-            Outcome::Decline => "decline",
-            Outcome::Parse => "parse",
-            Outcome::Budget => "budget",
+            Self::Clean => "clean",
+            Self::Decline => "decline",
+            Self::Parse => "parse",
+            Self::Budget => "budget",
         }
     }
 }

@@ -203,6 +203,7 @@ pub fn comment_marker_positions(text: &str) -> Vec<usize> {
             i += 1;
         }
     }
+    out.shrink_to_fit();
     out
 }
 

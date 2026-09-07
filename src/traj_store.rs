@@ -823,6 +823,7 @@ impl TrajStore {
             fb.total_cmp(&fa)
         });
         out.truncate(k);
+        out.shrink_to_fit();
         out
     }
 

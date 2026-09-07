@@ -136,8 +136,8 @@ struct Args {
 }
 
 impl Args {
-    fn parse() -> Args {
-        let mut a = Args {
+    fn parse() -> Self {
+        let mut a = Self {
             dry_run: false,
             preflight: false,
             limit: DEFAULT_LIMIT,

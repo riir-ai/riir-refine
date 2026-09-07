@@ -6395,8 +6395,8 @@ fn batch79_associative_scan_rel_error_gate() {
     }
     let mut max_rel = 0.0f32;
     for seed in 0..4u64 {
-        let mut a = Vec::new();
-        let mut b = Vec::new();
+        let mut a = Vec::with_capacity(256usize);
+        let mut b = Vec::with_capacity(256usize);
         for i in 0..256usize {
             let (ai, bi) = match seed {
                 // family 0: exponent crossings -- h swings across 2^n
@@ -10354,7 +10354,7 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     // changes every epoch, so the aliased old copy is physically unreachable.
     let (pitch, rr) = (64usize, 2usize);
     let mut sub_buffer = 0usize;
-    let mut offsets = Vec::new();
+    let mut offsets = Vec::with_capacity(4);
     for _ in 0..4 {
         offsets.push((sub_buffer % rr) * pitch);
         sub_buffer += 1;

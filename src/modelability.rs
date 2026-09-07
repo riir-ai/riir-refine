@@ -354,6 +354,7 @@ fn kmeanspp_init(train: &[&[f32]], k: usize) -> Vec<Vec<f64>> {
         }
         centroids.push(train[pick].iter().map(|x| f64::from(*x)).collect());
     }
+    centroids.shrink_to_fit();
     centroids
 }
 
@@ -515,6 +516,7 @@ mod tests {
                 out.push(vec![g.next(*cx, sigma) as f32, g.next(*cy, sigma) as f32]);
             }
         }
+        out.shrink_to_fit();
         out
     }
 

@@ -98,8 +98,8 @@ struct Args {
 }
 
 impl Args {
-    fn parse() -> Args {
-        let mut a = Args {
+    fn parse() -> Self {
+        let mut a = Self {
             arm: "DRY".into(),
             source: "both".into(),
             chunks: vec![0],

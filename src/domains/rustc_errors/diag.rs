@@ -280,6 +280,7 @@ pub fn parse_error_diags(json_stdout: &str) -> Vec<RustcErrorDiag> {
             rendered: diag.rendered.clone(),
         });
     }
+    out.shrink_to_fit();
     out
 }
 

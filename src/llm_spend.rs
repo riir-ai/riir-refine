@@ -322,25 +322,25 @@ impl SpendLedger {
 
     /// Open (or create) at `<root>/.heal/kat_llm_spend.json`, cap from env.
     #[must_use]
-    pub fn open(root: &Path) -> SpendLedger {
+    pub fn open(root: &Path) -> Self {
         Self::open_at(root.join(".heal").join(Self::FILE_NAME))
     }
 
     /// Open at an explicit path, cap from env (the `KAT_LLM_SPEND_FILE`
     /// override shape + tests).
     #[must_use]
-    pub fn open_at(path: PathBuf) -> SpendLedger {
+    pub fn open_at(path: PathBuf) -> Self {
         Self::at_path(path, cap_from_env())
     }
 
     /// Open at an explicit path with an explicit cap (tests + programmatic
     /// consumers).
     #[must_use]
-    pub fn open_at_with_cap(path: PathBuf, cap_usd: f64) -> SpendLedger {
+    pub fn open_at_with_cap(path: PathBuf, cap_usd: f64) -> Self {
         Self::at_path(path, cap_usd)
     }
 
-    fn at_path(path: PathBuf, cap_usd: f64) -> SpendLedger {
+    fn at_path(path: PathBuf, cap_usd: f64) -> Self {
         let mut state = match std::fs::read_to_string(&path) {
             Ok(text) => match serde_json::from_str::<SpendState>(&text) {
                 Ok(s) if s.version == SPEND_VERSION => s,
@@ -368,7 +368,7 @@ impl SpendLedger {
         // watermark discipline); it only stamps what new calls will use.
         state.pricing_version = PRICING_VERSION;
         state.cap_usd = cap_usd;
-        let mut ledger = SpendLedger { path, state };
+        let mut ledger = Self { path, state };
         ledger.roll_day(today_epoch_days());
         ledger
     }
@@ -685,7 +685,7 @@ mod tests {
 
     #[test]
     fn determinism_same_inputs_same_file_bytes() {
-        let mut states = Vec::new();
+        let mut states = Vec::with_capacity(3);
         for i in 0..3 {
             let file = tmp_file(&format!("det{i}"));
             let mut l = SpendLedger::open_at_with_cap(file, 1.0);

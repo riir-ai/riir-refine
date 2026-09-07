@@ -212,6 +212,7 @@ impl CompileProposer for AnonLifetime {
             ));
             from += at + "'static".len();
         }
+        out.shrink_to_fit();
         out
     }
 }

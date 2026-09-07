@@ -105,9 +105,9 @@ enum TemplatePos {
 impl TemplatePos {
     fn index(self) -> usize {
         match self {
-            TemplatePos::First => 0,
-            TemplatePos::Second => 1,
-            TemplatePos::Third => 2,
+            Self::First => 0,
+            Self::Second => 1,
+            Self::Third => 2,
         }
     }
 }
@@ -276,7 +276,7 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
         return None; // nothing consumed — nothing to inline here
     }
 
-    let mut edits = Vec::new();
+    let mut edits = Vec::with_capacity(fmt_args.len());
     if used > 0 || !referenced.is_empty() {
         edits.push(SourceEdit {
             start: template_range.start,

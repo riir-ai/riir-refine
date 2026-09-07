@@ -627,7 +627,7 @@ mod tests {
                 );
             }
             BatchParse::Unattributable(t) => {
-                panic!("expected attribution, got Unattributable({t:?})")
+                panic!("expected attribution, got Unattributable({t:?})");
             }
         }
     }
@@ -647,7 +647,7 @@ mod tests {
                 assert!(v[1].error.as_deref().is_some_and(|e| e.contains("boom")));
             }
             BatchParse::Unattributable(t) => {
-                panic!("expected attribution, got Unattributable({t:?})")
+                panic!("expected attribution, got Unattributable({t:?})");
             }
         }
     }
@@ -678,7 +678,7 @@ mod tests {
                 assert!(v[..13].iter().all(|x| x.lints.is_empty()), "no suffix bleed into s0..s12");
             }
             BatchParse::Unattributable(t) => {
-                panic!("expected attribution, got Unattributable({t:?})")
+                panic!("expected attribution, got Unattributable({t:?})");
             }
         }
     }
@@ -700,7 +700,7 @@ mod tests {
                 assert!(v[..2].iter().all(|x| x.lints.is_empty()));
             }
             BatchParse::Unattributable(t) => {
-                panic!("expected attribution, got Unattributable({t:?})")
+                panic!("expected attribution, got Unattributable({t:?})");
             }
         }
     }

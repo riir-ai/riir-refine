@@ -102,7 +102,7 @@ impl AdaptiveDrafter {
     /// Whether the pool has any entries. Empty → Stage 1 only.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.pool.pin().len() == 0
+        self.pool.pin().is_empty()
     }
 
     /// Number of verified fixes in the pool.
@@ -194,7 +194,7 @@ mod tests {
         // papaya is lock-free — concurrent access is safe. This is a smoke test
         // (not a stress test) verifying the API works under a simple race.
         let drafter = std::sync::Arc::new(AdaptiveDrafter::new());
-        let mut handles = Vec::new();
+        let mut handles = Vec::with_capacity(4);
         for i in 0..4 {
             let d = drafter.clone();
             handles.push(std::thread::spawn(move || {

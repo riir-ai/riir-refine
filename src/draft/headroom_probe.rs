@@ -644,8 +644,9 @@ mod tests {
             "{:<12} {:>9} {:>9} {:>10} {:>11} {:>11}",
             "mode", "recall@1", "pool@16", "headroom", "sel-misses", "ret-misses"
         );
-        let mut rows = Vec::new();
-        for mode in [RerankMode::Off, RerankMode::Structural, RerankMode::All] {
+        let cap_iter = [RerankMode::Off, RerankMode::Structural, RerankMode::All];
+        let mut rows = Vec::with_capacity(cap_iter.len());
+        for mode in cap_iter {
             let r = run_headroom_probe_with(mode);
             let v = r.verdict();
             println!(

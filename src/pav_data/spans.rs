@@ -34,9 +34,9 @@ impl SpanSource {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            SpanSource::Fixture => "fixture",
-            SpanSource::Store => "store",
-            SpanSource::Extra => "extra",
+            Self::Fixture => "fixture",
+            Self::Store => "store",
+            Self::Extra => "extra",
         }
     }
 }
