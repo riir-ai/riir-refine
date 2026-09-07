@@ -927,9 +927,53 @@
   GPU-training-forward lane's live state = riir-train Issue 729 (open-loop, option-1
   deferred with reopen trigger). Flag consumed — no open doc-sync leads remain from the
   09-03 plan-board sweep.
-- **Post-mining intake: 0 open classes** — P8 nan-unsafe float sort comparator CLOSED
+- **Post-mining intake: 2 open classes** (both filed 2026-09-07 from riir-ai Issue 888 —
+  the two entries immediately below). P8 nan-unsafe float sort comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
+- **2026-09-07 (M3, riir-ai Issue 888 consumer session) — OPEN class A:
+  `config-default-is-a-named-constant-and-the-consumer-reads-the-constant`.**
+  A static, cheap, high-precision lint candidate, measured **3x in one repo**:
+
+  | field | default expression | what the consumer actually reads |
+  |---|---|---|
+  | `LoraConfig.target_modules` | `LoraTarget::all().to_vec()` | `LoraTarget::COUNT` — **~35 sites / 9 files** |
+  | `AuditConfig.ring_capacity` | `AUDIT_RING_K` | `AUDIT_RING_K`, including as an **array length** (`[AuditEntry; AUDIT_RING_K]`), so the field is structurally un-honorable |
+  | `CrowdMcgsConfig.belief_decay_rate` | `DEFAULT_BELIEF_DECAY_RATE` | `DEFAULT_BELIEF_DECAY_RATE` |
+
+  **The shape:** a `pub` config field whose `Default` value is a *named constant or
+  associated const*, where the consuming code reads **the constant** rather than
+  `self.field`. Result is silent-wrong configuration — the caller sets the knob, gets the
+  constant, and any A/B over that dimension measures nothing. `rustc`'s `dead_code` cannot
+  see it (a `pub` field is assumed used-by-API), so it is invisible to
+  `cargo clippy --all-features --all-targets` at every feature state and on every platform.
+
+  **Why a lint beats a grep here:** the trigger is fully local and syntactic — (1) the field
+  has a `Default`/constructor init whose RHS is a path expression to a `const`, (2) there is
+  no `.field` read of that field in the defining crate, (3) that same const path IS read
+  elsewhere. Strictly more precise than the whole-repo heuristic the consumer used
+  (`riir-ai/scripts/inert_config_knob_report.py`: 57 candidates, 36 verified by hand).
+  **Two guards learned the hard way in that consumer:** the field may be read by
+  **destructuring** (`let Cfg { .., field } = cfg`) *in its own file* — that blind spot put
+  three LIVE fields in the report's most-confident bucket — and the defining crate may be
+  **upstream**, so 7 of 22 rows turned out live in a sibling repo. A lint runs per-crate
+  with type info and dodges both, which is exactly why it belongs here and not in a sweep.
+- **2026-09-07 (same session) — OPEN class B: `assert-on-default-config-value`.**
+  A test that asserts a config field equals its own default —
+  `assert!(cfg.sc_inference)`, `assert!(!cfg.track_variance)`,
+  `assert!((c.learning_rate - 0.0002).abs() < 1e-6)` — is often the **only** read of that
+  field anywhere, so an inert knob reads as **covered**. Measured: 2 rows in riir-ai
+  (`SelfConditionConfig.sc_inference`, `ElboAuxConfig.track_variance` — both asserted from a
+  *sibling repo's* test, which is also how they escaped the consumer's first pass), and the
+  same shape recurs across riir-games / riir-games-quest `learning_rate` assertions. It is a
+  **generic** smell, not a riir-ai one: asserting `Default` reproduces `Default` and proves
+  nothing about the field being *used*.
+
+  Proposer angle: flag a test whose only interaction with a `*Config` field is an
+  equality/boolean assertion against the literal appearing in that type's `Default` impl,
+  and suggest a **behavioral** assertion instead — the catching test is always behavioral
+  ("at f=0.5 `bytes_total()` is ~half the f=1.0 value"; "`target_modules=[Q,V]` yields 2
+  adapters, not 6"). Same family as the Plan-014 fake-coverage concern this file tracks.
 - **2026-09-03 (M3, idle loop — E4 decay-gate triage, the flat 35-run curve resolved):**
   the score bench has read 96.2/1.9 since 08-25 and the audit's E4 gate referenced the
   pre-P9 peak (98.1), printing a false decay context every run. Full miss-map triage
