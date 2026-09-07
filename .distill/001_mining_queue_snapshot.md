@@ -1108,6 +1108,8 @@ Queues empty after this entry → idle report.
 
 Zero open classes (P12 CLOSED 2026-09-07 below); the standing divergence (P4 residual) has no action planned.
 
+- [ ] **2026-09-07 P13 NEW — cfg-arm `mut` dropped without compiling the consumer's feature combo (substrate incident, fix `riir-ai a2d28a386`).** A lint-heal sweep on `riir-games-mmorpg/authority_sim/mod.rs` (commit `bea9464bc`, "drop unused mut on the claim_system builder") removed a `mut` that is load-bearing under `#[cfg(feature = "pvp_karma")]` (the block re-assigns the binding). The validating combo ("seal's sextet") did not include pvp_karma, so the E0384 surfaced only in consumer combos that forward the substrate's pvp_karma (seal party/pet_pvp/target_coordination lanes) — and would also break riir-ai's own --all-features lane. Fix pattern: `let mut` + `#[cfg_attr(not(feature = "pvp_karma"), allow(unused_mut))]` (mirrors the file's own lineage_surface pattern). **Intake question for the healer:** should `--verify` refuse (or warn-loud) when the edit touches a binding re-assigned inside ANY `#[cfg]` block whose feature is not in the verify-args feature set? This is the compile-gate blind spot the AGENTS already documents for default-off code ("a default-features check compiles gated files empty — a green check proves nothing about them"), now with a concrete consumer-breaking instance. Fix is landed; this row is the improvement-intake record.
+
 - [x] **2026-09-06 P11 NEW — gen-7 bench yields, three classes (Bench 074; all
   pre-existing, none gen-7-caused): LANDED 2026-09-06 (Plan 099 — authored 097,
   renumbered per the 848-class collision with the sibling's Batch-118 plan — /
