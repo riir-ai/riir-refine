@@ -14,7 +14,7 @@ measured-required fixes, not as the proposal's "optional" hardening.
 
 - [x] T1.1 `gist-rs/cargo-heal` created (public, 2026-09-07) + seeded on `main` (commit `157ea2d`): `install.sh`, `install.ps1`, capabilities-only README, no-source CI guard (fails on any tracked `.rs`). Canonical install URLs now resolve — verified HTTP 200 the day of seeding.
 - [x] T1.2 `gist-rs/homebrew-tap` (seed `8812009`) + `gist-rs/scoop-bucket` (seed `585a94a`) created (public, manifest-only, same guard); the Formula / bucket manifest arrive as release-job PRs (T2.4).
-- [-] T1.3 Fine-grained robot PAT as the org secret `RELEASE_PAT` — OWNER ACT (fine-grained PATs cannot be minted via the API). Scope: repository access = cargo-heal + homebrew-tap + scoop-bucket ONLY, permission = contents read/write. All three repos are public and source-free, so the token can neither read nor write any source anywhere. Publish job fails loud without it.
+- [x] T1.3 Fine-grained robot PAT as the org secret `RELEASE_PAT` — OWNER ACT — **DONE 2026-09-07**: minted fine-grained (`gist-rs`, the three public dist repos ONLY), stored as the ORG secret `RELEASE_PAT`, visibility `selected` → `gist-rs/riir-clippy` (verified `gh api orgs/gist-rs/actions/secrets/RELEASE_PAT --jq .visibility`). Permission correction: the text said contents RW only, but the tap/bucket steps call `gh pr create`, which requires **Pull requests: write** on a fine-grained PAT — the minted token carries contents + pull_requests RW; `release.yml` header comment corrected in the same change.
 
 ## Phase 2 — Pipeline (T2.x)
 

@@ -13,8 +13,10 @@
 #                         those siblings — path deps + [patch] sections).
 #   RELEASE_PAT         — fine-grained PAT, repository access = the three
 #                         PUBLIC source-free dist repos ONLY (cargo-heal,
-#                         homebrew-tap, scoop-bucket), contents read/write.
-#                         Publishes the release and opens the tap/bucket PRs.
+#                         homebrew-tap, scoop-bucket), contents + pull_requests
+#                         read/write (pull_requests is required by `gh pr create`
+#                         on the formula/manifest bump steps). Publishes the
+#                         release and opens the tap/bucket PRs.
 #
 # Deliberate deviations, recorded in Plan 105 (do not "fix" them here):
 #   * No --locked: Cargo.lock is gitignored in this repo (floating siblings
