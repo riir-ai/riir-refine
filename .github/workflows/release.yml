@@ -104,8 +104,9 @@ jobs:
           if-no-files-found: error
 
   # ── The 5-target build matrix ───────────────────────────────────────────────
-  # musl rows: cargo-zigbuild + zig (see the header note). macOS x86_64 is a
-  # cross-compile from the arm runner (same OS — plain cargo handles it).
+  # musl rows: setup-cross-toolchain-action, then plain cargo (see the header
+  # note). macOS x86_64 is a cross-compile from the arm runner (same OS —
+  # plain cargo handles it).
   # RUSTFLAGS is a per-row string because each host layout needs its own
   # remap prefix (windows carries both slash conventions).
   build:
