@@ -15,7 +15,12 @@
   ed25519 tree was already attributed in v0.1.0's doc — 101 → 102 crates),
   5/5 builds, package; publish skipped as designed.
 - **v0.1.1 tagged** at `c15c2c3` → run
-  [`34088624161`](https://github.com/gist-rs/riir-clippy/actions/runs/34088624161).
+  [`34088624161`](https://github.com/gist-rs/riir-clippy/actions/runs/34088624161)
+  **ALL GREEN incl. publish** — release live (`isDraft: false`, 5 archives +
+  SHA256SUMS + THIRD_PARTY_LICENSES.md), `ssh-key 0.6.7` attributed (101 →
+  107 crates), formula/manifest hashes verified 6/6 vs `SHA256SUMS`,
+  homebrew-tap#2 + scoop-bucket#2 merged. **G1 on the PUBLIC artifact**:
+  installer → `login` → `account` end-to-end from a clean `$HOME`.
 - **Consumer README live** on `gist-rs/cargo-heal` (`a11c73a`): TL;DR install
   (4 channels), feature table with counts measured by `--corpus-stats`
   (clippy 49 · rust_perf 112 · docker 31 · kernel_opt 559-not-shipped · sec
