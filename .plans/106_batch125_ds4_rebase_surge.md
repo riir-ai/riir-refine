@@ -8,6 +8,20 @@
 - **The compare-vs-pin trap (recorded):** `compare/69c38d23...ffd85d42` lists the WHOLE diverged history (62 commits, ~19K ln incl. files B118/B121 already mined: `metal/qwen4.metal`, `QWEN38_PERF_HANDOFF.md`, `qwen4_iq2.py`). The TRUE new delta = commits dated **2026-09-05 21:48Z .. 2026-09-06 23:11Z** (~47 commits). Never quote counts from the compare; re-derive at the pin.
 - Size class: BIG (ds4.c +4432/−146, ds4_server.c +1621/−149, ds4_metal.m +1420/−134, ds4_agent.c +1373/−473, 5 new speed-bench files ~3.6K ln, 4 new gguf-tools python files ~4.7K ln). Same class as B123's surge — split lanes, keep batches reviewable (the Plan-102 lesson).
 
+## CORRECTED SURVEY (T0, 2026-09-07 09:25 +07 — clone staged at `ffd85d42`, HEAD == pin, MIT verified)
+
+- **The trigger is SMALL, not a surge.** The `69c38d23...ffd85d42` compare lists 62 commits / ~19K ln because the PR line was REWRITTEN (re-based onto upstream main) — old mined content re-appears under new SHAs. Two already-banked populations subtract out:
+  1. **The upstream-side window** (`9ab7053..c0a6119f`: DGX Spark, ROCm gfx1151, Metal SSD expert-cache, tool-text preservation) = **Batch 123's entire 41-file delta** (Research 146). The original Part A lane A1 and Part B tool-text lane below are WITHDRAWN as mine targets — already banked; ride only as dedup-grep needles.
+  2. **The Qwen3.8 stack as of `69c38d23`** = B118/B121/B122's mines (old SHAs rewritten — e.g. old `9f4313d`→new `32724a2`, old `69c38d2`→new `948edcd`). `c0a6119f..ffd85d42` = 14 commits = the whole Qwen line, NOT the delta.
+- **The genuine new delta (message-level mapping vs the B118–B123 records; the old pin tree `69c38d23` is UNFETCHABLE — GitHub refuses force-pushed-away shas — so content-level verdicts happen at entry time via dedup grep + quote re-verify):**
+  - `658b2fc` Preserve Qwen tool-turn KV reuse and assistant boundaries — NEW (no counterpart recorded)
+  - `681b9ce` Fix JPEG decoding parity + separate vision quantization checks (`third_party/iris/jpeg.h`, `tests/test_jpeg_decode.py`) — NEW
+  - `4010cc6` Allow Qwen PLE sidecars in the native agent — B118 PLE-sidecar rider territory
+  - `b98e009` Record Qwen IQ2 and Q4K vision smoke results — methodology (B121-adjacent; Q4K is the new arm)
+  - `ffd85d4` Preserve Qwen tool handling and validate the main rebase — methodology/rebase-harness
+  - **Drift-check population:** `metal/qwen4.metal` + `ds4_qwen4.c` re-committed content vs B118's mined shapes (dedup grep decides rule vs already-banked per shape).
+- **Revised yield estimate: SMALL batch — 3–5 rules + 2–3 riders.**
+
 ## Staged clone (the `.raw` discipline)
 
 `.raw/ds4-metal` (gitignored; MIT — verify LICENSE at stage time), **fresh clone at mine time pinned to `ffd85d42`** — the PR has force-pushed twice already; NEVER reuse an old clone, re-verify HEAD == ls-remote at stage time. Quotes re-verified against the clone by the read lanes; clone removed at landing of the last batch.
@@ -44,11 +58,11 @@ Commit-message survey (re-verify every file/line at the pin — messages are NOT
 
 ## Tasks
 
-- [ ] T0 — stage `.raw/ds4-metal` at `ffd85d42` (fresh clone, HEAD == ls-remote, LICENSE verified); re-derive the TRUE delta (the 09-05 21:48Z..09-06 23:11Z commit window), record the real per-lane diffstats
-- [ ] T1 — Batch 125 (Part A): dedup grep A1 concepts against the corpus (rule vs rider vs already-banked per item); 2 parallel read lanes (A1 metal/ssd files, A2 speed-bench protos) proposing rules (pattern, bounded fix-space, category, rationale, source quote); re-verify every quoted line
+- [x] T0 — stage `.raw/ds4-metal` at `ffd85d42` (fresh clone 2026-09-07 09:24 +07, HEAD == pin, LICENSE MIT verified); true delta re-derived — trigger is SMALL (~5 new commits, see Corrected Survey); old-pin fetch refused (force-pushed sha) — content verdicts at entry time
+- [ ] T1 — Batch 125 (Part A, REVISED per Corrected Survey): dedup grep the ~5 new-commit concepts (`tool.turn|kv.reuse|jpeg|iris|ple|sidecar|vision.quant|q4k`) + the qwen4.metal drift-check shapes against the corpus; 2 parallel read lanes (lane 1: tool-turn KV reuse + PLE sidecars + tool handling in ds4_agent.c/ds4_server.c/qwen4 host files; lane 2: jpeg.h parity + vision quant checks + qwen4.metal/ds4_qwen4.c drift) proposing rules (pattern, bounded fix-space, category, rationale, source quote); re-verify every quoted line
 - [ ] T2 — Batch 125: corpus entries + `batch125_pseudocode_parses` gate + count pins (kernel_opt total/category; walk every manifest/doc line)
 - [ ] T3 — Batch 125 GOAT: batch gates first-shot + lib default/kernel_heal/kernel_heal+latent + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
 - [ ] T4 — Batch 125 landing: Research note (next number per `.research/.highwater`, currently 148) + AGENTS.md corpus count + `.docs/11_domains/` + snapshot row; commit `feat: batch 125: ...` + push
 - [ ] T5 — Batch 126 (Part B): same protocol for the tool-text + QA-methodology lanes (rust_perf); own GOAT + landing (Research N+1)
-- [ ] T6 — Part C league intel: append READ-ONLY rows to the riir-ai perf-league watch (`../riir-ai/.docs/09_performance/perf_rematch_league.md` watch file) ONLY if a content condition fires; never edit closed-negative issues without measured parity evidence
+- [ ] T6 — Part C league intel: REVISED — the DSpark EOS-early-stop + ROCm gfx1151 rows are UPSTREAM-side (B123 window), already surfaced there; no new league row expected. Append to the riir-ai watch ONLY if the entry-time read surfaces a new content condition
 - [ ] T7 — remove `.raw/ds4-metal` at the last landing; final snapshot update (pins current: PR `ffd85d42`, upstream `c0a6119f`)
