@@ -29,7 +29,17 @@ segments is the discriminator that keeps both true and false positives right.
 - **G2** ✓ — leak scan green on all 5 CI-built binaries in run `34074402607` (defined symbols: 0 — dyld imports + `__mh_execute_header` allowlisted; machine paths: 0; secret shapes: 0).
 - **G3** ✓ (partials) — `publish = false` intact (Cargo.toml L7); `gist-rs/riir-clippy` PRIVATE verified via API the same day; repo suite green (bin tests 15/15, install-copy parity 3/3, clippy clean on the shipping feature set).
 - **G4** ✓ (partials) — `SHA256SUMS` verifies for all 5 archives (`sha256sum -c` OK ×5, on the downloaded artifact); `THIRD_PARTY_LICENSES.md` present in every archive (tar/zip listings checked; 96 crates, 5 license families, cargo-about@0.9.2 pinned).
-- **G1** ☐ — clean-machine install on all five assets; requires a published release → first tag → T1.3.
+- **G1** ✅ **PASS (first real tag, 2026-09-07, T3.2 chain complete)** — macOS arm64 clean-prefix install: `CARGO_HEAL_INSTALL_DIR=/tmp/g1_cargo_heal sh -c 'curl -fsSL …/install.sh | sh'` → installer fetched `cargo-heal-v0.1.0-aarch64-apple-darwin.tar.gz`, installed, binary executes (full usage render; note `--version`/`--help` are not flags — usage-on-unknown-flag is the binary's behavior). Consumer hash verification proven: downloaded the release's `SHA256SUMS` + the archive from the PUBLIC release → `shasum -a 256 -c` → `aarch64-apple-darwin.tar.gz: OK` (the other 4 rows not-downloaded, expected). Untested-live here: `brew`/`scoop`/Linux/Windows install paths — formula + manifest hashes verified against `SHA256SUMS` structurally (all 5 match), PRs merged; Linux/Windows G1 rows remain for a box that boots them.
+
+## T3.2 chain record (first real tag, 2026-09-07)
+
+| Run | Result | Finding → fix (commit) |
+|---|---|---|
+| [`34081938353`](https://github.com/gist-rs/riir-clippy/actions/runs/34081938353) | builds ✓ package ✓ · publish ✗ AT THE EMPTY-TOKEN GUARD | **The guard worked as designed.** `RELEASE_PAT` was set as an ORG secret (Plan 105 T1.3's original text) — GitHub's FREE plan silently resolves org secrets to EMPTY for private repos even when the repo is selected and the UI lists it (community discussion 25428). Fix: `RELEASE_PAT` moved to a REPO secret on `gist-rs/riir-clippy`; the empty org secret deleted; T1.3 amended. |
+| same run, publish rerun | release ✓ tap-branch ✓ · `gh pr create` ✗ | `GraphQL: The release/v0.1.0 branch has no history in common with main` — the bump steps did `git init` (orphan history) then PR'd into `main`; GitHub rejects unrelated-history PRs. Fix: clone `main` shallow, branch off it, `cp` the formula/manifest in, force-push the branch (`0740daa`). |
+| [`34085254189`](https://github.com/gist-rs/riir-clippy/actions/runs/34085254189) | **ALL GREEN** — licenses, 5 builds, package, publish: release live (5 archives + `SHA256SUMS` + `THIRD_PARTY_LICENSES.md`, `isDraft: false`), homebrew-tap#1 + scoop-bucket#1 opened by the bot, hashes verified 5/5 vs `SHA256SUMS`, both merged. G1 above. | The pipeline is DONE: tag → public release → tap/bucket PRs in one green run. |
+
+Two secrets-level lessons now on record: (1) free-plan org secrets never reach private repos — silent-empty, fail at USE time not SET time, hence the fail-loud guard earning its keep; (2) `gh pr create` needs pull_requests:write on a fine-grained PAT (contents RW alone is insufficient — T1.3's original text underspecified).
 
 ## Durations (per-ovens, 2026-09-07, GH-hosted runners)
 
