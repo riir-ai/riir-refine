@@ -49,10 +49,12 @@ for f in "$@"; do
     fi
 
     # 2. Build-machine paths. Present tense = the remap prefix missed this
-    #    host's layout. The drive-letter arm requires TWO path segments
-    #    (dir\\dir or dir/dir) so mid-string `http://` substrings and random
-    #    compressed bytes (both measured as false positives on the shipping
-    #    binary) do not match, while a real `D:\a\...` remap failure does.
+    #    host's layout. The drive-letter arm requires an UPPERCASE drive
+    #    (MSVC/cargo bake C:\, D:\) + two path segments: measured on run
+    #    34073335938, a lowercase form false-positives on the generic
+    #    default-PATH constant baked by the musl runtime (`…/bin:/bin:/usr/bin`
+    #    → `n:/usr/bin`), and a preceding-char boundary would REJECT the real
+    #    leak (it occurs mid-string, e.g. `valueC:\Users\runneradmin`).
     #    Samples capped so a failure stays readable.
     if grep -a -q -E '/(Users|home)/' "$f"; then
         echo "  FAIL: absolute machine paths found, samples:"
@@ -61,9 +63,9 @@ for f in "$@"; do
     else
         echo "  ok: no /Users/ or /home/ paths"
     fi
-    if grep -a -q -E '[A-Za-z]:[\\/][A-Za-z0-9_. -]{1,}[\\/][A-Za-z0-9_. -]{1,}' "$f"; then
+    if grep -a -q -E '[A-Z]:[\\/][A-Za-z0-9_. -]{1,}[\\/][A-Za-z0-9_. -]{1,}' "$f"; then
         echo "  FAIL: drive-letter paths found, samples:"
-        grep -a -o -E '[A-Za-z]:[\\/][A-Za-z0-9_. -]{1,}[\\/][A-Za-z0-9_. -]{1,}' "$f" | sort -u | sed 's/^/       /' | sed -n '1,8p'
+        grep -a -o -E '[A-Z]:[\\/][A-Za-z0-9_. -]{1,}[\\/][A-Za-z0-9_. -]{1,}' "$f" | sort -u | sed 's/^/       /' | sed -n '1,8p'
         fail=1
     else
         echo "  ok: no drive-letter paths"

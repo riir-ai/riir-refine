@@ -130,7 +130,11 @@ jobs:
             cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            remap: --remap-path-prefix D:\a=/build --remap-path-prefix D:/a=/build
+            # Windows is the only host whose WORKSPACE (D:\a) and HOME
+            # (C:\Users\runneradmin — CARGO_HOME, where registry crates'
+            # panic Locations bake from) sit on different drives — measured
+            # run 34073335939's predecessor: D:\a alone left C:\Users leaks.
+            remap: --remap-path-prefix D:\a=/build --remap-path-prefix D:/a=/build --remap-path-prefix C:\Users\runneradmin=/build --remap-path-prefix C:/Users/runneradmin=/build
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
