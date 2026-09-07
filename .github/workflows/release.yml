@@ -238,7 +238,7 @@ jobs:
             fi
             cp THIRD_PARTY_LICENSES.md "$stage/THIRD_PARTY_LICENSES.md"
             if [ -f "$stage/cargo-heal.exe" ]; then
-              (cd "$stage" && zip -q "../../../dist/cargo-heal-${TAG}-${target}.zip" cargo-heal.exe THIRD_PARTY_LICENSES.md)
+              (cd "$stage" && zip -q "../../dist/cargo-heal-${TAG}-${target}.zip" cargo-heal.exe THIRD_PARTY_LICENSES.md)
             else
               tar -czf "dist/cargo-heal-${TAG}-${target}.tar.gz" -C "$stage" cargo-heal THIRD_PARTY_LICENSES.md
             fi
@@ -349,9 +349,9 @@ jobs:
             end
           end
           EOF
+          git init -q .
           git config user.name "cargo-heal-release-bot"
           git config user.email "bot@users.noreply.github.com"
-          git init -q .
           git checkout -q -b "release/${TAG}"
           git add Formula/cargo-heal.rb
           git commit -qm "cargo-heal ${TAG}"
@@ -387,9 +387,9 @@ jobs:
               "checkver": "github"
           }
           EOF
+          git init -q .
           git config user.name "cargo-heal-release-bot"
           git config user.email "bot@users.noreply.github.com"
-          git init -q .
           git checkout -q -b "release/${TAG}"
           git add "bucket/cargo-heal.json"
           git commit -qm "cargo-heal ${TAG}"
