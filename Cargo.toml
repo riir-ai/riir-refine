@@ -622,6 +622,14 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = false
 
+# Proposal 003 G2 (Plan 105): the release binary ships to the PUBLIC dist repo
+# (gist-rs/cargo-heal) — ship it stripped. Measured 2026-09-06: the unstripped
+# shipping binary (default + latent_retrieval) exposed 14,485 symbols, i.e. the
+# full internal architecture. `debug` already defaults to false in release
+# (the profile.dev note above); this additionally removes the symbol TABLE.
+[profile.release]
+strip = true
+
 # The Plan 049 T0.2/T0.3 stop-verdict gate imports the feature-gated
 # `draft::` retrieval surface (latent_retrieval) — without this row the
 # target fails `cargo clippy/test --all-targets` under default features

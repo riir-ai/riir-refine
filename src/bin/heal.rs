@@ -3324,6 +3324,18 @@ fn count_corpus_domain(repo: &Path, rel: &str, needle: &str) -> u32 {
 /// ancestor of the CWD owning the corpus paths, else the binary's own
 /// build-machine manifest dir (makes the flag work from any CWD on the
 /// build machine), else None (the caller errors clearly).
+///
+/// The manifest-dir fallback is DEBUG-ONLY by construction (Plan 105, G2):
+/// `env!` bakes the absolute build path into the binary as a string literal,
+/// which `--remap-path-prefix` cannot touch, and a distributed release binary
+/// could never use the path anyway — it does not exist off the build machine.
+/// The cfg split keeps dev behavior byte-identical while release compiles the
+/// fallback to plain `None`.
+#[cfg(debug_assertions)]
+const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = Some(env!("CARGO_MANIFEST_DIR"));
+#[cfg(not(debug_assertions))]
+const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
+
 fn resolve_corpus_repo_root() -> Option<PathBuf> {
     const MARKER: &str = "src/domains/kernel_opt/corpus";
     let mut dir = std::env::current_dir().ok()?;
@@ -3335,7 +3347,7 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
             break;
         }
     }
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest = BUILD_MACHINE_MANIFEST_DIR.map(PathBuf::from)?;
     if manifest.join(MARKER).exists() {
         return Some(manifest);
     }
