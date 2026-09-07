@@ -1,6 +1,6 @@
 # Research 138 — oMLX ANE-prefill + GDN blocked-sequential distill verdict (qwen35_ane_prefill.py + custom_kernels/qwen35_prefill/gdn.py)
 
-**Status:** RECORD — Batch 114 LANDED 2026-09-05 (Plan 087; 2 rules + 6 riders, corpus 516 → 518, G +1 / D +1; batch record in riir-clippy AGENTS.md). Mine-time verification: a dedicated read lane re-verified all ten quote surfaces at the pin with exact line numbers (range drift table in the lane report); two honest notes — (1) the queue line's `carried-state-reduction-stays-scalar` reassociation comment is NOT in this source (it belongs to Batch 113's llama.cpp `ssm.metal:454`; the oMLX-side scalar+shuffle MECHANISM stands on its own at gdn.py:498-514), and (2) Kernel S has NO channel-tile loop — the channel-tile staging pattern is Kernel B's (:283-292); the queue line's 'consumed across channel tiles' phrasing is corrected to 'reused across the inner time loop'.
+**Status:** RECORD — **CONSUMED 2026-09-07** (rules #2/#3 adopted into riir-ai `.issues/886`/`887`; see §Consumption record for the one corpus-relevant confirmation — rule #3's floor is independently shipped in riir-ai on the SPATIAL axis — and the one usage artifact). Batch 114 LANDED 2026-09-05 (Plan 087; 2 rules + 6 riders, corpus 516 → 518, G +1 / D +1; batch record in riir-clippy AGENTS.md). Mine-time verification: a dedicated read lane re-verified all ten quote surfaces at the pin with exact line numbers (range drift table in the lane report); two honest notes — (1) the queue line's `carried-state-reduction-stays-scalar` reassociation comment is NOT in this source (it belongs to Batch 113's llama.cpp `ssm.metal:454`; the oMLX-side scalar+shuffle MECHANISM stands on its own at gdn.py:498-514), and (2) Kernel S has NO channel-tile loop — the channel-tile staging pattern is Kernel B's (:283-292); the queue line's 'consumed across channel tiles' phrasing is corrected to 'reused across the inner time loop'.
 
 - **Source:** jundot/omlx @ `e467261edc786efd33b1e9023d5c4a827f8aa1c1` (main, 2026-09-03), Apache-2.0. Surfaces read: `omlx/patches/qwen35_ane_prefill.py` (3,604 lines — the PR3298 ANE-GDN + PR2853 CPU/ANE/GPU-sharing content, both MERGED into main; the recipe repo adapts this module), `omlx/custom_kernels/qwen35_prefill/gdn.py` (599 lines — Kernel S `_KERNEL_S_SRC`, the shelf's named-unmined lead), plus targeted ranges of the bank/warm/enable paths. `.raw/omlx` read in full-surface mode; pin + license recorded here BEFORE clone removal.
 - **Inspection date:** 2026-09-05 (M3 box).
@@ -35,6 +35,60 @@
 - `qwen35_ane_prefill.py` is Python orchestration around private ANE APIs — rules land as host-orchestration (D) patterns with Metal-shaped pseudocode, per the B94/oMLX precedent.
 - The recipe repo's qualified config (GDN-only 36 layers, dual-ANE, CPU 0.125 @ 8t, fixed-seq 3264, load-thread working-copy materialization) remains the lane-intel layer recorded in the queue snapshot — this note owns the KERNEL/orchestration mining half.
 - Batch 94 mined oMLX PR #3260 (pool/SSD-streaming) — zero overlap with these surfaces (grep-verified: no rule touches bank ladders, recurrent-safe caps, or the GDN kernel).
+
+## Consumption record — riir-ai side, 2026-09-07 (adoption filed; one corpus-relevant confirmation; one usage artifact)
+
+Batch 114's stated purpose was "so a future session **adopts** rather than
+rediscovers". That happened. Recording the outcome here because two of the three
+findings feed back into the corpus rather than staying in the consumer's lane.
+
+**1. Rules #2 and #3 are CONSUMED — filed as designs, per Plan 087's non-goal split**
+(adoption is riir-gpu/769 territory; this note only records that it occurred):
+
+| rule | consumer issue | outcome |
+|---|---|---|
+| #2 `ane-bank-split-ladder` | riir-ai `.issues/886` | ALL FOUR sub-rules adopted as T1–T5 (two-sided budget at the 0.70 phys-footprint fraction, the async-release `gc + settle` measurement-honesty rule, the near-halves halving retry ladder, the bank-count determinism axis as a REFUSAL). Substrate-first read found `AneProgramBank` already ships the right shape, so 886 extends it and adds no new type. |
+| #3 `recurrent-safe-approximate-slice-cap` | riir-ai `.issues/887` | mechanism adoption BLOCKED in the consumer — see artifact 3 below. The rule is not at fault. |
+
+**2. Rule #3 gains INDEPENDENT INTERNAL CONFIRMATION — corpus-relevant, upgrades its
+evidence basis.** `_min_viable_gdn_fraction`'s rule ("below the alignment-representability
+floor it compiles but does not work ⇒ loud warn, stay on the GPU") is **already shipped in
+riir-ai**, independently derived, on the *spatial* axis rather than the channel axis:
+
+```
+riir-gpu/src/ane_prefill/mod.rs:543-546
+  // P7: the ANE conv requires spatial width W >= 32 — narrower W compiles
+  // but fails at eval. A misconfigured block is a fail-open, not a panic.
+  if config.block_tokens < ANE_PREFILL_MIN_SPATIAL_W { return None; }
+```
+
+Same rule, same rationale, a **measured** constant (P7), reached without reference to
+oMLX. Independent rediscovery on a sibling axis is the strongest available signal that a
+mined rule is **general** rather than source-specific — worth carrying as evidence if #3
+is ever re-graded from rider to standalone. Note the asymmetry it exposes in the consumer:
+one axis guarded, the other not.
+
+**3. Usage artifact for the post-mining intake (a D-rule adoption-readiness gap, NOT a
+mine defect).** Rule #3's mechanics — cap DOWN at the token-local horizon, floor UP by
+alignment, log the cap with its reason — are all operations **on a channel fraction**. The
+consumer's `channel_fraction` turned out to be **inert**: validated at `mod.rs:548`, copied
+into `AnePrefillPlan`, and never applied (plan field read at zero of six plan call sites,
+`is_full_channels()` zero callers, the word "fraction" absent from `bank.rs`/`exec.rs`/
+`exec_zc.rs`, and production always constructs `..Default::default()` = 1.0 and registers
+whole tensors). Adopting the window as-designed would compute a cap and a floor, log them,
+and change no execution.
+
+Honest credit to the mine: **row 7 already called this** — *"our 769 f-fraction is the same
+axis, **unbuilt**"*. 887 only sharpens `unbuilt` to `present-but-inert`, which is the worse
+of the two states, because an inert knob reads as a live dimension (769's own budget prose
+is parameterized on `f` as one point on a curve that does not exist).
+
+Generalization offered to the intake, not asserted as a rule: **a D (host-orchestration)
+rule that bounds a quantity needs an adoption-readiness check that the consumer's quantity
+is LIVE, not merely present.** Cheapest form of that check is behavioral, not structural —
+for #3 it is "at f=0.5 the registered bank's `bytes_total()` is ~half the f=1.0 value",
+one assertion that fails today. Filed as `887` T4 on the consumer side.
+
 
 ## Queue slot
 
