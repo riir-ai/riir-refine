@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 110 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 14, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 23 are honestly
+//! 111 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 15, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 24 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -25,7 +25,10 @@
 //! completeness, per-turn diagnostics; correctness-of-emission and
 //! test-honesty content, not speed) + the two upstream-surge annotations
 //! (Batch 123 — full-vector comparison integrity, tri-state fit
-//! classification; measurement-integrity and robustness content, not speed).
+//! classification; measurement-integrity and robustness content, not speed)
+//! + the evaluation-design annotation (Batch 124 — matched controls,
+//! proxy-vs-endpoint, null-arm identity; experimental-design content, not
+//! speed).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -132,7 +135,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (87/110):
+//! Currently benchable (87/111):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -281,6 +284,10 @@
 //! - `renderer-error-is-not-capacity-overflow` (robustness classification —
 //!   a tri-state fit validator keeps render errors off the destructive
 //!   compaction path; Batch 123, ds4 upstream surge)
+//! - `matched-control-disentangles-policy-from-model` (evaluation-design —
+//!   matched controls separate the admission gate from the learned model;
+//!   proxy and endpoint metrics reported separately; gate-closed arm
+//!   bit-identical to the no-action baseline; Batch 124, arXiv:2609.04040)
 //! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
 //!   a timing gate whose work folds away under LTO has no nonzero baseline to
 //!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
@@ -2962,6 +2969,24 @@ fn ingest(obs: &Observation, reserve: usize) {
     }
 }".to_string(),
             context_notes: Some("REGIME-ANNOTATED, source-reported (the source changed the validator's return from bool to a tri-state int with the comment '-1 is a rendering/embedding error, not a request to compact the context'; every call site branches 'if (fits < 0) goto observation_error; if (!fits) compact' -- honestly NotBenchable here -- control-flow classification, not speed). THE FAILURE CLASS: a validator whose real domain is {error, fits, overflow} typed as bool collapses error into the ONE answer whose handler is destructive and irreversible (compaction rewrites/summarizes live context); every unrelated failure then surfaces as context loss, and the swallowed error string makes it undiagnosable. THE CONTRACT has three parts: the tri-state return, the destructive handler gated by the ONLY condition that names it (projected tokens exceeding context), and the cause propagated out of the callee (err buffer / error variant) instead of dying in a stack local. Applies to any ingestion loop classifying tool results, attachments, embeddings, or message batches before appending to live state. Distinct from diagnostics-not-just-exit-code (captures failure evidence for later grading; this decides the CONTROL-FLOW classification so a non-capacity error cannot fire a destructive path), from the Result-vs-Option idiom (type-level error propagation generally; this is the specific tri-state where a SUCCESS answer also has a destructive binary split), and from bounded-retry rules (budget conservation; orthogonal axis). Suggestion-only (a parse-only proposer cannot see which false answer routes to which handler). Source: antirez/ds4 @ c0a6119f (MIT) -- ds4_agent.c:9000-9017 (the tri-state signature + the '-1 is a rendering/embedding error' comment), 9911/9929/9944 (call sites: fits < 0 -> observation_error; !fits -> agent_worker_compact), 9972-9976 (the error label frees the observation + returns the real message; the transcript is never touched on -1). Batch 123 / Plan 103 / Research 146.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+// -- io (evaluation design): a learned predictor benchmarked against
+// an always-issues baseline conflates the MODEL with the ADMISSION POLICY.
+        // Batch 124 (2026-09-07, Plan 104 -- arXiv:2609.04040 distill, walk
+// #8). Matched controls -- the SAME confidence gate on a 257-parameter
+// online MLP and on a classical stride predictor -- make the neural
+// advantage vanish; the gate alone removes 35% of prefetches and lifts
+// accuracy 11% -> 15% while DRAM reads move only +-0.07%; gate-closed
+// execution reproduces the no-prefetch baseline EXACTLY.
+        PerfRule {
+            rule_id: "matched-control-disentangles-policy-from-model".to_string(),
+            name: "learned predictor benchmarked against an always-issues baseline -> run MATCHED CONTROLS (the same admission gate on the learned model AND the classical baseline) so the model's contribution separates from the gate's; report proxy AND endpoint metrics; make the gate-closed arm bit-identical to the no-action baseline".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The learned prefetcher is compared against a classical one that\n// ALWAYS issues: any accuracy win may come from the confidence gate\n// the learned version bundles, not from learning. And the gate is\n// graded on ACCURACY alone -- a proxy that can improve while endpoint\n// cost (DRAM traffic) does not move.\nfn evaluate(learned: &dyn Predictor, classical: &dyn Predictor) -> Report {\n    let a = run(learned);   // gate bundled inside: model vs policy confounded\n    let b = run(classical); // always-issues: no gate at all\n    Report { win: a.accuracy > b.accuracy, accuracy: a.accuracy }\n}".to_string(),
+            fixed_code: "// Matched controls: the SAME admission gate wraps BOTH predictors,\n// so the comparison isolates the MODEL. Three report axes: proxy\n// (accuracy), endpoint (DRAM traffic), and the null-arm identity --\n// gate-closed must reproduce the no-action baseline bit-exactly (a\n// provable no-op, not a mostly-no-op).\nfn evaluate(learned: &dyn Predictor, classical: &dyn Predictor) -> Report {\n    let gate = ConfidenceGate::default();\n    let a = run_gated(learned, &gate);   // model varies, gate fixed\n    let b = run_gated(classical, &gate); // same gate: the control\n    let null_arm = run_gated(&NullPredictor, &gate);\n    debug_assert_eq!(null_arm.endpoint, no_action_endpoint()); // identity\n    Report {\n        model_win: a.endpoint < b.endpoint,  // endpoint, not proxy\n        proxy: a.accuracy,\n        endpoint: a.endpoint,\n    }\n}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, paper-measured (arXiv:2609.04040, SPEC CPU2017 in native ChampSim: the matched-control design made a 257-parameter online MLP INDISTINGUISHABLE from gated stride on random traffic and SLOWER on most regular streams -- the neural advantage was the gate all along; the gate alone removed 35% of prefetches and lifted accuracy 11% -> 15% while DRAM reads changed only 0.07%; honestly NotBenchable here -- evaluation design, not speed). THREE decision contents: (1) MATCHED CONTROLS -- the admission policy is its own variable; wrap the learned model AND the classical baseline in the SAME gate, else the benchmark answers 'is the bundle better?' when it claims to answer 'is learning better?'; (2) PROXY-VS-ENDPOINT -- accuracy (a proxy) improved substantially while the endpoint (DRAM reads) did not move: better proxies do not imply better endpoints, so the report must carry BOTH and the win condition must be the endpoint; (3) NULL-ARM IDENTITY -- gate-closed execution reproduced the no-prefetch baseline exactly, which makes the gate a provable no-op when closed (the admission-gate twin of feature-flag bit-identity: an arm you cannot prove inert when off is an arm that can corrupt the experiment). THE WORKSPACE LAW this paper independently re-derived: gate first, predictor later -- Issue 880's kill-switch (no consumer, no prefetch), evpi_gate, convergence-cadence exits; and its honesty clause is the same one behind the lossy-surface promotion rule (aggregate metrics can be flat while the thing you care about moved). Distinct from ab-isolate-one-component-by-baseline-byte-copy (B121 -- isolates the ARTIFACT under test by byte-copying the baseline; this isolates POLICY from MODEL at evaluation-design level, no artifact copying), from full-vector-bit-identity-over-argmax (Batch 123 -- what may COUNT AS IDENTICAL in a comparison; this decides which COMPARISONS are meaningful at all), from dead-result-timing-loop-folded-under-lto (B109 -- the timing loop's work must not vanish; this is confound removal, not instrument integrity), and from diagnostics-not-just-exit-code (failure evidence; orthogonal stage). Suggestion-only (a parse-only proposer cannot see which benchmark conflates model with policy). Source: arXiv:2609.04040 'Confidence-Gated Admission for Hardware Prefetching: When the Gate Matters More Than the Predictor' (Majdane, Casartelli, Lopedoto, cs.AR/cs.PF, 2026-09-03) -- abstract: matched controls, 257-param MLP vs gated stride, 35% prefetch removal, accuracy 11->15%, DRAM +-0.07%, 'We prove gate-closed execution reproduces the no-prefetch baseline exactly', 'The gate matters more than the predictor, and better proxies do not imply better endpoints'. Batch 124 / Plan 104.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8272,7 +8297,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 110); // Batch 123 (ds4 upstream surge) 108 → 110
+        assert_eq!(corpus.entries.len(), 111); // Batch 124 (2609.04040) 110 → 111
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9864,7 +9889,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 53, "expected 53 context-annotated rules (Batch 123 added the ds4 surge annotations: full-vector identity, tri-state fit classification)");
+        assert_eq!(annotated.len(), 54, "expected 54 context-annotated rules (Batch 124 added the matched-control evaluation-design annotation)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -9934,7 +9959,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 53); // Batch 123: 51 → 53
+        assert_eq!(annotated, 54); // Batch 124: 53 → 54
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9968,7 +9993,7 @@ mod tests {
 
         // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 53, "expected 53 annotated rules");
+        assert_eq!(annotated.len(), 54, "expected 54 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10938,6 +10963,39 @@ mod tests {
                 .unwrap_or("")
                 .contains("despite matching argmax IDs"),
             "the source's drift-vs-argmax finding must be pinned verbatim"
+        );
+    }
+
+    /// Batch 124 — the new rule is present, parses, and carries its concepts.
+    #[test]
+    fn batch124_rule_present_and_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "matched-control-disentangles-policy-from-model")
+            .expect("matched-control rule missing from corpus");
+        assert!(
+            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            "matched-control buggy/fixed must both parse"
+        );
+        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+        for needle in ["control", "gate", "endpoint", "proxy", "baseline"] {
+            assert!(text.contains(needle), "matched-control concept {needle:?} missing");
+        }
+        assert!(
+            e.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            "matched-control rule must carry the NotBenchable annotation"
+        );
+        // The pinned source phrases (quote re-verification at the paper).
+        let notes = e.context_notes.as_deref().unwrap_or("");
+        assert!(
+            notes.contains("reproduces the no-prefetch baseline exactly"),
+            "the paper's null-arm identity claim must be pinned verbatim"
+        );
+        assert!(
+            notes.contains("better proxies do not imply better endpoints"),
+            "the paper's honesty clause must be pinned verbatim"
         );
     }
 }

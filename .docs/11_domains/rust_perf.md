@@ -25,7 +25,7 @@
 
 108 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 110 rules — Batch 123 (2026-09-07,
+profiling guide, Research 032; **now 111 rules — Batch 124 (2026-09-07,
 Research 146 / Plan 103 — the ds4 upstream surge, commit `c0a6119f`)
 added two io rules, all NotBenchable-annotated:
 `full-vector-bit-identity-over-argmax` (a numeric-regression gate compares
