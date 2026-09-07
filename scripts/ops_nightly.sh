@@ -111,8 +111,10 @@ release_lock() {
 
 acquire_lock || exit 0
 # ── Completion sentinel (katgpt-rs Issue 734) ──────────────────────────────
-# Measured on bash 3.2 and 5.x: when bash aborts on an unbound expansion
-# (`set -u`) or an `eval` syntax error it enters the EXIT trap with `$?`
+# Measured on macOS `/bin/bash` 3.2.57 — and ONLY there (katgpt-rs Issue
+# 735): bash 4.4 through 5.3, dash and busybox ash all preserve the
+# status. When 3.2 aborts on an unbound expansion (`set -u`) or an `eval`
+# syntax error it enters the EXIT trap with `$?`
 # ALREADY 0 — so a cleanup trap whose last command succeeds makes the abort
 # exit 0, and everything after it silently did not run while the caller reads
 # a PASS. `trap 'rc=$?; cleanup; exit $rc'` does not help: the rc it saves is

@@ -12,8 +12,10 @@
 
 `scripts/ci_feature_guard.sh` (what `rust.yml` runs) and
 `scripts/ops_nightly.sh` (the launchd nightly) each had `set -euo pipefail`
-plus a cleanup trap and no completion sentinel. Measured on bash 3.2 and 5.x:
-when bash aborts on an **unbound expansion** (`set -u`) or an **`eval` syntax
+plus a cleanup trap and no completion sentinel. Measured on macOS
+`/bin/bash` 3.2.57 — and ONLY there (katgpt-rs Issue 735): bash 4.4 through
+5.3, dash and busybox ash all preserve the status. When 3.2 aborts on an
+**unbound expansion** (`set -u`) or an **`eval` syntax
 error** it enters the EXIT trap with `$?` **already 0** — so a trap whose last
 command succeeds (`rm -f "$RUNLOG"`, `release_lock`) makes the abort exit
 **0**. Everything after it silently does not run and the caller reads a pass.
