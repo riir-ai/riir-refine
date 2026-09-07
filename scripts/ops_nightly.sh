@@ -110,7 +110,28 @@ release_lock() {
 }
 
 acquire_lock || exit 0
-trap release_lock EXIT
+# ── Completion sentinel (katgpt-rs Issue 734) ──────────────────────────────
+# Measured on bash 3.2 and 5.x: when bash aborts on an unbound expansion
+# (`set -u`) or an `eval` syntax error it enters the EXIT trap with `$?`
+# ALREADY 0 — so a cleanup trap whose last command succeeds makes the abort
+# exit 0, and everything after it silently did not run while the caller reads
+# a PASS. `trap 'rc=$?; cleanup; exit $rc'` does not help: the rc it saves is
+# itself 0. Only "did the script reach its own last line?" catches it.
+# Every deliberate `exit 1`/`exit 2` below passes through untouched — this arm
+# fires only on INCOMPLETE *and* claiming success.
+# (`acquire_lock || exit 0` above is deliberate and sits BEFORE the trap, so
+# the "another run holds the lock" path is untouched by this.)
+NIGHTLY_COMPLETED=0
+nightly_cleanup() {
+    nightly_st=$?
+    release_lock
+    if [ "${NIGHTLY_COMPLETED}" != "1" ] && [ "${nightly_st}" = "0" ]; then
+        log "FAIL: nightly ABORTED mid-run while reporting success — it never reached its last line; forcing exit 1"
+        exit 1
+    fi
+    exit "${nightly_st}"
+}
+trap nightly_cleanup EXIT
 
 log "=== start (pid $$) ==="
 
@@ -472,3 +493,4 @@ if [ "${DEPLOY_FAILED:-0}" = "1" ]; then
 fi
 
 log "=== done ==="
+NIGHTLY_COMPLETED=1  # the last line — see nightly_cleanup above

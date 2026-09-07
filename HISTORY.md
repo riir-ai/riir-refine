@@ -8,6 +8,36 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Both shell gates could have reported a PASS on an abort (fixed 2026-09-07)
+
+`scripts/ci_feature_guard.sh` (what `rust.yml` runs) and
+`scripts/ops_nightly.sh` (the launchd nightly) each had `set -euo pipefail`
+plus a cleanup trap and no completion sentinel. Measured on bash 3.2 and 5.x:
+when bash aborts on an **unbound expansion** (`set -u`) or an **`eval` syntax
+error** it enters the EXIT trap with `$?` **already 0** — so a trap whose last
+command succeeds (`rm -f "$RUNLOG"`, `release_lock`) makes the abort exit
+**0**. Everything after it silently does not run and the caller reads a pass.
+`trap 'rc=$?; cleanup; exit $rc'` does not repair it: the rc it saves is
+itself 0. Only a **completion sentinel** — a flag set on the script's own last
+line, checked by the handler — catches it.
+
+This is the same class as the note at `ops_nightly.sh:465` ("the silent exit 0
+that hid this for a day"), one level up: there a *step* failed silently, here
+the *whole script* could.
+
+Both repaired, each verified against its REAL extracted cleanup preamble:
+unbound abort → 1, deliberate verdict failure → 1 unchanged (`exit 1` for the
+guard, `exit 2` DEGRADED preserved for the nightly), clean completion → 0.
+`acquire_lock || exit 0` is untouched — it sits before the trap.
+
+Not hypothetical: seal-remake's `ci_feature_guard.sh` could not fail past its
+layer 13 for months for exactly this reason (seal-remake `26a18191`).
+Workspace picture + the detector:
+`katgpt-rs/scripts/trap_exit_launder_audit.py`, katgpt-rs Issue 734.
+`shellcheck` does **not** find this — pointed at a script carrying the live
+defect it reports one `SC2001`, and with `-o all` its only remark on the fatal
+line is `SC2250` (brace style).
+
 ## Batch-mining batch records + Role/domain/pipeline full record (was AGENTS.md lines 23–3043)
 
 Contains: the full Role section (per-domain corpus narratives — clippy_lints

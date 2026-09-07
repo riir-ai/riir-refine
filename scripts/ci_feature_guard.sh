@@ -104,7 +104,28 @@ echo "=== Layer 5c: every integration test + bin (all-features, no allowlist) ==
 # added test and a stale number in a comment reads as a spec. Nothing in this
 # script enforces them — Layer 5d's pin is derived from `tests/*.rs` on disk.
 RUNLOG="$(mktemp "${TMPDIR:-/tmp}/ci_feature_guard_5c.XXXXXX")"
-trap 'rm -f "$RUNLOG"' EXIT
+# ── Completion sentinel (katgpt-rs Issue 734) ──────────────────────────────
+# Measured on bash 3.2 and 5.x: when bash aborts on an unbound expansion
+# (`set -u`) or an `eval` syntax error it enters the EXIT trap with `$?`
+# ALREADY 0 — so a cleanup trap whose last command succeeds makes the abort
+# exit 0, and everything after it silently did not run while the caller reads
+# a PASS. `trap 'rc=$?; cleanup; exit $rc'` does not help: the rc it saves is
+# itself 0. Only "did the script reach its own last line?" catches it.
+# Every deliberate `exit 1`/`exit 2` below passes through untouched — this arm
+# fires only on INCOMPLETE *and* claiming success.
+GUARD_COMPLETED=0
+guard_cleanup() {
+    guard_st=$?
+    rm -f "$RUNLOG"
+    if [ "$GUARD_COMPLETED" != "1" ] && [ "$guard_st" = "0" ]; then
+        echo "✗ guard ABORTED mid-run while reporting success — it did not reach its" >&2
+        echo "  own last line, so the layers past the error above ran NOTHING." >&2
+        echo "  A premature death must never read as a pass; forcing exit 1." >&2
+        exit 1
+    fi
+    exit "$guard_st"
+}
+trap guard_cleanup EXIT
 
 # Layer 5c was the one UNBOUNDED step in this guard, and unbounded is exactly
 # how it failed. `--all-features` is a SUPERSET switch: it turns on every
@@ -231,3 +252,4 @@ echo "✓ every tests/*.rs target ran at least one test"
 
 echo
 echo "=== All layers PASS ==="
+GUARD_COMPLETED=1  # the last line — see guard_cleanup above
