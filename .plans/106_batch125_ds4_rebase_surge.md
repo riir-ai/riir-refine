@@ -1,0 +1,54 @@
+# Plan 106 — Batches 125/126: the ds4 PR rebase-surge re-mine
+
+**Status:** PLANNED 2026-09-07 — trigger verified by API (Plan 102 T7 discharge); `.raw` clone NOT staged yet; mine not started. Batch 125 = Part A (Metal perf lanes, kernel_opt). Batch 126 = Part B (tool-text + QA methodology, rust_perf). Part C = league intel, named-not-edited.
+
+## Trigger (verified 2026-09-07 09:15 +07, Plan 102 T7 re-scan)
+
+- **PR `qwen3.8-flash-next` head moved: `69c38d23` → `ffd85d42`** (updated 2026-09-06T23:18:03Z, AFTER the Batch-122 mine read the older head). The PR was **RE-BASED onto upstream main `c0a6119f`** (upstream's head is in the new PR ancestry — the fork and upstream cross-pollinated; upstream main itself is UNCHANGED at `c0a6119f`, the Batch-123 pin — no upstream trigger).
+- **The compare-vs-pin trap (recorded):** `compare/69c38d23...ffd85d42` lists the WHOLE diverged history (62 commits, ~19K ln incl. files B118/B121 already mined: `metal/qwen4.metal`, `QWEN38_PERF_HANDOFF.md`, `qwen4_iq2.py`). The TRUE new delta = commits dated **2026-09-05 21:48Z .. 2026-09-06 23:11Z** (~47 commits). Never quote counts from the compare; re-derive at the pin.
+- Size class: BIG (ds4.c +4432/−146, ds4_server.c +1621/−149, ds4_metal.m +1420/−134, ds4_agent.c +1373/−473, 5 new speed-bench files ~3.6K ln, 4 new gguf-tools python files ~4.7K ln). Same class as B123's surge — split lanes, keep batches reviewable (the Plan-102 lesson).
+
+## Staged clone (the `.raw` discipline)
+
+`.raw/ds4-metal` (gitignored; MIT — verify LICENSE at stage time), **fresh clone at mine time pinned to `ffd85d42`** — the PR has force-pushed twice already; NEVER reuse an old clone, re-verify HEAD == ls-remote at stage time. Quotes re-verified against the clone by the read lanes; clone removed at landing of the last batch.
+
+## Part A — Batch 125: Metal perf lanes (kernel_opt; M3 box, CPU-only)
+
+Commit-message survey (re-verify every file/line at the pin — messages are NOT evidence):
+
+**A1 — SSD streaming + expert-cache axis** (the B123 family continuation on the fork side; dedup grep `ssd|expert|stream|readahead|resident|working.set|preload` FIRST — expect riders/confirmations of `batch-pool-read-makes-serial-readahead-redundant`, `cold-large-prefill-whole-layer-lookahead-over-partial-cache`, `static-seed-priority-bounded-to-observed-scale` where the content cross-pollinated, NEW rules where the fork side is the original):
+- `22e41728` static Metal streaming weights resident within the runtime budget
+- `6ccc1e7e` Metal cache reuse + overlap the first GLM streaming prefill
+- `edcafe4d` reuse GLM router readback during IQ2 expert streaming
+- `85837d02` more of the safe Metal working set for DeepSeek expert caching
+- `91dda0bc` Metal expert caching adapts beyond the built-in preload ranking
+- `715ed7a8` age Metal expert caches from the first routed layer
+- `660e1d4b` bound Metal streaming model views without losing auxiliary mappings
+- `437dbcba` read full IQ2 GLM layers ahead during large continued prefills
+- `d7ade9fd` reuse cached IQ2 experts for small Metal GLM prefills
+- `fb2abb29` align Metal GLM attention scratch for arbitrary context lengths
+- `4814f44f` remove managed-storage notifications from shared Metal buffers
+- `e9653529` preserve RoPE in full GLM compact prefill
+
+**A2 — speed-bench protos (new unmined files, ~3.6K ln):** `speed-bench/gqa_mma_proto.metal` (1640) + `gqa_mma_proto.m` (890) + `qsa_prefill_bench.c` (590) + `hc_chain_proto_bench.c` (251) + `hc_chain_proto_kernels.h` (276). QSA = the B118 attention family; GQA MMA proto may carry new tile/pipeline shapes.
+
+## Part B — Batch 126: tool-text + QA methodology (rust_perf io/methodology)
+
+- **Tool-text preservation family** (NEW `ds4_tool_text.h` 59 ln + the delimiter/marker commits): `d077fa67` split tool delimiters in the server sampling tracker · `5b3cc8bf` GLM tool syntax + speculative server boundaries · `fc6414cd` literal tool/thinking markers inside argument data · `d108ae4e` literal tool data across agent/server rendering · `e1711c21` report tool observation errors without compacting the conversation · `930ab732` valid opportunistic drafts across tool sampling boundaries · `6eac69e0` bound tool recovery by request budget + explicit stops · `658b2fc1` Qwen tool-turn KV reuse + assistant boundaries · `c0a6119f` preserve the final byte of in-memory session snapshots (upstream head — its un-banked residue, B123 did not mine it).
+- **QA/measurement methodology** (the B121 `write-verify-readback` family neighbors; dedup first): `validate_scores.py` (236) + its test (219) · `compare_frontier_logits.py` (228) + its test (200) · `42da390e` frontend regressions without loading a model · `aa8fef4a` real server coding sessions + prefix-reuse checks in QA.
+
+## Part C — LEAGUE INTEL (named-not-edited; no corpus rules from hardware we don't own unless the rule is hardware-independent)
+
+- **DSpark EOS-early-stop** (`7a8c1b27` "stop verification at the first EOS") — spec-decode verify early-stop; READ-ONLY intel for the riir-ai 721/717 lanes (both closed-negative; do not reopen without measured parity evidence).
+- **ROCm gfx1151 lane** (`1ef9bba6` version-matched hipBLASLt prefill plans · `64e490bc` IQ2 prefill input staging specialization · `e83b1063` DSpark verifier attention projection · `394865c5` aligned target features + rolling window) — DGX Spark hardware we do not own; B110 precedent says the corpus serves user code on foreign hardware, so VALID decision-content rules may route here, but each must be hardware-independent in its fix shape (plan-selection/staging predicates), not a gfx1151 tuning constant.
+
+## Tasks
+
+- [ ] T0 — stage `.raw/ds4-metal` at `ffd85d42` (fresh clone, HEAD == ls-remote, LICENSE verified); re-derive the TRUE delta (the 09-05 21:48Z..09-06 23:11Z commit window), record the real per-lane diffstats
+- [ ] T1 — Batch 125 (Part A): dedup grep A1 concepts against the corpus (rule vs rider vs already-banked per item); 2 parallel read lanes (A1 metal/ssd files, A2 speed-bench protos) proposing rules (pattern, bounded fix-space, category, rationale, source quote); re-verify every quoted line
+- [ ] T2 — Batch 125: corpus entries + `batch125_pseudocode_parses` gate + count pins (kernel_opt total/category; walk every manifest/doc line)
+- [ ] T3 — Batch 125 GOAT: batch gates first-shot + lib default/kernel_heal/kernel_heal+latent + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
+- [ ] T4 — Batch 125 landing: Research note (next number per `.research/.highwater`, currently 148) + AGENTS.md corpus count + `.docs/11_domains/` + snapshot row; commit `feat: batch 125: ...` + push
+- [ ] T5 — Batch 126 (Part B): same protocol for the tool-text + QA-methodology lanes (rust_perf); own GOAT + landing (Research N+1)
+- [ ] T6 — Part C league intel: append READ-ONLY rows to the riir-ai perf-league watch (`../riir-ai/.docs/09_performance/perf_rematch_league.md` watch file) ONLY if a content condition fires; never edit closed-negative issues without measured parity evidence
+- [ ] T7 — remove `.raw/ds4-metal` at the last landing; final snapshot update (pins current: PR `ffd85d42`, upstream `c0a6119f`)
