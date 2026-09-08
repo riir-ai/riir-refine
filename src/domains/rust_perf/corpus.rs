@@ -9,8 +9,8 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 112 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 16, arithmetic 8, dispatch 5,
+//! 114 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 18, arithmetic 8, dispatch 5,
 //! caching 4, bevy 1, wasm 1). 87 are benchable; 25 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
@@ -2931,7 +2931,7 @@ PerfRule {
     }
     Verdict::Identical
 }".to_string(),
-            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's own commit message: 'The existing comparator silently accepts missing rows, duplicate rows and NaN in reproduced controls; the validator rejects them... The frontier tool detects full-vector drift despite matching argmax IDs at all four measured frontiers' -- a MEASURED failure class, not hypothetical; honestly NotBenchable here -- measurement integrity, not speed). WHY ARGMAX IS A LOSY PROJECTION: a kernel/quantization change can drift thousands of logits while the sampled token stays identical -- ID equality is the compression the gate must NOT trust; the source checks argmax AND the full float32 word vector, with the canonical-spelling round trip preserving signed zero ('argmax_logit: float32 bits do not match logits[argmax_id]' + 'argmax_id: not the first maximum of the complete logit vector'). WHY PRE-VALIDATION: a comparison over garbage is a confident wrong answer -- the validator refuses incomplete manifest coverage ('missing manifest cases'), duplicate case IDs, non-canonical numbers (NaN/Inf/scientific notation/blank refused by a strict regex), and internal inconsistency (ratio must equal numerator/denominator within HALF_PRINT_UNIT -- the producer's own rounding). THREE STATUSES: drift (valid but changed bytes) and invalid (untrustworthy artifact) are different failure classes with different actions -- folding them into one boolean destroys the triage. THE WORKSPACE HOOK: this is the comparison contract our own bit-identity gates (B118/B119's byte-identity logit dumps, the quant-family retention gates) already implement -- the rule generalizes it for corpus completeness; a lossy-ID gate on quant/kernels is exactly the class our lossy-surface promotion rule (deployed-path retention) exists to catch. Distinct from diagnostics-not-just-exit-code (captures failure evidence; this validates SUCCESSFUL artifacts before comparing), write-verify-readback-before-publish (the producer's publish gate; this is the consumer's comparison contract over two already-published artifacts), resume-revalidates-provenance-before-reuse (provenance on resume; this is matched-artifact validity + identity semantics), and ab-isolate-one-component-by-baseline-byte-copy (isolation method; this decides what may COUNT AS IDENTICAL). Suggestion-only (a parse-only proposer cannot see which IDs are lossy projections of which vectors). Source: antirez/ds4 @ c0a6119f (MIT) -- gguf-tools/quality-testing/validate_scores.py:146,152 (duplicate-ID refuse + missing-manifest refuse), :93-95 (the canonical finite-number regex '-?(?:0|[1-9][0-9]{0,308})\\.[0-9]{9}'), :120-123 (Decimal ratio == num/denom within half-print-unit); compare_frontier_logits.py:64-68 (canonical float32 spelling round-trip, signed zero preserved), :129-134 (argmax cross-check + full-vector identity), :194 ('identical' / 'drift' / 'invalid' three-status). Batch 123 / Plan 103 / Research 146.".to_string()),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source's own commit message: 'The existing comparator silently accepts missing rows, duplicate rows and NaN in reproduced controls; the validator rejects them... The frontier tool detects full-vector drift despite matching argmax IDs at all four measured frontiers' -- a MEASURED failure class, not hypothetical; honestly NotBenchable here -- measurement integrity, not speed). WHY ARGMAX IS A LOSY PROJECTION: a kernel/quantization change can drift thousands of logits while the sampled token stays identical -- ID equality is the compression the gate must NOT trust; the source checks argmax AND the full float32 word vector, with the canonical-spelling round trip preserving signed zero ('argmax_logit: float32 bits do not match logits[argmax_id]' + 'argmax_id: not the first maximum of the complete logit vector'). WHY PRE-VALIDATION: a comparison over garbage is a confident wrong answer -- the validator refuses incomplete manifest coverage ('missing manifest cases'), duplicate case IDs, non-canonical numbers (NaN/Inf/scientific notation/blank refused by a strict regex), and internal inconsistency (ratio must equal numerator/denominator within HALF_PRINT_UNIT -- the producer's own rounding). THREE STATUSES: drift (valid but changed bytes) and invalid (untrustworthy artifact) are different failure classes with different actions -- folding them into one boolean destroys the triage. THE WORKSPACE HOOK: this is the comparison contract our own bit-identity gates (B118/B119's byte-identity logit dumps, the quant-family retention gates) already implement -- the rule generalizes it for corpus completeness; a lossy-ID gate on quant/kernels is exactly the class our lossy-surface promotion rule (deployed-path retention) exists to catch. Distinct from diagnostics-not-just-exit-code (captures failure evidence; this validates SUCCESSFUL artifacts before comparing), write-verify-readback-before-publish (the producer's publish gate; this is the consumer's comparison contract over two already-published artifacts), resume-revalidates-provenance-before-reuse (provenance on resume; this is matched-artifact validity + identity semantics), and ab-isolate-one-component-by-baseline-byte-copy (isolation method; this decides what may COUNT AS IDENTICAL). Suggestion-only (a parse-only proposer cannot see which IDs are lossy projections of which vectors). Source: antirez/ds4 @ c0a6119f (MIT) -- gguf-tools/quality-testing/validate_scores.py:146,152 (duplicate-ID refuse + missing-manifest refuse), :93-95 (the canonical finite-number regex '-?(?:0|[1-9][0-9]{0,308})\\.[0-9]{9}'), :120-123 (Decimal ratio == num/denom within half-print-unit); compare_frontier_logits.py:64-68 (canonical float32 spelling round-trip, signed zero preserved), :129-134 (argmax cross-check + full-vector identity), :194 ('identical' / 'drift' / 'invalid' three-status). Batch 123 / Plan 103 / Research 146. RIDER (Batch 129 external confirmation, ds4-metal @ b85a6174 -- the cached hyper-connection activation rejection, speed-bench/qwen38-q2-decode-fusions.md:96-101): TWO WEAK GATES PASSED while the full comparison caught the drift -- the cache passed local FP64-reference error checks AND preserved greedy output on screening prompts, then failed full-logit comparison at 2.63 max-abs / 0.532 RMS with top-1 identical ('Local rounding changes can be amplified in this routed model ... matching generated text alone was not sufficient evidence'). Mechanism note worth keeping: MoE ROUTING amplifies local rounding (one perturbed logit flips an expert choice and the divergence compounds), so routed models need the FULL-vector gate at strictly lower tolerance than dense ones.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -3012,6 +3012,71 @@ fn ingest(obs: &Observation, reserve: usize) {
             buggy_code: "// The parity control fails after a fused kernel lands. The reflex: the\n// fusion regressed -- widen the tolerance or skip the test. But nobody ran\n// the SAME control against the UNTOUCHED baseline.\nfn parity_gate(live: &Session, fresh_prefill: &Session) -> bool {\n    // live: prefill-to-len-1 + single-token decode step for the last token\n    // fresh: FULL-prefix prefill -- a DIFFERENT FP accumulation order\n    max_abs_diff(live.logprobs(), fresh_prefill.logprobs()) < 1e-5 // flaky\n}\n\n// twin: the oracle compares outputs the fused path leaves unowned --\nfn gate_up_parity(unfused_scratch: &Scratch, fused: &Fused) -> bool {\n    unfused_scratch.gate == fused.gate && unfused_scratch.up == fused.up\n    // fused writes `mid` directly; gate/up scratch is never populated\n}".to_string(),
             fixed_code: "// Triage: reproduce the failure on the pre-change baseline. If it\n// reproduces, the oracle overclaims -- trim it to the contract consumers\n// actually depend on, under the SAME compute shape; never touch tolerance.\nfn parity_gate(live: &Session, reference: &Session) -> bool {\n    // both arms: prefill to len-1, then evaluate the last token via the\n    // SAME single-token decode step -- identical accumulation order\n    debug_assert!(parity_gate_baseline_reproduces()); // triage, one-time\n    max_abs_diff(live.logprobs(), reference.logprobs()) == 0.0 // exact now\n}\n\nfn gate_up_parity(unfused: &Scratch, fused: &Fused) -> bool {\n    // compare the CONSUMED outputs only; unowned scratch is skipped in\n    // BOTH arms (named in a comment so the skip is a decision, not drift)\n    fused.mid == unfused.mid\n}".to_string(),
             context_notes: Some("REGIME-ANNOTATED, source-shipped (both instances landed in the same QA-hardening commit; honestly NotBenchable here -- oracle-contract correctness, not speed). THE PROTOCOL: (1) reproduce the failing control on the UNTOUCHED baseline -- reproduction splits 'the change regressed' from 'the oracle overclaims' without touching any tolerance; (2) if it reproduces, the oracle asserted a contract the implementation never promised -- trim it to the outputs consumers actually read under the SAME compute shape (chunk boundaries, prefill/decode split, scratch ownership); (3) the fused path may leave optional/unused outputs UNOWNED -- skip them in both arms or compare through the consumer, with the skip named. THE FAILURE CLASS: an oracle that compares across accumulation orders (prefill-computed vs decode-computed) or across ownership boundaries (scratch a fused contract no longer populates) fails FOREVER on correct code -- the suite then either blocks good changes or trains developers to widen tolerances, which destroys the gate for real regressions. Distinct from full-vector-bit-identity-over-argmax (Batch 123 -- comparison STRICTNESS over artifacts: full vector, three statuses; this constructs the comparison so both sides share compute shape + consumed outputs -- the two compose), from ab-isolate-one-component-by-baseline-byte-copy (B121 -- the baseline as ISOLATION mechanism in A/B design; this uses baseline reproduction as the failing-control TRIAGE step), and from diagnostics-not-just-exit-code (B122 -- captures failure evidence; this fixes which CONTRACT the oracle asserts). Suggestion-only (a parse-only proposer cannot see which outputs a consumer reads). Source: ivanfioravanti/ds4-metal @ ffd85d42 (MIT) -- commit ffd85d4 'Preserve Qwen tool handling and validate the main rebase' (tests/ds4_test.c:203-204 'Match the replay's prefill/decode split. A full-prefix prefill uses different floating-point accumulation than the final decode step.' + tests/test_metal_moe_prefill.c:85-87 'Fused gate/up kernels write mid directly. Compare all consumed outputs against the unfused control, not unused scratch.' / 'if (run && i < 2) continue;'). Batch 125 / Plan 106 / Research 148.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io (measurement honesty): instrumented per-kernel attribution is
+// RANKING evidence, never production timing.
+        // Batch 129 (2026-09-08, Plan 110 -- ds4 Qwen Q2 distill). The
+// encoder-timeline profiler slowed the pipeline ~38% (54.4 -> ~34 tok/s);
+// the ranked-#1 candidate on that profile measured -6.95% and ranked-#2
+// -19.70%, while the ranking's LAST item produced the retained win.
+        PerfRule {
+            rule_id: "instrumented-attribution-not-production-times".to_string(),
+            name: "kernel-timeline attribution collected under INSTRUMENTATION is ranking-only evidence -- instrumentation itself slows the pipeline (the source: 54.4 -> ~34 tok/s, ~38%), so never read instrumented absolute times as production costs, never set budget targets from them, and state the wall-time methodology next to the numbers".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The profile says gate/up dominates, so the team sets a budget
+// target from the instrumented absolute time and greenlights the
+// biggest family first -- nobody asked what the profiler cost.
+fn attribute_regions(app: &mut App) -> Plan {
+    let times = profile_with_instrumentation(app); // ~38% slower run
+    let top = times.largest_family();
+    Plan { target: times[top], first: top } // absolute vs production
+}".to_string(),
+            fixed_code: "// Instrumented times rank CANDIDATES; go/no-go comes from an
+// un-instrumented A/B screen. The report labels the methodology
+// (synchronized wall-time, not hardware counters).
+fn attribute_regions(app: &mut App) -> Plan {
+    let times = profile_with_instrumentation(app);
+    let ranking = times.rank_families(); // ORDER is the evidence
+    let candidate = ranking.top();
+    let verdict = ab_screen_uninstrumented(app, candidate); // the real gate
+    Plan { candidate, verdict, note: \"wall-time attribution, profiler adds overhead\" }
+}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-shipped (the profiler overhead is stated in the source's own decision doc; honestly NotBenchable here -- measurement honesty, not speed). THREE decision contents: (1) INSTRUMENTED TIMES ARE NOT PRODUCTION TIMES -- the encoder-timeline instrumentation reduced throughput 54.4 -> ~34 tok/s, so its per-kernel-family absolute times cannot set budget targets (speed-bench/qwen38-q2-decode-fusions.md:103-105); (2) RANKING SURVIVES, ABSOLUTES DO NOT -- the profile is still valid evidence for ORDERING candidates, and the ordering can be wrong in aggregate: the ranked-#1 family (Q8 dense projections; IQ2 gate/up unpack measured -6.95%, ranked-#2 routed-input packing -19.70%) contained only rejections while the ranking's LAST item (GDN serialization) produced the retained +2.1-2.9% win -- rank candidates, screen before committing; (3) WALL-TIME IS NOT HW COUNTERS -- synchronized wall-time attribution must be labeled as such next to the numbers (prefill-structural.md:84-88: 'These are synchronized wall-time attributions, not GPU hardware counters; the profiler adds overhead'). Distinct from dead-result-timing-loop-folded-under-lto (B109 -- the harness's own work must not vanish; this is the OBSERVER distorting the observed), from dispatch-cost-sequential-measurement-not-single-op (single-op measurement protocol for ONE dispatch decision; this rules on the validity of instrumented end-to-end attribution as a whole), and from work-scaling-probe-launch-bound (uses profiler RANGES to measure a work function; never rules on absolute-time validity). Suggestion-only (a parse-only proposer cannot see which profiler distorted which run). Source: ivanfioravanti/ds4-metal @ b85a6174 (MIT) -- qwen38-q2-decode-fusions.md:103-105 + qwen38-prefill-structural.md:84-88. Batch 129 / Plan 110 / Research 151.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+// -- io (A/B design): a control arm built by UNSETTING the candidate env
+// silently runs the enabled DEFAULT -- both arms identical.
+        // Batch 129 (2026-09-08, Plan 110 -- ds4 Qwen Q2 distill). The
+// harness originally unset the candidate variable for control; when the
+// candidate is the DEFAULT-ON path, unsetting is a no-op and the A/B
+// reads ~0 while looking like a clean null result. Fix shipped in-source:
+// an explicit --control-value, validated as 0 vs 1.
+        PerfRule {
+            rule_id: "unset-control-arm-silent-default-parity".to_string(),
+            name: "when the candidate behavior is the DEFAULT-ON path, a control arm implemented by UNSETTING the env switch silently runs the same enabled default -- the harness must accept an EXPLICIT control value, validation must pass control!=candidate (0 vs 1), and the report must state which arm is control; an unset-env control on a default-on candidate proves nothing".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The candidate optimization is DEFAULT-ON (env unset = enabled).
+// The \"control\" arm unsets the same env -- which the enabled default
+// treats as ON. Both arms run the candidate; the A/B is vacuous.
+fn ab_bench(cfg: &Config) -> f64 {
+    let a = run_with(cfg, |e| e.remove(\"CANDIDATE\")); // = default = ON
+    let b = run_with(cfg, |e| e.insert(\"CANDIDATE\", \"1\"));
+    (b - a) / a // ~0.0 -- reads as 'no effect', proves nothing
+}".to_string(),
+            fixed_code: "// The control value is EXPLICIT and validated to differ from the
+// candidate's; both arm values are echoed in the header so a mislabeled
+// arm cannot masquerade as a null result.
+fn ab_bench(cfg: &Config, control: &str, candidate: &str) -> f64 {
+    assert_ne!(control, candidate, \"control must differ from candidate\");
+    let a = run_with(cfg, |e| e.insert(\"CANDIDATE\", control)); // explicit
+    let b = run_with(cfg, |e| e.insert(\"CANDIDATE\", candidate));
+    eprintln!(\"arms: control={control} candidate={candidate}\");
+    (b - a) / a
+}".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-shipped (the harness fix + validation landed in the same commit; honestly NotBenchable here -- experimental design, not speed). THE DEFECT: when the candidate is the DEFAULT-ON path, 'unset the env for control' is a NO-OP -- both arms run the candidate, the measured delta reads ~0, and the vacuous screen looks like a clean null result (or, worse, the sign convention silently flips with arm labeling: the source's 1K ABBA log intentionally labels the enabled default as CONTROL and rollback as candidate, so its negative candidate delta is not a regression -- prefill-structural.md:153-155). THE FIX CONTRACT: (1) the harness accepts an explicit control value (metal_prefill_variant_bench.c:214: the control arm sets cfg->control_value when provided, unsets only when not -- backward compatible, which is how the defect shipped); (2) validation passes --control-value 0 --candidate-value 1 and FAILS if the two arms measure identical (prefill-structural.md:58-61: 'enabled defaults cannot silently make both variants identical'); (3) the report names which arm is control. THE FAMILY: this is the control-arm CONSTRUCTION twin of matched-control-disentangles-policy-from-model (B124 -- matched controls isolate policy from model; this ensures the control arm actually executes the control) and the enable-default twin of the null-arm identity face (B124 half 3: the OFF-arm must be provably inert -- here the OFF-arm was never OFF). Distinct from ab-isolate-one-component-by-baseline-byte-copy (B121 -- artifact-level isolation of the component under test; this is the env-arm wiring of the A/B itself) and from diagnostics-not-just-exit-code (B122 -- failure evidence capture; orthogonal stage). Suggestion-only (a parse-only proposer cannot see which env var defaults to ON). Source: ivanfioravanti/ds4-metal @ b85a6174 (MIT) -- speed-bench/qwen38-prefill-structural.md:58-61, :153-155 + metal_prefill_variant_bench.c:52, :214 (the --control-value harness fix). Batch 129 / Plan 110 / Research 151.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8322,7 +8387,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 112); // Batch 125 (ds4 rebase-surge) 111 → 112
+        assert_eq!(corpus.entries.len(), 114); // Batch 129 (ds4 Qwen Q2) 112 → 114
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9917,7 +9982,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 55, "expected 55 context-annotated rules (Batch 125 added the control-reproduces-on-baseline oracle-contract annotation)");
+        assert_eq!(annotated.len(), 57, "expected 57 context-annotated rules (Batch 129 added the instrumented-attribution + unset-control-arm annotations)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -9975,7 +10040,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (102 total - 45 annotated; the new rule joined the ANNOTATED side)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (114 total - 57 annotated; the new rules joined the ANNOTATED side)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -9987,7 +10052,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 55); // Batch 125: 54 → 55
+        assert_eq!(annotated, 57); // Batch 129: 55 → 57
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -10021,7 +10086,7 @@ mod tests {
 
         // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 55, "expected 55 annotated rules");
+        assert_eq!(annotated.len(), 57, "expected 57 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -11058,6 +11123,54 @@ mod tests {
             notes.contains("Compare all consumed outputs against the unfused control"),
             "the unowned-scratch quote must be pinned verbatim"
         );
+    }
+
+    /// Batch 129 (2026-09-08, Plan 110 -- ds4 Qwen Q2 distill): the two io
+    /// measurement-honesty rules are present, parse, and pin their quotes.
+    #[test]
+    fn batch129_rules_present_and_parse() {
+        let corpus = build_perf_seed_corpus();
+        for (rid, needles, notes_needles) in [
+            (
+                "instrumented-attribution-not-production-times",
+                vec!["production costs", "ranking"],
+                vec![
+                    "54.4 -> ~34 tok/s",
+                    "synchronized wall-time attributions, not GPU hardware counters",
+                ],
+            ),
+            (
+                "unset-control-arm-silent-default-parity",
+                vec!["EXPLICIT control value", "which arm is control"],
+                vec![
+                    "enabled defaults cannot silently make both variants identical",
+                    "--control-value",
+                ],
+            ),
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-129 rule '{rid}' missing from corpus"));
+            assert_eq!(e.category, "io", "batch-129 rule '{rid}' must be io");
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "batch-129 '{rid}' buggy/fixed must both parse"
+            );
+            let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+            for needle in needles {
+                assert!(text.contains(needle), "batch-129 {rid} concept {needle:?} missing");
+            }
+            let notes = e.context_notes.as_deref().unwrap_or("");
+            assert!(
+                notes.contains("NotBenchable"),
+                "batch-129 '{rid}' must carry the NotBenchable annotation"
+            );
+            for needle in notes_needles {
+                assert!(notes.contains(needle), "batch-129 {rid} quote {needle:?} missing");
+            }
+        }
     }
 }
 

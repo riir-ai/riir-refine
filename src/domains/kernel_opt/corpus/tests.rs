@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        570,
-        "kernel batches through Batch 128 should have 570 rules"
+        575,
+        "kernel batches through Batch 129 should have 575 rules"
     );
 }
 
@@ -1330,8 +1330,13 @@ fn batch25_gemma_cluster_concepts_covered() {
         .iter()
         .map(|e| e.gpu_concept.as_str())
         .collect();
-    // D: device-side-argmax-minimal-download (riir-gpu gemma2_cubecl/gpu_forward.rs L319-346 + L348-423)
-    assert!(concepts.contains(&"when the host needs only a tiny derived result of a large GPU array (argmax index, top-k, threshold count), compute it ON DEVICE with a reduction kernel and download only the tiny result — 4 bytes (1 u32) instead of the full array (vocab_size × 4 ≈ 1 MB at 256K vocab). Greedy decode is the canonical consumer: ~250,000× smaller per-token boundary crossing; a 50-prompt + 500-decode session downloads ~50 MB instead of ~550 MB. Distinct from offload-cpu-bottleneck-to-gpu-kernel (CPU work moved to GPU) — the CPU side isn't slow, the DOWNLOAD feeding it is the cost; and from chain-dispatches-single-sync-point (sync count) — this is download size"));
+    // D: device-side-argmin-minimal-download (riir-gpu gemma2_cubecl/gpu_forward.rs L319-346 + L348-423).
+    // Batch 129 appended a rider to this concept (ds4-metal 66b0e3f), so the
+    // B23-style FULL-STRING pin became prefix + rider asserts (the B125
+    // full-string regeneration lesson, prefix form -- the original text is
+    // pinned verbatim, the rider pinned by its opening marker).
+    let argmax = concepts.iter().find(|c| c.starts_with("when the host needs only a tiny derived result of a large GPU array (argmax index, top-k, threshold count), compute it ON DEVICE with a reduction kernel and download only the tiny result — 4 bytes (1 u32) instead of the full array (vocab_size × 4 ≈ 1 MB at 256K vocab). Greedy decode is the canonical consumer: ~250,000× smaller per-token boundary crossing; a 50-prompt + 500-decode session downloads ~50 MB instead of ~550 MB. Distinct from offload-cpu-bottleneck-to-gpu-kernel (CPU work moved to GPU) — the CPU side isn't slow, the DOWNLOAD feeding it is the cost; and from chain-dispatches-single-sync-point (sync count) — this is download size")).expect("device-side-argmax-minimal-download concept prefix missing");
+    assert!(argmax.contains("RIDER (Batch 129 external confirmation + facet"), "batch-129 argmax rider missing");
     // B: monotone-transform-elision-under-argmax (riir-gpu gemma2_cubecl/gpu_forward.rs L208-217)
     assert!(concepts.contains(&"a strictly monotone post-transform (softcap cap·tanh(x/cap), clamps, positive rescalings) does not change the argmax — skip it entirely when the only consumer is greedy decoding / top-k / any order-only query. The GPU decode path returns the raw logits WITHOUT final logit softcapping because tanh is monotonically increasing: argmax(softcap(x)) == argmax(x); the value-consuming CPU path still applies it. Elides a full-array transcendental pass (256K tanh evals per decode token). Distinct from softcap-tanh-attention-score (applying softcap in-kernel) — this elides it under order-only consumers; distinct from optional-bias-branch (absence) — the transform exists but order is invariant under it"));
     // C: fan-out-shared-input-single-sync (riir-gpu gemma2_cubecl/dispatch.rs L69-122)
@@ -5303,7 +5308,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 570-rule corpus must appear in exactly one category.
+    // Every rule_id in the 575-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5350,18 +5355,18 @@ fn kernel_categories_counts_match_plan_003_table() {
     let expected = [
         (KernelCategory::MemoryAccess, 121),
         (KernelCategory::Compute, 60),
-        (KernelCategory::Fusion, 45),
+        (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 130),
         (KernelCategory::Parallelism, 46),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
-        (KernelCategory::MoeDispatchBackward, 27),
+        (KernelCategory::MoeDispatchBackward, 28),
         (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 11),
-        (KernelCategory::ConvGemmLayout, 14),
-        (KernelCategory::KernelPolymorphism, 18),
-        (KernelCategory::DtypeAlignment, 41),
+        (KernelCategory::ConvGemmLayout, 15),
+        (KernelCategory::KernelPolymorphism, 19),
+        (KernelCategory::DtypeAlignment, 42),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5376,9 +5381,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 570.
+    // Sum must equal 575.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 570, "Plan 003: category totals must sum to 570");
+    assert_eq!(total, 575, "Plan 003: category totals must sum to 575");
 }
 
 #[test]
@@ -5389,8 +5394,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 570,
-        "Plan 003: grouped corpus has {total} rules, expected 570"
+        total, 575,
+        "Plan 003: grouped corpus has {total} rules, expected 575"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9406,8 +9411,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        570,
-        "Batch 128: corpus should have 570 rules"
+        575,
+        "Batch 129: corpus should have 575 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10721,6 +10726,125 @@ fn batch128_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-128 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch129_rules_present() {
+    // Batch 129 (the ds4 Qwen Q2 decode-fusion + prefill-structural distill
+    // -- Plan 110 / Research 151): 5 kernel_opt rules mined at the fresh
+    // pins ds4-metal b85a6174 (branch qwen3.8-flash-next, LINEAR 12-commit
+    // delta past the B125 pin) + upstream antirez/ds4 f62ca29a (the
+    // b6af0ad SSD seed bounding rode in via the PR's upstream merge and is
+    // banked as a rider on the Batch-123 static-seed rule).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "pipeline-cache-key-covers-every-function-constant",
+        "block-quant-weight-pad-never-extends-activations",
+        "expert-remainder-routed-to-smaller-tile-twins",
+        "window-recurrence-halo-snapshot-block-parallel",
+        "fused-residual-update-writes-separate-next-buffer",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-129 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch129_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-129 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("pipeline-cache-key-covers-every-function-constant");
+    assert!(
+        c.contains("SILENT WRONG MATH")
+            && c.contains("type >= 40u -> return 0")
+            && c.contains("38d3e45")
+            && c.contains("b4c3550")
+            && c.contains("proven-shape-static-sibling-identical-results-fallback"),
+        "cache-key concept"
+    );
+    let c = concept("block-quant-weight-pad-never-extends-activations");
+    assert!(
+        c.contains("Activations remain 640 wide; only the weight row stride is padded")
+            && c.contains("Nonzero random padding ensures kernels ignore the physical tail")
+            && c.contains("5bd8796")
+            && c.contains("rejects a partial activation group")
+            && c.contains("pad-tail-to-fixed-tile"),
+        "weight-pad concept"
+    );
+    let c = concept("expert-remainder-routed-to-smaller-tile-twins");
+    assert!(
+        c.contains("saved arithmetic did not compensate for the resulting compiled kernel cost")
+            && c.contains("tail_tt = remainder <= 8u ? 8u")
+            && c.contains("b4c3550")
+            && c.contains("192 teacher-forced full-vocabulary vectors bit-identical")
+            && c.contains("batch-width-routed-dual-tile-twins"),
+        "tile-twins concept"
+    );
+    let c = concept("window-recurrence-halo-snapshot-block-parallel");
+    assert!(
+        c.contains("Only incoming block windows need a snapshot")
+            && c.contains("+2.10%")
+            && c.contains("b85a617")
+            && c.contains("kernel_qwen4_conv_halo")
+            && c.contains("chunkwise-parallel-recurrence"),
+        "halo-snapshot concept"
+    );
+    let c = concept("fused-residual-update-writes-separate-next-buffer");
+    assert!(
+        c.contains("write separate next buffers")
+            && c.contains("0.04-0.42% slower")
+            && c.contains("82d0314")
+            && c.contains("192 full-vocabulary FP32 vectors byte-identical")
+            && c.contains("inplace-output-alias"),
+        "separate-next-buffer concept"
+    );
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch129_pseudocode_parses() {
+    // G1 for Batch 129: syn-parse gate (the ds4 Qwen Q2 rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "pipeline-cache-key-covers-every-function-constant",
+        "block-quant-weight-pad-never-extends-activations",
+        "expert-remainder-routed-to-smaller-tile-twins",
+        "window-recurrence-halo-snapshot-block-parallel",
+        "fused-residual-update-writes-separate-next-buffer",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-129 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-129 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-129 opt_pattern for '{id}' must parse"
         );
     }
 }

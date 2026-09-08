@@ -23,11 +23,25 @@
 
 ## Corpus
 
-112 rules across 12 categories (rust-optimize skill checklist +
+114 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 112 rules — Batch 125 (2026-09-07,
-Research 148 / Plan 106 — the ds4 PR rebase-surge, commit `ffd85d4`)
-added one io rule, NotBenchable-annotated: `control-reproduces-on-baseline-
+profiling guide, Research 032; **now 114 rules — Batch 129 (2026-09-08,
+Research 151 / Plan 110 — the ds4 Qwen Q2 distill, pins ds4-metal `b85a6174`
++ upstream `f62ca29a`) added two io rules, NotBenchable-annotated:
+`instrumented-attribution-not-production-times` (instrumented profiling
+slowed the pipeline ~38% in-source — instrumented absolute times are
+ranking-only evidence; the ranked-#1 family measured NEGATIVE while the
+ranking's LAST item produced the retained win) and
+`unset-control-arm-silent-default-parity` (a control arm built by
+UNSETTING the candidate env on a DEFAULT-ON candidate runs the same
+enabled code — the harness must accept an explicit control value and
+validation must pass control 0 / candidate 1; the fix shipped in-source
+as `--control-value`). Plus the R4 rider on
+`full-vector-bit-identity-over-argmax` (two weak gates passed — local
+FP64 checks + greedy-text identity — while full-logit comparison caught
+2.63 max-abs drift; MoE routing amplifies local rounding). Batch 125
+(2026-09-07, Research 148 / Plan 106 — the ds4 PR rebase-surge, commit
+`ffd85d4`) had added one io rule, NotBenchable-annotated: `control-reproduces-on-baseline-
 trims-overclaim` (a failing parity/regression control is reproduced on the
 untouched baseline FIRST — a reproduction indicts the ORACLE, and the fix
 trims it to consumed outputs under matching compute shape, never widens

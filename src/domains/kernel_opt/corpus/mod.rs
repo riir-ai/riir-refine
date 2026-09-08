@@ -1526,8 +1526,34 @@
 //!   (paper-distilled precedent = B79 itself). Content gate:
 //!   `batch87_state_norm_breaks_associative_scan` (the breaker's
 //!   wrongness pinned materially, non-vacuous).
-//! - **Batch 128 (2026-09-07, the `PrismML` llama.cpp Metal/FA distill,
-//!   Plan 109 / Research 150):** 5 rules, corpus 565 -> 570 (A 120 -> 121,
+//! - **Batch 129 (2026-09-08, the ds4 Qwen Q2 decode-fusion + prefill-structural distill,
+//!   Plan 110 / Research 151):** 5 rules, corpus 570 -> 575 (C 45 -> 46,
+//!   H 27 -> 28, L 14 -> 15, M 18 -> 19, N 41 -> 42). Source:
+//!   `ivanfioravanti/ds4-metal` @ `b85a6174` branch `qwen3.8-flash-next`
+//!   (MIT; the PR line's 12-commit linear delta past the Batch-125 pin,
+//!   plus the upstream `b6af0ad` SSD seed-bounding commit riding in via
+//!   the PR's upstream merge — rider on the Batch-123 static-seed rule).
+//!   `pipeline-cache-key-covers-every-function-constant` (M — a keyed
+//!   pipeline cache serving driver-specialized variants must name EVERY
+//!   bound function constant; subset keys serve one variant's binary for
+//!   another's launch args), `block-quant-weight-pad-never-extends-activations`
+//!   (N — `Q2_K` 256-block row padding is weight-stride-only; the dequant
+//!   loop gates on the LOGICAL bound and partial activation groups are
+//!   rejected fail-closed), `expert-remainder-routed-to-smaller-tile-twins`
+//!   (H — per-expert tail rows run the smallest covering tile twin under a
+//!   compile-time `tail_base`; the runtime-branch alternative measured
+//!   -10.98% and was removed in-source),
+//!   `window-recurrence-halo-snapshot-block-parallel` (L — a K<=4 causal
+//!   conv parallelizes over token blocks behind a HALO-only snapshot; the
+//!   full-input snapshot measured slower and was superseded),
+//!   `fused-residual-update-writes-separate-next-buffer` (C — fused
+//!   residual+norm reads old buffers read-only and writes distinct next
+//!   buffers, alias-rejects fail-closed, and gates on the measured session
+//!   shape). Riders: device-side-argmax CPU-parity facets (`entries_gpu_02`),
+//!   fusion-payback fan-in instance (`entries_gpu_07`), static-seed
+//!   dynamic-producer twin (`entries_gpu_31`), kv-dequant expansion-ratio
+//!   sharpening (`entries_gpu_34`).
+//! - **Batch 128 (2026-09-07, the `PrismML` llama.cpp Metal/FA distill,//!   Plan 109 / Research 150):** 5 rules, corpus 565 -> 570 (A 120 -> 121,
 //!   K 9 -> 11, N 39 -> 41). Source: `PrismML-Eng/llama.cpp` master @
 //!   `5ea87dda` (MIT; the same fork Batch 127 mined for the CUDA slice —
 //!   this batch takes the unmined Metal/FA surface, the M3 box's
@@ -1598,6 +1624,7 @@ mod entries_gpu_31;
 mod entries_gpu_32;
 mod entries_gpu_33;
 mod entries_gpu_34;
+mod entries_gpu_35;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1645,6 +1672,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_32::entries());
     entries.extend(entries_gpu_33::entries());
     entries.extend(entries_gpu_34::entries());
+    entries.extend(entries_gpu_35::entries());
     Corpus::new(entries)
 }
 
@@ -1657,7 +1685,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 570-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 575-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1908,7 +1936,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rht-epilogue-fusion-contract",
             "gumbel-argmax-filtered-sampling-descent",
             "softmax-denominator-cancels-through-scale-invariant-norm",
-            "batch-verify-rows-single-dispatch"
+            "batch-verify-rows-single-dispatch",
+            "fused-residual-update-writes-separate-next-buffer"
         ],
     ),
     // D: Dispatch patterns (130 rules)
@@ -2189,6 +2218,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cold-large-prefill-whole-layer-lookahead-over-partial-cache",
             "static-seed-priority-bounded-to-observed-scale",
             "moe-broadcast-quantize-once-scatter",
+            "expert-remainder-routed-to-smaller-tile-twins",
         ],
     ),
     // I: NSA block-sparse selection (6 rules)
@@ -2252,7 +2282,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fold-tile-transpose-into-dequant-scatter",            "ldmatrix-mma-layout-loads",
 
             "dequant-byte-pairs-as-aligned-u16-loads",
-            "device-affine-scratch-admission-with-pool-fallback"
+            "device-affine-scratch-admission-with-pool-fallback",
+            "window-recurrence-halo-snapshot-block-parallel"
         ],
     ),
     // M: Kernel parametric polymorphism (18 rules)
@@ -2277,7 +2308,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lane-owned-topk-output",
             "derived-index-from-pinned-checkpoint-is-a-cache",
             "warm-reachable-dispatch-signatures-before-timed-window",
-            "row-aware-indexing-reuses-static-single-token-kernel"
+            "row-aware-indexing-reuses-static-single-token-kernel",
+            "pipeline-cache-key-covers-every-function-constant"
         ],
     ),
     // N: dtype + alignment specialization (41 rules)
@@ -2324,7 +2356,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fixed-point-parity-needs-reference-rounding",
             "per-block-int32-chunk-rescale-fp32-accum",
             "kv-dequant-materialization-batch-threshold-gate",
-            "quantize-scale-math-wide-precision-denorm-safe"
+            "quantize-scale-math-wide-precision-denorm-safe",
+            "block-quant-weight-pad-never-extends-activations"
         ],
     ),
     // O: IR strength reduction (4 rules)
