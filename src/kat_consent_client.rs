@@ -75,6 +75,19 @@ pub fn machine_label() -> String {
     let raw = std::env::var("HOST")
         .or_else(|_| std::env::var("HOSTNAME"))
         .or_else(|_| std::env::var("COMPUTERNAME"))
+        // macOS shells set HOSTNAME as a shell VARIABLE without exporting
+        // it (found live 2026-09-08: /bin/sh shows m3, the child process
+        // env does not) — the last resort is the platform's own hostname
+        // binary. One-shot path (--mine/--unmine), local, sub-second;
+        // a missing binary degrades to the empty label, never an error.
+        .or_else(|_| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|s| !s.is_empty())
+                .ok_or(std::env::VarError::NotPresent)
+        })
         .unwrap_or_default();
     clamp_machine_label(&raw)
 }
