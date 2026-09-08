@@ -18,6 +18,8 @@
 //! | billing switch | depleted ack + `RIIR_HEAL_KAT_METER=0` | 0 |
 //! | no account | depleted ack, NO login | 0 (anonymous runs are never gated) |
 //! | never synced | account, NO ack | 0 (no server truth → warn-only) |
+//! | 079 offer (auto-yes) | depleted ack + `RIIR_HEAL_KAT_PROMPT_YES=1` | 1 + `contributing now` + the sync output, then still `REFUSED` (closed port / no store → no marker) |
+//! | 079 offer (TTY ask) | depleted ack, no env, piped stdin | 1 + plain refusal, NO `contributing now` (no TTY → the 075 shape) |
 //!
 //! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
 //! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`); the service URL points at a closed
@@ -132,6 +134,12 @@ fn depleted_never_contributed_refuses_at_run_start() {
     assert!(text.contains("cargo heal sync"), "must name the sync step. output:\n{text}");
     assert!(text.contains("top up"), "must name the top-up path. output:\n{text}");
     assert!(text.contains("RIIR_HEAL_KAT_GATE"), "must name the kill switch. output:\n{text}");
+    // Issue 079: no env and no TTY (Command::output pipes stdin) → the
+    // offer must NOT fire — the plain 075 refusal shape.
+    assert!(
+        !text.contains("contributing now"),
+        "the offer must not fire without the env or a TTY. output:\n{text}"
+    );
     assert!(
         !text.contains("scanned "),
         "the refusal must precede the scan. output:\n{text}"
@@ -157,6 +165,39 @@ fn the_gate_is_mode_wide_fix_refuses_too() {
     let (code, text) = heal(&dir, &[], &["--fix"]);
     assert_eq!(code, Some(1), "output:\n{text}");
     assert!(text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Issue 079: the automation hook runs the contribute-now offer, then —
+/// with the service at a closed port and no trajectory store to build a
+/// batch from — the gate STILL refuses, honestly (no marker was written;
+/// the sticky grace needs an ACCEPTED push, never a promise).
+#[test]
+fn prompt_yes_offers_contribute_now_then_still_refuses_offline() {
+    let dir = scratch("prompt_yes");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_ack(&dir, 0);
+
+    let (code, text) = heal(&dir, &[("RIIR_HEAL_KAT_PROMPT_YES", "1")], &["--fix"]);
+    assert_eq!(code, Some(1), "offline the offer cannot lift the gate. output:\n{text}");
+    assert!(text.contains("contributing now"), "the offer must run. output:\n{text}");
+    assert!(
+        text.contains("no trajectory store"),
+        "the empty-outbox honest line. output:\n{text}"
+    );
+    assert!(text.contains("REFUSED"), "still refused offline. output:\n{text}");
+    assert!(
+        text.contains("did not lift the gate"),
+        "the fallthrough must say why. output:\n{text}"
+    );
+    assert!(!text.contains("scanned "), "output:\n{text}");
+    // The offer path writes no marker of its own — only an accepted push
+    // does (the closed port refused everything).
+    assert!(
+        !dir.join("contributed_once.json").exists(),
+        "a failed push must not write the sticky-grace marker"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

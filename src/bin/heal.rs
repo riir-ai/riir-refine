@@ -259,9 +259,8 @@ fn enforce_kat_soft_gate(args: &Args) {
         return;
     }
     let root = resolve_heal_root(&args.paths);
-    let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(
-        &root.join(".heal").join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME),
-    );
+    let ack_path = root.join(".heal").join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
+    let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");
     }
@@ -272,6 +271,43 @@ fn enforce_kat_soft_gate(args: &Args) {
         last_synced_balance_micro: ack.last_balance_micro,
         contributed_and_synced: riir_clippy::kat_contribution::has_contributed(&account_dir),
     });
+
+    // Issue 079 (owner ask, 2026-09-09): a flat refusal gives a depleted
+    // user no choice — OFFER the contribute-now path first. One accepted
+    // push writes the machine-global marker (the 075 sticky grace), so a
+    // yes here lifts the gate for good; payouts land at each epoch settle.
+    // The re-evaluation re-reads ONLY what `run_kat_sync` can change (the
+    // marker + the ack's server balance); `depleted_mine_offer` never asks
+    // a machine that already answered no (an explicit opt-out).
+    #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+    let (verdict, offered) = {
+        if matches!(verdict, riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { .. })
+            && depleted_mine_offer()
+        {
+            eprintln!("cargo heal: out of KAT — contributing now (`cargo heal sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)");
+            run_kat_sync();
+            let (reloaded, w) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+            if let Some(w) = w {
+                eprintln!("{w}");
+            }
+            let verdict =
+                riir_clippy::kat_soft_gate::evaluate(riir_clippy::kat_soft_gate::SoftGateInput {
+                    transport_capable: true,
+                    account_present: riir_clippy::kat_account::KatAccount::load(&account_dir)
+                        .is_ok(),
+                    last_synced_balance_micro: reloaded.last_balance_micro,
+                    contributed_and_synced: riir_clippy::kat_contribution::has_contributed(
+                        &account_dir,
+                    ),
+                });
+            (verdict, true)
+        } else {
+            (verdict, false)
+        }
+    };
+    #[cfg(not(all(feature = "kat_transport", feature = "latent_retrieval")))]
+    let offered = false;
+
     let riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { balance_micro } = verdict else {
         return;
     };
@@ -294,7 +330,46 @@ fn enforce_kat_soft_gate(args: &Args) {
         "(logged-out / offline / never-synced machines are never gated — this reads the last \
          SYNCED server balance; RIIR_HEAL_KAT_GATE=0 disables the gate)"
     );
+    if offered {
+        eprintln!(
+            "(the contribute-now attempt above did not lift the gate — nothing new was queued \
+             to push, or the push failed; the sync output above has the detail)"
+        );
+    }
     std::process::exit(1);
+}
+
+/// Issue 079 — the depleted-run contribute-now offer's consent surface.
+/// `RIIR_HEAL_KAT_PROMPT_YES=1|true|yes` is the automation hook (agents and
+/// CI run without a TTY); an explicit `--unmine` opt-out is never re-asked
+/// (it already answered this question); otherwise ONE y/N question on an
+/// interactive stdin. No env and no TTY → false (the plain 075 refusal,
+/// byte-identical to the pre-079 shape).
+#[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+fn depleted_mine_offer() -> bool {
+    if std::env::var("RIIR_HEAL_KAT_PROMPT_YES")
+        .ok()
+        .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+    {
+        return true;
+    }
+    let consent_dir = riir_clippy::kat_mining_consent::default_dir();
+    let (consent, _) = riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
+    if !consent.push_allowed() {
+        return false; // an explicit opt-out IS the answer
+    }
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        return false;
+    }
+    eprint!("cargo heal: out of KAT — contribute mining data now to lift the gate? [y/N] ");
+    use std::io::Write;
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return false;
+    }
+    matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
 /// The `RIIR_HEAL_KAT_GATE` kill-switch (the `RIIR_HEAL_KAT_METER` pattern):
