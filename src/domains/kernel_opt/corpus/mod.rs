@@ -1559,6 +1559,52 @@
 //!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
 //!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
 //!   (fmad split from `use_fast_math`).
+//! - **Batch 137 (2026-09-09, the CloudRift matmul-optimization distill,
+//!   Plan 116):** 11 rules, corpus 580 -> 591 (A 122 -> 127, E 47 -> 51,
+//!   L 15 -> 16, N 42 -> 43). Source: `cloudrift-ai/emmy` @ `1c058c9d`
+//!   (Apache-2.0; the renamed successor of the Batch-130 `deplodock` pin
+//!   `2aaa0328`) x the "Modern GPU Matmul Optimization" article (Trifonov,
+//!   2026-05-29; the queue lead's guessed blog path 404s — the real path is
+//!   `/blog/gpu-matmul-optimization`). `smem-fill-align-chunk-not-element`
+//!   (N — the slab base alignment derives from the FILL CHUNK, not the
+//!   element width: an f16 slab 2 B-aligned takes 16 B writes that fault at
+//!   8 mod 16; TMA destinations pin 128 B even at NONE swizzle),
+//!   `software-swizzle-shift-row-stride` (A — the software-fill XOR swizzle
+//!   shift derives from the ROW STRIDE, not log2(atom): a 128-elem fp16 row
+//!   is two atoms and collapses rows — the measured 7.8-way ldmatrix
+//!   conflict at D=128; disagreement between the three derivation consumers
+//!   is a TMA COPY DEADLOCK), `companion-slab-ring-slot-sync` (A — a scale
+//!   sidecar riding the same ring as its codes must carry the slot-row
+//!   offset; bare coordinates read slot 0 while codes read slot s — a
+//!   minority of cells off 2-3x, invisible in source AND aggregate parity;
+//!   found live in-source), `ptxas-recoalesces-scalar-runs-wash` (A — hand
+//!   vectorization of regular stride-1 runs is a wash: ptxas recoalesces at
+//!   every deployable -O; the pass is deliberately NOT a search dimension;
+//!   escape arm = irregular kernels with a static alignment proof),
+//!   `ptxas-reschedules-load-order-wash` (A — hand load/FMA interleaving is
+//!   a wash for the same reason; ASYNC issue-site placement stays a real
+//!   decision), `smem-pad-transport-gated` (A — the bank pad is dead under
+//!   TMA (descriptor swizzle) and live under cp.async, with a granularity
+//!   fork: 16 B chunk-aligned vs deliberate +1 de-vectorization — the
+//!   article's 3.7x arm; fill/drain share ONE pad source of truth),
+//!   `split-k-atomic-arm-legality` (E — the atomicAdd arm is semantically
+//!   illegal regardless of shape unless ONE component + ADDITIVE monoid +
+//!   output-rounds-once + distributive projection; every refusal names the
+//!   deferred finalize), `setmaxnreg-fit-gate-elected-arrive` (E, sm_90+ —
+//!   the .dec/.inc pair is gated on register-file arithmetic (24/240/64K),
+//!   the consumer band syncs via a NAMED barrier (CTA-wide __syncthreads is
+//!   UB on the divergent branch), ONE elected arrive releases the slot +
+//!   carries fence.proxy.async), `splitk-width-shape-need-gate` (E —
+//!   needed = max(2*SM/free_ctas, K/sqrt(M*N), 1): grid fullness alone
+//!   under-splits K-heavy shapes (mlp_down ranked its g8k golden ~9000-deep
+//!   under the occupancy-only gate)), `splitk-atomic-free-contention-threshold`
+//!   (E — the finalize fork keys on SPLITK*M*N contention with a FITTED
+//!   threshold and a round-trip cost side; the fork key must be STAMPED on
+//!   candidate rows or the interaction dead-weights to atomic),
+//!   `ldmatrix-pair-x2-to-x4-adjacency` (L — fuse two +8-adjacent x2
+//!   fragment loads into one x4, bit-identical, WAR-checked). Lane intel:
+//!   4090 = sm_89 Ada — cp.async pad arm live, split-K width gate strongest
+//!   (prefill GEMMs are the K-heavy family), setmaxnreg Hopper+ only.
 //! - **Batch 129 (2026-09-08, the ds4 Qwen Q2 decode-fusion + prefill-structural distill,
 //!   Plan 110 / Research 151):** 5 rules, corpus 570 -> 575 (C 45 -> 46,
 //!   H 27 -> 28, L 14 -> 15, M 18 -> 19, N 41 -> 42). Source:
@@ -1659,6 +1705,7 @@ mod entries_gpu_33;
 mod entries_gpu_34;
 mod entries_gpu_35;
 mod entries_gpu_36;
+mod entries_gpu_37;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1672,6 +1719,7 @@ mod tests;
 #[allow(clippy::too_many_lines)] // data table, not logic — grows with distillation batches
 pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     let mut entries = entries_popcorn::entries();
+    entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
     entries.extend(entries_gpu_02::entries());
@@ -1720,7 +1768,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 580-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 591-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1728,11 +1776,16 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (122 rules)
+    // A: Memory access patterns (127 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            "smem-pad-transport-gated",
+            "ptxas-reschedules-load-order-wash",
+            "ptxas-recoalesces-scalar-runs-wash",
+            "companion-slab-ring-slot-sync",
+            "software-swizzle-shift-row-stride",
             "tma-single-issuer-bulk-tile",
             "matvec-coalesce",
             "coalesced-row-read",
@@ -2116,11 +2169,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-time-dense-repack-keyed-sync-publish"
         ],
     ),
-    // E: Parallelism patterns (47 rules)
+    // E: Parallelism patterns (51 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            "splitk-atomic-free-contention-threshold",
+            "splitk-width-shape-need-gate",
+            "setmaxnreg-fit-gate-elected-arrive",
+            "split-k-atomic-arm-legality",
             "multiplexed-grid-axis-partition-modes-exclusive",
             "multi-dim-grid-launch",
             "block-count-clamp",
@@ -2304,11 +2361,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tuned-config-resource-limit-fallback",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (15 rules)
+    // L: Conv-as-GEMM + memory layout (16 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
         &[
+            "ldmatrix-pair-x2-to-x4-adjacency",
             "conv-1x1-as-matmul",
             "contiguity-guard-before-reshape",
             "cube-count-bounded-batch-pack",
@@ -2352,11 +2410,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pipeline-cache-key-covers-every-function-constant"
         ],
     ),
-    // N: dtype + alignment specialization (42 rules)
+    // N: dtype + alignment specialization (43 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            "smem-fill-align-chunk-not-element",
             "dtype-specialized-float-kind",
             "alignment-gated-zero-copy-view",
             "int2-pack-weights",

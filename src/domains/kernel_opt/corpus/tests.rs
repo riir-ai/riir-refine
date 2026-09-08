@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        580,
-        "kernel batches through Batch 130 should have 580 rules"
+        591,
+        "kernel batches through Batch 137 should have 591 rules"
     );
 }
 
@@ -5327,7 +5327,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 580-rule corpus must appear in exactly one category.
+    // Every rule_id in the 591-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5370,22 +5370,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 130).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 137).
     let expected = [
-        (KernelCategory::MemoryAccess, 122),
+        (KernelCategory::MemoryAccess, 127),
         (KernelCategory::Compute, 61),
         (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 132),
-        (KernelCategory::Parallelism, 47),
+        (KernelCategory::Parallelism, 51),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 28),
         (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 11),
-        (KernelCategory::ConvGemmLayout, 15),
+        (KernelCategory::ConvGemmLayout, 16),
         (KernelCategory::KernelPolymorphism, 19),
-        (KernelCategory::DtypeAlignment, 42),
+        (KernelCategory::DtypeAlignment, 43),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5400,9 +5400,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 580.
+    // Sum must equal 591.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 580, "Plan 003: category totals must sum to 580");
+    assert_eq!(total, 591, "Plan 003: category totals must sum to 591");
 }
 
 #[test]
@@ -5413,8 +5413,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 580,
-        "Plan 003: grouped corpus has {total} rules, expected 580"
+        total, 591,
+        "Plan 003: grouped corpus has {total} rules, expected 591"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9430,8 +9430,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        580,
-        "Batch 130: corpus should have 580 rules"
+        591,
+        "Batch 137: corpus should have 591 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -11031,6 +11031,176 @@ fn batch130_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-130 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch137_rules_present() {
+    // Batch 137 (the CloudRift "Modern GPU Matmul Optimization" distill --
+    // Plan 116): 11 kernel_opt rules mined at cloudrift-ai/emmy @ 1c058c9d
+    // (Apache-2.0; the renamed successor of the Batch-130 deplodock pin)
+    // x the matmul-optimization article (Trifonov, 2026-05-29; the queue
+    // lead's guessed blog path 404s -- /blog/gpu-matmul-optimization).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "smem-fill-align-chunk-not-element",
+        "software-swizzle-shift-row-stride",
+        "companion-slab-ring-slot-sync",
+        "ptxas-recoalesces-scalar-runs-wash",
+        "ptxas-reschedules-load-order-wash",
+        "smem-pad-transport-gated",
+        "split-k-atomic-arm-legality",
+        "setmaxnreg-fit-gate-elected-arrive",
+        "splitk-width-shape-need-gate",
+        "splitk-atomic-free-contention-threshold",
+        "ldmatrix-pair-x2-to-x4-adjacency",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-137 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch137_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-137 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("smem-fill-align-chunk-not-element");
+    assert!(
+        c.contains("Aligning to the ELEMENT would leave an f16 slab 2 B-aligned")
+            && c.contains("_cp_async_width(cols, elem_bytes) * elem_bytes")
+            && c.contains("CUDA_ERROR_MISALIGNED_ADDRESS")
+            && c.contains("stride-align-vectorization-key"),
+        "smem-fill-align concept"
+    );
+    let c = concept("software-swizzle-shift-row-stride");
+    assert!(
+        c.contains("7.8-way ldmatrix conflict at D = 128")
+            && c.contains("a TMA copy deadlock")
+            && c.contains("sm_89 bank-conflict fix")
+            && c.contains("xor-swizzle-smem-static-index-tables"),
+        "software-swizzle concept"
+    );
+    let c = concept("companion-slab-ring-slot-sync");
+    assert!(
+        c.contains("a minority off by a factor of 2-3")
+            && c.contains("COMPUTE-FILLED and single-buffer")
+            && c.contains("quant-group-scale-fetch-gating"),
+        "companion-slab concept"
+    );
+    let c = concept("ptxas-recoalesces-scalar-runs-wash");
+    assert!(
+        c.contains("not a search dimension")
+            && c.contains("0% difference at every -O level")
+            && c.contains("CUDA_ERROR_MISALIGNED_ADDRESS")
+            && c.contains("vector-width-pow2-sweep"),
+        "ptxas-recoalesces concept"
+    );
+    let c = concept("ptxas-reschedules-load-order-wash");
+    assert!(
+        c.contains("ptxas reschedules both forms to nearly the same SASS")
+            && c.contains("interleave-loads-between-tile-matmuls")
+            && c.contains("interleave-independent-accumulators-only"),
+        "ptxas-reschedules concept"
+    );
+    let c = concept("smem-pad-transport-gated");
+    assert!(
+        c.contains("Derived, not tuned")
+            && c.contains("a conflict-free scalar beats a serialized vector four times over")
+            && c.contains("Operand.pad_cols")
+            && c.contains("vectorized-smem-write-no-bank-padding"),
+        "smem-pad concept"
+    );
+    let c = concept("split-k-atomic-arm-legality");
+    assert!(
+        c.contains("a max carrier's partials would be SUMMED, silently wrong")
+            && c.contains("Storage is asked BEFORE the projection")
+            && c.contains("never a crash")
+            && c.contains("target-tile-split-k-deterministic-two-dispatch"),
+        "split-k-legality concept"
+    );
+    let c = concept("setmaxnreg-fit-gate-elected-arrive");
+    assert!(
+        c.contains("provably fits the 64K-register file")
+            && c.contains("is UB on the divergent role branch")
+            && c.contains("fence.proxy.async")
+            && c.contains("plane-specialization-load-compute-role-split"),
+        "setmaxnreg concept"
+    );
+    let c = concept("splitk-width-shape-need-gate");
+    assert!(
+        c.contains("ranked the winning g8k golden ~9000-deep")
+            && c.contains("pure atomic/combine waste")
+            && c.contains("streamk-starved-tile-grid-dispatch"),
+        "splitk-width concept"
+    );
+    let c = concept("splitk-atomic-free-contention-threshold");
+    assert!(
+        c.contains("above threshold splits REWARD the deferred combine kernel")
+            && c
+                .contains("a hand-set constant here would be a constant the fit optimizes around")
+            && c.contains("D_finalize_kernel goes dead")
+            && c.contains("target-tile-split-k-deterministic-two-dispatch"),
+        "splitk-contention concept"
+    );
+    let c = concept("ldmatrix-pair-x2-to-x4-adjacency");
+    assert!(
+        c.contains("bit-identical to its unpaired sibling")
+            && c.contains("a cooperative gather, not an ldmatrix")
+            && c.contains("Reading the KEPT fragment is fine")
+            && c.contains("ldmatrix-mma-layout-loads"),
+        "ldmatrix-pair concept"
+    );
+}
+
+#[test]
+fn batch137_pseudocode_parses() {
+    // G1 for Batch 137: syn-parse gate (the CloudRift matmul rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "smem-fill-align-chunk-not-element",
+        "software-swizzle-shift-row-stride",
+        "companion-slab-ring-slot-sync",
+        "ptxas-recoalesces-scalar-runs-wash",
+        "ptxas-reschedules-load-order-wash",
+        "smem-pad-transport-gated",
+        "split-k-atomic-arm-legality",
+        "setmaxnreg-fit-gate-elected-arrive",
+        "splitk-width-shape-need-gate",
+        "splitk-atomic-free-contention-threshold",
+        "ldmatrix-pair-x2-to-x4-adjacency",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-137 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-137 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-137 opt_pattern for '{id}' must parse"
         );
     }
 }
