@@ -929,8 +929,9 @@
   GPU-training-forward lane's live state = riir-train Issue 729 (open-loop, option-1
   deferred with reopen trigger). Flag consumed — no open doc-sync leads remain from the
   09-03 plan-board sweep.
-- **Post-mining intake: 2 open classes** (both filed 2026-09-07 from riir-ai Issue 888 —
-  the two entries immediately below). P8 nan-unsafe float sort comparator CLOSED
+- **Post-mining intake: 3 open classes** (A + B filed 2026-09-07, C filed 2026-09-08 —
+  all from riir-ai Issue 888; the three entries below). P8 nan-unsafe float sort
+  comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
 - **2026-09-07 (M3, riir-ai Issue 888 consumer session) — OPEN class A:
@@ -976,6 +977,34 @@
   and suggest a **behavioral** assertion instead — the catching test is always behavioral
   ("at f=0.5 `bytes_total()` is ~half the f=1.0 value"; "`target_modules=[Q,V]` yields 2
   adapters, not 6"). Same family as the Plan-014 fake-coverage concern this file tracks.
+- **2026-09-08 (M3, riir-ai Issue 888 T15/T16/T18 follow-up) — OPEN class C:
+  `config-path-orphaned-by-refactor-or-never-plumbed` (two sub-shapes, one detector
+  family).**
+
+  **C1 — orphaned-by-optimization** (the T17 watch, filed per its mandate): a perf
+  refactor replaces a config-fed path with a compile-time table/match and copies the
+  values faithfully — zero test fails, the knob stays pub and looks live. Measured once
+  (riir-games-civ `BehaviorConfig.alarm_radius`: a 20-arm `match` duplicated all 22
+  per-species values after the const-table optimization; fixed by wiring to the
+  SpeciesRegistry, riir-ai `88c51824b`). Detection needs HISTORY, not just syntax —
+  the field had a reader that vanished — so this is a **review-time + sweep-time**
+  heuristic, not a per-compile lint: on any commit touching a `Default`/constructor
+  init of a `pub` config field, check the field still has a non-test reader at the new
+  HEAD (the class-A lint's condition 2 reused as a post-hoc check).
+
+  **C2 — self-referential-config-struct** (the T18 escalation): a whole `pub` config
+  struct whose only readers are its own `validate()`, its own tests, and a GOAT-proof
+  file's config-only tests — plus advertised TOML/YAML sections nothing loads (the
+  section name colliding with a DIFFERENT live struct elsewhere makes it worse:
+  `PlasmaConfig`'s `[domain.inference]` doc pointed at the router's `InferenceBudget`).
+  Measured once (riir-games `PlasmaConfig`, 10 fields, presets advertising per-game
+  tuning values that tuned nothing; deleted, riir-ai `dbb939b26`). Detector shape:
+  per-struct — collect all `.field` reads of the type's fields crate-externally; a
+  struct with zero external reads is class C2 regardless of internal reads. Same
+  type-aware advantage as class A: `dead_code` cannot see it (pub = assumed-used).
+
+  Both sub-shapes share class A's two guards: destructuring reads in the defining file,
+  and upstream-crate liveness (a struct can be live in a sibling).
 - **2026-09-03 (M3, idle loop — E4 decay-gate triage, the flat 35-run curve resolved):**
   the score bench has read 96.2/1.9 since 08-25 and the audit's E4 gate referenced the
   pre-P9 peak (98.1), printing a false decay context every run. Full miss-map triage
