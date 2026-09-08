@@ -118,11 +118,20 @@ explicitly either way.
       subagent read-lanes ran; proposals + adjudications in the Appendix below.
 - [ ] T2b — (cargo-gated, folds into T3) subagent proposal lanes COMPLETE — no further
       read work needed; authoring may cite the Appendix directly.
-- [ ] T3 — (cargo-gated) Author entries + the batch137 standing syn-parse gate
-      (`batch137_pseudocode_parses` + presence/needles incl. NotBenchable
-      membership where annotated); rule_id-anchored edits ONLY (the B136
-      fuzzy-anchor lesson); blog-vs-repo divergences recorded in the research
-      note (the B130/Research-152 discipline).
+- [x] T3 — (write half DONE 2026-09-09, commit `288f984`) Author entries
+      (`entries_gpu_37.rs`, 11 rules) + batch137 standing gates
+      (`batch137_rules_present` / `batch137_concepts_covered` /
+      `batch137_pseudocode_parses`) + count pins (entries.len ×3 → 591,
+      category table A/E/L/N, KERNEL_CATEGORIES slices + slice comments,
+      mod.rs history paragraph + 591-rule doc). Quotes re-verified at the
+      pin BEFORE authoring (all load-bearing lines, incl. the corrected
+      featurization quote — actual text adds "2026-07-07 ... warp tier
+      repeated the same drop until 2026-07-28"). Validated rustfmt-parse
+      (all 3 files exit 0) + python pin-phrase check (44/44 pins present);
+      COMPILE validation pending — gate RUNS are T4, post-unblock.
+      rule_id-anchored edits throughout (no fuzzy anchors).
+      Blog-vs-repo divergences recorded in-rule (the washes: article
+      measured, repo encodes as doctrine).
 - [ ] T4 — (cargo-gated) GOAT: G1 parse/syn all new rules; G2 lib tests default
       + kernel_heal(+latent); G3 clippy 0 both states + retrieval floors
       (kernel 100/100/100, blended 94.7/96.9/97.7) + router annotation re-pin
