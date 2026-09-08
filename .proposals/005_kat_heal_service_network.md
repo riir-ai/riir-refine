@@ -18,7 +18,7 @@ Related: [Proposal 001](001_multi_domain_modelless_code_healer.md), [Proposal 00
 > `raw.githubusercontent.com` form. Two documents, two one-liners, one
 > unrunnable. The package-manager arms were wrong too: the scoop form needs
 > the bucket added first. See 003 §The canonical install one-liners.)*
-> - macOS/Linux: `curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh` (or `brew tap gist-rs/tap && brew install cargo-heal`)
+> - macOS/Linux: `curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh` (or `brew tap gist-rs/tap && brew trust gist-rs/tap && brew install cargo-heal`)
 > - Windows: `iwr -useb https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.ps1 | iex` (or `scoop bucket add gist-rs https://github.com/gist-rs/scoop-bucket && scoop install cargo-heal`)
 > - Then: `cargo heal login` → **free 100,000,000 KAT** (**1 KAT = 1 code word token processed** — modelless healing included; ≈ $300 of Claude-equivalent sticker value).
 

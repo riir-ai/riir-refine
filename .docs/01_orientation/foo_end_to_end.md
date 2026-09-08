@@ -28,7 +28,7 @@
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh
-# or: brew tap gist-rs/tap && brew install cargo-heal
+# or: brew tap gist-rs/tap && brew trust gist-rs/tap && brew install cargo-heal
 ```
 
 **This does not work yet, and the reason is not a copy problem.**

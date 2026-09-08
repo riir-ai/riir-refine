@@ -102,7 +102,7 @@ source is an owner act.
 
 | Platform | Channel 1 (zero-infra) | Channel 2 (package manager) | Notes |
 |---|---|---|---|
-| macOS (aarch64) | `curl -fsSL …/install.sh \| sh` | `brew tap gist-rs/tap && brew install cargo-heal` | Tap repo MUST be named `homebrew-*` → `gist-rs/homebrew-tap`. Formula downloads the **prebuilt** release tarball (binary formula — allowed in third-party taps; only homebrew/core requires build-from-source). |
+| macOS (aarch64) | `curl -fsSL …/install.sh \| sh` | `brew tap gist-rs/tap && brew trust gist-rs/tap && brew install cargo-heal` | Tap repo MUST be named `homebrew-*` → `gist-rs/homebrew-tap`; the `brew trust` step is the one-time tap trust (Homebrew 6+ refuses untrusted taps). Formula downloads the **prebuilt** release tarball (binary formula — allowed in third-party taps; only homebrew/core requires build-from-source). |
 | macOS (x86_64) | same | same | Either a separate asset or a `universal2-apple-darwin` lipo build. |
 | Linux (x86_64, aarch64) | same install.sh | (tap n/a) | **Static musl builds** (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`) — no glibc-version coupling. |
 | Windows (x86_64) | `iwr -useb …/install.ps1 \| iex` | `scoop bucket add gist-rs https://github.com/gist-rs/scoop-bucket && scoop install cargo-heal` | Scoop is the brew-equivalent for portable zips + closed source. **winget later**: winget-pkgs accepts closed-source packages (manifests just point at URLs + hashes) but unsigned exes hit SmartScreen — add after Authenticode signing + stable versioning. Chocolatey possible, not worth the moderation overhead initially. |
