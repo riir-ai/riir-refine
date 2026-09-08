@@ -210,6 +210,28 @@ fn open_kat_charge(
     Some(riir_clippy::kat_meter::KatCharge::open(&root, meter.state()))
 }
 
+/// Issue 076 client half: the ONE burn-sync status line (the
+/// consent-heartbeat contract — one line, never an exit-code change).
+/// Success carries the fresh server balance straight from the push
+/// response — the ONLY fresh-balance source, so a skipped push adds no
+/// network GET (the no-dial-when-nothing-to-send rule).
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
+    match outcome {
+        riir_clippy::kat_burn_client::BurnSync::Reported(ack) => {
+            let balance = riir_clippy::kat_payreq_client::render_kat(ack.balance_micro);
+            println!(
+                "burn sync: {} KAT reported (server balance {balance})",
+                ack.burn_kat_total
+            );
+        }
+        riir_clippy::kat_burn_client::BurnSync::Stacked { total, reason } => {
+            println!("burn sync: offline — {total} KAT stacked, reports with the next run ({reason})");
+        }
+        riir_clippy::kat_burn_client::BurnSync::Skipped => {}
+    }
+}
+
 /// Proposal 008 (the owner's just-works UX, 2026-09-08): `cargo heal
 /// --mine` — the contribution onboarding. One screen: what mining is,
 /// the policy warning, the web link, and the login → heal → sync →
@@ -796,6 +818,26 @@ fn run_kat_sync() {
         riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
     if let Some(w) = consent_warning {
         eprintln!("{w}");
+    }
+
+    // ── burn sync (Issue 076 client half) ──────────────────────────────
+    // Account billing, NOT the consent-gated batch below: the burn debt
+    // rides the login, so it reports even while mining is opted out (the
+    // issue is explicit — billing ≠ contribution). Same stacking rules as
+    // the post-run hook: one line, ~5 s, fail-soft; drains whatever a
+    // failed run left stacked. The burn numbers come from the settled
+    // charge ledger on disk (the last heal run's save), never recomputed.
+    {
+        let meter = open_kat_meter(&[]);
+        let charge = open_kat_charge(&[], meter.as_ref());
+        if let Some(c) = charge.as_ref() {
+            let outcome = riir_clippy::kat_burn_client::run_burn_sync(
+                &root,
+                c.state().charged_kat,
+                c.state().meter_watermark_tokens,
+            );
+            print_burn_sync(&outcome);
+        }
     }
 
     // ── push half ──────────────────────────────────────────────────
@@ -6202,6 +6244,25 @@ fn main() {
                 riir_clippy::kat_meter::FREE_TIER_GRANT_KAT
             );
         }
+    }
+
+    // Issue 076 client half: the burn auto-sync — account billing, NOT the
+    // mining-consent plane (it rides the login; `--unmine` does not stop
+    // it). Fires iff a charge ledger settled this run, the machine is
+    // logged in, and the cumulative burn exceeds the last ACCEPTED report.
+    // GIT-STYLE STACKING: a failed push leaves the ack untouched, so the
+    // un-pushed delta is a local commit — it reports (cumulative) with the
+    // next run or `cargo heal sync`. One status line, ~5 s budget, never an
+    // exit-code change.
+    #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+    if let Some(c) = kat_charge.as_ref() {
+        let root = resolve_heal_root(&args.paths);
+        let outcome = riir_clippy::kat_burn_client::run_burn_sync(
+            &root,
+            c.state().charged_kat,
+            c.state().meter_watermark_tokens,
+        );
+        print_burn_sync(&outcome);
     }
 }
 

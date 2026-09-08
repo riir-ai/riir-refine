@@ -289,6 +289,24 @@ pub mod kat_account_client;
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub mod kat_consent_client;
 
+// Issue 076 client half (owner mandate 2026-09-08): the burn auto-sync
+// client. After every run that settles a charge, the CUMULATIVE burn
+// (`ChargeState.charged_kat`) is reported to the service's `POST /burn`
+// with the account-key signature, and the fresh server balance rides back
+// on the same response. GIT-STYLE STACKING: the ack watermark
+// (`<root>/.heal/kat_burn_ack.json`) advances ONLY on a 200-accepted
+// response, so a failed push is a local commit — the full stacked total
+// reports with the NEXT run or `cargo heal sync` (the server's monotone
+// watermark makes a replay a no-op). Account billing, NOT mining consent:
+// it rides the login and is never consent-gated. Fail-soft: one status
+// line, ~5 s budget, never an exit-code change (the consent-heartbeat
+// contract). `kat_service` gets the message/body/parser/ack (pure,
+// golden-pinned); the transport rides `kat_transport` like every other
+// network surface in this repo (ureq) — a build without it compiles the
+// push to nothing.
+#[cfg(feature = "kat_service")]
+pub mod kat_burn_client;
+
 // Proposal 011 §7 / T4.1+T4.2 (Issue 061, Plan 066): the wet-run harness —
 // the six-step full-loop proof and the G-WET gate. Three things it exists
 // to make impossible: a faucet loop that moves a supply counter (the

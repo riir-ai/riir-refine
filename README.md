@@ -301,6 +301,26 @@ purge + re-login cycle is the fresh-grant farm shape (each new key gets a
 fresh once-per-key welcome grant) — which is exactly why it is never the
 default.
 
+## Fuel model — burn, auto-report, hourly settle
+
+Healing burns **1 KAT per code word token**, metered locally
+(accounting-only projection). After every run that settles a charge, the
+client AUTO-REPORTS the cumulative burn to the service (`POST /burn`,
+account-key signed) and prints one line with the fresh server balance —
+account billing, a ~5 s budget, never blocks the run and never changes its
+exit code. It rides the login, so `--unmine` does not stop it (billing ≠
+contribution).
+
+Offline runs **stack like local commits**: the ack watermark
+(`.heal/kat_burn_ack.json`) advances only on a 200-accepted response, so a
+push that fails is a local commit — the next run (or `cargo heal sync`)
+reports the FULL stacked total in one signed report, and the server's
+monotone watermark makes a replayed report a no-op. The service debits the
+100M KAT free grant **warn-and-pay** (healing never blocks) and commits
+burn to the mining pool on its hourly settle bucket (Issue 076 — the
+7-day epoch stays the staking cadence). The push rides the same network
+build as `sync`; a build without the transport compiles it to nothing.
+
 ## Automatic rustfmt (`--fix --write`)
 
 Healed files are **rustfmt'd automatically** after the write — default-on,

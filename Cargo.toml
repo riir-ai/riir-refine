@@ -794,6 +794,17 @@ required-features = ["kat_service", "latent_retrieval"]
 name = "unmine_consent_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# Issue 076 (owner mandate): the burn auto-sync STACKING test — the git
+# analogy through the real binary (closed port → one stacked line + no ack;
+# live mock → ONE report carrying the FULL cumulative total + ack advance +
+# signature verify; no new burn → zero requests). Same feature set as
+# unmine_consent_cli: `kat_transport` for the burn client's transport half
+# + the cargo-heal bin's own required-features so CARGO_BIN_EXE_cargo-heal
+# exists.
+[[test]]
+name = "kat_burn_stack"
+required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]
