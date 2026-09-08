@@ -1,6 +1,6 @@
 # Proposal 003 — Binary-only distribution (source stays secret)
 
-**Status:** proposed (binding policy adopted 2026-08-14; execution awaits a release plan) — **UNBLOCKED 2026-08-26**: `Issue 037` CLOSED (all gates green incl. A1 cadence — record: [HISTORY.md](../HISTORY.md) §Issue 037 + git history). The moat claim is now proven E2E (verdicts → learning → bench, E1–E5). First public release may proceed under its own release plan.
+**Status:** **DONE 2026-09-07** — executed via [Plan 105](../.plans/105_binary_release_pipeline.md) (COMPLETE: the three public source-free repos + the tag-triggered `release.yml` pipeline + `strip = true`) with gate evidence in [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md) (G1–G4 all measured; G1 on all five assets). Releases **v0.1.0 + v0.1.1 live** on `gist-rs/cargo-heal` (5 archives + SHA256SUMS + THIRD_PARTY_LICENSES.md each; homebrew-tap#1 + scoop-bucket#1 merged). Canonical one-liners: Issue 061 T4.3. (Earlier: UNBLOCKED 2026-08-26 — `Issue 037` CLOSED, all gates green incl. A1 cadence; record: [HISTORY.md](../HISTORY.md) §Issue 037 + git history.)
 **Branch:** `develop` (per global rule — no feature branches)
 **Owner:** unassigned
 **Fusion of:** [Research 003](../../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md) (the boundary verdict) × the rustup installer pattern (curl|sh + install.ps1) × cargo-dist prior art (installer UX + tap automation)
@@ -209,12 +209,9 @@ require license-text inclusion for **binary** distribution) → `gh release crea
   README status line.
 - Already-present guard cited: `publish = false` (`Cargo.toml` L7).
 
-### Deferred — execution (needs its own plan when a release is scheduled)
-- `[profile.release] strip = true` (Cargo.toml — deferred deliberately: the
-  file is mid-edit by a sibling session today; the change lands with the
-  release plan, not mixed into unrelated work).
-- The CI workflow, the three public repos, installers, tap/bucket manifests,
-  cargo-about license generation, the dist-repo `*.rs` guard.
+### Executed — 2026-09-07 via [Plan 105](../.plans/105_binary_release_pipeline.md) (was: deferred until a release was scheduled)
+- `[profile.release] strip = true` — landed with the release plan, exactly as this section required (not mixed into unrelated work).
+- The CI workflow (`release.yml`), the three public repos, installers, tap/bucket manifests, cargo-about license generation, the dist-repo `*.rs` guard — **ALL SHIPPED**; leak-scan + package + gate evidence: [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md).
 
 ### Explicitly NOT shipped by this proposal
 - Any source publication of any `riir-*` repo — forever (Research 003).
@@ -225,19 +222,19 @@ require license-text inclusion for **binary** distribution) → `gh release crea
 ## Phased rollout (sketch — a plan would expand this)
 
 ### Phase 1 — Scaffolding (when first release is wanted)
-- [ ] T1.1 Create `gist-rs/cargo-heal` (public): README (capabilities-not-how), install.sh, install.ps1, `*.rs` CI guard.
-- [ ] T1.2 Create `gist-rs/homebrew-tap` + `gist-rs/scoop-bucket` (public, manifest-only).
-- [ ] T1.3 Fine-grained robot PAT (contents:write on `cargo-heal` only) as an org secret in the private repo.
+- [x] T1.1 Create `gist-rs/cargo-heal` (public): README (capabilities-not-how), install.sh, install.ps1, `*.rs` CI guard. — DONE 2026-09-07 (Plan 105).
+- [x] T1.2 Create `gist-rs/homebrew-tap` + `gist-rs/scoop-bucket` (public, manifest-only). — DONE 2026-09-07 (Plan 105).
+- [x] T1.3 Fine-grained robot PAT (contents:write on `cargo-heal` only) as an org secret in the private repo. — DONE (en-route fix: repo-level `RELEASE_PAT` — the free-plan org-secret trap; Plan 105 T3.2).
 
 ### Phase 2 — Release pipeline (private repo CI)
-- [ ] T2.1 Tag-triggered matrix workflow (5 targets; musl static for linux; universal2 or per-arch for mac).
-- [ ] T2.2 `[profile.release] strip = true` + optional `--remap-path-prefix`.
-- [ ] T2.3 Package: tar.gz/zip + SHA256SUMS + THIRD_PARTY_LICENSES.md (cargo-about).
-- [ ] T2.4 `gh release create -R gist-rs/cargo-heal` + tap/bucket manifest bump PRs.
-- [ ] T2.5 `env!()`/secret-bake audit step.
+- [x] T2.1 Tag-triggered matrix workflow (5 targets; musl static for linux; universal2 or per-arch for mac). — DONE (`release.yml`; musl statics via cargo-zigbuild).
+- [x] T2.2 `[profile.release] strip = true` + optional `--remap-path-prefix`. — DONE (Bench 078: scan clean ×5).
+- [x] T2.3 Package: tar.gz/zip + SHA256SUMS + THIRD_PARTY_LICENSES.md (cargo-about). — DONE (9 release assets; SHA256SUMS verifies ×5).
+- [x] T2.4 `gh release create -R gist-rs/cargo-heal` + tap/bucket manifest bump PRs. — DONE (v0.1.0 run 34085254189 → homebrew-tap#1 + scoop-bucket#1 merged).
+- [x] T2.5 `env!()`/secret-bake audit step. — DONE (Bench 078: 0 secret-shaped strings).
 
 ### Phase 3 — GOAT gate
-- [ ] T3.1 G1–G4 per the gate table above; record in `.benchmarks/`.
+- [x] T3.1 G1–G4 per the gate table above; record in `.benchmarks/`. — DONE: [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md) (G1 completed on all legs 2026-09-07 incl. the four remaining ones; brew/scoop structural-only, honest scope note).
 
 ## Risks
 
@@ -270,4 +267,4 @@ require license-text inclusion for **binary** distribution) → `gh release crea
 
 ## TL;DR
 
-**Adopt: source stays secret forever; users get prebuilt `cargo-heal` binaries from a small public dist repo (`gist-rs/cargo-heal`) via brew tap / curl|sh / install.ps1 / scoop; winget + signing later. Next action: none until a release is actually scheduled — then open a plan from §Phased rollout, and add `strip = true` with it.**
+**Adopt: source stays secret forever; users get prebuilt `cargo-heal` binaries from a small public dist repo (`gist-rs/cargo-heal`) via brew tap / curl|sh / install.ps1 / scoop; winget + signing later.** **DONE 2026-09-07** — executed by [Plan 105](../.plans/105_binary_release_pipeline.md); v0.1.0 + v0.1.1 live on `gist-rs/cargo-heal`, G1–G4 in [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md). Remaining later-items (each with its own trigger): winget (after code signing), artifact signing, self-update.
