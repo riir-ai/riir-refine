@@ -3937,3 +3937,39 @@ needs — the correct order is consent-write THEN note, and `--mine` after a
 logout honestly skips with "not logged in". Final live state: m3 recorded
 in/out/in across the e2e, 177-row sync accepted by the service, the free-vs-
 mine split + machines table live on the front page.
+
+### The burn fast-settle e2e + the 075 soft gate (2026-09-08/09, 84d0d73 + de729c9)
+
+Issue 076 closed end-to-end: the client auto burn-sync landed (f3a7cf2,
+the git-analogy stacking proven 3/3 through the real binary against a
+std-TCP mock), the service got `POST /burn` + the hourly
+`KAT_FAST_SETTLE` bucket (riir-dapps `a2648c6`, armed in prod), and the
+live e2e moved all three site surfaces at once (100 KAT burned ·
+10 batches/179 rows · rust_perf 117 via the Batch-135 RustForge distill,
+Research 155 + Plan 114). The cross-repo follow-ups closed 2026-09-09:
+riir-dao `dd7d75a` (premise docs + the new
+`fast_settle_bucket_contract_is_pinned`), the G2 bench riir-dapps
+`23e0d47` (PASS/GO — hourly leg 0.03% of the crank budget at one year
+of buckets; `.benchmarks/008`), and the two pre-existing kat-service
+wasm32 clippy failures `4681084` (`AdoptionView::empty()` was dead under
+wasm32 because every caller is `#[cfg(test)]` — the lane now green under
+`-D warnings`, 83/83).
+
+The 075 zero-balance decision landed as the soft gate (de729c9): v2 burn
+ack carries `last_balance_micro` (one-time reset = a cumulative re-report,
+a server no-op), the pure four-leg predicate (`kat_soft_gate.rs`), and
+the STICKY machine-global `contributed_once.json` marker
+(`kat_contribution.rs`) — sticky because the payout cadence read showed
+`pay_due_rewards` rides the 7-day `settle_epoch`, NOT the hourly bucket,
+so a time-boxed grace would brick contributing users mid-epoch. Presence
+IS the fact (corrupt reads contributed — the anti-brick direction). The
+gate is mode-wide: the bare dry run settles charge too (measured by
+`kat_burn_stack` phase 1), so a `--write`-only gate would be a sieve.
+G3 reprice swept the same commit (kat_meter docs, heal.rs warns, README
+fuel model + soft-gate section, AGENTS CLI-UX + the stale release-set
+claim — `kat_transport` ships since v0.1.2/`56bd9bf`). CLI contract:
+`tests/kat_soft_gate_cli.rs` 7/7. Found validating, filed as Issue 078:
+the two QR goldens fail at HEAD (pre-existing, proven via stash — the
+independent-preimage halves PASS, so it is render drift, not a layout
+break). Open owner call: riir-dapps `.issues/025` (the 100 KAT vs 100 M
+KAT grant-units mismatch; m3 sits at balance 0 until it lands).
