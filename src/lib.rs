@@ -178,6 +178,15 @@ pub mod kat_meter;
 #[cfg(feature = "kat_service")]
 pub mod kat_account;
 
+// Owner mandate 2026-09-08: machine-global mining consent — the persisted
+// state behind `cargo heal --mine` (opt IN) / `--unmine` (opt OUT), and the
+// three-tier engagement story the ai.gist.rs front page documents.
+// DELIBERATELY UNGATED: `--unmine` must work in EVERY feature build (a user
+// on a build without `kat_service` still deserves an off switch), and it
+// owns the account-dir resolution that `kat_account::KatAccount::default_dir`
+// delegates to, so the two cannot drift. Zero new deps (serde_json only).
+pub mod kat_mining_consent;
+
 // Proposal 005 Phase 0 T0.2 (Plan 026): the redaction gate — no payload
 // leaves the machine before passing it. Deny-by-default `.heal-sync-policy`
 // allowlist (origin + path glob + span cap) + a 12-rule secret scanner +

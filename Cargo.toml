@@ -786,6 +786,14 @@ required-features = ["kat_transport"]
 name = "kat_sync_payload_g4"
 required-features = ["kat_service", "latent_retrieval"]
 
+# Owner mandate 2026-09-08: the --mine / --unmine consent tiers, driven
+# through the real binary. `kat_transport` (the `sync` command's gate)
+# subsumes `kat_service`; the other three are the cargo-heal bin's own
+# required-features, without which CARGO_BIN_EXE_cargo-heal does not exist.
+[[test]]
+name = "unmine_consent_cli"
+required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]

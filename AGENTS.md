@@ -174,7 +174,8 @@ Doctrine: the modelless path (L0–L3) is PRIMARY; LoRA (L4) is the conservative
 
 - **Bare `cargo heal` IS the dry run**: no mode, no paths → suggest review over `.` (or the given paths), zero edits, one banner line.
 - **`cargo heal --fix` IS a real fix**: writes in place (`--write` implied) and compile-gates on `fix_verify` builds (opt out `--no-verify`). No paths → scans `.`.
-- **`cargo heal --mine`** = the contribution onboarding (what mining is, the policy warning, ai.gist.rs, the login → heal → sync → account loop).
+- **`cargo heal --mine`** = the contribution onboarding (what mining is, the policy warning, ai.gist.rs, the login → heal → sync → account loop) **and the opt-IN consent write** (owner mandate 2026-09-08).
+- **`cargo heal --unmine`** = the opt-OUT counterpart. Records machine-global consent = opted out (`mining_consent.json` in the account dir, `src/kat_mining_consent.rs` — DELIBERATELY UNGATED so it works in every feature build); `cargo heal sync` then refuses its PUSH half before building or signing anything, and still runs the lease PULL half (a read is not a contribution). Healing is UNCHANGED and was always local; the queued `.heal/outbox/` path is NAMED and never deleted. Idempotent, exit 0; `--mine --unmine` together is exit 2. **The three tiers are `Unset` / `OptedIn` / `OptedOut`, and `Unset` behaves exactly as the pre-consent build did — running `sync` IS the consent.** Never make the absent state a refusal; that breaks every existing user.
 - `--write` still parses (no-op with `--fix`); `--suggest` stays the explicit review command; `--dry-run` belongs to `wetrun` only.
 - ⚠ Docs predating this used `--fix` as the dry run — those flows WRITE now. Review = the bare form or `--suggest`.
 

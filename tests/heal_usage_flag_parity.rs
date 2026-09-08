@@ -64,10 +64,18 @@ fn parser_flags(src: &str) -> BTreeSet<String> {
         if !is_long_flag(flag) {
             continue;
         }
-        // Only count it when it is being MATCHED (`=>` or `|` follows the
-        // closing quote), not merely mentioned in a message.
+        // Only count it when it is being MATCHED, not merely mentioned in a
+        // message. Three arm shapes, and the third was a real blind spot:
+        // `"--flag" =>`, `"--flag" | "--other" =>`, and a GUARDED arm
+        // `"--flag" if <cond> =>`. Missing the guard shape made
+        // `--dry-run` — parsed at `"--dry-run" if matches!(args.command,
+        // Some(KatCommand::Wetrun))` — read as advertised-but-unparsed, so
+        // the parity assertion failed on a flag that works. An extractor
+        // that cannot see a legal arm shape reports a confident FALSE
+        // finding, which is the same defect class as reporting a green
+        // over nothing.
         let after = rest[close + 1..].trim_start();
-        if after.starts_with("=>") || after.starts_with('|') {
+        if after.starts_with("=>") || after.starts_with('|') || after.starts_with("if ") {
             out.insert(flag.to_string());
         }
     }
@@ -110,8 +118,14 @@ fn the_audit_can_see_what_it_audits() {
         "the parser extractor found only {} flag(s) — it regressed",
         parser.len()
     );
-    // Shape pins: three flags whose spellings this extractor must handle.
-    for f in ["--suggest", "--fix", "--history"] {
+    // Shape pins: flags whose ARM SHAPES this extractor must handle.
+    // `--dry-run` is the guarded-arm pin (`"--dry-run" if matches!(…) =>`) —
+    // it is here because the extractor did not recognise that shape and
+    // produced a false "advertised but unparsed" finding.
+    // `--unmine` is the plain-arm pin for the consent tier (owner mandate
+    // 2026-09-08): a tier the usage text stops advertising is a tier
+    // nobody can find.
+    for f in ["--suggest", "--fix", "--history", "--dry-run", "--unmine"] {
         assert!(usage.contains(f), "usage extractor missed {f}");
         assert!(parser.contains(f), "parser extractor missed {f}");
     }

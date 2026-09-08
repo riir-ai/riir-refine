@@ -265,6 +265,118 @@ fn run_mine_intro() {
     {
         println!("transport: this build has no sync (needs --features kat_transport)");
     }
+
+    // Owner mandate 2026-09-08: --mine is now the opt-IN WRITE as well as
+    // the explainer — the three-tier engagement story needs a state the CLI
+    // can record, and an explainer that records nothing is not a tier.
+    // Ungated (kat_mining_consent compiles in every build), so the consent
+    // half works even where the status halves above did not compile.
+    let dir = riir_clippy::kat_mining_consent::default_dir();
+    println!();
+    match riir_clippy::kat_mining_consent::write(&dir, true) {
+        Ok(()) => {
+            println!(
+                "consent: recorded — mining is opted IN for this machine ({})",
+                riir_clippy::kat_mining_consent::consent_path(&dir).display()
+            );
+        }
+        Err(e) => {
+            eprintln!("consent: NOT recorded — {e}");
+            eprintln!(
+                "consent: the explainer above still stands; `cargo heal sync` behaves as before \
+                 (running sync IS the consent)"
+            );
+        }
+    }
+    let (state, warning) = riir_clippy::kat_mining_consent::read_with_warning(&dir);
+    if let Some(w) = warning {
+        eprintln!("{w}");
+    }
+    println!("{}", state.status_line());
+    println!("opt out any time: cargo heal --unmine");
+}
+
+/// Owner mandate 2026-09-08: `cargo heal --unmine` — the opt-OUT
+/// counterpart to `--mine`. Records machine-global consent = OPTED OUT and
+/// prints, honestly, what that did and did NOT turn off:
+///
+/// - **Unchanged**: healing itself. `--fix` / `--suggest` / the bare dry run
+///   were always local and stay local; this flag does not touch them.
+/// - **Stopped**: the outbound push half of `cargo heal sync`. The lease
+///   PULL half still runs — a read is not a contribution.
+/// - **Not deleted**: whatever is already queued in `.heal/outbox/`. The
+///   path is named and the files are the user's to remove; a tool that
+///   silently deletes the evidence of what it queued is not auditable.
+///
+/// Standalone early-return mode (before `validate_mode_flags`), works in
+/// EVERY feature build, exits 0, and is idempotent.
+fn run_unmine() {
+    let dir = riir_clippy::kat_mining_consent::default_dir();
+    let (before, warning) = riir_clippy::kat_mining_consent::read_with_warning(&dir);
+    if let Some(w) = warning {
+        eprintln!("{w}");
+    }
+    let already =
+        before == riir_clippy::kat_mining_consent::MiningConsent::OptedOut;
+
+    if let Err(e) = riir_clippy::kat_mining_consent::write(&dir, false) {
+        eprintln!("unmine: could NOT record the opt-out — {e}");
+        eprintln!(
+            "unmine: consent is still `{}`, so `cargo heal sync` would still push. Fix the \
+             account dir and re-run.",
+            before.label()
+        );
+        std::process::exit(1);
+    }
+
+    match already {
+        true => println!("KAT mining: already opted out — nothing changed"),
+        false => println!("KAT mining: opted OUT on this machine"),
+    }
+    println!(
+        "record: {}",
+        riir_clippy::kat_mining_consent::consent_path(&dir).display()
+    );
+    println!();
+    println!("STOPPED: the outbound push half of `cargo heal sync`. No redacted batch,");
+    println!("no signed payload, nothing leaves this machine. The lease PULL half still");
+    println!("runs — downloading a corpus epoch is a read, not a contribution.");
+    println!();
+    println!("UNCHANGED (and always was local): healing itself.");
+    println!("  cargo heal              <- dry run, zero edits, local");
+    println!("  cargo heal --fix        <- real fixes, written locally, compile-gated");
+    println!("  cargo heal --suggest    <- review, local");
+    println!("Trajectories still record locally — that is how the healer learns on YOUR");
+    println!("machine. Opting out stops the upload, not the local memory.");
+    println!();
+
+    // The already-queued batches. Named, never touched — the user decides.
+    let outbox = unmine_outbox_dir();
+    let queued = std::fs::read_dir(&outbox)
+        .map(|rd| rd.filter_map(Result::ok).count())
+        .unwrap_or(0);
+    println!("ALREADY QUEUED: {}", outbox.display());
+    match queued {
+        0 => println!("  (nothing queued — no batch was ever held for submission)"),
+        n => println!(
+            "  {n} queued batch file(s). These are YOURS to delete — `cargo heal` will not \
+             submit them while you are opted out, and it will not delete them either."
+        ),
+    }
+    println!();
+    println!("{}", riir_clippy::kat_mining_consent::MiningConsent::OptedOut.status_line());
+    println!("re-enable any time: cargo heal --mine");
+}
+
+/// The `.heal/outbox/` dir `run_kat_sync`'s `queue_outbox` writes into,
+/// resolved the SAME way (`resolve_heal_root` → `.heal/outbox`) so the path
+/// `--unmine` names is the path a queued batch actually sits at. No cfg
+/// fallback: `resolve_heal_root` compiles behind
+/// `latent_retrieval`/`kat_service` and this binary's `required-features`
+/// include BOTH, so a build of `cargo-heal` without it cannot exist — an
+/// unreachable cfg arm would be an untested claim, not extra safety.
+fn unmine_outbox_dir() -> PathBuf {
+    resolve_heal_root(&[]).join(".heal").join("outbox")
 }
 
 /// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal login` — generate/import
@@ -547,9 +659,29 @@ fn run_kat_sync() {
     let url = riir_clippy::kat_lease_client::service_url_for_command();
     let transport = HttpLeaseTransport::new(&url, 30);
 
+    // ── consent gate (owner mandate 2026-09-08) ───────────────────────
+    // Checked BEFORE the payload is built or signed: `cargo heal --unmine`
+    // records a machine-global opt-out, and an opt-out that still assembles
+    // and signs the batch it refuses to send is not an opt-out. `Unset`
+    // pushes exactly as this command always did — running `sync` IS the
+    // consent — so only an explicit opt-out changes behaviour here.
+    let consent_dir = riir_clippy::kat_mining_consent::default_dir();
+    let (consent, consent_warning) =
+        riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
+    if let Some(w) = consent_warning {
+        eprintln!("{w}");
+    }
+
     // ── push half ──────────────────────────────────────────────────
     let kv = root.join(".heal").join("trajectories.kv");
-    if !kv.exists() {
+    if !consent.push_allowed() {
+        println!("sync: push SKIPPED — mining is opted out on this machine");
+        println!(
+            "sync: consent record {} says opted out; nothing was built, signed or sent",
+            riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
+        );
+        println!("sync: re-enable with `cargo heal --mine` (the lease pull below still runs — a read is not a contribution)");
+    } else if !kv.exists() {
         println!("sync: no trajectory store at {} — run any --fix in this repo first", kv.display());
     } else {
         match riir_clippy::traj_store::TrajStore::open(&root) {
@@ -1754,6 +1886,7 @@ USAGE:
     cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker>] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --mine                                 <- what mining is + policy + how to earn KAT
+    cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
@@ -1842,6 +1975,12 @@ USAGE:
     --mine          What KAT mining is, the policy warning, the web link, and
                     the login → heal → sync → account loop (Proposal 008). Works in
                     every build; the status halves need their features.
+    --unmine        Opt OUT of contributing: records machine-global consent =
+                    opted out, so `cargo heal sync` refuses its PUSH half (the
+                    lease pull still runs). Healing (--fix / --suggest / the bare
+                    dry run) is UNCHANGED and was always local. Names the queued
+                    .heal/outbox/ path and deletes nothing. Idempotent; re-enable
+                    with --mine. Works in every build.
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
@@ -1913,7 +2052,15 @@ struct Args {
     /// `--mine` — the contribution onboarding (Proposal 008 T2.4's user
     /// surface): what mining is, the policy warning, the web link, and the
     /// login → heal → sync → account loop. Standalone — early return.
+    /// Also the opt-IN consent WRITE (owner mandate 2026-09-08).
     mine: bool,
+    /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
+    /// 2026-09-08, the ai.gist.rs three-tier engagement story). Records
+    /// machine-global consent = OPTED OUT, which makes `cargo heal sync`
+    /// refuse its PUSH half (the lease pull still runs). Standalone — early
+    /// return, works in every feature build. Mutually exclusive with
+    /// `--mine`.
+    unmine: bool,
     /// Set by parse_args when the bare no-mode default fired (the dry-run
     /// banner then prints once, from main). Not a user flag.
     bare_default: bool,
@@ -2072,6 +2219,7 @@ fn parse_args() -> Args {
         suggest: false,
         fix: false,
         mine: false,
+        unmine: false,
         bare_default: false,
         fix_compile: false,
         dump_trajectories: false,
@@ -2143,6 +2291,7 @@ fn parse_args() -> Args {
             "--dump-trajectories" => args.dump_trajectories = true,
             "--write" => args.write = true,
             "--mine" => args.mine = true,
+            "--unmine" => args.unmine = true,
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
@@ -2419,6 +2568,7 @@ fn parse_args() -> Args {
         && !args.dump_trajectories
         && !args.memory_stats
         && !args.mine
+        && !args.unmine
         && !args.misses
         && !args.misses_report
         && !args.recompute_elo
@@ -4026,8 +4176,22 @@ fn main() {
     // link, and the login → heal → sync → account loop. Works in EVERY
     // build — the explainer never needs a feature; the status halves
     // appear only when their feature compiled in.
+    // --mine and --unmine are opposite writes to one field, so passing both
+    // has no defensible resolution — reject before either side writes.
+    if riir_clippy::kat_mining_consent::flags_conflict(args.mine, args.unmine) {
+        eprintln!("{}", riir_clippy::kat_mining_consent::CONFLICT_MESSAGE);
+        std::process::exit(2);
+    }
     if args.mine {
         run_mine_intro();
+        return;
+    }
+    // ── Owner mandate 2026-09-08: --unmine — the opt-OUT counterpart. ────
+    // Standalone, same shape as --mine (early return before
+    // validate_mode_flags), works in EVERY build. Records consent = opted
+    // out so `cargo heal sync` refuses its push half; deletes nothing.
+    if args.unmine {
+        run_unmine();
         return;
     }
 

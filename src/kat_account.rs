@@ -185,19 +185,14 @@ impl KatAccount {
 
     /// The machine-global account dir (see the module docs for the tier
     /// rationale). `RIIR_HEAL_KAT_ACCOUNT_DIR` overrides the whole path.
+    ///
+    /// Delegates to [`crate::kat_mining_consent::default_dir`] — the mining
+    /// consent record lives in this same dir and must be readable in builds
+    /// where `kat_service` did NOT compile, so the resolution has ONE home
+    /// (the ungated module) and this is the `kat_service`-facing name for it.
     #[must_use]
     pub fn default_dir() -> PathBuf {
-        if let Ok(dir) = std::env::var("RIIR_HEAL_KAT_ACCOUNT_DIR") {
-            return PathBuf::from(dir);
-        }
-        let base = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))
-            })
-            .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
-            .unwrap_or_else(std::env::temp_dir);
-        base.join("riir-heal")
+        crate::kat_mining_consent::default_dir()
     }
 
     /// `cargo heal login` — generate (or import via [`Self::login_import`])
