@@ -2275,11 +2275,19 @@ mod tests {
         assert_ne!(qr_commitment(&other), Some(c));
     }
 
-    /// Captured 2026-09-02 against `qrcode 0.14.1` under
-    /// [`QR_RENDER_PARAMS`] (`EcLevel::M`, quiet zone on).
+    /// Captured 2026-09-09 against [`QR_GOLDEN_URL`] (the CURRENT
+    /// [`DEFAULT_SERVICE_URL`] host) — blake3 of [`qr_commitment`]'s
+    /// canonical matrix serialization under [`QR_RENDER_PARAMS`].
+    ///
+    /// Provenance: `dc9e179` (2026-09-02) captured these pins against the
+    /// then-current `kat.heal.gist.rs` host; `f7cbe31` flipped the host to
+    /// `heal.gist.rs` but its "QR golden … follow" claim never landed — the
+    /// pins kept encoding the retired host's QR and both golden tests ran
+    /// red until issue 078 re-derived them. `qr_golden_url_tracks_the_default_service_url`
+    /// is the guard that fails at the URL line next time.
     #[cfg(feature = "kat_transport")]
     const QR_COMMITMENT_GOLDEN: &str =
-        "de7617019294c1ea2ea6609ce93df60c14b7a7cd6b4b9bd456535ae584b2f9df";
+        "a06a9976aa00bd745fff19d9412d788bd420a0ef591976ffda2dfb84cc24e5ea";
 
     /// Axis 1 (STRUCTURAL), and the anti-vacuity half: the commitment must
     /// MOVE on every pinned axis. An in-preimage field that no test varies
@@ -2359,11 +2367,31 @@ mod tests {
         assert_eq!(hex32(blake3::hash(before.as_bytes()).as_bytes()), QR_ASCII_GOLDEN);
     }
 
-    /// Captured 2026-09-02 — blake3 of the ASCII render of
-    /// [`QR_GOLDEN_URL`] under [`QR_RENDER_PARAMS`].
+    /// Re-derived 2026-09-09 against [`QR_GOLDEN_URL`] (the CURRENT
+    /// [`DEFAULT_SERVICE_URL`] host) — blake3 of the ASCII render of
+    /// [`QR_GOLDEN_URL`] under [`QR_RENDER_PARAMS`]. Same provenance as
+    /// [`QR_COMMITMENT_GOLDEN`] below: the original pins encoded the
+    /// pre-`f7cbe31` host's render.
     #[cfg(feature = "kat_transport")]
     const QR_ASCII_GOLDEN: &str =
-        "213caa9e76f61663721285eb567a221938fb6bbc150c8f6c89b5b810db888dd9";
+        "4f0f6ee5cd754bc932af5789bb0f6b8c9f6c86ba60beb61a554830327f850ade";
+
+    /// Provenance tie (issue 078): the two goldens above are only meaningful
+    /// for the URL the service actually issues. This fails at the URL line —
+    /// with the re-derive instruction — when [`DEFAULT_SERVICE_URL`] moves,
+    /// instead of letting two digest mismatches be the first signal (the
+    /// exact gap that let the `f7cbe31` host flip run red for a week).
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn qr_golden_url_tracks_the_default_service_url() {
+        assert_eq!(
+            QR_GOLDEN_URL,
+            format!("{DEFAULT_SERVICE_URL}/payreq/71b5cbf13626d2554aba7d9b06e63474"),
+            "QR_GOLDEN_URL no longer tracks DEFAULT_SERVICE_URL — QR_COMMITMENT_GOLDEN \
+             and QR_ASCII_GOLDEN were captured against the golden URL: re-derive BOTH \
+             at the new host in the same commit as the flip"
+        );
+    }
 
     /// The ASCII render digest moves on the render params too — same
     /// anti-vacuity discipline applied to the surface a user actually sees.
