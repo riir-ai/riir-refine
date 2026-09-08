@@ -1,6 +1,6 @@
 # Issue 075 — verdict: per-run burn + consent prompt on plain `cargo heal` (NOT LGTM)
 
-**Status:** RECORD — amended same day after owner correction (2026-09-08); zero-balance decision pending owner answer
+**Status:** RECORD — verdict amended after owner correction; zero-balance decision RECORDED: soft gate (2026-09-08)
 
 ## The question
 
@@ -205,13 +205,48 @@ funds the very pool that pays `--mine` contributors (70% of burn →
 mining+trainer pool): the owner's burn-until-empty → contribute-back
 loop is the flywheel the split already implements.
 
-### The one open decision this amendment does not settle
+### Zero-balance decision (owner, 2026-09-08): SOFT GATE
 
-Zero-balance behavior. Shipped G3 is warn-and-pay, never brick
-(`KAT_WARN_REMAINING` = 10M warn threshold; healing never blocks). The
-owner's "they should consider contribute back" reads as nudge, not
-brick, but whether depletion ever soft-gates plain `--fix` for a
-depleted, contributing-capable account is an owner mandate (it amends
-G3 + the CLI UX contract). Asked 2026-09-08; answer to be recorded here.
+Asked same day; owner's answer:
 
-Amendment committed docs-only: status line + this section, nothing else.
+> Soft gate — depleted plain `--fix` refuses until contributing
+> (`--mine`/sync) or topped up; logged-out/offline stays warn-only.
+
+This amends two shipped contracts, and both edits belong to the landing
+commit-set:
+
+- **G3 "warn-and-pay, never brick"** (`src/kat_meter.rs:287-290` doc +
+  every "never blocks" comment/test): becomes warn-and-pay, brick at
+  zero — for LOGGED-IN, SYNCED, depleted, non-contributing accounts
+  only. Logged-out/offline stays warn-only (no server authority → no
+  honest gate; the owner said so explicitly).
+- **008's anonymous-funnel row** (008:255, "unheal required" from run 1):
+  superseded by prepaid-fuel sequencing — free 100M burn first;
+  contribution becomes the price of continuation at depletion.
+
+Implementation prerequisites, in dependency order — a gate against the
+raw local projection would brick users whose server balance is positive,
+because the projection models neither the daily faucet drip nor mining
+credits:
+
+1. **T0.3+ sync true-up lands first** — the last-synced SERVER balance
+   is the gate's input, never the projection; the projection stays the
+   offline/warn-only path.
+2. Gate predicate (all required): `kat_service` on ∧ account configured
+   ∧ last-synced balance ≤ 0 ∧ not yet contributed-and-synced. The
+   refusal message names BOTH refuel paths (`--mine` + sync; top-up).
+3. **Open question — OptedIn-with-zero grace:** if mining-credit payouts
+   land per-event, `--mine` + sync refuels immediately and the gate
+   lifts; if payouts are epoch-gated (7 days), the gate needs an OptedIn
+   grace window or it bricks contributing users mid-epoch. Read the
+   payout cadence before wiring the predicate; do not assume.
+4. **Open question — the OptedOut-depleted case is intentionally stuck**
+   until top-up (T1.6, not landed) or re-enabling mining. That IS the
+   paid-tier boundary the owner chose; the refusal message must say so —
+   a dead end with no named exit is a bug, not a gate.
+5. Reprice G3's tests + the AGENTS.md CLI UX contract lines in the same
+   commit; every doc surface quoting "never blocks" gets the same-commit
+   sweep (docs_gate's bench_doc_audit reads those labels).
+
+Decision recorded in commit `b03d3e0` (amendment) — this decision block
+lands as its follow-up commit.
