@@ -17,7 +17,7 @@ Retrieval domains (Plan 001 + Plans 018/030; `rustc_errors` is a 6th, driver-bas
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 49 corpus lints across style/complexity/perf/pedantic/nursery (38 `--fix`, 8 `--verify`, 3 self_evolve-only).
 - **`rust_perf`** (default-on) — heals Rust perf issues; 114 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
 - **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 580 rules.
-- **`sec`** (opt-in) — security-pattern bounded fixes (12 rules).
+- **`sec`** (opt-in) — security-pattern bounded fixes (14 rules; 6 fixable + 8 suggest-only).
 - **`docker`** (default-on) — Dockerfile bounded-fix healing (31 rules, hadolint oracle).
 - **`rustc_errors`** (default-on) — `cargo heal --fix-compile`, oracle-driven compile-error repair keyed by rustc error code; driver-shaped, inert until invoked.
 
@@ -160,7 +160,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag; powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light).
 - `rustc_errors` (DEFAULT-ON since 2026-08-29): the `--fix-compile` driver domain; inert until invoked (compile-time cost only); dep-tree unchanged (`compile_oracle = []` — std + serde only).
 - `docker` (DEFAULT-ON since 2026-08-28): Dockerfile healing domain; hadolint oracle (`docker_verify`); never a registry network call; the tier-2 `docker build --check` oracle rides `docker_buildcheck` (implies `docker_verify`) and never runs in the heal path.
-- `sec` (opt-in): security-pattern healing domain (12 rules; the clippy boundary gate bans clippy auto-fixes in its territory).
+- `sec` (opt-in): security-pattern healing domain (14 rules — 6 fixable + 8 suggest-only, incl. the Batch-131 InputValidation pair; the clippy boundary gate bans clippy auto-fixes in its territory).
 - `self_evolve` (DEFAULT-ON since 2026-08-16): latent self-evolution — `LatentFixMemory` + `LatentSkillEvolution` + `EvolveRecorder`; the memory half runs wherever fixes are applied, the EMA learning half no-ops (one log line) without the `clippy_verify` oracle; opt-out `RIIR_HEAL_SELF_EVOLVE=0`.
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc).
 - `l4_lora` (opt-in): the L4 generative fallback SEAM ONLY — trait + pipeline wiring, inert unless a fallback is installed via `HealPipeline::with_l4_fallback`. NOT promoted: `decline` is the default; the 3-condition reachability contract (no candidate / non-parsing / out-of-corpus-relevance) is enforced by `tests/g4_l4_composition.rs`.

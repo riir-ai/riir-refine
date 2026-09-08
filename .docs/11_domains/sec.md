@@ -53,6 +53,34 @@ a fixture. The `!=` form stays out of Phase-2 scope.
 |---|---|---|---|
 | `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated) | `partial_cmp(..).unwrap_or(Equal)` (or `.unwrap()`) inside a sort comparator → `total_cmp(..)` — NaN becomes deterministically ordered instead of equal-to-everything (an inconsistent order the std sorts MAY PANIC on since 1.81). Gates: enclosing fn contains a `sort_by`/`sort_unstable_by`/`select_nth_unstable_by` call + exact chain shape + `Equal`-only default + comment guard + macro args refuse. The arg carries over VERBATIM (`PartialOrd::partial_cmp` pins `(&self, other: &Self)` — the same shape `total_cmp` takes), so the output is the idiomatic human form; non-float receivers (`Option<f32>`, other Ord primitives) fail E0599 → the `--verify` gate auto-reverts. Probe 2026-09-01: zero clippy lints fire on the shape (real clippy 1.97, pedantic+nursery+perf+suspicious+correctness+style) — the boundary holds with margin. Source: riir-ai Issue 832 T5's P8 intake (≈300 sibling library sites); the intake's type-blindness concern dissolved by `total_cmp` (direction-preserving recv/arg order + name-identical on f32/f64) — recorded in the intake close-out. Honest recall limit: a comparator defined in a helper fn and passed to `sort_by(helper)` by name is not detected — the sort call and the chain must share the enclosing fn.
 
+## Batch 131 (2026-09-08) — the `InputValidation` family opens, suggest-only
+
+Two rules from the dhishwasher/Girder distill (BSL 1.1 — ORIGINAL fixtures
+below; the evidence shapes are cited at the pin in `.research/153`), both
+SUGGEST-ONLY: parse-only detectors with zero-FP negative suites ship in
+`proposers::{length_prefix_alloc, secret_file_create}`; `FIXABLE_SEC` and
+the `collect_edits` arms are deliberately untouched — these rules emit
+suggestions, never auto-fixes (the `ffi-export-panicking-body` shape).
+
+| Rule | Family | `--fix` | The detection + the bounded form |
+|---|---|---|---|
+| `length-prefix-validate-before-alloc` | `InputValidation` | suggest-only | a length parsed in-fn (`from_be_bytes`-class byte-swap or a header `.parse()`) reaching `vec![0u8; len]` with NO intervening bound comparison = allocation-size DoS (one peer-controlled header demands a multi-GB buffer). The bounded form: `if len == 0 \|\| len > MAX { return Err(..) }` BEFORE the alloc. Gates: same-fn chain only (cross-fn origins undetected — the helper-fn recall limit), identity tracking through casts/`?`/`ok_or`/`Some`/arithmetic, any comparison/match/assert on the tracked ident suppresses (validating a derived length bounds its source), `vec!`-repeat form only (`with_capacity` out of scope), `#[cfg(test)]` mods skipped. The evidence was BOTH WAYS in one codebase: an unbounded transport beside its own bounded twin (same author) — the class recurs even in careful code |
+| `secret-file-create-without-0600` | `InputValidation` | suggest-only | a credential-named file (`secret`/`password`/`passwd`/`credential`/`token`/`hmac`, word-boundary, plural stems count — `secrets.json`) created by `File::create` / `fs::write` / an OpenOptions create-chain WITHOUT `.mode(..)` is 0644-by-umask, world-readable. The bounded forms: `#[cfg(unix)] OpenOptions::mode(0o600)` at create, or portably after create `#[cfg(unix)] set_permissions(Permissions::from_mode(0o600))` (the house `kat_account::write_private` form). Gates: narrow vocabulary (the ambiguous words are EXCLUDED — `key`/`identity`/`private`/`pem`, so `api_key` writes are missed, honest), create-class writes only (reads out), ANY hardening marker anywhere in the fn suppresses the whole fn (one hardened file hides a sibling — conservative). Suggest-only because a portable mechanical rewrite is not parse-only-provable (Windows `from_mode` maps coarsely) |
+
+Gates at landing: sec lib 1261 passed / 0 failed (count pins: corpus 12→14,
+`rule_ids_unique_and_kebab`, FIXABLE_SEC unchanged), boundary gate 2/2 (real
+clippy over the grown probe crate — the new fixtures are compile-clean, the
+E0425 class the parse gate cannot see), clippy 0 default + sec, score-bench
+#80 FLAT 96.2/1.9 (suggest-only adds no fixer), retrieval: kernel+latent
+byte-identical (94.7/96.9/97.7 blended, kernel 100/100/100, router 93/131),
+sec self-variant top-1 holds for both new rules, ROUTER ANNOTATION re-pinned
+per the Issue 020 contract — the two sec arms re-measured: 41/101 → 35/101
+(floor 36→30/101) and 82/131 → 79/131 (floor 77→74/131); the new wire/fs
+vocabulary ATTRACTS generic Rust spans to the sec centroid — first measured
+sec-arm decay, recorded not weakened. The no-docker sec arms (Plan-018 pins)
+are no longer measurable build states (the tree grew default-feature hard
+deps) — noted in the floor fn.
+
 ## The boundary discipline (non-negotiable)
 
 `tests/sec_boundary_gate.rs` runs REAL clippy over the corpus fixtures with

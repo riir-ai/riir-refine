@@ -48,6 +48,10 @@ pub enum SecFamily {
     /// total-order contract makes the std sorts PANIC since 1.81 and
     /// silently mis-orders NaN otherwise).
     PanicSafety,
+    /// Input-validation safety (Batch 131 — untrusted lengths/sizes flowing
+    /// into allocations, secret files created without permission hardening).
+    /// Added APPEND-ONLY: no existing variant renumbered.
+    InputValidation,
 }
 
 impl SecFamily {
@@ -60,6 +64,7 @@ impl SecFamily {
             Self::UnsafeHygiene => "unsafe-hygiene",
             Self::CryptoHygiene => "crypto-hygiene",
             Self::PanicSafety => "panic-safety",
+            Self::InputValidation => "input-validation",
         }
     }
 }

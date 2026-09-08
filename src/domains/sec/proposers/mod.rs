@@ -31,14 +31,29 @@
 //! (not merely caller-gated — the FFI ripple is cross-language), guards
 //! already present suppress the rule, and every applied fix rides the
 //! `--fix --verify` compile gate.
+//!
+//! ## Batch 131 (2026-09-08) — the suggest-only detector pair
+//!
+//! The `InputValidation` family opens with two rules that ship DETECTORS,
+//! not fixers: parse-only detection walks with zero-FP negative suites,
+//! deliberately absent from `FIXABLE_SEC` and from `collect_edits`
+//! (suggest emission only, the `ffi-export-panicking-body` shape — these
+//! rules emit suggestions, never auto-fixes):
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `length-prefix-validate-before-alloc` | `length_prefix_alloc::detect` | the fix must invent a limit constant + an error-return path the fn may not have |
+//! | `secret-file-create-without-0600` | `secret_file_create::detect` | hardening semantics are per-OS (`Permissions::from_mode` maps coarsely on Windows) — a portable rewrite is judgment-bearing |
 
 use syn::File;
 
 pub mod drop_no_panic;
 pub mod ffi_catch_unwind;
+pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
+pub mod secret_file_create;
 pub mod slice_len_guard;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).

@@ -1,6 +1,6 @@
 # Research 153 — the dhishwasher/Girder distill (verdict YES B− → sec-domain Batch 131)
 
-**Status:** DISTILLED — pending owner decision (owner approved mining 2026-09-08 "do distill"; batch planned plan-first as Plan 112 / Batch 131 — flips to RECORD at landing)
+**Status:** RECORD (Batch 131 landed 2026-09-08 — 2 rules, corpus 12→14, both suggest-only, `InputValidation` family opened; Plan 112 T0–T9 all pass; landing gates in `.docs/11_domains/sec.md` §Batch 131 + the queue snapshot's Last-landed line; owner approved mining 2026-09-08 "do distill")
 
 ## Source
 

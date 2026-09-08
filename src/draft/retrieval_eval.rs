@@ -1253,8 +1253,14 @@ mod tests {
                 // common-token centroid absorbs generic Rust spans, and the
                 // fixture set carries NO sec-labeled spans, so every
                 // sec-routing is a miss by construction).
+                // NOT re-measured at Batch 131: the no-docker states no
+                // longer BUILD (hard deps on default features — rustc_errors
+                // is unconditional in draft code), so the Plan-018 pin stands
+                // for this arm; the docker-on arms below are the states
+                // anyone runs.
                 (false, true, false) => 40.0 / 101.0,
-                // 4-domain + kernel: measured 78/131 (59.5%, Plan 018).
+                // Same — not measurable since the docker-landing tree grew
+                // default-feature hard deps; Plan-018 pin stands.
                 (true, true, false) => 73.0 / 131.0,
                 // ── docker-enabled states (Plan 030 T0.4, MEASURED
                 // 2026-08-28; floor = measured − 5 spans, per state) ──
@@ -1276,8 +1282,19 @@ mod tests {
                 // TF-cosine centroids upward; floor = measured - 5 per the
                 // Plan-030 convention.
                 (true, false, true) => 88.0 / 131.0,  // measured 93/131 (71.0%)
-                (false, true, true) => 36.0 / 101.0,  // measured 41/101 (40.6%)
-                (true, true, true) => 77.0 / 131.0,   // measured 82/131 (62.6%)
+                // Batch 131 (2026-09-08, Plan 112): the two sec
+                // InputValidation adds (wire-frame alloc + secret-file
+                // create) re-measured 35/101 (34.7%, was 41/101 = 40.6% at
+                // Plan 018) -- the sec centroid's new wire/fs vocabulary
+                // (from_be_bytes, vec![0u8; len], File::create) ATTRACTS
+                // generic Rust spans; floor = measured - 5 per the Plan-030
+                // convention. First measured DECAY on a sec arm; the delta
+                // is recorded, not weakened silently (Issue 020 contract).
+                (false, true, true) => 30.0 / 101.0,  // measured 35/101 (34.7%)
+                // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
+                // Batch 130) -- same sec-centroid drift on the full state;
+                // floor = measured - 5.
+                (true, true, true) => 74.0 / 131.0,   // measured 79/131 (60.3%)
             }
         }
     }

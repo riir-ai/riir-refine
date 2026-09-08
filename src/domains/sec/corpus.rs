@@ -22,6 +22,8 @@
 //! | `password-hash-argon2` | `CryptoHygiene` | no (suggest-only, dep-gated) | — (silent on 1.97) |
 //! | `constant-time-secret-compare` | `CryptoHygiene` | yes (strict-gated) | — (silent on 1.97) |
 //! | `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated, P8) | — (silent on 1.97; probe: zero lints fire on the shape) |
+//! | `length-prefix-validate-before-alloc` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the fix must INVENT a limit + an error path) |
+//! | `secret-file-create-without-0600` | `InputValidation` | no (suggest-only) | — (no lint fires; the fix is cfg(unix)-shaped — a portable rewrite is judgment-bearing) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -29,6 +31,14 @@
 //! map is platform-dependent — not parse-only-provable),
 //! `no-box-leak` + `maybe-uninit-requires-justification` (no bounded fix;
 //! clippy owns the direct-chain uninit form at error level).
+//!
+//! Batch 131 (2026-09-08): the `InputValidation` family opens with two
+//! SUGGEST-ONLY rules (dhishwasher/Girder distill, BSL 1.1 — ORIGINAL
+//! fixtures below, shapes cited at the pin in `.research/153`). Both ship
+//! parse-only DETECTORS with zero-FP negative suites
+//! (`proposers::length_prefix_alloc` / `proposers::secret_file_create`);
+//! `collect_edits` arms and `FIXABLE_SEC` membership are deliberately
+//! absent — these rules emit suggestions, never auto-fixes.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -183,6 +193,56 @@ pedantic+nursery+perf+suspicious+correctness+style)"
             buggy_code: "pub fn sort_scores(v: &mut [f32]) {\n    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));\n}\n".to_string(),
             fixed_code: "pub fn sort_scores(v: &mut [f32]) {\n    v.sort_by(|a, b| a.total_cmp(b));\n}\n".to_string(),
             family: SecFamily::PanicSafety,
+        },
+        // ══ Batch 131 (Girder distill) — the InputValidation family opens. ══
+        // ══ Both suggest-only: detectors ship, collect_edits arms do not. ══
+        // ── length-prefix-validate-before-alloc (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "length-prefix-validate-before-alloc".to_string(),
+            sec_concept: "one packet controls the allocation: a length parsed from a PEER \
+(u32::from_be_bytes on a wire header, or a Content-Length-style parse::<usize>()) \
+flowing into vec![0u8; len] with NO intervening `0 < len <= limit` check lets a \
+4-byte header demand a multi-GB buffer — allocation-size DoS (OOM/abort); the \
+cost axis is SECURITY, not cycles. Validate BEFORE the alloc: \
+`if len == 0 || len > MAX { return Err(..) }`. The class recurs even in careful \
+code — the evidence is BOTH WAYS in one codebase (an unbounded transport beside \
+its own bounded twin, same author). Suggest-only: the fix must invent a limit \
+constant and an error-return path the fn may not have. Honest recall limits: \
+cross-fn length origins (helper parses, caller allocs) undetected; bare-ident \
+lengths only (field/method origins out); vec!-repeat form only (`with_capacity` \
+from trusted metadata is out of scope by design); the shape proves a MISSING \
+VALIDATION, not an untrusted source — sites parsing trusted lengths fire and \
+review decides. Batch 131 / Research 153 / Plan 112."
+                .to_string(),
+            buggy_code: "pub fn read_frame(stream: &mut std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    let mut prefix = [0_u8; 4];\n    std::io::Read::read_exact(stream, &mut prefix)?;\n    let len = u32::from_be_bytes(prefix) as usize;\n    let mut body = vec![0_u8; len];\n    std::io::Read::read_exact(stream, &mut body)?;\n    Ok(body)\n}\n"
+                .to_string(),
+            fixed_code: "pub const MAX_FRAME_BYTES: usize = 1 << 20;\n\npub fn read_frame(stream: &mut std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    let mut prefix = [0_u8; 4];\n    std::io::Read::read_exact(stream, &mut prefix)?;\n    let len = u32::from_be_bytes(prefix) as usize;\n    if len == 0 || len > MAX_FRAME_BYTES {\n        return Err(std::io::Error::new(\n            std::io::ErrorKind::InvalidData,\n            \"frame length out of range\",\n        ));\n    }\n    let mut body = vec![0_u8; len];\n    std::io::Read::read_exact(stream, &mut body)?;\n    Ok(body)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── secret-file-create-without-0600 (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "secret-file-create-without-0600".to_string(),
+            sec_concept: "a credential-named file (secret/password/passwd/credential/\
+token/hmac vocabulary, word-boundary) created world-readable: `File::create` \
+(and `fs::write`, and an OpenOptions create/create_new WITHOUT `.mode(..)`) \
+makes the file 0644-by-umask, readable by every local user — harden at create \
+time with `#[cfg(unix)] OpenOptions::mode(0o600)`, or portably AFTER create \
+with `#[cfg(unix)] set_permissions(Permissions::from_mode(0o600))` (the house \
+`kat_account::write_private` form). Suggest-only: a portable mechanical fix is \
+not parse-only-provable (Windows `from_mode` maps coarsely; hardening semantics \
+are per-OS). Honest recall limits: the vocabulary is deliberately NARROW — \
+`key`/`identity`/`private`/`pem` are excluded as ambiguous (public keys, \
+identity metadata, public certs), so `api_key`/`private_key` writes are missed; \
+any `mode`/`set_permissions`/`umask` marker anywhere in the fn suppresses it \
+(one hardened file hides a sibling hazard — conservative). Batch 131 / \
+Research 153 / Plan 112."
+                .to_string(),
+            buggy_code: "pub fn save_session_token(path: &std::path::Path, token: &str) -> std::io::Result<()> {\n    let mut f = std::fs::File::create(path)?;\n    use std::io::Write;\n    f.write_all(token.as_bytes())\n}\n"
+                .to_string(),
+            fixed_code: "pub fn save_session_token(path: &std::path::Path, token: &str) -> std::io::Result<()> {\n    let mut f = std::fs::File::create(path)?;\n    #[cfg(unix)]\n    {\n        use std::os::unix::fs::PermissionsExt;\n        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;\n    }\n    use std::io::Write;\n    f.write_all(token.as_bytes())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
         },
     ]
 }
