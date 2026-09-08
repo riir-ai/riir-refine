@@ -3917,3 +3917,23 @@ Rationale: 36/58 historical notes have no Status line, which is benign only
 because they are closed records; the two genuinely-pending notes (053, 058)
 DO carry explicit Status lines. The vocabulary makes that distinction
 machine-skimmable for future sessions.
+
+### The consent heartbeat + v0.1.3 (2026-09-08, 77e26a8 + a38a473)
+
+`cargo heal --mine`/`--unmine` now send a one-shot SIGNED tier note
+(`POST /mining/consent`, `kat_consent_client.rs`, golden signing-message
+dual-pinned with the service's `ConsentDoc` — riir-dapps `548d336`), so the
+ai.gist.rs adoption surface can show per-machine engagement tiers. Issue 075
+filed the per-run-burn verdict (NOT LGTM) and refined Proposals 008/010 in
+the same commit. v0.1.3 cut via `manual_release.sh` (Actions budget still
+exhausted), tap + scoop bumped by hand. TWO live lessons in one e2e:
+(1) macOS shells set `HOSTNAME` as a shell variable WITHOUT exporting it —
+the first tier note landed with an empty machine label; the fix (a38a473)
+adds the `hostname`-binary fallback to the env cascade, and the release was
+republished same-hour (zero consumers) with the tap re-pinned; brew reinstall
+verified byte-identical to the release artifact.
+(2) `--unmine`'s logout half (74f0865) deletes the account key the heartbeat
+needs — the correct order is consent-write THEN note, and `--mine` after a
+logout honestly skips with "not logged in". Final live state: m3 recorded
+in/out/in across the e2e, 177-row sync accepted by the service, the free-vs-
+mine split + machines table live on the front page.
