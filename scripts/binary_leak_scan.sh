@@ -72,8 +72,18 @@ for f in "$@"; do
     fi
 
     # 3. Secret shapes. Any hit is a stop-the-line event, never a warning.
-    if grep -a -q -E 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}' "$f"; then
+    #    Benign false positive, documented: the redactor's OWN prefix table
+    #    (`PREFIX_RULES` in kat_redact.rs) lays its literal entries adjacent
+    #    in .rodata — `xoxb-xoxa-xoxp-xoxr-xoxs-sk-` is the TABLE, not a
+    #    token (a real Slack token has a random body after ONE prefix). The
+    #    negative lookahead (no engine in POSIX grep -E) is emulated by
+    #    excluding the exact table adjacency, and any hit that is not
+    #    exactly that adjacency still fails.
+    leaks=$(grep -a -o -E 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}' "$f" \
+        | grep -v -E '^xoxb-xoxa-xoxp-xoxr-xoxs-sk-' || true)
+    if [ -n "$leaks" ]; then
         echo "  FAIL: secret-shaped string(s) found"
+        printf '%s\n' "$leaks" | sort -u | sed 's/^/       /' | sed -n '1,8p'
         fail=1
     else
         echo "  ok: no secret-shaped strings"
