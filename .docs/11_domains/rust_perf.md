@@ -23,9 +23,31 @@
 
 ## Corpus
 
-117 rules across 12 categories (rust-optimize skill checklist +
+120 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 117 rules — Batch 135 (2026-09-09,
+profiling guide, Research 032; **now 120 rules — Batch 136 (2026-09-09,
+Plan 115 — the Lattimore "Graph Algorithms in Rayon" blog distill, three
+NotBenchable-annotated concurrency rules, all decision-content — the source
+is a qualitative approach comparison with NO measured numbers and the
+author's own closing verdict IS the ladder): `dynamic-work-parallelism-ladder`
+(work unknown in advance → pick the structure by COMPOSITION requirements
+first, allocation second: scoped spawning is the composition-safe default
+despite the per-task heap boxing; spawn_broadcast + private job control
+STARVES the pool — parked threads are unavailable to rayon; channel +
+par_bridge does not compose — an owned value created in one work item
+cannot be split into borrowed work items), `sender-per-work-item-terminates-channel`
+(the dynamic-queue shutdown idiom: every work item carries a sender clone,
+drop the ORIGINAL after seeding, the channel closes when the LAST item
+drops — termination by ownership, no sentinel/counter/close call;
+the drop(tx) is load-bearing — forget it and the receiver hangs forever),
+`nested-par-inside-channel-bridge-deadlocks` (the correctness lead: a
+nested par_iter inside bridge-fed work can STEAL a task from another
+worker, block pulling the next item from the SAME channel, and the
+interrupted item's sender clone keeps the channel open — rayon tasks are
+THREAD-TIED so the blocked stealer never releases it; fixes in order:
+serialize the inner section / pre-materialize its inputs / move the whole
+traversal to scoped spawning; the async/await axis recorded as the
+author's unimplemented speculation). Previously 117 — Batch 135 (2026-09-09,
 Research 155 / Plan 114 — the Wild-linker "RustForge wild performance
 tricks" article distill, three MEASURED benchable rules, one allocation +
 two concurrency): `atomic-vec-zero-cost-convert` (Vec<T> ↔ Vec<AtomicT>
@@ -215,11 +237,14 @@ category (23 rules; Batch 75 added `encoded-layout-borrowed-view` + `group-keys-
 `narrow-counter-overflow-promotion`; Batch 85 added
 `weight-tile-consumption-order`; Batch 86 added
 `bitflag-pack-when-footprint-dominates`);
-concurrency has 10 (Issue 014 added the two metric-mismatch rules; Batch 65
+concurrency has 13 (Issue 014 added the two metric-mismatch rules; Batch 65
 added the two measured contention rules; Batch 73 added
 `lock-guard-narrow-field-accessor`; Batch 78 added
 `cache-line-block-partitioned-lock`; Batch 135 added
-`atomic-vec-zero-cost-convert` + `partitioned-mut-slices-zero-sync`);
+`atomic-vec-zero-cost-convert` + `partitioned-mut-slices-zero-sync`; Batch
+136 added the rayon-queue trio `dynamic-work-parallelism-ladder` +
+`sender-per-work-item-terminates-channel` +
+`nested-par-inside-channel-bridge-deadlocks`, all NotBenchable-annotated);
 caching has 4 (Issue 014 added `regex-hoist-lazylock`; Batch 73 added
 `sort-key-cache-precompute-out-of-lock`; Batch 76 added
 `eager-pointer-collect-lazy-fetch`); arithmetic has 8
@@ -240,7 +265,7 @@ annotation is x86-source-cited only, the Batch 86 bitflag rule is a
 deterministic size axis, the Batch 94 read-coalescing annotation is
 workload-level (source-reported, the cacheability coupling is the decision
 content), and the Batch 109 rule is the measurement-honesty axis itself (a
-timing gate whose work folds away has no nonzero baseline to ratio). 60 of 117 carry
+timing gate whose work folds away has no nonzero baseline to ratio). 63 of 120 carry
 `context_notes` — the class ledger that follows is the early-corpus
 accounting; Batches 83–112 kept adding to the annotated set, and the per-rule
 verdicts live in the table below — 11 verdict-class (4 `ParetoDominated` + 7

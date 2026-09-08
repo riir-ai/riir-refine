@@ -9,8 +9,8 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 117 entries across 12 categories (complexity 19, allocation 23, simd 8,
-//! layout 10, iterators 10, concurrency 10, io 18, arithmetic 8, dispatch 5,
+//! 120 entries across 12 categories (complexity 19, allocation 23, simd 8,
+//! layout 10, iterators 10, concurrency 13, io 18, arithmetic 8, dispatch 5,
 //! caching 4, bevy 1, wasm 1). 90 are benchable; 27 are honestly
 //! NotBenchable — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
@@ -141,7 +141,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (90/117):
+//! Currently benchable (90/120):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -228,8 +228,11 @@
 //! - `atomic-vec-zero-cost-convert` (Atomic::new-per-element collect from a borrowed vec → into_iter().map on the OWNED vec — same-layout collect reuses the buffer and the loop compiles out; alloc axis 2→1; Batch 135, Wild-linker article distill)
 //! - `vec-reuse-across-lifetime-change` (fresh Vec<&'iter T> per iteration → owned buffer retargeted in place via a const size/align assert + clear() + empty collect — alloc axis 1→0; Batch 135, Wild-linker article distill)
 //! - `partitioned-mut-slices-zero-sync` (shared Vec under one contended Mutex → disjoint chunks_mut partition, zero synchronization — sizes = thread counts; Batch 135, Wild-linker article distill)
+//! - `dynamic-work-parallelism-ladder` (work-unknown-in-advance structure ladder: scoped spawning is the composition-safe default despite the boxing — spawn_broadcast starves the pool, channel+par_bridge does not compose; Batch 136, rayon-graph blog distill)
+//! - `sender-per-work-item-terminates-channel` (dynamic queue shutdown is ownership-driven: seed sender clones per item, drop the original, the channel closes when the last item drops; Batch 136, rayon-graph blog distill)
+//! - `nested-par-inside-channel-bridge-deadlocks` (a nested par_iter in par_bridge-fed work steals, blocks on the SAME channel, and the interrupted item's sender clone keeps it open — thread-tied tasks hang; Batch 136, rayon-graph blog distill)
 //!
-//! Not benchable (27/117) — honest (count repaired by Batch 135; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
+//! Not benchable (30/120) — honest (count repaired by Batch 135; the Batch 136 rayon-queue rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -335,7 +338,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 117 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 120 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (23 rules; Batch 86 added 2; Batch 135
@@ -346,7 +349,9 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 /// each); layout has 10 (Batch 61 + 85 + 86 + 112 added); concurrency has 10
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1; Batch 135 added the zero-cost
-/// atomic conversion + the zero-sync partition);
+/// atomic conversion + the zero-sync partition; Batch 136 added the
+/// dynamic-work ladder + the sender-termination idiom + the par_bridge
+/// deadlock);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the DestProp branch-site rule; Batch 101 added
 /// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
@@ -3156,6 +3161,107 @@ fn ab_bench(cfg: &Config, control: &str, candidate: &str) -> f64 {
             context_notes: Some("MEASURED ParetoDominant 4/0/0, verdict-stable x2 (M3 Max, release, 2026-09-09 — Batch 135 benches; sizes = THREAD counts per the align-64 precedent): 6.90x/9.12x/11.81x/6.13x at 1/2/4/8 threads — the per-bump Mutex serializes even UNCONTENDED (a lock/unlock per bump is ~20ns against a plain store), and contention widens it; alloc axis EXEMPT (see bench.rs ALLOC_AXIS_EXEMPT): the contended std Mutex allocates nondeterministically on macOS in the pthread slow path — the Batch-78 probe evidence covers the same platform class. THE DECISION CONTENT is the disjointness proof: the transform is legal exactly when each worker's writes land in a known contiguous range (contiguous id ranges per object — the Wild linker shape; per-thread partitions of an image/row band; per-shard cells). ANTI-REGIMES: scattered/overlapping access patterns (use fine-grained locks or atomics), read-share-write-rare workloads (RwLock), or when the partition itself costs more than the contention (tiny arrays). Composes with vec-with-capacity (reserve before partition) and reuse-allocation-clear (persistent per-worker buffers). Distinct from cache-line-block-partitioned-lock (that REDUCES contention by partitioning LOCK GRANULARITY — still locks, for scattered per-item writes; this ELIMINATES synchronization via ownership partition for provably-ranged writes — the two answer different access patterns and can compose: partition into worker regions, block-partition the remainder) and from parallel-disjoint-pread-hides-cold-page-latency (io positional reads on a shared fd; this is shared-MEMORY mutation). Fixtures original, std-only (thread::scope + chunks_mut — no rayon dep); the article's split_off_mut form is nightly-shaped and the portable split_at_mut/chunks_mut core is what lands. Source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — technique 1. Batch 135 / Plan 114 / Research 155.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(partitioned_mut_slices_zero_sync_bench_spec()),
+        },
+        // ── Batch 136 (2026-09-09, Plan 115 — the Lattimore "Graph Algorithms
+// in Rayon" blog distill): dynamic work (graph traversal — work unknown
+// in advance) on a rayon pool. All three rules are NotBenchable — the
+// source is a QUALITATIVE approach comparison with NO measured numbers,
+// and the author's own closing verdict is the decision content.
+// ── concurrency: dynamic-work parallelism ladder ────────────────────
+        PerfRule {
+            rule_id: "dynamic-work-parallelism-ladder".to_string(),
+            name: "parallel work whose amount is UNKNOWN IN ADVANCE (graph traversal from roots) needs a STRUCTURE decision, not a perf decision: scoped spawning is the composition-safe default despite the per-task heap boxing — pick by composition requirements first, allocation second; spawn_broadcast + private job control starves the pool (parked threads are unavailable to rayon), and a channel + par_bridge queue does not compose with borrowed work".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "// The team picked the queue structure for ALLOCATION reasons (rayon\n// documents scoped spawning as 'more expensive' — it heap-boxes each\n// task), then the algorithm grew: two traversal jobs need to combine,\n// and one work item must split an owned value into borrowed sub-work.\n// Neither fits the channel shape: the borrows cannot cross work items,\n// so the queue's WorkItem enum accretes every job's variants and the\n// jobs end up hand-inlined into one monster enum.\nenum WorkItem {\n    Visit(Node),\n    ProcessChunk(/* borrowed from an earlier item? impossible */),\n}".to_string(),
+            fixed_code: "// Composition first: scoped spawning keeps rayon's work-stealing\n// available to every task (nested par_iter works), borrows cross\n// freely within the scope, and jobs compose by spawning, not by enum\n// accretion. The per-task heap boxing is the PRICE of that default;\n// pay it until profiling proves the allocations matter.\nuse rayon::Scope;\n\nfn explore_all(roots: &[Node]) {\n    rayon::scope(|s| {\n        for node in roots {\n            s.spawn(|s: &Scope<'_>| explore(node, s));\n        }\n    });\n}\n\nfn explore(node: &Node, s: &Scope<'_>) {\n    // nested par_iter INSIDE the traversal works — the pool is not\n    // privately captured;\n    for child in node.children() {\n        s.spawn(|s| explore(child, s));\n    }\n}".to_string(),
+            context_notes: Some("QUALITATIVE LADDER, source-shipped (the author's own measured trade: 'a channel works fine for simple tasks and avoids the heap allocations, but it really doesn't compose at all well' — he RETURNED to scoped spawning; honestly NotBenchable — the decision content is the ladder, not a speed claim). THE LADDER for work-unknown-in-advance parallelism: (1) spawn_broadcast + own job control — COMPLEX and STARVES the pool: the thread that would run a nested par_iter finds all other threads parked in private job control, unavailable to rayon; (2) channel + par_bridge — alloc-light but deadlocks under nested par_iter (see nested-par-inside-channel-bridge-deadlocks) and fails composition (an owned value created in one work item cannot be split into borrowed work items — the borrow checker refuses; two queue jobs needing sequenced borrows cannot combine); (3) SCOPED SPAWNING — the composition-safe default; rayon's 'more expensive' doc warning refers to the per-task heap boxing, which is the price of stealable, composable tasks. THE DECISION CONTENT: choose by composition first, allocations second — the doc warning is the trap. FUTURE axis (recorded, not a rule): async/await detaches tasks from threads, so a steal-then-block would resume elsewhere — the author speculates, has not tried. Related upstream note: rayon try_for_each_init runs init per WORK ITEM, not per thread — per-thread arenas multiply. Distinct from partitioned-mut-slices-zero-sync (KNOWN disjoint work — this is UNKNOWN work) and from channel-send-batching-unpark (producer-side send batching on a FIXED worker set — this is queue STRUCTURE for dynamic work). Fixtures original (rayon + a Node shape). Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── concurrency: the dynamic-queue shutdown idiom ────────────────
+        PerfRule {
+            rule_id: "sender-per-work-item-terminates-channel".to_string(),
+            name: "a dynamic work queue over an unbounded channel terminates only when the LAST sender drops — seed each work item with a CLONE of the send end, drop the ORIGINAL after seeding, and let completion be implicit: when the final item is processed its sender clone drops and the receiver's iterator ends".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::mpsc;
+
+// The seed loop keeps the original sender alive in the spawning
+// closure, and work items have NO way to enqueue children — so the
+// traversal terminates only because it cannot express discovered
+// work. Add child-discovery and the receiver never sees a close:
+// the original sender outlives the loop inside the worker's closure
+// capture, and the for-iterator blocks forever on the next recv.
+fn walk(roots: Vec<Node>) {
+    let (tx, rx) = mpsc::channel();
+    for r in roots {
+        tx.send(r).unwrap();
+    }
+    for node in rx {                       // blocks: tx never drops
+        for child in node.children() {     // ...and cannot enqueue them
+            // tx.send(child) — tx is not reachable here
+        }
+    }
+}".to_string(),
+            fixed_code: "// Every work item CARRIES a clone of the sender; the original is
+// dropped after seeding. Discovering children is just sending from
+// the clone the item holds, and when the LAST item finishes, the
+// last clone drops — the channel closes and the par_bridge/enumerate
+// ends by construction. No sentinel, no count, no close() call.
+fn walk(roots: Vec<Node>) {
+    let (tx, rx) = crossbeam_channel::unbounded();
+    for r in roots {
+        tx.send(Work::Visit(r, tx.clone())).unwrap();
+    }
+    drop(tx); // the seed's copy must go, or nothing ever closes
+    for Work::Visit(node, tx) in rx {
+        for child in node.children() {
+            tx.send(Work::Visit(child, tx.clone())).unwrap();
+        }
+    } // last sender dropped inside the loop — iteration ends here
+}".to_string(),
+            context_notes: Some("IDIOM RULE, source-shipped (the working example is the post's channel+par_bridge approach; honestly NotBenchable — it is the CORRECTNESS/termination shape, not a speed claim). THE DECISION CONTENT: termination of a dynamically-discovered work queue must be OWNERSHIP-DRIVEN — 'the channel closes when the last work item drops its sender clone' replaces sentinel values, atomic counters + an explicit close, or a separate done-flag thread. The drop(tx) after seeding is LOAD-BEARING: forgetting it hangs the receiver forever (the classic bug this idiom exists to prevent). Regime: unbounded channels feeding par_bridge or a plain for-over-rx loop where work is DISCOVERED during processing (graph reachability, transitive deps, crawl frontiers). ANTI-REGIMES: fixed work known upfront (just par_iter over the collection — no channel needed); producer/consumer THROUGHPUT shaping (that is bounded-channel-backpressure / channel-send-batching-unpark — different axis entirely); cancellation mid-queue needs an explicit flag, ownership close alone cannot signal abort. Distinct from nested-par-inside-channel-bridge-deadlocks (the FAILURE mode of this same queue shape under nested rayon work — the idiom is correct; the hazard is mixing it with par_bridge's steal behavior). Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── concurrency: nested par_iter inside par_bridge work = deadlock ─
+        PerfRule {
+            rule_id: "nested-par-inside-channel-bridge-deadlocks".to_string(),
+            name: "a nested par_iter inside par_bridge-fed work can DEADLOCK: the inner parallel iterator steals a task from another worker, blocks pulling the NEXT item from the same channel, and the work item it interrupted still holds a sender clone — rayon tasks are THREAD-TIED, so the blocked stealer never releases it and the channel never closes".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use crossbeam_channel::unbounded;
+use rayon::prelude::*;
+
+// The queue feeds work out; each item ALSO runs a nested parallel
+// section. One worker's inner par_iter steals a task from another
+// thread; that stolen task's own for_in_rx.next() blocks waiting for
+// MORE work — but the interrupted work item holds a sender clone, so
+// the channel cannot close. Thread-tied tasks wait on themselves:
+// four workers, zero progress, no panic — just a silent hang.
+fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<Item>) {
+    for item in rx.into_iter().par_bridge() {
+        let parts = split(item);
+        parts.par_iter().for_each(|p| process(p)); // steals ...
+        let _ = tx.clone(); // ... while this clone is still held
+    }
+}".to_string(),
+            fixed_code: "// Keep nested parallel sections OUT of bridge-fed items: either run
+// the inner work SEQUENTIALLY inside queue items (the queue already
+// parallelizes across items), or hand the nested section its own
+// pre-materialized inputs so it cannot block on the queue it feeds
+// from. If nested rayon work is unavoidable per item, switch the
+// whole job to scoped spawning — stealable scope tasks resume on
+// other threads instead of pinning a worker.
+fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<Item>) {
+    for item in rx {                       // sequential recv loop
+        for p in split(&item) {
+            process(p);                    // inner work inline, no steal
+        }
+    }
+    drop(tx);
+}".to_string(),
+            context_notes: Some("CORRECTNESS LEAD, source-explained (the mechanism paragraph is the post's own subtle-case walkthrough; honestly NotBenchable — a deadlock is not an A/B axis). THE DEADLOCK CHAIN, each link load-bearing: (1) par_bridge workers PULL from the channel, and rayon's par_iter may STEAL the pull task from a blocked worker's thread; (2) the stolen pull BLOCKS on rx.recv() for the next item; (3) the channel stays open because the work item that was interrupted still holds its SENDER clone; (4) rayon tasks are thread-TIED — the blocked stealer never resumes far enough to drop anything. Result: silent hang, no panic. REGIME: any queue shape where work items hold channel senders AND their processing runs nested rayon collectors. FIXES in order: serialize the inner section (the queue already parallelizes), pre-materialize inner inputs before the parallel section, or move the whole traversal to scoped spawning (composition-safe default — see dynamic-work-parallelism-ladder). FUTURE axis: async tasks are NOT thread-tied, so steal-then-block would migrate — the author's speculation, unimplemented. Distinct from nested-parallelism-deadlock notes in rayon docs (that warns scoped spawning is expensive; this is the channel-queue interaction the docs do not name) and from sender-per-work-item-terminates-channel (the correct shutdown idiom this hazard breaks). Fixtures original. Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
         },
     ])
 }
@@ -8464,7 +8570,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 117); // Batch 135 (rustforge) 114 → 117
+        assert_eq!(corpus.entries.len(), 120); // Batch 136 (rayon) 117 → 120
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9998,10 +10104,13 @@ mod tests {
         // annotations (13 rules) were never counted here — the pin sat at the
         // Batch-109-era 14 while reality moved to 27. The test only compiles
         // under `rust_perf_bench`, so nobody ran it.
-        assert_eq!(without_spec.len(), 27); // 117 total − 90 benchable
+        assert_eq!(without_spec.len(), 30); // 120 total − 90 benchable
         assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
         assert!(without_spec.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — the deterministic size axis (12 → 8), not a speed bench
+        assert!(without_spec.contains(&"dynamic-work-parallelism-ladder")); // Batch 136 — qualitative ladder, the author's verdict IS the content
+        assert!(without_spec.contains(&"sender-per-work-item-terminates-channel")); // Batch 136 — termination/ownership shape, not an A/B axis
+        assert!(without_spec.contains(&"nested-par-inside-channel-bridge-deadlocks")); // Batch 136 — a deadlock is not an A/B axis
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -10063,7 +10172,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 60, "expected 60 context-annotated rules (Batch 135 added the three Wild-linker article annotations)");
+        assert_eq!(annotated.len(), 63, "expected 63 context-annotated rules (Batch 136 added the three rayon-queue annotations)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -10133,7 +10242,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 60); // Batch 135: 57 → 60
+        assert_eq!(annotated, 63); // Batch 136: 60 → 63
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -10165,9 +10274,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 60 annotated rules.
+        // Filter to the 63 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 60, "expected 60 annotated rules");
+        assert_eq!(annotated.len(), 63, "expected 63 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -11436,6 +11545,81 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Batch 136 (2026-09-09, Plan 115 — the Lattimore "Graph Algorithms in
+    /// Rayon" blog distill): the three new rules are present, parse, and
+    /// carry the concept needles. NotBenchable by design (qualitative source
+    /// — no bench_spec), so the without_spec membership pin above carries
+    /// the count half and this gate carries the presence/parse half.
+    #[test]
+    fn batch136_rules_present_and_parse() {
+        let corpus = build_perf_seed_corpus();
+        for (rid, category, needles) in [
+            (
+                "dynamic-work-parallelism-ladder",
+                "concurrency",
+                vec!["UNKNOWN IN ADVANCE", "scoped spawning", "composition"],
+            ),
+            (
+                "sender-per-work-item-terminates-channel",
+                "concurrency",
+                vec!["drop(tx)", "clone", "closes"],
+            ),
+            (
+                "nested-par-inside-channel-bridge-deadlocks",
+                "concurrency",
+                vec!["par_bridge", "steal", "THREAD-TIED"],
+            ),
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-136 rule '{rid}' missing from corpus"));
+            assert_eq!(e.category, category, "batch-136 rule '{rid}' category");
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "batch-136 '{rid}' buggy/fixed must both parse"
+            );
+            assert!(
+                e.context_notes.is_some(),
+                "batch-136 '{rid}' must carry its NotBenchable rationale in context_notes"
+            );
+            let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+            for needle in needles {
+                assert!(text.contains(needle), "batch-136 {rid} concept {needle:?} missing");
+            }
+        }
+    }
+
+    /// Batch 136 — G1 exactness: the idiom fixture's ownership-driven close
+    /// actually terminates (the sender-per-work-item shape with the original
+    /// sender dropped), and the deadlock fixture's SEQUENTIAL fix drains a
+    /// discovered frontier completely. Runs on std only (mpsc, no rayon —
+    /// the deadlock shape is pinned by the rule's mechanism prose, not
+    /// reproduced here; a hang in a unit test is not a verdict).
+    #[test]
+    fn batch136_termination_parity() {
+        use std::sync::mpsc;
+
+        // Ownership-driven close: discovered children enqueue from the
+        // clone they carry; the ORIGINAL sender drops before draining.
+        let (tx, rx) = mpsc::channel::<u32>();
+        for seed in [1u32, 2, 3] {
+            tx.send(seed).unwrap();
+        }
+        drop(tx);
+        let mut visited: Vec<u32> = Vec::new();
+        let mut queue: Vec<u32> = rx.into_iter().collect();
+        while let Some(n) = queue.pop() {
+            visited.push(n);
+            if n > 1 {
+                queue.push(n / 2); // discovered work — legal: we own the drain
+            }
+        }
+        assert_eq!(visited.len(), 5, "seeds 1,2,3 + discovered 1-from-3 and 1-from-2");
+        assert_eq!(*visited.last().unwrap(), 1, "the frontier must reach the leaf");
     }
 }
 
