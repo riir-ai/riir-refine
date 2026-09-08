@@ -2307,6 +2307,7 @@ Requesting a domain whose feature is off is an error (T2.4 gating). --verify nee
     std::process::exit(2);
 }
 
+#[derive(Default)]
 struct Args {
     suggest: bool,
     fix: bool,
@@ -2878,15 +2879,16 @@ fn parse_args() -> Args {
 ///
 /// Returns the exact message `main` prints before `usage()`.
 fn validate_mode_flags(
-    suggest: bool,
-    fix: bool,
-    fix_compile: bool,
-    dump_trajectories: bool,
-    write: bool,
-    verify: bool,
-    verify_args: bool,
-    has_command: bool,
+    args: &Args,
 ) -> Result<(), &'static str> {
+    let (suggest, fix, fix_compile, dump_trajectories) =
+        (args.suggest, args.fix, args.fix_compile, args.dump_trajectories);
+    let (write, verify, verify_args, has_command) = (
+        args.write,
+        args.verify,
+        args.verify_args.is_some(),
+        args.command.is_some(),
+    );
     if !suggest && !fix && !fix_compile && !dump_trajectories && !has_command {
         return Err("no mode given — use --suggest, --fix, --fix-compile, or --dump-trajectories");
     }
@@ -4302,7 +4304,7 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 }
 
 fn main() {
-    let mut args = parse_args();
+    let args = parse_args();
 
     // ── Proposal 005 T0.1 + T1.6: KAT subcommands (standalone — no paths) ─
     #[cfg(feature = "kat_service")]
@@ -4686,23 +4688,14 @@ fn main() {
     if args.bare_default {
         println!(
             "cargo heal: dry run — reviewing {} (no edits). Real fixes: cargo heal --fix",
-            if args.paths.len() == 1 && args.paths[0] == std::path::PathBuf::from(".") {
+            if args.paths.len() == 1 && args.paths[0] == std::path::Path::new(".") {
                 "the current directory".to_string()
             } else {
                 format!("{} path(s)", args.paths.len())
             }
         );
     }
-    if let Err(msg) = validate_mode_flags(
-        args.suggest,
-        args.fix,
-        args.fix_compile,
-        args.dump_trajectories,
-        args.write,
-        args.verify,
-        args.verify_args.is_some(),
-        args.command.is_some(),
-    ) {
+    if let Err(msg) = validate_mode_flags(&args) {
         eprintln!("{msg}");
         usage();
     }
@@ -7047,58 +7040,71 @@ mod corpus_stats_needle_tests {
 /// this task closed) fails here instead of in a user's shell.
 #[cfg(test)]
 mod mode_flag_tests {
-    use super::validate_mode_flags as v;
+    use super::{validate_mode_flags as v, Args};
+
+    /// Named-field construction keeps each matrix row self-describing —
+    /// the positional-8-bool form this replaced is the shape
+    /// `clippy::too_many_arguments` exists to name.
+    fn a(suggest: bool, fix: bool, fix_compile: bool, dump_trajectories: bool) -> Args {
+        Args {
+            suggest,
+            fix,
+            fix_compile,
+            dump_trajectories,
+            ..Args::default()
+        }
+    }
 
     #[test]
     fn accepted_combinations() {
         // The four modes alone (T4.3b adds --dump-trajectories).
-        assert!(v(true, false, false, false, false, false, false, false).is_ok(), "--suggest");
-        assert!(v(false, true, false, false, false, false, false, false).is_ok(), "--fix");
-        assert!(v(false, false, true, false, false, false, false, false).is_ok(), "--fix-compile");
-        assert!(v(false, false, false, true, false, false, false, false).is_ok(), "--dump-trajectories");
+        assert!(v(&a(true, false, false, false)).is_ok(), "--suggest");
+        assert!(v(&a(false, true, false, false)).is_ok(), "--fix");
+        assert!(v(&a(false, false, true, false)).is_ok(), "--fix-compile");
+        assert!(v(&a(false, false, false, true)).is_ok(), "--dump-trajectories");
         // --write with each writing mode.
-        assert!(v(false, true, false, false, true, false, false, false).is_ok(), "--fix --write");
-        assert!(v(false, false, true, false, true, false, false, false).is_ok(), "--fix-compile --write");
+        assert!(v(&Args { write: true, ..a(false, true, false, false) }).is_ok(), "--fix --write");
+        assert!(v(&Args { write: true, ..a(false, false, true, false) }).is_ok(), "--fix-compile --write");
         // The trap this task closed: --fix-compile --write --verify-args.
         assert!(
-            v(false, false, true, false, true, false, true, false).is_ok(),
+            v(&Args { write: true, verify_args: Some(String::new()), ..a(false, false, true, false) }).is_ok(),
             "--fix-compile --write --verify-args \"...\""
         );
         // --verify still needs --fix (its batch semantics are --fix's).
-        assert!(v(false, true, false, false, true, true, false, false).is_ok(), "--fix --write --verify");
-        assert!(v(false, true, false, false, true, true, true, false).is_ok(), "--fix --verify --verify-args");
+        assert!(v(&Args { write: true, verify: true, ..a(false, true, false, false) }).is_ok(), "--fix --write --verify");
+        assert!(v(&Args { write: true, verify: true, verify_args: Some(String::new()), ..a(false, true, false, false) }).is_ok(), "--fix --verify --verify-args");
         // The owner's just-works defaults (2026-09-08): a bare invocation
         // with a KAT command is NOT a mode error, and no-mode-no-command is
         // the dry run (main defaults it BEFORE the matrix, so the matrix
         // itself never sees that shape — but a KAT command must satisfy it).
-        assert!(v(false, false, false, false, false, false, false, true).is_ok(), "KAT command alone");
+        assert!(v(&Args { command: Some(super::KatCommand::Account), ..a(false, false, false, false) }).is_ok(), "KAT command alone");
     }
 
     #[test]
     fn rejected_combinations() {
-        assert!(v(false, false, false, false, false, false, false, false).is_err(), "no mode");
+        assert!(v(&a(false, false, false, false)).is_err(), "no mode");
         assert!(
-            v(false, false, false, false, true, false, false, false).is_err(),
+            v(&Args { write: true, ..a(false, false, false, false) }).is_err(),
             "--write without a mode"
         );
         assert!(
-            v(false, false, false, false, false, true, false, false).is_err(),
+            v(&Args { verify: true, ..a(false, false, false, false) }).is_err(),
             "--verify without --fix"
         );
         assert!(
-            v(false, false, true, false, false, true, false, false).is_err(),
+            v(&Args { verify: true, ..a(false, false, true, false) }).is_err(),
             "--verify with --fix-compile does NOT satisfy the --fix requirement"
         );
         assert!(
-            v(true, false, false, false, false, false, true, false).is_err(),
+            v(&Args { verify_args: Some(String::new()), ..a(true, false, false, false) }).is_err(),
             "--verify-args without --verify/--fix-compile"
         );
         assert!(
-            v(false, false, true, true, false, false, false, false).is_err(),
+            v(&a(false, false, true, true)).is_err(),
             "--dump-trajectories is standalone (no other mode)"
         );
         assert!(
-            v(false, false, false, true, true, false, false, false).is_err(),
+            v(&Args { write: true, ..a(false, false, false, true) }).is_err(),
             "--write does not apply to --dump-trajectories"
         );
     }
