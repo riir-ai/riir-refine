@@ -805,6 +805,16 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 name = "kat_burn_stack"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# Issue 075 (owner soft gate): the depleted-account refusal through the REAL
+# binary — all four predicate legs driven at the process boundary (exit 1 +
+# both refuel paths on the refuse leg; the marker / positive balance /
+# kill-switches on the allow legs). Same feature set as kat_burn_stack:
+# `kat_transport` for the ack's balance half + the cargo-heal bin's own
+# required-features so CARGO_BIN_EXE_cargo-heal exists.
+[[test]]
+name = "kat_soft_gate_cli"
+required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]

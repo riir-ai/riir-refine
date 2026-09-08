@@ -37,8 +37,13 @@
 //! multiply — the whole reason per-unit burn beat the volume-tiered lease at
 //! Phase 0; see Plan 024's decision record). Still **accounting-only** (G9d):
 //! the balance is a local projection, the server ledger is the authority
-//! (caveat #9), and healing never blocks on it (G3 — warn-and-pay, never
-//! brick). The watermark design keeps reprices honest: settle charges only
+//! (caveat #9), and the projection itself never blocks a run (G3 —
+//! warn-and-pay). The BLOCKING half lives server-side since Issue 075 (the
+//! owner's soft gate, 2026-09-08): a depleted, logged-in, SYNCED,
+//! never-contributing account is refused at run start by
+//! [`crate::kat_soft_gate`] over the last-synced server balance — never
+//! this projection (it models neither the faucet drip nor mining credits).
+//! The watermark design keeps reprices honest: settle charges only
 //! the meter delta at the *then-current* rate, so a rate change (a
 //! `CHARGE_VERSION` bump) applies to new tokens only — the frozen
 //! `charged_kat` below the watermark is never silently re-derived.
@@ -285,8 +290,10 @@ pub const CHARGE_KAT_PER_MILLION_TOKENS: u64 = 1_000_000;
 pub const FREE_TIER_GRANT_KAT: u64 = 100_000_000;
 
 /// Out-of-KAT warn threshold (§KAT): the warning fires while at most this much
-/// of the grant projection remains. The QR/top-up half of the UX is T1.6;
-/// healing itself never blocks (G3 — warn-and-pay, never brick).
+/// of the grant projection remains. The QR/top-up half of the UX is T1.6.
+/// G3 as amended by Issue 075: the projection is warn-only, but the 075
+/// soft gate (`crate::kat_soft_gate`) refuses depleted, logged-in, SYNCED,
+/// never-contributing accounts at run start over the SERVER balance.
 pub const KAT_WARN_REMAINING: u64 = 10_000_000;
 
 /// KAT owed for `tokens` at the current rate (the per-unit burn).

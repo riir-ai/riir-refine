@@ -172,12 +172,20 @@ fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj
 /// meter location (never fatal to a heal). `RIIR_HEAL_KAT_METER_FILE`
 /// overrides the exact file; otherwise `<resolve_heal_root>/.heal/kat_meter.json`
 /// (beside the trajectory store).
+/// The shared billing kill-switch (Plan 024 — ONE switch for the whole KAT
+/// billing plane): `RIIR_HEAL_KAT_METER=0|off|false|no` disables the meter,
+/// the charge ledger, AND the 075 soft gate (a user who turned billing off
+/// must not keep a stale-ack gate). The `RIIR_HEAL_SELF_EVOLVE=0` pattern.
+#[cfg(feature = "kat_service")]
+fn kat_billing_disabled() -> bool {
+    std::env::var("RIIR_HEAL_KAT_METER")
+        .ok()
+        .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
+}
+
 #[cfg(feature = "kat_service")]
 fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_clippy::kat_meter::KatMeter> {
-    let disabled = std::env::var("RIIR_HEAL_KAT_METER")
-        .ok()
-        .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"));
-    if disabled {
+    if kat_billing_disabled() {
         return None;
     }
     if let Ok(file) = std::env::var("RIIR_HEAL_KAT_METER_FILE") {
@@ -230,6 +238,72 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
         }
         riir_clippy::kat_burn_client::BurnSync::Skipped => {}
     }
+}
+
+/// Issue 075 (owner soft gate, 2026-09-08): the depleted-account refusal.
+/// Fires for the scan flow — EVERY mode that processes source burns fuel
+/// (the bare dry run settles charge too; measured by `kat_burn_stack`), so
+/// gating only `--fix --write` would be a sieve. Placed after
+/// `validate_mode_flags` (the mode is known) and before the meter opens
+/// (nothing heavy has run), and only in a transport build — the gate's
+/// input is the last SYNCED server balance, which only that build can
+/// obtain. Disarmed by the gate kill-switch (`RIIR_HEAL_KAT_GATE=0`) and by
+/// the shared billing switch (`RIIR_HEAL_KAT_METER=0` — one billing plane,
+/// the Plan 024 decision); otherwise defers to the pure predicate.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn enforce_kat_soft_gate(args: &Args) {
+    if args.dump_trajectories {
+        return; // a local export processes no source and burns no fuel
+    }
+    if kat_billing_disabled() || kat_gate_disabled() {
+        return;
+    }
+    let root = resolve_heal_root(&args.paths);
+    let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(
+        &root.join(".heal").join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME),
+    );
+    if let Some(w) = warning {
+        eprintln!("{w}");
+    }
+    let account_dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let verdict = riir_clippy::kat_soft_gate::evaluate(riir_clippy::kat_soft_gate::SoftGateInput {
+        transport_capable: true,
+        account_present: riir_clippy::kat_account::KatAccount::load(&account_dir).is_ok(),
+        last_synced_balance_micro: ack.last_balance_micro,
+        contributed_and_synced: riir_clippy::kat_contribution::has_contributed(&account_dir),
+    });
+    let riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { balance_micro } = verdict else {
+        return;
+    };
+    let balance = riir_clippy::kat_payreq_client::render_kat(balance_micro);
+    let account_id = riir_clippy::kat_account::KatAccount::load(&account_dir)
+        .map(|a| a.state().account_id.clone())
+        .unwrap_or_default();
+    let top_up = riir_clippy::kat_lease_client::payment_url(
+        riir_clippy::kat_lease_client::DEFAULT_SERVICE_URL,
+        &account_id,
+    );
+    eprintln!(
+        "cargo heal: REFUSED — the account's last synced KAT balance is {balance} \
+         (depleted) and this machine has not yet contributed (Issue 075 soft gate)."
+    );
+    eprintln!("Refuel with either:");
+    eprintln!("  * contribute:  cargo heal --mine   (what mining is)  →  cargo heal sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
+    eprintln!("  * top up:      {top_up}");
+    eprintln!(
+        "(logged-out / offline / never-synced machines are never gated — this reads the last \
+         SYNCED server balance; RIIR_HEAL_KAT_GATE=0 disables the gate)"
+    );
+    std::process::exit(1);
+}
+
+/// The `RIIR_HEAL_KAT_GATE` kill-switch (the `RIIR_HEAL_KAT_METER` pattern):
+/// `0|off|false|no` disarms the 075 soft gate for this run.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn kat_gate_disabled() -> bool {
+    std::env::var("RIIR_HEAL_KAT_GATE")
+        .ok()
+        .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
 }
 
 /// Proposal 008 (the owner's just-works UX, 2026-09-08): `cargo heal
@@ -631,7 +705,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 charge.charged_kat, charge.meter_watermark_tokens, charge.meter_watermark_tokens);
             println!("balance projection:  {remaining} of {grant} KAT (per-repo until server aggregation)");
             if remaining <= KAT_WARN_REMAINING {
-                println!("kat: WARN balance ≤ {KAT_WARN_REMAINING} — top up before the next long run (never blocks healing)");
+                println!("kat: WARN balance ≤ {KAT_WARN_REMAINING} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)");
             }
         }
         None => {
@@ -905,6 +979,17 @@ fn run_kat_sync() {
                     match transport.post_sync(&payload.ndjson) {
                         riir_clippy::kat_lease_client::HttpResponse::Ok(_) => {
                             println!("sync: push accepted by {url}");
+                            // Issue 075: record the machine-global
+                            // contributed-once fact (the soft gate's sticky
+                            // grace). Fail-soft — the service already
+                            // accepted; a lost marker costs a gate miss, not
+                            // a brick.
+                            if let Err(e) = riir_clippy::kat_contribution::mark(
+                                &riir_clippy::kat_account::KatAccount::default_dir(),
+                                &payload.commitment,
+                            ) {
+                                eprintln!("sync: contribution marker not recorded — {e}");
+                            }
                             // T079: the ledger-plane half of "the service
                             // sees the key" — claim the once-per-key
                             // free-tier grant (read-first; a no-op when it
@@ -4621,6 +4706,12 @@ fn main() {
         eprintln!("{msg}");
         usage();
     }
+    // Issue 075 (owner soft gate): the depleted-account refusal — fires
+    // BEFORE any scanning (prepaid fuel: an empty tank dispenses nothing,
+    // in every mode that burns). The cfg IS the predicate's first leg: a
+    // build without transport has no synced balance and stays warn-only.
+    #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+    enforce_kat_soft_gate(&args);
     #[cfg(not(feature = "fix_verify"))]
     if args.verify {
         eprintln!("--verify requires a build with --features fix_verify");
@@ -6207,9 +6298,13 @@ fn main() {
         println!("{}", c.summary_line());
         let remaining = c.balance_projection();
         if remaining == 0 {
-            // §KAT warn-and-pay (T1.6): at 0 the evolved-corpus hot-push
-            // pauses at epoch end + the persistent warning fires — mining
-            // accrual/settlement CONTINUE, healing NEVER blocks (G3).
+            // §KAT warn-and-pay (T1.6), as amended by the 075 soft gate:
+            // at 0 the evolved-corpus hot-push pauses at epoch end + the
+            // persistent warning fires — mining accrual/settlement CONTINUE.
+            // The run-start REFUSAL for depleted non-contributing accounts
+            // is the gate's (`enforce_kat_soft_gate`); this end-of-run warn
+            // still never blocks (it fires after the work, and only on the
+            // local projection).
             eprintln!(
                 "kat-charge: 0 KAT remain of the {} grant projection — out-of-KAT",
                 riir_clippy::kat_meter::FREE_TIER_GRANT_KAT

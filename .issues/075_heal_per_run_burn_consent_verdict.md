@@ -1,4 +1,5 @@
-# Issue 075 — verdict: per-run burn + consent prompt on plain `cargo heal` (NOT LGTM)
+# Issue 075 — verdict: per-run burn + consent prompt on plain `cargo heal` (NOT LGTM) [L1-296]
+**Status:** RECORD — decisions applied; the soft gate LANDED 2026-09-09 (predicate + marker + v2 ack + CLI contract test; see §"LANDED")
 
 **Status:** RECORD — amended ×2 same day: soft gate + cadence correction (owner, 2026-09-08); implementation in `.issues/076`
 
@@ -292,4 +293,58 @@ correct and the table above conflated two timers:
 - Cross-repo pin to re-check when the bucket lands: riir-dao
   `tests/dapps_contract_pins.rs` hard-codes the reward schedule —
   per-bucket composition must re-derive it or amend the pin in the same
-  commit.
+  commit. **DONE** — riir-dao `dd7d75a` (2026-09-09): premise docs on the
+  flag-off fixtures + new `fast_settle_bucket_contract_is_pinned`.
+
+## LANDED — the soft gate (2026-09-09)
+
+The zero-balance decision above is implemented (this file's last open
+item). Commit set on `develop`; the residue that carried over:
+
+- **The predicate** (`src/kat_soft_gate.rs`, pure + unit-tested): all four
+  legs — transport-capable build ∧ account configured ∧ last-synced
+  server balance ≤ 0 ∧ not yet contributed-and-synced. Server truth rides
+  the v2 burn ack (`last_balance_micro`; BURN_ACK_VERSION 2 — the one-time
+  reset re-reports the cumulative total, a server-side no-op). Never the
+  local projection (prerequisite 1 held).
+- **The grace (open question 3 — answered by reading the payout cadence,
+  not assuming):** payouts are EPOCH-GATED — `record_mining_credit` fixes
+  the claim, but `pay_due_rewards` rides `settle_epoch` (7-day), NOT the
+  hourly burn bucket (which composes the 65/5/20/10 split only). A
+  time-boxed grace would brick contributing users mid-epoch, so the grace
+  is STICKY: the machine-global `contributed_once.json` marker
+  (`src/kat_contribution.rs`), written on the first accepted telemetry
+  push, lifts the gate permanently. Presence = contributed (anti-brick:
+  a corrupt file reads contributed — the false direction merely lets a
+  free-rider through a soft gate, the opposite direction bricks a real
+  contributor). Repo-local sync watermarks were rejected as the marker —
+  a contributor must not be gated in their second repo.
+- **Open question 4 (OptedOut-depleted):** the refusal message names BOTH
+  exits verbatim (`cargo heal --mine` → sync; the top-up URL) — the same
+  message serves OptedIn and OptedOut, and `--mine` IS the re-enable.
+- **Mode-wide, not `--write`-only:** the bare dry run settles charge too
+  (measured by `tests/kat_burn_stack.rs` phase 1), so the gate fires for
+  every scanning mode; `dump_trajectories` is excluded (processes no
+  source, burns no fuel).
+- **Kill switches:** `RIIR_HEAL_KAT_GATE=0` (the gate's own) and the
+  shared `RIIR_HEAL_KAT_METER=0` billing plane (one switch, Plan 024 —
+  extracted as `kat_billing_disabled()` so meter and gate cannot drift).
+- **G3 reprice (prerequisite 5, same-commit sweep):** `kat_meter.rs`
+  module + `KAT_WARN_REMAINING` docs, the heal.rs zero-balance warn
+  comment, the account-view warn line, README fuel model (+ a soft-gate
+  section), AGENTS.md CLI-UX contract (+ a gate bullet; the stale
+  "shipped release set compiles the push to nothing" claim fixed — the
+  set has carried `kat_transport` since v0.1.2).
+- **Contract test:** `tests/kat_soft_gate_cli.rs` — 7/7 through the REAL
+  binary (refuse: exit 1 + both paths + no `scanned` line + no charge
+  ledger opened; allow: marker / positive balance / both kill switches /
+  anonymous / never-synced). Suites green: gate 7/7, burn-stack 3/3 (v2
+  ack), unmine 9/9, `kat_contribution` + `kat_soft_gate` units 9/9;
+  clippy clean at no-default + `kat_service` + the 4-feature set.
+- **Pre-existing, NOT this change (found validating):**
+  `kat_lease_client::qr_commitment_golden` +
+  `render_qr_ascii_is_byte_identical_to_the_pre_t14_call_shape` fail at
+  HEAD with this work stashed (proven) — a stale golden vs the current
+  render (the independent-preimage half passes), likely a qrcode version
+  drift from the f7cbe31 URL flip era; and the heal.rs `unused_mut` /
+  `too_many_arguments` warnings the 076 caveats already carry.

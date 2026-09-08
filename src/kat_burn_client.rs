@@ -43,11 +43,12 @@
 //! `kat_transport` — like every other network surface in this repo
 //! (`HttpLeaseTransport` / `HttpPayreqTransport` / `HttpAccountTransport`
 //! are all ureq behind `kat_transport`, and ureq is that feature's dep).
-//! **A `kat_service`-only build — the shipped release set
-//! `default + latent_retrieval + kat_service` — compiles the push (and the
-//! two call sites' burn lines) to nothing, exactly as it already does for
-//! `sync` and the consent heartbeat.** Escaping that gate would take either
-//! a new dependency or a hand-rolled HTTP client — both refused by
+//! **The shipped release set has carried `kat_transport` since `v0.1.2`
+//! (`56bd9bf`: `default + latent_retrieval + kat_service + kat_transport`,
+//! build + license jobs on the SAME set) — the push ships.** A bare
+//! `kat_service`-only dev build still compiles it to nothing, exactly as it
+//! does for `sync` and the consent heartbeat. Escaping that gate would take
+//! either a new dependency or a hand-rolled HTTP client — both refused by
 //! BOUNDARY.md; the gate moves when the release feature set does, not in
 //! this module.
 
@@ -152,7 +153,12 @@ pub fn parse_burn_response(body: &[u8]) -> Result<BurnReportAck, String> {
 /// The ack-watermark shape version (bump = a new shape; a mismatch
 /// re-watermarks at zero — over-reporting is the safe direction, the
 /// server's monotone watermark absorbs it).
-pub const BURN_ACK_VERSION: u8 = 1;
+///
+/// History: v1 = the 076 shape (total, meter watermark, ack time). v2 adds
+/// `last_balance_micro` (Issue 075) — the last-synced server balance the
+/// soft gate reads; the one-time v1→v2 reset re-reports the full cumulative
+/// total, a server-side no-op.
+pub const BURN_ACK_VERSION: u8 = 2;
 
 /// What the service last ACKNOWLEDGED — the local-commit book of the burn
 /// sync. Persisted per-repo at `<root>/.heal/kat_burn_ack.json` (beside the
@@ -169,6 +175,12 @@ pub struct KatBurnAck {
     pub meter_watermark_tokens: u64,
     /// Unix seconds of the accepted report (informational).
     pub acked_unix: u64,
+    /// The account balance AFTER the warn-and-pay debit, as the server
+    /// answered (`None` = pre-v2 ack / never synced). The 075 soft gate
+    /// reads THIS — the last-synced server truth — never the local
+    /// projection (which models neither the faucet drip nor mining credits).
+    #[serde(default)]
+    pub last_balance_micro: Option<i64>,
 }
 
 impl Default for KatBurnAck {
@@ -189,6 +201,7 @@ impl KatBurnAck {
             burn_kat_total: 0,
             meter_watermark_tokens: 0,
             acked_unix: 0,
+            last_balance_micro: None,
         }
     }
 
@@ -461,6 +474,7 @@ pub fn run_burn_sync_at(
                 burn_kat_total: server.burn_kat_total,
                 meter_watermark_tokens,
                 acked_unix: now_unix(),
+                last_balance_micro: Some(server.balance_micro),
             };
             if let Err(e) = record.save(&ack_path) {
                 eprintln!(
@@ -664,17 +678,29 @@ mod tests {
         assert_eq!(ack, KatBurnAck::empty());
         assert!(warning.is_none(), "a missing ack is the normal first run");
 
-        // Round trip.
+        // Round trip (v2 carries the last-synced server balance — the 075
+        // soft gate's input).
         let record = KatBurnAck {
             version: BURN_ACK_VERSION,
             burn_kat_total: 4_242,
             meter_watermark_tokens: 9_999,
             acked_unix: 1_700_000_000,
+            last_balance_micro: Some(12_345_678),
         };
         record.save(&path).expect("save");
         let (ack, warning) = KatBurnAck::load_at(&path);
         assert_eq!(ack, record);
         assert!(warning.is_none());
+
+        // A v1-shaped file (no balance field): version 1 is now a MISMATCH,
+        // so the documented v1→v2 path is the re-watermark (never the
+        // serde default).
+        std::fs::write(&path, "{}").expect("write v1 shape");
+        let (ack, warning) = KatBurnAck::load_at(&path);
+        assert_eq!(ack, KatBurnAck::empty());
+        assert_eq!(ack.last_balance_micro, None);
+        let warning = warning.expect("a v1 ack must warn after the v2 bump");
+        assert!(warning.contains("re-watermarking at zero"), "{warning}");
 
         // Corrupt → fresh at zero + the honest warning.
         std::fs::write(&path, "{not json").expect("write corrupt");

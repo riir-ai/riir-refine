@@ -316,10 +316,25 @@ Offline runs **stack like local commits**: the ack watermark
 push that fails is a local commit — the next run (or `cargo heal sync`)
 reports the FULL stacked total in one signed report, and the server's
 monotone watermark makes a replayed report a no-op. The service debits the
-100M KAT free grant **warn-and-pay** (healing never blocks) and commits
-burn to the mining pool on its hourly settle bucket (Issue 076 — the
-7-day epoch stays the staking cadence). The push rides the same network
-build as `sync`; a build without the transport compiles it to nothing.
+100M KAT free grant **warn-and-pay** and commits burn to the mining pool on
+its hourly settle bucket (Issue 076 — the 7-day epoch stays the staking
+cadence). The push rides the same network build as `sync`; a build without
+the transport compiles it to nothing.
+
+### The soft gate (Issue 075 — depleted accounts, owner decision 2026-09-08)
+
+Prepaid fuel, not an interactive gate: when the account's **last synced
+server balance** is ≤ 0 and the machine has never contributed-and-synced,
+scanning runs REFUSE at start (exit 1) until the user contributes
+(`cargo heal --mine`, then one accepted `cargo heal sync` — the push
+acceptance records a machine-global marker that lifts the gate for good) or
+tops up. Logged-out, offline, and never-synced machines stay warn-only — no
+server authority, no honest gate. The refusal names both refuel paths.
+`RIIR_HEAL_KAT_GATE=0` (or the shared `RIIR_HEAL_KAT_METER=0` billing
+switch) disarms the gate; the burn push itself keeps its never-blocks
+contract. Contributed accounts are never re-gated while depleted — mining
+payouts land at the 7-day epoch settle, and bricking a contributor mid-epoch
+is the exact failure the gate exists to avoid.
 
 ## Automatic rustfmt (`--fix --write`)
 
