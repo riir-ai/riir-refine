@@ -1281,7 +1281,13 @@ mod tests {
                 // B129) -- the rich TMA/dispatch concept text sharpened the
                 // TF-cosine centroids upward; floor = measured - 5 per the
                 // Plan-030 convention.
-                (true, false, true) => 88.0 / 131.0,  // measured 93/131 (71.0%)
+                // Batch 137 (2026-09-09, Plan 116): the 11 CloudRift matmul
+                // adds re-measured 91/131 (69.5%, was 93/131 = 71.0% at
+                // B130/B136) -- the dense split-K/ldmatrix/swizzle concept
+                // vocabulary attracts 2 more generic Rust spans to the
+                // kernel centroids (the B131 sec-centroid mechanism, kernel
+                // flavor); floor = measured - 5 per the Plan-030 convention.
+                (true, false, true) => 86.0 / 131.0,  // measured 91/131 (69.5%)
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file
                 // create) re-measured 35/101 (34.7%, was 41/101 = 40.6% at

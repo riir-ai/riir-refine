@@ -1559,7 +1559,7 @@
 //!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
 //!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
 //!   (fmad split from `use_fast_math`).
-//! - **Batch 137 (2026-09-09, the CloudRift matmul-optimization distill,
+//! - **Batch 137 (2026-09-09, the `CloudRift` matmul-optimization distill,
 //!   Plan 116):** 11 rules, corpus 580 -> 591 (A 122 -> 127, E 47 -> 51,
 //!   L 15 -> 16, N 42 -> 43). Source: `cloudrift-ai/emmy` @ `1c058c9d`
 //!   (Apache-2.0; the renamed successor of the Batch-130 `deplodock` pin
@@ -1590,20 +1590,20 @@
 //!   `split-k-atomic-arm-legality` (E — the atomicAdd arm is semantically
 //!   illegal regardless of shape unless ONE component + ADDITIVE monoid +
 //!   output-rounds-once + distributive projection; every refusal names the
-//!   deferred finalize), `setmaxnreg-fit-gate-elected-arrive` (E, sm_90+ —
+//!   deferred finalize), `setmaxnreg-fit-gate-elected-arrive` (E, `sm_90`+ —
 //!   the .dec/.inc pair is gated on register-file arithmetic (24/240/64K),
 //!   the consumer band syncs via a NAMED barrier (CTA-wide __syncthreads is
 //!   UB on the divergent branch), ONE elected arrive releases the slot +
 //!   carries fence.proxy.async), `splitk-width-shape-need-gate` (E —
-//!   needed = max(2*SM/free_ctas, K/sqrt(M*N), 1): grid fullness alone
-//!   under-splits K-heavy shapes (mlp_down ranked its g8k golden ~9000-deep
+//!   needed = max(2*`SM/free_ctas`, K/sqrt(M*N), 1): grid fullness alone
+//!   under-splits K-heavy shapes (`mlp_down` ranked its g8k golden ~9000-deep
 //!   under the occupancy-only gate)), `splitk-atomic-free-contention-threshold`
 //!   (E — the finalize fork keys on SPLITK*M*N contention with a FITTED
 //!   threshold and a round-trip cost side; the fork key must be STAMPED on
 //!   candidate rows or the interaction dead-weights to atomic),
 //!   `ldmatrix-pair-x2-to-x4-adjacency` (L — fuse two +8-adjacent x2
 //!   fragment loads into one x4, bit-identical, WAR-checked). Lane intel:
-//!   4090 = sm_89 Ada — cp.async pad arm live, split-K width gate strongest
+//!   4090 = `sm_89` Ada — cp.async pad arm live, split-K width gate strongest
 //!   (prefill GEMMs are the K-heavy family), setmaxnreg Hopper+ only.
 //! - **Batch 129 (2026-09-08, the ds4 Qwen Q2 decode-fusion + prefill-structural distill,
 //!   Plan 110 / Research 151):** 5 rules, corpus 570 -> 575 (C 45 -> 46,

@@ -1,4 +1,4 @@
-//! Entries slice — Batch 137 (rules 581-591 of 591) — the CloudRift "Modern GPU Matmul
+//! Entries slice — Batch 137 (rules 581-591 of 591) — the `CloudRift` "Modern GPU Matmul
 //! Optimization" distill.
 //! Source: cloudrift-ai/emmy @ 1c058c9d (Apache-2.0) — the renamed successor of the
 //! Batch-130 `deplodock` pin `2aaa0328`; the blog: cloudrift.ai/blog/gpu-matmul-optimization
