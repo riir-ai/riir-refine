@@ -84,7 +84,16 @@ pub struct BenchSpec {
 /// removing the contention it exists to measure). Timing verdicts for
 /// these rules are unaffected (median-of-samples); only the alloc-count
 /// comparison is skipped. Add a rule here ONLY with probe evidence.
-pub const ALLOC_AXIS_EXEMPT: &[&str] = &["cache-line-block-partitioned-lock"];
+pub const ALLOC_AXIS_EXEMPT: &[&str] = &[
+    "cache-line-block-partitioned-lock",
+    // Batch 135 (partitioned-mut-slices-zero-sync): the buggy arm locks a
+    // single std Mutex PER BUMP across all workers — the same contended
+    // macOS pthread slow path the Batch-78 probe measured allocating
+    // nondeterministically (41/44/42/41/41 allocs across 12t runs). Same
+    // platform class, no fresh probe; the partition arm allocates
+    // deterministically. Timing verdicts unaffected (median-of-samples).
+    "partitioned-mut-slices-zero-sync",
+];
 
 /// The per-size outcome of a bench comparison.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

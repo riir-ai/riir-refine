@@ -9,10 +9,13 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 114 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 18, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 25 are honestly
-//! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
+//! 117 entries across 12 categories (complexity 19, allocation 23, simd 8,
+//! layout 10, iterators 10, concurrency 10, io 18, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 90 are benchable; 27 are honestly
+//! NotBenchable — the count repaired by Batch 135 (the pre-Batch-118 ledger
+//! said 25 while the gated test said 14; the Batch 118–129 ds4 io
+//! annotations were never counted) (8 external-runtime/size-class + 2
+//! metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
 //! 94) + the measurement-honesty axis itself (Batch 109 — a timing gate
@@ -138,7 +141,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (87/111):
+//! Currently benchable (90/117):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -222,8 +225,11 @@
 //! - `mir-destprop-branch-site-merge` (known-fn-item conditional dispatch → two direct tail-jumps — MIR DestinationPropagation cmov-merges the merged form into one indirect site mixing branch-target history; Batch 99, wasmi distill)
 //! - `dispatch-handler-pair-hoist` (runtime-table handler read per dispatch → hoist both entries once — register-resident select; cross-arch ParetoDominant, x86 re-gated 2026-09-04; Batch 101)
 //! - `hot-byval-move-over-memcpy-threshold` (hot by-value move of a >128-byte type → shrink/ref — the threshold is an arch-shaped LLVM backend constant; Mixed on M3, x86 pays the memcpy call; Batch 112)
+//! - `atomic-vec-zero-cost-convert` (Atomic::new-per-element collect from a borrowed vec → into_iter().map on the OWNED vec — same-layout collect reuses the buffer and the loop compiles out; alloc axis 2→1; Batch 135, Wild-linker article distill)
+//! - `vec-reuse-across-lifetime-change` (fresh Vec<&'iter T> per iteration → owned buffer retargeted in place via a const size/align assert + clear() + empty collect — alloc axis 1→0; Batch 135, Wild-linker article distill)
+//! - `partitioned-mut-slices-zero-sync` (shared Vec under one contended Mutex → disjoint chunks_mut partition, zero synchronization — sizes = thread counts; Batch 135, Wild-linker article distill)
 //!
-//! Not benchable (15/102) — honest:
+//! Not benchable (27/117) — honest (count repaired by Batch 135; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -329,16 +335,18 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 105 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 117 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
+/// wasm). Allocation is the deepest (23 rules; Batch 86 added 2; Batch 135
+/// added the lifetime-reuse rule); complexity
 /// has 19 (Batch 76 + 91 added 1 each; Batch 109 added the measurement-
 /// honesty rule); iterators
 /// has 10 (Batch 66/67 added 2; Batch 91 added 1); simd has 8 (Batch 62 + 64 + 83 added 1
-/// each); layout has 10 (Batch 61 + 85 + 86 + 112 added); concurrency has 8
+/// each); layout has 10 (Batch 61 + 85 + 86 + 112 added); concurrency has 10
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
-/// contention rules; Batch 73 added 1);
+/// contention rules; Batch 73 added 1; Batch 135 added the zero-cost
+/// atomic conversion + the zero-sync partition);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the DestProp branch-site rule; Batch 101 added
 /// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
@@ -3079,6 +3087,75 @@ fn ab_bench(cfg: &Config, control: &str, candidate: &str) -> f64 {
             context_notes: Some("REGIME-ANNOTATED, source-shipped (the harness fix + validation landed in the same commit; honestly NotBenchable here -- experimental design, not speed). THE DEFECT: when the candidate is the DEFAULT-ON path, 'unset the env for control' is a NO-OP -- both arms run the candidate, the measured delta reads ~0, and the vacuous screen looks like a clean null result (or, worse, the sign convention silently flips with arm labeling: the source's 1K ABBA log intentionally labels the enabled default as CONTROL and rollback as candidate, so its negative candidate delta is not a regression -- prefill-structural.md:153-155). THE FIX CONTRACT: (1) the harness accepts an explicit control value (metal_prefill_variant_bench.c:214: the control arm sets cfg->control_value when provided, unsets only when not -- backward compatible, which is how the defect shipped); (2) validation passes --control-value 0 --candidate-value 1 and FAILS if the two arms measure identical (prefill-structural.md:58-61: 'enabled defaults cannot silently make both variants identical'); (3) the report names which arm is control. THE FAMILY: this is the control-arm CONSTRUCTION twin of matched-control-disentangles-policy-from-model (B124 -- matched controls isolate policy from model; this ensures the control arm actually executes the control) and the enable-default twin of the null-arm identity face (B124 half 3: the OFF-arm must be provably inert -- here the OFF-arm was never OFF). Distinct from ab-isolate-one-component-by-baseline-byte-copy (B121 -- artifact-level isolation of the component under test; this is the env-arm wiring of the A/B itself) and from diagnostics-not-just-exit-code (B122 -- failure evidence capture; orthogonal stage). Suggestion-only (a parse-only proposer cannot see which env var defaults to ON). Source: ivanfioravanti/ds4-metal @ b85a6174 (MIT) -- speed-bench/qwen38-prefill-structural.md:58-61, :153-155 + metal_prefill_variant_bench.c:52, :214 (the --control-value harness fix). Batch 129 / Plan 110 / Research 151.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // ── Batch 135 (2026-09-09, Plan 114 / Research 155): the Wild-linker
+        // "RustForge wild performance tricks" article distill — three rules,
+        // all benchable + measured. The article is an unlicensed-format blog
+        // post by the Wild linker author — cite-shape only; the fixtures
+        // below are original reproductions of the patterns.
+        //
+        // ── concurrency: permanent atomic storage / transmute → zero-cost
+        // representation conversion (the Vec<AtomicT> mirror) ────────────
+        // The naive way to get &-aliased random writes into a Vec<T> is to
+        // rebuild it as Vec<AtomicT> with Atomic::new per element (fresh
+        // allocation + a full copy every conversion), or to transmute, or to
+        // keep the data permanently atomic. When size_of + align_of match
+        // (AtomicU32 has the layout of u32), consuming the owned vec via
+        // into_iter().map(Atomic::new).collect() reuses the SAME heap
+        // allocation and the map loop compiles out entirely (the article's
+        // x86 asm: a few movups/mov, no loop, no branch) — so switching the
+        // representation per phase is free and there is no excuse for either
+        // transmute or permanent atomics. Back-conversion must CONSUME via
+        // into_inner(), never load per element; core::mem::take moves the
+        // vec across the phase boundary without touching the heap (an empty
+        // Vec does not allocate).
+        PerfRule {
+            rule_id: "atomic-vec-zero-cost-convert".to_string(),
+            name: "Vec<T> ↔ Vec<AtomicT> conversion by Atomic::new-per-element collect (fresh alloc + full copy) → into_iter().map(Atomic::new).collect() on the OWNED vec — same size+align makes std reuse the buffer and the loop vanish; switch representation per phase instead of paying atomics everywhere or transmuting".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::atomic::AtomicU32;\n\n// Rebuild the atomic mirror from the shared plain vec: the source is only\n// borrowed, so a fresh allocation + an element-by-element copy is forced\n// on EVERY conversion. Teams that need &-aliased writes often keep the\n// data permanently atomic instead — paying atomic costs in every reader\n// — or reach for transmute.\nfn to_atomic(plain: &[u32]) -> Vec<AtomicU32> {\n    plain.iter().map(|&v| AtomicU32::new(v)).collect()\n}".to_string(),
+            fixed_code: "use std::sync::atomic::AtomicU32;\n\n// The vec is OWNED, so into_iter() iterates in place; with matching\n// size_of/align_of (AtomicU32 is layout-identical to u32) the collect\n// reuses the SAME heap allocation and the map loop compiles out — the\n// conversion is free, so keep the plain representation for the owned\n// phases and convert only for the shared-write phase. Convert BACK by\n// consuming: into_iter().map(|a| a.into_inner()).collect() — never\n// per-element loads — and move the vec across phases with mem::take.\nfn to_atomic(plain: Vec<u32>) -> Vec<AtomicU32> {\n    plain.into_iter().map(AtomicU32::new).collect()\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 4/0/0, verdict-stable x2 (M3 Max, release, 2026-09-09 — Batch 135 benches): 1.83x/1.78x/1.57x/1.33x at n=100/1K/10K/100K, alloc axis EXACT 2 → 1 at every size (both arms pay one shared clone; the buggy conversion adds a second malloc + full copy, the fixed one reuses the buffer). REGIME: the conversion is free ONLY when size_of::<T>() == size_of::<AtomicT>() and align matches (std's in-place collect specialization for vec::IntoIter) — u32/i32/u64/i64/usize and their Atomic twins all match; wider/newtype wrappers match when the wrapper is a transparent single-field struct. ANTI-REGIMES: converting a BORROWED source still needs the fresh allocation (the source outlives the result — the fixed form requires ownership); a wrapper with Drop or a different layout falls back to a real copy loop. THE DECISION CONTENT: switch the representation per phase (plain owned storage, atomic only for the shared-write window) instead of keeping data permanently atomic (pays atomic costs in every reader) or transmuting (unsound under noalias). Back-conversion consumes via into_inner() — per-element loads re-copy the buffer for nothing. mem::take moves the vec across the phase boundary without touching the heap. Distinct from mutex-to-atomic (permanent-storage direction: replace a Mutex with one atomic; this switches a WHOLE VEC's representation for a phase, then switches back) and from mem-take (the move idiom this rule uses at the boundary — different mechanism, they compose). Fixtures are original reproductions of the pattern; source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — the Wild linker's symbol-resolution phase conversion, technique 3. Batch 135 / Plan 114 / Research 155.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(atomic_vec_zero_cost_convert_bench_spec()),
+        },
+        // ── allocation: alloc-per-iteration because the hoisted buffer can't
+        // be TYPED → reuse the heap allocation across a lifetime/type change
+        // (the reuse_vec pattern) ─────────────────────────────────────────
+        // reuse-allocation-clear covers the caller-passed scratch buffer.
+        // This rule covers the case that shape CANNOT express: the buffer's
+        // element type (or lifetime) differs per iteration — Vec<&'iter T> —
+        // so no single borrowed-scratch signature typechecks. The fix keeps
+        // the buffer OWNED and retargets it in place: clear() makes the map
+        // body unreachable (the loop compiles out), the const size/align
+        // assert turns an incompatible T/U into a COMPILE error at the call
+        // site, and std's in-place collect preserves the heap allocation.
+        PerfRule {
+            rule_id: "vec-reuse-across-lifetime-change".to_string(),
+            name: "hot loop allocates a fresh Vec<&'iter T> (or any same-layout Vec<U>) every iteration because the hoisted buffer cannot be typed across the element lifetime → own the buffer and retarget it in place with a const size/align assert + clear() + into_iter().map(unreachable).collect() — the allocation is reused, the loop compiles out, incompatible T/U is a compile error".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "// Every call allocates: the picked refs live only for this call, so\n// a hoisted Vec<&[u32]> buffer cannot be typed to outlive one call's\n// borrow — the borrow checker rejects every signature that tries.\nfn row_lens(rows: &[Vec<u32>]) -> u64 {\n    let picked: Vec<&[u32]> = rows.iter().map(|r| &r[..]).collect();\n    picked.iter().map(|s| s.len() as u64).sum()\n}".to_string(),
+            fixed_code: "// The buffer is OWNED and retargeted per call: the const assert makes\n// a layout-mismatched T/U a compile error; clear() empties the buffer\n// so the map body is unreachable and the loop compiles out; std's\n// in-place collect hands the SAME heap allocation back re-typed.\n// SAFETY CONTRACT (caller-enforced): the stored refs are cleared (or\n// the buffer dropped) before any referent dies — a panic between take\n// and restore only loses the buffer, never reads a dead ref.\nfn reuse_vec<T, U>(mut v: Vec<T>) -> Vec<U> {\n    const {\n        assert!(\n            std::mem::size_of::<T>() == std::mem::size_of::<U>()\n                && std::mem::align_of::<T>() == std::mem::align_of::<U>(),\n        );\n    }\n    v.clear();\n    v.into_iter().map(|_| unreachable!()).collect()\n}\n\nfn row_lens(rows: &[Vec<u32>], buf: &mut Vec<&'static [u32]>) -> u64 {\n    let mut cur: Vec<&[u32]> = reuse_vec(std::mem::take(buf));\n    cur.clear();\n    cur.extend(rows.iter().map(|r| &r[..]));\n    let total: u64 = cur.iter().map(|s| s.len() as u64).sum();\n    *buf = reuse_vec(cur);\n    total\n}".to_string(),
+            context_notes: Some("MEASURED (M3 Max, release, 2026-09-09 — Batch 135 benches, verdict-stable x2): **Mixed 2/0/2 timing (1.49x@100 / 1.07x@1K / Tie@10K/100K) + alloc axis EXACT 1 → 0 at every size** — the deterministic alloc axis is the load-bearing cell (the elision is proven by integers, not wall-clock); timing ties once the refill dominates the malloc (the reuse-allocation-clear Mixed shape — its L2 note covers the large-N regime). REGIME: same-layout element types ONLY — the const assert (inline const, stable 1.79) fires at MONOMORPHIZATION, so a mismatched T/U is a compile error at the call site, not a runtime panic; &T → &'static T retargeting is the canonical case (8-byte slices, references, Box-backed handles, NonNull). THE SAFETY CONTRACT is the rule's load-bearing content: the 'static element type is only sound because the buffer is cleared before any referent can die and consumers never observe a cleared slot — the caller owns the contract, the compiler only checks the LAYOUT half; on panic between take and restore the buffer is dropped (freed), never read dead. Distinct from reuse-allocation-clear (a caller-passed &mut Vec<T> scratch of ONE fixed element type — the shape that cannot typecheck when the element lifetime differs per iteration; that rule removes the compiler-can't-hoist obstacle, this one the borrow-checker-can't-type obstacle) and from mem-take (the boundary move this pattern uses). EXTENSION ARM (recorded, not landed): types that mix owned + borrowed fields (Foo<'a> {owned: String, borrowed: &'a str}) cross the same barrier via a MaybeUninit<&'static> shadow-struct field-wise map — sound only while the shadowed field is never observed empty (the article's own panic caveat). Suggestion-only (a parse-only proposer cannot prove the caller contract). Fixtures original; source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — technique 4, the Wild linker's buffer reuse. Batch 135 / Plan 114 / Research 155.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(vec_reuse_across_lifetime_change_bench_spec()),
+        },
+        // ── concurrency: shared Vec under one Mutex (or atomics everywhere)
+        // → partition into disjoint &mut slices, ZERO synchronization ─────
+        // When each worker's writes provably land in a DISJOINT contiguous
+        // range (the Wild linker's per-object symbol-id ranges), a lock
+        // serializes work that cannot conflict. split the buffer once and
+        // hand each worker its own &mut [T]: no locks, no atomics, no
+        // contention — the writes are ordinary stores.
+        PerfRule {
+            rule_id: "partitioned-mut-slices-zero-sync".to_string(),
+            name: "shared Vec mutated through one Mutex (or atomics) although each worker writes a known DISJOINT contiguous range → partition once (chunks_mut / split_at_mut) and hand each worker its own &mut [T] — zero locks, zero atomics; applies only when the access pattern is provably disjoint".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::Mutex;\n\n// One lock guards the whole array: the workers' index ranges never\n// overlap, but every single bump serializes on the Mutex — the sync\n// buys nothing the partition would not give for free.\nfn bump_all(grid: &Mutex<Vec<u64>>, cells: usize, workers: usize, iters: usize) {\n    std::thread::scope(|s| {\n        for w in 0..workers {\n            s.spawn(move || {\n                for cell_idx in (w..cells).step_by(workers) {\n                    for _ in 0..iters {\n                        let mut g = grid.lock().unwrap();\n                        g[cell_idx] = g[cell_idx].wrapping_add(1);\n                    }\n                }\n            });\n        }\n    });\n}".to_string(),
+            fixed_code: "// Partition ONCE into disjoint contiguous ranges and give each\n// worker exclusive &mut ownership of its slice: the writes are plain\n// stores — no lock, no atomic, no contention, and the per-cell result\n// is identical (each cell is bumped by exactly one owner).\nfn bump_all(grid: &mut Vec<u64>, workers: usize, iters: usize) {\n    let per = grid.len().div_ceil(workers);\n    std::thread::scope(|s| {\n        for chunk in grid.chunks_mut(per) {\n            s.spawn(move || {\n                for _ in 0..iters {\n                    for cell in chunk.iter_mut() {\n                        *cell = cell.wrapping_add(1);\n                    }\n                }\n            });\n        }\n    });\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 4/0/0, verdict-stable x2 (M3 Max, release, 2026-09-09 — Batch 135 benches; sizes = THREAD counts per the align-64 precedent): 6.90x/9.12x/11.81x/6.13x at 1/2/4/8 threads — the per-bump Mutex serializes even UNCONTENDED (a lock/unlock per bump is ~20ns against a plain store), and contention widens it; alloc axis EXEMPT (see bench.rs ALLOC_AXIS_EXEMPT): the contended std Mutex allocates nondeterministically on macOS in the pthread slow path — the Batch-78 probe evidence covers the same platform class. THE DECISION CONTENT is the disjointness proof: the transform is legal exactly when each worker's writes land in a known contiguous range (contiguous id ranges per object — the Wild linker shape; per-thread partitions of an image/row band; per-shard cells). ANTI-REGIMES: scattered/overlapping access patterns (use fine-grained locks or atomics), read-share-write-rare workloads (RwLock), or when the partition itself costs more than the contention (tiny arrays). Composes with vec-with-capacity (reserve before partition) and reuse-allocation-clear (persistent per-worker buffers). Distinct from cache-line-block-partitioned-lock (that REDUCES contention by partitioning LOCK GRANULARITY — still locks, for scattered per-item writes; this ELIMINATES synchronization via ownership partition for provably-ranged writes — the two answer different access patterns and can compose: partition into worker regions, block-partition the remainder) and from parallel-disjoint-pread-hides-cold-page-latency (io positional reads on a shared fd; this is shared-MEMORY mutation). Fixtures original, std-only (thread::scope + chunks_mut — no rayon dep); the article's split_off_mut form is nightly-shaped and the portable split_at_mut/chunks_mut core is what lands. Source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — technique 1. Batch 135 / Plan 114 / Research 155.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(partitioned_mut_slices_zero_sync_bench_spec()),
         },
     ])
 }
@@ -8387,7 +8464,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 114); // Batch 129 (ds4 Qwen Q2) 112 → 114
+        assert_eq!(corpus.entries.len(), 117); // Batch 135 (rustforge) 114 → 117
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9904,7 +9981,7 @@ mod tests {
             .iter()
             .filter(|e| e.bench_spec.is_some())
             .count();
-        assert_eq!(with_spec, 87, "expected 87 benchable rules (Batch 112 added the memcpy-threshold bench), got {with_spec}");
+        assert_eq!(with_spec, 90, "expected 90 benchable rules (Batch 135 added the three Wild-linker article benches), got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -9917,7 +9994,11 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 14); // Batch 109 — the measurement-honesty axis joins
+        // Batch 135 repaired this pin: the Batch 118–129 source-reported io
+        // annotations (13 rules) were never counted here — the pin sat at the
+        // Batch-109-era 14 while reality moved to 27. The test only compiles
+        // under `rust_perf_bench`, so nobody ran it.
+        assert_eq!(without_spec.len(), 27); // 117 total − 90 benchable
         assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
         assert!(without_spec.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — the deterministic size axis (12 → 8), not a speed bench
@@ -9982,7 +10063,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 57, "expected 57 context-annotated rules (Batch 129 added the instrumented-attribution + unset-control-arm annotations)");
+        assert_eq!(annotated.len(), 60, "expected 60 context-annotated rules (Batch 135 added the three Wild-linker article annotations)");
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -10052,7 +10133,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 57); // Batch 129: 55 → 57
+        assert_eq!(annotated, 60); // Batch 135: 57 → 60
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -10084,9 +10165,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 45 annotated rules.
+        // Filter to the 60 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 57, "expected 57 annotated rules");
+        assert_eq!(annotated.len(), 60, "expected 60 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -11172,6 +11253,190 @@ mod tests {
             }
         }
     }
+
+    /// Batch 135 (2026-09-09, Plan 114 — the Wild-linker RustForge article
+    /// distill): the three new rules are present and parse. The
+    /// `vec-reuse-across-lifetime-change` fixed fixture carries an INLINE
+    /// CONST block (the compile-time layout assert) — this gate is what
+    /// proves the corpus's syn accepts it.
+    #[test]
+    fn batch135_rules_present_and_parse() {
+        let corpus = build_perf_seed_corpus();
+        for (rid, category, needles) in [
+            (
+                "atomic-vec-zero-cost-convert",
+                "concurrency",
+                vec!["into_iter", "Atomic::new", "same size+align"],
+            ),
+            (
+                "vec-reuse-across-lifetime-change",
+                "allocation",
+                vec!["reuse_vec", "clear()", "compile error"],
+            ),
+            (
+                "partitioned-mut-slices-zero-sync",
+                "concurrency",
+                vec!["chunks_mut", "DISJOINT", "zero"],
+            ),
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-135 rule '{rid}' missing from corpus"));
+            assert_eq!(e.category, category, "batch-135 rule '{rid}' category");
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "batch-135 '{rid}' buggy/fixed must both parse"
+            );
+            let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+            for needle in needles {
+                assert!(text.contains(needle), "batch-135 {rid} concept {needle:?} missing");
+            }
+        }
+    }
+
+    /// Batch 135 — G1 exactness: both arms of all three fixtures produce
+    /// IDENTICAL results on fixed inputs (representation conversion, buffer
+    /// retargeting, and partitioned mutation are all pure win shapes — no
+    /// value may change). Runs on std only, no feature gate.
+    #[test]
+    fn batch135_fixtures_g1_parity() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        // Nested items lead the fn body (clippy::items_after_statements).
+        fn reuse_vec<T, U>(mut v: Vec<T>) -> Vec<U> {
+            const {
+                assert!(
+                    std::mem::size_of::<T>() == std::mem::size_of::<U>()
+                        && std::mem::align_of::<T>() == std::mem::align_of::<U>(),
+                );
+            }
+            v.clear();
+            v.into_iter().map(|_| unreachable!()).collect()
+        }
+        const CELLS: usize = 97;
+        const WORKERS: usize = 4;
+        const ITERS: usize = 3;
+
+        // (a) atomic conversion: identical values through both forms.
+        let input: Vec<u32> = (0..257u32).map(|x| x.wrapping_mul(2_654_435_761) | 1).collect();
+        let buggy: u64 = {
+            let atomic: Vec<AtomicU32> =
+                input.iter().map(|&v| AtomicU32::new(v)).collect();
+            atomic.iter().map(|a| u64::from(a.load(Ordering::Relaxed))).sum()
+        };
+        let fixed: u64 = {
+            let atomic: Vec<AtomicU32> = input
+                .clone()
+                .into_iter()
+                .map(AtomicU32::new)
+                .collect();
+            atomic.iter().map(|a| u64::from(a.load(Ordering::Relaxed))).sum()
+        };
+        assert_eq!(buggy, fixed, "(a) atomic conversion must be value-identical");
+
+        // (b) lifetime retargeting: identical sums, stable across calls.
+        let rows: &'static [Vec<u32>] = Box::leak(
+            vec![vec![1, 2, 3], vec![4], vec![], vec![5, 6, 7, 8, 9]].into_boxed_slice(),
+        );
+        let picked: Vec<&[u32]> = rows.iter().map(|r| &r[..]).collect();
+        let buggy_total: u64 = picked.iter().map(|s| s.len() as u64).sum();
+        let mut buf: Vec<&'static [u32]> = Vec::new();
+        let run = |buf: &mut Vec<&'static [u32]>| -> u64 {
+            let mut cur: Vec<&[u32]> = reuse_vec(std::mem::take(buf));
+            cur.clear();
+            cur.extend(rows.iter().map(|r| &r[..]));
+            let total: u64 = cur.iter().map(|s| s.len() as u64).sum();
+            *buf = reuse_vec(cur);
+            total
+        };
+        let fixed_total = run(&mut buf);
+        assert_eq!(fixed_total, run(&mut buf), "(b) retarget reuse must be call-stable");
+        assert_eq!(buggy_total, fixed_total, "(b) lifetime retarget must be value-identical");
+
+        // (c) partitioned mutation: identical checksums (prime cell count so
+        // the chunks are ragged; strided-vs-contiguous ownership must not
+        // change the per-cell bump count).
+        let buggy = {
+            let grid = std::sync::Mutex::new(vec![0u64; CELLS]);
+            let gref = &grid; // move closures capture the SHARED reference (Copy)
+            std::thread::scope(|s| {
+                for w in 0..WORKERS {
+                    s.spawn(move || {
+                        for cell_idx in (w..CELLS).step_by(WORKERS) {
+                            for _ in 0..ITERS {
+                                let mut g = gref.lock().unwrap();
+                                g[cell_idx] = g[cell_idx].wrapping_add(1);
+                            }
+                        }
+                    });
+                }
+            });
+            let cs = grid.lock().unwrap().iter().sum::<u64>();
+            cs
+        };
+        let fixed = {
+            let mut grid = vec![0u64; CELLS];
+            let per = grid.len().div_ceil(WORKERS);
+            std::thread::scope(|s| {
+                for chunk in grid.chunks_mut(per) {
+                    s.spawn(move || {
+                        for _ in 0..ITERS {
+                            for cell in chunk.iter_mut() {
+                                *cell = cell.wrapping_add(1);
+                            }
+                        }
+                    });
+                }
+            });
+            grid.iter().sum::<u64>()
+        };
+        assert_eq!(buggy, fixed, "(c) partition must be value-identical");
+        assert_eq!(fixed, (CELLS * ITERS) as u64, "(c) closed form");
+    }
+
+    /// Batch 135 — the measured Pareto verdicts for the three new rules.
+    /// SLOW (spawns a cargo build + run per rule in a temp crate): run
+    /// explicitly with `cargo test -p riir-clippy --lib --features
+    /// rust_perf_bench batch135_pareto -- --ignored --nocapture`.
+    #[cfg(feature = "rust_perf_bench")]
+    #[test]
+    #[ignore = "slow: spawns cargo build+run per rule (temp bench crates)"]
+    fn batch135_pareto_benches() {
+        let corpus = build_perf_seed_corpus();
+        let validator = crate::domains::rust_perf::bench::PerfBenchValidator::new();
+        for rid in [
+            "atomic-vec-zero-cost-convert",
+            "vec-reuse-across-lifetime-change",
+            "partitioned-mut-slices-zero-sync",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-135 rule '{rid}' missing"));
+            let verdict = validator.validate(rid, e.bench_spec.as_ref());
+            assert!(!verdict.is_not_benchable(), "batch-135 '{rid}' has a spec");
+            let b = match &verdict {
+                crate::domains::rust_perf::bench::BenchVerdict::Pareto(p) => p,
+                crate::domains::rust_perf::bench::BenchVerdict::NotBenchable(n) => {
+                    panic!("batch-135 '{rid}' unexpectedly NotBenchable: {n:?}")
+                }
+            };
+            assert!(b.ran, "batch-135 '{rid}' bench must run: {:?}", b.error);
+            println!(
+                "batch-135 {rid}: {:?} faster={} slower={} tie={}",
+                b.overall, b.faster_count, b.slower_count, b.tie_count
+            );
+            for r in &b.results {
+                println!(
+                    "  n={:>6} buggy={:>9}ns fixed={:>9}ns speedup={:.2}x allocs {}→{} outcome={:?}",
+                    r.size, r.buggy_ns, r.fixed_ns, r.speedup, r.buggy_allocs, r.fixed_allocs, r.outcome
+                );
+            }
+        }
+    }
 }
 
 /// Bench spec for `bitplane-transpose-repeated-predicate-scan` (Batch 83,
@@ -11843,6 +12108,262 @@ pub fn run_buggy(input: &Input) {
 
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(run_hoisted(&input.ops, &input.xs));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `atomic-vec-zero-cost-convert` (Batch 135, Plan 114 —
+/// the Wild-linker article distill): both arms pay ONE shared `clone()` so
+/// the timing delta is exactly the conversion; the buggy conversion then
+/// adds a fresh malloc + element copy while the fixed one consumes the
+/// owned clone in place (std's same-layout collect reuse — the alloc axis
+/// pins the elision EXACTLY: 2 → 1). G1: both arms read the same values,
+/// so the Relaxed-load checksums must match exactly.
+#[cfg(feature = "rust_perf_bench")]
+fn atomic_vec_zero_cost_convert_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    // The source is only BORROWED: a fresh allocation + element-by-element
+    // copy is forced on every conversion.
+    pub fn to_atomic(plain: &[u32]) -> Vec<AtomicU32> {
+        plain.iter().map(|&v| AtomicU32::new(v)).collect()
+    }
+
+    pub fn convert(owned: Vec<u32>) -> u64 {
+        let atomic = to_atomic(&owned);
+        std::hint::black_box(&atomic); // keep the allocation observable
+        atomic.iter().map(|a| a.load(Ordering::Relaxed) as u64).sum()
+    }
+}
+
+mod fixed {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    // The vec is OWNED: into_iter walks in place and the same-layout
+    // collect reuses the buffer — no new allocation, no copy loop.
+    pub fn to_atomic(plain: Vec<u32>) -> Vec<AtomicU32> {
+        plain.into_iter().map(AtomicU32::new).collect()
+    }
+
+    pub fn convert(owned: Vec<u32>) -> u64 {
+        let atomic = to_atomic(owned);
+        std::hint::black_box(&atomic);
+        atomic.iter().map(|a| a.load(Ordering::Relaxed) as u64).sum()
+    }
+}
+
+pub struct Input {
+    a: Vec<u32>,
+    b: Vec<u32>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed = 0x853C_49E6_748F_EA9Bu64;
+    let mut next = move || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        seed >> 33
+    };
+    let mut mk = || (0..n).map(|_| next() as u32 | 1).collect::<Vec<u32>>();
+    Input { a: mk(), b: mk() }
+}
+
+pub fn run_buggy(input: &Input) {
+    let owned = input.a.clone(); // shared ownership gain: both arms pay it
+    std::hint::black_box(buggy::convert(owned));
+}
+
+pub fn run_fixed(input: &Input) {
+    let owned = input.b.clone();
+    std::hint::black_box(fixed::convert(owned));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `vec-reuse-across-lifetime-change` (Batch 135): the buggy
+/// arm builds a fresh `Vec<&[u32]>` per call (malloc + fill + consume); the
+/// fixed arm owns a `'static`-typed buffer (thread_local), retargets it per
+/// call via the reuse_vec pattern, and refills — capacity retained, so the
+/// steady-state alloc axis is 1 → 0. The rows are `Box::leak`ed so the
+/// `'static` element type is sound inside the harness (the rule text carries
+/// the real-world caller contract). G1: identical sums.
+#[cfg(feature = "rust_perf_bench")]
+fn vec_reuse_across_lifetime_change_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    // Fresh vec of row refs per call: one malloc + fill + consume.
+    pub fn row_lens(rows: &[Vec<u32>]) -> u64 {
+        let picked: Vec<&[u32]> = rows.iter().map(|r| &r[..]).collect();
+        std::hint::black_box(&picked); // keep the allocation observable
+        picked.iter().map(|s| s.len() as u64).sum()
+    }
+}
+
+mod fixed {
+    use std::cell::RefCell;
+
+    // The buffer is OWNED and retargeted per call: the const size/align
+    // assert makes a mismatched T/U a compile error; clear() empties the
+    // buffer so the map body is unreachable and the loop compiles out;
+    // std's in-place collect hands the SAME allocation back re-typed.
+    pub fn reuse_vec<T, U>(mut v: Vec<T>) -> Vec<U> {
+        const {
+            assert!(
+                std::mem::size_of::<T>() == std::mem::size_of::<U>()
+                    && std::mem::align_of::<T>() == std::mem::align_of::<U>(),
+            );
+        }
+        v.clear();
+        v.into_iter().map(|_| unreachable!()).collect()
+    }
+
+    thread_local! {
+        // 'static-typed BY CONTRACT: rows are leaked for the whole bench,
+        // and the buffer is cleared before any stored ref could be read.
+        static BUF: RefCell<Vec<&'static [u32]>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub fn row_lens(rows: &[Vec<u32>]) -> u64 {
+        BUF.with(|b| {
+            let mut buf = b.borrow_mut();
+            let mut cur: Vec<&[u32]> = reuse_vec(std::mem::take(&mut buf));
+            cur.clear();
+            cur.extend(rows.iter().map(|r| &r[..]));
+            let total: u64 = cur.iter().map(|s| s.len() as u64).sum();
+            let retargeted: Vec<&'static [u32]> = reuse_vec(cur);
+            *buf = retargeted;
+            total
+        })
+    }
+}
+
+pub struct Input {
+    rows: &'static [Vec<u32>],
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed = 0xA24B_5D3F_6C17_E890u64;
+    let mut next = move || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        seed >> 33
+    };
+    let rows: Vec<Vec<u32>> = (0..n)
+        .map(|_| (0..4).map(|_| next() as u32).collect())
+        .collect();
+    Input { rows: Box::leak(rows.into_boxed_slice()) }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::row_lens(input.rows));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::row_lens(input.rows));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `partitioned-mut-slices-zero-sync` (Batch 135): the buggy
+/// arm locks a single Mutex PER BUMP across all workers (contended); the
+/// fixed arm partitions once into disjoint contiguous chunks and runs plain
+/// stores with zero synchronization. Sizes = THREAD counts per the align-64
+/// precedent. G1: the closed-form checksum (every cell bumped ITERS times)
+/// is asserted in-harness. The alloc axis is EXEMPT for this rule (see
+/// ALLOC_AXIS_EXEMPT — contended macOS pthread mutex slow path).
+#[cfg(feature = "rust_perf_bench")]
+fn partitioned_mut_slices_zero_sync_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1, 2, 4, 8],
+        harness: r#"
+use std::sync::Mutex;
+
+const CELLS: usize = 4_096;
+const ITERS: usize = 8;
+
+mod buggy {
+    use std::sync::Mutex;
+
+    // One lock guards the whole array; every bump serializes even though
+    // the workers' index ranges never overlap.
+    pub fn bump(grid: &Mutex<Vec<u64>>, workers: usize) {
+        std::thread::scope(|s| {
+            for w in 0..workers {
+                s.spawn(move || {
+                    for cell_idx in (w..super::CELLS).step_by(workers) {
+                        for _ in 0..super::ITERS {
+                            let mut g = grid.lock().unwrap();
+                            g[cell_idx] = g[cell_idx].wrapping_add(1);
+                        }
+                    }
+                });
+            }
+        });
+    }
+}
+
+mod fixed {
+    // Partition ONCE into disjoint contiguous ranges: plain stores, no
+    // lock, no atomic — each cell is bumped by exactly one owner.
+    pub fn bump(grid: &mut Vec<u64>, workers: usize) {
+        let per = grid.len().div_ceil(workers);
+        std::thread::scope(|s| {
+            for chunk in grid.chunks_mut(per) {
+                s.spawn(move || {
+                    for _ in 0..super::ITERS {
+                        for cell in chunk.iter_mut() {
+                            *cell = cell.wrapping_add(1);
+                        }
+                    }
+                });
+            }
+        });
+    }
+}
+
+pub struct Input {
+    workers: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // n = THREAD COUNT (the contention axis is the size axis).
+    Input { workers: n }
+}
+
+fn expected() -> u64 {
+    (CELLS * ITERS) as u64
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let grid = Mutex::new(vec![0u64; CELLS]);
+    buggy::bump(&grid, input.workers);
+    let cs: u64 = grid.lock().unwrap().iter().sum();
+    debug_assert_eq!(cs, expected());
+    std::hint::black_box(cs);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut grid = vec![0u64; CELLS];
+    fixed::bump(&mut grid, input.workers);
+    let cs: u64 = grid.iter().sum();
+    debug_assert_eq!(cs, expected());
+    std::hint::black_box(cs);
 }
 "#
         .to_string(),
