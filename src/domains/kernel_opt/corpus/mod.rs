@@ -1526,6 +1526,39 @@
 //!   (paper-distilled precedent = B79 itself). Content gate:
 //!   `batch87_state_norm_breaks_associative_scan` (the breaker's
 //!   wrongness pinned materially, non-vacuous).
+//! - **Batch 130 (2026-09-08, the `CloudRift` `cuBLAS`-5090 TMA distill,
+//!   Plan 111 / Research 152):** 5 rules, corpus 575 -> 580 (A 121 -> 122,
+//!   B 60 -> 61, D 130 -> 132, E 46 -> 47). Source: `cloudrift-ai/emmy`
+//!   @ `2aaa0328` (Apache-2.0; the blog landing commit "Mini GPU compiler:
+//!   TMA SGEMM kernel beating cuBLAS on RTX 5090" #89 — NOT the
+//!   `DeploDock/Emmy` path in the queue lead, which 404s; org is
+//!   `cloudrift-ai`, and commit `8764cc2e` later restructured the repo).
+//!   `vendor-dispatch-verify-before-outsource` (D — a suspiciously-good
+//!   win over a vendor baseline is a dispatcher-bug signal: cuBLAS 5090
+//!   batched FP32 dispatches ONE `simt_sgemm_128x32_8x5` across a 32x
+//!   range at 33-42% FMA pipe while the same binary escalates to 73/82%
+//!   on Pro 6000/H200 — no escalation at ANY threshold means the ladder
+//!   is missing, not mistuned), `sub-ms-bench-boost-clock-never-engages` (D — below ~1 ms the boost governor never engages; interleaved-pair
+//!   iterations + median + ratio-not-absolute + clock sampling),
+//!   `lds-cluster-cross-warp-phase-not-static-distance` (B — after
+//!   static latency hiding suffices, the LDS temporal distribution
+//!   governs warp phase: clustered LDS halves `dispatch_stall` 44%->22%,
+//!   the generator-side cause is emission order at `lower.py:192-198)`,
+//!   `tma-single-issuer-bulk-tile` (A — one thread issues the whole 2D
+//!   tile, mbarrier byte-count completion, double-buffer parity; the
+//!   honest claim is instruction count + simplicity, not FMA pipe;
+//!   ragged-K truncation caveat in-rule),
+//!   `multiplexed-grid-axis-partition-modes-exclusive` (E — split-K and
+//!   batch both consuming blockIdx.z must be refused at config time;
+//!   the source's own `ValueError`). Riders: `l2-grouped-tile-schedule`
+//!   (SWIZ=8 formula + DRAM parity), `unroll-fixed-inner` (partial-unroll
+//!   monotonicWORSE boundary), `autotune-warps-stages` (`launch_bounds`
+//!   20x spill negative + triple-buffer same-IPC + tensor-pipe positive
+//!   caveat), `cpasync-multistage-tile-pipeline` (82.6% crossover +
+//!   `mbarrier.try_wait`), `hardcoded-fast-path-jit-specialization` (the
+//!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
+//!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
+//!   (fmad split from `use_fast_math`).
 //! - **Batch 129 (2026-09-08, the ds4 Qwen Q2 decode-fusion + prefill-structural distill,
 //!   Plan 110 / Research 151):** 5 rules, corpus 570 -> 575 (C 45 -> 46,
 //!   H 27 -> 28, L 14 -> 15, M 18 -> 19, N 41 -> 42). Source:
@@ -1625,6 +1658,7 @@ mod entries_gpu_32;
 mod entries_gpu_33;
 mod entries_gpu_34;
 mod entries_gpu_35;
+mod entries_gpu_36;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1638,6 +1672,7 @@ mod tests;
 #[allow(clippy::too_many_lines)] // data table, not logic — grows with distillation batches
 pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     let mut entries = entries_popcorn::entries();
+    entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
     entries.extend(entries_gpu_02::entries());
     entries.extend(entries_gpu_03::entries());
@@ -1685,7 +1720,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 575-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 580-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1693,11 +1728,12 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (121 rules)
+    // A: Memory access patterns (122 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            "tma-single-issuer-bulk-tile",
             "matvec-coalesce",
             "coalesced-row-read",
             "vectorized-pack-load",
@@ -1820,11 +1856,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "extent-clamped-operand-views-partial-k-tile"
         ],
     ),
-    // B: Compute patterns (60 rules)
+    // B: Compute patterns (61 rules)
     (
         KernelCategory::Compute,
         "B: compute",
         &[
+            "lds-cluster-cross-warp-phase-not-static-distance",
             "autotune-warps-stages",
             "upcast-before-reduction",
             "branchless-select",
@@ -1887,7 +1924,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lut-free-bit-spread-vadd4-unpack"
         ],
     ),
-    // C: Fusion patterns (45 rules)
+    // C: Fusion patterns (46 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1940,11 +1977,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-residual-update-writes-separate-next-buffer"
         ],
     ),
-    // D: Dispatch patterns (130 rules)
+    // D: Dispatch patterns (132 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            "sub-ms-bench-boost-clock-never-engages",
+            "vendor-dispatch-verify-before-outsource",
             "sm-count-block-size",
             "predicate-gated-backend",
             "pow2-block-alignment",
@@ -2077,11 +2116,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-time-dense-repack-keyed-sync-publish"
         ],
     ),
-    // E: Parallelism patterns (46 rules)
+    // E: Parallelism patterns (47 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            "multiplexed-grid-axis-partition-modes-exclusive",
             "multi-dim-grid-launch",
             "block-count-clamp",
             "backward-as-conjugate",
@@ -2186,7 +2226,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (27 rules)
+    // H: MoE dispatch + backward pass (28 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2264,7 +2304,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tuned-config-resource-limit-fallback",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (14 rules)
+    // L: Conv-as-GEMM + memory layout (15 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -2286,7 +2326,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "window-recurrence-halo-snapshot-block-parallel"
         ],
     ),
-    // M: Kernel parametric polymorphism (18 rules)
+    // M: Kernel parametric polymorphism (19 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2312,7 +2352,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pipeline-cache-key-covers-every-function-constant"
         ],
     ),
-    // N: dtype + alignment specialization (41 rules)
+    // N: dtype + alignment specialization (42 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",

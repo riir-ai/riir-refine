@@ -458,7 +458,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 575, "Plan 003: experts cover all 575 corpus rules");
+        assert_eq!(total, 580, "Plan 003: experts cover all 580 corpus rules");
     }
 
     #[test]

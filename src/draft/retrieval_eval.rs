@@ -1270,11 +1270,12 @@ mod tests {
                 // to Proposal 006's open question about a 5th domain's cost
                 // to the router: for THIS domain it is not a cost.
                 (false, false, true) => 68.0 / 101.0, // measured 73/101 (72.3%)
-                // Batch 129 (2026-09-08, Plan 110): the 5 kernel + 2 perf
-                // corpus adds shifted the TF-cosine centroids -- annotation
-                // re-measured 88/131 (67.2%, was 94/131 = 71.8% at B128);
-                // floor = measured - 5 per the Plan-030 convention.
-                (true, false, true) => 83.0 / 131.0,  // measured 88/131 (67.2%)
+                // Batch 130 (2026-09-08, Plan 111): the 5 kernel CloudRift
+                // adds re-measured 93/131 (71.0%, was 88/131 = 67.2% at
+                // B129) -- the rich TMA/dispatch concept text sharpened the
+                // TF-cosine centroids upward; floor = measured - 5 per the
+                // Plan-030 convention.
+                (true, false, true) => 88.0 / 131.0,  // measured 93/131 (71.0%)
                 (false, true, true) => 36.0 / 101.0,  // measured 41/101 (40.6%)
                 (true, true, true) => 77.0 / 131.0,   // measured 82/131 (62.6%)
             }

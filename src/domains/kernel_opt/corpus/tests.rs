@@ -83,8 +83,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        575,
-        "kernel batches through Batch 129 should have 575 rules"
+        580,
+        "kernel batches through Batch 130 should have 580 rules"
     );
 }
 
@@ -191,10 +191,23 @@ fn batch1_categories_covered() {
     assert!(concepts.contains(&"vectorized memory access"));
     assert!(concepts.contains(&"work distribution"));
     // Compute patterns
-    assert!(concepts.contains(&"autotune dispatch"));
+    // Batch 130 appended a rider (cloudrift-ai/emmy launch-config negatives),
+    // so the B23-style exact pin became prefix + rider asserts (the B125
+    // full-string regeneration lesson, prefix form).
+    let autotune = concepts
+        .iter()
+        .find(|c| c.starts_with("autotune dispatch"))
+        .expect("autotune-warps-stages concept missing");
+    assert!(autotune.contains("RIDER (Batch 130"), "batch-130 autotune rider missing");
     assert!(concepts.contains(&"numerical precision in reductions"));
     assert!(concepts.contains(&"branch divergence elimination"));
-    assert!(concepts.contains(&"loop unrolling for instruction-level parallelism"));
+    // Batch 130 appended a boundary rider (the CloudRift unroll negatives) --
+    // prefix + rider form per the B125 lesson.
+    let unroll = concepts
+        .iter()
+        .find(|c| c.starts_with("loop unrolling for instruction-level parallelism"))
+        .expect("unroll-fixed-inner concept missing");
+    assert!(unroll.contains("RIDER (Batch 130"), "batch-130 unroll rider missing");
     assert!(concepts.contains(&"function inlining"));
     // Fusion patterns
     assert!(concepts.contains(&"kernel fusion"));
@@ -320,7 +333,13 @@ fn batch4_moe_backward_concepts_covered() {
         .map(|e| e.gpu_concept.as_str())
         .collect();
     assert!(concepts.contains(&"grouped GEMM with prefix-sum offsets"));
-    assert!(concepts.contains(&"swizzled L2-cache-aware tile mapping"));
+    // Batch 130 appended a rider (the CloudRift SWIZ=8 external instance) --
+    // prefix + rider form per the B125 lesson.
+    let l2group = concepts
+        .iter()
+        .find(|c| c.starts_with("swizzled L2-cache-aware tile mapping"))
+        .expect("l2-grouped-tile-schedule concept missing");
+    assert!(l2group.contains("RIDER (Batch 130"), "batch-130 l2-group rider missing");
     assert!(concepts.contains(&"pointwise activation in matmul epilogue"));
     assert!(concepts.contains(&"two backward ops fused into one kernel"));
     assert!(concepts.contains(&"partial activation save with in-kernel recompute"));
@@ -1241,7 +1260,7 @@ fn batch23_attention_cubecl_concepts_covered() {
     // D: fold-query-tokens-for-occupancy (riir-gpu attention_cubecl/mod.rs L336-576 + L1552-1573)
     assert!(concepts.contains(&"when n_head < SM_count (small models, speculative decode with seq_len_q > 1), fold multiple query tokens into one workgroup to increase GPU occupancy. Each workgroup processes fold_factor query tokens sequentially for one head. fold_factor(n_head, seq_len_q, workgroup_size) picks the largest divisor of seq_len_q ≤ workgroup_size / n_head. Benefit: (n_head × fold) workgroups vs n_head → fills idle SMs during speculative decode"));
     // D: hardcoded-fast-path-jit-specialization (riir-gpu attention_cubecl/mod.rs L1313-1342)
-    assert!(concepts.contains(&"when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- moe/topk_softmax_kernels.cu:679 + moe/topk_softplus_sqrt_kernels.cu:786): both MoE top-k launchers switch (num_experts) to dispatch per-count template instantiations -- the specialization axis on a second family (expert count rather than head count). RIDER (Batch 113 external instance, ggml-org/llama.cpp @ 5266f24da v0.4.0 -- commit f1793c1 #27978): mm_ids_helper is generated for ANY n_expert_used -- the specialized helper exists for every count the dispatch can name, not just the popular ones (specialization-surface breadth: bake constants per config, generate the family). RIDER (Batch 117, antirez/ds4 @ 9ab7053 -- ds4_metal.m:42934-42945): pin DERIVED BYTE SIZES alongside logical dims -- gate_row_bytes == 2176, expert_bytes == 4456448, down_row_bytes == 1088 -- because the byte sizes IMPLY THE QUANT BLOCK LAYOUT (2176 = (4096/32)*17 and 17 B/block = the MXFP4 32-values-per-block record), so the pin catches quant-format/stride drift a dims-only check misses without a separate dtype comparison; the fallback is the generic pipeline ternary. RIDER (Batch 117, antirez/ds4 @ 9ab7053 -- ds4.c:54323-54333): the TOPOLOGY-AXIS widening contract -- a schedule gated on measured (device, quant-pair) combos may extend to a new topology only when the topology SHARES THE KERNEL MACHINERY (TP active + MXFP4/MXFP4 arm added beside the CPU-pair arm), unmeasured combos keep the reference schedule, and the invariance is stated at the gate: 'No sampling decision is changed by this dispatch' -- with exact-sampling, the one mode where it could change, explicitly excluded."));
+    assert!(concepts.contains(&"when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- moe/topk_softmax_kernels.cu:679 + moe/topk_softplus_sqrt_kernels.cu:786): both MoE top-k launchers switch (num_experts) to dispatch per-count template instantiations -- the specialization axis on a second family (expert count rather than head count). RIDER (Batch 113 external instance, ggml-org/llama.cpp @ 5266f24da v0.4.0 -- commit f1793c1 #27978): mm_ids_helper is generated for ANY n_expert_used -- the specialized helper exists for every count the dispatch can name, not just the popular ones (specialization-surface breadth: bake constants per config, generate the family). RIDER (Batch 117, antirez/ds4 @ 9ab7053 -- ds4_metal.m:42934-42945): pin DERIVED BYTE SIZES alongside logical dims -- gate_row_bytes == 2176, expert_bytes == 4456448, down_row_bytes == 1088 -- because the byte sizes IMPLY THE QUANT BLOCK LAYOUT (2176 = (4096/32)*17 and 17 B/block = the MXFP4 32-values-per-block record), so the pin catches quant-format/stride drift a dims-only check misses without a separate dtype comparison; the fallback is the generic pipeline ternary. RIDER (Batch 117, antirez/ds4 @ 9ab7053 -- ds4.c:54323-54333): the TOPOLOGY-AXIS widening contract -- a schedule gated on measured (device, quant-pair) combos may extend to a new topology only when the topology SHARES THE KERNEL MACHINERY (TP active + MXFP4/MXFP4 arm added beside the CPU-pair arm), unmeasured combos keep the reference schedule, and the invariance is stated at the gate: 'No sampling decision is changed by this dispatch' -- with exact-sampling, the one mode where it could change, explicitly excluded. RIDER (Batch 130 external instance, cloudrift-ai/emmy @ 2aaa0328 -- deplodock/compiler/cuda/runner.py:431-434 + lower.py:243,247-253,283): the codegen twin of this rule -- a fresh translation unit is GENERATED per (M,N,K) with the dims baked as #define M {m} / #define N {n} / #define K {k} ('// Compile-time matrix dimensions for kernel optimization'), so specialization breadth comes from the generator rather than a hand-maintained variant family: the tile-loop count nt=K/{bk} folds to a literal the compiler can fully unroll, and the epilogue is selected by a PREPROCESSOR ALIGNMENT PREDICATE -- #if (M % {bm} == 0 && N % {bn} == 0) emits the bounds-free store macro while the #else arm keeps the per-element-checked stores IN THE SAME SOURCE, so the generic fallback is a preprocessor arm of one kernel, not a second dispatch target. Honest magnitude (blog-reported, accompanies the pin): the bake moves 1024 from 98% to 101% and 4096 from 100% to 101% of cuBLAS -- real but marginal next to the per-size tile-table sweep, which carries the gains. Scope discipline: fresh-compile-per-shape re-pays nvcc per invocation, so it is sensible for COMMON sizes only (powers of two, model dims), never every M/N/K -- the generator's runner indeed re-emits per benchmark invocation."));
 }
 
 #[test]
@@ -1636,7 +1655,7 @@ fn batch29_concepts_covered() {
     // D: launch-unchecked-caller-owned-size-contract (riir-gpu epilogue/mod.rs L50 + gemv_residual_cubecl.rs L205-226)
     assert!(concepts.contains(&"the checked launch path validates buffer sizes and argument consistency on EVERY dispatch — host-side overhead that dominates when each dispatch is microseconds of work in a 14-dispatches-per-layer × 26-layer decode loop. Compile kernels with launch_unchecked, wrap each in a launcher that takes exact element counts as plain args, and push the size contract into a documented # Safety section (exact per-handle element counts, required hardware features) verified by the caller and by tests. The repeated shape: thin launcher struct + one unsafe launch + an enumerated handle-size contract. Distinct from cuda-graph-scalar-via-device-pointer (streamlines launches by moving scalars to device memory — this elides per-launch validation) and from no-blocking-sync-in-async-pipeline (elides syncs — this elides checks)"), "unchecked-launch concept");
     // B: fast-math-contraction-behind-feature-flag (riir-gpu epilogue/gemv_residual_cubecl.rs L67-75 + L94-101 + L131-139)
-    assert!(concepts.contains(&"a numerics-affecting compiler flag (fast-math contraction) must not be enabled globally — it changes rounding everywhere and breaks bit-comparisons and tolerance gates — nor disabled forever (the hot dot-product loop stays uncontracted mul+add on every build). Attach the flag to the KERNEL ATTRIBUTE via a cfg_attr pair gated on a dedicated Cargo feature: the attribute-identical strict-FP compilation stays the byte-identical default, correctness/equivalence gates run strict, and perf builds opt in. The partial += w[k] * x[k] accumulation contracts to FMA only on the opt-in compilation of the same source. Distinct from dtype-specialized-float-kind (dtype specialization — this is compiler-numerics-mode specialization) and from in-kernel numeric transforms like softplus-piecewise-saturation-clamp (algorithm changes — this gates a compiler flag with zero algorithm change)"), "fma-flag concept");
+    assert!(concepts.contains(&"a numerics-affecting compiler flag (fast-math contraction) must not be enabled globally — it changes rounding everywhere and breaks bit-comparisons and tolerance gates — nor disabled forever (the hot dot-product loop stays uncontracted mul+add on every build). Attach the flag to the KERNEL ATTRIBUTE via a cfg_attr pair gated on a dedicated Cargo feature: the attribute-identical strict-FP compilation stays the byte-identical default, correctness/equivalence gates run strict, and perf builds opt in. The partial += w[k] * x[k] accumulation contracts to FMA only on the opt-in compilation of the same source. Distinct from dtype-specialized-float-kind (dtype specialization — this is compiler-numerics-mode specialization) and from in-kernel numeric transforms like softplus-piecewise-saturation-clamp (algorithm changes — this gates a compiler flag with zero algorithm change) RIDER (Batch 130 external instance, cloudrift-ai/emmy @ 2aaa0328 -- deplodock/compiler/cuda/runner.py:636-642,656-658): the flag pair must be SPLIT, not lumped as 'fast math' -- contraction is the EXACT half, the lossy flags are the other half: fast_math=False (the default) is the IEEE-clean configuration: we still enable --fmad=true so SGEMM gets fused FFMA instructions (without it nvcc emits separate FMUL+FADD and SGEMM throughput halves), but we do NOT pass --use_fast_math, which would also enable --ftz=true and relaxed div/sqrt -- those break exact-FP32 claims for headline numbers (docstring verbatim, with the repo's nvcc_cmd = [nvcc, -O3, --fmad=true] and the conditional --use_fast_math append as the enforcement). FMA fusion has a SINGLE rounding, so an exactness-claiming build keeps contraction ON unconditionally and refuses only ftz/relaxed-math -- the inverse posture of gating contraction itself when bit-identity across builds is the contract."), "fma-flag concept");
 }
 
 #[test]
@@ -5308,7 +5327,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 575-rule corpus must appear in exactly one category.
+    // Every rule_id in the 580-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5351,13 +5370,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 128).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 130).
     let expected = [
-        (KernelCategory::MemoryAccess, 121),
-        (KernelCategory::Compute, 60),
+        (KernelCategory::MemoryAccess, 122),
+        (KernelCategory::Compute, 61),
         (KernelCategory::Fusion, 46),
-        (KernelCategory::Dispatch, 130),
-        (KernelCategory::Parallelism, 46),
+        (KernelCategory::Dispatch, 132),
+        (KernelCategory::Parallelism, 47),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 28),
@@ -5381,9 +5400,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 575.
+    // Sum must equal 580.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 575, "Plan 003: category totals must sum to 575");
+    assert_eq!(total, 580, "Plan 003: category totals must sum to 580");
 }
 
 #[test]
@@ -5394,8 +5413,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 575,
-        "Plan 003: grouped corpus has {total} rules, expected 575"
+        total, 580,
+        "Plan 003: grouped corpus has {total} rules, expected 580"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9411,8 +9430,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        575,
-        "Batch 129: corpus should have 575 rules"
+        580,
+        "Batch 130: corpus should have 580 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10845,6 +10864,173 @@ fn batch129_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-129 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch130_rules_present() {
+    // Batch 130 (the CloudRift cuBLAS-5090 TMA distill -- Plan 111 /
+    // Research 152): 5 kernel_opt rules mined at cloudrift-ai/emmy @
+    // 2aaa0328 (Apache-2.0; the blog landing commit #89 -- NOT the
+    // DeploDock/Emmy path in the queue lead, which 404s).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "vendor-dispatch-verify-before-outsource",
+        "sub-ms-bench-boost-clock-never-engages",
+        "lds-cluster-cross-warp-phase-not-static-distance",
+        "tma-single-issuer-bulk-tile",
+        "multiplexed-grid-axis-partition-modes-exclusive",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-130 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch130_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-130 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("vendor-dispatch-verify-before-outsource");
+    assert!(
+        c.contains("no escalation at any threshold")
+            && c.contains("simt_sgemm_128x32_8x5")
+            && c.contains("vendor-fused-op-instantiation-check")
+            && c.contains("cublas_loop_vs_strided.cu"),
+        "vendor-dispatch concept"
+    );
+    let c = concept("sub-ms-bench-boost-clock-never-engages");
+    assert!(
+        c.contains("clock governor never engages boost")
+            && c.contains("562->1890 MHz")
+            && c.contains("INTERLEAVED for thermal fairness")
+            && c.contains("dispatch-cost-sequential-measurement-not-single-op"),
+        "sub-ms-bench concept"
+    );
+    let c = concept("lds-cluster-cross-warp-phase-not-static-distance");
+    assert!(
+        c.contains("dispatch_stall 44.21% vs 22.36%")
+            && c.contains("hypothesis was wrong")
+            && c.contains("Generate FMA block: B load first, then interleave A load + FMA per row")
+            && c.contains("interleave-loads-between-tile-matmuls"),
+        "lds-cluster concept"
+    );
+    let c = concept("tma-single-issuer-bulk-tile");
+    assert!(
+        c.contains("cp.async.bulk.tensor.2d")
+            && c.contains("mbarrier.arrive.expect_tx")
+            && c.contains("TRUNCATES a ragged K tail silently")
+            && c.contains("cpasync-multistage-tile-pipeline"),
+        "tma-single-issuer concept"
+    );
+    let c = concept("multiplexed-grid-axis-partition-modes-exclusive");
+    assert!(
+        c.contains("Both modes consume blockIdx.z")
+            && c.contains("BATCH > 1 ? BATCH : k_splits_val")
+            && c.contains("target-tile-split-k-deterministic-two-dispatch"),
+        "grid-axis-exclusivity concept"
+    );
+    // Rider pins: the 7 riders this batch appended to existing rules,
+    // pinned by their opening marker (the B129 prefix+rider form).
+    let corpus_all: Vec<&str> = corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+    let rider_targets = [
+        "when kernel params match a known config",            // hardcoded-fast-path
+        "a numerics-affecting compiler flag",                 // fast-math
+        "swizzled L2-cache-aware tile mapping",               // l2-grouped
+        "loop unrolling for instruction-level parallelism",   // unroll-fixed-inner
+        "autotune dispatch",                                  // autotune-warps-stages
+        "Stage global-to-shared tile fetches",                // cpasync-multistage
+        "pin the launch heuristic to the architecture",       // launch-heuristic (prefix probe below)
+    ];
+    let _ = rider_targets;
+    for (prefix_probe, marker) in [
+        (
+            "when kernel params match a known config",
+            "RIDER (Batch 130 external instance, cloudrift-ai/emmy",
+        ),
+        (
+            "a numerics-affecting compiler flag",
+            "RIDER (Batch 130 external instance, cloudrift-ai/emmy",
+        ),
+        (
+            "swizzled L2-cache-aware tile mapping",
+            "RIDER (Batch 130 external instance, cloudrift-ai/emmy",
+        ),
+        (
+            "loop unrolling for instruction-level parallelism",
+            "RIDER (Batch 130, cloudrift-ai/emmy",
+        ),
+        ("autotune dispatch", "RIDER (Batch 130, cloudrift-ai/emmy"),
+        (
+            "Stage global-to-shared tile fetches",
+            "RIDER (Batch 130, cloudrift-ai/emmy",
+        ),
+    ] {
+        let concept = corpus_all
+            .iter()
+            .find(|c| c.starts_with(prefix_probe))
+            .unwrap_or_else(|| panic!("rider target concept missing: {prefix_probe}"));
+        assert!(
+            concept.contains(marker),
+            "batch-130 rider missing on: {prefix_probe}"
+        );
+    }
+    // launch-heuristic-pinned-to-calibration-arch: concept opening differs;
+    // locate by rule id.
+    let lh = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "launch-heuristic-pinned-to-calibration-arch")
+        .expect("launch-heuristic rule missing");
+    assert!(
+        lh.gpu_concept.contains("RIDER (Batch 130 external instance, cloudrift-ai/emmy"),
+        "batch-130 launch-heuristic rider missing"
+    );
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch130_pseudocode_parses() {
+    // G1 for Batch 130: syn-parse gate (the CloudRift TMA rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "vendor-dispatch-verify-before-outsource",
+        "sub-ms-bench-boost-clock-never-engages",
+        "lds-cluster-cross-warp-phase-not-static-distance",
+        "tma-single-issuer-bulk-tile",
+        "multiplexed-grid-axis-partition-modes-exclusive",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-130 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-130 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-130 opt_pattern for '{id}' must parse"
         );
     }
 }
