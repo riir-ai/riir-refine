@@ -10311,7 +10311,7 @@ fn batch119_sentinel_never_equal_and_reset_before_reuse() {
     assert!(is_poisoned(f32::from_bits(POISON)));
     // (2) the int-dtype hazard: the same bits are a legitimate i32 payload.
     assert_eq!(
-        POISON as i32,
+        POISON.cast_signed(),
         -327_686,
         "the source's 4-byte poison IS a representable i32 -- the documented \
          int-dtype collision hazard, structurally unfixable for integers"
@@ -10356,6 +10356,7 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     // changes per epoch, making the aliased copy unreachable; (4) a split
     // 16-byte payload is ready only when BOTH slot flags match (the ~0u retry
     // encoding); (5) a stale flag never passes the poll within a wrap.
+    const NOT_READY: u32 = !0u32; // the ~0u retry encoding (used in (4) below)
     // (1) the source's advanceEpoch arithmetic on a uint8_t.
     let mut epoch: u8 = 2; // the constructor's initial epoch
     let mut seen_zero_or_one = false;
@@ -10377,15 +10378,12 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     // (3) the rotation: offset = (subBuffer % roundRobinFactor) * pitch
     // changes every epoch, so the aliased old copy is physically unreachable.
     let (pitch, rr) = (64usize, 2usize);
-    let mut sub_buffer = 0usize;
     let mut offsets = Vec::with_capacity(4);
-    for _ in 0..4 {
+    for (sub_buffer, _) in (0..4).enumerate() {
         offsets.push((sub_buffer % rr) * pitch);
-        sub_buffer += 1;
     }
     assert_eq!(offsets, vec![0, 64, 0, 64], "the rotation alternates sub-buffers");
     // (4) split-slot both-flags-match with the ~0u retry encoding.
-    const NOT_READY: u32 = !0u32;
     let split_slot_ready = |f0: u32, f1: u32, _epoch: u32| {
         if f0 == f1 { f0 } else { NOT_READY }
     };
@@ -10890,6 +10888,7 @@ fn batch130_rules_present() {
     }
 }
 
+#[allow(clippy::too_many_lines)] // the B130 phrase-table test: one assertion block per mandated phrase
 #[test]
 fn batch130_concepts_covered() {
     // Distinctness + mandated phrases must survive in the concept text
