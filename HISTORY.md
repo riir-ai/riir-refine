@@ -3973,3 +3973,31 @@ the two QR goldens fail at HEAD (pre-existing, proven via stash — the
 independent-preimage halves PASS, so it is render drift, not a layout
 break). Open owner call: riir-dapps `.issues/025` (the 100 KAT vs 100 M
 KAT grant-units mismatch; m3 sits at balance 0 until it lands).
+
+### Issue 078 resolved — the QR goldens encoded the RETIRED host (2026-09-09, ecbf542)
+
+The record above says "render drift" — that hypothesis is now FALSIFIED,
+and the provenance is proven: both pinned goldens are byte-exact the
+digests of the PRE-`f7cbe31` URL (`kat.heal.gist.rs/payreq/71b5cbf...`,
+verified by a since-removed scratch test). `dc9e179` captured them
+against that host; `f7cbe31` flipped `DEFAULT_SERVICE_URL`/`QR_GOLDEN_URL`
+to `heal.gist.rs` and its commit message claims "QR golden … follow",
+but the diff touched only the URL — the pins kept encoding the retired
+host's QR and both golden tests ran red from the flip until now. NOT
+upstream: the lock resolved `qrcode 0.14.1` throughout (the existing
+`qrcode_resolved_version_is_the_pinned_one` lock-read pin was green the
+whole time — issue 078's fix-shape step 2 "add a version pin assertion"
+was already satisfied by it).
+
+Fix (ecbf542): both goldens re-derived at the CURRENT host
+(`de761701→a06a9976…`, `213caa9e→4f0f6ee5…`), provenance in both doc
+comments, and a new `qr_golden_url_tracks_the_default_service_url` tie
+that fails AT THE URL LINE with the re-derive instruction when
+`DEFAULT_SERVICE_URL` moves — the gap that let the flip run red.
+Gate coverage (078's closing condition): the `kat_transport` lib tests
+are compiled AND run by `ci_feature_guard.sh` Layer 5c (`cargo test
+--all-features --tests` selects the lib unittest binary); the lane had
+simply not completed since the flip. 6/6 `qr_*` + 30/30
+`kat_lease_client` green, clippy `-D warnings` clean at
+`--features kat_transport`. Issue file removed per the noise-reduction
+rule; this section is the record.
