@@ -1,6 +1,6 @@
 # Issue 075 — verdict: per-run burn + consent prompt on plain `cargo heal` (NOT LGTM)
 
-**Status:** RECORD — verdict filed, no code change (2026-09-08)
+**Status:** RECORD — amended same day after owner correction (2026-09-08); zero-balance decision pending owner answer
 
 ## The question
 
@@ -161,3 +161,57 @@ pricing every invocation (R3); the ledger half violates the tier model
 - Filed docs-only in a shared worktree (sibling agent editing code); no
   code, no `*.rs`, no AGENTS.md/README touched, nothing committed by this
   filing.
+
+## Owner correction — same day (2026-09-08)
+
+The owner clarified the question. The verdict answered a different question
+in three places; corrected on the record:
+
+1. **"Prompt on each run" was a misread — R1/R2 refuted a strawman.** The
+   intended model is **prepaid fuel, not an interactive gate**: burn the
+   init free KAT grant run by run; when it runs out, the user should
+   consider contributing back via `--mine`. What survives of R1/R2 is
+   policy, not refutation: no per-run interactive prompt (the owner never
+   wanted one), consent stays the machine-global ask-once record
+   (`Unset` = running `sync` IS the consent).
+2. **R3's premise was wrong — withdrawn as written.** The free tier is
+   NOT "for users with nothing to burn"; it IS a burn allowance: the
+   once-per-account **100,000,000 KAT grant** (`FREE_TIER_GRANT_KAT`,
+   `src/kat_meter.rs:285`, minted server-side at login). What remains of
+   R3 is sequencing only: 008's anonymous-funnel row prices the free tier
+   in unheal egress ("unheal required", 008:255) from run 1, while the
+   owner's model contributes at depletion instead. That row's rewrite is
+   an owner call, pending here.
+3. **R4 ruled out something the owner never proposed.** The owner's
+   "count total and commit it in the end" IS the shipped/intended
+   architecture: per-run burn is LOCAL meter accounting only (crash-safe
+   watermark, `src/kat_meter.rs:442-454`); the ledger commit is the epoch
+   settle batch. R4 survives only as the guard-rail it always was: never
+   make the ledger write per-run.
+
+### How settlement actually works (the owner's direct question: "daily? hourly?")
+
+| leg | cadence | where |
+|---|---|---|
+| per-run burn | every run, **LOCAL ONLY** — 1 KAT per code word token against the watermark; no network, no prompt | `KatCharge::settle` (`src/kat_meter.rs:442-454`) |
+| report burn debt | at `cargo heal sync` — **designed, NOT landed** (T0.3+; "reconciles at sync" is the meter's own printed caveat) | 008:268-272 |
+| daily faucet grant | exactly-once per UTC day per account (7-day activity window, day budget, treasury-funded) | crank grant leg (`riir-dapps/src/kat/crank.rs`) |
+| epoch settle commit | exactly-once per epoch — **7 days** (`ticks_per_epoch: 604_800`, `riir-dapps/src/kat/staking.rs:192`); burn-first batch `BurnFrom(liability)` → 65% pool + 5% staking / 20% treasury / 10% true-burn | crank settle leg, `epoch_settlements_with` |
+
+The worker alarm wakes ~hourly (`KAT_CRANK_ALARM_SECS`, hourly default —
+the settle leg's `UpToDate` "common hourly case"); the money legs act
+once per UTC day (faucet) and once per 7-day epoch (settle). Burn-as-fuel
+funds the very pool that pays `--mine` contributors (70% of burn →
+mining+trainer pool): the owner's burn-until-empty → contribute-back
+loop is the flywheel the split already implements.
+
+### The one open decision this amendment does not settle
+
+Zero-balance behavior. Shipped G3 is warn-and-pay, never brick
+(`KAT_WARN_REMAINING` = 10M warn threshold; healing never blocks). The
+owner's "they should consider contribute back" reads as nudge, not
+brick, but whether depletion ever soft-gates plain `--fix` for a
+depleted, contributing-capable account is an owner mandate (it amends
+G3 + the CLI UX contract). Asked 2026-09-08; answer to be recorded here.
+
+Amendment committed docs-only: status line + this section, nothing else.
