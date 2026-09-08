@@ -277,6 +277,18 @@ pub mod kat_payreq_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_account_client;
 
+// Owner mandate 2026-09-08: the consent-heartbeat client — the one-shot,
+// SIGNED tier note `--mine`/`--unmine` send so the network's web front can
+// show each machine's engagement tier (opted-in / opted-out). Best-effort
+// by contract: a failure is one skipped line, never an exit code. The note
+// carries the tier + machine label + signature ONLY — never heal data
+// (the module's golden-bytes test pins exactly what is signed). Behind
+// BOTH kat_service (the account key, the consent record, the base URL) AND
+// kat_transport (ureq): builds without either compile it to nothing and
+// the commands simply skip the line.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+pub mod kat_consent_client;
+
 // Proposal 011 §7 / T4.1+T4.2 (Issue 061, Plan 066): the wet-run harness —
 // the six-step full-loop proof and the G-WET gate. Three things it exists
 // to make impossible: a faucet loop that moves a supply counter (the

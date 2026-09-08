@@ -285,6 +285,10 @@ Implementation split: the CLI half is DONE (this day's UX commits); the
 anonymous-sync arm + the burn-reconcile are `kat-service`/`riir-dapps`
 surface work, filed under the mining queue, NOT this repo.
 
+### Why the burn is not a per-run prompt (2026-09-08 verdict)
+
+Owner asked whether plain `cargo heal` should burn KAT and prompt for unheal consent each run — **NOT LGTM (Issue 075)**: the burn already exists as the local metered charge (`CHARGE_KAT_PER_MILLION_TOKENS` `src/kat_meter.rs:279`, `KatCharge::settle` `src/kat_meter.rs:442-454`, accounting-only with the server reconcile at sync `src/kat_meter.rs:328-332`), so a per-run prompt re-presents a settled charge without moving money. Consent is already the machine-global three-tier record (`src/kat_mining_consent.rs:8-20` — `Unset` = running `sync` IS the consent; a refusal-state prompt breaks every scripted/CI user), and the free tier (010 §M2) is treasury-funded precisely for users with nothing to burn. The ledger leg stays the epoch-cadence burn-first batch (`riir-dapps/src/kat/compose.rs:248-277`); per-run settlement would violate the Glacial tier (`riir-dapps/AGENTS.md:55-70`). Verdict, refuted alternative, and what would flip it: [Issue 075](../.issues/075_heal_per_run_burn_consent_verdict.md).
+
 ## TL;DR
 
 **Ship it phased, simulator-first — the agent earns autonomy by beating frozen constants in the sandbox, never by default.** The architecture is one sentence: *modelless strategy selection (the shipped self-heal math) proposes bounded parameter sets from committed telemetry; GLM reasons at the boundaries without authority; the ledger enforces the bounds at apply time; every decision is a BLAKE3-anchored artifact that replays bit-identically — that trail is the proof-of-AI-work.* Next action (updated 2026-08-28): Phases 0–2 are LANDED and the G5 gate returned FAIL (wash), so the agent is **advisory-only and terminal at that scope**. The only live items are T2.3 (advisory soak — accrues when live telemetry flows) and, if the owner wants autonomy at all, a NEW plan carrying v2 candidates plus the cap/initial supply decision that no lever in this proposal can reach.

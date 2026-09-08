@@ -116,6 +116,8 @@ This also answers the priority question 008 left open: **stipend first, grants f
 
 Mass account creation to farm grants is a pre-existing exposure; M2 changes *which* resource it drains (treasury instead of supply). The floor bounds that drain absolutely, and the fallback path is exactly today's behavior — so **M2 is strictly no worse than the status quo at every treasury level**, and better above the floor. Grant eligibility hardening (proof-of-personhood, registration cost) is a separate concern and is explicitly out of scope.
 
+> Cross-ref (2026-09-08): [Issue 075](../.issues/075_heal_per_run_burn_consent_verdict.md) — why the free tier never demands a burn at heal time: the burn is the existing local meter (`src/kat_meter.rs`) settled at epoch cadence, and M2 exists precisely for users with nothing to burn.
+
 ## Levers table (additions to 008 §The levers)
 
 | Lever | Parameter | Bounds (per epoch) | Enforcement |

@@ -228,8 +228,9 @@ fn run_mine_intro() {
     println!("  * Devnet: KAT carries NO cash value and NO redemption right.");
     println!("  * Payloads are REDACTED (rule verdicts + counters, never your code)");
     println!("    and SIGNED with your account key.");
-    println!("  * Contributing is opt-in per sync run — nothing leaves this machine");
-    println!("    unless you run `cargo heal sync` (or it runs as your settlement step).");
+    println!("  * Contributing is opt-in per sync run — no heal data leaves this machine");
+    println!("    (one exception: --mine/--unmine send a signed tier note) unless you run");
+    println!("    `cargo heal sync` (or it runs as your settlement step).");
     println!();
     println!("START (4 steps):");
     println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
@@ -252,6 +253,11 @@ fn run_mine_intro() {
             ),
             Err(_) => println!("status: NOT logged in — step 2 first"),
         }
+        let wallet_base = riir_clippy::kat_lease_client::service_url_for_command();
+        println!(
+            "web wallet (same account): {}/wallet   <- GitHub SSH-key match",
+            wallet_base.trim_end_matches('/')
+        );
     }
     #[cfg(not(feature = "kat_service"))]
     {
@@ -294,6 +300,22 @@ fn run_mine_intro() {
     }
     println!("{}", state.status_line());
     println!("opt out any time: cargo heal --unmine");
+
+    // The one-shot signed tier note (owner mandate 2026-09-08): best-effort —
+    // offline / not-logged-in prints one skipped line; never fatal, never an
+    // exit-code change. Feature-gated: a build without the service+transport
+    // halves simply has no heartbeat line.
+    #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+    {
+        let base = riir_clippy::kat_lease_client::service_url_for_command();
+        let trimmed = base.trim_end_matches('/');
+        match riir_clippy::kat_consent_client::send_heartbeat(&base) {
+            Ok("recorded") => println!("consent heartbeat: recorded (opted IN) at {trimmed}"),
+            Ok("unchanged") => println!("consent heartbeat: already recorded (opted IN)"),
+            Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
+            Err(reason) => println!("consent heartbeat: skipped — {reason}"),
+        }
+    }
 }
 
 /// Owner mandate 2026-09-08: `cargo heal --unmine` — the opt-OUT
@@ -307,6 +329,14 @@ fn run_mine_intro() {
 /// - **Not deleted**: whatever is already queued in `.heal/outbox/`. The
 ///   path is named and the files are the user's to remove; a tool that
 ///   silently deletes the evidence of what it queued is not auditable.
+/// - **Sent (best-effort, one-shot)**: a signed consent tier note to the
+///   service — tier + machine label + signature, NEVER heal data — so the
+///   web front shows this machine opted out. Only when the `kat_service` +
+///   `kat_transport` halves compiled in AND the machine is logged in +
+///   online; the note goes out BEFORE the logout half removes the key (a
+///   signature needs it). Local consent is recorded first; the `sync` PUSH
+///   half stays refused either way; a skipped or failed note never changes
+///   the exit code and the outbox is still never touched.
 ///
 /// Standalone early-return mode (before `validate_mode_flags`), works in
 /// EVERY feature build, exits 0, and is idempotent.
@@ -337,10 +367,28 @@ fn run_unmine() {
         "record: {}",
         riir_clippy::kat_mining_consent::consent_path(&dir).display()
     );
+
+    // The one-shot signed tier note (owner mandate 2026-09-08) — BEFORE the
+    // logout half below removes the key, because a signature needs it. The
+    // note carries the tier + machine label + signature only, never heal
+    // data; a failure prints one line and never changes the exit code.
+    #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+    {
+        let base = riir_clippy::kat_lease_client::service_url_for_command();
+        let trimmed = base.trim_end_matches('/');
+        match riir_clippy::kat_consent_client::send_heartbeat(&base) {
+            Ok("recorded") => println!("consent heartbeat: recorded (opted OUT) at {trimmed}"),
+            Ok("unchanged") => println!("consent heartbeat: already recorded (opted OUT)"),
+            Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
+            Err(reason) => println!("consent heartbeat: skipped — {reason}"),
+        }
+    }
     println!();
     println!("STOPPED: the outbound push half of `cargo heal sync`. No redacted batch,");
-    println!("no signed payload, nothing leaves this machine. The lease PULL half still");
-    println!("runs — downloading a corpus epoch is a read, not a contribution.");
+    println!("no signed payload, nothing else leaves this machine (the one exception:");
+    println!("the attempted tier note above — tier + machine label, never heal data).");
+    println!("The lease PULL half still runs — downloading a corpus epoch is a read,");
+    println!("not a contribution.");
     println!();
     println!("UNCHANGED (and always was local): healing itself.");
     println!("  cargo heal              <- dry run, zero edits, local");
