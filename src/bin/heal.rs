@@ -2036,7 +2036,19 @@ fn parse_args() -> Args {
         json: false,
         import_series: false,
     };
-    let mut it = std::env::args().skip(1);
+    // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
+    // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
+    // not carry it). Without the strip, `heal` landed in the scan-path arm
+    // and the KAT subcommands' `args.paths.is_empty()` guard demoted every
+    // one of them (`cargo heal login` → "no mode given" + usage dump) while
+    // every flag-mode invocation (`cargo heal --suggest …`) kept working —
+    // which is how the G1 gates and the repo-side KAT tests all missed it.
+    // A leading `heal` is this tool's own name, never a scan path.
+    let mut raw: Vec<String> = std::env::args().skip(1).collect();
+    if raw.first().is_some_and(|first| first == "heal") {
+        raw.remove(0);
+    }
+    let mut it = raw.into_iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--suggest" => args.suggest = true,
