@@ -110,13 +110,14 @@ explicitly either way.
       rust_perf): table above; rule-level re-verification (READ each named
       neighbor) required at mine time BEFORE authoring — the pre-pass is
       file/grep-level, the B30 filter is load-bearing at rule granularity.
-- [ ] T2 — (cargo-gated) Fresh clone `cloudrift-ai/emmy` into `.raw/`, pin @
-      HEAD + license, walk the pass files the article cites
-      (lower.py t-passes, backend `_tma.py`, decomposition 070_matmul.py,
-      095_interleave_loads / 096_pair_ldmatrix_loads / 110_drop_redundant_syncs
-      — note: article cites pass NUMBERS that may have moved with the Emmy
-      rename; re-locate by name); spawn 2 parallel subagent proposal lanes
-      (kernel_opt + compiler-pass/rust_perf), re-verify every quoted line.
+- [x] T2a — (zero-build read half, DONE 2026-09-09) Fresh clone `cloudrift-ai/emmy` →
+      `.raw/emmy` @ `1c058c9d31b02fe1b229a295a855e02d7e941b35` (2026-09-08, Apache-2.0
+      re-verified; tip HEAD = "fused attention kernel past FlashAttention-2" — the FA
+      articles' kernel landed here too, relevant for Batch 138). Clone RETAINED for T3
+      quote re-verification (rm -rf at landing per the .raw discipline). Two parallel
+      subagent read-lanes ran; proposals + adjudications in the Appendix below.
+- [ ] T2b — (cargo-gated, folds into T3) subagent proposal lanes COMPLETE — no further
+      read work needed; authoring may cite the Appendix directly.
 - [ ] T3 — (cargo-gated) Author entries + the batch137 standing syn-parse gate
       (`batch137_pseudocode_parses` + presence/needles incl. NotBenchable
       membership where annotated); rule_id-anchored edits ONLY (the B136
@@ -143,3 +144,122 @@ explicitly either way.
       `.distill/001_mining_queue_snapshot.md` in the same commit (lead-pair
       entry → landed; Batch 138 = FA parts 1+2 stays queued); rm -rf the
       `.raw` clone.
+
+## Appendix — T2a subagent proposals (2026-09-09, two read-lanes @ pin `1c058c9d`)
+
+Eleven candidates, all rule_ids grep-verified novel, all quotes file:line-verified
+at the pin by the lanes; T3 must RE-verify quotes before authoring (the B31
+drift discipline). All expected NotBenchable-annotated (RTX 5090/CUDA numbers;
+M3 box).
+
+**Lane A (kernel_opt structure):**
+1. `smem-fill-align-chunk-not-element` (N dtype/alignment, CORRECTNESS class):
+   smem slab base alignment must derive from the FILL CHUNK (16 B cp.async / TMA
+   box), not the element width — a 2 B-aligned f16 slab takes 16 B writes that
+   fault at 8 mod 16 (live fault, `_stage.py:310-318`; TMA pins 128 B even at
+   NONE swizzle, `_stage.py:288-289,854-856`). Rider: load-side static alignment
+   proof (`050_vectorize_loads.py:174-185` — fp16 n=2 NOT a freebie).
+2. `software-swizzle-shift-row-stride` (A): software-fill slab XOR swizzle shift
+   must derive from the ROW STRIDE, not default log2(atom) — a 128-elem fp16 row
+   spans two 128 B atoms and collapses rows onto a quarter of chunk positions
+   (measured 7.8-way ldmatrix conflict at D=128, vanishes at D=64;
+   `_stage.py:349-362`; gate = NONE | inner==atom | !pow2, else shift;
+   `sm_89`-scoped — hardware/TMA slabs excluded). Rider: the derivation is
+   consumed by 3 parties (descriptor encode, TMA box split, drain mode) and
+   disagreement = TMA COPY DEADLOCK (`_stage.py:336-337,862-875`).
+3. `companion-slab-ring-slot-sync` (A, CORRECTNESS, live-found bug): a scale/
+   sidecar slab riding the SAME depth-D ring as its codes must carry the slot-row
+   offset; bare coordinate reads slot 0 while codes read slot s → a minority of
+   cells scaled wrong by 2-3×, invisible in source AND most-output parity
+   (`_atom.py:411-420,386-389,1172-1175`). Per-channel fragment naming is part of
+   the rule.
+4. `split-k-atomic-arm-legality` (E, CORRECTNESS): the atomicAdd combine arm is
+   SEMANTICALLY illegal regardless of shape unless: ONE state component ·
+   ADDITIVE monoid · output rounds-into-able (low-precision → deferred f32
+   finalize) · projection DISTRIBUTES over the add (`_split.py:88-114`); storage
+   asked BEFORE projection; over-refusal is fail-safe (`_split.py:61-71` static-K
+   divisibility admission).
+5. `setmaxnreg-fit-gate-elected-arrive` (E, sm_90+ ONLY): (a) emit the
+   `setmaxnreg.dec/inc` pair only when raised total fits the SM register file
+   (`24·prod + 240·cons ≤ 65536`, `_stage.py:911-917,967`) — the article presents
+   it as free, the repo gates it; (b) consumer band syncs via NAMED barrier
+   (`Sync(barrier_id=1, count=threads)`) — CTA-wide `__syncthreads()` is UB on
+   the divergent role branch (`:944-945`); (c) ONE elected arrive releases the
+   empty-slot mbarrier (count 1, not block_threads) + carries
+   `fence.proxy.async` (`:945-950`); (d) raw `tid==0` election for mbarrier init
+   in split kernels (`:957-959`).
+6. `ldmatrix-pair-x2-to-x4-adjacency` (L, bit-identical positive transform):
+   fuse two atom-adjacent `ldmatrix.x2` (+8 elems on one axis) into one `.x4`
+   when same slab/role/swizzle, no masks, not byte slabs, barrier-free
+   straight-line between; second load moves UP — an intervening read of the
+   MOVED fragment blocks (WAR), read of the KEPT fragment is fine
+   (`096_pair_ldmatrix_loads.py:11-24,45-46,107-136`). ⚠ ADJUDICATION: lane B
+   dropped this ("owned by xor-swizzle family + positive transform"); lane A's
+   distinct-from is more precise (xor-swizzle owns the TABULATION axis, this is
+   the FUSION axis; positive transforms have corpus precedent, e.g.
+   `vectorized-pack-load`). T3 decision: admit as rule with the fusion-axis
+   distinct-from, or fold as rider on `ldmatrix-mma-layout-loads`.
+
+**Lane B (wash/decision rungs):**
+7. `ptxas-recoalesces-scalar-runs-wash` (decision/refutation): hand-vectorizing
+   regular stride-1 scalar-load runs is a WASH — ptxas recoalesces at every
+   deployable -O; the pass is IR-legibility only and deliberately NOT a search
+   dimension (`hints=(True,)`, `050_vectorize_loads.py:34-38`,
+   `search/space.py:22-24,153-159`); escape arm = irregular kernels (unprovable
+   alignment, gapped strides — `:176-179`); stores symmetric
+   (`080_vectorize_stores.py`) folded in-fix-space. COMPOSES with
+   `vector-width-pow2-sweep` via silicon scope split (Metal/AMD keep the sweep).
+8. `ptxas-reschedules-load-order-wash` (decision/refutation): hand load/
+   FMA interleaving is a wash for the same reason
+   (`095_interleave_loads.py:23-26`, `space.py:161-167`); escape arm = ASYNC
+   issue-site placement (stays `interleave-loads-between-tile-matmuls`'s
+   territory); `-Xptxas -O0` = debug only.
+9. `smem-pad-transport-gated` (decision): TWO stacked gates — (1) TRANSPORT:
+   under TMA never pad (descriptor swizzle replaces it, `_SWIZZLE` table
+   `_tma.py:58`); under cp.async pad is live; (2) GRANULARITY: pad one 16 B
+   transfer unit per row (bank-quartet break, chunks stay aligned —
+   `ir/address.py:17-28` "Derived, not tuned"; "cp.async only: a TMA box deposit
+   is dense") OR deliberately +1 element to DE-VECTORIZE a conflicted float4 —
+   the article's 3.7× arm ("conflict-free scalar beats serialized vector");
+   fill/drain contract: pad lives on `Operand.pad_cols`, "the two cannot
+   disagree" (`_atom.py:910-911`). TENSION RESOLVED: composes with
+   `vectorized-smem-write-no-bank-padding` (that rule owns default-layout
+   vectorized STORES; this owns CONFLICTED READS under a transport key).
+10. `splitk-width-shape-need-gate` (decision, STRONGEST lane intel):
+    `needed = max(2·SM/free_ctas, K/√(M·N), 1)` (`search/features.py:675-686`) —
+    grid fullness ALONE under-splits: emmy's own mlp_down counterexample
+    (M=512,N=4096,K=14336: free_ctas saturates SMs → naive gate ranked the
+    winning g8k ~9000-deep; `:679-683`); excess = pure combine waste
+    (`:666-667`); paired excess/deficit features (`:687-693`). Worked 4090
+    example: prefill down-proj needs ≈10-way split where occupancy-only says 2.
+11. `splitk-atomic-free-contention-threshold` (decision, EPILOGUE economics):
+    atomicAdd vs partials+reduce fork keyed on SPLITK·M·N contention with a
+    FITTED (not hand-set) threshold (`search/prior/linear_model.py:65,84-93`);
+    round-trip cost side named (`features.py:694-697`); decision-content
+    integrity: the fork key must be STAMPED on candidate rows or the interaction
+    silently dead-weights to atomic default (`:512-515` lesson). Legality
+    preconditions shared with #4. ⚠ ADJUDICATION: #4 and #11 overlap on the
+    legality set — T3 decision: two rules (legality=semantic correctness,
+    contention=perf economics) cross-referenced, or one rule with two arms.
+
+**Lane intel (both lanes agree, condensed):** YES — this batch is league-relevant.
+4090 = sm_89 Ada: cp.async live, TMA/setmaxnreg/mbarrier-ring ABSENT → #9's
+TMA-dead arm never fires on 4090 (pad arm live), #5 is Hopper+ only (still valid
+corpus decision content), #10 strongest (prefill GEMMs are exactly the K-heavy
+family; qwen down-proj shapes), #1/#2/#6 Ada-portable. #7/#8 = bench-budget
+intel (don't spend league cycles on hand-vectorize/interleave toggles).
+Post-merge 4090 verification runs: candidate rows for the perf league queue.
+
+**Dropped by the lanes (mapped to owning neighbors):** CTA-swizzle GROUP_M walk
+(→ `l2-grouped-tile-schedule` rider), +1 pad on cp.async float4 as standalone
+(→ folded into #9), reg_depth register double-buffer (→
+`register-double-buffer-operand-pipeline`), prologue-peel pipelining (→
+`cpasync-multistage-tile-pipeline`), WS role split itself (→
+`plane-specialization-load-compute-role-split`; #5 keeps post-split deltas),
+ring-clamp/barrier-under-mask (borderline — strongest rider candidate for
+`cpasync-multistage-tile-pipeline`), symbolic-K overhang masks (→
+`clamp-tile-indices-to-sentinel-discard-at-write` rider), TMA descriptor scratch
+liveness (→ `hazard-tracked-aliasing-scratch-allocator` rider),
+drop-redundant-syncs peephole (below the bar this batch; future positive-rung
+candidate), scratch-slab liveness packing (host allocator, out of kernel_opt
+scope), TMA single-issuer / m16n8k16 atom / ldmatrix layout (B130/B92 owned).
