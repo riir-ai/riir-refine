@@ -1,6 +1,6 @@
 # Issue 075 — verdict: per-run burn + consent prompt on plain `cargo heal` (NOT LGTM)
 
-**Status:** RECORD — verdict amended after owner correction; zero-balance decision RECORDED: soft gate (2026-09-08)
+**Status:** RECORD — amended ×2 same day: soft gate + cadence correction (owner, 2026-09-08); implementation in `.issues/076`
 
 ## The question
 
@@ -250,3 +250,46 @@ credits:
 
 Decision recorded in commit `b03d3e0` (amendment) — this decision block
 lands as its follow-up commit.
+
+### Cadence correction — round 2 (owner, 2026-09-08)
+
+The owner read the settlement table and objected to the 7-day commit
+cadence ("7 days? is that a pigeon or blockchain?"). The objection is
+correct and the table above conflated two timers:
+
+- **The 7 days is STAKING, not burn.** `lockup_ticks: 604_800` ("the
+  proposal's 7 days", `riir-dapps/src/kat/staking.rs:123-130` — the
+  flash-farming defense: a flash-borrowed stake cannot farm one epoch),
+  the unstake refund escrow (~48 h, `escrow_ticks: 172_800`, genesis-
+  frozen exit mechanics), and the yield-ceiling epoch
+  (`ticks_per_epoch: 604_800`, "bp per 7-day epoch") are ALL staking
+  exit/anti-farm mechanics. The owner guessed exactly this: "i think you
+  mean unstake is 7 days not burn sync."
+- **The burn settle leg merely BORROWS the staking epoch counter**
+  (`Epoch::from_chain_height`) — an implementation convenience that the
+  table above recorded as if it were physics. It is not. Nothing in the
+  burn path needs 7 days.
+- **Decisions recorded (owner, same day):**
+  1. **Client sync happens right after the run finishes** — the
+     burn-debt report is account accounting riding the login, NOT the
+     unheal consent (separate concerns; the consent record governs the
+     telemetry batch only). Fail-soft background push; the `kat-charge`
+     line shows fresh server balance.
+  2. **Burn settlement commits hourly** — its own bucket, decoupled
+     from `StakingParams.ticks_per_epoch`; the alarm already wakes
+     hourly. Batching's real reasons (idempotent crash-safe
+     composition, auditable supply moves, under-supply-never-inflation
+     crash ordering) need hours, not weeks.
+  3. **Staking stays 7-day** — lockup, escrow/venting, yield ceiling,
+     flash-vote defense untouched. That is the anti-farm wait and the
+     ONLY 7-day wait in the system.
+- **What the user never waits on: the L1 chain.** It was never in the
+  per-run path — the service ledger (authenticated durability, not
+  Byzantine agreement) is the user's truth; the chain anchor stays
+  batched (Glacial applies to quorum/chain writes, never to the service
+  ledger's internal buckets).
+- Implementation plan + tasks: `.issues/076_kat_burn_fast_settle_auto_sync.md`.
+- Cross-repo pin to re-check when the bucket lands: riir-dao
+  `tests/dapps_contract_pins.rs` hard-codes the reward schedule —
+  per-bucket composition must re-derive it or amend the pin in the same
+  commit.
