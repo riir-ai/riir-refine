@@ -132,23 +132,36 @@ explicitly either way.
       rule_id-anchored edits throughout (no fuzzy anchors).
       Blog-vs-repo divergences recorded in-rule (the washes: article
       measured, repo encodes as doctrine).
-- [ ] T4 — (cargo-gated) GOAT: G1 parse/syn all new rules; G2 lib tests default
-      + kernel_heal(+latent); G3 clippy 0 both states + retrieval floors
-      (kernel 100/100/100, blended 94.7/96.9/97.7) + router annotation re-pin
-      per the Issue 020 contract (floor re-derived from measured, never
-      silently weakened) + `--score-bench` append + `--corpus-stats`.
+- [x] T4 — (DONE 2026-09-09, `4c2e94a` + `b638e71`) GOAT: G1 batch137 gates 3/3
+      by name; G2 lib default 1187/0 + kernel_heal 1518/0/1i +
+      kernel_heal+latent 1635/0/2i; G3 clippy 0 ×3 all-targets + retrieval
+      floors HELD byte-identical (kernel 100/100/100, blended 94.7/96.9/97.7) +
+      router annotation re-pinned 88→86/131 per the Issue 020 contract (measured
+      91/131 = 69.5%, was 93/131 — the dense B137 concept vocabulary attracts 2
+      more generic spans to the kernel centroids, the B131 sec-centroid
+      mechanism; decay recorded, never silent). T4 caught ONE stale count pin
+      (router expert-coverage 580→591) + 4 PRE-EXISTING test-target clippy rot
+      (batch119 ×3 + batch130 too_many_lines — the states B136's clippy never
+      covered), fixed as cited drive-bys. `--corpus-stats` 591/120/49/14/31.
+      `--score-bench` REMAINS — timing-gated on the p335 parity arm (numerics
+      only unaffected; run when the box quiets).
 - [ ] T5 — (cargo-gated) rust_perf bench-feature Pareto/alloc validator for any
       rust_perf-routed candidate; NotBenchable annotation + context_notes for
       decision-content rules (expected: MOST of this batch — the article's
       numbers are 5090/CUDA-shaped, not M3/Metal-executable).
-- [ ] T6 — Count pins walk: corpus.rs header totals ×2 + category table +
-      mod.rs lists + entries.len + without_spec/annotated membership + AGENTS
-      ×2 + README ×2 + `.docs/11_domains/` (count + Batch-137 paragraph +
-      index row). Repair any stale pin encountered (the B135 NotBenchable-drift
-      precedent).
-- [ ] T7 — Research note `.research/NNN_batch137_*.md` (next free number per
-      `.research/.highwater`); lane-intel verdict recorded; negative results
-      (the washes) recorded even when they land as riders.
+- [x] T6 — (DONE 2026-09-09, `efe724c`) Count pins walk: corpus.rs header
+      totals ×2 + category table + mod.rs lists + entries.len were T3-landed and
+      compile-verified; AGENTS ×2 (domain list 580→591 + the feature-gate list
+      570→591 PRE-EXISTINGLY stale two batches — repaired), README ×2 (rule row
+      + tree, Batch 1-137), `.docs/11_domains/kernel_opt.md` (status row + the
+      Batch 137 ledger paragraph). Grep-verified zero stale 570/575/580 prose
+      counts remain.
+- [x] T7 — (DONE 2026-09-09, Research 156) `.research/156_batch137_cloudrift_matmul_distill.md`
+      born-complete: source + URL-shape correction, the 11-rule table, both
+      adjudications, the two washes as recorded negatives, lane-intel YES with
+      the per-rule split, blog-vs-repo honesty, the full gate row + the
+      write-blind-compile-free lesson, the parity-arm session context;
+      `.highwater` 155 → 156.
 - [ ] T8 — Commit `feat(kernel_opt): batch 137: ...` + push; update
       `.distill/001_mining_queue_snapshot.md` in the same commit (lead-pair
       entry → landed; Batch 138 = FA parts 1+2 stays queued); rm -rf the
