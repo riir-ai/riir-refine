@@ -210,6 +210,63 @@ fn open_kat_charge(
     Some(riir_clippy::kat_meter::KatCharge::open(&root, meter.state()))
 }
 
+/// Proposal 008 (the owner's just-works UX, 2026-09-08): `cargo heal
+/// --mine` — the contribution onboarding. One screen: what mining is,
+/// the policy warning, the web link, and the login → heal → sync →
+/// account loop. Feature halves (account status / outbox) appear only
+/// when their feature compiled in — the explainer itself never needs one.
+fn run_mine_intro() {
+    println!("KAT mining — turn your healing work into network credit");
+    println!();
+    println!("WHAT: every cargo heal run records HOW the healer behaved (which rules");
+    println!("fired, which were declined, what merged). Redacted batches of those");
+    println!("records — no source, no paths, rule verdicts only — are the network's");
+    println!("training data. Miners who contribute them are paid from 70% of every");
+    println!("KAT the network burns, at each epoch settle.");
+    println!();
+    println!("POLICY (read before contributing):");
+    println!("  * Devnet: KAT carries NO cash value and NO redemption right.");
+    println!("  * Payloads are REDACTED (rule verdicts + counters, never your code)");
+    println!("    and SIGNED with your account key.");
+    println!("  * Contributing is opt-in per sync run — nothing leaves this machine");
+    println!("    unless you run `cargo heal sync` (or it runs as your settlement step).");
+    println!();
+    println!("START (4 steps):");
+    println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
+    println!("  2. login:      cargo heal login        <- claims your 100M KAT free grant");
+    println!("  3. heal:       cargo heal --fix        <- real fixes, metered locally");
+    println!("  4. mine:       cargo heal sync         <- push the redacted batch, pull the lease");
+    println!();
+    println!("WATCH: cargo heal account              <- burn, balance, grant, network state");
+    println!();
+
+    // Feature halves: the status the build can actually see.
+    #[cfg(feature = "kat_service")]
+    {
+        use riir_clippy::kat_account::KatAccount;
+        match KatAccount::load(&KatAccount::default_dir()) {
+            Ok(account) => println!(
+                "status: logged in as {} (key: {})",
+                riir_clippy::kat_account::short_id(&account.state().account_id),
+                account.key_path().display()
+            ),
+            Err(_) => println!("status: NOT logged in — step 2 first"),
+        }
+    }
+    #[cfg(not(feature = "kat_service"))]
+    {
+        println!("status: account/status halves need a build with --features kat_service");
+    }
+    #[cfg(feature = "kat_transport")]
+    {
+        println!("transport: available — `cargo heal sync` pushes the queued batch");
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        println!("transport: this build has no sync (needs --features kat_transport)");
+    }
+}
+
 /// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal login` — generate/import
 /// the account key + record the grant projection. Prints one outcome line,
 /// the account id, the key path, and the Phase-0 honesty note. No `$`
@@ -1676,8 +1733,10 @@ fn usage() -> ! {
     #[cfg(feature = "fix_verify")]
     let verify_help = format!(
         "    --verify        With --fix: write, cargo-check, auto-revert the offending edits\n\
-         (adds {} + looser capacity bounds). Implies --write.\n\
-    --verify-args <s> Extra cargo args for --verify (whitespace-split, e.g. \"--features a,b,c\").\n",
+         (adds {} + looser capacity bounds). Implies --write. DEFAULT-ON with\n\
+         --fix now (the just-works UX); --no-verify skips it.\n\
+    --verify-args <s> Extra cargo args for --verify (whitespace-split, e.g. \"--features a,b,c\").\n\
+    --no-verify     With --fix: skip the default compile gate (fast, syn-gated only).\n",
         VERIFY_LINTS.join(", ")
     );
     #[cfg(not(feature = "fix_verify"))]
@@ -1690,9 +1749,11 @@ fn usage() -> ! {
         "cargo-heal (Plan 005) — modelless code healing via latent corpus retrieval
 
 USAGE:
+    cargo heal                                        <- DRY RUN: review what would be fixed (no edits)
+    cargo heal --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
     cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker>] [--top-k <N>] <path>...
-    cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
+    cargo heal --mine                                 <- what mining is + policy + how to earn KAT
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
@@ -1712,10 +1773,15 @@ USAGE:
     cargo heal faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo heal wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
 
+    (no mode)       DRY RUN (the just-works default): review what WOULD be
+                    fixed — suggest output over the paths (default: `.`),
+                    zero edits. The explicit word for it is --dry-run.
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
-                    ({} perf rules + {} clippy lints: {} | {}). The proposer's visitor
-                    is the gate — latent suggestions never auto-apply.
+                    ({} perf rules + {} clippy lints: {} | {}). WRITES by default (the
+                    explicit flag is the consent) and compile-gates on --verify builds
+                    (opt out: --no-verify). Bare `cargo heal` is the dry run. The proposer's
+                    visitor is the gate — latent suggestions never auto-apply.
     --fix-compile   Compile-error repair (Plan 019, needs --features rustc_errors):
                     cargo-check the owning packages, parse coded errors (E0597...),
                     propose per error via playbooks, apply best → recheck → keep/revert,
@@ -1768,12 +1834,14 @@ USAGE:
     --json          With --corpus-stats: stdout carries ONLY the dashboard
                     JSON payload ({{today, corpus, scores}}) — the human table
                     moves to stderr.
-    --write         With --fix/--fix-compile: write the edits in place (with --fix:
-                    then rustfmt AUTOMATICALLY when the original was already
-                    rustfmt-clean — pre-existing drift + CRLF files are skipped — no
-                    formatting churn enters a mechanical diff). Without --write:
-                    per-edit review incl. the fmt plan (would-format / skip drift /
-                    skip CRLF).
+    --write         With --fix-compile: write the edits in place. (--fix already
+                    writes — the explicit flag is the consent; rustfmt AUTOMATICALLY
+                    follows when the original was already rustfmt-clean — pre-existing
+                    drift + CRLF files are skipped — no formatting churn enters a
+                    mechanical diff.)
+    --mine          What KAT mining is, the policy warning, the web link, and
+                    the login → heal → sync → account loop (Proposal 008). Works in
+                    every build; the status halves need their features.
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
@@ -1842,6 +1910,13 @@ Requesting a domain whose feature is off is an error (T2.4 gating). --verify nee
 struct Args {
     suggest: bool,
     fix: bool,
+    /// `--mine` — the contribution onboarding (Proposal 008 T2.4's user
+    /// surface): what mining is, the policy warning, the web link, and the
+    /// login → heal → sync → account loop. Standalone — early return.
+    mine: bool,
+    /// Set by parse_args when the bare no-mode default fired (the dry-run
+    /// banner then prints once, from main). Not a user flag.
+    bare_default: bool,
     /// Plan 019 T1.3: `--fix-compile` — the rustc_errors oracle driver.
     /// A separate mode (not a --fix modifier): it operates on packages,
     /// needs no retrieval, and its loop has verification built in.
@@ -1862,6 +1937,9 @@ struct Args {
     domain: Option<DomainId>,
     top_k: usize,
     verify: bool,
+    /// `--no-verify`: opt out of the compile gate that --fix now defaults
+    /// to on `fix_verify` builds (the just-works UX keeps the escape hatch).
+    no_verify: bool,
     verify_args: Option<String>,
     paths: Vec<PathBuf>,
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
@@ -1953,10 +2031,10 @@ struct Args {
     /// Proposal 011 T1.3: `--wait <secs>` — the poll-on-credit budget
     /// (default 600; `0` = don't poll — the credit surfaces via `account`).
     pay_wait: u64,
-    /// Proposal 011 T4.2: `--dry-run` — with `wetrun`, run steps 1+6 only
-    /// (read-only, zero state). Admitted on EVERY network including
-    /// mainnet; it is what mainnet gets.
-    dry_run: bool,
+    /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
+    /// read-only (admitted on every network incl. mainnet). The heal modes
+    /// have no --dry-run flag: bare `cargo heal` IS the dry run.
+    wetrun_dry_run: bool,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -1993,6 +2071,8 @@ fn parse_args() -> Args {
         account_history: false,
         suggest: false,
         fix: false,
+        mine: false,
+        bare_default: false,
         fix_compile: false,
         dump_trajectories: false,
         max_iters: 5,
@@ -2002,6 +2082,7 @@ fn parse_args() -> Args {
         domain: None,
         top_k: 3,
         verify: false,
+        no_verify: false,
         verify_args: None,
         paths: Vec::new(),
         score_bench: false,
@@ -2026,7 +2107,7 @@ fn parse_args() -> Args {
         pay_qr: false,
         pay_label: None,
         pay_wait: 600,
-        dry_run: false,
+        wetrun_dry_run: false,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -2052,13 +2133,20 @@ fn parse_args() -> Args {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--suggest" => args.suggest = true,
+            // The owner's just-works UX (2026-09-08): `--fix` is a REAL fix —
+            // it writes (and verify-gates when the build carries
+            // `fix_verify`), because the explicit flag IS the consent. The
+            // old review-only behavior needs one explicit word: `--dry-run`
+            // (also the bare `cargo heal` default — see validate_mode_flags).
             "--fix" => args.fix = true,
             "--fix-compile" => args.fix_compile = true,
             "--dump-trajectories" => args.dump_trajectories = true,
             "--write" => args.write = true,
+            "--mine" => args.mine = true,
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
+            "--no-verify" => args.no_verify = true,
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
@@ -2181,7 +2269,11 @@ fn parse_args() -> Args {
                 args.pay_amount = Some(value);
             }
             "--request" => args.pay_request = true,
-            "--dry-run" => args.dry_run = true,
+            // `--dry-run` belongs to `wetrun` only (Proposal 011 T4.2) — the
+            // heal modes' dry run is the bare no-mode default, not a flag.
+            "--dry-run" if matches!(args.command, Some(KatCommand::Wetrun)) => {
+                args.wetrun_dry_run = true;
+            }
             "--qr" => args.pay_qr = true,
             "--label" => {
                 let Some(value) = it.next() else {
@@ -2281,16 +2373,52 @@ fn parse_args() -> Args {
         );
         usage();
     }
-    if args.dry_run && !matches!(args.command, Some(KatCommand::Wetrun)) {
-        eprintln!("--dry-run requires the `wetrun` command");
+    // ── The owner's just-works defaults (2026-09-08) ─────────────────────
+    // Applied HERE (inside parse_args) so every downstream check — the
+    // paths guard below included — sees the final posture:
+    //   * bare `cargo heal` (no mode, no KAT command) = DRY RUN: suggest
+    //     over `.` (or the given paths), zero edits;
+    //   * `--fix` = REAL fix: writes (the explicit flag is the consent)
+    //     and compile-gates on fix_verify builds (opt out --no-verify);
+    //   * `--suggest` stays the explicit review command (unchanged).
+    let bare = !args.suggest
+        && !args.fix
+        && !args.fix_compile
+        && !args.dump_trajectories
+        && args.command.is_none();
+    if bare {
+        args.suggest = true;
+        args.bare_default = true;
+        if args.paths.is_empty() {
+            args.paths.push(std::path::PathBuf::from("."));
+        }
+    }
+    // `--fix` with no paths scans the cwd too — the just-works contract is
+    // "no flags, no paths": only `--suggest` demands explicit paths.
+    if args.fix && args.paths.is_empty() && args.command.is_none() {
+        args.paths.push(std::path::PathBuf::from("."));
+    }
+    if args.fix {
+        args.write = true;
+        #[cfg(feature = "fix_verify")]
+        if !args.no_verify {
+            args.verify = true;
+        }
+    }
+    if args.no_verify && !args.fix {
+        eprintln!("--no-verify requires --fix");
         usage();
     }
     if args.paths.is_empty()
         && args.command.is_none()
+        && !args.suggest
+        && !args.fix
+        && !args.fix_compile
         && !args.score_bench
         && !args.score_report
         && !args.dump_trajectories
         && !args.memory_stats
+        && !args.mine
         && !args.misses
         && !args.misses_report
         && !args.recompute_elo
@@ -2310,7 +2438,12 @@ fn parse_args() -> Args {
 }
 
 /// Plan 019 T1.5: the mode-flag validation matrix, extracted so every
-/// accepted/rejected combination is pinnable by test.
+/// accepted/rejected combination is pinnable by test. The owner's
+/// just-works UX (2026-09-08) folded the DEFAULTS in: a caller with NO
+/// mode and NO standalone command gets a DRY-RUN suggest over `.` — bare
+/// `cargo heal` must just work — and `--fix` without `--dry-run` writes
+/// (the explicit flag is the consent); `--dry-run` pins the review
+/// posture regardless of flag order.
 ///
 /// The silent-usability trap this closes: the existing guards rejected
 /// `--fix-compile --write --verify-args "..."` because `--write` demanded
@@ -2329,8 +2462,9 @@ fn validate_mode_flags(
     write: bool,
     verify: bool,
     verify_args: bool,
+    has_command: bool,
 ) -> Result<(), &'static str> {
-    if !suggest && !fix && !fix_compile && !dump_trajectories {
+    if !suggest && !fix && !fix_compile && !dump_trajectories && !has_command {
         return Err("no mode given — use --suggest, --fix, --fix-compile, or --dump-trajectories");
     }
     if dump_trajectories && (suggest || fix || fix_compile) {
@@ -3745,7 +3879,7 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 }
 
 fn main() {
-    let args = parse_args();
+    let mut args = parse_args();
 
     // ── Proposal 005 T0.1 + T1.6: KAT subcommands (standalone — no paths) ─
     #[cfg(feature = "kat_service")]
@@ -3772,7 +3906,7 @@ fn main() {
                 args.pay_wait,
             ),
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
-            KatCommand::Wetrun => run_kat_wetrun(args.dry_run),
+            KatCommand::Wetrun => run_kat_wetrun(args.wetrun_dry_run),
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {
@@ -3884,6 +4018,17 @@ fn main() {
     if args.misses_report {
         eprintln!("--report requires --misses");
         std::process::exit(2);
+    }
+
+    // ── Proposal 008 (the owner's just-works UX): --mine — the ──────────
+    // contribution onboarding. Standalone (early return before
+    // validate_mode_flags): what mining is, the policy warning, the web
+    // link, and the login → heal → sync → account loop. Works in EVERY
+    // build — the explainer never needs a feature; the status halves
+    // appear only when their feature compiled in.
+    if args.mine {
+        run_mine_intro();
+        return;
     }
 
     // ── Issue 037 observability: --memory-stats — the loop debug query ────
@@ -4095,7 +4240,19 @@ fn main() {
     // ── Issue 072 T5 (Plan 092): the frontier-ordered authoring queue ──
 
     // Plan 019 T1.5: the mode-flag matrix (pinned by
-    // `mode_flag_tests` below).
+    // `mode_flag_tests` below) — the just-works defaults (bare = dry run,
+    // --fix = write + compile-gate) were already applied inside
+    // parse_args; the banner here is the only bare-mode surface.
+    if args.bare_default {
+        println!(
+            "cargo heal: dry run — reviewing {} (no edits). Real fixes: cargo heal --fix",
+            if args.paths.len() == 1 && args.paths[0] == std::path::PathBuf::from(".") {
+                "the current directory".to_string()
+            } else {
+                format!("{} path(s)", args.paths.len())
+            }
+        );
+    }
     if let Err(msg) = validate_mode_flags(
         args.suggest,
         args.fix,
@@ -4104,6 +4261,7 @@ fn main() {
         args.write,
         args.verify,
         args.verify_args.is_some(),
+        args.command.is_some(),
     ) {
         eprintln!("{msg}");
         usage();
@@ -6425,48 +6583,53 @@ mod mode_flag_tests {
     #[test]
     fn accepted_combinations() {
         // The four modes alone (T4.3b adds --dump-trajectories).
-        assert!(v(true, false, false, false, false, false, false).is_ok(), "--suggest");
-        assert!(v(false, true, false, false, false, false, false).is_ok(), "--fix");
-        assert!(v(false, false, true, false, false, false, false).is_ok(), "--fix-compile");
-        assert!(v(false, false, false, true, false, false, false).is_ok(), "--dump-trajectories");
+        assert!(v(true, false, false, false, false, false, false, false).is_ok(), "--suggest");
+        assert!(v(false, true, false, false, false, false, false, false).is_ok(), "--fix");
+        assert!(v(false, false, true, false, false, false, false, false).is_ok(), "--fix-compile");
+        assert!(v(false, false, false, true, false, false, false, false).is_ok(), "--dump-trajectories");
         // --write with each writing mode.
-        assert!(v(false, true, false, false, true, false, false).is_ok(), "--fix --write");
-        assert!(v(false, false, true, false, true, false, false).is_ok(), "--fix-compile --write");
+        assert!(v(false, true, false, false, true, false, false, false).is_ok(), "--fix --write");
+        assert!(v(false, false, true, false, true, false, false, false).is_ok(), "--fix-compile --write");
         // The trap this task closed: --fix-compile --write --verify-args.
         assert!(
-            v(false, false, true, false, true, false, true).is_ok(),
+            v(false, false, true, false, true, false, true, false).is_ok(),
             "--fix-compile --write --verify-args \"...\""
         );
         // --verify still needs --fix (its batch semantics are --fix's).
-        assert!(v(false, true, false, false, true, true, false).is_ok(), "--fix --write --verify");
-        assert!(v(false, true, false, false, true, true, true).is_ok(), "--fix --verify --verify-args");
+        assert!(v(false, true, false, false, true, true, false, false).is_ok(), "--fix --write --verify");
+        assert!(v(false, true, false, false, true, true, true, false).is_ok(), "--fix --verify --verify-args");
+        // The owner's just-works defaults (2026-09-08): a bare invocation
+        // with a KAT command is NOT a mode error, and no-mode-no-command is
+        // the dry run (main defaults it BEFORE the matrix, so the matrix
+        // itself never sees that shape — but a KAT command must satisfy it).
+        assert!(v(false, false, false, false, false, false, false, true).is_ok(), "KAT command alone");
     }
 
     #[test]
     fn rejected_combinations() {
-        assert!(v(false, false, false, false, false, false, false).is_err(), "no mode");
+        assert!(v(false, false, false, false, false, false, false, false).is_err(), "no mode");
         assert!(
-            v(false, false, false, false, true, false, false).is_err(),
+            v(false, false, false, false, true, false, false, false).is_err(),
             "--write without a mode"
         );
         assert!(
-            v(false, false, false, false, false, true, false).is_err(),
+            v(false, false, false, false, false, true, false, false).is_err(),
             "--verify without --fix"
         );
         assert!(
-            v(false, false, true, false, false, true, false).is_err(),
+            v(false, false, true, false, false, true, false, false).is_err(),
             "--verify with --fix-compile does NOT satisfy the --fix requirement"
         );
         assert!(
-            v(true, false, false, false, false, false, true).is_err(),
+            v(true, false, false, false, false, false, true, false).is_err(),
             "--verify-args without --verify/--fix-compile"
         );
         assert!(
-            v(false, false, true, true, false, false, false).is_err(),
+            v(false, false, true, true, false, false, false, false).is_err(),
             "--dump-trajectories is standalone (no other mode)"
         );
         assert!(
-            v(false, false, false, true, true, false, false).is_err(),
+            v(false, false, false, true, true, false, false, false).is_err(),
             "--write does not apply to --dump-trajectories"
         );
     }

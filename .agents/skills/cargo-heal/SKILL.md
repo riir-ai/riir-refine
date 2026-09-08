@@ -14,21 +14,30 @@ self-evolve trajectories on every apply.
 
 - Global binary `cargo heal` = `~/.cargo/bin/cargo-heal` → symlink to
   `/Users/katopz/git/riir-clippy/target/release/cargo-heal`
-  (built with `--features fix_verify,clippy_verify`).
+  (built with `--features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport`
+  — the bin's required-features + the verify features; Plan 107 T1 made
+  kat_service mandatory).
 - Rebuild after healer source changes:
-  `cd /Users/katopz/git/riir-clippy && cargo build --release --features fix_verify,clippy_verify --bin cargo-heal`
+  `cd /Users/katopz/git/riir-clippy && cargo build --release --features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport --bin cargo-heal`
   (the symlink keeps pointing at the rebuilt binary).
 - Fresh box without the sibling repo → fall back to manual fixes +
   `cargo clippy --fix`; do not block on the healer.
 
-## Usage
+## Usage (the just-works UX, 2026-09-08)
 
 ```bash
-cargo heal --fix <paths>                                  # dry run (review only)
-cargo heal --fix --write --verify <paths>                 # compile-gated apply
-cargo heal --fix --write --verify --verify-args "--features <set>" <paths>   # gated code
+cargo heal <paths>                                        # DRY RUN (the bare default — zero edits)
+cargo heal --fix <paths>                                  # REAL fix: writes + compile-gates (fix_verify builds)
+cargo heal --fix --no-verify <paths>                      # write without the compile gate (syn-gated only)
 cargo heal --suggest <paths>                              # rule suggestions, no edits
+cargo heal --fix --verify --verify-args "--features <set>" <paths>   # gated code
 ```
+
+- `--fix` WRITES by default now (the explicit flag is the consent) and
+  verify-gates by default on `fix_verify` builds. `--write` still parses
+  (no-op with --fix). `--suggest` is the explicit review command.
+- ⚠ Old scripts/docs that used `--fix` as a dry run now WRITE — use the
+  bare form (or `--suggest`) for review.
 
 - `--verify` runs a baseline `cargo check --all-targets`, applies, re-checks,
   and REVERTS any edit that broke compilation (line-matched span-level).

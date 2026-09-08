@@ -6,6 +6,14 @@
 # A dependency whose license is not in `accepted` FAILS generation — that is
 # the compliance gate (loud, not silently skipped). Extend only after a human
 # reads the license.
+#
+# Owner-mandated read 2026-09-08 (the kat_transport addition, release.yml):
+# CDLA-Permissive-2.0 was read and accepted for webpki-roots 0.26/1.0 — it
+# covers ONLY the bundled Mozilla root-store DATA (use/modify/share freely,
+# keep the agreement text with the data, no other conditions; §3 explicitly
+# frees results). Not viral, no notice burden beyond the shipped license
+# text. ureq/rustls/qrcode and the rest of the transport tree resolve to
+# already-accepted SPDX ids.
 accepted = [
     "MIT",
     "MIT-0",
@@ -20,6 +28,7 @@ accepted = [
     "MPL-2.0",
     "CC0-1.0",
     "OpenSSL",
+    "CDLA-Permissive-2.0",
 ]
 
 targets = [

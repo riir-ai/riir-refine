@@ -239,6 +239,52 @@ Metrics: burn/mint convergence, pool-overdraw events, miner retention (returning
 11. **EIP-7265 (Circuit Breaker Standard)** — bounded-outflow doctrine; our per-lever delta bounds + per-day caps follow it.
 12. **DAO-AI (arXiv:2510.21117)** + the autonomous-treasury-agent literature — agentic AI producing interpretable, auditable collective decisions; our inversion: the agent proposes, deterministic guards dispose.
 
+## Amendment (2026-09-08) — the just-works funnel: free tier pays in unheal, logged-in pays in KAT
+
+**Owner mandate (the UX complaint: "i'm asking too much, it should just work").**
+The CLI surface is now (shipped this day): bare `cargo heal` = dry run,
+`cargo heal --fix` = real fix (writes, compile-gated), `cargo heal --mine` =
+the one-screen onboarding (what mining is + policy + ai.gist.rs + the loop).
+This amendment records the ECONOMICS that surface feeds — it changes no
+ratified lever, no bound, and no never-lever row (this proposal's own
+contract), and the G5 advisory-only verdict stands untouched. What it adds
+is the DEMAND-side funnel the levers were always meant to modulate:
+
+| Tier | Who | Fixes | Pays | Egress |
+|---|---|---|---|---|
+| **free (anonymous)** | no login | rust corpus only (the default-on domains) | nothing | **unheal required** — the redacted miss/decline/trajectory batch ships with (or after) the run, the anonymous `/sync` arm |
+| **logged-in** | `cargo heal login` | everything the build ships | **burns KAT per code word** (the existing repo-local meter, already live) | **opt-in** — logged-in users MAY decline the unheal egress (sync stays a separate explicit step) |
+| **paid domains (later)** | the python domain and successors | the convincer corpus | KAT burn (or USD pack) | same as logged-in |
+
+Honest shape of the trade (recorded, not hidden):
+
+1. **The free tier's currency is data.** Rust fixes are free BECAUSE the
+   unheal stream is the mining feed — the 70% mining+trainer pool pays for
+   exactly this. An anonymous user who refuses the egress is costing the
+   network compute; the honest policy is that the egress is the price, not
+   a donation. This needs an UNSIGNED (or first-contact-keyed) anonymous
+   sync arm server-side — a `kat-service` issue to file; the client already
+   composes the payload shape.
+2. **The logged-in burn already exists** (the `kat-charge` line, the repo
+   charge ledger, `account`'s balance projection) — nothing new ships for
+   it. What landing makes real is the reconcile: burn becomes DEBT on the
+   service ledger at sync (the epoch-settle input) instead of a local
+   projection.
+3. **Nothing here touches the never-lever list or G5.** The advisory-only
+   terminal state governs the AGENT; the funnel is plain product pricing
+   (what a user gets vs what they give), which this proposal always left to
+   the owner. The dopamine levers T3.1/T3.2 stay WON'T-DO — the funnel is
+   demand generation, not reward-shaping.
+4. **The privacy posture is unchanged and load-bearing**: payloads are
+   redacted rule verdicts + counters, never source, never paths (the
+   `--mine` screen says so; the sync payload shape already enforces it).
+   The anonymous arm ships the SAME redaction — anonymous is not
+   unredacted.
+
+Implementation split: the CLI half is DONE (this day's UX commits); the
+anonymous-sync arm + the burn-reconcile are `kat-service`/`riir-dapps`
+surface work, filed under the mining queue, NOT this repo.
+
 ## TL;DR
 
 **Ship it phased, simulator-first — the agent earns autonomy by beating frozen constants in the sandbox, never by default.** The architecture is one sentence: *modelless strategy selection (the shipped self-heal math) proposes bounded parameter sets from committed telemetry; GLM reasons at the boundaries without authority; the ledger enforces the bounds at apply time; every decision is a BLAKE3-anchored artifact that replays bit-identically — that trail is the proof-of-AI-work.* Next action (updated 2026-08-28): Phases 0–2 are LANDED and the G5 gate returned FAIL (wash), so the agent is **advisory-only and terminal at that scope**. The only live items are T2.3 (advisory soak — accrues when live telemetry flows) and, if the owner wants autonomy at all, a NEW plan carrying v2 candidates plus the cap/initial supply decision that no lever in this proposal can reach.

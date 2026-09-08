@@ -170,6 +170,14 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 
 Doctrine: the modelless path (L0–L3) is PRIMARY; LoRA (L4) is the conservative last resort and that is enforced in code, not by convention. **A syntactic check (`parses`) is not a relevance check** (the Issue 030 lesson) — any stage deciding "did the modelless path succeed?" must test whether the answer pertains to the input. Annotated rules carry `context_notes`, propagated end-to-end via `HealEntry::context_notes()`; the drafter surfaces the annotation, the consumer decides whether their context matches.
 
+## CLI UX contract — the just-works surface (owner mandate 2026-09-08)
+
+- **Bare `cargo heal` IS the dry run**: no mode, no paths → suggest review over `.` (or the given paths), zero edits, one banner line.
+- **`cargo heal --fix` IS a real fix**: writes in place (`--write` implied) and compile-gates on `fix_verify` builds (opt out `--no-verify`). No paths → scans `.`.
+- **`cargo heal --mine`** = the contribution onboarding (what mining is, the policy warning, ai.gist.rs, the login → heal → sync → account loop).
+- `--write` still parses (no-op with `--fix`); `--suggest` stays the explicit review command; `--dry-run` belongs to `wetrun` only.
+- ⚠ Docs predating this used `--fix` as the dry run — those flows WRITE now. Review = the bare form or `--suggest`.
+
 ## Documentation Shape
 
 11-folder numbered `.docs/` book (sibling format): `01_orientation`, `02_corpus`, `03_drafter`, `04_pruner`, `05_clippy_verify`, `06_ruliology`, `07_examples`, `08_benchmarks`, `09_lessons`, `10_self_evolve`, `11_domains`. The top-level `.docs/README.md` is the index; each folder has a `README.md` index table. Files inside numbered folders have **no number prefix** (bare slugs — e.g. `crate_role.md`); add a doc by dropping `slug.md` in the right folder + one line in that folder's index table. `README.md` (repo root) is the build surface; `AGENTS.md` is the authoritative repo-local context.

@@ -96,7 +96,7 @@ jobs:
       - name: Generate THIRD_PARTY_LICENSES.md (fails on any non-accepted license)
         run: |
           cargo about generate --config .github/about/about.toml \
-            --features latent_retrieval,kat_service .github/about/about.hbs \
+            --features latent_retrieval,kat_service,kat_transport .github/about/about.hbs \
             > THIRD_PARTY_LICENSES.md
 
       - uses: actions/upload-artifact@v4
@@ -182,19 +182,20 @@ jobs:
         env:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
 
-      # Shipping feature set = default + latent_retrieval + kat_service (the
-      # bin's required-features; Proposal 003 §leak-surface item 4 + Plan 107
-      # T1: the KAT account client goes public — meter/charge/account are
-      # std-only + ssh-key, no transport, no cf_workers_ai). NEVER
-      # ternary_inference. kat_transport (ureq/qrcode) defers to v0.1.2 —
-      # its TLS tree would need a human license-read on the about.toml
-      # accept list first.
+      # Shipping feature set = default + latent_retrieval + kat_service +
+      # kat_transport (the bin's required-features; Proposal 003 §leak-surface
+      # item 4 + Plan 107 T1). NEVER ternary_inference. kat_transport (ureq/
+      # qrcode) joins at v0.1.2 per this file's own deferral note — the
+      # license read it demanded is DONE: webpki-roots' CDLA-Permissive-2.0
+      # covers only the bundled root-store data (read + accepted, owner
+      # mandate 2026-09-08, recorded in .github/about/about.toml); every
+      # other transport crate resolves to already-accepted SPDX ids.
       - name: Build
         shell: bash
         run: |
           set -euo pipefail
           cargo build --release --target ${{ matrix.target }} \
-            --features latent_retrieval,kat_service --bin cargo-heal
+            --features latent_retrieval,kat_service,kat_transport --bin cargo-heal
 
       - uses: actions/upload-artifact@v4
         with:
