@@ -265,6 +265,38 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet src/
 cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet --write src/
 ```
 
+## KAT network — the KAT service (mining + balance)
+
+The service plane (Cloudflare Worker in the private `riir-dapps` repo) hosts
+the KAT ledger, the corpus lease, and the mining queue. The client talks to
+`https://heal.gist.rs` by default; point it anywhere else with:
+
+```sh
+export RIIR_HEAL_KAT_SERVICE_URL=http://127.0.0.1:8811   # a localnet from riir-dapps
+```
+
+The loop (every step is honest about what is local vs server):
+
+```sh
+cargo heal login      # account key (Ed25519, OpenSSH format) + once-per-key welcome grant
+cargo heal --fix      # heal — metered locally (accounting-only projection)
+cargo heal sync       # PUSH the redacted signed batch (mining) + PULL the corpus lease
+cargo heal account    # burn / balance / grant / network state
+```
+
+Leave at any time:
+
+```sh
+cargo heal --unmine   # opt OUT of contributing + LOG OUT (local identity removed)
+```
+
+`--unmine` stops the push half of `sync` (the lease pull — a read — still
+runs) and removes the local key + record, i.e. the not-logged-in free-tier
+state. Two things it deliberately does NOT do: the server ledger keeps
+everything already committed (a client cannot un-submit), and a later
+`login` generates a NEW key = a NEW account (the old balance stays on the
+old account).
+
 ## Automatic rustfmt (`--fix --write`)
 
 Healed files are **rustfmt'd automatically** after the write — default-on,

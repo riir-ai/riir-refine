@@ -350,6 +350,51 @@ fn run_unmine() {
     println!("machine. Opting out stops the upload, not the local memory.");
     println!();
 
+    // ── the logout half (Plan 020 — 'back to the free-tier state'): the
+    //    local account identity is removed so the CLI reads as
+    //    not-logged-in again. Two honest lines the user MUST see: the
+    //    SERVER ledger keeps every committed record + balance (a client
+    //    cannot un-submit — the G9d mirror), and a fresh `login` after a
+    //    purge generates a NEW key = a NEW account (the old balance stays
+    //    on the old account; the once-per-key welcome grant does not
+    //    transfer).
+    let account_dir = riir_clippy::kat_account::KatAccount::default_dir();
+    match riir_clippy::kat_account::KatAccount::load(&account_dir) {
+        Ok(account) => {
+            let key_path = account.key_path().to_path_buf();
+            let pub_path = account_dir.join(riir_clippy::kat_account::KatAccount::PUB_FILE);
+            let record_path = account_dir.join(riir_clippy::kat_account::KatAccount::RECORD_FILE);
+            println!("LOGOUT (local): removing the account identity");
+            println!("  key:    {}", key_path.display());
+            println!("  record: {}", record_path.display());
+            let mut removed_any = false;
+            for p in [&key_path, &pub_path, &record_path] {
+                match std::fs::remove_file(p) {
+                    Ok(()) => removed_any = true,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => eprintln!("  unmine: could not remove {}: {e}", p.display()),
+                }
+            }
+            if removed_any {
+                println!(
+                    "  logged out — the machine is back to the not-logged-in free-tier state"
+                );
+            }
+            println!();
+            println!("HONESTY (the two things logout does NOT do):");
+            println!("  1. The server ledger KEEPS what was already committed: your records,");
+            println!("     rewards and balance stay on the account they were earned under. A");
+            println!("     client cannot un-submit.");
+            println!("  2. `cargo heal login` after this generates a NEW key = a NEW account.");
+            println!("     The old account's balance does not transfer, and the once-per-key");
+            println!("     welcome grant belongs to the old key.");
+        }
+        Err(_) => {
+            println!("LOGOUT: no local account found — already at the free-tier state");
+        }
+    }
+    println!();
+
     // The already-queued batches. Named, never touched — the user decides.
     let outbox = unmine_outbox_dir();
     let queued = std::fs::read_dir(&outbox)
@@ -1975,12 +2020,13 @@ USAGE:
     --mine          What KAT mining is, the policy warning, the web link, and
                     the login → heal → sync → account loop (Proposal 008). Works in
                     every build; the status halves need their features.
-    --unmine        Opt OUT of contributing: records machine-global consent =
-                    opted out, so `cargo heal sync` refuses its PUSH half (the
-                    lease pull still runs). Healing (--fix / --suggest / the bare
-                    dry run) is UNCHANGED and was always local. Names the queued
-                    .heal/outbox/ path and deletes nothing. Idempotent; re-enable
-                    with --mine. Works in every build.
+    --unmine        Opt OUT of contributing + LOG OUT (Plan 020): records
+                    machine-global consent = opted out, so `cargo heal sync`
+                    refuses its PUSH half (the lease pull still runs), and
+                    removes the local account identity (key + record) — the
+                    not-logged-in free-tier state. The SERVER ledger keeps
+                    everything already committed (a client cannot un-submit);
+                    a later `login` generates a NEW key = a NEW account.
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
