@@ -398,49 +398,22 @@ fn run_unmine() {
     println!("machine. Opting out stops the upload, not the local memory.");
     println!();
 
-    // ── the logout half (Plan 020 — 'back to the free-tier state'): the
-    //    local account identity is removed so the CLI reads as
-    //    not-logged-in again. Two honest lines the user MUST see: the
-    //    SERVER ledger keeps every committed record + balance (a client
-    //    cannot un-submit — the G9d mirror), and a fresh `login` after a
-    //    purge generates a NEW key = a NEW account (the old balance stays
-    //    on the old account; the once-per-key welcome grant does not
-    //    transfer).
-    let account_dir = riir_clippy::kat_account::KatAccount::default_dir();
-    match riir_clippy::kat_account::KatAccount::load(&account_dir) {
-        Ok(account) => {
-            let key_path = account.key_path().to_path_buf();
-            let pub_path = account_dir.join(riir_clippy::kat_account::KatAccount::PUB_FILE);
-            let record_path = account_dir.join(riir_clippy::kat_account::KatAccount::RECORD_FILE);
-            println!("LOGOUT (local): removing the account identity");
-            println!("  key:    {}", key_path.display());
-            println!("  record: {}", record_path.display());
-            let mut removed_any = false;
-            for p in [&key_path, &pub_path, &record_path] {
-                match std::fs::remove_file(p) {
-                    Ok(()) => removed_any = true,
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => eprintln!("  unmine: could not remove {}: {e}", p.display()),
-                }
-            }
-            if removed_any {
-                println!(
-                    "  logged out — the machine is back to the not-logged-in free-tier state"
-                );
-            }
-            println!();
-            println!("HONESTY (the two things logout does NOT do):");
-            println!("  1. The server ledger KEEPS what was already committed: your records,");
-            println!("     rewards and balance stay on the account they were earned under. A");
-            println!("     client cannot un-submit.");
-            println!("  2. `cargo heal login` after this generates a NEW key = a NEW account.");
-            println!("     The old account's balance does not transfer, and the once-per-key");
-            println!("     welcome grant belongs to the old key.");
-        }
-        Err(_) => {
-            println!("LOGOUT: no local account found — already at the free-tier state");
-        }
+    // ── the UNSYNC half (Plan 020 review verdict): reset the local sync
+    //    bookkeeping so the state is coherent with "not contributing" —
+    //    the watermark goes (the pending-unsynced estimator reads it) and
+    //    queued outbox batches stay NAMED but untouched (auditability —
+    //    a tool that silently deletes the evidence of what it queued is
+    //    not auditable; they are inert while opted out and the user
+    //    decides).
+    let watermark = resolve_heal_root(&[]).join(".heal").join("kat_sync_watermark.json");
+    match std::fs::remove_file(&watermark) {
+        Ok(()) => println!("UNSYNC: cleared the sync watermark ({})", watermark.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => eprintln!("unmine: could not clear the watermark: {e}"),
     }
+    println!(
+        "ACCOUNT: untouched — your key, balance and rewards stay exactly as they are.\n         This is fully reversible: `cargo heal --mine` re-enables contributing\n         with the SAME account. (To abandon the identity entirely — which\n         ORPHANS the server-side balance forever and starts fresh-grant\n         territory — use `cargo heal --unmine --purge`.)"
+    );
     println!();
 
     // The already-queued batches. Named, never touched — the user decides.
@@ -459,6 +432,66 @@ fn run_unmine() {
     println!();
     println!("{}", riir_clippy::kat_mining_consent::MiningConsent::OptedOut.status_line());
     println!("re-enable any time: cargo heal --mine");
+}
+
+/// The destructive half of `--unmine --purge`: remove the local account
+/// identity (key + pub sidecar + record) + the outbox + the watermark.
+///
+/// The two consequences printed here are LOAD-BEARING, not boilerplate:
+/// 1. The identity IS the key — the server has no recovery path, so the
+///    balance/rewards on this account become permanently unclaimable.
+/// 2. `login` afterwards generates a NEW key = a NEW account with a fresh
+///    once-per-key welcome grant — key-destruction-then-regeneration is
+///    exactly the grant-farm shape the daily-activity sybil tax exists to
+///    tax, and this flag must not be the easy one-command path into it.
+///    Hence: explicit `--purge`, never the default.
+fn run_unmine_purge() {
+    let account_dir = riir_clippy::kat_account::KatAccount::default_dir();
+    match riir_clippy::kat_account::KatAccount::load(&account_dir) {
+        Ok(account) => {
+            let key_path = account.key_path().to_path_buf();
+            let pub_path = account_dir.join(riir_clippy::kat_account::KatAccount::PUB_FILE);
+            let record_path = account_dir.join(riir_clippy::kat_account::KatAccount::RECORD_FILE);
+            println!("PURGE: removing the local account identity");
+            println!("  key:    {}", key_path.display());
+            println!("  record: {}", record_path.display());
+            println!();
+            println!("WARNINGS (read before this is over):");
+            println!("  1. The identity IS the key. The server ledger keeps your records,");
+            println!("     rewards and balance, but NOTHING can ever claim them again —");
+            println!("     there is no recovery path. The balance is orphaned forever.");
+            println!("  2. `cargo heal login` afterwards generates a NEW key = a NEW account");
+            println!("     with a FRESH once-per-key welcome grant. The old balance does not");
+            println!("     transfer. Repeatedly purging + re-logging is grant-farming — do");
+            println!("     not build a habit on it.");
+            let mut removed_any = false;
+            for p in [&key_path, &pub_path, &record_path] {
+                match std::fs::remove_file(p) {
+                    Ok(()) => removed_any = true,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => eprintln!("  purge: could not remove {}: {e}", p.display()),
+                }
+            }
+            let outbox = unmine_outbox_dir();
+            match std::fs::remove_dir_all(&outbox) {
+                Ok(()) => println!("  outbox cleared: {}", outbox.display()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => eprintln!("  purge: could not clear the outbox: {e}"),
+            }
+            let watermark = resolve_heal_root(&[]).join(".heal").join("kat_sync_watermark.json");
+            match std::fs::remove_file(&watermark) {
+                Ok(()) => println!("  watermark cleared: {}", watermark.display()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => eprintln!("  purge: could not clear the watermark: {e}"),
+            }
+            if removed_any {
+                println!("  purged — the machine is at the not-logged-in state");
+            }
+        }
+        Err(_) => {
+            println!("PURGE: no local account found — already at the free-tier state");
+        }
+    }
 }
 
 /// The `.heal/outbox/` dir `run_kat_sync`'s `queue_outbox` writes into,
@@ -2068,13 +2101,20 @@ USAGE:
     --mine          What KAT mining is, the policy warning, the web link, and
                     the login → heal → sync → account loop (Proposal 008). Works in
                     every build; the status halves need their features.
-    --unmine        Opt OUT of contributing + LOG OUT (Plan 020): records
+    --unmine        Opt OUT of contributing (keeps your account): records
                     machine-global consent = opted out, so `cargo heal sync`
                     refuses its PUSH half (the lease pull still runs), and
-                    removes the local account identity (key + record) — the
-                    not-logged-in free-tier state. The SERVER ledger keeps
-                    everything already committed (a client cannot un-submit);
-                    a later `login` generates a NEW key = a NEW account.
+                    clears the local sync bookkeeping (watermark; the queued
+                    .heal/outbox/ batches are named, never deleted). Your key,
+                    balance and rewards are UNTOUCHED — fully reversible with
+                    --mine. Healing (--fix / --suggest / the bare dry run) is
+                    UNCHANGED and was always local.
+    --purge         With --unmine ONLY: additionally remove the local account
+                    identity (key + record + outbox + watermark). DESTRUCTIVE:
+                    the identity IS the key — the server-side balance and
+                    rewards become permanently unclaimable (no recovery path),
+                    and a purge + re-login cycle is the fresh-grant farm shape
+                    (each new key gets a fresh once-per-key welcome grant).
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
@@ -2155,6 +2195,12 @@ struct Args {
     /// return, works in every feature build. Mutually exclusive with
     /// `--mine`.
     unmine: bool,
+    /// `--purge` — with `--unmine` ONLY (Plan 020 review verdict: purging
+    /// the identity ORPHANS the server-side balance forever — there is no
+    /// recovery path — and a purge+re-login cycle is the fresh-grant farm
+    /// shape, so it is never the default). Removes the local key + record
+    /// + the outbox + the sync watermark.
+    purge: bool,
     /// Set by parse_args when the bare no-mode default fired (the dry-run
     /// banner then prints once, from main). Not a user flag.
     bare_default: bool,
@@ -2314,6 +2360,7 @@ fn parse_args() -> Args {
         fix: false,
         mine: false,
         unmine: false,
+        purge: false,
         bare_default: false,
         fix_compile: false,
         dump_trajectories: false,
@@ -2386,6 +2433,7 @@ fn parse_args() -> Args {
             "--write" => args.write = true,
             "--mine" => args.mine = true,
             "--unmine" => args.unmine = true,
+            "--purge" => args.purge = true,
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
@@ -2592,6 +2640,10 @@ fn parse_args() -> Args {
     }
     if args.account_history && !matches!(args.command, Some(KatCommand::Account)) {
         eprintln!("--history requires the `account` command");
+        usage();
+    }
+    if args.purge && !args.unmine {
+        eprintln!("--purge requires --unmine (it only makes sense as the destructive half of opting out)");
         usage();
     }
     // `--request` and `--qr` are SHARED by `pay` and `faucet` (both open a
@@ -4286,6 +4338,9 @@ fn main() {
     // out so `cargo heal sync` refuses its push half; deletes nothing.
     if args.unmine {
         run_unmine();
+        if args.purge {
+            run_unmine_purge();
+        }
         return;
     }
 

@@ -287,15 +287,19 @@ cargo heal account    # burn / balance / grant / network state
 Leave at any time:
 
 ```sh
-cargo heal --unmine   # opt OUT of contributing + LOG OUT (local identity removed)
+cargo heal --unmine          # opt OUT of contributing — key + balance UNTOUCHED, reversible
+cargo heal --unmine --purge  # DESTRUCTIVE: also remove the local identity (orphans the
+                             # server-side balance forever — no recovery path)
 ```
 
 `--unmine` stops the push half of `sync` (the lease pull — a read — still
-runs) and removes the local key + record, i.e. the not-logged-in free-tier
-state. Two things it deliberately does NOT do: the server ledger keeps
-everything already committed (a client cannot un-submit), and a later
-`login` generates a NEW key = a NEW account (the old balance stays on the
-old account).
+runs) and clears the sync bookkeeping; your key, balance and rewards stay
+exactly as they are, so `--mine` re-enables contributing with the SAME
+account. `--purge` is the explicit destructive opt-out: the identity IS the
+key, so the server-side balance becomes permanently unclaimable, and a
+purge + re-login cycle is the fresh-grant farm shape (each new key gets a
+fresh once-per-key welcome grant) — which is exactly why it is never the
+default.
 
 ## Automatic rustfmt (`--fix --write`)
 
