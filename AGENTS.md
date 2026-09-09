@@ -99,6 +99,9 @@ Plan 001 generalized the framework from a clippy-only healer into a pluggable mu
 /git/riir-train           ← OPTIONAL dep (only for L4 LoRA fallback, deferred)
 /git/riir-chain           ← NOT a dep
 /git/riir-neuron-db       ← transitive only (via riir-rag under latent_retrieval)
+/git/riir-auth            ← OPTIONAL dep (account-key login substrate; kat_service →
+                          riir-auth/account_key only, NOT github_login — Issue 081,
+                          2026-09-09; src/kat_account.rs is the kat-facing facade)
 ```
 
 Path deps in `Cargo.toml` assume the standard `/git/` sibling layout.
