@@ -116,6 +116,21 @@ while v1 is mostly authored — not because the substrate is sharper on
 are static in-tree metadata, and folding them into the BLAKE3 would rotate
 every future artifact without changing a single measurement.
 
+### Fresh-family disambiguation (issue 082, 2026-09-09) — the attribution TESTED
+
+The composition attribution above was tested with the 740-unblock pairing:
+composition held real-vs-real, provenance held disjoint (fresh carves from
+`riir-neuron-db` + `riir-dapps`, absent from every known set, vs the gen6
+reference). **R1 fired: gap −0.7608 nats (d −1.026) on BOTH fresh families**
+— the axis tracks corpus-family proximity on composition-matched real code.
+Honest mechanism: the fresh signal is all-or-nothing (0/48 fresh carves fire
+ANY proposer rule — all-flat at ln 48), and gen6's mining-time lint selection
+remains a confound the pairing cannot remove; convergent validity is
+demonstrated in the coarse discriminative form. Full record:
+`.benchmarks/081_ood_fresh_family_convergent_validity.md` (promotion is
+unchanged — `regime_probe` stays opt-in; this settles convergent validity,
+not promotion).
+
 ## Compatibility
 
 - Rows predating the axis deserialize with `ood: None`

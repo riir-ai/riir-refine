@@ -536,6 +536,16 @@ required-features = ["score_bench", "latent_retrieval"]
 name = "margin_spectrum"
 required-features = ["score_bench", "latent_retrieval"]
 
+# Issue 082: the disambiguating OOD experiment — composition-matched
+# (gen6 real vs fresh real), provenance-disjoint (neuron-db + dapps carves,
+# absent from every known set). Pre-registered readings live in the module
+# doc; print-only, oracle-free. Numbers land in
+# .benchmarks/081_ood_fresh_family_convergent_validity.md.
+#   cargo run --example ood_fresh_family --features score_bench,latent_retrieval
+[[example]]
+name = "ood_fresh_family"
+required-features = ["score_bench", "latent_retrieval"]
+
 # Issue 008: real-world validation of self_evolve via cargo clippy ground truth.
 # Requires both self_evolve + clippy_verify. SLOW — spawns cargo clippy dozens of times.
 [[example]]
