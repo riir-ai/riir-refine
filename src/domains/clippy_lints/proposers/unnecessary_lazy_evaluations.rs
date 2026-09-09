@@ -140,4 +140,51 @@ mod tests {
         let out = propose_fix("unnecessary_lazy_evaluations", input);
         assert!(out.is_none(), "eager call must not fire: {out:?}");
     }
+
+    #[test]
+    fn struct_literal_body_fires_multi_line() {
+        // The measured miss (riir-dapps issue 035's payout leg, healed
+        // 2026-09-09): real clippy flagged this span, the healer fixed 0
+        // — the struct-literal body fell through is_pure_expr. Multi-line
+        // ON PURPOSE: the incident span was 3 lines, and the splice must
+        // carry the original body text verbatim.
+        let input = "fn f(x: Option<u8>) -> Result<u8, E> {\n    x.ok_or_else(|| E::Refused {\n        reason: \"epoch overflow at the payout leg\",\n    })\n}";
+        let out = propose_fix("unnecessary_lazy_evaluations", input).expect("matched");
+        assert!(
+            out.contains("x.ok_or(E::Refused {") && out.contains("\"epoch overflow at the payout leg\","),
+            "multi-line struct body not preserved: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn field_access_and_enum_ctor_bodies_fire() {
+        let field = "fn f(x: Option<u8>, e: E) -> u8 { x.unwrap_or_else(|| e.a) }";
+        let out = propose_fix("unnecessary_lazy_evaluations", field).expect("matched");
+        assert!(out.contains("x.unwrap_or(e.a)"), "{out}");
+
+        for (body, eager) in [("Some(1)", "Some(1)"), ("Err(1u8)", "Err(1u8)")] {
+            let input = format!(
+                "fn f(x: Option<Option<u8>>) -> Option<Option<u8>> {{ x.unwrap_or_else(|| {body}) }}"
+            );
+            let out = propose_fix("unnecessary_lazy_evaluations", &input).expect("matched");
+            assert!(out.contains(&format!("x.unwrap_or({eager})")), "{out}");
+        }
+    }
+
+    #[test]
+    fn impure_struct_field_and_arbitrary_call_unchanged() {
+        // An impure FIELD VALUE taints the whole literal (real clippy
+        // agrees — probed 2026-09-09).
+        let input =
+            "fn side() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| E { a: side(), b: 2 }) }";
+        let out = propose_fix("unnecessary_lazy_evaluations", input);
+        assert!(out.is_none(), "impure struct field must not fire: {out:?}");
+
+        // An arbitrary call is not a constructor — stays lazy.
+        let input =
+            "fn g() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| g()) }";
+        let out = propose_fix("unnecessary_lazy_evaluations", input);
+        assert!(out.is_none(), "arbitrary call must not fire: {out:?}");
+    }
 }

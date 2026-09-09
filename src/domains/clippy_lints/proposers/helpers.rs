@@ -79,6 +79,35 @@ pub(crate) fn is_pure_expr(e: &Expr) -> bool {
         Expr::Paren(p) => is_pure_expr(&p.expr),
         Expr::Unary(u) => is_pure_expr(&u.expr),
         Expr::Binary(b) => is_pure_expr(&b.left) && is_pure_expr(&b.right),
+        // Struct literal — construction has no effects; pure iff every
+        // field value (and the struct-update base, if any) is pure.
+        // Measured against real clippy 2026-09-09 (probe crate,
+        // unnecessary_lazy_evaluations): flagged with pure fields, NOT
+        // flagged when any field calls a fn.
+        Expr::Struct(s) => {
+            s.fields.iter().all(|f| is_pure_expr(&f.expr))
+                && s.rest.as_ref().is_none_or(|r| is_pure_expr(r))
+        }
+        // Field access — reads have no effects; pure iff the base is.
+        Expr::Field(f) => is_pure_expr(&f.base),
+        // The std enum constructors can't have side effects — anything
+        // else callable might. Bounded: `Some`/`Ok`/`Err` ONLY, args pure
+        // (real clippy flags `|| Some(1)` / `|| Err(e)`, never an
+        // arbitrary call).
+        Expr::Call(c) => {
+            let Expr::Path(p) = &*c.func else {
+                return false;
+            };
+            let ctor = p
+                .path
+                .segments
+                .last()
+                .map_or_else(String::new, |s| s.ident.to_string());
+            matches!(ctor.as_str(), "Some" | "Ok" | "Err")
+                && c.args.iter().all(is_pure_expr)
+        }
+        // Indexing can panic (real clippy does NOT flag `|| a[0]`),
+        // method calls / macros / arrays can do anything — stay impure.
         _ => false,
     }
 }
