@@ -1,6 +1,7 @@
 # Issue 085 — `dist` healing domain (Cargo.toml build-config advice)
 
 **Status:** Phase 1 LANDED 2026-09-09 — 4 suggest-only rules, lane + retrieval integration, floors re-measured; promotion (GOAT gate below) pending.
+**UPDATE 2026-09-10 (idle session, zero-contention diagnosis):** both build blockers named in the T-list are REPAIRED at HEAD — (1) the E0631 `v5_is_removal_rule` signature mismatch was `ce74bac`'s healer `redundant_closure` point-free rewrite of the load-bearing `&String→&str` coercion, compiled to nothing at default features (`#[cfg(feature = "score_bench")]`), restored to the closure form by Batch 140 `d2d2388`; (2) the Batch 138/139 kernel_verify `.parses` all-features conflict was fixed by `91493a1` (cfg-adaptive `verdict_passes` accessor in `corpus/tests.rs`). Batch 140 also RAN score-bench #87 FLAT 96.2/1.9 at the canonical state. Remaining owed for promotion: the score-bench run with `dist` ON (the corpus/routing twin — #87 was the dist-off canonical state) + condition (4)'s real-consumer-repo scan with a true-positive cite. Both are cargo-gated (the plan391 v9 quiet gate, riir-ai `.issues/876`); routed to ride the Batch 122 (Plan 122 T4) cargo window, which already owes score-bench + corpus-stats.
 
 ## Premise (measured, this repo, 2026-09-09)
 

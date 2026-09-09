@@ -63,6 +63,13 @@
       silent); rust_perf NotBenchable annotations + context_notes for the
       decision-content rules (this batch is ALL source-measured 5090 content —
       expect every rule NotBenchable-annotated); score-bench + corpus-stats.
+      **T4 also owes Issue 085's promotion runs (see its 09-10 UPDATE): the
+      score-bench +dist twin (the dist-off canonical #87 FLAT already ran at
+      Batch 140) + a real-consumer `--domain dist` scan with a true-positive
+      cite. The E0631 (d2d2388 restored) + `.parses` (91493a1 accessor)
+      blockers are already repaired at HEAD — the all-features arm is
+      EXPECTED to compile; a red there is new information, not the known
+      conflict.**
 - [ ] T5 — (zero-build write, after T4 numbers) Research note: Research 163 →
       RECORD with the landing deltas; `.research/.highwater` bump if a new note
       opens (else 163 closes in place).
