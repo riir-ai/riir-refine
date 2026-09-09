@@ -1,6 +1,6 @@
 # Issue 081 — migrate `kat_account` onto riir-auth's `account_key` substrate
 
-**Status:** LANDED 2026-09-09 — all tasks complete; commits `6557781` (this repo: code + contract + tests) and the riir-auth half (`adopt` made public + BOUNDARY consumer flip). Gates: clippy `-D warnings` × all-features + kat_service + default; lib tests 1187 (default) / 1331 (kat_service) / 1518 (kernel_heal); compat suite 16/16; G9 6/6; CLI e2e (soft-gate 13, consent 9, burn 3, refill 4, wetrun 11, payload 11); standalone dep gate 10/10 + self-test; boundary contract ✓ 17 repos; riir-auth 97 (features) + 81 (default).
+**Status:** LANDED 2026-09-09 — all tasks complete; commits `1a5f6a0` (this repo: code + contract + tests) and riir-auth `3553bdc` (BOUNDARY consumer flip; `adopt` pub landed there as `a18a693` via the sibling sweep). Gates: clippy `-D warnings` × all-features + kat_service + default; lib tests 1187 (default) / 1331 (kat_service) / 1518 (kernel_heal); compat suite 16/16; G9 6/6; CLI e2e (soft-gate 13, consent 9, burn 3, refill 4, wetrun 11, payload 11); standalone dep gate 10/10 + self-test; boundary contract ✓ 17 repos; riir-auth 97 (features) + 81 (default).
 
 ## Context
 
