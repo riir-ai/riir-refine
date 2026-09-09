@@ -213,6 +213,15 @@ fix_verify = ["compile_oracle", "latent_retrieval"]
 # documentation, not a consumer.
 score_bench = ["clippy_verify", "latent_retrieval", "clippy_lints", "rust_perf", "katgpt-core/regime_probe"]
 
+# Issue 077 T3: e^{−2M} margin-weighted mining order (arXiv:2604.26841's
+# margin law on WHERE the carve miner spends its file budget — smallest
+# drafter margin first). Opt-in; the miner's default stays diff-count-desc
+# and is bit-identical with the flag off. Demote-if-no-gain rule: the A/B
+# pre-registers "arm wins iff its bench heal rate strictly beats the
+# control's"; a tie or loss keeps this OFF default forever unless a NEW
+# pre-registered A/B says otherwise (recorded in .benchmarks/080).
+margin_mining = ["score_bench", "latent_retrieval"]
+
 # Plan 336 T4.4/T5.3: the L4 generative fallback stage. Ships the composition
 # SEAM only (trait + pipeline wiring) — no model, no GPU, no heavy deps. Inert
 # unless a fallback is installed via `HealPipeline::with_l4_fallback`.
@@ -504,6 +513,14 @@ required-features = ["score_bench"]
 # module (latent_retrieval) for `draft::ClippyOracle`.
 [[example]]
 name = "score_bench_mine_v6"
+required-features = ["score_bench", "latent_retrieval"]
+
+# Issue 077 T2: the offline margin-spectrum analysis over the frozen v1
+# fixture set — buckets + the e^{−2M} concentration claim. PRINT-ONLY (no
+# gating, no promotion decision); numbers recorded in the issue.
+#   cargo run --release --example margin_spectrum --features score_bench,latent_retrieval
+[[example]]
+name = "margin_spectrum"
 required-features = ["score_bench", "latent_retrieval"]
 
 # Issue 008: real-world validation of self_evolve via cargo clippy ground truth.

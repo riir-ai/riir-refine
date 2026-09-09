@@ -39,6 +39,9 @@ pub mod clippy_oracle;
 pub mod instantiation_rerank;
 #[cfg(feature = "clippy_verify")]
 pub mod jury_disagreement;
+// Issue 077 T2+T3: the margin law's shared substrate — pure math + the
+// matcher access pattern, no oracle. Gated latent_retrieval (the matcher).
+pub mod margin_weight;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
 pub mod span_source;
@@ -68,6 +71,10 @@ pub use headroom_probe::{
 pub use instantiation_rerank::{
     CollapseVerdict, RerankMode, RERANK_POOL, detect_collapse, detect_collapse_rule_ids,
     rule_family,
+};
+pub use margin_weight::{
+    SpanMargin, concentration_fraction, contested_margin, margin_weight, span_margin,
+    span_min_margin,
 };
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
 pub use retrieval_eval::{
