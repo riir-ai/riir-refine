@@ -24,3 +24,4 @@ Two healer-consumer fusions of the regime-probe suite (rows M5 + M2-consumer of 
 
 - This is the "did I ask what this does for the healer?" answer for Research 541 — the paper's margin law lands directly on corpus mining, and its regime probe lands on the withheld-pair OOD axis.
 - Boundary: zero new deps; the primitive lives in katgpt-core (public), this repo consumes it.
+- Fresh-family follow-up: the set-composition attribution above was TESTED and held — issue 082 (R1 convergent validity demonstrated, gap −0.7608 / d −1.026 on both fresh families), `.benchmarks/081_ood_fresh_family_convergent_validity.md`.
