@@ -191,19 +191,24 @@ jobs:
       # every fix as unverified (Heuristic tier) — which the mining pipeline
       # then cannot treat as strong evidence. Adds no new external crates
       # (compile_oracle is std + serde only), so the license read is unchanged.
+      # Build with --profile dist (size-optimized, Cargo.toml [profile.dist]):
+      # measured 2026-09-09, 11.0 MB → 4.3 MB (-61%) on the arm64 shipping set.
+      # Dev-time builds stay on plain --release (drafter speed); the shipped
+      # artifact optimizes for download size. panic=abort is safe here: the
+      # only catch_unwind strings in the tree are sec-domain proposer TEXT.
       - name: Build
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --release --target ${{ matrix.target }} \
+          cargo build --profile dist --target ${{ matrix.target }} \
             --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-heal
 
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/cargo-heal
-            target/${{ matrix.target }}/release/cargo-heal.exe
+            target/${{ matrix.target }}/dist/cargo-heal
+            target/${{ matrix.target }}/dist/cargo-heal.exe
           if-no-files-found: error
 
   # ── Package + the G2 gate ───────────────────────────────────────────────────
