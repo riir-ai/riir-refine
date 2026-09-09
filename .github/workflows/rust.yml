@@ -70,11 +70,13 @@
 name: Rust
 
 on:
-  schedule:
-    # Fridays 03:23 UTC — off-the-hour (top-of-hour is the runner-queue crunch),
-    # and a different slot from katgpt-rs's Monday full gate so workspace gates
-    # do not stack.
-    - cron: '23 3 * * 5'
+  # SCHEDULE SUSPENDED (owner call 2026-09-09): Actions spending limit —
+  # schedules evaluate against the DEFAULT branch (develop). Re-add to enable:
+  # schedule:
+  #   # Fridays 03:23 UTC — off-the-hour (top-of-hour is the runner-queue
+  #   # crunch), and a different slot from katgpt-rs's Monday full gate so
+  #   # workspace gates do not stack.
+  #   - cron: '23 3 * * 5'
   push:
     branches: [main]
     paths-ignore:
