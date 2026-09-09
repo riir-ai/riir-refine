@@ -22,8 +22,10 @@
 //! `{"account_pubkey_hex":…,"signature_hex":…,"burn_kat_total":…,"meter_watermark_tokens":…}`
 //! where the signature covers [`BURN_SIGNING_DOMAIN`] ‖ pubkey (32 bytes) ‖
 //! `burn_kat_total` as u64 LE — 52 bytes total ([`burn_report_message`]).
-//! `burn_kat_total` is the cumulative
-//! [`crate::kat_meter::ChargeState::charged_kat`] (whole KAT);
+//! `burn_kat_total` is the cumulative burn in WHOLE KAT — the charge book
+//! ([`crate::kat_meter::ChargeState::charged_kat`], MICRO-KAT) converted by
+//! [`wire_kat_total`] at the sync boundary (the 10⁶× unit gap that once
+//! clamped away a 100 KAT grant is the measured reason);
 //! `meter_watermark_tokens` is informational. The service derives the
 //! account itself (`blake3(pubkey)[..16]` — the house truncation
 //! [`crate::kat_payreq_client::account_for_pubkey`] mirrors), verifies,
@@ -323,6 +325,25 @@ use crate::kat_lease_client::HttpResponse;
 /// best-effort billing push must never make a run feel stuck.
 pub const BURN_TIMEOUT_SECS: u64 = 5;
 
+/// The charge book → wire unit divisor. The local charge ledger counts in
+/// MICRO-KAT (`charged_kat` = 1 micro per code word token at the v1 rate —
+/// 1 KAT per MILLION tokens; the same unit as the 100 KAT grant's
+/// 100,000,000 micro and the ledger's `MicroUnits`), while the PINNED wire
+/// contract carries `burn_kat_total` in WHOLE KAT (the service debits
+/// `increment × 1_000_000` micro). Sending the book value unconverted
+/// over-reports by 10⁶× and the warn-and-pay clamp wipes the whole grant
+/// (measured live 2026-09-09: a true 2.32 KAT spend consumed the account's
+/// full 100 KAT grant). Floor conversion: sub-KAT remainders accumulate in
+/// the book and ride the next report — the server's granularity is the
+/// whole KAT it can actually debit.
+pub const WIRE_PER_CHARGE_UNITS: u64 = 1_000_000;
+
+/// The wire `burn_kat_total` (whole KAT) for a charge-book value (micro).
+#[must_use]
+pub fn wire_kat_total(charged_kat: u64) -> u64 {
+    charged_kat / WIRE_PER_CHARGE_UNITS
+}
+
 /// The burn-channel transport (one trait per channel — the
 /// [`crate::kat_payreq_client::PayreqTransport`] pattern; the ureq HTTP
 /// impl here, a scripted mock in tests driving the same trait).
@@ -469,6 +490,10 @@ pub enum BurnSync {
 /// resolved service URL
 /// ([`crate::kat_lease_client::service_url_for_command`]) around
 /// [`run_burn_sync_at`].
+///
+/// `charged_kat` is the charge book's MICRO-KAT value
+/// ([`crate::kat_meter::ChargeState::charged_kat`]); the wire conversion
+/// (whole KAT) happens inside [`run_burn_sync_at`].
 #[cfg(feature = "kat_transport")]
 #[must_use]
 pub fn run_burn_sync(root: &Path, charged_kat: u64, meter_watermark_tokens: u64) -> BurnSync {
@@ -507,11 +532,17 @@ pub fn run_burn_sync_at(
     if let Some(w) = warning {
         eprintln!("{w}");
     }
-    if charged_kat <= ack.burn_kat_total {
+    // The book is micro-KAT; the wire (and the ack that mirrors the
+    // server's answer) is WHOLE KAT — convert ONCE here so the skip
+    // comparison, the report, and the stacked total all speak the wire's
+    // unit (the 10⁶× over-report that clamped away a 100 KAT grant is the
+    // measured reason this conversion is load-bearing).
+    let wire_total = wire_kat_total(charged_kat);
+    if wire_total <= ack.burn_kat_total {
         return BurnSync::Skipped;
     }
     let transport = HttpBurnTransport::new(base_url, BURN_TIMEOUT_SECS);
-    match report_burn(&transport, &key, charged_kat, meter_watermark_tokens) {
+    match report_burn(&transport, &key, wire_total, meter_watermark_tokens) {
         Ok(server) => {
             let record = KatBurnAck {
                 version: BURN_ACK_VERSION,
@@ -536,7 +567,7 @@ pub fn run_burn_sync_at(
             BurnSync::Reported(server)
         }
         Err(reason) => BurnSync::Stacked {
-            total: charged_kat,
+            total: wire_total,
             reason,
         },
     }
@@ -974,6 +1005,18 @@ mod transport_tests {
     }
 
     #[test]
+    fn wire_conversion_floors_micro_to_whole_kat() {
+        // The measured incident this conversion closes: the book said
+        // 2,380,972 (micro) and the wire received 2,323,993 (whole) — the
+        // clamp then ate the account's whole grant.
+        assert_eq!(wire_kat_total(0), 0);
+        assert_eq!(wire_kat_total(999_999), 0, "sub-KAT stays unreported");
+        assert_eq!(wire_kat_total(1_000_000), 1);
+        assert_eq!(wire_kat_total(2_380_972), 2, "floor, never round");
+        assert_eq!(wire_kat_total(u64::MAX), u64::MAX / WIRE_PER_CHARGE_UNITS);
+    }
+
+    #[test]
     fn report_burn_accepts_documented_answers_and_refuses_rewinds() {
         let key = test_key();
 
@@ -1056,7 +1099,10 @@ mod transport_tests {
         KatAccount::login(&account_dir).expect("hermetic login");
 
         let mock = spawn_echo_burn_mock();
-        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 321, 4_000);
+        // The book is MICRO-KAT: 321_000_000 micro = 321 whole KAT on the
+        // wire (the conversion under test — the raw book value must never
+        // reach the wire unconverted).
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 321_000_000, 4_000);
         let BurnSync::Reported(ack) = outcome else {
             panic!("expected Reported, got {outcome:?}");
         };
@@ -1071,7 +1117,7 @@ mod transport_tests {
         assert_eq!(
             v.get("burn_kat_total").and_then(serde_json::Value::as_u64),
             Some(321),
-            "the report carries the FULL cumulative total"
+            "the report carries the FULL cumulative total, WHOLE KAT (converted, never the raw micro book)"
         );
         assert_eq!(
             v.get("meter_watermark_tokens").and_then(serde_json::Value::as_u64),
@@ -1086,16 +1132,26 @@ mod transport_tests {
         assert_eq!(on_disk.meter_watermark_tokens, 4_000);
         assert!(on_disk.acked_unix > 0);
 
-        // A second call with NO new burn: skip path, zero dials.
-        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 321, 4_000);
+        // A second call with NO new WHOLE KAT: skip path, zero dials. The
+        // book grew 999_999 micro (sub-KAT, below the wire's granularity)
+        // and must STILL skip — the remainder rides the next crossing.
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 321_999_999, 4_000);
         assert_eq!(outcome, BurnSync::Skipped);
-        assert_eq!(mock.captured().len(), 1, "no new burn must not dial");
+        assert_eq!(mock.captured().len(), 1, "no new whole KAT must not dial");
+
+        // The next whole-KAT crossing reports the FULL cumulative total.
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 322_000_000, 4_000);
+        let BurnSync::Reported(ack) = outcome else {
+            panic!("expected Reported at the whole-KAT crossing, got {outcome:?}");
+        };
+        assert_eq!(ack.burn_kat_total, 322);
+        assert_eq!(mock.captured().len(), 2);
 
         // A LOWER local total (the charge ledger recovered fresh under an
         // advanced ack) also skips — the server is ahead, never behind.
-        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 5, 100);
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 5_000_000, 100);
         assert_eq!(outcome, BurnSync::Skipped);
-        assert_eq!(mock.captured().len(), 1);
+        assert_eq!(mock.captured().len(), 2);
 
         let _ = std::fs::remove_dir_all(&account_dir);
         let _ = std::fs::remove_dir_all(&root);
@@ -1114,13 +1170,14 @@ mod transport_tests {
         assert!(!root.join(".heal").join(KatBurnAck::FILE_NAME).exists());
 
         // Logged in + new burn + dead service: the stack is retained and
-        // the ack stays absent.
+        // the ack stays absent. (50_000_000 micro book = 50 whole KAT
+        // stacked — the Stacked total is the WIRE unit.)
         KatAccount::login(&account_dir).expect("hermetic login");
-        let outcome = run_burn_sync_at(&account_dir, &root, CLOSED_PORT, 50, 50);
+        let outcome = run_burn_sync_at(&account_dir, &root, CLOSED_PORT, 50_000_000, 50);
         let BurnSync::Stacked { total, reason } = outcome else {
             panic!("expected Stacked, got {outcome:?}");
         };
-        assert_eq!(total, 50, "the FULL cumulative total stacks");
+        assert_eq!(total, 50, "the FULL cumulative total stacks (whole KAT)");
         assert!(!reason.is_empty());
         assert!(
             !root.join(".heal").join(KatBurnAck::FILE_NAME).exists(),
@@ -1151,7 +1208,7 @@ mod transport_tests {
                 r#"{{"accepted":true,"burn_kat_total":50,"increment_kat":50,"balance_micro":99000000,"contributed":true,"first_commitment_hex":"{hex}"}}"#
             ),
         );
-        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 50, 50);
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 50_000_000, 50);
         let BurnSync::Reported(ack) = outcome else {
             panic!("expected Reported, got {outcome:?}");
         };
@@ -1173,7 +1230,7 @@ mod transport_tests {
             "OK",
             r#"{"accepted":true,"burn_kat_total":5,"increment_kat":5,"balance_micro":0,"contributed":false}"#,
         );
-        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 5, 5);
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 5_000_000, 5);
         let BurnSync::Reported(ack) = outcome else {
             panic!("expected Reported, got {outcome:?}");
         };
@@ -1187,7 +1244,7 @@ mod transport_tests {
         // Pre-v3 server: no fields → the ack stays None (marker fallback).
         let root = temp_root("root080c");
         let mock = spawn_echo_burn_mock();
-        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 7, 7);
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 7_000_000, 7);
         let BurnSync::Reported(ack) = outcome else {
             panic!("expected Reported, got {outcome:?}");
         };

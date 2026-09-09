@@ -1,7 +1,9 @@
 //! KAT code-token meter + charge consumer — Proposal 005 Phase 0 T0.5/T0.6
 //! (Plans 023 + 024).
 //!
-//! **1 KAT = 1 word token of code processed by the healer.** A word token is
+//! **1 KAT = 1,000,000 code word tokens processed by the healer** (the
+//! deployed v1 rate — `charged_kat` counts MICRO-KAT, one micro per
+//! token). A word token is
 //! a maximal run of bytes that are not ASCII whitespace (`u8::is_ascii_whitespace`
 //! — space, `\t`, `\n`, `\r`, `\f`). The counter runs over the **raw bytes of
 //! the source the healer processes**, never over an AST:
@@ -268,7 +270,10 @@ pub const CHARGE_CHANGELOG: &[(u32, &str)] = &[
     (
         1,
         "initial charge model (T0.6 decision, 2026-08-26): per-unit burn — 1 KAT per \
-         code word token (CHARGE_KAT_PER_MILLION_TOKENS = 1_000_000). Chosen over the \
+         MILLION code word tokens (CHARGE_KAT_PER_MILLION_TOKENS = 1_000_000; the \
+         deployed economics — the 100 KAT free grant funds ~100M tokens, the \
+         proposal's ~$300 Claude-equivalent intent; charged_kat counts MICRO-KAT). \
+         Chosen over the \
          volume-tiered lease (caveat #16's recommendation) for Phase 0: simplest \
          auditable accounting (charge = tokens x rate, one integer multiply), no \
          tier-boundary or lease-expiry semantics. Revisitable before T1.3 (the Stripe \
@@ -277,9 +282,13 @@ pub const CHARGE_CHANGELOG: &[(u32, &str)] = &[
 ];
 
 /// KAT charged per 1,000,000 code word tokens — the per-unit burn rate.
-/// v1: `1_000_000` → exactly 1 KAT per token (§KAT). Encoded per-million so a
-/// future fractional rate (e.g. `500_000` = 0.5 KAT/token) needs no type
-/// change. Any change to this constant is a reprice → [`CHARGE_VERSION`] bump
+/// v1: `1_000_000` = 1 KAT per MILLION tokens (the deployed economics —
+/// the 100 KAT free grant funds ~100M tokens of healing, the proposal's
+/// "100M tokens ≈ $300" intent). Encoded per-million so a future
+/// fractional rate (e.g. `500_000` = 0.5 KAT/M tokens) needs no type
+/// change. `kat_for_tokens` yields MICRO-KAT — the same unit as this
+/// grant-side constant and the ledger's `MicroUnits`; the burn wire is
+/// WHOLE KAT ([`crate::kat_burn_client::wire_kat_total`] converts). Any change to this constant is a reprice → [`CHARGE_VERSION`] bump
 /// + [`CHARGE_CHANGELOG`] entry in the same change.
 pub const CHARGE_KAT_PER_MILLION_TOKENS: u64 = 1_000_000;
 
