@@ -11,8 +11,9 @@
 #
 # Two jobs:
 #   standalone     — no siblings, no secret, no cargo: pins the escaping-dep
-#                    set (scripts/standalone_dep_gate.sh, 9 entries across 3
-#                    siblings). The ONLY check that runs in a bare clone.
+#                    set (scripts/standalone_dep_gate.sh, 10 entries across 4
+#                    siblings since Issue 081 added riir-auth). The ONLY
+#                    check that runs in a bare clone.
 #   feature-guard  — the full scripts/ci_feature_guard.sh, siblings provided.
 #                    Runs exactly what a developer runs locally — no CI-only
 #                    configuration, so a red run is reproducible on a laptop.

@@ -16,7 +16,7 @@ Retrieval domains (Plan 001 + Plans 018/030; `rustc_errors` is a 6th, driver-bas
 
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 49 corpus lints across style/complexity/perf/pedantic/nursery (38 `--fix`, 8 `--verify`, 3 self_evolve-only).
 - **`rust_perf`** (default-on) — heals Rust perf issues; 120 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
-- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 591 rules.
+- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 601 rules.
 - **`sec`** (opt-in) — security-pattern bounded fixes (14 rules; 6 fixable + 8 suggest-only).
 - **`docker`** (default-on) — Dockerfile bounded-fix healing (31 rules, hadolint oracle).
 - **`rustc_errors`** (default-on) — `cargo heal --fix-compile`, oracle-driven compile-error repair keyed by rustc error code; driver-shaped, inert until invoked.
@@ -147,7 +147,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 
 ### CI enforcement (2026-09-02, katgpt-rs Issue 701 R2 self-apply)
 
-`.github/workflows/rust.yml` runs `scripts/ci_feature_guard.sh` — the same guard a developer runs, not a CI-only subset — plus a `standalone` job pinning the escaping-path-dep set (`scripts/standalone_dep_gate.sh`: 9 entries across 3 siblings; private siblings via `SIBLING_REPOS_TOKEN`, hard-erroring when absent). Triggers are deliberately narrow (the workspace spending-limit convention): weekly on `develop` (the rot check), pushes to `main`, and `workflow_dispatch`. Separately, `.github/workflows/release.yml` (Plan 105, Proposal 003) runs on `v*` tags (publish to the public dist repo + tap/bucket PRs) and `workflow_dispatch` (dry run); it needs `SIBLING_REPOS_TOKEN` (as rust.yml) plus `RELEASE_PAT` (the three public dist repos only — see Plan 105 T1.3). Toolchain installs from `rust-toolchain.toml` (never @stable); the Tier-2 `docker build --check` agreement degrades deterministically in CI via a dead `DOCKER_HOST`; the layer-5c wedge budget is 7200 s for the 4-core runner; first scheduled runs are the cost measurement (~300 min budget). (Full runner notes: `HISTORY.md`.)
+`.github/workflows/rust.yml` runs `scripts/ci_feature_guard.sh` — the same guard a developer runs, not a CI-only subset — plus a `standalone` job pinning the escaping-path-dep set (`scripts/standalone_dep_gate.sh`: 10 entries across 4 siblings since Issue 081 added riir-auth; private siblings via `SIBLING_REPOS_TOKEN`, hard-erroring when absent). Triggers are deliberately narrow (the workspace spending-limit convention): weekly on `develop` (the rot check), pushes to `main`, and `workflow_dispatch`. Separately, `.github/workflows/release.yml` (Plan 105, Proposal 003) runs on `v*` tags (publish to the public dist repo + tap/bucket PRs) and `workflow_dispatch` (dry run); it needs `SIBLING_REPOS_TOKEN` (as rust.yml) plus `RELEASE_PAT` (the three public dist repos only — see Plan 105 T1.3). Toolchain installs from `rust-toolchain.toml` (never @stable); the Tier-2 `docker build --check` agreement degrades deterministically in CI via a dead `DOCKER_HOST`; the layer-5c wedge budget is 7200 s for the 4-core runner; first scheduled runs are the cost measurement (~300 min budget). (Full runner notes: `HISTORY.md`.)
 
 ## Feature Flag Discipline
 
@@ -157,7 +157,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `rust_perf` (default-on): rust performance healing domain (120 rules measured by `--corpus-stats` 2026-09-09; the feature list's older "105"/"112"/"114"/"117" was stale — Pareto + alloc-count promoted).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
-- `kernel_heal` (opt-in): GPU kernel optimization domain (591 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
+- `kernel_heal` (opt-in): GPU kernel optimization domain (601 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - `kernel_verify` (opt-in): CubeCL compile check (STUB — delegates to the shared `RustAnalyzerPruner`). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search (pattern reuse, no dep; once per invocation, not per-tick). Implies `clippy_lints`.
 - `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag; powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light).
