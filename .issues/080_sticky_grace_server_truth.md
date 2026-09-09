@@ -1,6 +1,6 @@
 # Issue 080 — the sticky-grace input is a locally forgeable file: swap the gate to server truth (burn-ack v3 `contributed`), retire `contributed_once.json`
 
-**Status:** IN PROGRESS — filed 2026-09-09; client half LANDED on develop (Plan 327 T3: burn-ack v3 `contributed` + `first_commitment_hex`, truth-wins gate, CLI regression tests, docs); server half = riir-dapps Issue 027; REMAINS: the dated removal of `kat_contribution` + the legacy marker read after fleet v3 (docs re-update then)
+**Status:** IN PROGRESS — filed 2026-09-09; client half LANDED on develop `587132b` (Plan 327 T3: burn-ack v3 `contributed` + `first_commitment_hex`, truth-wins gate, CLI regression tests, docs); server half = riir-dapps Issue 027; REMAINS: the dated removal of `kat_contribution` + the legacy marker read after fleet v3 (docs re-update then)
 
 ## The finding
 
