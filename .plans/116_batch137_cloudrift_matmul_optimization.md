@@ -1,6 +1,6 @@
 # 116 — Batch 137: the CloudRift "Modern GPU Matmul Optimization" distill
 
-**Status:** PLANNED — plan-first landed 2026-09-09 under the box-measurement gate (p335 parity arm PID 90715 saturating CPU; v8 quiet-gated behind it). T0+T1 done zero-build (source verified live + dedup pre-pass below); T2+ are cargo-gated and execute post-unblock, Protocol A order.
+**Status:** LANDED 2026-09-09 (final commit `adaebc4` — full GOAT, batch + adjudications + Research 156 in the landing; count walk T6 `efe724c`; queue moved to Batch 138). Plan-first landed 2026-09-09 under the box-measurement gate (p335 parity arm PID 90715 saturating CPU; v8 quiet-gated behind it); T2+ executed post-unblock the same day, Protocol A order.
 
 ## Source
 
