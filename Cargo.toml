@@ -907,3 +907,76 @@ required-features = ["cf_workers_ai"]
 [[test]]
 name = "uncontaminated_g1"
 required-features = ["clippy_verify", "latent_retrieval"]
+
+# `.issues/083` — the 16 auto-discovered `#![cfg]`-gated targets, armed.
+# Each row mirrors its file's whole-file `#![cfg(...)]` header VERBATIM: the
+# `#![cfg]` protects the COUNT (an ungated body would not compile), this row
+# protects the READER. Without it a plain `cargo test --test <name>` compiles
+# the file to an EMPTY BINARY and prints `test result: ok. 0 passed` with
+# exit 0 — byte-for-byte a real pass. `ci_feature_guard` layer 5c/5d runs
+# `--all-features`, where every row below is satisfied, so arming these
+# cannot shrink CI's executed set or move layer 5d's target count.
+
+[[test]]
+name = "bonsai_retrieval_probe"
+required-features = ["bonsai_retrieval"]
+
+[[test]]
+name = "cross_domain_oracle_truth"
+required-features = ["clippy_verify", "latent_retrieval"]
+
+[[test]]
+name = "docker_class_a_agreement"
+required-features = ["docker_verify"]
+
+[[test]]
+name = "docker_tier2_buildcheck"
+required-features = ["docker_buildcheck"]
+
+[[test]]
+name = "jury_disagreement_poc"
+required-features = ["clippy_verify", "latent_retrieval"]
+
+[[test]]
+name = "kat_redact_t32_external"
+required-features = ["kat_service"]
+
+[[test]]
+name = "kat_wetrun_gwet"
+required-features = ["kat_transport"]
+
+[[test]]
+name = "p12_suppress_reverted_e2e"
+required-features = ["fix_verify", "latent_retrieval"]
+
+[[test]]
+name = "store_backend_e2e"
+required-features = ["clippy_verify", "fix_verify", "latent_retrieval"]
+
+[[test]]
+name = "t062_withheld_pair_ood"
+required-features = ["clippy_lints", "latent_retrieval"]
+
+[[test]]
+name = "t44_end_to_end_l4"
+required-features = ["l4_lora"]
+
+[[test]]
+name = "t51_l4_vs_decline"
+required-features = ["clippy_verify", "l4_lora"]
+
+[[test]]
+name = "t71_evolved_directions"
+required-features = ["latent_retrieval"]
+
+[[test]]
+name = "t73_memory_axis_headroom"
+required-features = ["clippy_verify", "latent_retrieval"]
+
+[[test]]
+name = "wgsl_mine_pairs"
+required-features = ["kernel_heal"]
+
+[[test]]
+name = "wgsl_t5_control"
+required-features = ["kernel_heal"]
