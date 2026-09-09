@@ -588,6 +588,48 @@ mod tests {
         ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
     }
 
+    #[test]
+    fn cross_repo_unit_golden_book_micro_to_wire_to_debit() {
+        // The cross-repo UNIT golden (the mirror of the server-side test
+        // of the same name in riir-dapps `tests/kat_burn.rs`, which feeds
+        // these exact wire totals to a real ledger and asserts each
+        // debits exactly the increment × 1_000_000 micro, replay = 200
+        // no-op). The byte half of the golden lives in
+        // `burn_message_golden_bytes` + the dapps twin; this is the unit
+        // half — the same numbers, both sides, so the incident's
+        // symmetric-mock/asymmetric-unit gap cannot reopen. Pure half:
+        // runs wherever `kat_service` compiles this module, no transport
+        // feature required.
+        const TABLE: [(u64, u64); 4] = [
+            (999_999, 0),   // sub-KAT: never reported, never debits
+            (1_000_000, 1), // the first whole-KAT crossing
+            (2_380_972, 2), // the incident's book value — floor, never round
+            (3_000_000, 3), // an exact crossing
+        ];
+        for (book_micro, wire) in TABLE {
+            assert_eq!(
+                wire_kat_total(book_micro),
+                wire,
+                "book {book_micro} micro must wire as {wire} whole KAT"
+            );
+        }
+
+        // What the server does with the chain 1 → 2 → 3 over an empty
+        // watermark: debits (total − stored) × WIRE_PER_CHARGE_UNITS per
+        // accepted report — exactly the book, zero loss at the boundary.
+        let mut stored = 0;
+        let mut debited = 0;
+        for total in [1u64, 2, 3] {
+            debited += (total - stored) * WIRE_PER_CHARGE_UNITS;
+            stored = total;
+        }
+        assert_eq!(
+            debited,
+            3_000_000,
+            "a 3_000_000 micro book debits exactly 3_000_000 micro"
+        );
+    }
+
     /// Lowercase-hex decode (test-only; the wire encode is `hex_encode`).
     fn hex_decode(s: &str) -> Vec<u8> {
         (0..s.len())

@@ -1,6 +1,17 @@
 # Issue 081 — the burn wire carried micro-KAT book values in a whole-KAT field: the first settlement clamp-wiped the account's 100 KAT grant; the server watermark is now poisoned at 2,323,993
 
-**Status:** OPEN — filed 2026-09-09 (found in the owner's live e2e recheck). Client fix LANDED same day: `wire_kat_total` conversion at the sync boundary (see the commit ref in the plan note); this issue tracks the SERVER-side residue + the prose fixes.
+**Status:** OPEN — filed 2026-09-09 (found in the owner's live e2e recheck).
+Client fix LANDED same day: `wire_kat_total` conversion at the sync boundary
+(see the commit ref in the plan note); this issue tracks the SERVER-side
+residue + the prose fixes. 2026-09-09 later: the LESSON's cross-repo unit
+golden LANDED both sides — riir-dapps `tests/kat_burn.rs` + riir-clippy
+`src/kat_burn_client.rs`, both named `cross_repo_unit_golden_book_micro_to_wire_to_debit`,
+pinning the same concrete table (book 999_999 / 1_000_000 / 2_380_972 /
+3_000_000 micro → wire 0/1/2/3 whole KAT → increment × 1_000_000 micro
+debit, replay = 200 no-op) with no cargo dep between the repos — the
+symmetric-mock/asymmetric-unit gap that let the incident ship is now a
+drift tripwire. Owner items 1–3 below REMAIN (watermark rescale / fleet
+books / proposal prose).
 
 ## What happened (measured live, ai.gist.rs)
 
