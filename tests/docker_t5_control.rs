@@ -90,7 +90,12 @@ fn t5_control_scanner_structure_on_in_tree_files() {
         // Counts independently verified against
         // `grep -cE '^[A-Za-z]+ ' <file>` at pin time (2026-08-28) — the
         // scanner is not allowed to define its own ground truth here.
-        ("deploy", 2, 18, "rust:1.97.0-alpine"),
+        // base 1.97.0 -> 1.98.1 on 2026-09-09 (Batch 140 rider): re-measured
+        // against origin/develop — `438b4d44` (09-07, the engram-producer
+        // lane) bumped the builder tag as a rider; stages 2 + stanzas 18
+        // re-verified unchanged, only the tag moved. The pin had been red
+        // for any fetcher since 09-07 with the owning lane gone.
+        ("deploy", 2, 18, "rust:1.98.1-alpine"),
         // 9 -> 11 on 2026-08-28: riir-chain ADOPTED the healer's fixes
         // (Plan 030 T1.6), adding the `SHELL` pipefail stanza and a
         // runtime-stage `USER`. Re-verified with `grep -cE '^[A-Za-z]+ '`.

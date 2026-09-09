@@ -1296,11 +1296,22 @@ mod tests {
                 // generic Rust spans; floor = measured - 5 per the Plan-030
                 // convention. First measured DECAY on a sec arm; the delta
                 // is recorded, not weakened silently (Issue 020 contract).
-                (false, true, true) => 30.0 / 101.0,  // measured 35/101 (34.7%)
+                // Batch 140 (2026-09-09, Plan 120): the advisory-db
+                // unbounded-read add re-measured 34/101 (33.7%, was 35/101
+                // = 34.7% at B131) -- the read_to_end/TcpStream vocabulary
+                // keeps the B131 sec-centroid drift ticking (-1 span);
+                // floor = 34 - 5 = 29.
+                (false, true, true) => 29.0 / 101.0,  // measured 34/101 (33.7%)
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.
-                (true, true, true) => 74.0 / 131.0,   // measured 79/131 (60.3%)
+                // Batch 140 (2026-09-09, Plan 120): re-measured 83/131
+                // (63.4%, was 79/131 = 60.3% at B131) -- +4 UP; the same
+                // wire vocabulary that decays the no-kernel arm sharpened
+                // the full-state boundary here (cross-arm divergence is
+                // consistent with the B130 kernel-vocabulary raise); floor
+                // = 83 - 5 = 78.
+                (true, true, true) => 78.0 / 131.0,   // measured 83/131 (63.4%)
             }
         }
     }

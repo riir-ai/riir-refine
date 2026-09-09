@@ -81,6 +81,35 @@ sec-arm decay, recorded not weakened. The no-docker sec arms (Plan-018 pins)
 are no longer measurable build states (the tree grew default-feature hard
 deps) — noted in the floor fn.
 
+## Batch 140 (2026-09-09) — the advisory-db distill, the family's 3rd suggest-only rule
+
+One rule from the rustsec/advisory-db seed (CC0 @ `b50980aa`; Research 161 /
+Plan 120 — the DB is a class TAXONOMY with real-world frequency, cited as
+class provenance only; fixtures are ORIGINAL syntheses):
+
+| Rule | Family | `--fix` | The detection + the bounded form |
+|---|---|---|---|
+| `unbounded-read-into-vec` | `InputValidation` | suggest-only | an unbounded stream read into a growable Vec from a network reader (`read_to_end`/`read_to_string`, or a `loop { read?; extend }` drain, no `Read::take` cap) grows the buffer without limit on peer-controlled bytes — the RUSTSEC-2024-0003 / CVE-2019-9514 (h2) resource-exhaustion class. The bounded form: `Read::take(reader, MAX_BYTES)` + `Vec::with_capacity(..)`. Gates: untrusted-source vocabulary is parse-provable only (TcpStream-typed params/bindings, listener `accept()`/`incoming()` children, `connect()`/`reqwest::get()` results — a bare `R: Read` is an honest NO); File readers are the trusted regime and never track; `.take(` anywhere in the receiver chain suppresses; the loop-drain shape needs BOTH halves (read on a tracked reader + extend on a local Vec) and caps suppress (`resize` fn-wide, `buf.len()` in a loop comparison, the read-count binding vs a non-zero operand — `n == 0` is the EOF sentinel, not a cap); `#[cfg(test)]` mods skipped. Suggest-only: choosing the limit is a protocol decision |
+
+Gates at landing: default lib 1188/0 + sec lib 1290/0 (batch140 detector suite
+18/18); clippy 0 default + sec; boundary gate 2/2 (real clippy over the grown
+probe crate — and the E0425-class lesson fired again as designed: the first
+buggy fixture was E0596-broken (`stream` not `mut`) and the gate red'd via the
+`unwrap_used` pin going vacuous BEFORE anything could claim fixture readiness);
+score-bench #87 FLAT 96.2/1.9 (suggest-only adds no fixer, same as B131);
+corpus-stats sec 14 → 15; retrieval: blended 93.1/96.0/97.0 of 101 (floors
+93/95/97 held), sec self-variant top-1 holds for the new rule, ROUTER
+ANNOTATION re-measured per the Issue-020 contract — sec+docker 34/101 (33.7%,
+was 35/101; the read_to_end/TcpStream vocabulary keeps the B131 sec-centroid
+drift ticking −1 span; floor re-pinned 30 → 29/101) and full state 83/131
+(63.4%, was 79/131 — +4 UP, cross-arm divergence consistent with the B130
+kernel-vocabulary raise; floor re-pinned 74 → 78/131); both deltas recorded,
+neither weakened silently. En-route fix on develop: `ce74bac`'s healer
+`redundant_closure` rewrite of the `--score-bench` filter was load-bearing
+(`&String` → `&str` deref-coercion — the documented healer escape class) and
+compiled to nothing under default features; restored + verified via the
+score-bench run itself.
+
 ## The boundary discipline (non-negotiable)
 
 `tests/sec_boundary_gate.rs` runs REAL clippy over the corpus fixtures with

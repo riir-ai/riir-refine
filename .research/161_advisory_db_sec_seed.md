@@ -1,6 +1,6 @@
 # Research 161 — rustsec/advisory-db as a sec-domain seed source (Batch 140 candidate)
 
-**Status:** DISTILLED — pending owner decision (verdict YES B; 1-2 suggest-only rules; plan 120 opened)
+**Status:** RECORD — batch landed 2026-09-09 (Plan 120: `unbounded-read-into-vec` suggest-only, InputValidation; the optional zeroization rule declined per the plan's defer note).
 
 - **Source:** `rustsec/advisory-db` @ `b50980aad8b8f14f77e25a97b32dd94bf008b0af` (main, cloned 2026-09-09; **CC0 1.0 / public domain** — LICENSE.txt verified, the strongest possible corpus-seed license; fixtures remain ORIGINAL per the standing constraint, the DB is cited as class provenance only).
 - **Inspection:** 2026-09-09, M3 box. Full shallow clone; 1,223 crate advisories counted; category + mechanism-keyword distributions computed over the whole tree; 4 advisories read in full (lru 2026-0253, h2 2024-0003, bcrypt 2026-0199, blurhash 2023-0083).

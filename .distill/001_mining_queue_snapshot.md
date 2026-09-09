@@ -17,7 +17,7 @@
 > the verdict, `rm -rf` when the batch lands. Full contract = `distill` skill
 > §"Full-source access" (Batch 96-98 vendor precedent) + katgpt-rs `research` §0.5.
 
-> **Live queue state (2026-09-09, post-Batch-139 — the ds4-metal PR #5 distill LANDED (Plan 119, corpus 601 → 605 kernel / 120 → 121 rust_perf); queued: Batch 140 = the rustsec/advisory-db sec seed (Research 161 / Plan 120, verdict YES B — lead `unbounded-read-into-vec` suggest-only, InputValidation family extension, 1-2 rules; pin `b50980aa`, CC0); + the upstream antirez/ds4 Part-B walk (`f62ca29a..6289c516`, separate batch, dedup `ssd|glm|state.space` first); arxiv walk #9 opens Mon 09-14 (sibling lane); M3 batch records follow)**
+> **Live queue state (2026-09-09, post-Batch-140 — the advisory-db sec seed LANDED (Plan 120, corpus sec 14 → 15); queued: the upstream antirez/ds4 Part-B walk (`f62ca29a..6289c516`, separate batch, dedup `ssd|glm|state.space` first); arxiv walk #9 opens Mon 09-14 (sibling lane); M3 batch records follow)**
 >
 > **VERDICT 2026-09-09 (Research 161 / Plan 120) — `rustsec/advisory-db` @ `b50980aa` (CC0): YES B, route sec.** Data-source shape (taxonomy oracle, not code): 1,223 advisories, category oracle computed (DoS 126 / memory-corruption 271 / memory-exposure 88); lead rule `unbounded-read-into-vec` (h2/CVE-2019-9514 class, `take(limit)` bounded fix, suggest-only) — dedup: composes with `length-prefix-validate-before-alloc` (stream-growth ≠ alloc-from-length), 5 classes COVERED by existing rules (dropped), zeroization C+ deferred, panic-on-parse + traversal dropped (fix-space unbounded). Yield 1-2. Lane-intel axis: does NOT fire (no perf-league surface — security data). `.raw/advisory-db` removed at the verdict commit; re-clone at pin for Batch 140.
 

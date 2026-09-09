@@ -24,6 +24,7 @@
 //! | `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated, P8) | — (silent on 1.97; probe: zero lints fire on the shape) |
 //! | `length-prefix-validate-before-alloc` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the fix must INVENT a limit + an error path) |
 //! | `secret-file-create-without-0600` | `InputValidation` | no (suggest-only) | — (no lint fires; the fix is cfg(unix)-shaped — a portable rewrite is judgment-bearing) |
+//! | `unbounded-read-into-vec` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the fix must CHOOSE the limit — a protocol decision) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -39,6 +40,12 @@
 //! (`proposers::length_prefix_alloc` / `proposers::secret_file_create`);
 //! `collect_edits` arms and `FIXABLE_SEC` membership are deliberately
 //! absent — these rules emit suggestions, never auto-fixes.
+//!
+//! Batch 140 (2026-09-09): the rustsec/advisory-db distill (CC0; Research
+//! 161 / Plan 120) adds the family's third suggest-only rule — the
+//! unbounded stream-read class (RUSTSEC-2024-0003 / CVE-2019-9514 anchor),
+//! detector in `proposers::unbounded_read`. The DB is cited as CLASS
+//! provenance only; the fixtures are ORIGINAL syntheses.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -241,6 +248,29 @@ Research 153 / Plan 112."
             buggy_code: "pub fn save_session_token(path: &std::path::Path, token: &str) -> std::io::Result<()> {\n    let mut f = std::fs::File::create(path)?;\n    use std::io::Write;\n    f.write_all(token.as_bytes())\n}\n"
                 .to_string(),
             fixed_code: "pub fn save_session_token(path: &std::path::Path, token: &str) -> std::io::Result<()> {\n    let mut f = std::fs::File::create(path)?;\n    #[cfg(unix)]\n    {\n        use std::os::unix::fs::PermissionsExt;\n        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;\n    }\n    use std::io::Write;\n    f.write_all(token.as_bytes())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── Batch 140 (advisory-db distill) — the InputValidation family's ══
+        // ── third suggest-only rule (detector, no collect_edits arm).      ══
+        // ── unbounded-read-into-vec (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "unbounded-read-into-vec".to_string(),
+            sec_concept: "an unbounded stream read into a growable Vec from a network reader \
+(read_to_end / read_to_string / a loop { read?; extend } drain, no Read::take cap) lets one peer \
+control the allocation: the buffer grows without limit on peer-controlled bytes — the resource-\
+exhaustion class RUSTSEC-2024-0003 / CVE-2019-9514 (h2) anchors in the wild. The cost axis is \
+SECURITY, not cycles. Bound it: `Read::take(reader, MAX_BYTES)` + `Vec::with_capacity(..)`. \
+Suggest-only: choosing the limit is a protocol decision, never mechanical. Honest recall limits: \
+the untrusted-source proof is parse-provable vocabulary only (TcpStream-typed bindings, \
+listener accept()/incoming() children, connect()/reqwest::get() results) — a bare `R: Read` \
+generic is an honest NO; File readers are the trusted regime and never fire; cross-fn drains \
+undetected. Batch 140 / Research 161 / Plan 120 (rustsec/advisory-db @ b50980aa, CC0 — cited \
+as class provenance; fixtures are original syntheses)."
+                .to_string(),
+            buggy_code: "pub fn read_request(mut stream: std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    let mut buf = Vec::new();\n    std::io::Read::read_to_end(&mut stream, &mut buf)?;\n    Ok(buf)\n}\n"
+                .to_string(),
+            fixed_code: "pub fn read_request(stream: std::net::TcpStream, max_bytes: u64) -> std::io::Result<Vec<u8>> {\n    let mut limited = std::io::Read::take(stream, max_bytes);\n    let mut buf = Vec::with_capacity(max_bytes.min(1 << 20) as usize);\n    std::io::Read::read_to_end(&mut limited, &mut buf)?;\n    Ok(buf)\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },

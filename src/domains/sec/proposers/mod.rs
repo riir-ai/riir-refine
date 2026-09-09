@@ -44,6 +44,12 @@
 //! |---|---|---|
 //! | `length-prefix-validate-before-alloc` | `length_prefix_alloc::detect` | the fix must invent a limit constant + an error-return path the fn may not have |
 //! | `secret-file-create-without-0600` | `secret_file_create::detect` | hardening semantics are per-OS (`Permissions::from_mode` maps coarsely on Windows) — a portable rewrite is judgment-bearing |
+//!
+//! ## Batch 140 (2026-09-09) — the advisory-db distill joins the family
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `unbounded-read-into-vec` | `unbounded_read::detect` | the fix must CHOOSE the limit (bytes? messages? wall time?) — a protocol decision, never mechanical |
 
 use syn::File;
 
@@ -55,6 +61,7 @@ pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
 pub mod slice_len_guard;
+pub mod unbounded_read;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
