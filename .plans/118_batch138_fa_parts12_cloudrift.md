@@ -1,6 +1,6 @@
 # 118 — Batch 138: the CloudRift "Learning FlashAttention the Hard Way" Parts 1+2 distill
 
-**Status:** IN PROGRESS — plan-first 2026-09-09; T0+T1 zero-build done same session (both articles fetched full-text live, dedup pre-pass below); box WINDOW open (v8 PID absent, zero cargo/rustc/compute processes, 4090 idle-checked 20%/605 MiB) → T2+ execute in-session this cycle, Protocol A order.
+**Status:** LANDED 2026-09-09 — full Protocol A run in one session (the box window held: v8 absent, zero compute processes all cycle). 10 rules + 4 riders, corpus 591 → 601, commit `a68005e`; batch138 gates 3/3 FIRST-SHOT, retrieval floors byte-identical 7th consecutive, router UP 91→95/131 (no re-pin), score-bench #85 FLAT (8th). Research 158 (157 taken mid-session by the VeloxQuant sibling). Landing tail = this commit + `.raw/emmy138` rm.
 
 ## Source
 
@@ -110,32 +110,32 @@ lane runs on M3/4090 — both consumer). Record the verdict explicitly either wa
       rust_perf): table above; rule-level re-verification (READ each named
       neighbor) required at mine time BEFORE authoring — the pre-pass is
       file/grep-level, the B30 filter is load-bearing at rule granularity.
-- [ ] T2a — Fresh clone `cloudrift-ai/emmy` → `.raw/emmy` @ then-HEAD
+- [x] T2a — Fresh clone `cloudrift-ai/emmy` → `.raw/emmy` @ then-HEAD
       (`bdd26c53` at plan time; re-verify == ls-remote at clone), license
       re-verify; two parallel subagent read-lanes (A: Part-2 moveset surface +
       knobs codec; B: the refused-optimizations + FA-3/4 analysis + Part-1
       algebra candidates); proposals + adjudications into the Appendix;
       quotes re-verified at the pin BEFORE authoring.
-- [ ] T3 — Author entries (`entries_gpu_38.rs`, expected 3-6 rules) + batch138
+- [x] T3 — Author entries (`entries_gpu_38.rs`, expected 3-6 rules) + batch138
       standing gates (`batch138_rules_present` / `batch138_concepts_covered` /
       `batch138_pseudocode_parses`) + count pins (entries.len ×3, category
       table, KERNEL_CATEGORIES slices + slice comments, mod.rs history + doc).
       rule_id-anchored edits throughout; python pin-phrase check + rustfmt-parse
       pre-validation before any compile claim.
-- [ ] T4 — GOAT: G1 batch138 gates by name; G2 lib default + kernel_heal +
+- [x] T4 — GOAT: G1 batch138 gates by name; G2 lib default + kernel_heal +
       kernel_heal+latent counts; G3 clippy 0 ×3 all-targets + retrieval floors
       (kernel 100/100/100, blended 94.7/96.9/97.7) + router annotation
       re-measure per the Issue 020 contract (re-pin ONLY on measured decay,
       recorded never silent) + `--corpus-stats` + `--score-bench` #84.
-- [ ] T5 — rust_perf bench-feature Pareto/alloc validator for any rust_perf
+- [x] T5 — rust_perf bench-feature Pareto/alloc validator for any rust_perf
       candidate (expected none); NotBenchable annotations + context_notes for
       decision-content rules (expected: the fast-exp limiter rule + the 3HT
       test rule — both measurement-shape, not M3-executable).
-- [ ] T6 — Count pins walk: corpus.rs header totals + category table + mod.rs
+- [x] T6 — Count pins walk: corpus.rs header totals + category table + mod.rs
       lists + AGENTS ×2 + README ×2 + `.docs/11_domains/kernel_opt.md` (status
       row + Batch 138 ledger paragraph) + `.docs/11_domains/README.md` index;
       grep-verify zero stale prose counts remain.
-- [ ] T7 — Research note `.research/157_batch138_fa_parts12_distill.md`
+- [x] T7 — Research note `.research/157_batch138_fa_parts12_distill.md`
       born-complete: both URL shapes, the scoreboard table, the four refusals
       as recorded negatives, lane-intel verdict with the per-rule split,
       blog-vs-repo honesty, the full gate row; `.highwater` 156 → 157.
