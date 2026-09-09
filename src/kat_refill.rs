@@ -47,13 +47,16 @@
 //!
 //! # Feature shape
 //!
-//! `kat_service` gets the pure halves (the ack refresh, the exit decision,
-//! the renders); the flow + transport ride `kat_transport` (the
-//! vote/payreq-client convention). The transport COMPOSES the two shipped
-//! HTTP transports — [`crate::kat_payreq_client::HttpPayreqTransport`]
-//! (faucet + balance, with its refusal-body rule) and
-//! [`crate::kat_wetrun::HttpWetrunTransport`] (the bearer crank POST, with
-//! its fail-closed no-token posture) — so zero HTTP is re-derived here.
+//! `kat_service` gets the pure halves that don't name transport types (the
+//! ack refresh); the exit decision + renders + flow + transport ride
+//! `kat_transport` (the vote/payreq-client convention) — `RefillOutcome`
+//! carries the transport-gated leg types (`FaucetRequest` / `CrankLeg` /
+//! `ServiceBalance`), so its consumers gate with it. The transport COMPOSES
+//! the two shipped HTTP transports —
+//! [`crate::kat_payreq_client::HttpPayreqTransport`] (faucet + balance, with
+//! its refusal-body rule) and [`crate::kat_wetrun::HttpWetrunTransport`]
+//! (the bearer crank POST, with its fail-closed no-token posture) — so zero
+//! HTTP is re-derived here.
 
 /// The settle poll cadence for `--refill-wait` (the pay-command's 5 s).
 pub const REFILL_POLL_INTERVAL_SECS: u64 = 5;
@@ -85,6 +88,10 @@ pub fn record_server_balance(
 
 /// The exit decision — **0 iff the final synced balance is positive** (the
 /// module doc's contract; total function so the table stays pinnable).
+/// kat_transport-gated because `RefillOutcome` carries the transport-gated
+/// leg types (`FaucetRequest` / `CrankLeg` / `ServiceBalance`) — the "pure
+/// half" split below the type level, not at it.
+#[cfg(feature = "kat_transport")]
 #[must_use]
 pub fn refill_exit_code(outcome: &RefillOutcome) -> i32 {
     match &outcome.final_balance {
