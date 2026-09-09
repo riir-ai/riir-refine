@@ -366,6 +366,9 @@ fn enforce_kat_soft_gate(args: &Args) {
 /// byte-identical to the pre-079 shape).
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn depleted_mine_offer() -> bool {
+    use std::io::IsTerminal;
+    use std::io::Write;
+
     if std::env::var("RIIR_HEAL_KAT_PROMPT_YES")
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes"))
@@ -377,12 +380,10 @@ fn depleted_mine_offer() -> bool {
     if !consent.push_allowed() {
         return false; // an explicit opt-out IS the answer
     }
-    use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() {
         return false;
     }
     eprint!("cargo heal: out of KAT — contribute mining data now to lift the gate? [y/N] ");
-    use std::io::Write;
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     if std::io::stdin().read_line(&mut line).is_err() {
@@ -549,10 +550,7 @@ fn run_unmine() {
         std::process::exit(1);
     }
 
-    match already {
-        true => println!("KAT mining: already opted out — nothing changed"),
-        false => println!("KAT mining: opted OUT on this machine"),
-    }
+    if already { println!("KAT mining: already opted out — nothing changed") } else { println!("KAT mining: opted OUT on this machine") }
     println!(
         "record: {}",
         riir_clippy::kat_mining_consent::consent_path(&dir).display()
@@ -608,9 +606,7 @@ fn run_unmine() {
 
     // The already-queued batches. Named, never touched — the user decides.
     let outbox = unmine_outbox_dir();
-    let queued = std::fs::read_dir(&outbox)
-        .map(|rd| rd.filter_map(Result::ok).count())
-        .unwrap_or(0);
+    let queued = std::fs::read_dir(&outbox).map_or(0, |rd| rd.filter_map(Result::ok).count());
     println!("ALREADY QUEUED: {}", outbox.display());
     match queued {
         0 => println!("  (nothing queued — no batch was ever held for submission)"),
@@ -1764,17 +1760,13 @@ fn run_kat_refill(wait_secs: u64) {
             std::process::exit(1);
         }
     };
-    let acct_hex = match riir_clippy::kat_account_client::service_account_hex(&account.state().account_id)
-    {
-        Some(h) => h.to_string(),
-        None => {
+    let acct_hex = if let Some(h) = riir_clippy::kat_account_client::service_account_hex(&account.state().account_id) { h.to_string() } else {
             eprintln!(
                 "refill: the local account id does not carry a valid service account prefix — \
                  re-run `cargo heal login`"
             );
             std::process::exit(1);
-        }
-    };
+        };
 
     #[cfg(feature = "kat_transport")]
     {
@@ -3813,7 +3805,7 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
