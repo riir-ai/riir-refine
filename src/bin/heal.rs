@@ -451,9 +451,11 @@ fn run_mine_intro() {
     println!("  * Devnet: KAT carries NO cash value and NO redemption right.");
     println!("  * Payloads are REDACTED (rule verdicts + counters, never your code)");
     println!("    and SIGNED with your account key.");
-    println!("  * Contributing is opt-in per sync run — no heal data leaves this machine");
-    println!("    (one exception: --mine/--unmine send a signed tier note) unless you run");
-    println!("    `cargo heal sync` (or it runs as your settlement step).");
+    println!("  * Contributing is opt-in per MACHINE: after --mine, every heal run (the");
+    println!("    dry run and --fix) auto-syncs the redacted batch — one line, fail-soft.");
+    println!("    Before --mine, nothing leaves this machine (one exception: --mine/--unmine");
+    println!("    send a signed tier note); --unmine stops the auto-push; `cargo heal sync`");
+    println!("    stays the manual push.");
     println!();
     println!("START (3 steps):");
     println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
@@ -1117,14 +1119,267 @@ fn run_kat_update() {
 /// (`.heal/outbox/`) and the honest state prints. Pull: the lease refresh
 /// (shared with `update`). The sync watermark advances ONLY on a real push
 /// acceptance (queued batches stay "pending" — the honest accounting).
+/// What the mining-batch push did (the quiet tail prints one line via
+/// [`print_mine_push`]; the verbose sync prints its own full report).
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
-fn run_kat_sync() {
-    use riir_clippy::kat_lease_client::{
-        queue_outbox, run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
-        LeaseTransport,
-    };
+enum MinePush {
+    /// An accepted push: (rows included, rows new at the server).
+    Accepted { rows_included: usize, rows_new: u64 },
+    /// The service did not accept (offline / not live) — the batch is
+    /// queued locally and pushes with a later run.
+    QueuedOffline,
+    /// Nothing to push (no store, unreadable, no account, empty payload).
+    Skipped,
+}
+
+/// The one tail line (the burn-report discipline): Accepted and
+/// QueuedOffline print, Skipped stays silent.
+#[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+fn print_mine_push(outcome: &MinePush) {
+    match outcome {
+        MinePush::Accepted {
+            rows_included,
+            rows_new,
+        } => println!(
+            "mining: batch pushed — {rows_included} row(s) ({rows_new} new) → the proof queue; paid at the epoch settle"
+        ),
+        MinePush::QueuedOffline => println!(
+            "mining: service unreachable — the batch is queued; it pushes with the next run"
+        ),
+        MinePush::Skipped => {}
+    }
+}
+
+/// The mining-batch push half, SHARED by `cargo heal sync` (verbose — the
+/// caller has already gated on consent and prints its opted-out report)
+/// and the opted-in run tails (quiet: one line via [`print_mine_push`],
+/// never fatal, short budget). The watermark advances ONLY on a real push
+/// acceptance; a queued batch stays "pending" (the honest accounting).
+/// The QUIET tail never exits the process on a missing account — the run
+/// has already done its work — while verbose `sync` keeps its hard
+/// refusal (payload v2 is signed; there is nothing to do without a key).
+#[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+fn push_mining_batch(
+    quiet: bool,
+    url: &str,
+    transport: &riir_clippy::kat_lease_client::HttpLeaseTransport,
+) -> MinePush {
+    use riir_clippy::kat_lease_client::{queue_outbox, LeaseTransport};
     use riir_clippy::kat_redact::SpanOrigin;
     use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
+
+    let sv = !quiet; // verbose mode = the `cargo heal sync` report
+    let root = resolve_heal_root(&[]);
+    let kv = root.join(".heal").join("trajectories.kv");
+    if !kv.exists() {
+        if sv {
+            println!(
+                "sync: no trajectory store at {} — run any --fix in this repo first",
+                kv.display()
+            );
+        }
+        return MinePush::Skipped;
+    }
+    let (traj, bad) = match riir_clippy::traj_store::TrajStore::open(&root) {
+        Ok(t) => t,
+        Err(e) => {
+            if sv {
+                eprintln!("sync: trajectory store unreadable: {e}");
+            }
+            return MinePush::Skipped;
+        }
+    };
+    if bad > 0 {
+        eprintln!("sync: {bad} corrupt row(s) skipped");
+    }
+    let rows = traj.dump();
+    let loaded = riir_clippy::kat_redact::RedactionGate::discover(None);
+    if loaded.warning.is_some() {
+        eprintln!(
+            "sync: redaction policy — {}",
+            loaded.warning.clone().unwrap_or_default()
+        );
+    }
+    // Payload v2 is SIGNED with the account key (Issue 008) — the receiver
+    // derives the submitter from it, so an account is required to sync.
+    let account =
+        match riir_clippy::kat_account::KatAccount::load(&riir_clippy::kat_account::KatAccount::default_dir())
+        {
+            Ok(a) => a,
+            Err(e) => {
+                if sv {
+                    eprintln!(
+                        "sync: no account ({e}) — payload v2 is signed with the account \
+                         key; run `cargo heal login` first"
+                    );
+                    std::process::exit(1);
+                }
+                return MinePush::Skipped;
+            }
+        };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            if sv {
+                eprintln!("sync: account key unusable ({e})");
+                std::process::exit(1);
+            }
+            return MinePush::Skipped;
+        }
+    };
+    let payload =
+        SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &signing_key).build(&rows);
+    if sv {
+        println!(
+            "sync payload: {} row(s) included, {} blocked, signed as {}… (batch {})",
+            payload.rows_included,
+            payload.rows_blocked,
+            riir_clippy::kat_account::short_id(account.state().account_id.as_str()),
+            &payload.commitment[..12.min(payload.commitment.len())]
+        );
+    }
+    if payload.rows_included == 0 {
+        return MinePush::Skipped;
+    }
+    // The deny-by-default remedy (2026-09-09 fresh-machine find) — verbose
+    // only; the quiet tail's reader gets the same answer from `sync`.
+    if sv
+        && payload.outcomes.iter().any(|o| {
+            matches!(
+                o,
+                riir_clippy::kat_sync_payload::RowOutcome::Blocked {
+                    reason: riir_clippy::kat_redact::BlockReason::NoPolicy,
+                    ..
+                }
+            )
+        })
+    {
+        let policy_path = root.join(".heal-sync-policy");
+        eprintln!(
+            "sync: {} row(s) BLOCKED — no {} (the redaction gate is deny-by-default)",
+            payload.rows_blocked,
+            policy_path.display()
+        );
+        eprintln!(
+            "sync: run `cargo heal --mine` in this repo to write the default policy, \
+             then sync again (queued batches stay queued)"
+        );
+    }
+    match transport.post_sync(&payload.ndjson) {
+        riir_clippy::kat_lease_client::HttpResponse::Ok(body) => {
+            let mut rows_new = 0u64;
+            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
+                rows_new = v
+                    .get("rows_new")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
+            }
+            if sv {
+                println!("sync: push accepted by {url}");
+                println!(
+                    "sync: rows enter the proof queue — credited when the proof pass \
+                     runs, PAID at the next epoch settle; duplicate shapes earn nothing \
+                     (heal real code for novel fixes)"
+                );
+                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
+                    println!(
+                        "sync: server ingest — rows_new {} refreshed {} terminal_skipped {} recorded {}",
+                        v.get("rows_new").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                        v.get("rows_refreshed").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                        v.get("rows_terminal_skipped").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                        v.get("recorded").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                    );
+                }
+            }
+            // The outbox copy of THIS batch is now delivered mail — remove
+            // it (pruned per-file, never the directory; re-push is
+            // idempotent server-side, so an early crash here is harmless).
+            let batch_file = root
+                .join(".heal")
+                .join("outbox")
+                .join(format!(
+                    "{}.ndjson",
+                    &payload.commitment[..12.min(payload.commitment.len())]
+                ));
+            if batch_file.is_file() {
+                let _ = std::fs::remove_file(&batch_file);
+            }
+            // Issue 075: record the machine-global contributed-once fact
+            // (the soft gate's sticky grace). Fail-soft — the service
+            // already accepted; a lost marker costs a gate miss, not a brick.
+            if let Err(e) = riir_clippy::kat_contribution::mark(
+                &riir_clippy::kat_account::KatAccount::default_dir(),
+                &payload.commitment,
+            ) {
+                eprintln!("sync: contribution marker not recorded — {e}");
+            }
+            // T079: the ledger-plane half of "the service sees the key" —
+            // claim the once-per-key free-tier grant (read-first; a no-op
+            // when already in place). Quiet mode prints nothing here —
+            // `cargo heal account` reports the grant, and a failure is
+            // invisible at this layer by design (the push already landed).
+            if let Ok(key) = account.signing_key() {
+                if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
+                    &account.state().account_id,
+                ) {
+                    let payreq =
+                        riir_clippy::kat_payreq_client::HttpPayreqTransport::new(url, 10);
+                    match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct)
+                    {
+                        Ok(Some(claim)) if !claim.already => {
+                            if sv {
+                                println!(
+                                    "sync: free-tier grant claimed ({})",
+                                    riir_clippy::kat_payreq_client::render_kat(claim.claimed_micro)
+                                );
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            if sv {
+                                println!("sync: grant not claimed — {e}");
+                            }
+                        }
+                    }
+                }
+            }
+            // Real acceptance → advance the watermark (the pushed rows are
+            // no longer "pending-unsynced").
+            let wm =
+                riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(&payload);
+            if let Err(e) = wm.save(
+                &root
+                    .join(".heal")
+                    .join(riir_clippy::kat_pending_estimator::SyncWatermark::FILE_NAME),
+            ) {
+                eprintln!("sync: watermark save failed: {e}");
+            }
+            MinePush::Accepted {
+                rows_included: payload.rows_included,
+                rows_new,
+            }
+        }
+        resp => {
+            let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
+                .ok()
+                .map_or_else(|| "(queue write failed)".to_string(), |p| p.display().to_string());
+            if sv {
+                println!(
+                    "sync: push NOT accepted ({resp:?}) — the service plane is not yet live;"
+                );
+                println!(
+                    "sync: payload queued locally at {queued} (submits when the Worker lands; the watermark does not advance)"
+                );
+            }
+            let _ = queued;
+            MinePush::QueuedOffline
+        }
+    }
+}
+
+#[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+fn run_kat_sync() {
+    use riir_clippy::kat_lease_client::{run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore};
 
     let root = resolve_heal_root(&[]);
     let store = LeaseStore::open(&root);
@@ -1155,7 +1410,10 @@ fn run_kat_sync() {
     // sync (the 079 contract is ONE accepted push). Opted-out / no-store
     // machines are unaffected: the push half skips itself and the drain
     // still runs.
-    let kv = root.join(".heal").join("trajectories.kv");
+    // ── push half (extracted — shared with the opted-in run tails) ────
+    // The consent gate stays verbose HERE: `cargo heal sync` is the place
+    // an opted-out holder reads WHY nothing was built or signed. The tails
+    // gate on explicit OptedIn instead and run the same helper quiet.
     if !consent.push_allowed() {
         println!("sync: push SKIPPED — mining is opted out on this machine");
         println!(
@@ -1163,174 +1421,8 @@ fn run_kat_sync() {
             riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
         );
         println!("sync: re-enable with `cargo heal --mine` (the lease pull below still runs — a read is not a contribution)");
-    } else if !kv.exists() {
-        println!("sync: no trajectory store at {} — run any --fix in this repo first", kv.display());
     } else {
-        match riir_clippy::traj_store::TrajStore::open(&root) {
-            Ok((traj, bad)) => {
-                if bad > 0 {
-                    eprintln!("sync: {bad} corrupt row(s) skipped");
-                }
-                let rows = traj.dump();
-                let loaded = riir_clippy::kat_redact::RedactionGate::discover(None);
-                if loaded.warning.is_some() {
-                    eprintln!("sync: redaction policy — {}", loaded.warning.clone().unwrap_or_default());
-                }
-                // Payload v2 is SIGNED with the account key (Issue 008) —
-                // the receiver derives the submitter from it, so an account
-                // is required to sync at all.
-                let account =
-                    match riir_clippy::kat_account::KatAccount::load(
-                        &riir_clippy::kat_account::KatAccount::default_dir(),
-                    ) {
-                        Ok(a) => a,
-                        Err(e) => {
-                            eprintln!(
-                                "sync: no account ({e}) — payload v2 is signed with the account \
-                                 key; run `cargo heal login` first"
-                            );
-                            std::process::exit(1);
-                        }
-                    };
-                let signing_key = match account.signing_key() {
-                    Ok(k) => k,
-                    Err(e) => {
-                        eprintln!("sync: account key unusable ({e})");
-                        std::process::exit(1);
-                    }
-                };
-                let payload =
-                    SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &signing_key)
-                        .build(&rows);
-                println!(
-                    "sync payload: {} row(s) included, {} blocked, signed as {}… (batch {})",
-                    payload.rows_included,
-                    payload.rows_blocked,
-                    riir_clippy::kat_account::short_id(account.state().account_id.as_str()),
-                    &payload.commitment[..12.min(payload.commitment.len())]
-                );
-                // The deny-by-default remedy (2026-09-09 fresh-machine find):
-                // a blocked-only batch with no policy file named the gate but
-                // not the fix. Name BOTH — `--mine` writes the default.
-                if payload.outcomes.iter().any(|o| {
-                    matches!(
-                        o,
-                        riir_clippy::kat_sync_payload::RowOutcome::Blocked {
-                            reason: riir_clippy::kat_redact::BlockReason::NoPolicy,
-                            ..
-                        }
-                    )
-                }) {
-                    let policy_path = root.join(".heal-sync-policy");
-                    eprintln!(
-                        "sync: {} row(s) BLOCKED — no {} (the redaction gate is deny-by-default)",
-                        payload.rows_blocked,
-                        policy_path.display()
-                    );
-                    eprintln!(
-                        "sync: run `cargo heal --mine` in this repo to write the default policy, \
-                         then sync again (queued batches stay queued)"
-                    );
-                }
-                if payload.rows_included > 0 {
-                    match transport.post_sync(&payload.ndjson) {
-                        riir_clippy::kat_lease_client::HttpResponse::Ok(body) => {
-                            println!("sync: push accepted by {url}");
-                            // The pipeline explainer (2026-09-09 fresh-machine
-                            // find: a first-time contributor read mining 0 /
-                            // status "—" and concluded the push was lost —
-                            // the row was in the proof queue, then judged a
-                            // duplicate, invisibly). One honest line.
-                            println!(
-                                "sync: rows enter the proof queue — credited when the proof pass \
-                                 runs, PAID at the next epoch settle; duplicate shapes earn nothing \
-                                 (heal real code for novel fixes)"
-                            );
-                            // The server's ingest report (rows_new /
-                            // rows_refreshed / rows_terminal_skipped) is the
-                            // ONLY honest "what landed" answer — print it
-                            // (issue 031: a bare "accepted" hid a dropped
-                            // payload for a full day).
-                            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
-                                println!(
-                                    "sync: server ingest — rows_new {} refreshed {} terminal_skipped {} recorded {}",
-                                    v.get("rows_new").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                                    v.get("rows_refreshed").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                                    v.get("rows_terminal_skipped").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                                    v.get("recorded").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                                );
-                            }
-                            // The outbox copy of THIS batch is now delivered
-                            // mail — remove it (the queue is for UNDELIVERED
-                            // batches; re-push is idempotent server-side, so
-                            // an early crash between accept and unlink is
-                            // harmless). Pruned per-file, never the directory.
-                            let batch_file = root
-                                .join(".heal")
-                                .join("outbox")
-                                .join(format!(
-                                    "{}.ndjson",
-                                    &payload.commitment[..12.min(payload.commitment.len())]
-                                ));
-                            if batch_file.is_file() {
-                                let _ = std::fs::remove_file(&batch_file);
-                            }
-                            // Issue 075: record the machine-global
-                            // contributed-once fact (the soft gate's sticky
-                            // grace). Fail-soft — the service already
-                            // accepted; a lost marker costs a gate miss, not
-                            // a brick.
-                            if let Err(e) = riir_clippy::kat_contribution::mark(
-                                &riir_clippy::kat_account::KatAccount::default_dir(),
-                                &payload.commitment,
-                            ) {
-                                eprintln!("sync: contribution marker not recorded — {e}");
-                            }
-                            // T079: the ledger-plane half of "the service
-                            // sees the key" — claim the once-per-key
-                            // free-tier grant (read-first; a no-op when it
-                            // is already in place). The mining ingest and
-                            // the ledger grant are different DOs, so the
-                            // push alone never produced the grant row.
-                            if let Ok(key) = account.signing_key() {
-                                if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
-                                    &account.state().account_id,
-                                ) {
-                                    let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
-                                    match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
-                                        Ok(Some(claim)) if !claim.already => println!(
-                                            "sync: free-tier grant claimed ({})",
-                                            riir_clippy::kat_payreq_client::render_kat(claim.claimed_micro)
-                                        ),
-                                        Ok(_) => {}
-                                        Err(e) => println!("sync: grant not claimed — {e}"),
-                                    }
-                                }
-                            }
-                            // Real acceptance → advance the watermark (the
-                            // pushed rows are no longer "pending-unsynced").
-                            let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(
-                                &payload,
-                            );
-                            if let Err(e) = wm
-                                .save(&root.join(".heal").join(riir_clippy::kat_pending_estimator::SyncWatermark::FILE_NAME))
-                            {
-                                eprintln!("sync: watermark save failed: {e}");
-                            }
-                        }
-                        resp => {
-                            let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
-                                .ok().map_or_else(|| "(queue write failed)".to_string(), |p| p.display().to_string());
-                            println!(
-                                "sync: push NOT accepted ({resp:?}) — the service plane is not yet live;"
-                            );
-                            println!("sync: payload queued locally at {queued} (submits when the Worker lands; the watermark does not advance)");
-                        }
-                    }
-                }
-            }
-            Err(e) => eprintln!("sync: trajectory store unreadable: {e}"),
-        }
+        let _ = push_mining_batch(false, &url, &transport);
     }
 
     // ── burn sync (Issue 076 client half) — AFTER the push half ──────
@@ -6935,6 +7027,34 @@ fn main() {
                 kat(riir_clippy::kat_meter::FREE_TIER_GRANT_KAT)
             );
         }
+    }
+
+    // Owner mandate 2026-09-10 — the OPTED-IN machine auto-contributes:
+    // once `--mine` has been run, every heal run (the bare dry run and
+    // --fix alike) drains the mining batch here, exactly like the burn
+    // report below. CONSENT IS THE DIFFERENCE: `Unset` never auto-pushes
+    // (nothing silently leaves a machine that never joined — running
+    // `cargo heal sync` IS the consent), `OptedOut` never pushes, and the
+    // quiet push is one line, ~5 s, never an exit-code change. It runs
+    // BEFORE the burn drain (the run_kat_sync ORDER note: the accepted
+    // batch is what makes the drain's v3 response carry `contributed:
+    // true` into the ack).
+    #[cfg(all(
+        feature = "kat_service",
+        feature = "kat_transport",
+        feature = "latent_retrieval"
+    ))]
+    if matches!(
+        riir_clippy::kat_mining_consent::read_with_warning(
+            &riir_clippy::kat_mining_consent::default_dir()
+        )
+        .0,
+        riir_clippy::kat_mining_consent::MiningConsent::OptedIn
+    ) {
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, 5);
+        let outcome = push_mining_batch(true, &url, &transport);
+        print_mine_push(&outcome);
     }
 
     // Issue 076 client half: the burn auto-sync — account billing, NOT the
