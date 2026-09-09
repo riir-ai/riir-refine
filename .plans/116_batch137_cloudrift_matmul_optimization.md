@@ -1,6 +1,6 @@
 # 116 — Batch 137: the CloudRift "Modern GPU Matmul Optimization" distill
 
-**Status:** LANDED 2026-09-09 (final commit `adaebc4` — full GOAT, batch + adjudications + Research 156 in the landing; count walk T6 `efe724c`; queue moved to Batch 138). Plan-first landed 2026-09-09 under the box-measurement gate (p335 parity arm PID 90715 saturating CPU; v8 quiet-gated behind it); T2+ executed post-unblock the same day, Protocol A order.
+**Status:** LANDED 2026-09-09 (final commit `adaebc4` — full GOAT, batch + adjudications + Research 156 in the landing; count walk T6 `efe724c`; queue moved to Batch 138). Plan-first landed 2026-09-09 under the box-measurement gate (p335 parity arm PID 90715 saturating CPU; v8 quiet-gated behind it); T2+ executed post-unblock the same day, Protocol A order. **ALL BOXES CLOSED 2026-09-10** (T2b folded-done, T5 N/A-vacuous — no rust_perf-routed candidate existed in this kernel_opt batch; stale-box hygiene, no content change).
 
 ## Source
 
@@ -116,8 +116,9 @@ explicitly either way.
       articles' kernel landed here too, relevant for Batch 138). Clone RETAINED for T3
       quote re-verification (rm -rf at landing per the .raw discipline). Two parallel
       subagent read-lanes ran; proposals + adjudications in the Appendix below.
-- [ ] T2b — (cargo-gated, folds into T3) subagent proposal lanes COMPLETE — no further
-      read work needed; authoring may cite the Appendix directly.
+- [x] T2b — FOLDED into T3 (closed 2026-09-10, stale-box hygiene: the task text
+      already read "COMPLETE — no further read work needed"; authoring cited the
+      Appendix directly, `288f984`). No separate deliverable existed.
 - [x] T3 — (write half DONE 2026-09-09, commit `288f984`) Author entries
       (`entries_gpu_37.rs`, 11 rules) + batch137 standing gates
       (`batch137_rules_present` / `batch137_concepts_covered` /
@@ -145,10 +146,11 @@ explicitly either way.
       covered), fixed as cited drive-bys. `--corpus-stats` 591/120/49/14/31.
       `--score-bench` REMAINS — timing-gated on the p335 parity arm (numerics
       only unaffected; run when the box quiets).
-- [ ] T5 — (cargo-gated) rust_perf bench-feature Pareto/alloc validator for any
-      rust_perf-routed candidate; NotBenchable annotation + context_notes for
-      decision-content rules (expected: MOST of this batch — the article's
-      numbers are 5090/CUDA-shaped, not M3/Metal-executable).
+- [x] T5 — N/A-VACUOUS (closed 2026-09-10, stale-box hygiene): conditional on
+      "any rust_perf-routed candidate" — Batch 137 was kernel_opt-routed, ALL
+      11 rules NotBenchable-annotated as the plan itself expected (RTX 5090/CUDA
+      numbers, M3 box), so the Pareto/alloc validator had no candidate. T4's
+      score-bench #83 (`235c8d4`) closed the measurement half.
 - [x] T6 — (DONE 2026-09-09, `efe724c`) Count pins walk: corpus.rs header
       totals ×2 + category table + mod.rs lists + entries.len were T3-landed and
       compile-verified; AGENTS ×2 (domain list 580→591 + the feature-gate list
