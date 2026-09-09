@@ -2712,6 +2712,8 @@ mod tests {
             standardized_gap: 1.25,
             regime: crate::score_bench::ood::OodRegime::Memorizing,
             artifact: "cd".repeat(32),
+            ref_provenance_families: vec!["authored-composite".to_string()],
+            ood_provenance_families: vec!["riir-chain@7421245a~1".to_string()],
         });
         let line = serde_json::to_string(&instrumented).unwrap();
         let from_ood_line: ScoreRunRow = serde_json::from_str(&line).unwrap();

@@ -38,7 +38,25 @@
 //! artifact contract), the entropy kernel is the shared katgpt-core one, and
 //! the BLAKE3 artifact is [`katgpt_core::regime_probe::entropy_gap_into`]'s
 //! canonical encoding — no entropy arithmetic lives in this repo (T1).
+//!
+//! Provenance surface (issue 077, provenance half): each set also reports
+//! its distinct provenance FAMILIES — the `repo@sha` prefix of every
+//! fixture's `provenance` string ([`provenance_family`]). This is the
+//! "which sibling states does each set actually cover" answer that reads
+//! the `anomalous_negative` verdict: `v1_frozen` is mostly authored
+//! composites plus one katgpt-rs state, while `gen6_real_repo` is carved
+//! entirely from pre-heal sibling states — the substrate firing SHARPER on
+//! the real-code set is a set-composition fact, not a substrate fact.
+//! Deliberately NOT part of the BLAKE3 artifact: the artifact pins the
+//! entropy MEASUREMENT (values in sorted-id order); family membership is a
+//! static in-tree property of the frozen sets (every fixture row carries
+//! its provenance verbatim in source), so folding it into the hash would
+//! rotate every future artifact without changing a single measurement — a
+//! presentational change masquerading as a new one. The families ride the
+//! row as data ([`OodRow::ref_provenance_families`] /
+//! [`OodRow::ood_provenance_families`]) and the console report instead.
 
+use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use katgpt_core::regime_probe::{conditional_entropy_nats, entropy_gap_into, EntropyGapReport};
@@ -112,7 +130,71 @@ pub struct OodRow {
     /// 64-hex BLAKE3 artifact — the primitive's canonical little-endian
     /// encoding over both entropy samples (fixtures id-sorted per set), so
     /// an audit can re-verify the exact measurement behind a verdict.
+    /// Provenance families are deliberately NOT hashed in — see the module
+    /// doc's provenance-surface note.
     pub artifact: String,
+    /// Distinct provenance families of the reference set ([`REF_SET`]) —
+    /// sorted `repo@sha` prefixes. Empty on rows written before the
+    /// surface landed (`serde(default)` keeps old JSONL rows readable).
+    #[serde(default)]
+    pub ref_provenance_families: Vec<String>,
+    /// Distinct provenance families of the OOD set ([`OOD_SET`]).
+    #[serde(default)]
+    pub ood_provenance_families: Vec<String>,
+}
+
+/// The provenance FAMILY of one fixture — the `repo@sha` prefix, i.e.
+/// everything up to the first `:` of the `provenance` string
+/// (`katgpt-rs@9e0e6a57`, `authored-composite`, `riir-train@a1197e06~1`).
+/// A string with no `:` is its own family.
+#[must_use]
+pub fn provenance_family(provenance: &str) -> &str {
+    match provenance.split_once(':') {
+        Some((family, _)) => family,
+        None => provenance,
+    }
+}
+
+/// The OOD set's MINING provenance family for one fixture. The frozen
+/// conversion in [`super::generations::generation_v6`] stamps
+/// `construction:gen6:…` provenance onto the bench rows (freeze-gate
+/// metadata), so the family question reads the real `repo@sha` provenance
+/// off the raw span table by id; ids not on that table keep their own
+/// fixture provenance.
+#[must_use]
+pub fn ood_set_family(fixture: &BenchFixture) -> &str {
+    for s in super::generations::RAW_SPANS_V6 {
+        if s.id == fixture.id {
+            return provenance_family(s.provenance);
+        }
+    }
+    provenance_family(fixture.provenance)
+}
+
+/// Distinct provenance families of a fixture set, sorted — the set-level
+/// coverage summary. Counts (which family contributes how many spans) ride
+/// [`family_counts`]; the row carries the distinct names.
+#[must_use]
+pub fn provenance_families(fixture_list: &[BenchFixture], family_of: fn(&BenchFixture) -> &str) -> Vec<String> {
+    let mut families: Vec<&str> = fixture_list.iter().map(family_of).collect();
+    families.sort_unstable();
+    families.dedup();
+    families.into_iter().map(ToString::to_string).collect()
+}
+
+/// Per-family span counts of a fixture set — most-contributing first, name
+/// asc on ties. The console report's `families:` line.
+// Count→ratio-free census over fixture populations (≤ 10³); allowed.
+#[allow(clippy::cast_precision_loss)]
+#[must_use]
+pub fn family_counts(fixture_list: &[BenchFixture], family_of: fn(&BenchFixture) -> &str) -> Vec<(String, usize)> {
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for fx in fixture_list {
+        *counts.entry(family_of(fx).to_string()).or_insert(0) += 1;
+    }
+    let mut pairs: Vec<(String, usize)> = counts.into_iter().collect();
+    pairs.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    pairs
 }
 
 /// Per-span rule score vector over the production fixpoint's rule table —
@@ -211,6 +293,11 @@ pub fn row_from_entropies(
         standardized_gap: report.standardized_gap,
         regime,
         artifact,
+        // The offline miniature constructor leaves the families empty —
+        // they are a SET-level property, filled by [`ood_axis`] from the
+        // real fixture tables (the samples here may be synthetic).
+        ref_provenance_families: Vec::new(),
+        ood_provenance_families: Vec::new(),
     }
 }
 
@@ -223,10 +310,15 @@ pub fn ood_axis() -> &'static OodRow {
     AXIS.get_or_init(|| {
         let mut ref_skipped = 0usize;
         let mut ood_skipped = 0usize;
-        let ref_ents = fixture_entropies(&super::fixtures::fixtures(), &mut ref_skipped);
-        let ood_ents =
-            fixture_entropies(&super::generations::generation_v6(), &mut ood_skipped);
-        row_from_entropies(&ref_ents, &ood_ents, (ref_skipped, ood_skipped))
+        let ref_set = super::fixtures::fixtures();
+        let ood_set = super::generations::generation_v6();
+        let ref_ents = fixture_entropies(&ref_set, &mut ref_skipped);
+        let ood_ents = fixture_entropies(&ood_set, &mut ood_skipped);
+        let mut row = row_from_entropies(&ref_ents, &ood_ents, (ref_skipped, ood_skipped));
+        row.ref_provenance_families =
+            provenance_families(&ref_set, |fx| provenance_family(fx.provenance));
+        row.ood_provenance_families = provenance_families(&ood_set, ood_set_family);
+        row
     })
 }
 
@@ -246,7 +338,7 @@ mod tests {
         vec![0.0f32; 8]
     }
 
-    fn sample(kind: SampleKind, n: usize) -> Vec<f32> {
+    fn sample(kind: &SampleKind, n: usize) -> Vec<f32> {
         let logits = match kind {
             SampleKind::Peaked => peaked_logits(),
             SampleKind::Flat => flat_logits(),
@@ -263,7 +355,7 @@ mod tests {
     /// the substrate is decisive on its home ground) vs a flat held-out set
     /// (finite entropy) must classify Memorizing with a large positive gap;
     /// mirrored samples must classify AnomalousNegative; identical samples
-    /// must classify Converged with an exactly-zero gap.
+    /// must classify `Converged` with an exactly-zero gap.
     #[test]
     fn g1_miniature_gap_sign_and_classification() {
         // Reference peaked (memorized home ground), OOD flat (diffuse on
@@ -380,5 +472,63 @@ mod tests {
         });
         // Cached → the same measurement every reader in the process sees.
         assert_eq!(ood_axis(), axis);
+    }
+
+    /// The `repo@sha` prefix is the family — everything up to the first
+    /// `:`, including the `~1` sweep-revision suffix; a string with no `:`
+    /// is its own family.
+    #[test]
+    fn provenance_family_parses_the_repo_at_sha_prefix() {
+        assert_eq!(
+            provenance_family("katgpt-rs@9e0e6a57:bench_ptrm_width_scaling.rs"),
+            "katgpt-rs@9e0e6a57"
+        );
+        assert_eq!(
+            provenance_family("riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs"),
+            "riir-train@a1197e06~1"
+        );
+        assert_eq!(
+            provenance_family("authored-composite:T3.5.5:return_plus_identity_op"),
+            "authored-composite"
+        );
+        assert_eq!(provenance_family("no-colon-string"), "no-colon-string");
+    }
+
+    /// The real axis row carries each set's distinct families: v1 is the
+    /// authored-composite set plus its katgpt-rs mining state; gen6 is
+    /// carved entirely from real pre-heal sibling states. The overlap at
+    /// the REPO level (katgpt-rs appears in both, different shas) with the
+    /// composition difference (authored vs all-real) is the documented
+    /// anomalous_negative reading.
+    #[test]
+    fn ood_axis_row_carries_provenance_families() {
+        let axis = ood_axis();
+        assert!(!axis.ref_provenance_families.is_empty());
+        assert!(!axis.ood_provenance_families.is_empty());
+        // Sorted + distinct by construction.
+        let mut sorted = axis.ref_provenance_families.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted, axis.ref_provenance_families);
+        // v1: the composite era + exactly one real mining state family.
+        assert!(axis.ref_provenance_families.iter().any(|f| f == "authored-composite"));
+        assert!(axis
+            .ref_provenance_families
+            .iter()
+            .filter(|f| f.starts_with("authored"))
+            .count()
+            == 1);
+        // gen6: no authored family — every span is a real repo@sha carve.
+        assert!(
+            !axis
+                .ood_provenance_families
+                .iter()
+                .any(|f| f.starts_with("authored")),
+            "gen6 must be all-real"
+        );
+        assert!(axis
+            .ood_provenance_families
+            .iter()
+            .all(|f| f.contains('@')));
     }
 }

@@ -345,7 +345,34 @@ pub fn print_report(score: &super::BenchScore) {
         ood.mean_ref_entropy, ood.mean_ood_entropy, ood.mean_gap, ood.standardized_gap, ood.regime
     );
     println!("  artifact blake3:{}…", &ood.artifact[..16]);
+    // Issue 077 provenance surface — which sibling states each set actually
+    // covers (the anomalous_negative reading: set composition, not substrate).
+    // The OOD side resolves families through the raw span table — the frozen
+    // fixtures carry construction-provenance, not the mining repo@sha.
+    print_provenance_families(
+        "ref",
+        &ood.ref_set,
+        &super::fixtures::fixtures(),
+        |fx| super::ood::provenance_family(fx.provenance),
+    );
+    print_provenance_families("ood", &ood.ood_set, &super::generations::generation_v6(), super::ood::ood_set_family);
     println!("───────────────────────────────────────────────────────");
+}
+
+/// One `families:` line of the OOD block — `family×count` pairs over the
+/// set's fixtures, most-contributing first (the row carries the distinct
+/// names only; the counts are recomputed here for the human report).
+fn print_provenance_families(
+    side: &str,
+    set: &str,
+    all: &[super::BenchFixture],
+    family_of: fn(&super::BenchFixture) -> &str,
+) {
+    let joined: Vec<String> = super::ood::family_counts(all, family_of)
+        .into_iter()
+        .map(|(f, n)| format!("{f}×{n}"))
+        .collect();
+    println!("  {side} ({set}) families: {}", joined.join(", "));
 }
 
 /// Chart geometry constants (860×400, y ∈ [0,1] from percent).
@@ -633,6 +660,8 @@ mod tests {
             standardized_gap: 2.0,
             regime: crate::score_bench::ood::OodRegime::Memorizing,
             artifact: "ab".repeat(32),
+            ref_provenance_families: vec!["authored-composite".to_string()],
+            ood_provenance_families: vec!["riir-chain@7421245a~1".to_string()],
         });
         let line = serde_json::to_string(&with_ood).unwrap();
         assert!(line.contains("\"ood\":{"));
