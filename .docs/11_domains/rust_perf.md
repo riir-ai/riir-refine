@@ -23,9 +23,22 @@
 
 ## Corpus
 
-120 rules across 12 categories (rust-optimize skill checklist +
+121 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 120 rules — Batch 136 (2026-09-09,
+profiling guide, Research 032; **now 121 rules — Batch 139 (2026-09-09,
+Plan 119 / Research 154 — the ds4-metal PR #5 distill, part (c) of the ds4
+lanes; one NotBenchable-annotated io rule, decision-content): `prefault-admission-keyed-to-ram-headroom`
+(a whole-file WILLNEED prefault of a huge mmap sidecar must be ADMITTED by
+a RAM-headroom predicate — `hw.memsize >= model + sidecar + 16 GiB margin`
+(the source's own worked cell: 64 < 41.7 + 29.8 + 16 stays demand-paged,
+128 passes and prefaults again); fail CLOSED when RAM cannot be queried;
+log the decision; keep a force override (`DS4_QWEN4_PLE_PREFETCH_FULL`);
+the companion DONTNEED eviction sweep (`DS4_QWEN4_PLE_EVICT_TOKENS`,
+717 -> 482 -> 129 MiB) is DEFAULT-OFF with the source's own unbenched-cost
+caveat; and the mincore instrument refusal: macOS residency counters report
+CACHE-WIDE file residency, not task-mapped pages — the sweep REFUSES to log
+a residency figure and names vmmap as the reliable instrument). Previously
+120 — Batch 136 (2026-09-09,
 Plan 115 — the Lattimore "Graph Algorithms in Rayon" blog distill, three
 NotBenchable-annotated concurrency rules, all decision-content — the source
 is a qualitative approach comparison with NO measured numbers and the
@@ -265,7 +278,7 @@ annotation is x86-source-cited only, the Batch 86 bitflag rule is a
 deterministic size axis, the Batch 94 read-coalescing annotation is
 workload-level (source-reported, the cacheability coupling is the decision
 content), and the Batch 109 rule is the measurement-honesty axis itself (a
-timing gate whose work folds away has no nonzero baseline to ratio). 63 of 120 carry
+timing gate whose work folds away has no nonzero baseline to ratio). 64 of 121 carry
 `context_notes` — the class ledger that follows is the early-corpus
 accounting; Batches 83–112 kept adding to the annotated set, and the per-rule
 verdicts live in the table below — 11 verdict-class (4 `ParetoDominated` + 7

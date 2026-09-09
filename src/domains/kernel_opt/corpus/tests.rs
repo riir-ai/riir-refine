@@ -82,8 +82,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        601,
-        "kernel batches through Batch 138 should have 601 rules"
+        605,
+        "kernel batches through Batch 139 should have 605 rules"
     );
 }
 
@@ -1648,7 +1648,7 @@ fn batch29_concepts_covered() {
     // D: launch-unchecked-caller-owned-size-contract (riir-gpu epilogue/mod.rs L50 + gemv_residual_cubecl.rs L205-226)
     assert!(concepts.contains(&"the checked launch path validates buffer sizes and argument consistency on EVERY dispatch — host-side overhead that dominates when each dispatch is microseconds of work in a 14-dispatches-per-layer × 26-layer decode loop. Compile kernels with launch_unchecked, wrap each in a launcher that takes exact element counts as plain args, and push the size contract into a documented # Safety section (exact per-handle element counts, required hardware features) verified by the caller and by tests. The repeated shape: thin launcher struct + one unsafe launch + an enumerated handle-size contract. Distinct from cuda-graph-scalar-via-device-pointer (streamlines launches by moving scalars to device memory — this elides per-launch validation) and from no-blocking-sync-in-async-pipeline (elides syncs — this elides checks)"), "unchecked-launch concept");
     // B: fast-math-contraction-behind-feature-flag (riir-gpu epilogue/gemv_residual_cubecl.rs L67-75 + L94-101 + L131-139)
-    assert!(concepts.contains(&"a numerics-affecting compiler flag (fast-math contraction) must not be enabled globally — it changes rounding everywhere and breaks bit-comparisons and tolerance gates — nor disabled forever (the hot dot-product loop stays uncontracted mul+add on every build). Attach the flag to the KERNEL ATTRIBUTE via a cfg_attr pair gated on a dedicated Cargo feature: the attribute-identical strict-FP compilation stays the byte-identical default, correctness/equivalence gates run strict, and perf builds opt in. The partial += w[k] * x[k] accumulation contracts to FMA only on the opt-in compilation of the same source. Distinct from dtype-specialized-float-kind (dtype specialization — this is compiler-numerics-mode specialization) and from in-kernel numeric transforms like softplus-piecewise-saturation-clamp (algorithm changes — this gates a compiler flag with zero algorithm change) RIDER (Batch 130 external instance, cloudrift-ai/emmy @ 2aaa0328 -- deplodock/compiler/cuda/runner.py:636-642,656-658): the flag pair must be SPLIT, not lumped as 'fast math' -- contraction is the EXACT half, the lossy flags are the other half: fast_math=False (the default) is the IEEE-clean configuration: we still enable --fmad=true so SGEMM gets fused FFMA instructions (without it nvcc emits separate FMUL+FADD and SGEMM throughput halves), but we do NOT pass --use_fast_math, which would also enable --ftz=true and relaxed div/sqrt -- those break exact-FP32 claims for headline numbers (docstring verbatim, with the repo's nvcc_cmd = [nvcc, -O3, --fmad=true] and the conditional --use_fast_math append as the enforcement). FMA fusion has a SINGLE rounding, so an exactness-claiming build keeps contraction ON unconditionally and refuses only ftz/relaxed-math -- the inverse posture of gating contraction itself when bit-identity across builds is the contract."), "fma-flag concept");
+    assert!(concepts.contains(&"a numerics-affecting compiler flag (fast-math contraction) must not be enabled globally — it changes rounding everywhere and breaks bit-comparisons and tolerance gates — nor disabled forever (the hot dot-product loop stays uncontracted mul+add on every build). Attach the flag to the KERNEL ATTRIBUTE via a cfg_attr pair gated on a dedicated Cargo feature: the attribute-identical strict-FP compilation stays the byte-identical default, correctness/equivalence gates run strict, and perf builds opt in. The partial += w[k] * x[k] accumulation contracts to FMA only on the opt-in compilation of the same source. Distinct from dtype-specialized-float-kind (dtype specialization — this is compiler-numerics-mode specialization) and from in-kernel numeric transforms like softplus-piecewise-saturation-clamp (algorithm changes — this gates a compiler flag with zero algorithm change) RIDER (Batch 130 external instance, cloudrift-ai/emmy @ 2aaa0328 -- deplodock/compiler/cuda/runner.py:636-642,656-658): the flag pair must be SPLIT, not lumped as 'fast math' -- contraction is the EXACT half, the lossy flags are the other half: fast_math=False (the default) is the IEEE-clean configuration: we still enable --fmad=true so SGEMM gets fused FFMA instructions (without it nvcc emits separate FMUL+FADD and SGEMM throughput halves), but we do NOT pass --use_fast_math, which would also enable --ftz=true and relaxed div/sqrt -- those break exact-FP32 claims for headline numbers (docstring verbatim, with the repo's nvcc_cmd = [nvcc, -O3, --fmad=true] and the conditional --use_fast_math append as the enforcement). FMA fusion has a SINGLE rounding, so an exactness-claiming build keeps contraction ON unconditionally and refuses only ftz/relaxed-math -- the inverse posture of gating contraction itself when bit-identity across builds is the contract. RIDER (Batch 139 external confirmation + boundary, ivanfioravanti/ds4-metal @ 18ca8ec MIT -- speed-bench/qwen38-m5-round2.md:19): a PURE SOURCE RESTRUCTURE can silently flip contraction with NO flag change -- staging eight F16 gate/mix terms ahead per lane ('F16 HC gate/mix with eight terms loaded ahead per lane') re-shaped the multiply-add chain the compiler contracted, and the variant was REJECTED because 'logits differ (fast-math contraction changed with the staged loop)' -- a byte-identity bar, not tolerance. The boundary that makes this a rule and not a scare: in the SAME batch, staging 16 merge partials ahead was safe and won (+0.8%) because the staged values feed an order-preserved accumulation of already-materialized loads, not an FMA chain the compiler re-shapes -- the contraction hazard lives in RESTRUCTURING THE ARITHMETIC EXPRESSION, not in moving the DATA; a staging proposal that only hoists loads is exempt, one that rewrites the accumulation expression is not, and the byte-identity gate is what catches the difference either way."), "fma-flag concept");
 }
 
 #[test]
@@ -5320,7 +5320,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 601-rule corpus must appear in exactly one category.
+    // Every rule_id in the 605-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5363,17 +5363,17 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 138).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 139).
     let expected = [
         (KernelCategory::MemoryAccess, 129),
         (KernelCategory::Compute, 63),
         (KernelCategory::Fusion, 46),
-        (KernelCategory::Dispatch, 132),
-        (KernelCategory::Parallelism, 53),
+        (KernelCategory::Dispatch, 133),
+        (KernelCategory::Parallelism, 54),
         (KernelCategory::FlashAttnTiling, 14),
         (KernelCategory::LinearAttnRecurrence, 29),
-        (KernelCategory::MoeDispatchBackward, 28),
-        (KernelCategory::NsaBlockSparse, 6),
+        (KernelCategory::MoeDispatchBackward, 29),
+        (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 12),
         (KernelCategory::ConvGemmLayout, 17),
@@ -5393,9 +5393,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 601.
+    // Sum must equal 605.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 601, "Plan 003: category totals must sum to 601");
+    assert_eq!(total, 605, "Plan 003: category totals must sum to 605");
 }
 
 #[test]
@@ -5406,8 +5406,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 601,
-        "Plan 003: grouped corpus has {total} rules, expected 601"
+        total, 605,
+        "Plan 003: grouped corpus has {total} rules, expected 605"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9514,8 +9514,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        601,
-        "Batch 138: corpus should have 601 rules"
+        605,
+        "Batch 139: corpus should have 605 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -11491,6 +11491,160 @@ fn batch138_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-138 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch139_rules_present() {
+    // Batch 139 (the ds4-metal PR #5 distill -- Plan 119 / Research 154):
+    // 4 kernel_opt rules mined at ivanfioravanti/ds4-metal branch
+    // qwen3.8-flash-next @ 18ca8ec (MIT; the merged PR #5 + 6 post-merge
+    // maintainer commits, delta past Batch 129's b85a6174 pin = 19 commits).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "expert-major-tile-order-token-tile-cache-resident",
+        "narrow-matvec-one-row-per-simdgroup",
+        "tile-max-prefiltered-exact-topk",
+        "sustained-load-drift-interleave-protocol",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-139 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // the B51-style phrase pins, one block per rule
+fn batch139_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-139 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("expert-major-tile-order-token-tile-cache-resident");
+    assert!(
+        c.contains("pure PERMUTATION of threadgroup execution")
+            && c.contains("bit-exact BY CONSTRUCTION")
+            && c.contains("cache-resident across ALL of that expert's tiles")
+            && c.contains("l2-grouped-tile-schedule"),
+        "expert-major concept"
+    );
+    let c = concept("narrow-matvec-one-row-per-simdgroup");
+    assert!(
+        c.contains("rows <= 1024")
+            && c.contains("per-row arithmetic is UNCHANGED")
+            && c.contains("ORDERED override chain")
+            && c.contains("row-parallelism-ladder-split-vs-pack"),
+        "narrow-matvec concept"
+    );
+    let c = concept("tile-max-prefiltered-exact-topk");
+    assert!(
+        c.contains("LOWER BOUND on the k-th block score")
+            && c.contains("BYTE-IDENTICAL to the full-row selection")
+            && c.contains("must CONJOIN the producer's enable predicate")
+            && c.contains("0x7f7fffff")
+            && c.contains("running-threshold-prune-compaction-aliasing-guard"),
+        "tile-max concept"
+    );
+    let c = concept("sustained-load-drift-interleave-protocol");
+    assert!(
+        c.contains("1030 -> 910 -> 870 -> 850")
+            && c.contains("ABBA/BAAB")
+            && c.contains("walk the whole prefix/context UNTIMED")
+            && c.contains("deltas under ~2% are not treated as evidence")
+            && c.contains("settings cached when the graph is allocated look identical here")
+            && c.contains("sub-ms-bench-boost-clock-never-engages"),
+        "drift-protocol concept"
+    );
+    // The eight Batch-139 riders must be present on their host rules.
+    let host = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("rider host '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    assert!(
+        host("output-buffer-rotation-pool-multi-forward")
+            .contains("COMPLETE-OVERWRITE SNAPSHOT + SWAP-ADOPTION")
+            && host("write-before-read-state-skips-checkpoint")
+                .contains("the snapshot SET here is exactly this rule's read-modify classification"),
+        "swap-restore riders"
+    );
+    assert!(
+        host("pipeline-cache-key-covers-every-function-constant")
+            .contains("the DETECTION half of this defect class"),
+        "stale-source rider"
+    );
+    assert!(
+        host("cpasync-multistage-tile-pipeline").contains("the METAL TENSOROPS double-buffer instance"),
+        "mpp-dbuf rider"
+    );
+    assert!(
+        host("fast-math-contraction-behind-feature-flag")
+            .contains("a PURE SOURCE RESTRUCTURE can silently flip contraction"),
+        "contraction rider"
+    );
+    assert!(
+        host("kv-dequant-materialization-batch-threshold-gate")
+            .contains("the PREFILL CHUNK WIDTH"),
+        "chunk-width rider"
+    );
+    assert!(
+        host("swept-shape-bucket-launch-tables")
+            .contains("the SINGLE-ROW launch-table entry"),
+        "gdn-threads rider"
+    );
+    assert!(
+        host("multi-simdgroup-shared-staged-tile").contains("the SMALL-grain instance"),
+        "scorer-staging rider"
+    );
+    assert!(
+        host("register-rotation-prefetch-loop").contains("the FIXED-WIDTH BATCH form on a DEPENDENT chain"),
+        "merge-prefetch rider"
+    );
+}
+
+#[test]
+fn batch139_pseudocode_parses() {
+    // G1 for Batch 139: syn-parse gate (the ds4-metal PR #5 rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "expert-major-tile-order-token-tile-cache-resident",
+        "narrow-matvec-one-row-per-simdgroup",
+        "tile-max-prefiltered-exact-topk",
+        "sustained-load-drift-interleave-protocol",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-139 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-139 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-139 opt_pattern for '{id}' must parse"
         );
     }
 }

@@ -1559,6 +1559,58 @@
 //!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
 //!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
 //!   (fmad split from `use_fast_math`).
+//! - **Batch 139 (2026-09-09, the ds4-metal PR #5 distill, Plan 119):** 4
+//!   rules, corpus 601 -> 605 (D 132 -> 133, E 53 -> 54, H 28 -> 29,
+//!   I 6 -> 7). Source: `ivanfioravanti/ds4-metal` branch `qwen3.8-flash-next`
+//!   @ `18ca8ec` (MIT; the merge of polymorf's PR #5 + 6 post-merge maintainer
+//!   commits — the delta past Batch 129's `b85a6174` pin, 19 commits). Two
+//!   read lanes (kernel surfaces / host-io-measurement) + coordinator;
+//!   Research 154's round1.md caveat closed (read in full at mine time).
+//!   `expert-major-tile-order-token-tile-cache-resident` (H — the GOAT lead:
+//!   the `MoE` prefill grid re-enumerated (`row_blocks` x `tiles`, experts) so
+//!   consecutive threadgroups share a token tile and one expert's weight rows
+//!   stay cache-resident across its tiles; a pure permutation of threadgroup
+//!   execution — bit-exact by construction; +1.8-2.6% on M5 Max),
+//!   `narrow-matvec-one-row-per-simdgroup` (E — decode matvecs with rows
+//!   <= 1024 launch one row per simdgroup: threadgroup count doubles, per-row
+//!   arithmetic unchanged, rollback -0.55%/-0.54% vs no-op -0.005%; the
+//!   `Q4_K` and `MXFP4` `MoE` twins instantiate the ladder at their own grain),
+//!   `tile-max-prefiltered-exact-topk` (I — tau = k-th largest tile maximum
+//!   is a lower bound on the k-th block score: keep only bound-reaching
+//!   tiles, run the SAME radix over the compact set, byte-identical ties
+//!   included; capacity fallback reruns the full row in the SAME dispatch;
+//!   the producer/consumer enable predicates are CONJOINED at both dispatch
+//!   sites — the stale-sidecar defense is dispatch-granularity coupling, not
+//!   in-kernel detection), `sustained-load-drift-interleave-protocol` (D —
+//!   whole-run drift 10-20%/minutes + a ~25% first-session-at-new-context
+//!   penalty: ABBA/BAAB over four fresh processes per frontier OR per-chunk
+//!   interleaving in one session, untimed full pass first, no-op control as
+//!   the noise floor, ~2% evidence threshold, and the graph-alloc-time-knob
+//!   blind spot for same-engine A/Bs). Riders: output-buffer-rotation-pool-
+//!   multi-forward (+ the MTP swap-restore face: complete-overwrite snapshot,
+//!   pointer-swap adoption, invalidation; B58 cross-ref),
+//!   pipeline-cache-key-covers-every-function-constant (+ the DETECTION
+//!   half: failed lookups memoized log-once + the working-directory-compile
+//!   diagnostic naming the binary/checkout skew), cpasync-multistage-tile-
+//!   pipeline (+ the MPP double-buffer Metal instance: one barrier per
+//!   k-step, `Q4_K`-only), fast-math-contraction-behind-feature-flag (+ the
+//!   staged-loop rejection: eight-terms-ahead staging changed contraction,
+//!   logits differ — the negative control), kv-dequant-materialization-
+//!   batch-threshold-gate (+ the chunk-width-per-format facet: `Q2` fastest
+//!   at 8192-token chunks +35%, `Q4` at 4096 2.2x, regresses at 8192),
+//!   swept-shape-bucket-launch-tables (+ the GDN front thread-count row:
+//!   256 elsewhere, 1024 on M5, +0.69% over 512's +0.14%),
+//!   multi-simdgroup-shared-staged-tile (+ the indexer-scorer instance:
+//!   4 query rows staged once per threadgroup, half4 keys, index-order
+//!   accumulation preserved), register-rotation-prefetch-loop (+ the merge
+//!   16-split prefetch: sixteen splits' loads in flight per round, chain
+//!   visits in order — 64 dependent-load rounds -> 4). DROPS: `c73d32a`
+//!   tool-call parsing (host chat-template correctness, zero perf content);
+//!   the four-row `Q8_0` matvec tile + tg-64/128 sweeps (the source's own
+//!   rejected-variants table, riders of record only). Lane intel: M3-decode
+//!   leads (one-row matvec occupancy + GDN widening) named for 844/851, NOT
+//!   edited; Flash-Next re-arm trigger stays unlit (neither pack <=24-GB
+//!   feasible). Records: Plan 119 / Research 154.
 //! - **Batch 138 (2026-09-09, the `CloudRift` "Learning `FlashAttention` the Hard
 //!   Way" Parts 1+2 distill, Plan 118):** 10 rules, corpus 591 -> 601 (A 127 ->
 //!   129, B 61 -> 63, E 51 -> 53, F 13 -> 14, K 11 -> 12, L 16 -> 17, M 19 ->
@@ -1757,6 +1809,7 @@ mod entries_gpu_35;
 mod entries_gpu_36;
 mod entries_gpu_37;
 mod entries_gpu_38;
+mod entries_gpu_39;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1771,6 +1824,7 @@ mod tests;
 pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     let mut entries = entries_popcorn::entries();
     entries.extend(entries_gpu_38::entries());
+    entries.extend(entries_gpu_39::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1820,7 +1874,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 601-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 605-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2087,7 +2141,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-residual-update-writes-separate-next-buffer",
         ],
     ),
-    // D: Dispatch patterns (132 rules)
+    // D: Dispatch patterns (133 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2224,9 +2278,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "speculation-scheduler-break-even-flip",
             "new-syntax-family-enumerates-every-keyed-surface",
             "one-time-dense-repack-keyed-sync-publish",
+            "sustained-load-drift-interleave-protocol",
         ],
     ),
-    // E: Parallelism patterns (53 rules)
+    // E: Parallelism patterns (54 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2284,6 +2339,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sentinel-readiness-over-separate-flag",
             "ll-flag-in-data-packed-poll",
             "interleave-independent-accumulators-only",
+            "narrow-matvec-one-row-per-simdgroup",
         ],
     ),
     // F: Flash-attention tiling (14 rules)
@@ -2343,7 +2399,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (28 rules)
+    // H: MoE dispatch + backward pass (29 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2376,9 +2432,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "static-seed-priority-bounded-to-observed-scale",
             "moe-broadcast-quantize-once-scatter",
             "expert-remainder-routed-to-smaller-tile-twins",
+            "expert-major-tile-order-token-tile-cache-resident",
         ],
     ),
-    // I: NSA block-sparse selection (6 rules)
+    // I: NSA block-sparse selection (7 rules)
     (
         KernelCategory::NsaBlockSparse,
         "I: NSA block-sparse",
@@ -2389,6 +2446,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sliding-window-plus-sparse",
             "sparse-kv-index-list-sentinel-padded",
             "running-threshold-prune-compaction-aliasing-guard",
+            "tile-max-prefiltered-exact-topk",
         ],
     ),
     // J: Varlen packing + chunked reductions (5 rules)

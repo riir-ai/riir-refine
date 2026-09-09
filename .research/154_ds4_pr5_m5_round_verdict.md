@@ -1,6 +1,6 @@
 # 154 — Distill verdict: ivanfioravanti/ds4-metal PR #5 (Qwen3.8 M5 Max rounds 1+2 + integration fixes)
 
-**Status:** DISTILLED — Batch 134 plan-first (Plan 113); mining pending. Verdict: **YES, grade B corpus / LEAGUE INTEL MODERATE.** Recorded 2026-09-08 (M3 box, CPU-only).
+**Status:** RECORD — Batch 139 LANDED 2026-09-09 (Plan 119; 4 kernel_opt rules + 1 rust_perf rule + 8 riders; corpus 601→605 kernel / 120→121 rust_perf; all gates green). Landing record appended at the bottom; verdict section below stands as written at verdict time (2026-09-08, M3 box, CPU-only).
 
 ## Source + trigger
 
@@ -78,4 +78,14 @@ Mapped against `../riir-ai/.docs/09_performance/perf_rematch_league.md` (scorebo
 
 ## Queue slot
 
-**Batch 134** (behind in-flight Batch 131 Girder + the queued 132/133 CloudRift pair), plan-first: `.plans/113_batch134_ds4_pr5_m5_round.md`. Expected yield: 2–4 rules + 6–10 riders after coordinator falsification.
+**Batch 139** (behind nothing — armed 2026-09-09 after Batch 138), plan-first: `.plans/119_batch139_ds4_pr5_m5_round.md`. Expected yield: 2–4 rules + 6–10 riders after coordinator falsification.
+
+## Landing record (2026-09-09, Batch 139)
+
+- **Yield:** 4 kernel_opt rules (`expert-major-tile-order-token-tile-cache-resident` H / `narrow-matvec-one-row-per-simdgroup` E / `tile-max-prefiltered-exact-topk` I / `sustained-load-drift-interleave-protocol` D) + 1 rust_perf io rule (`prefault-admission-keyed-to-ram-headroom`) + 8 riders (B7+B58 swap-restore, B129 stale-source detection, B130-Metal MPP double-buffer, contraction rejection on fast-math-contraction, B129-kv-dequant chunk-width facet, B104 swept-table GDN row, B108 scorer staging, register-rotation-prefetch merge instance). Corpus 601→605 / 120→121.
+- **T0 verification:** HEAD == ls-remote == pin `18ca8ec` (branch did NOT move since verdict); LICENSE MIT re-verified; delta recomputed: 19 commits / 25 files / +9105/−93 — matches this verdict exactly.
+- **Corrigenda (lanes vs this draft):** (1) stale-sidecar defense is DISPATCH-GRANULARITY producer/consumer coupling (both sites re-derive both env overrides), NOT in-kernel detection — the in-kernel fallback is capacity-only; the rule text was written accordingly. (2) The pre-PR narrow-matvec geometry was NR0=4 (not 2) for `out_dim ∈ {512,1024} && in_dim ≥ 4096` quality-off — the one-row form OVERRIDES it. (3) The merge 16-split prefetch is `44fb985`, not `f27d9b0`. (4) `DS4_QWEN4_GDN_PREFILL_NSG` predates `bc61011` (ships with the `858b524` lab commit). (5) The +2.6% expert-major figure is over the drift-free half of an interleaved 64K run. (6) round1.md read in full: quantified drift calibration (1030→910→870→850), the distinct 15–35% first-timed-run artifact, the ~2% evidence threshold, the +16.4%-artifact-vs-+1.0%-corrected pair, the dispatch-overhead budget (~897 dispatches/token, ~5% of the token), and the sub-noise-knobs-compose-to-+7.5% demonstration.
+- **Drops:** `c73d32a` tool-call parsing (Lane B adjudication: host chat-template correctness, zero perf content); the four-row Q8_0 matvec tile + tg-64/128 sweeps (the source's own rejected-variants table; riders of record only).
+- **Gates:** batch139 gates 3/3 (presence / concepts / syn-parse) + the rust_perf batch139 gate with a fail-closed G1 parity (unqueryable RAM → demand-paged; 64 GiB cell refuses; 128 GiB cell prefaults) + default 1188/0 + kernel_heal 1525/0/1i + kernel_heal+latent 1647/0/2i + retrieval floors byte-identical (kernel 100/100/100, blended 94.7/96.9/97.7 — 8th consecutive) + router measured 95/131 = 72.5% FLAT vs B138 (floor 86 held, no re-pin) + clippy 0 ×3 all-targets + `--corpus-stats` 605/121/49/14/31 + score-bench #86 FLAT 96.2/1.9 (9th consecutive; entropy-gap OOD axis live).
+- **T7 league artifacts (named-not-edited, per plan):** (a) the M3-decode leads — narrow-matvec one-row occupancy + GDN front widening — are the same idle-core regime as B831's split-K lesson and are RECORDED here for the 844/851 owners; the league doc is not edited by this batch. (b) The protocol affirmation (drift ABBA + first-session penalty + no-op control) externally confirms the league fairness manifest's discipline (B817 ×5-interleaved; Bench 854's window-sensitivity). (c) The Flash-Next re-arm trigger STAYS UNLIT (Q4_K ~100 GB and Q2 packs both not ≤24-GB-feasible). (d) The +3.865% portable-path diagnostic is NOT default-change evidence — honesty facet confirmed.
+- **Queue:** `.raw/ds4-metal` removed at landing. Part B (antirez/ds4 upstream `f62ca29a..6289c516`) remains the queued separate-batch candidate (dedup `ssd|glm|state.space` first per the B123 family).

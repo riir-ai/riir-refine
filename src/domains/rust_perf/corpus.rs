@@ -9,8 +9,8 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 120 entries across 12 categories (complexity 19, allocation 23, simd 8,
-//! layout 10, iterators 10, concurrency 13, io 18, arithmetic 8, dispatch 5,
+//! 121 entries across 12 categories (complexity 19, allocation 23, simd 8,
+//! layout 10, iterators 10, concurrency 13, io 19, arithmetic 8, dispatch 5,
 //! caching 4, bevy 1, wasm 1). 90 are benchable; 27 are honestly
 //! NotBenchable — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
@@ -141,7 +141,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (90/120):
+//! Currently benchable (90/121):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -231,8 +231,12 @@
 //! - `dynamic-work-parallelism-ladder` (work-unknown-in-advance structure ladder: scoped spawning is the composition-safe default despite the boxing — spawn_broadcast starves the pool, channel+par_bridge does not compose; Batch 136, rayon-graph blog distill)
 //! - `sender-per-work-item-terminates-channel` (dynamic queue shutdown is ownership-driven: seed sender clones per item, drop the original, the channel closes when the last item drops; Batch 136, rayon-graph blog distill)
 //! - `nested-par-inside-channel-bridge-deadlocks` (a nested par_iter in par_bridge-fed work steals, blocks on the SAME channel, and the interrupted item's sender clone keeps it open — thread-tied tasks hang; Batch 136, rayon-graph blog distill)
+//! - `prefault-admission-keyed-to-ram-headroom` (admission-policy annotation,
+//!   source-reported — the DECISION CONTENT is the headroom predicate + the
+//!   fail-closed direction + the mincore instrument refusal; page-cache state
+//!   dominates any microbench; Batch 139, ds4-metal PR #5 PLE prefault)
 //!
-//! Not benchable (30/120) — honest (count repaired by Batch 135; the Batch 136 rayon-queue rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
+//! Not benchable (31/121) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -338,7 +342,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 120 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 121 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (23 rules; Batch 86 added 2; Batch 135
@@ -354,10 +358,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 /// deadlock);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the DestProp branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
+/// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 19 (Batch
 /// 68/69 added 1 each + Batch 85 added 1 + Batch 94 added the cacheability-
 /// coupled coalescing rule + Batch 118 added the disjoint-pread latency-
-/// overlap rule); bevy + wasm have 1 each.
+/// overlap rule + Batch 122/123/129 added the measurement-honesty io rules
+/// + Batch 139 added the prefault-admission rule); bevy + wasm have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -3090,6 +3095,79 @@ fn ab_bench(cfg: &Config, control: &str, candidate: &str) -> f64 {
     (b - a) / a
 }".to_string(),
             context_notes: Some("REGIME-ANNOTATED, source-shipped (the harness fix + validation landed in the same commit; honestly NotBenchable here -- experimental design, not speed). THE DEFECT: when the candidate is the DEFAULT-ON path, 'unset the env for control' is a NO-OP -- both arms run the candidate, the measured delta reads ~0, and the vacuous screen looks like a clean null result (or, worse, the sign convention silently flips with arm labeling: the source's 1K ABBA log intentionally labels the enabled default as CONTROL and rollback as candidate, so its negative candidate delta is not a regression -- prefill-structural.md:153-155). THE FIX CONTRACT: (1) the harness accepts an explicit control value (metal_prefill_variant_bench.c:214: the control arm sets cfg->control_value when provided, unsets only when not -- backward compatible, which is how the defect shipped); (2) validation passes --control-value 0 --candidate-value 1 and FAILS if the two arms measure identical (prefill-structural.md:58-61: 'enabled defaults cannot silently make both variants identical'); (3) the report names which arm is control. THE FAMILY: this is the control-arm CONSTRUCTION twin of matched-control-disentangles-policy-from-model (B124 -- matched controls isolate policy from model; this ensures the control arm actually executes the control) and the enable-default twin of the null-arm identity face (B124 half 3: the OFF-arm must be provably inert -- here the OFF-arm was never OFF). Distinct from ab-isolate-one-component-by-baseline-byte-copy (B121 -- artifact-level isolation of the component under test; this is the env-arm wiring of the A/B itself) and from diagnostics-not-just-exit-code (B122 -- failure evidence capture; orthogonal stage). Suggestion-only (a parse-only proposer cannot see which env var defaults to ON). Source: ivanfioravanti/ds4-metal @ b85a6174 (MIT) -- speed-bench/qwen38-prefill-structural.md:58-61, :153-155 + metal_prefill_variant_bench.c:52, :214 (the --control-value harness fix). Batch 129 / Plan 110 / Research 151.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io (admission policy): a WILLNEED prefault of a huge mmap sidecar
+        // runs unconditionally -------------------------------------------
+        // Batch 139 (2026-09-09, Plan 119 / Research 154 -- the ds4-metal
+        // PR #5 PLE-prefault distill, commits bd7061b + 881c678). A ~30 GiB
+        // memory-mapped n-gram sidecar inherited prefetch_cpu=true, so
+        // model_open's whole-file POSIX_MADV_WILLNEED dragged the table
+        // toward the page cache at startup: on 64 GB machines pressure
+        // stops it partway (10.5 GiB resident measured on an M5 Pro) and
+        // the prefaulted pages feed SUSTAINED pressure at larger contexts,
+        // while demand paging keeps the true working set ~700 MiB. The
+        // fix ADMITS the prefault only with real RAM headroom, fails
+        // CLOSED when RAM cannot be queried, logs the decision, and
+        // keeps a force override; the companion DONTNEED sweep is
+        // default-off with the source's own unbated-cost caveat.
+        PerfRule {
+            rule_id: "prefault-admission-keyed-to-ram-headroom".to_string(),
+            name: "a WILLNEED/madvise prefault of a large mmap sidecar gated by nothing -> admit it only when hw.memsize covers resident model + sidecar + a fixed OS margin, FAIL CLOSED on an unqueryable RAM total, log the decision, and keep an explicit force override; the release sweep (DONTNEED) is a separate default-off knob".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The sidecar opens with prefetch_cpu=true: a whole-file WILLNEED
+// runs at startup regardless of machine size. On a 64 GB box hosting
+// a 41.7 GiB model the prefault fights the model for page cache,
+// stops partway (10.5 GiB resident measured), and the pages it DID
+// pull feed sustained pressure for the rest of the session.
+fn open_sidecar(path: &str) -> Sidecar {
+    let m = mmap_readonly(path)?;
+    madvise(m.as_ptr(), m.len(), Advice::WillNeed)?; // unconditional
+    Ok(Sidecar { map: m })
+}
+
+".to_string(),
+            fixed_code: "// Admission: prefault ONLY with measured headroom (model + sidecar +
+// margin); an unqueryable RAM total FAILS CLOSED to demand paging;
+// the decision is logged and force-overridable. The release sweep is
+// a separate default-off knob.
+fn open_sidecar(path: &str, model_bytes: u64) -> Result<Sidecar, Open> {
+    let m = mmap_readonly(path)?;
+    let prefault = match prefault_admission(model_bytes, m.len() as u64) {
+        Admission::Yes => {
+            eprintln!(\"sidecar: full prefault (headroom ok)\");
+            true
+        }
+        reason => {
+            eprintln!(\"sidecar: demand-paged ({reason:?})\");
+            false
+        }
+    };
+    if prefault {
+        madvise(m.as_ptr(), m.len(), Advice::WillNeed)?;
+    }
+    Ok(Sidecar { map: m })
+}
+
+enum Admission { Yes, NoRamQuery, InsufficientHeadroom }
+
+fn prefault_admission(model: u64, sidecar: u64) -> Admission {
+    const MARGIN: u64 = 16 << 30;
+    let Some(total) = host_ram_bytes() else { return Admission::NoRamQuery };
+    if total >= model + sidecar + MARGIN {
+        Admission::Yes
+    } else {
+        Admission::InsufficientHeadroom
+    }
+}
+
+fn host_ram_bytes() -> Option<u64> {
+    None // sysctl/proc equivalent; None must mean NO prefault
+}
+
+".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source ships campaign numbers, no isolated A/B of the admission itself; honestly NotBenchable here -- page-cache state dominates any microbench). THE TWO-SIDED TRADE, stated in-source: cold idle prefill is ~1/3 slower demand-paged (~650 vs ~950 t/s on an M5 Max) -- the admission BUYS warm-start speed only where it cannot hurt; 128 GiB machines pass the same predicate (128 >= 41.7 + 29.8 + 16) and prefault again, so the constant is portable even though the verdict is per-box. FOUR load-bearing halves: (1) the margin is an OS reserve, not slack -- 16 GiB fixed; (2) FAIL-CLOSED direction: unreadable hw.memsize disables the prefault (slow-but-safe), never prefaults on a guess -- resource-admission heuristics fail toward the demand-paged default; (3) the decision is a logged line naming which arm ran (the source: 'PLE sidecar resident prefetch enabled (full table)' / 'PLE sidecar demand-paged (insufficient RAM headroom or DS4_QWEN4_PLE_PREFETCH_FULL=0)'), and the env override forces either arm; (4) the companion POSIX_MADV_DONTNEED sweep (evict gathered tokens every N calls; measured 717 -> 482 MiB @1024 -> 129 MiB @256) is DEFAULT-OFF with the source's own caveat 'the full-power throughput cost of the sweep is not yet benchmarked' -- an unmeasured cost ships behind an explicit opt-in, never as the default. INSTRUMENT CAVEAT worth keeping with the rule: on macOS, mincore()/resident-page counters report CACHE-WIDE residency of the backing FILE, not pages mapped into THIS task -- the sweep's code REFUSES to log a residency figure and names vmmap against the live process as the reliable instrument; a metric that measures the wrong scope is refused, not reported. Distinct from parallel-disjoint-pread-hides-cold-page-latency (B118 -- overlaps cold page-ins ONCE at gather time; this decides whether pages are faulted EAGERLY at all and what backs the eviction policy), from coalesce-nearby-reads-bounded-gap-cacheability-gated (B94 -- merges syscalls for random reads; different axis: fault-in policy vs read shape), from batch-pool-read-makes-serial-readahead-redundant (B123 -- deletes a read-ahead HINT that duplicates a queued parallel pool; this keeps a prefault but ADMITS it by headroom -- the hint there was redundant work, the prefault here is a capacity decision), and from sparse-demand-paged-kv-cache (kernel_opt B107 -- VRAM placement sparsity; this is host page-cache policy). Suggestion-only (a parse-only proposer cannot see mapping sizes or host RAM). Source: ivanfioravanti/ds4-metal @ 18ca8ec (MIT) -- ds4.c:66896-66903 (the demand-by-design comment), :66928-66953 (the admission + margin + decision log + DS4_QWEN4_PLE_PREFETCH_FULL override), :42376-42385 (sysctl hw.memsize), :42407-42438 (the DONTNEED sweep + DS4_QWEN4_PLE_EVICT_TOKENS + the mincore refusal note 'the sweep does not log a residency figure; vmmap against the live process is the reliable measurement'); commit 881c678 msg ('Restore the full-table WILLNEED prefault only when hw.memsize covers the resident model, the sidecar, and a 16 GiB OS margin: 128 GiB machines prefault again ... while 64 GiB machines stay demand-paged (64 < 41.7 + 29.8 + 16)'; 'Greedy output is byte-identical cold vs warm and with the override in either direction'). Batch 139 / Plan 119 / Research 154.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8570,7 +8648,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 120); // Batch 136 (rayon) 117 → 120
+        assert_eq!(corpus.entries.len(), 121); // Batch 139 (ds4 PR#5 prefault) 120 → 121
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -10104,7 +10182,8 @@ mod tests {
         // annotations (13 rules) were never counted here — the pin sat at the
         // Batch-109-era 14 while reality moved to 27. The test only compiles
         // under `rust_perf_bench`, so nobody ran it.
-        assert_eq!(without_spec.len(), 30); // 120 total − 90 benchable
+        assert_eq!(without_spec.len(), 31); // 121 total − 90 benchable
+        assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
         assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
         assert!(without_spec.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — the deterministic size axis (12 → 8), not a speed bench
@@ -10172,7 +10251,8 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 63, "expected 63 context-annotated rules (Batch 136 added the three rayon-queue annotations)");
+        assert_eq!(annotated.len(), 64, "expected 64 context-annotated rules (Batch 139 added the prefault-admission annotation)");
+        assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
         assert!(annotated.contains(&"write-verify-readback-before-publish")); // Batch 121 — the ds4 IQ2 publish-integrity annotation
@@ -10230,7 +10310,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (114 total - 57 annotated; the new rules joined the ANNOTATED side)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (121 total - 64 annotated; the Batch 139 rule joined the ANNOTATED side)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -10242,7 +10322,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 63); // Batch 136: 60 → 63
+        assert_eq!(annotated, 64); // Batch 139: 63 → 64
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -10274,9 +10354,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 63 annotated rules.
+        // Filter to the 64 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 63, "expected 63 annotated rules");
+        assert_eq!(annotated.len(), 64, "expected 64 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -11620,6 +11700,68 @@ mod tests {
         }
         assert_eq!(visited.len(), 5, "seeds 1,2,3 + discovered 1-from-3 and 1-from-2");
         assert_eq!(*visited.last().unwrap(), 1, "the frontier must reach the leaf");
+    }
+
+    /// Batch 139 (2026-09-09, Plan 119 / Research 154 — the ds4-metal PR #5
+    /// distill): the prefault-admission rule is present, parses, is io, and
+    /// carries its NotBenchable rationale. The fail-closed direction is
+    /// pinned by a G1 parity: an unqueryable RAM total must choose the
+    /// DEMAND-PAGED arm (the slow-but-safe side), never the prefault.
+    #[test]
+    fn batch139_rules_present_and_parse() {
+        const MARGIN: u64 = 16 << 30;
+        const MODEL: u64 = 44_769_582_803; // ~41.7 GiB (the source's model)
+        const SIDECAR: u64 = 31_984_068_608; // ~29.8 GiB (the PLE sidecar)
+        let corpus = build_perf_seed_corpus();
+        let (rid, category, needles) = (
+            "prefault-admission-keyed-to-ram-headroom",
+            "io",
+            vec![
+                "FAIL CLOSED",
+                "hw.memsize",
+                "margin",
+                "DS4_QWEN4_PLE_EVICT_TOKENS",
+                "REFUSES to log a residency figure",
+            ],
+        );
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-139 rule '{rid}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-139 rule '{rid}' category");
+        assert!(
+            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            "batch-139 '{rid}' buggy/fixed must both parse"
+        );
+        assert!(
+            e.context_notes.is_some(),
+            "batch-139 '{rid}' must carry its NotBenchable rationale in context_notes"
+        );
+        let text = format!("{}\n{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code, e.context_notes.clone().unwrap_or_default());
+        for needle in needles {
+            assert!(text.contains(needle), "batch-139 {rid} concept {needle:?} missing");
+        }
+
+        // G1: the admission predicate's fail-closed direction, as a plain
+        // integer function (the rule's own semantics, mirrored).
+        let admission = |ram: Option<u64>, model: u64, sidecar: u64| {
+            match ram {
+                None => false, // NoRamQuery -> demand-paged (fail closed)
+                Some(total) => total >= model + sidecar + MARGIN,
+            }
+        };
+        assert!(!admission(None, 0, 0), "unqueryable RAM must NOT prefault");
+        assert!(!admission(
+            Some(64 << 30),
+            MODEL,
+            SIDECAR
+        ), "64 < 41.7 + 29.8 + 16 must stay demand-paged (the source's own cell)");
+        assert!(admission(
+            Some(128 << 30),
+            MODEL,
+            SIDECAR
+        ), "128 GiB machines prefault again");
     }
 }
 
