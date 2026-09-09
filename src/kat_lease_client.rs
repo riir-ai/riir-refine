@@ -1060,6 +1060,93 @@ impl ReheatReport {
 /// host: `<base>/pay?acct=<account_id>`).
 pub const DEFAULT_SERVICE_URL: &str = "https://ai.gist.rs";
 
+/// The failover PAIR of [`DEFAULT_SERVICE_URL`] — the other known service
+/// host. Born 2026-09-09: release binaries v0.1.2/v0.1.3 shipped
+/// `heal.gist.rs` as the default, that host has no public DNS record, and
+/// every fresh install died at DNS before the docs' env override could be
+/// discovered. The three HTTP clients (lease / payreq / wetrun-read) retry a
+/// HOST-level failure once against the pair (see [`failover_base`]) and
+/// stick to it for the process lifetime.
+pub const FALLBACK_SERVICE_URL: &str = "https://heal.gist.rs";
+
+/// The process-wide failover memo (see [`failover_base`]): once a host-level
+/// failure flips the CLI to the paired host, every later request in the same
+/// process starts there — one flip line, ever, per run.
+#[cfg(feature = "kat_transport")]
+static FAILED_OVER: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The failover pair for a service base URL: the two known service hosts
+/// fall back to EACH OTHER; any other (operator-set / test-double) URL is
+/// respected literally and falls back to nothing.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn fallback_pair_for(base: &str) -> Option<String> {
+    match base.trim_end_matches('/') {
+        DEFAULT_SERVICE_URL => Some(FALLBACK_SERVICE_URL.to_string()),
+        FALLBACK_SERVICE_URL => Some(DEFAULT_SERVICE_URL.to_string()),
+        _ => None,
+    }
+}
+
+/// Host-level = the request provably never reached a server (DNS resolution,
+/// connection refused). Timeouts and TLS failures are deliberately NOT
+/// failover triggers: a timed-out push may have landed (every money write
+/// here is server-side idempotent, but an unneeded retry is still a retry),
+/// and a TLS failure names a proxy/operator problem the paired host cannot
+/// fix.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn is_host_level_error(e: &ureq::Error) -> bool {
+    is_host_level_kind(e.kind())
+}
+
+/// The [`is_host_level_error`] classification over the public `ureq::ErrorKind`
+/// enum — a separate fn because transport errors themselves are
+/// `pub(crate)`-constructed and so untestable from outside the crate.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn is_host_level_kind(kind: ureq::ErrorKind) -> bool {
+    matches!(kind, ureq::ErrorKind::Dns | ureq::ErrorKind::ConnectionFailed)
+}
+
+/// The base URL the next request should use: the failover memo when one is
+/// recorded, else the client's own base (trailing slash normalized).
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn request_base(base: &str) -> String {
+    FAILED_OVER
+        .get()
+        .cloned()
+        .unwrap_or_else(|| base.trim_end_matches('/').to_string())
+}
+
+/// One-shot failover: on a HOST-level error against a base with a paired
+/// host, record + return the pair (the caller retries against it). Server
+/// statuses, timeouts, custom URLs, and anything after the first flip answer
+/// `None` — not ours to retry.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn failover_base(tried: &str, e: &ureq::Error) -> Option<String> {
+    if !is_host_level_error(e) {
+        return None;
+    }
+    let next = failover_flip(tried)?;
+    eprintln!("service: {tried} unreachable ({e}) — falling back to {next}");
+    Some(next)
+}
+
+/// The state half of [`failover_base`] (memo check + pair + set), error-free
+/// so the same-module tests can drive it deterministically.
+#[cfg(feature = "kat_transport")]
+fn failover_flip(tried: &str) -> Option<String> {
+    if FAILED_OVER.get().is_some() {
+        return None;
+    }
+    let next = fallback_pair_for(tried)?;
+    FAILED_OVER.set(next.clone()).ok()?;
+    Some(next)
+}
+
 /// The payment-page URL for an account (the QR payload).
 #[must_use]
 pub fn payment_url(service_base: &str, account_id: &str) -> String {
@@ -1188,32 +1275,44 @@ impl HttpLeaseTransport {
     }
 
     fn get(&self, path: &str, if_none_match: Option<&str>) -> HttpResponse {
-        let url = format!("{}{path}", self.base);
-        let mut req = self.agent.get(&url);
-        if let Some(v) = if_none_match {
-            req = req.set("If-None-Match", v);
-        }
-        match req.call() {
-            Ok(r) => Self::body(r),
-            // ureq surfaces some non-2xx as Status errors — 304 is the one
-            // we care about (both shapes handled defensively).
-            Err(ureq::Error::Status(304, _)) => HttpResponse::NotModified,
-            Err(ureq::Error::Status(c, _)) => HttpResponse::Status(c),
-            Err(e) => HttpResponse::Error(e.to_string()),
+        let mut base = request_base(&self.base);
+        loop {
+            let url = format!("{base}{path}");
+            let mut req = self.agent.get(&url);
+            if let Some(v) = if_none_match {
+                req = req.set("If-None-Match", v);
+            }
+            match req.call() {
+                Ok(r) => return Self::body(r),
+                // ureq surfaces some non-2xx as Status errors — 304 is the one
+                // we care about (both shapes handled defensively).
+                Err(ureq::Error::Status(304, _)) => return HttpResponse::NotModified,
+                Err(ureq::Error::Status(c, _)) => return HttpResponse::Status(c),
+                Err(e) => match failover_base(&base, &e) {
+                    Some(next) => base = next,
+                    None => return HttpResponse::Error(e.to_string()),
+                },
+            }
         }
     }
 
     fn post(&self, path: &str, body: &str) -> HttpResponse {
-        let url = format!("{}{path}", self.base);
-        match self
-            .agent
-            .post(&url)
-            .set("Content-Type", "application/x-ndjson")
-            .send_string(body)
-        {
-            Ok(r) => Self::body(r),
-            Err(ureq::Error::Status(c, _)) => HttpResponse::Status(c),
-            Err(e) => HttpResponse::Error(e.to_string()),
+        let mut base = request_base(&self.base);
+        loop {
+            let url = format!("{base}{path}");
+            match self
+                .agent
+                .post(&url)
+                .set("Content-Type", "application/x-ndjson")
+                .send_string(body)
+            {
+                Ok(r) => return Self::body(r),
+                Err(ureq::Error::Status(c, _)) => return HttpResponse::Status(c),
+                Err(e) => match failover_base(&base, &e) {
+                    Some(next) => base = next,
+                    None => return HttpResponse::Error(e.to_string()),
+                },
+            }
         }
     }
 
@@ -2381,6 +2480,56 @@ mod tests {
     /// with the re-derive instruction — when [`DEFAULT_SERVICE_URL`] moves,
     /// instead of letting two digest mismatches be the first signal (the
     /// exact gap that let the `f7cbe31` host flip run red for a week).
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn fallback_pair_covers_both_known_hosts_and_never_custom() {
+        assert_eq!(
+            fallback_pair_for(DEFAULT_SERVICE_URL).as_deref(),
+            Some(FALLBACK_SERVICE_URL)
+        );
+        assert_eq!(
+            fallback_pair_for(FALLBACK_SERVICE_URL).as_deref(),
+            Some(DEFAULT_SERVICE_URL)
+        );
+        // An operator override / test-double URL is respected literally.
+        assert_eq!(fallback_pair_for("https://example.test"), None);
+        // Trailing slash normalized.
+        assert_eq!(
+            fallback_pair_for("https://ai.gist.rs/").as_deref(),
+            Some(FALLBACK_SERVICE_URL)
+        );
+    }
+
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn host_level_kinds_are_dns_and_connect_only() {
+        assert!(is_host_level_kind(ureq::ErrorKind::Dns));
+        assert!(is_host_level_kind(ureq::ErrorKind::ConnectionFailed));
+        // An IO timeout is NOT host-level (the push may have landed).
+        assert!(!is_host_level_kind(ureq::ErrorKind::Io));
+        assert!(!is_host_level_kind(ureq::ErrorKind::InvalidUrl));
+    }
+
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn failover_flips_once_to_the_pair_and_request_base_follows() {
+        // Process-global memo: this is the only test that flips it, and the
+        // assertions tolerate either host being the first writer.
+        if let Some(next) = failover_flip(DEFAULT_SERVICE_URL) {
+            assert_eq!(next, FALLBACK_SERVICE_URL);
+        } else {
+            assert!(FAILED_OVER.get().is_some());
+        }
+        // One-shot: every later flip is None, either direction.
+        assert_eq!(failover_flip(FALLBACK_SERVICE_URL), None);
+        assert_eq!(failover_flip(DEFAULT_SERVICE_URL), None);
+        // And request_base now answers the memo for ANY client base.
+        assert_eq!(
+            request_base("https://unrelated.test"),
+            FAILED_OVER.get().unwrap().as_str()
+        );
+    }
+
     #[cfg(feature = "kat_transport")]
     #[test]
     fn qr_golden_url_tracks_the_default_service_url() {

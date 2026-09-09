@@ -484,25 +484,37 @@ impl HttpPayreqTransport {
     }
 
     fn post_json(&self, path: &str, body: &str) -> HttpResponse {
-        let url = format!("{}{path}", self.base);
-        match self
-            .agent
-            .post(&url)
-            .set("Content-Type", "application/json")
-            .send_string(body)
-        {
-            Ok(r) => Self::body(r),
-            Err(ureq::Error::Status(c, r)) => Self::refusal_or_status(c, r),
-            Err(e) => HttpResponse::Error(e.to_string()),
+        let mut base = crate::kat_lease_client::request_base(&self.base);
+        loop {
+            let url = format!("{base}{path}");
+            match self
+                .agent
+                .post(&url)
+                .set("Content-Type", "application/json")
+                .send_string(body)
+            {
+                Ok(r) => return Self::body(r),
+                Err(ureq::Error::Status(c, r)) => return Self::refusal_or_status(c, r),
+                Err(e) => match crate::kat_lease_client::failover_base(&base, &e) {
+                    Some(next) => base = next,
+                    None => return HttpResponse::Error(e.to_string()),
+                },
+            }
         }
     }
 
     fn get(&self, path: &str) -> HttpResponse {
-        let url = format!("{}{path}", self.base);
-        match self.agent.get(&url).call() {
-            Ok(r) => Self::body(r),
-            Err(ureq::Error::Status(c, _)) => HttpResponse::Status(c),
-            Err(e) => HttpResponse::Error(e.to_string()),
+        let mut base = crate::kat_lease_client::request_base(&self.base);
+        loop {
+            let url = format!("{base}{path}");
+            match self.agent.get(&url).call() {
+                Ok(r) => return Self::body(r),
+                Err(ureq::Error::Status(c, _)) => return HttpResponse::Status(c),
+                Err(e) => match crate::kat_lease_client::failover_base(&base, &e) {
+                    Some(next) => base = next,
+                    None => return HttpResponse::Error(e.to_string()),
+                },
+            }
         }
     }
 }

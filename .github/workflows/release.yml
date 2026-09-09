@@ -96,7 +96,7 @@ jobs:
       - name: Generate THIRD_PARTY_LICENSES.md (fails on any non-accepted license)
         run: |
           cargo about generate --config .github/about/about.toml \
-            --features latent_retrieval,kat_service,kat_transport .github/about/about.hbs \
+            --features latent_retrieval,kat_service,kat_transport,fix_verify .github/about/about.hbs \
             > THIRD_PARTY_LICENSES.md
 
       - uses: actions/upload-artifact@v4
@@ -183,19 +183,20 @@ jobs:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
 
       # Shipping feature set = default + latent_retrieval + kat_service +
-      # kat_transport (the bin's required-features; Proposal 003 §leak-surface
-      # item 4 + Plan 107 T1). NEVER ternary_inference. kat_transport (ureq/
-      # qrcode) joins at v0.1.2 per this file's own deferral note — the
-      # license read it demanded is DONE: webpki-roots' CDLA-Permissive-2.0
-      # covers only the bundled root-store data (read + accepted, owner
-      # mandate 2026-09-08, recorded in .github/about/about.toml); every
-      # other transport crate resolves to already-accepted SPDX ids.
+      # kat_transport + fix_verify (the bin's required-features; Proposal 003
+      # §leak-surface item 4 + Plan 107 T1). NEVER ternary_inference.
+      # kat_transport (ureq/qrcode) joined at v0.1.2. fix_verify joins at
+      # v0.1.4 (2026-09-09): the docs promise `--fix` compile-gates, and a
+      # shipped binary without the gate both breaks that promise AND records
+      # every fix as unverified (Heuristic tier) — which the mining pipeline
+      # then cannot treat as strong evidence. Adds no new external crates
+      # (compile_oracle is std + serde only), so the license read is unchanged.
       - name: Build
         shell: bash
         run: |
           set -euo pipefail
           cargo build --release --target ${{ matrix.target }} \
-            --features latent_retrieval,kat_service,kat_transport --bin cargo-heal
+            --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-heal
 
       - uses: actions/upload-artifact@v4
         with:

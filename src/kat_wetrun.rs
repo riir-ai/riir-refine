@@ -1153,10 +1153,16 @@ impl HttpWetrunTransport {
     }
 
     fn get(&self, path: &str) -> HttpResponse {
-        match self.agent.get(&format!("{}{path}", self.base)).call() {
-            Ok(r) => Self::body(r),
-            Err(ureq::Error::Status(c, _)) => HttpResponse::Status(c),
-            Err(e) => HttpResponse::Error(e.to_string()),
+        let mut base = crate::kat_lease_client::request_base(&self.base);
+        loop {
+            match self.agent.get(&format!("{base}{path}")).call() {
+                Ok(r) => return Self::body(r),
+                Err(ureq::Error::Status(c, _)) => return HttpResponse::Status(c),
+                Err(e) => match crate::kat_lease_client::failover_base(&base, &e) {
+                    Some(next) => base = next,
+                    None => return HttpResponse::Error(e.to_string()),
+                },
+            }
         }
     }
 }

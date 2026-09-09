@@ -358,6 +358,19 @@ fn enforce_kat_soft_gate(args: &Args) {
     std::process::exit(1);
 }
 
+/// The `--yes` run-global (the flag form of `RIIR_HEAL_YES`): every y/N
+/// prompt answers yes without a TTY — the agents/CI contract. A static
+/// rather than plumbed `Args`: the prompt sites sit deep in flows that do
+/// not otherwise carry it, and one store site in `main` covers the run.
+static PROMPT_YES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The env half of the `--yes` contract (`RIIR_HEAL_YES=1|true|yes|on`).
+fn prompt_yes_env() -> bool {
+    std::env::var("RIIR_HEAL_YES")
+        .ok()
+        .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
+}
+
 /// Issue 079 — the depleted-run contribute-now offer's consent surface.
 /// `RIIR_HEAL_KAT_PROMPT_YES=1|true|yes` is the automation hook (agents and
 /// CI run without a TTY); an explicit `--unmine` opt-out is never re-asked
@@ -373,6 +386,10 @@ fn depleted_mine_offer() -> bool {
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes"))
     {
+        return true;
+    }
+    // `--yes` (or `RIIR_HEAL_YES=1`) — the run-global non-interactive consent.
+    if PROMPT_YES.load(std::sync::atomic::Ordering::Relaxed) {
         return true;
     }
     let consent_dir = riir_clippy::kat_mining_consent::default_dir();
@@ -406,6 +423,21 @@ fn kat_gate_disabled() -> bool {
 /// the policy warning, the web link, and the login → heal → sync →
 /// account loop. Feature halves (account status / outbox) appear only
 /// when their feature compiled in — the explainer itself never needs one.
+/// The default `.heal-sync-policy` `--mine` writes (version 3, the
+/// [`riir_clippy::kat_redact`] schema): own-repo rows sync, the standard
+/// source globs, findings redacted in place, secrets still blocked by the
+/// gate itself. WITHOUT a policy the gate is deny-by-default and every sync
+/// prints `0 included, N blocked` — the friction this write removes. The
+/// user's existing policy is NEVER touched.
+const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
+  "version": 3,
+  "sync_enabled": true,
+  "allow_origins": ["own-repo"],
+  "allow_paths": ["src/**/*.rs", "tests/**/*.rs", "benches/**/*.rs", "examples/**/*.rs"],
+  "max_span_bytes": 65536,
+  "allow_redacted": false
+}"#;
+
 fn run_mine_intro() {
     println!("KAT mining — turn your healing work into network credit");
     println!();
@@ -491,6 +523,30 @@ fn run_mine_intro() {
     }
     println!("{}", state.status_line());
     println!("opt out any time: cargo heal --unmine");
+
+    // The policy moment rides the consent moment: opting IN here while the
+    // repo has no `.heal-sync-policy` would make the very next `sync` print
+    // `0 included, N blocked` (deny-by-default) with no named remedy. Write
+    // the default once, loudly; never overwrite; never write outside a git
+    // repo (the root resolver falls back to cwd — a non-repo cwd has nothing
+    // to sync from anyway).
+    let policy_root = resolve_heal_root(&[]);
+    let policy_path = policy_root.join(".heal-sync-policy");
+    if policy_path.exists() {
+        println!("policy: using existing {}", policy_path.display());
+    } else if policy_root.join(".git").exists() {
+        match std::fs::write(&policy_path, DEFAULT_SYNC_POLICY_JSON) {
+            Ok(()) => println!(
+                "policy: wrote default .heal-sync-policy at {} — rows from this repo now sync \
+                 (secrets are still blocked by the redaction gate)",
+                policy_path.display()
+            ),
+            Err(e) => eprintln!(
+                "policy: could not write .heal-sync-policy ({e}) — `cargo heal sync` will block \
+                 rows until one exists"
+            ),
+        }
+    }
 
     // The one-shot signed tier note (owner mandate 2026-09-08): best-effort —
     // offline / not-logged-in prints one skipped line; never fatal, never an
@@ -1090,10 +1146,43 @@ fn run_kat_sync() {
                     riir_clippy::kat_account::short_id(account.state().account_id.as_str()),
                     &payload.commitment[..12.min(payload.commitment.len())]
                 );
+                // The deny-by-default remedy (2026-09-09 fresh-machine find):
+                // a blocked-only batch with no policy file named the gate but
+                // not the fix. Name BOTH — `--mine` writes the default.
+                if payload.outcomes.iter().any(|o| {
+                    matches!(
+                        o,
+                        riir_clippy::kat_sync_payload::RowOutcome::Blocked {
+                            reason: riir_clippy::kat_redact::BlockReason::NoPolicy,
+                            ..
+                        }
+                    )
+                }) {
+                    let policy_path = root.join(".heal-sync-policy");
+                    eprintln!(
+                        "sync: {} row(s) BLOCKED — no {} (the redaction gate is deny-by-default)",
+                        payload.rows_blocked,
+                        policy_path.display()
+                    );
+                    eprintln!(
+                        "sync: run `cargo heal --mine` in this repo to write the default policy, \
+                         then sync again (queued batches stay queued)"
+                    );
+                }
                 if payload.rows_included > 0 {
                     match transport.post_sync(&payload.ndjson) {
                         riir_clippy::kat_lease_client::HttpResponse::Ok(body) => {
                             println!("sync: push accepted by {url}");
+                            // The pipeline explainer (2026-09-09 fresh-machine
+                            // find: a first-time contributor read mining 0 /
+                            // status "—" and concluded the push was lost —
+                            // the row was in the proof queue, then judged a
+                            // duplicate, invisibly). One honest line.
+                            println!(
+                                "sync: rows enter the proof queue — credited when the proof pass \
+                                 runs, PAID at the next epoch settle; duplicate shapes earn nothing \
+                                 (heal real code for novel fixes)"
+                            );
                             // The server's ingest report (rows_new /
                             // rows_refreshed / rows_terminal_skipped) is the
                             // ONLY honest "what landed" answer — print it
@@ -2506,6 +2595,10 @@ USAGE:
     --json          With --corpus-stats: stdout carries ONLY the dashboard
                     JSON payload ({{today, corpus, scores}}) — the human table
                     moves to stderr.
+    --version       Print the version and exit (also -V).
+    --yes           Non-interactive consent: every y/N prompt answers yes
+                    (the flag form of RIIR_HEAL_YES=1 — agents/CI). Currently
+                    arms the depleted-run contribute-now offer (Issue 079).
     --write         With --fix-compile: write the edits in place. (--fix already
                     writes — the explicit flag is the consent; rustfmt AUTOMATICALLY
                     follows when the original was already rustfmt-clean — pre-existing
@@ -2611,6 +2704,12 @@ struct Args {
     /// login → heal → sync → account loop. Standalone — early return.
     /// Also the opt-IN consent WRITE (owner mandate 2026-09-08).
     mine: bool,
+    /// `--version` / `-V` — print the version and exit (standalone).
+    version: bool,
+    /// `--yes` — non-interactive consent: every y/N prompt answers yes
+    /// (the flag form of `RIIR_HEAL_YES=1`; agents and CI). Currently arms
+    /// the depleted-run contribute-now offer (Issue 079).
+    yes: bool,
     /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
     /// 2026-09-08, the ai.gist.rs three-tier engagement story). Records
     /// machine-global consent = OPTED OUT, which makes `cargo heal sync`
@@ -2794,6 +2893,8 @@ fn parse_args() -> Args {
         suggest: false,
         fix: false,
         mine: false,
+        version: false,
+        yes: false,
         unmine: false,
         purge: false,
         refill: false,
@@ -2870,6 +2971,14 @@ fn parse_args() -> Args {
             "--write" => args.write = true,
             "--mine" => args.mine = true,
             "--unmine" => args.unmine = true,
+            "--version" | "-V" => args.version = true,
+            // ONE global `--yes`: non-interactive consent for every y/N prompt
+            // AND the vote arm it used to serve exclusively (the later
+            // duplicate arm is gone — first-match would have shadowed it).
+            "--yes" => {
+                args.yes = true;
+                args.vote_yes = true;
+            }
             "--purge" => args.purge = true,
             "--refill" => args.refill = true,
             "--refill-wait" => {
@@ -2998,7 +3107,6 @@ fn parse_args() -> Args {
                     usage();
                 }));
             }
-            "--yes" => args.vote_yes = true,
             "--no" => args.vote_no = true,
             "--amount" => {
                 let Some(value) = it.next() else {
@@ -3805,7 +3913,7 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
@@ -4780,6 +4888,19 @@ fn main() {
     // appear only when their feature compiled in.
     // --mine and --unmine are opposite writes to one field, so passing both
     // has no defensible resolution — reject before either side writes.
+    // `--version` answers before anything else (standalone; ungated — a
+    // feature-less build still knows its own version).
+    if args.version {
+        println!("cargo-heal {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    // `--yes` arms every y/N prompt (the flag form of `RIIR_HEAL_YES`) — set
+    // the run-global here so the deep prompt sites read it without plumbing
+    // Args through every flow.
+    PROMPT_YES.store(
+        args.yes || prompt_yes_env(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     if riir_clippy::kat_mining_consent::flags_conflict(args.mine, args.unmine) {
         eprintln!("{}", riir_clippy::kat_mining_consent::CONFLICT_MESSAGE);
         std::process::exit(2);
