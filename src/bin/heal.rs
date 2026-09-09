@@ -455,11 +455,11 @@ fn run_mine_intro() {
     println!("    (one exception: --mine/--unmine send a signed tier note) unless you run");
     println!("    `cargo heal sync` (or it runs as your settlement step).");
     println!();
-    println!("START (4 steps):");
+    println!("START (3 steps):");
     println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
     println!("  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo heal login)");
     println!("  3. heal:       cargo heal --fix        <- real fixes, metered locally");
-    println!("  4. mine:       cargo heal sync         <- push the redacted batch, pull the lease");
+    println!("  sync:          --mine just ran it; re-run --mine or `cargo heal sync` to push newer batches");
     println!();
     println!("WATCH: cargo heal account              <- burn, balance, grant, network state");
     println!();
@@ -467,7 +467,6 @@ fn run_mine_intro() {
     // Feature halves: the status the build can actually see.
     #[cfg(feature = "kat_service")]
     {
-        use riir_clippy::kat_account::KatAccount;
         // Owner mandate 2026-09-10: --mine IS the join command — a missing
         // account is a dead-end the explainer had to apologize for ("step 2
         // first"). Run the zero-config login chain right here: LOCAL key ops
@@ -568,6 +567,27 @@ fn run_mine_intro() {
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted IN)"),
             Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
             Err(reason) => println!("consent heartbeat: skipped — {reason}"),
+        }
+    }
+
+    // The join completes with a SYNC (owner mandate 2026-09-10, the same
+    // call that killed the "step 2 first" dead-end): opting in and then
+    // telling the user to find `cargo heal sync` is exactly the confusing
+    // extra step the tier exists to remove. The full sync runs here — push
+    // half (the grant claim rides an accepted batch), burn drain, lease
+    // pull — the SAME command output `cargo heal sync` prints. Guards: the
+    // transport halves (a build without them has no sync, stated above),
+    // and a SUCCESSFUL login — run_kat_sync exits the process on a missing
+    // account, which must never turn a completed --mine into a failure.
+    #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+    {
+        let account_ok =
+            riir_clippy::kat_account::KatAccount::load(&riir_clippy::kat_account::KatAccount::default_dir())
+                .is_ok();
+        if account_ok {
+            println!();
+            println!("sync: pushing what's queued (the same as running `cargo heal sync`):");
+            run_kat_sync();
         }
     }
 }
@@ -2648,11 +2668,12 @@ USAGE:
                     drift + CRLF files are skipped — no formatting churn enters a
                     mechanical diff.)
     --mine          What KAT mining is, the policy warning, the web link, and
-                    the login → heal → sync → account loop (Proposal 008); LOGS
-                    YOU IN when no account exists (owner mandate 2026-09-10 —
-                    the zero-config chain `cargo heal login` runs, local key ops
-                    only). Works in every build; the status halves need their
-                    features.
+                    the login → heal → sync loop (Proposal 008); LOGS YOU IN
+                    when no account exists and RUNS THE SYNC at the end (owner
+                    mandate 2026-09-10 — the join completes in one command;
+                    re-run --mine, or use `cargo heal sync`, to push newer
+                    batches). Works in every build; the status halves need
+                    their features.
     --unmine        Opt OUT of contributing (keeps your account): records
                     machine-global consent = opted out, so `cargo heal sync`
                     refuses its PUSH half (the lease pull still runs), and
