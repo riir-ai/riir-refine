@@ -159,6 +159,35 @@ Four refusals reach you in the ledger's own words — faucet disabled at this
 deployment, service accounts cannot request, daily cap already used, one
 request already open. None of them is reworded into a timeout.
 
+## 7b. `cargo heal --refill` (Plan 117) — the faucet leg, driven
+
+`faucet --request` opens the row; `--refill` drives the whole refuel and
+finishes the job:
+
+```sh
+cargo heal --refill                   # faucet request → crank trigger → balance → gate refresh
+cargo heal --refill --refill-wait 120 # + a bounded settle poll (default: one after-read)
+```
+
+The differences from `faucet --request`, and why:
+
+- **It waits for the truth, bounded.** The `--wait` refusal above is about
+  `faucet`'s poll-shaped UX; `--refill`'s default is ALSO one read (no
+  poll) — `--refill-wait` bounds an OPT-IN poll that breaks the moment the
+  balance moves. The credit normally lands at the hourly crank alarm, not
+  synchronously.
+- **It can force the settle pass.** With `RIIR_HEAL_KAT_CRANK_TOKEN` set it
+  POSTs `/admin/crank/daily` (bearer; the token IS the authorization) and
+  renders the counters — including `skipped_treasury`, the Issue-010/025
+  signal. Without it the crank leg is a named skip, never a failure.
+- **It refreshes the 075 gate's input.** The confirmed server balance is
+  written into the burn ack (`record_server_balance`, server truth wins
+  whatever the value), so the depleted-gate refusal lifts the moment fuel
+  lands instead of waiting for the next burn push.
+
+Exit 0 iff the final synced balance is positive — an explicit command's
+outcome IS its code (the burn push's never-blocks contract does not apply).
+
 ## 8. `cargo heal wetrun` (T4.1/T4.2) — the full-loop proof
 
 ```sh

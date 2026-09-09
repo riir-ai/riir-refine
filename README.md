@@ -282,7 +282,29 @@ cargo heal login      # account key (Ed25519, OpenSSH format) + once-per-key wel
 cargo heal --fix      # heal — metered locally (accounting-only projection)
 cargo heal sync       # PUSH the redacted signed batch (mining) + PULL the corpus lease
 cargo heal account    # burn / balance / grant / network state
+cargo heal --refill   # out of KAT? dev/test faucet refill (see below)
 ```
+
+### `cargo heal --refill` — the dev/test faucet refill (Plan 117)
+
+When the balance runs dry, one command refuels from the service's faucet:
+
+```sh
+cargo heal --refill                   # faucet request → balance read → gate input refreshed
+cargo heal --refill --refill-wait 120 # + a bounded settle poll (default: one read, no poll)
+```
+
+It composes three shipped surfaces — the faucet request (`faucet --request`'s
+wire, amount pinned by the deployment's daily cap), an authorized crank
+trigger (`POST /admin/crank/daily`, ONLY when `RIIR_HEAL_KAT_CRANK_TOKEN` is
+set — the bearer IS the authorization, and prod never distributes one; without
+it the row settles at the next hourly alarm), and the public balance read.
+The result is written into the soft gate's input (the burn ack's server
+balance), so the gate lifts the moment fuel lands instead of waiting for the
+next burn push. Exit 0 iff the final synced balance is positive. The credit
+is treasury-funded and capped — on a deployment whose treasury is at/below
+its grant floor the crank report SAYS so (`skipped_treasury`) and nothing
+credits until it is funded (riir-dapps Issues 010/025).
 
 Leave at any time:
 
@@ -325,16 +347,18 @@ the transport compiles it to nothing.
 
 Prepaid fuel, not an interactive gate: when the account's **last synced
 server balance** is ≤ 0 and the machine has never contributed-and-synced,
-scanning runs REFUSE at start (exit 1) until the user contributes
-(`cargo heal --mine`, then one accepted `cargo heal sync` — the burn-push
-ack records the server's `contributed` truth, which lifts the gate for
-good) or tops up. Since Issue 080 the sticky grace is **server truth**:
-the burn-ack v3 `contributed` field decides — `false` refuses even when a
-machine-local marker exists (the forgeable `contributed_once.json` input
-is closed), and the marker is honored only while a pre-v3 server has never
-said otherwise (removed once the fleet upgrades). Logged-out, offline, and
-never-synced machines stay warn-only — no server authority, no honest
-gate. The refusal names both refuel paths. `RIIR_HEAL_KAT_GATE=0` (or the
+scanning runs REFUSE at start (exit 1) until the user refuels by any of
+three paths: `cargo heal --refill` (the dev/test faucet refill — Plan 117),
+contributing (`cargo heal --mine`, then one accepted `cargo heal sync` — the
+burn-push ack records the server's `contributed` truth, which lifts the gate
+for good), or paying (the web payment page). Since Issue 080 the sticky
+grace is **server truth**: the burn-ack v3 `contributed` field decides —
+`false` refuses even when a machine-local marker exists (the forgeable
+`contributed_once.json` input is closed), and the marker is honored only
+while a pre-v3 server has never said otherwise (removed once the fleet
+upgrades). Logged-out, offline, and never-synced machines stay warn-only —
+no server authority, no honest gate. The refusal names all three refuel
+paths. `RIIR_HEAL_KAT_GATE=0` (or the
 shared `RIIR_HEAL_KAT_METER=0` billing switch) disarms the gate; the burn
 push itself keeps its never-blocks contract. Contributed accounts are
 never re-gated while depleted — mining payouts land at the 7-day epoch

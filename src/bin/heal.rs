@@ -341,7 +341,8 @@ fn enforce_kat_soft_gate(args: &Args) {
         "cargo heal: REFUSED — the account's last synced KAT balance is {balance} \
          (depleted) and this machine has not yet contributed (Issue 075 soft gate)."
     );
-    eprintln!("Refuel with either:");
+    eprintln!("Refuel with any of:");
+    eprintln!("  * refill:      cargo heal --refill   (the dev/test faucet refill — opens the faucet request, refreshes this gate from the server balance; Plan 117)");
     eprintln!("  * contribute:  cargo heal --mine   (what mining is)  →  cargo heal sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
     eprintln!("  * top up:      {top_up}");
     eprintln!(
@@ -1653,6 +1654,112 @@ fn run_kat_faucet(qr: bool) {
     }
 }
 
+/// Plan 117: `cargo heal --refill` — the dev/test faucet refill. The
+/// composition lives in [`riir_clippy::kat_refill`] (the module doc owns
+/// the posture: the faucet/balance legs ride the `faucet --request`
+/// client-side precedent — the DEPLOYMENT's cap config is the faucet's
+/// gate — and the crank leg's authorization is the operator-set bearer
+/// token, fail-soft on refusal).
+///
+/// The two things this bin adds around the flow:
+///
+/// 1. the root-scoped ack refresh (T5): a confirmed server balance is
+///    written into the 075 gate's input file so the gate lifts without a
+///    new burn push — the whole point of the command;
+/// 2. the exit contract: 0 iff the final synced balance is positive
+///    (explicit command — unlike the burn push, the outcome IS the code).
+fn run_kat_refill(wait_secs: u64) {
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("refill: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("refill: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let acct_hex = match riir_clippy::kat_account_client::service_account_hex(&account.state().account_id)
+    {
+        Some(h) => h.to_string(),
+        None => {
+            eprintln!(
+                "refill: the local account id does not carry a valid service account prefix — \
+                 re-run `cargo heal login`"
+            );
+            std::process::exit(1);
+        }
+    };
+
+    #[cfg(feature = "kat_transport")]
+    {
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        // The crank bearer is read HERE, never inside `kat_refill` — the
+        // module stays environment-free (the wetrun caveat #2 rule), and
+        // the operator's token IS the crank authorization (the module doc
+        // owns the reasoning).
+        let crank_bearer = std::env::var("RIIR_HEAL_KAT_CRANK_TOKEN")
+            .ok()
+            .filter(|t| !t.is_empty());
+        let trigger_crank = crank_bearer.is_some();
+        let transport = riir_clippy::kat_refill::HttpRefillTransport::new(
+            &url,
+            10,
+            signing_key.clone(),
+            crank_bearer,
+        );
+        let outcome = riir_clippy::kat_refill::refill_flow(
+            &transport,
+            &signing_key,
+            &acct_hex,
+            trigger_crank,
+            wait_secs,
+            std::time::Duration::from_secs(riir_clippy::kat_refill::REFILL_POLL_INTERVAL_SECS),
+        );
+        for line in riir_clippy::kat_refill::refill_display_lines(&outcome, &url) {
+            println!("{line}");
+        }
+
+        // The soft-gate refresh (T5): the 075 gate reads the burn ack's
+        // last SYNCED server balance — write the confirmed read there,
+        // whatever the value (server truth wins, the issue-080 lesson), so
+        // a credited account's gate lifts without waiting for the next
+        // burn push. A failed save is a warning: the gate input stays
+        // stale, the fuel is still real.
+        if let Some(b) = &outcome.final_balance {
+            let root = resolve_heal_root(&[]);
+            let ack_path =
+                root.join(".heal")
+                    .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
+            let (mut ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+            if let Some(w) = warning {
+                eprintln!("{w}");
+            }
+            if riir_clippy::kat_refill::record_server_balance(&mut ack, b.balance_micro) {
+                match ack.save(&ack_path) {
+                    Ok(()) => println!(
+                        "refill: soft-gate input refreshed — {}",
+                        ack_path.display()
+                    ),
+                    Err(e) => eprintln!("refill: the gate input refresh did not save: {e}"),
+                }
+            }
+        }
+        std::process::exit(riir_clippy::kat_refill::refill_exit_code(&outcome));
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, acct_hex, wait_secs);
+        eprintln!("refill: refilling requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
 /// The wet-run's local legs — step 3 (a REAL scored scan→fix cycle with
 /// the REAL charge meter) and step 4 (the signed v2 payload).
 ///
@@ -2233,6 +2340,7 @@ USAGE:
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --mine                                 <- what mining is + policy + how to earn KAT
     cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
+    cargo heal --refill [--refill-wait <s>]           <- dev/test faucet refill when out of KAT (Plan 117; kat_transport)
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
@@ -2335,6 +2443,15 @@ USAGE:
                     rewards become permanently unclaimable (no recovery path),
                     and a purge + re-login cycle is the fresh-grant farm shape
                     (each new key gets a fresh once-per-key welcome grant).
+    --refill        Dev/test faucet refill (Plan 117): open a faucet request,
+                    force a crank settle pass when RIIR_HEAL_KAT_CRANK_TOKEN is
+                    set, then read the server balance and refresh the 075
+                    gate's input from that server truth. Exit 0 iff the final
+                    synced balance is positive. The refuel path the soft gate
+                    names beside contribute + the payment page.
+    --refill-wait <s>  With --refill ONLY: bound the settle poll (default 0 =
+                    one after-read, no poll — the credit normally lands at the
+                    hourly crank alarm, not synchronously).
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
@@ -2418,10 +2535,22 @@ struct Args {
     unmine: bool,
     /// `--purge` — with `--unmine` ONLY (Plan 020 review verdict: purging
     /// the identity ORPHANS the server-side balance forever — there is no
-    /// recovery path — and a purge+re-login cycle is the fresh-grant farm
+    /// recovery path — and a purge + re-login cycle is the fresh-grant farm
     /// shape, so it is never the default). Removes the local key + record
     /// + the outbox + the sync watermark.
     purge: bool,
+    /// Plan 117: `--refill` — the dev/test faucet refill (the refuel path
+    /// the 075 gate names). Standalone early-return mode (before
+    /// `validate_mode_flags` AND before the soft gate — refill IS the
+    /// escape hatch). Composes the shipped faucet/crank/balance surfaces
+    /// and refreshes the gate's server-truth input; the module
+    /// (`kat_refill`) owns the wire, this flag owns the consent.
+    refill: bool,
+    /// Plan 117: `--refill-wait <secs>` — with `--refill` ONLY: the bounded
+    /// settle-poll budget after the crank leg (default 0 = one after-read,
+    /// no spinning — the credit normally lands at the hourly alarm, not
+    /// synchronously).
+    refill_wait: u64,
     /// Set by parse_args when the bare no-mode default fired (the dry-run
     /// banner then prints once, from main). Not a user flag.
     bare_default: bool,
@@ -2582,6 +2711,8 @@ fn parse_args() -> Args {
         mine: false,
         unmine: false,
         purge: false,
+        refill: false,
+        refill_wait: 0,
         bare_default: false,
         fix_compile: false,
         dump_trajectories: false,
@@ -2655,6 +2786,17 @@ fn parse_args() -> Args {
             "--mine" => args.mine = true,
             "--unmine" => args.unmine = true,
             "--purge" => args.purge = true,
+            "--refill" => args.refill = true,
+            "--refill-wait" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--refill-wait requires a value (seconds; 0 = one after-read, no poll)");
+                    usage();
+                };
+                args.refill_wait = value.parse().unwrap_or_else(|_| {
+                    eprintln!("--refill-wait expects a number, got {value:?}");
+                    usage();
+                });
+            }
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
@@ -2867,6 +3009,10 @@ fn parse_args() -> Args {
         eprintln!("--purge requires --unmine (it only makes sense as the destructive half of opting out)");
         usage();
     }
+    if args.refill_wait != 0 && !args.refill {
+        eprintln!("--refill-wait requires --refill (it bounds the refill's settle poll)");
+        usage();
+    }
     // `--request` and `--qr` are SHARED by `pay` and `faucet` (both open a
     // payreq row and both print a link); `--amount`/`--label`/`--wait` are
     // `pay`-only. The faucet's amount is the deployment's
@@ -2901,6 +3047,7 @@ fn parse_args() -> Args {
         && !args.fix
         && !args.fix_compile
         && !args.dump_trajectories
+        && !args.refill
         && args.command.is_none();
     if bare {
         args.suggest = true;
@@ -2936,6 +3083,7 @@ fn parse_args() -> Args {
         && !args.memory_stats
         && !args.mine
         && !args.unmine
+        && !args.refill
         && !args.misses
         && !args.misses_report
         && !args.recompute_elo
@@ -4563,6 +4711,17 @@ fn main() {
         if args.purge {
             run_unmine_purge();
         }
+        return;
+    }
+
+    // ── Plan 117: --refill — the dev/test faucet refill ───────────────────
+    // Standalone (early return before validate_mode_flags AND before the
+    // 075 soft gate: refill IS the refuel path the gate names — gating the
+    // escape hatch behind the gate would be a latched door). The money
+    // consent is the explicit flag itself; the crank leg's consent is the
+    // operator-set RIIR_HEAL_KAT_CRANK_TOKEN.
+    if args.refill {
+        run_kat_refill(args.refill_wait);
         return;
     }
 
@@ -6410,7 +6569,7 @@ fn main() {
                     riir_clippy::kat_lease_client::DEFAULT_SERVICE_URL,
                     &acct,
                 );
-                eprintln!("kat-charge: top up — {url}");
+                eprintln!("kat-charge: top up — {url} (or: cargo heal --refill)");
                 let qr = riir_clippy::kat_lease_client::render_qr_ascii(&url);
                 if !qr.is_empty() {
                     eprintln!("{qr}");

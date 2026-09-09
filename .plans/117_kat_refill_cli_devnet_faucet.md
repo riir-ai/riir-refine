@@ -1,6 +1,6 @@
 # Plan 117 — `cargo heal --refill`: the dev/test faucet refill (client half)
 
-**Status:** PLANNED — 2026-09-09 (code unblocked; CREDIT blocked on riir-dapps Issue 025 owner call + devnet treasury funding — see T0)
+**Status:** IMPLEMENTED (client half) — 2026-09-09; CREDIT still blocked on riir-dapps Issue 025 owner call + devnet treasury funding (T0); dapps rider filed: see T9
 
 ## The verdict (grep + prior art, 2026-09-09)
 
@@ -60,47 +60,54 @@ The client is URL-honest: it prints the exact service URL it drives. It adds no 
 
 ## Tasks
 
-- [ ] T0 — Prereqs (owner/ops, NOT this repo's code; plan is executable around them, refill prints
+- [-] T0 — Prereqs (owner/ops, NOT this repo's code; plan is executable around them, refill prints
       the honest refusal until they land): (a) fund/verify devnet treasury ≥ 100K floor
       (`scripts/setup.sh` bootstrap or `POST /admin/treasury/fund`); (b) riir-dapps Issue 025 owner
-      call; (c) Plan 079 refund-leg decision (a vs b).
-- [ ] T1 — CLI flag `--refill` (flag-mode like `--mine`/`--unmine`, per the owner's exact ask):
-      parser arm + `Args` field + `validate_mode_flags` + `usage()` row. Keep
-      `tests/heal_usage_flag_parity.rs` green WITHOUT a `NOT_HEAL_FLAGS` exemption (Plan 064
-      lesson); a `kat_service`-off build must still parse and error cleanly (KatCommand doc
-      convention, `heal.rs:47-50`).
-- [ ] T2 — `src/kat_refill.rs` (pure core + transport trait, `kat_service`-gated; HTTP half under
-      `kat_transport` like every network surface): reuse `kat_payreq_client::faucet_message` +
-      `post_faucet` (golden digest already pinned cross-repo — no new wire bytes); classify the four
-      service refusals verbatim (disabled / service account / cap used / one already open).
-- [ ] T3 — Authorized crank trigger leg: if `RIIR_HEAL_KAT_CRANK_TOKEN` is set → reuse the wetrun
-      `post_crank` transport (`POST /admin/crank/daily`); else print the honest line "settles on the
-      next crank pass (≤ ~1 h on devnet; export RIIR_HEAL_KAT_CRANK_TOKEN to force)". Never require
-      the token; fail-soft like every ops surface.
-- [ ] T4 — Bounded settle wait + server-truth readback: `--refill-wait SECS` (default 0 = no poll;
-      poll interval ≥ 5 s, hard poll cap); `GET /balance?acct=` (public route) → one-line
-      `kat-fuel: <render_kat>` verdict. The command's exit code IS its outcome (explicit command —
-      the burn push's never-blocks contract is untouched).
-- [ ] T5 — Soft-gate refresh: on confirmed `balance_micro > 0`, write `last_balance_micro` into the
-      burn ack (`.heal/kat_burn_ack.json`, stays v3, `burn_kat_total` + `contributed` untouched) so
-      the Issue 075 gate lifts on server truth without waiting for a new burn. Gate input remains
-      the ack — never the local projection (`kat_soft_gate.rs:16-19` rule).
-- [ ] T6 — Refusal copy update: the depleted-gate refusal gains `cargo heal --refill` as the first
-      refuel path beside contribute + pay URL (`heal.rs:336-346`). Update the `"top up"` text
-      assertions in `tests/kat_soft_gate_cli.rs:185` deliberately in the same commit.
-- [ ] T7 — Tests: unit tests for refusal classification + ack refresh + gate-lift predicate; CLI
-      contract test driving the real bin (`CARGO_BIN_EXE_cargo-heal`, closed-port + seeded ack
-      pattern of `tests/kat_soft_gate_cli.rs`); golden-digest parity inherits from the existing
-      cross-repo pins (nothing new to mirror).
-- [ ] T8 — Docs: README §KAT network + §soft gate (refuel paths = contribute | `--refill` | pay URL),
-      AGENTS.md CLI-UX-contract bullet, `.docs/01_orientation/foo_end_to_end.md` refill walkthrough,
-      HISTORY.md record; update `.docs` foo wetrun §7 cross-links.
-- [ ] T9 — riir-dapps riders (file THERE when picked up, reference here): optional `env`/`mode` field
-      in `GET /` service info so the client can label devnet/testnet; confirm faucet rows settle on
-      the live devnet's hourly alarm (workerd e2e already proves the alarm leg at 5 s).
-- [ ] T10 — Validation + land: `cargo clippy` (heal-first per house rule) + the T7 suites +
-      `./scripts/ci_feature_guard.sh` locally (develop has no CI trigger); stage named files only
-      (`scripts/staged_set_audit.py` before the multi-file commit); commit `feat:` on develop, push.
+      call; (c) Plan 079 refund-leg decision (a vs b). — OWNER-GATED, deferred
+- [x] T1 — CLI flag `--refill` (flag-mode like `--mine`/`--unmine`, per the owner's exact ask):
+      parser arm + `Args` field + validate_mode_flags-path guard + `usage()` rows (`--refill`,
+      `--refill-wait <s>` + the `--refill-wait requires --refill` guard). `tests/heal_usage_flag_parity.rs`
+      green WITHOUT a `NOT_HEAL_FLAGS` exemption (Plan 064 lesson); a `kat_service`-off build parses
+      and errors cleanly (KatCommand doc convention).
+- [x] T2 — `src/kat_refill.rs` (pure core + transport trait, `kat_service`-gated; HTTP half under
+      `kat_transport`): reuses `kat_payreq_client::faucet_message` + the golden-pinned faucet POST;
+      classifies the four service refusals verbatim (the composed `HttpPayreqTransport` carries the
+      refusal-body rule). DECISION vs plan draft: NO client-side host admission — the wetrun
+      classifier names the production default (`heal.gist.rs`, the devnet front) Unclassifiable, so
+      an admission rule would break the primary use case; the faucet's gate is the DEPLOYMENT's cap
+      config and the crank's authorization is the bearer itself (module doc owns the reasoning).
+- [x] T3 — Authorized crank trigger leg: `RIIR_HEAL_KAT_CRANK_TOKEN` set → the wetrun's bearer
+      `POST /admin/crank/daily` (transport COMPOSED, not forked); unset → `CrankLeg::Skipped` + the
+      honest render line. Fail-soft: a refused crank never fails the refill; `skipped_treasury`
+      surfaces as the Issue-010/025 diagnosis.
+- [x] T4 — Bounded settle wait + server-truth readback: `--refill-wait SECS` (default 0 = one
+      after-read; poll interval 5 s, monotone budget, early-break on the credit);
+      `kat-fuel: <render_kat>` line. Exit contract: **0 iff the final synced balance is positive**
+      (a cap-used refusal with fuel in the account is exit 0 — the goal was fuel).
+- [x] T5 — Soft-gate refresh: the confirmed balance is written into the burn ack
+      (`record_server_balance`, stays v3, `burn_kat_total` + `contributed` untouched) so the Issue
+      075 gate lifts on server truth. SERVER TRUTH WINS whatever the value — a depleted read is
+      WRITTEN (the issue-080 lesson applied to the balance leg), never stale optimism.
+- [x] T6 — Refusal copy update: the depleted-gate refusal names `cargo heal --refill` FIRST (the
+      dev escape hatch), beside contribute + pay URL; "Refuel with any of:"; the end-of-run
+      0-KAT line gained `(or: cargo heal --refill)`. `tests/kat_soft_gate_cli.rs` rows all green
+      (text assertions extended, none weakened) + a new order-pinning row in `kat_refill_cli.rs`.
+- [x] T7 — Tests: 7 unit (`kat_refill::tests`: ack-refresh purity, exit table, happy path,
+      refusal-continues, pinned-zero, poll early-break, copy rule) + 4 CLI through the real binary
+      against a std-TCP mock (`tests/kat_refill_cli.rs`, the `kat_burn_stack` shape — no-account
+      refusal; live happy path asserting the ack refresh + the bearer ON THE WIRE; the gate naming
+      refill; the `--refill-wait` guard). Golden-digest parity inherits from the existing
+      cross-repo pins (zero new wire bytes). Cargo.toml `[[test]] kat_refill_cli` row added (the
+      Issue-713 green-zero rule).
+- [x] T8 — Docs: README §KAT network (the `--refill` subsection) + §soft gate (three refuel
+      paths), AGENTS.md CLI-UX bullet (the full posture + upstream-blocked note),
+      `.docs/01_orientation/foo_end_to_end.md` §7b (vs `faucet --request`), HISTORY.md record.
+- [-] T9 — riir-dapps riders: service-info `env`/`mode` field (optional display nicety) +
+      live-devnet crank confirmation — FILED as riir-dapps `.issues/029_plan117_service_info_env_and_live_crank.md`
+      (`fa5162c`); the heavy lift there stays Issue 025 (owner call).
+- [x] T10 — Validation + land: `cargo clippy --all-targets` green at the bin feature set +
+      `--lib` at kat_service,kat_transport; the T7 suites + kat_soft_gate_cli (13) +
+      heal_usage_flag_parity (3) green; named-file staging only; commit `feat:` on develop, push.
 
 ## GOAT gate (CLI-shaped — no perf bench applies; correctness + budget)
 

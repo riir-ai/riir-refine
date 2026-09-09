@@ -8,6 +8,59 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Plan 117 — `cargo heal --refill`, the dev/test faucet refill (2026-09-09)
+
+Plan: `.plans/117_kat_refill_cli_devnet_faucet.md`. The depleted-account
+ergonomics gap the 075/079 arc left open: the gate's refusal said "top up"
+but the only CLI surface was `faucet --request` (opens a row, tells you to
+come back) and the only immediate credit was the once-per-key welcome grant.
+`--refill` composes the shipped primitives and adds the one missing piece —
+the soft-gate input refresh, so a credited account's gate lifts from SERVER
+truth without waiting for the next burn push.
+
+Design verdicts worth keeping:
+
+- **Not a new money surface.** Every wire byte is shipped: the faucet POST
+  (golden-pinned both sides since Plan 066), the wetrun's bearer crank POST,
+  the public balance read. The transport COMPOSES `HttpPayreqTransport` +
+  `HttpWetrunTransport` — zero HTTP re-derived (`src/kat_refill.rs`).
+- **The client adds no host gate, deliberately.** The wetrun's
+  `classify_service_url` names the production default `heal.gist.rs`
+  Unclassifiable — and that host IS the devnet front, so a client-side
+  admission rule would break the command's primary use case while adding
+  nothing: the faucet's gate is the DEPLOYMENT's cap config (a zero-cap —
+  production — deployment has no faucet at all), and the crank's
+  authorization is the bearer token itself. Prod safety is structural:
+  prod never distributes a crank token and never enables a faucet cap.
+- **Server truth wins on the gate input** (the issue-080 lesson applied to
+  the balance leg): `record_server_balance` writes whatever the read
+  answered, including a depleted value — a refill that reads 0 GATES the
+  machine honestly instead of preserving stale optimism.
+- **Exit 0 iff the final synced balance is positive.** A "daily cap used"
+  refusal with fuel already in the account is a SUCCESS — the goal was
+  fuel. The four ledger refusals still surface verbatim (the payreq
+  refusal-body rule rides the composed transport).
+- **The crank leg is fail-soft.** A refused/failed crank is a rendered line
+  (`skipped_treasury` included — the Issue-010/025 diagnosis, surfaced not
+  hidden); the row still settles at the next hourly alarm.
+
+Tests: 7 unit (`kat_refill::tests` — ack refresh purity, exit table, happy
+path, refusal-continues, pinned-zero, poll early-break, copy rule) + 4 CLI
+through the real binary against a std-TCP mock (`tests/kat_refill_cli.rs`,
+the `kat_burn_stack` shape — no-account refusal, live happy path with ack
+refresh + bearer-on-the-wire assertion, the gate naming the refill path,
+the `--refill-wait` guard). Gates: G1 zero new wire bytes + verbatim
+refusals + server-truth-only refresh; G2 bounded poll (default one read,
+interval 5 s, monotone budget); G3 all 13 `kat_soft_gate_cli` rows + 3
+usage-parity rows green with the refusal copy updated deliberately; G4 n/a
+(one-shot CLI). No new feature flag — rides the shipped release set
+(`kat_transport` since `v0.1.2`, `56bd9bf`).
+
+Blocked upstream (unchanged by this landing): devnet treasury funding ≥ the
+grant floor + riir-dapps Issue 025 (units mismatch owner call). Until then
+`--refill` works and the crank report's `skipped_treasury` is the honest
+answer.
+
 ## Both shell gates could have reported a PASS on an abort (fixed 2026-09-07)
 
 `scripts/ci_feature_guard.sh` (what `rust.yml` runs) and

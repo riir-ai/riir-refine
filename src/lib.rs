@@ -342,6 +342,18 @@ pub mod kat_soft_gate;
 #[cfg(feature = "kat_service")]
 pub mod kat_wetrun;
 
+// Plan 117: the refill flow — `cargo heal --refill`, the dev/test faucet
+// refill. NOT a new money surface: it composes the shipped primitives
+// (the golden-pinned faucet POST + the wetrun's bearer crank POST + the
+// public balance read) and adds the one missing piece — the 075 soft-gate
+// input refresh, so a credited account's gate lifts from SERVER truth
+// without waiting for the next burn push. `kat_service` gets the pure
+// halves (the ack refresh + the exit decision + the renders); the flow +
+// transport ride `kat_transport` and COMPOSE the shipped HTTP transports
+// (zero HTTP re-derived).
+#[cfg(feature = "kat_service")]
+pub mod kat_refill;
+
 // Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
 // for network-learned corpus candidates — the frozen bench runs BEFORE any
 // candidate enters the local overlay (Certified on pass; Withdrawn is

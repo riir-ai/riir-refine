@@ -823,6 +823,16 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 name = "kat_soft_gate_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# Plan 117: the `--refill` dev/test faucet refill through the REAL binary
+# (no-account refusal; live mock → faucet opened + bearer crank + balance
+# confirmed + the 075 gate's ack input REFRESHED; the gate refusal names
+# the refill path). Same feature set as kat_soft_gate_cli: `kat_transport`
+# for the refill flow's transport half + the cargo-heal bin's own
+# required-features so CARGO_BIN_EXE_cargo-heal exists.
+[[test]]
+name = "kat_refill_cli"
+required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]
