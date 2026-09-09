@@ -6,9 +6,7 @@
 > Consumes `katgpt_core::regime_probe` (katgpt-rs Issue 740 / Bench 702);
 > zero entropy arithmetic lives in this repo.
 
-**Status:** RECORD — T1 + T4 landed 2026-09-09, riir-clippy `1994a8a`;
-first measured row appended (score-history run #84). T2/T3 (margin-weighted
-mining) remain open in the issue.
+**Status:** RECORD — T1 + T4 landed 2026-09-09, riir-clippy `1994a8a`; provenance surface landed same day at `80e8667` (see §Provenance families); T2 + T3 landed 2026-09-09 (`2e3ce9a` / `095686a`) — T3 as a recorded DEMOTE (`.benchmarks/080_margin_mining_ab.md`).
 
 ## Where it runs
 
@@ -93,6 +91,30 @@ lands on.** Future sets should record their provenance family next to their
 frozen labels so the axis's verdict can be read against it. Re-measure after
 corpus or proposer changes: the axis is a per-build probe, and the JSONL
 history makes the drift visible per run.
+
+## Provenance families (the set-composition reading, made measurable)
+
+The row now carries each set's distinct provenance families — the
+`repo@sha` prefix of every fixture's mining provenance (`OodRow
+::ref_provenance_families` / `::ood_provenance_families`, serde-default
+additive; the console report prints `family×count` pairs). The OOD side
+resolves through `RAW_SPANS_V6` by id: the frozen fixture conversion stamps
+`construction:gen6:…` provenance (freeze-gate metadata), so the family
+question reads the real `repo@sha` off the raw span table.
+
+Measured:
+
+| set | families |
+|---|---|
+| `v1_frozen` | authored-composite, katgpt-rs@8da93f6c, katgpt-rs@9e0e6a57, riir-ai@849ce8330 (4 — mostly authored composites) |
+| `gen6_real_repo` | katgpt-rs@5b2d42970~1, riir-ai@1e050442a~1, riir-chain@7421245a~1, riir-train@a1197e06~1, riir-train@e6084429~1 (5 — all real pre-heal states) |
+
+This pins reading 2 above as a set-COMPOSITION fact: the substrate fires
+more sharply on gen6 because gen6 is entirely sibling-provenance real code
+while v1 is mostly authored — not because the substrate is sharper on
+"unseen" material. The artifact input is deliberately unchanged: families
+are static in-tree metadata, and folding them into the BLAKE3 would rotate
+every future artifact without changing a single measurement.
 
 ## Compatibility
 
