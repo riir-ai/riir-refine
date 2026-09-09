@@ -2049,18 +2049,23 @@ fn run_kat_wetrun(dry_run: bool) {
             println!("   {}", if step.ok { "PASS" } else { "FAIL" });
         }
         if let (Some(b), Some(a)) = (report.supply_before, report.supply_after) {
+            // Rendered as KAT decimals, not as the raw micro integers: an
+            // unlabelled `1400000` next to the word "supply" is the
+            // `.issues/081` display class, and this line is the one a human
+            // reads when the G-WET gate reds.
+            let kat = riir_clippy::kat_payreq_client::render_kat;
             println!(
                 "G-WET supply: epoch {} mint {} burn {} pool_paid {} pool_avail {} → \
                  mint {} burn {} pool_paid {} pool_avail {}",
                 b.epoch,
-                b.mint_kat,
-                b.burn_kat,
-                b.pool_paid_kat,
-                b.pool_available_kat,
-                a.mint_kat,
-                a.burn_kat,
-                a.pool_paid_kat,
-                a.pool_available_kat
+                kat(b.mint_micro),
+                kat(b.burn_micro),
+                kat(b.pool_paid_micro),
+                kat(b.pool_available_micro),
+                kat(a.mint_micro),
+                kat(a.burn_micro),
+                kat(a.pool_paid_micro),
+                kat(a.pool_available_micro)
             );
         }
         println!("{}", report.verdict_line());

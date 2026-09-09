@@ -188,22 +188,25 @@ pub fn admit(network: Network, mode: RunMode) -> Result<(), String> {
 /// The supply-bearing counters the service exposes at
 /// `GET /telemetry?epoch=<n>` — the wire view of riir-dapps' `Meta` row.
 ///
-/// Integer money only (G4-S): every field is `i64` micro/KAT as the service
-/// serves it. A float anywhere in here would be review-blocking.
+/// Integer money only (G4-S): every amount is `i64` **micro-KAT**
+/// (1 KAT = `1_000_000` micro), the unit the service actually serves — the
+/// `_micro` suffix is load-bearing, because these keys spent their whole
+/// life named `*_kat` while carrying micro (riir-dapps `.issues/033`). A
+/// float anywhere in here would be review-blocking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SupplyCounters {
     /// The epoch this row belongs to. Carried IN the snapshot so a
     /// comparison across two different epochs cannot masquerade as a
     /// bit-unchanged claim — it changes the bytes and reds the gate.
     pub epoch: u64,
-    /// Mint accrued in this epoch.
-    pub mint_kat: i64,
-    /// Burn accrued in this epoch.
-    pub burn_kat: i64,
-    /// Mining credits paid from the pool.
-    pub pool_paid_kat: i64,
-    /// Pool backing available to mining credits.
-    pub pool_available_kat: i64,
+    /// Mint accrued in this epoch, in micro-KAT.
+    pub mint_micro: i64,
+    /// Burn accrued in this epoch, in micro-KAT.
+    pub burn_micro: i64,
+    /// Mining credits paid from the pool, in micro-KAT.
+    pub pool_paid_micro: i64,
+    /// Pool backing available to mining credits, in micro-KAT.
+    pub pool_available_micro: i64,
 }
 
 impl SupplyCounters {
@@ -224,10 +227,10 @@ impl SupplyCounters {
     pub fn to_bytes(self) -> [u8; Self::ENCODED_LEN] {
         let mut out = [0u8; Self::ENCODED_LEN];
         out[0..8].copy_from_slice(&self.epoch.to_le_bytes());
-        out[8..16].copy_from_slice(&self.mint_kat.to_le_bytes());
-        out[16..24].copy_from_slice(&self.burn_kat.to_le_bytes());
-        out[24..32].copy_from_slice(&self.pool_paid_kat.to_le_bytes());
-        out[32..40].copy_from_slice(&self.pool_available_kat.to_le_bytes());
+        out[8..16].copy_from_slice(&self.mint_micro.to_le_bytes());
+        out[16..24].copy_from_slice(&self.burn_micro.to_le_bytes());
+        out[24..32].copy_from_slice(&self.pool_paid_micro.to_le_bytes());
+        out[32..40].copy_from_slice(&self.pool_available_micro.to_le_bytes());
         out
     }
 
@@ -257,6 +260,17 @@ impl SupplyCounters {
 /// missing counter. A missing counter is an ERROR, never a zero — a zeroed
 /// mint counter is exactly the reading that would make a money printer look
 /// frozen.
+///
+/// # The two spellings
+///
+/// Each amount is read as `<name>_micro` **first**, falling back to the
+/// legacy `<name>_kat` (riir-dapps `.issues/033`: those keys always carried
+/// micro under a KAT name). The fallback is not cosmetic — the rename
+/// crosses a DEPLOY boundary: riir-dapps is fixed in tree but a live worker
+/// still serves only the legacy spelling, and reading a key with `?` made a
+/// missing one a hard decode error. Accepting either keeps this driver
+/// working on both sides of that deploy, exactly as riir-dao's `dao-soak`
+/// does. Drop the fallback when riir-dapps `.issues/033` drops the keys.
 pub fn parse_supply(asked_epoch: u64, body: &[u8]) -> Result<SupplyCounters, String> {
     let v: serde_json::Value = serde_json::from_slice(body)
         .map_err(|_| "the telemetry response was not JSON".to_string())?;
@@ -273,17 +287,24 @@ pub fn parse_supply(asked_epoch: u64, body: &[u8]) -> Result<SupplyCounters, Str
              epoch's counters as another's"
         ));
     }
-    let n = |k: &str| -> Result<i64, String> {
-        v.get(k)
+    // `_micro` wins where both are present; riir-dapps emits the pair with
+    // the same value during the deprecation window, so there is no conflict
+    // to arbitrate — preferring the honest name simply makes the legacy arm
+    // dead the moment the deploy lands.
+    let n = |new: &str, legacy: &str| -> Result<i64, String> {
+        v.get(new)
+            .or_else(|| v.get(legacy))
             .and_then(serde_json::Value::as_i64)
-            .ok_or_else(|| format!("the telemetry row carried no `{k}`"))
+            .ok_or_else(|| {
+                format!("the telemetry row carried no `{new}` (nor legacy `{legacy}`)")
+            })
     };
     Ok(SupplyCounters {
         epoch,
-        mint_kat: n("mint_kat")?,
-        burn_kat: n("burn_kat")?,
-        pool_paid_kat: n("pool_paid_kat")?,
-        pool_available_kat: n("pool_available_kat")?,
+        mint_micro: n("mint_micro", "mint_kat")?,
+        burn_micro: n("burn_micro", "burn_kat")?,
+        pool_paid_micro: n("pool_paid_micro", "pool_paid_kat")?,
+        pool_available_micro: n("pool_available_micro", "pool_available_kat")?,
     })
 }
 
@@ -313,13 +334,13 @@ pub fn assert_supply_unchanged(
         i64::try_from(before.epoch).unwrap_or(i64::MAX),
         i64::try_from(after.epoch).unwrap_or(i64::MAX),
     );
-    note("mint_kat", before.mint_kat, after.mint_kat);
-    note("burn_kat", before.burn_kat, after.burn_kat);
-    note("pool_paid_kat", before.pool_paid_kat, after.pool_paid_kat);
+    note("mint_micro", before.mint_micro, after.mint_micro);
+    note("burn_micro", before.burn_micro, after.burn_micro);
+    note("pool_paid_micro", before.pool_paid_micro, after.pool_paid_micro);
     note(
-        "pool_available_kat",
-        before.pool_available_kat,
-        after.pool_available_kat,
+        "pool_available_micro",
+        before.pool_available_micro,
+        after.pool_available_micro,
     );
     Err(format!(
         "G-WET FAILED — the wet-run moved a supply counter. The refund is FAUCET-funded by \
@@ -1349,27 +1370,27 @@ mod tests {
         // is an assumption, not a pin.
         let base = SupplyCounters {
             epoch: 3,
-            mint_kat: 5,
-            burn_kat: 7,
-            pool_paid_kat: 11,
-            pool_available_kat: 13,
+            mint_micro: 5,
+            burn_micro: 7,
+            pool_paid_micro: 11,
+            pool_available_micro: 13,
         };
         let probes = [
             SupplyCounters { epoch: 4, ..base },
             SupplyCounters {
-                mint_kat: 6,
+                mint_micro: 6,
                 ..base
             },
             SupplyCounters {
-                burn_kat: 8,
+                burn_micro: 8,
                 ..base
             },
             SupplyCounters {
-                pool_paid_kat: 12,
+                pool_paid_micro: 12,
                 ..base
             },
             SupplyCounters {
-                pool_available_kat: 14,
+                pool_available_micro: 14,
                 ..base
             },
         ];
@@ -1396,19 +1417,19 @@ mod tests {
     fn the_gwet_failure_leads_with_caveat_2_and_names_the_moved_counter() {
         let before = SupplyCounters {
             epoch: 3,
-            mint_kat: 0,
-            burn_kat: 0,
-            pool_paid_kat: 0,
-            pool_available_kat: 0,
+            mint_micro: 0,
+            burn_micro: 0,
+            pool_paid_micro: 0,
+            pool_available_micro: 0,
         };
         let after = SupplyCounters {
-            mint_kat: 10_000_000,
+            mint_micro: 10_000_000,
             ..before
         };
         let err = assert_supply_unchanged(before, after).expect_err("a mint moved");
         assert!(err.starts_with("G-WET FAILED"), "{err}");
         assert!(err.contains("money printer with a test wrapper"), "{err}");
-        assert!(err.contains("mint_kat 0 → 10000000"), "{err}");
+        assert!(err.contains("mint_micro 0 → 10000000"), "{err}");
         // The refund is faucet-funded; the message must say so rather than
         // read as a tolerance to widen.
         assert!(err.contains("FAUCET-funded"), "{err}");
@@ -1419,14 +1440,14 @@ mod tests {
     #[test]
     fn an_absent_row_is_zeros_and_a_row_appearing_with_a_counter_reds_the_gate() {
         let absent = SupplyCounters::absent(9);
-        assert_eq!(absent.mint_kat, 0);
+        assert_eq!(absent.mint_micro, 0);
         assert_eq!(absent.epoch, 9);
         assert!(assert_supply_unchanged(absent, SupplyCounters::absent(9)).is_ok());
         assert!(
             assert_supply_unchanged(
                 absent,
                 SupplyCounters {
-                    mint_kat: 1,
+                    mint_micro: 1,
                     ..absent
                 }
             )
@@ -1441,8 +1462,8 @@ mod tests {
     fn parse_supply_refuses_a_foreign_epoch_a_refusal_and_a_missing_counter() {
         let row = |epoch: u64| {
             serde_json::json!({
-                "epoch": epoch, "burn_kat": 0, "mint_kat": 0,
-                "pool_paid_kat": 0, "pool_available_kat": 0
+                "epoch": epoch, "burn_micro": 0, "mint_micro": 0,
+                "pool_paid_micro": 0, "pool_available_micro": 0
             })
             .to_string()
             .into_bytes()
@@ -1460,12 +1481,66 @@ mod tests {
         );
         // A missing counter is an ERROR, never a zero — a zeroed mint is
         // exactly the reading that makes a printer look frozen.
-        let partial = serde_json::json!({"epoch": 4, "burn_kat": 0}).to_string();
+        let partial = serde_json::json!({"epoch": 4, "burn_micro": 0}).to_string();
         let err = parse_supply(4, partial.as_bytes()).expect_err("partial row");
-        assert!(err.contains("mint_kat"), "{err}");
+        assert!(err.contains("mint_micro"), "{err}");
         let err = parse_supply(4, b"{\"error\":\"nope\"}").expect_err("refusal");
         assert!(err.contains("refused"), "{err}");
         assert!(parse_supply(4, b"not json").is_err());
+    }
+
+    /// The rename crosses a DEPLOY boundary (`.issues/082`): riir-dapps is
+    /// fixed in tree but a live worker still serves only `*_kat`, so BOTH
+    /// spellings must decode, and `_micro` must win where both are present.
+    /// The legacy arm is the one that has no other coverage — the mock
+    /// transport in `tests/kat_wetrun_gwet.rs` serves the new spelling.
+    #[test]
+    fn parse_supply_reads_either_spelling_and_prefers_micro() {
+        let legacy = serde_json::json!({
+            "epoch": 4, "burn_kat": 7, "mint_kat": 5,
+            "pool_paid_kat": 11, "pool_available_kat": 13
+        })
+        .to_string();
+        assert_eq!(
+            parse_supply(4, legacy.as_bytes()).expect("legacy spelling decodes"),
+            SupplyCounters {
+                epoch: 4,
+                mint_micro: 5,
+                burn_micro: 7,
+                pool_paid_micro: 11,
+                pool_available_micro: 13,
+            }
+        );
+        // Both present: `_micro` wins. riir-dapps emits the pair with equal
+        // values, so a disagreement is synthetic — which is exactly why it
+        // is the readable way to pin the precedence.
+        let both = serde_json::json!({
+            "epoch": 4,
+            "burn_micro": 7, "burn_kat": 700,
+            "mint_micro": 5, "mint_kat": 500,
+            "pool_paid_micro": 11, "pool_paid_kat": 1100,
+            "pool_available_micro": 13, "pool_available_kat": 1300
+        })
+        .to_string();
+        assert_eq!(
+            parse_supply(4, both.as_bytes()).expect("reads"),
+            SupplyCounters {
+                epoch: 4,
+                mint_micro: 5,
+                burn_micro: 7,
+                pool_paid_micro: 11,
+                pool_available_micro: 13,
+            }
+        );
+        // Neither spelling present is still a hard error, and the message
+        // names both so the reader can tell which side of the deploy the
+        // service is on.
+        let err = parse_supply(
+            4,
+            serde_json::json!({"epoch": 4, "burn_micro": 0}).to_string().as_bytes(),
+        )
+        .expect_err("partial row");
+        assert!(err.contains("mint_micro") && err.contains("mint_kat"), "{err}");
     }
 
     // ── the riir-dapps Issue 010 path ────────────────────────────────

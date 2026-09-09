@@ -100,10 +100,10 @@ impl MockService {
             settled: RefCell::new(0),
             supply: RefCell::new(SupplyCounters {
                 epoch: EPOCH,
-                mint_kat: 0,
-                burn_kat: 0,
-                pool_paid_kat: 0,
-                pool_available_kat: 0,
+                mint_micro: 0,
+                burn_micro: 0,
+                pool_paid_micro: 0,
+                pool_available_micro: 0,
             }),
             treasury_micro: RefCell::new(1_000_000_000),
             user_micro: RefCell::new(0),
@@ -165,8 +165,8 @@ impl WetrunTransport for MockService {
         assert_eq!(epoch, EPOCH, "the snapshot must be pinned to one epoch");
         let s = *self.supply.borrow();
         Self::ok(&serde_json::json!({
-            "epoch": s.epoch, "burn_kat": s.burn_kat, "mint_kat": s.mint_kat,
-            "pool_paid_kat": s.pool_paid_kat, "pool_available_kat": s.pool_available_kat
+            "epoch": s.epoch, "burn_micro": s.burn_micro, "mint_micro": s.mint_micro,
+            "pool_paid_micro": s.pool_paid_micro, "pool_available_micro": s.pool_available_micro
         }))
     }
 
@@ -411,7 +411,7 @@ fn the_supply_gate_can_actually_fail() {
             let first = !self.0.log.borrow().iter().any(|c| c == "GET /telemetry");
             let r = self.0.get_telemetry(e);
             if first {
-                self.0.supply.borrow_mut().mint_kat += 1;
+                self.0.supply.borrow_mut().mint_micro += 1;
             }
             r
         }
@@ -430,7 +430,7 @@ fn the_supply_gate_can_actually_fail() {
     match &report.verdict {
         Verdict::NotReady(why) => {
             assert!(why.contains("G-WET FAILED"), "{why}");
-            assert!(why.contains("mint_kat 0 → 1"), "{why}");
+            assert!(why.contains("mint_micro 0 → 1"), "{why}");
             assert!(why.contains("money printer with a test wrapper"), "{why}");
         }
         other => panic!("one minted micro must fail G-WET, got {other:?}"),
@@ -492,8 +492,8 @@ fn an_issue_010_treasury_skip_fails_loudly_and_never_retries() {
     // a metered spend.
     assert_eq!(legs.cycles_run, 0);
     // Supply untouched — the failure mode is "no credit", never "a mint".
-    assert_eq!(mock.supply.borrow().mint_kat, 0);
-    assert_eq!(mock.supply.borrow().burn_kat, 0);
+    assert_eq!(mock.supply.borrow().mint_micro, 0);
+    assert_eq!(mock.supply.borrow().burn_micro, 0);
 }
 
 /// The other honest crank refusal: the bearer. Named as a missing input,
@@ -604,7 +604,7 @@ fn a_dry_run_issues_only_reads_on_every_network() {
         assert_eq!(*mock.settled.borrow(), 0, "{net:?}");
         assert_eq!(*mock.user_micro.borrow(), 0, "{net:?}");
         assert_eq!(mock.supply.borrow().to_bytes(), SupplyCounters {
-            epoch: EPOCH, mint_kat: 0, burn_kat: 0, pool_paid_kat: 0, pool_available_kat: 0
+            epoch: EPOCH, mint_micro: 0, burn_micro: 0, pool_paid_micro: 0, pool_available_micro: 0
         }.to_bytes(), "{net:?}");
     }
 }

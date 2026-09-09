@@ -1,8 +1,12 @@
 # Issue 082 — `kat_wetrun` parses the `/telemetry` keys that riir-dapps just renamed
 
-**Status:** OPEN — filed 2026-09-09. **Not broken today**: riir-dapps emits the
-legacy keys alongside the new ones for one deprecation release. This issue is
-the interlock that must be closed BEFORE that release drops them.
+**Status:** RESOLVED 2026-09-09 (same day). Both spellings decode, `_micro`
+wins, the struct fields no longer lie about their unit, and the human-facing
+G-WET line renders KAT decimals. riir-dapps `.issues/033` is UNBLOCKED on this
+side — dropping the legacy keys can no longer break `kat_wetrun`.
+Verified: `--lib kat_wetrun` 12/12 (was 11 — the new precedence test),
+`--test kat_wetrun_gwet` 11/11, clippy clean over lib + `cargo-heal` + tests
+at `latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport`.
 
 ## The finding
 
@@ -31,18 +35,35 @@ That is also exactly how a consumer gets forgotten: the window closes silently.
 
 ## Fix
 
-- [ ] `kat_wetrun.rs`: read `*_micro` first and fall back to `*_kat`, the
+- [x] `parse_supply` reads `*_micro` first and falls back to `*_kat`, the
       pattern riir-dao's `dao-soak` uses (`u_micro(new, legacy)`) — it works on
       both sides of the riir-dapps deploy boundary, which matters because
-      riir-dapps is fixed IN TREE but not deployed
-- [ ] Rename the local struct fields `mint_kat`/`pool_available_kat` →
-      `*_micro` for the same honesty reason (they are micro; the byte codec at
-      `kat_wetrun.rs:227-230` is fixed-offset, so the rename is byte-neutral —
-      keep the golden/round-trip test unchanged as the proof)
-- [ ] `src/bin/heal.rs:2056-2063` renders these values — check whether it
-      renders them as KAT anywhere (the `.issues/081` display class)
-- [ ] Tell riir-dapps `.issues/033` when done — its "drop the `*_kat` keys"
-      task is gated on this one
+      riir-dapps is fixed IN TREE but not deployed. `_micro` WINS where both
+      are present (riir-dapps emits the pair with equal values, so there is no
+      real conflict to arbitrate — preferring the honest name simply makes the
+      legacy arm dead the moment the deploy lands). A row carrying NEITHER
+      spelling is still a hard error, and the message now names both, so the
+      reader can tell which side of the deploy the service is on
+- [x] Struct fields renamed `mint_kat`/`burn_kat`/`pool_paid_kat`/
+      `pool_available_kat` → `*_micro`. Byte-neutral, and the PROOF is that
+      `to_bytes`'s fixed offsets (`0..8/8..16/16..24/24..32/32..40`),
+      `ENCODED_LEN = 40`, and `the_supply_encoding_covers_every_field` are all
+      untouched — only identifiers moved
+- [x] The struct's own unit prose was the ambiguity that caused this: it said
+      "every field is `i64` micro/KAT as the service serves it". Now it says
+      micro-KAT with the 1_000_000 factor, and each field doc carries the unit
+- [x] `src/bin/heal.rs` G-WET supply line: it printed the four raw micro
+      integers under unit-free labels next to the word "supply" — the
+      `.issues/081` display class in its milder form (it did not claim KAT,
+      but it is the line a human reads when the gate reds). Now rendered via
+      `kat_payreq_client::render_kat`, so `1400000` reads `1.400000 KAT`
+- [x] The legacy arm is the one with no other coverage — the mock transport in
+      `tests/kat_wetrun_gwet.rs` serves the NEW spelling (post-deploy
+      reality), so the fallback is pinned by a dedicated unit test
+      (`parse_supply_reads_either_spelling_and_prefers_micro`) rather than by
+      the integration mock
+- [x] riir-dapps `.issues/033` told: its "drop the `*_kat` keys" task no
+      longer has a consumer interlock here
 
 ## Cross-refs
 
