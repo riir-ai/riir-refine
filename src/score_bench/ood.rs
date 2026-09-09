@@ -353,14 +353,17 @@ mod tests {
 
     /// Bench 702 G1 in miniature: a peaked reference (near-zero entropy —
     /// the substrate is decisive on its home ground) vs a flat held-out set
-    /// (finite entropy) must classify Memorizing with a large positive gap;
-    /// mirrored samples must classify AnomalousNegative; identical samples
+    /// (finite entropy) must classify `Memorizing` with a large positive gap;
+    /// mirrored samples must classify `AnomalousNegative`; identical samples
     /// must classify `Converged` with an exactly-zero gap.
     #[test]
     fn g1_miniature_gap_sign_and_classification() {
+        // float_cmp allowed: the identical-samples gap is exactly 0.0 by
+        // construction (same buffer, same kernel) — the equality IS the pin.
+        #![allow(clippy::float_cmp)]
         // Reference peaked (memorized home ground), OOD flat (diffuse on
         // unseen) → gap = ln 8 ≈ +2.08 > 1.0 → Memorizing.
-        let r = row_from_entropies(&sample(SampleKind::Peaked, 16), &sample(SampleKind::Flat, 16), (0, 0));
+        let r = row_from_entropies(&sample(&SampleKind::Peaked, 16), &sample(&SampleKind::Flat, 16), (0, 0));
         assert!(r.mean_gap > 1.0, "memorization gap must be large: {}", r.mean_gap);
         assert!(r.mean_ref_entropy < 0.01);
         assert_eq!(r.regime, OodRegime::Memorizing);
@@ -369,12 +372,12 @@ mod tests {
 
         // Mirrored: held-out sharper than home ground → anomalous, not a
         // paper regime, never folded into Memorizing/Converged.
-        let r2 = row_from_entropies(&sample(SampleKind::Flat, 16), &sample(SampleKind::Peaked, 16), (0, 0));
+        let r2 = row_from_entropies(&sample(&SampleKind::Flat, 16), &sample(&SampleKind::Peaked, 16), (0, 0));
         assert!(r2.mean_gap < -1.0);
         assert_eq!(r2.regime, OodRegime::AnomalousNegative);
 
         // Identical distributions → converged, exact zero gap, d = 0.
-        let same = sample(SampleKind::Flat, 16);
+        let same = sample(&SampleKind::Flat, 16);
         let r3 = row_from_entropies(&same, &same, (0, 0));
         assert_eq!(r3.mean_gap, 0.0);
         assert_eq!(r3.standardized_gap, 0.0);
@@ -385,23 +388,31 @@ mod tests {
     /// ±0.4 nats converges, ±0.6 nats classifies.
     #[test]
     fn regime_threshold_edges() {
+        // cast_possible_truncation allowed: i ≤ 7 · 0.1 is exact fixture
+        // arithmetic; float_cmp allowed: the regime boundary is a >=
+        // comparison the test pins from BOTH sides (no boundary value).
+        #![allow(clippy::cast_possible_truncation, clippy::float_cmp)]
+        let tenth: Vec<f32> = (0..8_u16).map(|i| f32::from(i) * 0.1).collect();
         let mk = |delta: f32| {
-            let a: Vec<f32> = (0..8).map(|i| i as f32 * 0.1).collect();
-            let b: Vec<f32> = (0..8).map(|i| i as f32 * 0.1 + delta).collect();
-            row_from_entropies(&a, &b, (0, 0))
+            let b: Vec<f32> = tenth.iter().map(|&x| x + delta).collect();
+            row_from_entropies(&tenth, &b, (0, 0))
         };
         assert_eq!(mk(0.4).regime, OodRegime::Converged);
         assert_eq!(mk(0.6).regime, OodRegime::Memorizing);
         assert_eq!(mk(-0.6).regime, OodRegime::AnomalousNegative);
     }
 
-    /// An empty sample is Insufficient — no verdict is classified over no
+    /// An empty sample is `Insufficient` — no verdict is classified over no
     /// data. The raw gap fields keep the primitive's one-sided measurement
-    /// (mean_ref of an empty sample is 0.0) so the row stays consistent
+    /// (`mean_ref` of an empty sample is 0.0) so the row stays consistent
     /// with its own artifact — never a fabricated zero.
     #[test]
     fn empty_sample_is_insufficient() {
-        let r = row_from_entropies(&[], &sample(SampleKind::Flat, 4), (3, 0));
+        // float_cmp allowed: the empty-sample mean is EXACTLY 0.0 (the
+        // primitive's documented convention, not a rounded value) and the
+        // one-sided gap equals the ood mean by that same construction.
+        #![allow(clippy::float_cmp)]
+        let r = row_from_entropies(&[], &sample(&SampleKind::Flat, 4), (3, 0));
         assert_eq!(r.regime, OodRegime::Insufficient);
         assert_eq!(r.mean_ref_entropy, 0.0, "empty-sample mean is 0.0 (the primitive's convention)");
         assert_eq!(r.mean_gap, r.mean_ood_entropy, "one-sided measurement, artifact-consistent");
@@ -413,8 +424,8 @@ mod tests {
     /// artifacts (the audit can re-verify the exact measurement).
     #[test]
     fn artifact_determinism() {
-        let a = sample(SampleKind::Peaked, 8);
-        let b = sample(SampleKind::Flat, 8);
+        let a = sample(&SampleKind::Peaked, 8);
+        let b = sample(&SampleKind::Flat, 8);
         let r1 = row_from_entropies(&a, &b, (0, 0));
         let r2 = row_from_entropies(&a, &b, (0, 0));
         assert_eq!(r1.artifact, r2.artifact);
@@ -499,7 +510,7 @@ mod tests {
     /// carved entirely from real pre-heal sibling states. The overlap at
     /// the REPO level (katgpt-rs appears in both, different shas) with the
     /// composition difference (authored vs all-real) is the documented
-    /// anomalous_negative reading.
+    /// `anomalous_negative` reading.
     #[test]
     fn ood_axis_row_carries_provenance_families() {
         let axis = ood_axis();
@@ -512,12 +523,13 @@ mod tests {
         assert_eq!(sorted, axis.ref_provenance_families);
         // v1: the composite era + exactly one real mining state family.
         assert!(axis.ref_provenance_families.iter().any(|f| f == "authored-composite"));
-        assert!(axis
-            .ref_provenance_families
-            .iter()
-            .filter(|f| f.starts_with("authored"))
-            .count()
-            == 1);
+        assert_eq!(
+            axis.ref_provenance_families
+                .iter()
+                .filter(|f| f.starts_with("authored"))
+                .count(),
+            1
+        );
         // gen6: no authored family — every span is a real repo@sha carve.
         assert!(
             !axis

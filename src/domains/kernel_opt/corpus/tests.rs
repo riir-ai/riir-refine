@@ -10715,6 +10715,7 @@ fn batch128_concepts_covered() {
 }
 
 #[test]
+#[cfg(not(feature = "kernel_verify"))]
 fn batch128_pseudocode_parses() {
     // G1 for Batch 128: syn-parse gate (the PrismML Metal/FA rules).
     // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
@@ -11166,6 +11167,7 @@ fn batch137_concepts_covered() {
 }
 
 #[test]
+#[cfg(not(feature = "kernel_verify"))]
 fn batch137_pseudocode_parses() {
     // G1 for Batch 137: syn-parse gate (the CloudRift matmul rules).
     // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is

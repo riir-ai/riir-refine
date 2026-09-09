@@ -2706,7 +2706,7 @@ mod tests {
 
     /// The non-vacuity arm: a builder that renders only the module's SHAPE
     /// (line count, fn count, brace balance) preserves contextual semantics
-    /// while dropping discrete identity — the exact XBridge failure mode.
+    /// while dropping discrete identity — the exact `XBridge` failure mode.
     /// It is rename-INVARIANT on the same twins, which is what makes the
     /// fixture pair a real discriminator: if the real builders ever regress
     /// to summarizing, `entity_perturbation_flips_the_anchor_and_nothing_else`

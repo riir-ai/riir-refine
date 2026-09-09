@@ -7,10 +7,11 @@
 //!   construction, the meter's raw-bytes rule applied to identity).
 //! - **G9b** — the record shape is version-stamped with an explicit changelog;
 //!   the version rides the persisted file.
-//! - **G9d** — accounting-only: the grant is a LOCAL projection. No code path
-//!   in the account module mints, spends, or mutates the grant after first
-//!   write; re-login must not move it (the "once per account key" property,
-//!   client half).
+//! - **G9d** — accounting-only: the grant is a LOCAL projection (since
+//!   Issue 081, literally the [`FREE_TIER_GRANT_KAT`] meter constant — the
+//!   canonical record no longer carries a grant field). No code path in the
+//!   account module mints, spends, or mutates the grant; re-login must not
+//!   move anything (the "once per account key" property, client half).
 //! - **Composition** — the account grant × the repo-local charge ledger → the
 //!   balance projection `account` prints (`grant.saturating_sub(charged)`),
 //!   read back through the exact persisted JSON the CLI reads.
@@ -78,7 +79,12 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     let dir = temp_dir("grant");
     let (first, outcome) = KatAccount::login(&dir).unwrap();
     assert!(matches!(outcome, LoginOutcome::Generated { .. }));
-    assert_eq!(first.state().grant_kat, FREE_TIER_GRANT_KAT);
+    // G9d post-081: the grant lives in the RENDER (the meter constant), not
+    // on the record state.
+    assert!(first
+        .summary_lines()
+        .iter()
+        .any(|l| l.contains("grant projection") && l.contains(&FREE_TIER_GRANT_KAT.to_string())));
 
     // Re-login: Existing — the record (incl. grant + created_at) is preserved
     // byte-for-byte semantics: "granted once per account key".
@@ -94,14 +100,13 @@ fn g9d_grant_projection_never_moves_across_relogins() {
         "an idempotent re-login must not rewrite the record"
     );
 
-    // Import of the SAME key into a second dir derives the same identity +
-    // the same grant projection (the id is the key, not the directory).
+    // Import of the SAME key into a second dir derives the same identity
+    // (the id is the key, not the directory).
     let dir2 = temp_dir("grant2");
     let (imported, outcome) =
         KatAccount::login_import(&dir2, &dir.join(KatAccount::KEY_FILE)).unwrap();
     assert!(matches!(outcome, LoginOutcome::Imported { .. }));
     assert_eq!(imported.state().account_id, first.state().account_id);
-    assert_eq!(imported.state().grant_kat, FREE_TIER_GRANT_KAT);
 }
 
 // ── Composition: account grant × repo-local charge → balance projection ────
@@ -132,7 +137,8 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     let persisted: ChargeState = serde_json::from_str(&text).unwrap();
     assert_eq!(persisted.charged_kat, tokens, "1 KAT/token at the v1 rate");
 
-    let grant = account.state().grant_kat;
+    // Issue 081: the grant projection is the meter constant (G9d).
+    let grant = FREE_TIER_GRANT_KAT;
     let remaining = grant.saturating_sub(persisted.charged_kat);
     assert_eq!(remaining, FREE_TIER_GRANT_KAT - tokens);
     // And the ledger files are distinct roots by design: the account is
@@ -212,5 +218,7 @@ fn g9_record_round_trips_through_the_persisted_json() {
     let parsed: AccountState = serde_json::from_str(&text).unwrap();
     assert_eq!(parsed, *account.state());
     assert_eq!(parsed.account_version, ACCOUNT_VERSION);
-    assert_eq!(parsed.grant_kat, FREE_TIER_GRANT_KAT);
+    // The canonical record shape: provenance instead of a grant field (the
+    // grant is the meter constant — the render carries it).
+    assert!(parsed.github_user.is_none());
 }

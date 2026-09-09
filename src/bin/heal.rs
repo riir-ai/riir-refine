@@ -682,6 +682,30 @@ fn run_unmine_purge() {
             println!("PURGE: no local account found — already at the free-tier state");
         }
     }
+    // Issue 081: sweep the LEGACY kat layout too — the pre-canonical files
+    // (in the old consent-dir account location) survive an adoption (copied,
+    // not moved) and `--unmine` is the one command that must remove the
+    // identity EVERYWHERE it lives.
+    let legacy_dir = riir_clippy::kat_account::KatAccount::legacy_dir();
+    let legacy_paths = [
+        legacy_dir.join(riir_clippy::kat_account::KatAccount::LEGACY_KEY_FILE),
+        legacy_dir.join(riir_clippy::kat_account::KatAccount::LEGACY_PUB_FILE),
+        legacy_dir.join(riir_clippy::kat_account::KatAccount::LEGACY_RECORD_FILE),
+    ];
+    let mut legacy_removed = false;
+    for p in legacy_paths {
+        match std::fs::remove_file(&p) {
+            Ok(()) => legacy_removed = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => eprintln!("  purge: could not remove {}: {e}", p.display()),
+        }
+    }
+    if legacy_removed {
+        println!(
+            "  legacy kat account files removed from {}",
+            legacy_dir.display()
+        );
+    }
 }
 
 /// The `.heal/outbox/` dir `run_kat_sync`'s `queue_outbox` writes into,
@@ -706,11 +730,12 @@ fn run_kat_login(import_key: Option<&Path>) {
     let dir = KatAccount::default_dir();
     let result = match import_key {
         Some(source) => KatAccount::login_import(&dir, source),
-        // Proposal 011 T0.2 (ask 8.2): the default chain — existing →
-        // RIIR_HEAL_KAT_KEY override → the machine's default SSH key →
-        // generate fresh with a disclosed fallback note. Zero configuration:
-        // an adopted SSH key makes the account id match the GitHub .keys
-        // key-match the web wallet derives for the same key.
+        // Proposal 011 T0.2 (ask 8.2), Issue 081 chain: existing canonical
+        // key → deprecated RIIR_HEAL_KAT_KEY override (warned) → the legacy
+        // kat account (adopted into the canonical dir) → RIIR_AUTH_ACCOUNT_KEY
+        // → the machine's default SSH key → generate fresh with a disclosed
+        // fallback note. Zero configuration, and the identity the KAT ledger
+        // knows survives the move to the canonical account dir.
         None => KatAccount::login_default(&dir),
     };
     let (account, outcome) = match result {
@@ -791,7 +816,10 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
             }
         });
 
-    let grant = account.state().grant_kat;
+    // Issue 081: the grant projection is the meter CONSTANT now — the
+    // canonical record no longer carries a grant_kat field (it was never
+    // mutated after first write, so the constant IS the projection).
+    let grant = riir_clippy::kat_meter::FREE_TIER_GRANT_KAT;
     match &charge {
         Some(charge) => {
             let remaining = grant.saturating_sub(charge.charged_kat);
@@ -3792,7 +3820,8 @@ fn run_score_bench_perf() {
                     }
                     let after = sb::generations::v5_persists(other, &region);
                     let before = before_regions[i]
-                        .as_ref().map_or(false, |r| sb::generations::v5_persists(other, r));
+                        .as_ref()
+                        .is_some_and(|r| sb::generations::v5_persists(other, r));
                     if after && !before {
                         created_total += 1;
                         eprintln!(

@@ -1,557 +1,267 @@
-//! KAT account key + local account view — Proposal 005 Phase 0 T0.1 (Plan 025).
+//! The KAT account — a thin facade over riir-auth's `account_key` substrate
+//! (Issue 081, the Plan 327 consolidation home).
 //!
-//! **Identity: an Ed25519 keypair in OpenSSH format; account id = BLAKE3(pubkey).**
-//! The exact pattern the stack ships three times (`riir-chain/src/ssh_key.rs`,
-//! `GmKeySetup`, the mmorpg `avatar_crypto` registry) — the SHAPE and the crate
-//! (`ssh-key`), not a code dep: those repos are outside this crate's boundary.
+//! **What moved.** The login/adoption/record machinery — OpenSSH Ed25519
+//! parse (encrypted keys refused), machine-SSH adoption, 0600 key write, pub
+//! sidecar, versioned record projection, key-is-the-authority recovery,
+//! tamper-evident `verify` — is [`riir_auth::account_key::AccountKey`] now.
+//! This module used to ship that machinery itself (Plans 025/026); the
+//! workspace carried four copies of the pattern and the consolidation end
+//! state is one. What stays here is the kat-facing presentation
+//! ([`history_lines`], [`welcome_line`], the grant line in
+//! [`KatAccount::summary_lines`]) and the ONE-TIME legacy adoption chain
+//! that moves a pre-081 kat account onto the canonical identity.
 //!
-//! **Machine-global, not repo-local.** An account is a user identity shared by
-//! every repo this host heals — unlike the meter/charge ledgers, which are
-//! deliberately repo-local (per-repo burn). Resolution (the `default_memory_path`
-//! precedent at CONFIG tier — a key is identity, not disposable cache):
-//! `RIIR_HEAL_KAT_ACCOUNT_DIR` → `$XDG_CONFIG_HOME/riir-heal` →
-//! `~/.config/riir-heal` → `%APPDATA%\riir-heal` → temp fallback.
+//! **The canonical identity.** The account dir is
+//! [`AccountKey::default_dir()`] — `~/.config/riir-auth` (override:
+//! `RIIR_AUTH_ACCOUNT_DIR`), the key file is the stock OpenSSH name
+//! (`id_ed25519`), the record is `account.json` — the SAME identity the
+//! `ndb` CLI (neuron-db-cli) derives. One machine, one account: `cargo
+//! heal`'s payload/vote/burn signing and `ndb`'s private-row sealing share
+//! the key file and the BLAKE3(pubkey) account id.
 //!
-//! Files in the account dir:
-//! - [`KatAccount::KEY_FILE`] — OpenSSH private key (unencrypted, `0600` on unix)
-//! - [`KatAccount::PUB_FILE`] — OpenSSH public key sidecar
-//! - [`KatAccount::RECORD_FILE`] — the versioned local record ([`AccountState`])
+//! **The legacy window.** Accounts created before Issue 081 live in the
+//! mining-consent dir (`~/.config/riir-heal`, override:
+//! `RIIR_HEAL_KAT_ACCOUNT_DIR`) under the kat file names
+//! ([`KatAccount::LEGACY_KEY_FILE`] et al). [`KatAccount::login_default`]
+//! adopts them LOUDLY into the canonical dir — the identity (and therefore
+//! the KAT ledger balance keyed to it) survives; the legacy files are left
+//! in place (copied, not moved) and `--unmine`'s purge sweeps both layouts.
 //!
-//! **The record is a projection of the key** (the charge-recovers-from-the-meter
-//! precedent, Plan 024): missing / corrupt / unknown-version → re-derive from the
-//! key file + warn. The key is the authority — `account_id` is a pure function
-//! of the pubkey, so a lost record costs nothing but its `created_at_unix`.
+//! **Deprecated env vars.** `RIIR_HEAL_KAT_KEY` (the old key-path override)
+//! is still honored by [`KatAccount::login_default`] — with a loud
+//! deprecation line — so scripted setups keep working through the window;
+//! the canonical override is [`AccountKey::KEY_OVERRIDE_ENV`]
+//! (`RIIR_AUTH_ACCOUNT_KEY`). `RIIR_HEAL_KAT_ACCOUNT_DIR` no longer moves
+//! the ACCOUNT (it moves the consent plane, which
+//! [`crate::kat_mining_consent`] still owns and honors it for) — the
+//! account is fleet-canonical now.
 //!
-//! **Accounting-only (G9d):** the grant line ([`FREE_TIER_GRANT_KAT`]) is the
-//! LOCAL projection of the §KAT free tier — "100M KAT granted once per account
-//! key at login". The server mints it at Phase 1 (T1.2) and enforces
-//! once-per-key there; nothing here mints or spends.
+//! **Accounting-only (G9d):** the grant line is the LOCAL projection of the
+//! §KAT free tier — now literally [`crate::kat_meter::FREE_TIER_GRANT_KAT`].
+//! The record no longer carries a `grant_kat` field: it was never mutated
+//! after first write, so the constant IS the projection (the canonical
+//! record shape is riir-auth's — `github_user` login provenance instead).
+//!
+//! **Testing note.** The chain is exercised through the env-free
+//! [`KatAccount::login_default_in`] seam (the substrate's `login_default_with`
+//! pattern); the CLI e2e tests own their envs via
+//! `RIIR_AUTH_ACCOUNT_DIR` / `RIIR_HEAL_KAT_ACCOUNT_DIR` isolation.
 
 use std::path::{Path, PathBuf};
 
-use ssh_key::{Algorithm, LineEnding, PrivateKey};
+pub use riir_auth::account_key::{
+    account_id_for, short_id, AccountState, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
+};
+use riir_auth::account_key::AccountKey;
 
 use crate::kat_meter::FREE_TIER_GRANT_KAT;
 
-/// The account record shape version. Bump ONLY when the record's field set or
-/// semantics change, and record the delta in [`ACCOUNT_CHANGELOG`] in the same
-/// change (the meter/charge discipline: no silent shape change).
-pub const ACCOUNT_VERSION: u32 = 1;
+/// A loaded (or just-created) KAT account — a kat-facing newtype over the
+/// [`AccountKey`] substrate (a type alias cannot carry the kat-specific
+/// `impl`: [`KatAccount::signing_key`], [`KatAccount::summary_lines`], the
+/// legacy chain).
+#[derive(Debug, Clone)]
+pub struct KatAccount(AccountKey);
 
-/// Versioned deltas of the account record shape.
-pub const ACCOUNT_CHANGELOG: &[(u32, &str)] = &[
-    (
-        1,
-        "initial shape: account_version, account_id (64-hex BLAKE3 of the Ed25519 \
-         pubkey), created_at_unix, grant_kat (local projection of the free tier).",
-    ),
-];
-
-/// The account id derivation: full 32-byte BLAKE3 of the 32-byte Ed25519
-/// public key, hex-encoded (64 chars). Pure function of the pubkey — same key,
-/// same id, any host, any run (G9a).
-#[must_use]
-pub fn account_id_for(pubkey: &[u8; 32]) -> String {
-    blake3::hash(pubkey).to_hex().to_string()
-}
-
-/// Short display form (`9f3a…` — the proposal's payment-URL shape).
-#[must_use]
-pub fn short_id(account_id: &str) -> &str {
-    &account_id[..account_id.len().min(4)]
-}
-
-/// The persisted local account record — a PROJECTION of the key + the grant
-/// entitlement (accounting-only, G9d).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AccountState {
-    /// The record shape version ([`ACCOUNT_VERSION`]).
-    pub account_version: u32,
-    /// BLAKE3(pubkey), 64-char hex.
-    pub account_id: String,
-    /// Unix seconds at first record write (informational; lost on record
-    /// recovery, preserved on idempotent re-login).
-    pub created_at_unix: u64,
-    /// The local grant projection — [`FREE_TIER_GRANT_KAT`] at first write,
-    /// never mutated afterwards by any Phase 0 code path.
-    pub grant_kat: u64,
-}
-
-/// What `login` did (the CLI prints one line per variant).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LoginOutcome {
-    /// No key existed; a fresh Ed25519 keypair was generated + written.
-    /// `fallback_note` records why an existing key was not adopted
-    /// ([`KatAccount::login_default`] only — plain [`KatAccount::login`]
-    /// emits `None`).
-    Generated {
-        account_id: String,
-        fallback_note: Option<String>,
-    },
-    /// `--key <path>` imported an existing OpenSSH private key.
-    Imported { account_id: String },
-    /// A fresh account ADOPTED an existing key (the machine's default SSH
-    /// key or a `RIIR_HEAL_KAT_KEY` override — Proposal 011 T0.2): the
-    /// identity inherits the adopted key, so the BLAKE3(pubkey) account id
-    /// matches what the GitHub `.keys` key-match derives for that key.
-    /// The source path is carried for the disclosure print (caveat #8 —
-    /// say exactly which key landed where).
-    Adopted { account_id: String, source: PathBuf },
-    /// A key already existed in the account dir; it was loaded as-is.
-    Existing { account_id: String },
-}
-
-impl LoginOutcome {
-    /// The account id every variant carries.
-    #[must_use]
-    pub fn account_id(&self) -> &str {
-        match self {
-            Self::Generated { account_id, .. }
-            | Self::Imported { account_id }
-            | Self::Adopted { account_id, .. }
-            | Self::Existing { account_id } => account_id,
-        }
+impl std::ops::Deref for KatAccount {
+    type Target = AccountKey;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
-}
-
-/// A loaded (or just-created) KAT account.
-#[derive(Debug)]
-pub struct KatAccount {
-    dir: PathBuf,
-    state: AccountState,
-}
-
-/// Parse an OpenSSH Ed25519 private key from its text form. Encrypted keys are
-/// REFUSED with the remedy text (the `riir-chain` `SshKeyError::Encrypted`
-/// precedent — a policy refusal, not a parse failure).
-fn parse_private_key(content: &str) -> Result<PrivateKey, String> {
-    let key = PrivateKey::from_openssh(content)
-        .map_err(|e| format!("parsing OpenSSH private key: {e}"))?;
-    if key.is_encrypted() {
-        return Err(
-            "SSH private key is passphrase-encrypted; this host supports unencrypted keys only — \
-             generate one with: ssh-keygen -t ed25519 -N '' (or drop the passphrase first)"
-                .to_string(),
-        );
-    }
-    if key.key_data().ed25519().is_none() {
-        return Err("key is not Ed25519".to_string());
-    }
-    Ok(key)
-}
-
-/// Extract the raw 32-byte Ed25519 pubkey from a parsed private key.
-fn pubkey_of(key: &PrivateKey) -> [u8; 32] {
-    *key
-        .public_key()
-        .key_data()
-        .ed25519()
-        .expect("ed25519 checked at parse")
-        .as_ref()
-}
-
-/// The account's Ed25519 SIGNING key (Proposal 008 T2.4 — vote signing).
-/// Reads the on-disk OpenSSH key + converts to the dalek type (the key file
-/// is the authority — the record is a projection; re-reading keeps that
-/// invariant for signing too).
-fn signing_key_of(key: &PrivateKey) -> Result<ed25519_dalek::SigningKey, String> {
-    let kp = key
-        .key_data()
-        .ed25519()
-        .ok_or_else(|| "key is not Ed25519".to_string())?;
-    ed25519_dalek::SigningKey::try_from(kp)
-        .map_err(|e| format!("converting the account key to a signing key: {e}"))
-}
-
-/// Write a file with `0600` on unix (best-effort elsewhere).
-fn write_private(path: &Path, text: &str) -> Result<(), String> {
-    std::fs::write(path, text).map_err(|e| format!("writing {}: {e}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| format!("chmod 600 {}: {e}", path.display()))?;
-    }
-    Ok(())
 }
 
 impl KatAccount {
-    /// The private key file name inside the account dir.
-    pub const KEY_FILE: &'static str = "kat_id_ed25519";
-    /// The public key sidecar file name.
-    pub const PUB_FILE: &'static str = "kat_id_ed25519.pub";
-    /// The versioned local record file name.
-    pub const RECORD_FILE: &'static str = "kat_account.json";
+    /// The private key file name inside the (canonical) account dir — the
+    /// stock OpenSSH name since Issue 081.
+    pub const KEY_FILE: &'static str = AccountKey::KEY_FILE;
+    /// The public key sidecar file name (canonical).
+    pub const PUB_FILE: &'static str = AccountKey::PUB_FILE;
+    /// The versioned local record file name (canonical).
+    pub const RECORD_FILE: &'static str = AccountKey::RECORD_FILE;
 
-    /// The machine-global account dir (see the module docs for the tier
-    /// rationale). `RIIR_HEAL_KAT_ACCOUNT_DIR` overrides the whole path.
-    ///
-    /// Delegates to [`crate::kat_mining_consent::default_dir`] — the mining
-    /// consent record lives in this same dir and must be readable in builds
-    /// where `kat_service` did NOT compile, so the resolution has ONE home
-    /// (the ungated module) and this is the `kat_service`-facing name for it.
+    /// The private key file name in the LEGACY (pre-081) account dir — what
+    /// [`Self::login_default`]'s adoption arm and `--unmine`'s purge sweep
+    /// look for. Never written again.
+    pub const LEGACY_KEY_FILE: &'static str = "kat_id_ed25519";
+    /// The legacy public sidecar name.
+    pub const LEGACY_PUB_FILE: &'static str = "kat_id_ed25519.pub";
+    /// The legacy record name (the grant-carrying shape; abandoned on
+    /// adoption — the canonical record re-projects from the key).
+    pub const LEGACY_RECORD_FILE: &'static str = "kat_account.json";
+
+    /// The DEPRECATED key-path override, still honored (warned) by
+    /// [`Self::login_default`] through the deprecation window. Superseded by
+    /// [`AccountKey::KEY_OVERRIDE_ENV`].
+    pub const LEGACY_KEY_OVERRIDE_ENV: &'static str = "RIIR_HEAL_KAT_KEY";
+
+    /// The machine-global canonical account dir (delegates to the substrate).
     #[must_use]
     pub fn default_dir() -> PathBuf {
+        AccountKey::default_dir()
+    }
+
+    /// The LEGACY account dir — the mining-consent dir the account lived in
+    /// before Issue 081 (the consent module owns the resolution and still
+    /// honors `RIIR_HEAL_KAT_ACCOUNT_DIR` for it). The adoption source and
+    /// the purge sweep's second target.
+    #[must_use]
+    pub fn legacy_dir() -> PathBuf {
         crate::kat_mining_consent::default_dir()
     }
 
     /// `cargo heal login` — generate (or import via [`Self::login_import`])
     /// the key, then load-or-recover the record. Idempotent: an existing key
-    /// is loaded, never regenerated.
+    /// is loaded, never regenerated. Delegates to [`AccountKey::login`].
     ///
     /// # Errors
     ///
     /// String errors for: unreadable/unparseable key files, an encrypted key,
     /// a missing `--key` import source, or unwritable account dir.
     pub fn login(dir: &Path) -> Result<(Self, LoginOutcome), String> {
-        let key_path = dir.join(Self::KEY_FILE);
-        if key_path.exists() {
-            let account = Self::load(dir)?;
-            let account_id = account.state.account_id.clone();
-            Ok((account, LoginOutcome::Existing { account_id }))
-        } else {
-            Self::generate_into(dir, None)
-        }
-    }
-
-    /// `cargo heal login` with the Proposal 011 T0.2 default chain — zero
-    /// configuration for the onboarding loop (ask 8.2). In order:
-    ///
-    /// 1. an existing account key wins → [`LoginOutcome::Existing`] (the
-    ///    idempotence contract is unchanged; adoption never re-binds an
-    ///    account);
-    /// 2. `RIIR_HEAL_KAT_KEY` (a private-key path) overrides the default
-    ///    location and fails LOUDLY when set but unusable — explicit
-    ///    configuration must not silently fall back to a different identity;
-    /// 3. otherwise adopt the machine's default SSH key (`~/.ssh/id_ed25519`,
-    ///    `HOME`/`USERPROFILE`) when it exists, parses, and is an unencrypted
-    ///    Ed25519 key — copied into the account dir (the [`Self::login_import`]
-    ///    semantics: 0600, pub sidecar, fresh record) so the key-file-is-the-
-    ///    authority invariant holds everywhere; the original stays untouched;
-    /// 4. anything else → generate fresh, with the reason recorded in
-    ///    [`LoginOutcome::Generated`]'s `fallback_note` (one honest line,
-    ///    never a silent identity change).
-    ///
-    /// SSH-key rotation afterwards leaves the account on the OLD identity —
-    /// the same ops-assisted re-binding posture Proposal 011 caveat #7
-    /// documents; no self-service re-bind.
-    ///
-    /// # Errors
-    ///
-    /// String errors: the `RIIR_HEAL_KAT_KEY` override unreadable/unparseable,
-    /// or the account-dir/record write failures shared with [`Self::login`].
-    pub fn login_default(dir: &Path) -> Result<(Self, LoginOutcome), String> {
-        let key_path = dir.join(Self::KEY_FILE);
-        if key_path.exists() {
-            let account = Self::load(dir)?;
-            let account_id = account.state.account_id.clone();
-            return Ok((account, LoginOutcome::Existing { account_id }));
-        }
-        if let Ok(source) = std::env::var(Self::KEY_OVERRIDE_ENV) {
-            return Self::adopt(dir, Path::new(&source));
-        }
-        match Self::machine_default_ssh_key() {
-            Some(source) => Self::adopt(dir, &source),
-            None => Self::generate_into(
-                dir,
-                Some(
-                    "no default SSH key at ~/.ssh/id_ed25519 — generated a dedicated account key"
-                        .to_string(),
-                ),
-            ),
-        }
-    }
-
-    /// The `RIIR_HEAL_KAT_KEY` override: a private-key path adopted by
-    /// [`Self::login_default`] when no account key exists yet.
-    pub const KEY_OVERRIDE_ENV: &'static str = "RIIR_HEAL_KAT_KEY";
-
-    /// The machine's default Ed25519 SSH private key, if one exists
-    /// (`$HOME`/`$USERPROFILE` → `.ssh/id_ed25519`). The `.pub` alone cannot
-    /// sign, so adoption reads the private half — and adoption requires
-    /// Ed25519 (the only key type the account supports).
-    fn machine_default_ssh_key() -> Option<PathBuf> {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))?;
-        let path = PathBuf::from(home)
-            .join(".ssh")
-            .join("id_ed25519");
-        path.is_file().then_some(path)
-    }
-
-    /// Adopt an existing OpenSSH Ed25519 private key as a FRESH account's
-    /// key — the shared body of [`Self::login_import`] and
-    /// [`Self::login_default`]'s adoption arms. Never called with an account
-    /// key already present (both callers check first).
-    fn adopt(dir: &Path, source: &Path) -> Result<(Self, LoginOutcome), String> {
-        let text = std::fs::read_to_string(source)
-            .map_err(|e| format!("reading key {}: {e}", source.display()))?;
-        let key = parse_private_key(&text)?;
-
-        std::fs::create_dir_all(dir)
-            .map_err(|e| format!("creating account dir {}: {e}", dir.display()))?;
-        let openssh = key
-            .to_openssh(LineEnding::LF)
-            .map_err(|e| format!("serializing key: {e}"))?;
-        write_private(&dir.join(Self::KEY_FILE), &openssh)?;
-        Self::write_pub_sidecar(dir, &key)?;
-
-        let account = Self::with_fresh_record(dir, &key)?;
-        let account_id = account.state.account_id.clone();
-        Ok((
-            account,
-            LoginOutcome::Adopted {
-                account_id,
-                source: source.to_path_buf(),
-            },
-        ))
+        AccountKey::login(dir).map(|(a, o)| (Self(a), o))
     }
 
     /// `cargo heal login --key <path>` — import an existing OpenSSH Ed25519
     /// private key (unencrypted only). Refuses when the account dir already
-    /// holds a key (import never overwrites identity).
+    /// holds a key (import never overwrites identity). Delegates to
+    /// [`AccountKey::login_import`].
     ///
     /// # Errors
     ///
     /// String errors for: an existing key in the account dir, an unreadable/
     /// unparseable/encrypted import source, or write failures.
     pub fn login_import(dir: &Path, source: &Path) -> Result<(Self, LoginOutcome), String> {
-        let key_path = dir.join(Self::KEY_FILE);
-        if key_path.exists() {
-            return Err(format!(
-                "account dir already holds a key ({}); import never overwrites identity — \
-                 delete it first if you really mean to switch accounts",
-                key_path.display()
-            ));
-        }
-        let text = std::fs::read_to_string(source)
-            .map_err(|e| format!("reading import key {}: {e}", source.display()))?;
-        let key = parse_private_key(&text)?;
-
-        std::fs::create_dir_all(dir)
-            .map_err(|e| format!("creating account dir {}: {e}", dir.display()))?;
-        let openssh = key
-            .to_openssh(LineEnding::LF)
-            .map_err(|e| format!("serializing key: {e}"))?;
-        write_private(&key_path, &openssh)?;
-        Self::write_pub_sidecar(dir, &key)?;
-
-        let account = Self::with_fresh_record(dir, &key)?;
-        let account_id = account.state.account_id.clone();
-        Ok((account, LoginOutcome::Imported { account_id }))
+        AccountKey::login_import(dir, source).map(|(a, o)| (Self(a), o))
     }
 
-    /// Generate a fresh Ed25519 keypair into the account dir. `fallback_note`
-    /// is the [`LoginOutcome::Generated`] disclosure for why an existing key
-    /// was not adopted (the [`Self::login_default`] chain only).
-    fn generate_into(dir: &Path, fallback_note: Option<String>) -> Result<(Self, LoginOutcome), String> {
-        let mut key = PrivateKey::random(&mut ssh_key::rand_core::OsRng, Algorithm::Ed25519)
-            .map_err(|e| format!("generating Ed25519 keypair: {e}"))?;
-        key.set_comment("riir-heal kat account");
-
-        std::fs::create_dir_all(dir)
-            .map_err(|e| format!("creating account dir {}: {e}", dir.display()))?;
-        let openssh = key
-            .to_openssh(LineEnding::LF)
-            .map_err(|e| format!("serializing key: {e}"))?;
-        write_private(&dir.join(Self::KEY_FILE), &openssh)?;
-        Self::write_pub_sidecar(dir, &key)?;
-
-        let account = Self::with_fresh_record(dir, &key)?;
-        let account_id = account.state.account_id.clone();
-        Ok((
-            account,
-            LoginOutcome::Generated {
-                account_id,
-                fallback_note,
-            },
-        ))
-    }
-
-    /// Build the account over a just-written key with a FRESH record — the
-    /// generators know the record is new (no recovery warning, which is for
-    /// a key that LOST its record, not one that just got one).
-    fn with_fresh_record(dir: &Path, key: &PrivateKey) -> Result<Self, String> {
-        let account_id = account_id_for(&pubkey_of(key));
-        let state = Self::fresh_state(&account_id);
-        Self::write_record(dir, &state)?;
-        Ok(Self {
-            dir: dir.to_path_buf(),
-            state,
-        })
-    }
-
-    /// Write the `.pub` sidecar for a held private key.
-    fn write_pub_sidecar(dir: &Path, key: &PrivateKey) -> Result<(), String> {
-        let pub_text = key
-            .public_key()
-            .to_openssh()
-            .map_err(|e| format!("serializing pubkey: {e}"))?;
-        let pub_path = dir.join(Self::PUB_FILE);
-        std::fs::write(&pub_path, format!("{pub_text}\n"))
-            .map_err(|e| format!("writing {}: {e}", pub_path.display()))
-    }
-
-    /// Load the account from `dir`: parse the key, derive the account id,
-    /// then load-or-recover the record. **The key is the authority** — a
-    /// missing/corrupt/unknown-version record is re-derived from the key with
-    /// one warning (never fatal to an explicit `account` query, and never
-    /// silently regenerating the KEY).
+    /// The associated-form loader — `heal.rs` calls `KatAccount::load(&dir)`
+    /// by path (Deref does not forward associated functions), so the shim
+    /// re-exports the substrate loader under the kat name.
     ///
     /// # Errors
     ///
     /// String errors for: no key file, an unparseable/encrypted key, or an
     /// unparseable-record write-back failure.
     pub fn load(dir: &Path) -> Result<Self, String> {
-        let key_path = dir.join(Self::KEY_FILE);
-        if !key_path.exists() {
-            return Err(format!(
-                "no account key at {} — run `cargo heal login` first",
-                key_path.display()
-            ));
-        }
-        let text = std::fs::read_to_string(&key_path)
-            .map_err(|e| format!("reading {}: {e}", key_path.display()))?;
-        let key = parse_private_key(&text)?;
-        let account_id = account_id_for(&pubkey_of(&key));
-
-        let record_path = dir.join(Self::RECORD_FILE);
-        let mut recovered = false;
-        // Read → parse → validate, as one Option chain: `None` at any step is
-        // the recovery path (the key is the authority — the record is a
-        // projection, exactly as the charge is of the meter).
-        let mut state = std::fs::read_to_string(&record_path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<AccountState>(&text).ok())
-            .filter(|s| s.account_version == ACCOUNT_VERSION && s.account_id == account_id)
-            .unwrap_or_else(|| {
-                recovered = true;
-                Self::fresh_state(&account_id)
-            });
-        // Version restamp on recovery (the charge-salvage shape: the derived
-        // fields are rebuilt, the version always rides the file).
-        state.account_version = ACCOUNT_VERSION;
-        state.account_id = account_id;
-        if recovered {
-            eprintln!(
-                "kat-account: record missing/corrupt/stale — recovered from the key (the \
-                 authority); grant re-projected at {FREE_TIER_GRANT_KAT} KAT, created_at reset"
-            );
-            Self::write_record(dir, &state)?;
-        }
-        Ok(Self {
-            dir: dir.to_path_buf(),
-            state,
-        })
+        AccountKey::load(dir).map(Self)
     }
 
-    /// The account's Ed25519 SIGNING key, re-read from the key file
-    /// (Proposal 008 T2.4 — `cargo heal vote` signs with the login key;
-    /// the file is the authority, the record is a projection).
+    /// `cargo heal login` with the default chain — Issue 081's legacy-aware
+    /// order. In order:
+    ///
+    /// 1. a canonical account key exists → [`LoginOutcome::Existing`] (the
+    ///    idempotence contract is unchanged; adoption never re-binds an
+    ///    account);
+    /// 2. `RIIR_HEAL_KAT_KEY` (deprecated) — honored with a loud deprecation
+    ///    line, via the [`Self::login_import`] semantics: explicit
+    ///    configuration must not silently change meaning;
+    /// 3. a LEGACY kat account exists in [`Self::legacy_dir`] — adopted into
+    ///    the canonical dir (copied; the legacy files stay) with a loud
+    ///    disclosure. This arm comes BEFORE the machine-SSH arm because a
+    ///    pre-081 account may be a GENERATED key that no SSH key derives:
+    ///    SSH adoption here would silently re-bind the KAT-ledger identity;
+    /// 4. otherwise → [`AccountKey::login_default`] (the canonical override
+    ///    → the machine's default SSH key → generate fresh with a disclosed
+    ///    fallback note — the substrate's tested chain).
+    ///
+    /// SSH-key rotation afterwards leaves the account on the OLD identity —
+    /// the ops-assisted re-binding posture Proposal 011 caveat #7 documents.
+    ///
+    /// # Errors
+    ///
+    /// String errors: the overrides unreadable/unparseable, or the
+    /// account-dir/record write failures shared with [`Self::login`].
+    pub fn login_default(dir: &Path) -> Result<(Self, LoginOutcome), String> {
+        Self::login_default_in(dir, Some(&Self::legacy_dir()))
+    }
+
+    /// The env-free core of [`Self::login_default`] (the substrate's
+    /// `login_default_with` pattern): the legacy dir is explicit, so the
+    /// adoption arm is testable without mutating process env. Only the
+    /// DEPRECATED override read stays env-based — it IS the deprecated
+    /// contract being honored.
+    ///
+    /// # Errors
+    ///
+    /// The same errors [`Self::login_default`] documents.
+    pub fn login_default_in(
+        dir: &Path,
+        legacy_dir: Option<&Path>,
+    ) -> Result<(Self, LoginOutcome), String> {
+        if dir.join(Self::KEY_FILE).exists() {
+            let (account, outcome) = AccountKey::login(dir)?;
+            return Ok((Self(account), outcome));
+        }
+        if let Ok(source) = std::env::var(Self::LEGACY_KEY_OVERRIDE_ENV) {
+            eprintln!(
+                "kat-account: {} is deprecated — use {} (honored this run)",
+                Self::LEGACY_KEY_OVERRIDE_ENV,
+                AccountKey::KEY_OVERRIDE_ENV
+            );
+            let (account, outcome) = AccountKey::adopt(dir, Path::new(&source), None)?;
+            return Ok((Self(account), outcome));
+        }
+        if let Some(legacy_dir) = legacy_dir {
+            let legacy = legacy_dir.join(Self::LEGACY_KEY_FILE);
+            if legacy.is_file() {
+                eprintln!(
+                    "kat-account: legacy account found at {} — adopting it into the canonical \
+                     account dir {} (shared with the `ndb` CLI); the legacy files stay and \
+                     `cargo heal --unmine` sweeps both",
+                    legacy.display(),
+                    dir.display()
+                );
+                let (account, outcome) = AccountKey::adopt(dir, &legacy, None)?;
+                return Ok((Self(account), outcome));
+            }
+        }
+        AccountKey::login_default(dir).map(|(a, o)| (Self(a), o))
+    }
+
+    /// The account's Ed25519 SIGNING key, re-read from the key file (the
+    /// file is the authority — the record is a projection; re-reading keeps
+    /// that invariant for signing too). The seed route: the substrate
+    /// exposes the raw 32-byte seed ([`AccountKey::seed`]), the dalek type
+    /// is built locally — `ed25519-dalek` was already this feature's dep for
+    /// vote signing, and `SigningKey::from_bytes(seed)` is the same
+    /// construction the old `ssh-key → keypair → dalek` path performed.
     ///
     /// # Errors
     ///
     /// String errors for a missing key file, an unparseable/encrypted key,
     /// or a non-Ed25519 key.
     pub fn signing_key(&self) -> Result<ed25519_dalek::SigningKey, String> {
-        let key_path = self.dir.join(Self::KEY_FILE);
-        let text = std::fs::read_to_string(&key_path)
-            .map_err(|e| format!("reading {}: {e}", key_path.display()))?;
-        signing_key_of(&parse_private_key(&text)?)
+        let seed = self.0.seed()?;
+        Ok(ed25519_dalek::SigningKey::from_bytes(&seed))
     }
 
-    /// Persist the record file (the generators' fresh write + load's
-    /// recovery write-back — one encoder, one shape).
-    fn write_record(dir: &Path, state: &AccountState) -> Result<(), String> {
-        let json =
-            serde_json::to_string_pretty(state).map_err(|e| format!("encoding record: {e}"))?;
-        let path = dir.join(Self::RECORD_FILE);
-        std::fs::write(&path, format!("{json}\n"))
-            .map_err(|e| format!("writing {}: {e}", path.display()))
-    }
-
-    /// A fresh record projection for a derived account id.
-    fn fresh_state(account_id: &str) -> AccountState {
-        AccountState {
-            account_version: ACCOUNT_VERSION,
-            account_id: account_id.to_string(),
-            created_at_unix: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()),
-            grant_kat: FREE_TIER_GRANT_KAT,
-        }
-    }
-
-    /// Tamper evidence: recompute the account id from the KEY file's pubkey
-    /// and compare against the record. Also re-checks the `.pub` sidecar
-    /// agrees with the private key (the round-trip pin).
-    ///
-    /// # Errors
-    ///
-    /// A human-readable mismatch description on any disagreement.
-    pub fn verify(&self) -> Result<(), String> {
-        let text = std::fs::read_to_string(self.dir.join(Self::KEY_FILE))
-            .map_err(|e| format!("reading key: {e}"))?;
-        let key = parse_private_key(&text)?;
-        let derived = account_id_for(&pubkey_of(&key));
-        if derived != self.state.account_id {
-            return Err(format!(
-                "account id mismatch: key derives {derived}, record says {} — the record or \
-                 key was modified after login",
-                self.state.account_id
-            ));
-        }
-        let pub_text = std::fs::read_to_string(self.dir.join(Self::PUB_FILE))
-            .map_err(|e| format!("reading pub sidecar: {e}"))?;
-        let from_sidecar = ssh_key::PublicKey::from_openssh(pub_text.trim_end())
-            .map_err(|e| format!("parsing pub sidecar: {e}"))?;
-        if from_sidecar.key_data().ed25519().map(|e| *e.as_ref())
-            != Some(pubkey_of(&key))
-        {
-            return Err(
-                "pub sidecar disagrees with the private key — regenerate it before syncing"
-                    .to_string(),
-            );
-        }
-        Ok(())
-    }
-
-    /// The loaded account state (record projection).
-    #[must_use]
-    pub fn state(&self) -> &AccountState {
-        &self.state
-    }
-
-    /// The account dir.
-    #[must_use]
-    pub fn dir(&self) -> &Path {
-        &self.dir
-    }
-
-    /// The private key path (for display).
-    #[must_use]
-    pub fn key_path(&self) -> PathBuf {
-        self.dir.join(Self::KEY_FILE)
-    }
-
-    /// The `account` view lines (identity + grant + the Phase-0 honesty note).
-    /// No `$` figures (caveats #12/#15) — tokens only.
+    /// The `account` view lines (identity + grant + the Phase-0 honesty
+    /// note). No `$` figures (caveats #12/#15) — tokens only. The grant is
+    /// the meter constant (G9d — see the module docs); the `github:` line is
+    /// only printed when the substrate record carries provenance.
     #[must_use]
     pub fn summary_lines(&self) -> Vec<String> {
-        vec![
+        let mut lines = vec![
             format!(
                 "account:            {}… ({})",
-                short_id(&self.state.account_id),
-                self.state.account_id
+                short_id(&self.0.state().account_id),
+                self.0.state().account_id
             ),
-            format!("key:                {}", self.key_path().display()),
+            format!("key:                {}", self.0.key_path().display()),
             format!(
-                "grant projection:   {} KAT (free tier, once per account key)",
-                self.state.grant_kat
+                "grant projection:   {FREE_TIER_GRANT_KAT} KAT (free tier, once per account key)"
             ),
+        ];
+        if let Some(user) = &self.0.state().github_user {
+            lines.push(format!("github:             {user}"));
+        }
+        lines.push(
             "phase 0: local view — the server mints the grant + holds the authoritative \
              ledger at Phase 1 (T1.2); sync arrives with T0.3+"
                 .to_string(),
-        ]
+        );
+        lines
     }
 }
 
@@ -598,188 +308,236 @@ pub fn welcome_line() -> &'static str {
 mod tests {
     use super::*;
 
+    /// Serializes the `login_default` chain tests: the chain READS the
+    /// deprecated-override env var, and libtest runs tests in parallel —
+    /// without mutual exclusion one test's window can arm another test's
+    /// override arm (measured: exactly that race). Lock scopes wrap only
+    /// the call, never the asserts, so a failed assert cannot poison it.
+    /// (the `ENV_LOCK` name the CLI e2e files also use.)
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn temp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kat_acct_{tag}_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "kat_account_{tag}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
     }
 
+    /// Restore the env vars the deprecated-override tests touch.
+    fn clear_override_env() {
+        std::env::remove_var(KatAccount::LEGACY_KEY_OVERRIDE_ENV);
+    }
+
     #[test]
-    fn account_id_is_blake3_of_the_pubkey() {
-        // Independent recompute (the "pin every reimplemented derivation"
-        // lesson): expected computed inline, not via the code under test.
-        let pubkey = [7u8; 32];
-        let expected = blake3::hash(&pubkey).to_hex().to_string();
-        assert_eq!(account_id_for(&pubkey), expected);
-        assert_eq!(account_id_for(&pubkey).len(), 64);
-        // Different pubkeys → different ids; short form is the first 4 chars.
-        assert_ne!(account_id_for(&[8u8; 32]), expected);
-        assert_eq!(short_id(&expected), &expected[..4]);
+    fn legacy_file_names_are_pinned() {
+        // The adoption arm + `--unmine`'s purge sweep look these up by name;
+        // a silent rename would orphan every pre-081 account + leave purge
+        // incomplete. Pin the wire.
+        assert_eq!(KatAccount::LEGACY_KEY_FILE, "kat_id_ed25519");
+        assert_eq!(KatAccount::LEGACY_PUB_FILE, "kat_id_ed25519.pub");
+        assert_eq!(KatAccount::LEGACY_RECORD_FILE, "kat_account.json");
+        // And the canonical names come from the substrate (one source).
+        assert_eq!(KatAccount::KEY_FILE, AccountKey::KEY_FILE);
+        assert_eq!(KatAccount::PUB_FILE, AccountKey::PUB_FILE);
+        assert_eq!(KatAccount::RECORD_FILE, AccountKey::RECORD_FILE);
     }
 
     #[test]
     fn login_generates_key_and_record() {
         let dir = temp_dir("gen");
         let (account, outcome) = KatAccount::login(&dir).unwrap();
-        assert!(matches!(outcome, LoginOutcome::Generated { .. }));
-
-        let key_text = std::fs::read_to_string(dir.join(KatAccount::KEY_FILE)).unwrap();
-        let key = PrivateKey::from_openssh(&key_text).unwrap();
-        assert!(!key.is_encrypted());
-        assert!(key.key_data().ed25519().is_some());
-        assert_eq!(
-            account.state().account_id,
-            account_id_for(&pubkey_of(&key)),
-            "record id must be the derivation of the generated key"
-        );
-        assert_eq!(account.state().grant_kat, FREE_TIER_GRANT_KAT);
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.join(KatAccount::KEY_FILE))
-                .unwrap()
-                .permissions()
-                .mode();
-            assert_eq!(mode & 0o777, 0o600, "private key must be 0600");
-        }
-
-        // The record parses back + carries the version stamp.
+        assert!(matches!(outcome, LoginOutcome::Generated { fallback_note: None, .. }));
+        // The canonical file names.
+        assert!(dir.join(KatAccount::KEY_FILE).is_file());
+        assert!(dir.join(KatAccount::PUB_FILE).is_file());
+        // The record parses back as the SUBSTRATE shape (github_user
+        // provenance, no grant field) + carries the version stamp.
         let record = std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
         assert!(record.contains(&format!("\"account_version\": {ACCOUNT_VERSION}")));
         let parsed: AccountState = serde_json::from_str(&record).unwrap();
         assert_eq!(parsed, *account.state());
+        assert!(parsed.github_user.is_none());
+        assert_eq!(parsed.account_id.len(), 64);
+        account.verify().unwrap();
     }
 
     #[test]
     fn login_is_idempotent_and_preserves_the_record() {
         let dir = temp_dir("idem");
         let (first, _) = KatAccount::login(&dir).unwrap();
+        let before = std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
         let (second, outcome) = KatAccount::login(&dir).unwrap();
         assert!(matches!(outcome, LoginOutcome::Existing { .. }));
-        assert_eq!(first.state(), second.state(), "re-login must not move the record");
+        assert_eq!(second.state(), first.state());
+        let after = std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
+        assert_eq!(before, after, "an idempotent re-login must not rewrite the record");
     }
 
     #[test]
-    fn login_import_adopts_an_existing_key() {
-        let source_dir = temp_dir("src");
-        let (_, _) = KatAccount::login(&source_dir).unwrap();
-        let source_key = source_dir.join(KatAccount::KEY_FILE);
-
+    fn login_import_adopts_an_existing_key_and_refuses_overwrite() {
         let dir = temp_dir("imp");
-        let (imported, outcome) = KatAccount::login_import(&dir, &source_key).unwrap();
+        let (first, _) = KatAccount::login(&dir).unwrap();
+        let dir2 = temp_dir("imp2");
+        let (imported, outcome) =
+            KatAccount::login_import(&dir2, &dir.join(KatAccount::KEY_FILE)).unwrap();
         assert!(matches!(outcome, LoginOutcome::Imported { .. }));
-        assert_eq!(
-            imported.state().account_id,
-            KatAccount::load(&source_dir).unwrap().state().account_id,
-            "import must adopt the source key's identity"
-        );
-
-        // A second import into the same dir refuses (never overwrites).
-        assert!(KatAccount::login_import(&dir, &source_key).is_err());
+        assert_eq!(imported.state().account_id, first.state().account_id);
+        // Import never overwrites identity.
+        let err = KatAccount::login_import(&dir2, &dir.join(KatAccount::KEY_FILE)).unwrap_err();
+        assert!(err.contains("never overwrites"), "{err}");
     }
 
     #[test]
-    fn login_default_adopts_the_machine_ssh_key() {
-        // Env-mutating tests are serialized (process-global env + parallel
-        // test threads is the Plan-545 pollution class).
-        let _env = ENV_LOCK.lock().unwrap();
-        // 011 T0.2: seed a plausible "machine default" by pointing HOME at a
-        // temp root carrying ~/.ssh/id_ed25519, then login_default must adopt
-        // it (identity = the adopted key's derivation) rather than generate.
-        let home = temp_dir("home");
-        let ssh_dir = home.join(".ssh");
-        std::fs::create_dir_all(&ssh_dir).unwrap();
-        let key_dir = temp_dir("seedkey");
-        let (seed, _) = KatAccount::login(&key_dir).unwrap();
-        std::fs::copy(key_dir.join(KatAccount::KEY_FILE), ssh_dir.join("id_ed25519")).unwrap();
+    fn login_default_adopts_the_legacy_kat_account() {
+        // Seed a legacy account: a canonical-style key, filed under the
+        // legacy kat name in a scratch legacy dir — exactly what a pre-081
+        // `cargo heal login` left behind.
+        let seed_dir = temp_dir("legacy_seed");
+        let (seed, _) = KatAccount::login(&seed_dir).unwrap();
+        let legacy_dir = temp_dir("legacy_dir");
+        std::fs::copy(
+            seed_dir.join(KatAccount::KEY_FILE),
+            legacy_dir.join(KatAccount::LEGACY_KEY_FILE),
+        )
+        .unwrap();
 
-        // Shield the test from the developer's real HOME and any override,
-        // then restore both (lock-guarded, so no sibling test races the env).
-        let saved_home = std::env::var_os("HOME");
-        let saved_override = std::env::var(KatAccount::KEY_OVERRIDE_ENV).ok();
-        std::env::set_var("HOME", &home);
-        std::env::remove_var(KatAccount::KEY_OVERRIDE_ENV);
-        let dir = temp_dir("adopt");
-        let result = KatAccount::login_default(&dir);
-        restore_env("HOME", saved_home, KatAccount::KEY_OVERRIDE_ENV, saved_override);
-        let (account, outcome) = result.unwrap();
-
-        assert!(
-            matches!(outcome, LoginOutcome::Adopted { ref source, .. } if source.ends_with("id_ed25519")),
-            "outcome must record the adopted source"
-        );
+        let canonical = temp_dir("canonical");
+        let (account, outcome, seed_id) = {
+            let _guard = ENV_LOCK.lock().unwrap();
+            KatAccount::login_default_in(&canonical, Some(&legacy_dir))
+                .map(|(a, o)| (a, o, seed.state().account_id.clone()))
+        }
+        .unwrap();
+        // Adopted, from the legacy path, same identity the legacy key
+        // derives — the KAT ledger balance keyed to that id survives.
+        assert!(matches!(outcome, LoginOutcome::Adopted { .. }));
+        assert_eq!(outcome.account_id(), seed_id);
         assert_eq!(
             account.state().account_id,
-            seed.state().account_id,
-            "the account id must be the adopted key's derivation"
+            account_id_for(&account.public_key_bytes().unwrap())
         );
-        assert!(!matches!(outcome, LoginOutcome::Generated { .. }));
+        // Copied, not moved: the legacy file stays (purge sweeps it later).
+        assert!(legacy_dir.join(KatAccount::LEGACY_KEY_FILE).is_file());
+        assert!(canonical.join(KatAccount::KEY_FILE).is_file());
+        // And the canonical record was re-projected from the key.
+        assert!(canonical.join(KatAccount::RECORD_FILE).is_file());
     }
 
     #[test]
-    fn login_default_falls_back_to_generate_with_a_note_when_no_ssh_key() {
-        let _env = ENV_LOCK.lock().unwrap();
-        let home = temp_dir("empty-home");
-        let saved_home = std::env::var_os("HOME");
-        let saved_override = std::env::var(KatAccount::KEY_OVERRIDE_ENV).ok();
-        std::env::set_var("HOME", &home);
-        std::env::remove_var(KatAccount::KEY_OVERRIDE_ENV);
-        let dir = temp_dir("fallback");
-        let result = KatAccount::login_default(&dir);
-        restore_env("HOME", saved_home, KatAccount::KEY_OVERRIDE_ENV, saved_override);
+    fn login_default_honours_the_deprecated_key_override_over_legacy() {
+        // Lock-scoped env mutation (edition 2021: set_var is safe; the lock
+        // keeps sibling tests out; the set/remove pair wraps ONLY the call,
+        // so a failed assert cannot poison the lock).
+        let result = {
+            let _guard = ENV_LOCK.lock().unwrap();
+            let source_dir = temp_dir("override_src");
+            let (source, _) = KatAccount::login(&source_dir).unwrap();
+            // A legacy dir holding a DIFFERENT key — the override (explicit
+            // configuration) must win over the legacy adoption.
+            let other_dir = temp_dir("override_other");
+            let (other, _) = KatAccount::login(&other_dir).unwrap();
+            let legacy_dir = temp_dir("override_legacy");
+            std::fs::copy(
+                other_dir.join(KatAccount::KEY_FILE),
+                legacy_dir.join(KatAccount::LEGACY_KEY_FILE),
+            )
+            .unwrap();
 
-        let (account, outcome) = result.unwrap();
-        let LoginOutcome::Generated { fallback_note, .. } = &outcome else {
-            panic!("expected the generate fallback, got {outcome:?}");
+            let canonical = temp_dir("override_canonical");
+            let other_id_expected = other.state().account_id.clone();
+            std::env::set_var(
+                KatAccount::LEGACY_KEY_OVERRIDE_ENV,
+                source_dir.join(KatAccount::KEY_FILE),
+            );
+            let r = KatAccount::login_default_in(&canonical, Some(&legacy_dir));
+            clear_override_env();
+            r.map(|(a, o)| (a, o, source.state().account_id.clone(), other_id_expected))
         };
-        assert!(
-            fallback_note.as_deref().is_some_and(|n| n.contains("id_ed25519")),
-            "the fallback must disclose why (no default SSH key)"
-        );
-        assert!(!account.state().account_id.is_empty());
+        let (account, outcome, source_id, other_id) = result.unwrap();
+        // The override arm is the DISCLOSED adoption (source in the outcome,
+        // not the bare import) — the CLI prints exactly which key landed.
+        assert!(matches!(outcome, LoginOutcome::Adopted { .. }));
+        assert_eq!(account.state().account_id, source_id, "the override key wins");
+        assert_ne!(account.state().account_id, other_id, "the legacy arm must not fire");
     }
 
     #[test]
-    fn login_default_existing_key_wins_and_env_override_is_loud() {
-        let _env = ENV_LOCK.lock().unwrap();
-        // (1) An existing account key wins over everything — adoption never
-        // re-binds. (2) A set-but-unusable RIIR_HEAL_KAT_KEY fails LOUDLY
-        // (explicit config must not silently fall back to another identity).
-        let dir = temp_dir("existing");
-        let (first, _) = KatAccount::login(&dir).unwrap();
-        let (again, outcome) = KatAccount::login_default(&dir).unwrap();
-        assert!(matches!(outcome, LoginOutcome::Existing { .. }));
-        assert_eq!(first.state(), again.state());
+    fn login_default_prefers_the_legacy_account_over_the_machine_ssh_key() {
+        // The ORDER pin: with a legacy key present, the chain adopts it even
+        // on a host that has a real machine SSH key (this dev box does; CI
+        // runners do not) — the substrate chain is never reached, which the
+        // recorded adopt SOURCE proves: the legacy path, never ~/.ssh.
+        let legacy_seed_dir = temp_dir("order_legacy");
+        let (_legacy_seed, _) = KatAccount::login(&legacy_seed_dir).unwrap();
+        let legacy_dir = temp_dir("order_legacy_dir");
+        std::fs::copy(
+            legacy_seed_dir.join(KatAccount::KEY_FILE),
+            legacy_dir.join(KatAccount::LEGACY_KEY_FILE),
+        )
+        .unwrap();
 
-        std::env::set_var(KatAccount::KEY_OVERRIDE_ENV, "Z:/definitely/missing/key");
-        let fresh_dir = temp_dir("override");
-        let result = KatAccount::login_default(&fresh_dir);
-        std::env::remove_var(KatAccount::KEY_OVERRIDE_ENV);
-        assert!(result.is_err(), "a set override pointing nowhere must error, not fall back");
+        let canonical = temp_dir("order_canonical");
+        let (_account, outcome) = {
+            let _guard = ENV_LOCK.lock().unwrap();
+            KatAccount::login_default_in(&canonical, Some(&legacy_dir))
+        }
+        .unwrap();
+        match outcome {
+            LoginOutcome::Adopted { source, .. } => {
+                assert_eq!(source, legacy_dir.join(KatAccount::LEGACY_KEY_FILE));
+            }
+            other => panic!("the legacy arm must fire, got {other:?}"),
+        }
     }
 
-    /// Serialize the env-mutating tests (process-global env + parallel test
-    /// threads is the Plan-545 pollution class).
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    #[test]
+    fn signing_key_matches_the_raw_seed_route() {
+        use ed25519_dalek::Signer;
+        // Bit-compat pin: the seed route (substrate seed → dalek) signs
+        // identically to reading the keypair straight out of the OpenSSH
+        // file — the exact construction the old module performed.
+        let dir = temp_dir("sign");
+        let (account, _) = KatAccount::login(&dir).unwrap();
+        let msg = b"issue-081 signing route pin";
+        let via_shim = account.signing_key().unwrap();
+        let via_shim = via_shim.sign(msg);
 
-    /// Restore two env vars by saved values (`None` = remove). Lock-held by
-    /// the callers; split out so each test's restore path is one line.
-    fn restore_env(
-        name_a: &str,
-        saved_a: Option<std::ffi::OsString>,
-        name_b: &str,
-        saved_b: Option<String>,
-    ) {
-        match saved_a {
-            Some(v) => std::env::set_var(name_a, v),
-            None => std::env::remove_var(name_a),
-        }
-        match saved_b {
-            Some(v) => std::env::set_var(name_b, v),
-            None => std::env::remove_var(name_b),
-        }
+        let text =
+            std::fs::read_to_string(dir.join(KatAccount::KEY_FILE)).unwrap();
+        let key = ssh_key::PrivateKey::from_openssh(&text).unwrap();
+        let keypair = key.key_data().ed25519().unwrap();
+        let direct = ed25519_dalek::SigningKey::from_bytes(keypair.private.as_ref());
+        assert_eq!(
+            direct.verifying_key().to_bytes(),
+            account.public_key_bytes().unwrap()
+        );
+        let via_direct = direct.sign(msg);
+        assert_eq!(via_shim.to_bytes(), via_direct.to_bytes());
+    }
+
+    #[test]
+    fn verify_detects_record_tampering() {
+        let dir = temp_dir("tamper");
+        let (account, _) = KatAccount::login(&dir).unwrap();
+        account.verify().unwrap();
+        // A record rewritten with a foreign id: `load` recovers (the key is
+        // the authority) and re-derives the true id.
+        let mut state = account.state().clone();
+        state.account_id = "f".repeat(64);
+        std::fs::write(
+            dir.join(KatAccount::RECORD_FILE),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+        let recovered = KatAccount::load(&dir).unwrap();
+        assert_eq!(recovered.state().account_id, account.state().account_id);
+        recovered.verify().unwrap();
     }
 
     #[test]
@@ -800,72 +558,19 @@ mod tests {
     }
 
     #[test]
-    fn generated_key_round_trips_with_the_pub_sidecar() {
-        let dir = temp_dir("rt");
-        let (account, _) = KatAccount::login(&dir).unwrap();
-        account.verify().unwrap();
-
-        let pub_text = std::fs::read_to_string(dir.join(KatAccount::PUB_FILE)).unwrap();
-        assert!(pub_text.starts_with("ssh-ed25519 "), "sidecar is OpenSSH form");
-    }
-
-    #[test]
-    fn verify_detects_record_tampering() {
-        let dir = temp_dir("tamper");
-        let (account, _) = KatAccount::login(&dir).unwrap();
-        account.verify().unwrap();
-
-        // Rewrite the record with a foreign account id.
-        let mut state = account.state().clone();
-        state.account_id = "0".repeat(64);
-        let record = dir.join(KatAccount::RECORD_FILE);
-        std::fs::write(&record, serde_json::to_string(&state).unwrap()).unwrap();
-
-        // `load` recovers (key is the authority)…
-        let recovered = KatAccount::load(&dir).unwrap();
-        assert_ne!(recovered.state().account_id, "0".repeat(64));
-        // …and `verify` on a doctored in-memory state catches it.
-        let mut doctored = recovered;
-        doctored.state.account_id = "1".repeat(64);
-        assert!(doctored.verify().is_err());
-    }
-
-    #[test]
-    fn corrupt_or_stale_record_recovers_from_the_key() {
-        let dir = temp_dir("recover");
-        let (first, _) = KatAccount::login(&dir).unwrap();
-        let record = dir.join(KatAccount::RECORD_FILE);
-
-        // Corrupt.
-        std::fs::write(&record, "{ not json").unwrap();
-        let (again, outcome) = KatAccount::login(&dir).unwrap();
-        assert!(matches!(outcome, LoginOutcome::Existing { .. }));
-        assert_eq!(again.state().account_id, first.state().account_id);
-        assert_eq!(again.state().grant_kat, FREE_TIER_GRANT_KAT);
-
-        // Unknown version.
-        let mut state = first.state().clone();
-        state.account_version = 99;
-        std::fs::write(&record, serde_json::to_string(&state).unwrap()).unwrap();
-        let (again, _) = KatAccount::login(&dir).unwrap();
-        assert_eq!(again.state().account_version, ACCOUNT_VERSION);
-        assert_eq!(again.state().account_id, first.state().account_id);
-    }
-
-    #[test]
-    fn load_without_a_key_names_the_remedy() {
-        let dir = temp_dir("nokey");
-        let err = KatAccount::load(&dir).unwrap_err();
-        assert!(err.contains("cargo heal login"), "error must name the remedy: {err}");
-    }
-
-    #[test]
-    fn summary_carries_no_currency_figure() {
-        // Caveats #12/#15: no `$` beside KAT accounting — tokens only.
+    fn summary_lines_carry_the_grant_projection_and_no_currency() {
         let dir = temp_dir("summary");
         let (account, _) = KatAccount::login(&dir).unwrap();
-        for line in account.summary_lines() {
-            assert!(!line.contains('$'), "summary line carries a currency figure: {line}");
+        let lines = account.summary_lines();
+        // The grant is the meter constant now (G9d) — the render still
+        // carries it.
+        let grant_line = lines
+            .iter()
+            .find(|l| l.contains("grant projection"))
+            .expect("the grant line survives the facade move");
+        assert!(grant_line.contains(&FREE_TIER_GRANT_KAT.to_string()), "{grant_line}");
+        for line in &lines {
+            assert!(!line.contains('$'), "copy rule: no $ — got {line:?}");
         }
     }
 }

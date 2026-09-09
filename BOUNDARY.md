@@ -31,7 +31,7 @@ from game crates but has zero game-domain coupling.
 | riir-engine, riir-gpu | `../riir-ai/crates/*` | opt-in `ternary_inference` only |
 | riir-rag | `../riir-ai/crates/riir-rag` | opt-in `latent_retrieval` only |
 | riir-neuron-db | `../riir-neuron-db` | `optional = true`, `default-features = false` (measured 2026-08-21) |
-| riir-auth | `../riir-auth` | **planned (Issue 081)**: `optional = true`, `default-features = false`, `kat_service` enables `riir-auth/account_key` only — the account-key login substrate (Plan 327 consolidation home; `github_login` NOT enabled). No graph edge yet — the row pre-declares the intended dep. |
+| riir-auth | `../riir-auth` | `optional = true`, `default-features = false`; `kat_service` enables `riir-auth/account_key` only (NOT `github_login`) — the account-key login substrate (Plan 327 consolidation; landed with Issue 081, 2026-09-09). `src/kat_account.rs` is the kat-facing facade over it. |
 ## Standing invariants
 
 - **Source secrecy**: this repo's source never becomes public. Distribution is

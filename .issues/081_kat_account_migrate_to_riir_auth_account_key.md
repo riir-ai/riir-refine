@@ -1,6 +1,6 @@
 # Issue 081 — migrate `kat_account` onto riir-auth's `account_key` substrate
 
-**Status:** OPEN — design complete + substrate-ready verdict recorded; execution queued behind the shared-worktree conflict (`Cargo.toml` mid-edit by a sibling session, 2026-09-09).
+**Status:** LANDED 2026-09-09 — all tasks complete; commits `6557781` (this repo: code + contract + tests) and the riir-auth half (`adopt` made public + BOUNDARY consumer flip). Gates: clippy `-D warnings` × all-features + kat_service + default; lib tests 1187 (default) / 1331 (kat_service) / 1518 (kernel_heal); compat suite 16/16; G9 6/6; CLI e2e (soft-gate 13, consent 9, burn 3, refill 4, wetrun 11, payload 11); standalone dep gate 10/10 + self-test; boundary contract ✓ 17 repos; riir-auth 97 (features) + 81 (default).
 
 ## Context
 
@@ -134,12 +134,19 @@ discipline (`HEAD + my hunks` only, `git hash-object -w` +
 
 ## Tasks
 
-- [ ] Wait out the sibling `Cargo.toml` edit (poll `git status -sb`) or adopt blob-commit discipline
-- [ ] Cargo.toml: optional `riir-auth` dep + `kat_service` feature wiring
-- [ ] Rewrite `src/kat_account.rs` as the shim (newtype + legacy adoption chain + presentation + re-exports)
-- [ ] `bin/heal.rs`: grant read → meter constant; purge dual-layout sweep; use-site audit
-- [ ] Compat test suite (6 obligations above)
-- [ ] `standalone_dep_gate.sh` 9 → 10 entries; BOUNDARY row → landed
-- [ ] `rust.yml` sibling checkout list + AGENTS.md/README deprecation notes
-- [ ] riir-auth BOUNDARY drift note flip (that repo's commit)
-- [ ] Full gate: clippy x3 states + lib tests + standalone gate + boundary contract
+- [x] ~~Wait out the sibling `Cargo.toml` edit~~ — cleared mid-session (their `1994a8a`/`ffdd7a9` landed); no blob-commit dance needed
+- [x] Cargo.toml: optional `riir-auth` dep + `kat_service` feature wiring
+- [x] Rewrite `src/kat_account.rs` as the shim (newtype + legacy adoption chain + presentation + re-exports; ~870 → ~500 lines incl. the 16-test compat suite)
+- [x] `bin/heal.rs`: grant read → meter constant; purge dual-layout sweep; use-site audit (all other `KatAccount::` call sites compile via the shim unchanged)
+- [x] Compat test suite — landed as 6 unit tests + the G9 suite updates (legacy adoption same-id pin, deprecated-override-honored + beats-legacy, legacy-beats-machine-SSH order pin, seed-route signing bit-compat, legacy file-name pin, dual-layout purge)
+- [x] `standalone_dep_gate.sh` 9 → 10 entries; BOUNDARY row → landed
+- [x] `rust.yml` sibling checkout list (+ AGENTS.md/README needed no edits — grep confirmed neither documents the deprecated env vars)
+- [x] riir-auth BOUNDARY drift note flip + `AccountKey::adopt` made `pub` (the one substrate change: the disclosed-source adoption is a consumer-facing primitive — `login_import` does not carry the source path)
+- [x] Full gate: clippy ×3 states + lib tests ×3 states + standalone gate + boundary contract — ALL GREEN (numbers in the status line)
+
+## Landing notes (the deviations worth remembering)
+
+- **`AccountKey::adopt` became `pub`** (riir-auth side): the shim's adoption arms need the DISCLOSED-source outcome (`login_import` returns the bare `Imported`). Small, additive, substrate-tested.
+- **A libtest race was measured, not assumed**: the chain reads `RIIR_HEAL_KAT_KEY`, so a sibling test's set/remove window armed another test's override arm mid-flight (14 passed / 2 failed → env-lock-wraps-the-call-only pattern → 16/16). The lock scope deliberately EXCLUDES the asserts — a failed assert must not poison the mutex.
+- **The `--all-features` clippy layer was red at HEAD** for reasons unrelated to this issue (batch-137 test targets using `.parses` under `kernel_verify`, the sec module docs, the sibling's in-flight score_bench work) — fixed in this commit as drive-by rot repair (the B136 `b638e71` precedent) so the gate this issue had to pass was actually runnable.
+- The e2e CLI tests' isolation now sets BOTH envs (`RIIR_HEAL_KAT_ACCOUNT_DIR` for the consent plane + `RIIR_AUTH_ACCOUNT_DIR` for the canonical account plane) — one env would leave the real `~/.config/riir-auth` reachable.

@@ -200,12 +200,18 @@ mod tests {
     /// on graded, steep, and the all-tied degenerate population.
     #[test]
     fn lowest_margin_half_carries_at_least_half_the_mass() {
-        // cast_possible_truncation allowed: i ≤ 100 · 0.01 and i ≤ 20 · 0.5
-        // are exact in f32 (small integers × a power-of-two-friendly scale —
-        // the multiplication is the test's own fixture shape).
         #![allow(clippy::cast_possible_truncation)]
-        let graded: Vec<f32> = (1..=100).map(|i| margin_weight(i as f32 * 0.01)).collect();
-        let steep: Vec<f32> = (0..20).map(|i| margin_weight(i as f32 * 0.5)).collect();
+        // f32 mantissa holds 1..=100 exactly; the cast lint is pedantic here
+        // (small integers × a power-of-two-friendly scale, the test's own
+        // fixture shape).
+        let graded: Vec<f32> = (1..=100_u16)
+            .map(f32::from)
+            .map(|i| margin_weight(i * 0.01))
+            .collect();
+        let steep: Vec<f32> = (0..20_u16)
+            .map(f32::from)
+            .map(|i| margin_weight(i * 0.5))
+            .collect();
         let all_tied: Vec<f32> = vec![margin_weight(0.25); 50];
         let odd_tied: Vec<f32> = vec![margin_weight(0.25); 51];
         for weights in [&graded, &steep, &all_tied, &odd_tied] {

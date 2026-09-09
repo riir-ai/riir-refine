@@ -55,6 +55,9 @@ fn scratch(tag: &str) -> PathBuf {
 fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-heal"))
         .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
+        // Issue 081: the purge sweep targets the canonical account dir too —
+        // isolate it (the consent plane still rides the old var above).
+        .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_HEAL_TRAJ_ROOT", dir)
         // 127.0.0.1:1 is closed: the lease pull fails fast instead of
         // reaching the real service from a test.

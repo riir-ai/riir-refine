@@ -181,6 +181,9 @@ fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Op
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-heal"));
     cmd.current_dir(dir)
         .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
+        // Issue 081: the account plane moved to the canonical dir — isolate
+        // it too (the consent plane still rides the old var above).
+        .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_HEAL_TRAJ_ROOT", dir)
         .env("RIIR_HEAL_KAT_SERVICE_URL", url)
         .env("RIIR_HEAL_KAT_LEASE", "0")

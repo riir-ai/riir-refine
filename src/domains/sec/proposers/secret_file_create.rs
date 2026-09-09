@@ -415,7 +415,7 @@ mod tests {
     }
 
     /// Batch 131 gate — the UNHARDENED `File::create` on a credential path
-    /// (original fixture, the corpus buggy_code) MUST fire.
+    /// (original fixture, the corpus `buggy_code`) MUST fire.
     #[test]
     fn batch131_unhardened_token_create_fires() {
         let src = "pub fn save_session_token(path: &std::path::Path, token: &str) -> std::io::Result<()> {\n    \
@@ -435,7 +435,7 @@ mod tests {
         assert_eq!(findings(src).len(), 1);
     }
 
-    /// The OpenOptions builder WITHOUT `.mode(..)` fires (credential path).
+    /// The `OpenOptions` builder WITHOUT `.mode(..)` fires (credential path).
     #[test]
     fn batch131_openoptions_without_mode_fires() {
         let src = "pub fn fresh(token_path: &std::path::Path) -> std::io::Result<()> {\n    \
@@ -449,7 +449,7 @@ mod tests {
 
     // ── NEGATIVE SUITE — every class must stay SILENT (zero-FP bar) ──
 
-    /// The COMPLIANT OpenOptions form (`.mode(0o600)`) is silent — the
+    /// The COMPLIANT `OpenOptions` form (`.mode(0o600)`) is silent — the
     /// hardened twin, the Girder evidence shape.
     #[test]
     fn batch131_openoptions_with_mode_is_silent() {
@@ -543,7 +543,7 @@ mod tests {
     }
 
     /// Findings carry byte spans into the source (span integrity); the
-    /// fn-name signal alone fires (the ct_eq fn-name precedent).
+    /// fn-name signal alone fires (the `ct_eq` fn-name precedent).
     #[test]
     fn batch131_finding_spans_slice_the_source() {
         let src = "pub fn store_credential(path: &std::path::Path) -> std::io::Result<()> {\n    \

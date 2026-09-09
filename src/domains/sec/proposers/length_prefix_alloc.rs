@@ -4,7 +4,7 @@
 //! A length parsed inside a fn (`u32::from_be_bytes(..)`-class byte-swap,
 //! or a `.parse()` of a header field) flowing into a `vec![0u8; len]`
 //! repeat allocation with NO intervening comparison of that length against
-//! a bound is an allocation-size DoS: one peer-controlled header can
+//! a bound is an allocation-size `DoS`: one peer-controlled header can
 //! demand a multi-GB buffer (OOM/abort). The cost axis is security, not
 //! cycles.
 //!
@@ -480,7 +480,7 @@ mod tests {
     }
 
     /// Batch 131 gate — the UNBOUNDED wire-frame shape (original fixture,
-    /// the corpus buggy_code) MUST fire.
+    /// the corpus `buggy_code`) MUST fire.
     #[test]
     fn batch131_unbounded_from_be_bytes_fires() {
         let src = "pub fn read_frame(stream: &mut std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    \
@@ -574,7 +574,7 @@ mod tests {
 
     /// HONEST RECALL LIMIT pinned as a test: the parse in a helper fn and
     /// the alloc in the caller are NOT connected parse-only (the
-    /// nan_safe_cmp helper-fn precedent).
+    /// `nan_safe_cmp` helper-fn precedent).
     #[test]
     fn batch131_cross_fn_origin_is_undetected() {
         let src = "fn parse_len(prefix: [u8; 4]) -> usize {\n    \

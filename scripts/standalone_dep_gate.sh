@@ -17,14 +17,16 @@
 #
 # Precedent: `riir-neuron-db/scripts/standalone_dep_gate.sh` (3 entries, one
 # public sibling) and `riir-chain/scripts/standalone_dep_gate.sh` (twelve
-# entries, three siblings — its Issue 028). Here the surface is nine entries
-# across THREE siblings, two of them private:
+# entries, three siblings — its Issue 028). Here the surface is ten entries
+# across FOUR siblings, three of them private:
 #
 #   katgpt-rs      (public)   katgpt-core, katgpt-device-verify
 #   riir-ai        (private)  riir-engine, riir-gpu, riir-rag
 #                             + cubecl-runtime, cubecl-wgpu, wgpu-hal
 #                             (the [patch.crates-io] vendor paths)
 #   riir-neuron-db (private)  riir-neuron-db
+#   riir-auth      (private)  riir-auth (Issue 081 — the account_key
+#                             substrate under kat_service)
 #
 # Provisioning them is `.github/workflows/rust.yml`'s job (the feature-guard
 # job; the two private siblings need `SIBLING_REPOS_TOKEN`).
@@ -49,18 +51,19 @@ cd "$(dirname "$0")/.."
 
 # The pinned inventory: "<manifest-relative-path> <dep-name>", sorted.
 #
-# 9 entries as of 2026-09-02. `[patch]` entries resolve through the same
-# lexical scan (their lines are `name = { path = "…" }` exactly like
-# dependency lines) and are pinned — a new vendor patch is a new repo CI must
-# provision. `katgpt-core` appears twice in the root manifest (the dependency
-# table and `[patch."https://github.com/katopz/katgpt-rs"]`) and is pinned
-# once; the scan dedupes the same way.
+# 10 entries as of 2026-09-09 (Issue 081 added riir-auth). `[patch]` entries
+# resolve through the same lexical scan (their lines are `name = { path = "…" }`
+# exactly like dependency lines) and are pinned — a new vendor patch is a new
+# repo CI must provision. `katgpt-core` appears twice in the root manifest (the
+# dependency table and `[patch."https://github.com/katopz/katgpt-rs"]`) and is
+# pinned once; the scan dedupes the same way.
 EXPECTED=$(
     cat <<'EOF'
 Cargo.toml cubecl-runtime
 Cargo.toml cubecl-wgpu
 Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
+Cargo.toml riir-auth
 Cargo.toml riir-engine
 Cargo.toml riir-gpu
 Cargo.toml riir-neuron-db
@@ -133,7 +136,7 @@ if [ "$ACTUAL" = "$EXPECTED" ]; then
     n=$(printf '%s\n' "$ACTUAL" | grep -c . || true)
     echo "✓ standalone-dep gate PASSED — $n escaping path deps, matching the pin"
     echo "  (this repo is still NOT standalone-buildable; the gate pins the gap,"
-    echo "   it does not close it. CI provisions all three siblings —"
+    echo "   it does not close it. CI provisions all four siblings —"
     echo "   .github/workflows/rust.yml, feature-guard job.)"
     exit 0
 fi
