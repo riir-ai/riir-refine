@@ -162,10 +162,13 @@ explicitly either way.
       the per-rule split, blog-vs-repo honesty, the full gate row + the
       write-blind-compile-free lesson, the parity-arm session context;
       `.highwater` 155 → 156.
-- [ ] T8 — Commit `feat(kernel_opt): batch 137: ...` + push; update
-      `.distill/001_mining_queue_snapshot.md` in the same commit (lead-pair
-      entry → landed; Batch 138 = FA parts 1+2 stays queued); rm -rf the
-      `.raw` clone.
+- [x] T8 — (DONE 2026-09-09) Landing sequence: `288f984` (T3 authoring) →
+      `4c2e94a`+`b638e71` (T4 gate repairs) → `efe724c` (T6 docs) → `818dd8a`
+      (plan+snapshot+Research 156) → `b724437` (the kat_refill cfg fix the
+      score_bench build caught) → `235c8d4` (score-bench #83 FLAT 96.2/1.9 —
+      7th consecutive batch in the band) → this commit (plan close + snapshot
+      LANDED + `.raw/emmy` rm). Global cargo-heal rebuilt at the canonical
+      release set, serving 591. Batch 137 CLOSED.
 
 ## Appendix — T2a subagent proposals (2026-09-09, two read-lanes @ pin `1c058c9d`)
 
