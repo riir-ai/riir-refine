@@ -1334,11 +1334,14 @@ mod tests {
                 // consistent with the B130 kernel-vocabulary raise); floor
                 // = 83 - 5 = 78.
                 (true, true, true) => {
-                    // ALL-ON dist-on: currently red at HEAD from the
-                    // PRE-EXISTING kernel_verify `.parses` conflict (Batch
-                    // 138/139 tests vs the KernelVerifyResult fields —
-                    // unrelated to dist); inherits the dist-off twin until
-                    // that lane is repaired and this state re-measures.
+                    // ALL-ON dist-on: MEASURED 2026-09-10 (post kernel_verify
+                    // repair, all-features live run) 83/131 (63.4%) — BIT-
+                    // IDENTICAL to its dist-off twin (83/131 at Batch 140):
+                    // the dist corpus costs the router nothing at full state
+                    // (the docker-precedent mechanism saturates here; the
+                    // default+dist arm's +1 span does not survive the kernel
+                    // vocabulary). Floor = 83 - 5 = 78 per the Plan-030
+                    // convention.
                     78.0 / 131.0 // measured 83/131 (63.4%)
                 }
             }
