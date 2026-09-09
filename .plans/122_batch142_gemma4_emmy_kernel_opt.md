@@ -91,6 +91,15 @@
 T3b–T4 wait for a cargo window: the 851 v9 quiet gate is in an editor-hot
 stalemate (see riir-ai `.issues/876` 09-10 note — 169 refusals/14.5 h) where
 every cargo process resets the gate's streak, and agent-B sessions hold the
-target dir. When the box frees (v9 fires or expires, agent builds drain), run
-T2 → T3a → T3b → T4 in one session per Protocol A. T3a (pure write) may ride
-earlier ONLY with T2's quote verification done first.
+target dir. **Tightened 09-10 03:32 (idle session, read the 876 record): the
+stalemate is STRUCTURAL and owner-owned — round-the-clock agent activity makes
+the 600s streak unreachable ("no clean windows exist while agents run"), the
+knob-loosening path is explicitly NOT-recommended (Bench-649 contamination
+class), and the unblock conditions are all owner calls. CONCRETE TIMELINE: v9's
+deadline is 09-11 05:59 — on expiry the launcher ABANDONs per-length and the
+quiet-gate pressure LIFTS (v10 relaunch = owner decision, not automatic).
+T3b–T4's expected window therefore opens after 09-11 05:59 unless v9 fires
+first or the owner intervenes; until then, waiting is the correct discipline,
+not starved politeness.** When the box frees, run T2 → T3a → T3b → T4 in one
+session per Protocol A. T3a (pure write) may ride earlier ONLY with T2's quote
+verification done first.
