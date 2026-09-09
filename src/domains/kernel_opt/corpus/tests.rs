@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::domain::HealEntry;
 
@@ -77,14 +76,14 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 111 (11): vLLM libtorch_stable remainder + rider sweep (Research 133 / Plan 082) -- register-rotation-prefetch-loop, shared-operand-groups-per-warp, whole-row-register-resident-under-length-budget (A +3), grid-dependency-wait-scoped-to-dependent-operands, refine-by-rescan-prefix-filter-vs-buffered-ties (D +2), warp-aggregated-atomic-scatter, routing-by-precomputed-lookup (H +2), launch-heuristic-pinned-to-calibration-arch (K +1), lane-owned-topk-output (M +1), ue8m0-pow2-scale-as-biased-exponent-byte, coarse-precision-first-exact-refine (N +2); source re-cloned + re-pinned at 8277c42e4 at mine time (origin had moved to 16328c7a minutes before); lanes: rules #12-#20/#22/#25 LAND, #21 (noinline) + #23 (clamp-before-collective) KILLED as COVERAGE (B110 rules already carry them, same citations), #24 demoted to a RIDER on device-m-runtime-mblock-graph-stable-gemm; + 20 riders across 13 files (19 kernel_opt + weight-tile-consumption-order in rust_perf), incl. the hi/lo packed-u64 redux (B107), phase-counted barrier (B92 stripe), B57 union-across-phase + filler-thread barrier matching, stable-softplus third form (B98), loud-refusal third instance (B103), PDL capability gating (B105), measurement-revision + family-gated table (B104), and the H1 fit-guard contract encoded as refine-by-rescan-prefix-filter-vs-buffered-ties.
     // Batch 114 (2): oMLX ANE-prefill + GDN blocked-sequential distill (Research 138 / Plan 087) -- recurrence-prefill-exact-restructure-before-reformulation (G +1, the A- GOAT lead: restructure the EXACT sequential recurrence's memory layout -- TB-block smem staging + register-resident state -- BEFORE an algebraic reformulation; stock per-slice k/q re-read = 32x redundant traffic (~13 GB/16k-token layer), ~2x at 16K on M3 ULTRA source-reported; the WY/FLA chunked reformulation measured a LOSER 3x independent + our Bench 734/769 negatives 0.97x/0.98x), ane-bank-split-ladder (D +1: near-half-first split ladder for a monolithic accelerator bank that cannot map at program-create (0x20004; our 0x50004 cascade the same class); the driver's release is ASYNCHRONOUS -> drop + gc + settle BEFORE the headroom re-measure; 70% phys-footprint jetsam gate -- 4 bounded attempts still hit 48.3 GB on 48 GB (source-measured); bank-count = DETERMINISM axis; fail-open snapshot; feeds riir-ai 876/769 T2/R1/R4a-R7), + 6 riders (B84 token-local recurrent-safe fraction cap; B84 pad-tail profitability + single-prompt guard; B22 sub-simdgroup cooperation radius -- the FULL-STRING pin regenerated; B95 whole-sequence prefill-grain instance; B107 program-SHAPE vs delivered-chunk-WIDTH coupling; B79 scalar-staging pad boundary). Source jundot/omlx @ e467261 (Apache-2.0).
     // Batch 115 (6): qwen-3.8-mtp-challenge submission-diff-history walk (Research 139 / Plan 088) -- ordinal-map-exact-tail-selection (D +1, the strongest intake: replace a reference sort's tail-K EXACTLY by order-encoding the reference's TOTAL order -- stable ties toward the HIGHER index, NaN above all, -0.0 folded -- into a monotone u32 key; then any integer selection reproduces the reference bit-for-bit; same-set + tie-forcing + positive-control gates; 14-dispatch full-argsort stub -> 2), complete-coverage-scatter-collapses-operand-to-dense (D +1: island-row COVERAGE decides dead compute -- a complete-permutation scatter means every packed row is overwritten unread -> one dense matmul + an install-time argSort-inverse reorder; partial keeps the scatter; lazy eligibility when install ordering makes the replaced gate unknowable; the same lens bounds PRUNING -- the measured 49,152 trim REGRESSED accept 1.00 -> 0.877 below committed argmax support), exhaustive-domain-input-patch-bit-identity (N +1: a 16-bit input domain is exhaustively sweepable -- 65,280 finite values -- so patch ONLY the divergent inputs via direct output-word mapping before the lossless expansion, exhaustive zero-mismatch gate + boundary negative control; f32 unsweepable -> tolerance stays), derived-index-from-pinned-checkpoint-is-a-cache (M +1: a warm-time index from pinned tensors alone is CACHE-class -- legality boundary + canonical order (runtime-derived == offline-screened) + fail-loud over silent fallback + one attempt forever; balanced bisection makes empty clusters impossible), warm-reachable-dispatch-signatures-before-timed-window (M +1: JIT backends compile per signature (shape/dtype/input-count/host-device-mix) and an ADAPTIVE schedule reaches a SET -- warm the reachable set with throwaway token-neutral state, the scored EXPRESSION not a call prefix, extend with receipt when the schedule changes), env-gate-reaches-and-arms-the-scored-process (D +1, measurement-honesty #2: sanitizer-allowlist spelling (a gate outside the allowlist runs both arms on the same code), force-set injected defaults into first-use-cached knobs (ambient stock defeats no-overwrite), durable arm witness not stderr, bare-leg no-env receipt; source Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac (Apache-2.0; B100 read the tip TREE, this batch read the ~50-diff HISTORY -- complementary); + 8 riders: B63 boundary-fused residual pair (external confirmation + eval-ladder-both-halves), B96 activation-side digit-fold two-posture exactness, B97 single-rounding-boundary fusion, B38 unconsumed-variant factory skip, B107 workgroup radix + ordinal bitmap tie-cut + bf16 16-bit exact key, B51 quantized-embed dequant-at-use, B82 shapeless-trace Slice-fatal, B77 derived-sum-table member). **ADDENDUM (collision salvage, 2026-09-06):** a parallel session's duplicate Batch 115 (4 rules incl. two shared seeds) yielded per push-wins; the salvage the landed batch lacks landed as 4 rules (dispatch-cliff-bitexact-shape-confinement D, readout-trim-needs-committed-id-coverage D, dead-output-rows-state-append-only-path D, distinct-index-bitmap-ascending-compaction E) + 6 riders (B96 bit-plane in-consumer offset-sum placement -- corrects this batch's claim that the arm was already covered, B97 verbatim-body text-identity construction, B104 x2 DIRECT_NIBBLES + register-cliff / worst-domain 2.3e-4 semantic pruning, B100 host-side grid-trim witness, exhaustive-domain-input-patch += the per-OUTPUT fidelity-exclusion half); batch115_addendum gates 3.
-        // Batch 116 (6): PrismML fork ternary + verify-batch distill (Research 140 / Plan 089) -- activation-bitplane-popcount-word-dot (N +1: activation int8 bit-planes consumed by AND+popcount -- 32 weights per instruction pair ~0.8 ops/weight/col vs ~3 for select-per-weight; the fork's own ablation removed ONLY the bit test and ran 1.7x faster = extraction-bound diagnosis; LOSSY, ships default-off upstream, behavior-axis gated), scratch-sizing-shares-dispatch-eligibility-predicate (D +1: tail-carved scratch -- the allocator's size helper and the encoder are two statements of one path predicate; ONE predicate both consume, drift is benign-waste one way and OOB the other), byte-owning-threads-non-positional-digit-codes (A +1: non-positional multi-digit packings must map threads to whole BYTES -- element-span ownership reloads every packed byte per digit index, 29.8 -> 136.4 tok/s source-reported; the fork's own negative-results ledger rides in-rule: contiguous byte ownership WORSE, 'fewer ops beat more ILP'), fwht-wide-block-row-per-threadgroup-exchange-ladder (E +1: past the N/32 register wall -- one row per THREADGROUP, three exchange tiers by partner distance, same host kernel names, dispatch-side threadgroup-max assert; fills the register-resident butterfly rule's named beyond-budget arm), shader-shape-cutover-keys-on-resource-block-ratio (D +1: subgroup/registers vs staged shape cutover must be a TWO-TERM disjunction n > ABS_MAX || n/subgroup_size > MAX_EL_PER_LANE -- width alone admits the register wall on narrow subgroups; creation-time resource guards + recorded specialization geometry + null-pipeline fallback), same-input-folded-transform-memo-per-build (D +1: graph-build CSE of folded transform nodes keyed (input, rotation), one-build lifetime, key-completeness invariant source-asserted-by-comment -- the sharpest port edge; 36% duplicate transforms, +3.5% pp512 source-reported) + 3 riders (telescoped-digit += radix-general mantissa-bound exactness + single-trit two-floor form + float-pipe motivation, bridge-rung += register-budget sizing + exact-fit nr1 + per-type mv/mm crossover, dispatcher-eligibility += four inverse-direction instances in one PR window incl. head-truncated-grep transcription); source PrismML-Eng/llama.cpp origin/prism @ 7113f6462 (Apache-2.0, 12 commits past the league pin e311ed38f; quotes via git show, vendor checkout untouched).
+    // Batch 116 (6): PrismML fork ternary + verify-batch distill (Research 140 / Plan 089) -- activation-bitplane-popcount-word-dot (N +1: activation int8 bit-planes consumed by AND+popcount -- 32 weights per instruction pair ~0.8 ops/weight/col vs ~3 for select-per-weight; the fork's own ablation removed ONLY the bit test and ran 1.7x faster = extraction-bound diagnosis; LOSSY, ships default-off upstream, behavior-axis gated), scratch-sizing-shares-dispatch-eligibility-predicate (D +1: tail-carved scratch -- the allocator's size helper and the encoder are two statements of one path predicate; ONE predicate both consume, drift is benign-waste one way and OOB the other), byte-owning-threads-non-positional-digit-codes (A +1: non-positional multi-digit packings must map threads to whole BYTES -- element-span ownership reloads every packed byte per digit index, 29.8 -> 136.4 tok/s source-reported; the fork's own negative-results ledger rides in-rule: contiguous byte ownership WORSE, 'fewer ops beat more ILP'), fwht-wide-block-row-per-threadgroup-exchange-ladder (E +1: past the N/32 register wall -- one row per THREADGROUP, three exchange tiers by partner distance, same host kernel names, dispatch-side threadgroup-max assert; fills the register-resident butterfly rule's named beyond-budget arm), shader-shape-cutover-keys-on-resource-block-ratio (D +1: subgroup/registers vs staged shape cutover must be a TWO-TERM disjunction n > ABS_MAX || n/subgroup_size > MAX_EL_PER_LANE -- width alone admits the register wall on narrow subgroups; creation-time resource guards + recorded specialization geometry + null-pipeline fallback), same-input-folded-transform-memo-per-build (D +1: graph-build CSE of folded transform nodes keyed (input, rotation), one-build lifetime, key-completeness invariant source-asserted-by-comment -- the sharpest port edge; 36% duplicate transforms, +3.5% pp512 source-reported) + 3 riders (telescoped-digit += radix-general mantissa-bound exactness + single-trit two-floor form + float-pipe motivation, bridge-rung += register-budget sizing + exact-fit nr1 + per-type mv/mm crossover, dispatcher-eligibility += four inverse-direction instances in one PR window incl. head-truncated-grep transcription); source PrismML-Eng/llama.cpp origin/prism @ 7113f6462 (Apache-2.0, 12 commits past the league pin e311ed38f; quotes via git show, vendor checkout untouched).
     // Batch 117 (5): antirez/ds4 Metal tensor-prefill delta distill (Plan 090 / Research 141) -- routed-activation-pack-once-shared-operand (L +1: pack the scattered routed activations ONCE per stage into a dense converted device tensor -- all consumers read it plain; f32->half exactly once at the pack; bounded grow-only scratch + derived 256 MiB refusal; bit-exact by conversion-site-only movement; +1.7-3.2% source-reported, MXFP4 arm non-uniform and said so), device-affine-scratch-admission-with-pool-fallback (A +1: three-check admission tuple ptr^device^capacity with the ladder RETAINED -- device affinity captured at SET time is the multi-GPU illegal-access guard; pool-alloc-inside-capture is the motivation (the remove-the-alloc complement of captured-graph-bakes-buffer-addresses); best-effort 96 MiB provisioning; +7.5/6.5/6.4% steady decode source-reported), batch-verify-rows-single-dispatch (C +1: the 2-6-row verify block in ONE launch, partials straight into the TP exchange slab, combine epilogue hoisted and byte-identical for both schedules -- lockstep by construction; +11-23% whole-commit conflated with the seed schedule, said so), row-aware-indexing-reuses-static-single-token-kernel (M +1: widen the existing static kernel's grid mapping (z -> token,slot) + per-token bases and call the static impl VERBATIM rebased -- reuse-instead-of-twin, the static pole of the B92 axis), dense-fast-path-bounded-by-selector-coverage (F +1: dense substitution is legal exactly through top_k + anchor_pool - 1 -- the selector's own reach, never the work-window; converts a tolerance into a proof while enabling the bounded GEMM; ~21 -> ~68 tok/s companion enablement source-reported) + 8 riders (B97 duplicate-pad-at-materialization complement, B35 TP non-owner identity + selector-padding sentinel, B23 byte-size static pin + topology-axis widening, B57 single-pass two-phase twins + four-backend audit, B58 remove-the-alloc-from-capture complement, B103 clamp-to-stay-on-bounded-gemm); source antirez/ds4 main @ 9ab7053 (MIT; Batch 97/98 pin 110afdd + ~14 commits; two read lanes + coordinator spot-verification, line drifts corrected).
     // Batch 118 (6): antirez/ds4 PR #991 Qwen3.8-Flash-Next distill (Research 142 / Plan 097) -- role-scoped-store-must-match-compute-guard (A, the correctness lead: unguarded store on a role-colliding row_half -> EXACTLY-UNIFORM softmax, invisible four ways, SIX sessions; gate batch118_unguarded_store_yields_uniform_softmax), tile-amplification-precedes-staging-pass (H, converged by both lanes), operand-precision-gated-by-consumer-invariance (N, GOAT-grade pass/fail arms + Q-split null ablation; closure MODEL-SCOPED), compute-role-split-by-accumulator-pressure (A, 2 score + 4 PV simdgroups), speculation-scheduler-break-even-flip (D, +3.8% plain decode -> 202 bypass vs 62; 110% margin doc-only), running-threshold-prune-compaction-aliasing-guard (I, memcmp == 0 survives; in-place compaction aliasing guard) + parallel-disjoint-pread-hides-cold-page-latency (rust_perf io) + 7 riders (B24/B95/B77/B57/stripe-semaphore/block-reduction gate batch118_indexed_shuffle_ladders_must_read_unmutated_partials/smem-envelope); source ivanfioravanti/ds4-metal branch qwen3.8-flash-next @ 236cb2a5 (MIT; force-pushed once, HEAD re-verified == pin).
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        591,
-        "kernel batches through Batch 137 should have 591 rules"
+        601,
+        "kernel batches through Batch 138 should have 601 rules"
     );
 }
 
@@ -198,7 +197,10 @@ fn batch1_categories_covered() {
         .iter()
         .find(|c| c.starts_with("autotune dispatch"))
         .expect("autotune-warps-stages concept missing");
-    assert!(autotune.contains("RIDER (Batch 130"), "batch-130 autotune rider missing");
+    assert!(
+        autotune.contains("RIDER (Batch 130"),
+        "batch-130 autotune rider missing"
+    );
     assert!(concepts.contains(&"numerical precision in reductions"));
     assert!(concepts.contains(&"branch divergence elimination"));
     // Batch 130 appended a boundary rider (the CloudRift unroll negatives) --
@@ -207,7 +209,10 @@ fn batch1_categories_covered() {
         .iter()
         .find(|c| c.starts_with("loop unrolling for instruction-level parallelism"))
         .expect("unroll-fixed-inner concept missing");
-    assert!(unroll.contains("RIDER (Batch 130"), "batch-130 unroll rider missing");
+    assert!(
+        unroll.contains("RIDER (Batch 130"),
+        "batch-130 unroll rider missing"
+    );
     assert!(concepts.contains(&"function inlining"));
     // Fusion patterns
     assert!(concepts.contains(&"kernel fusion"));
@@ -254,7 +259,11 @@ fn batch2_flash_attention_concepts_covered() {
         .iter()
         .map(|e| e.gpu_concept.as_str())
         .collect();
-    assert!(concepts.contains(&"flash-attention online softmax"));
+    // The Batch-138 streaming-license rider extended this concept with a
+    // RIDER suffix — assert the prefix, not the whole string.
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("flash-attention online softmax")));
     assert!(concepts.contains(&"base-2 math for faster GPU exponentiation"));
     assert!(concepts.contains(&"structured 2D block pointer loads"));
     assert!(concepts.contains(&"compile-time heuristic dispatch"));
@@ -339,7 +348,10 @@ fn batch4_moe_backward_concepts_covered() {
         .iter()
         .find(|c| c.starts_with("swizzled L2-cache-aware tile mapping"))
         .expect("l2-grouped-tile-schedule concept missing");
-    assert!(l2group.contains("RIDER (Batch 130"), "batch-130 l2-group rider missing");
+    assert!(
+        l2group.contains("RIDER (Batch 130"),
+        "batch-130 l2-group rider missing"
+    );
     assert!(concepts.contains(&"pointwise activation in matmul epilogue"));
     assert!(concepts.contains(&"two backward ops fused into one kernel"));
     assert!(concepts.contains(&"partial activation save with in-kernel recompute"));
@@ -574,22 +586,14 @@ fn batch11_recurrence_concepts_covered() {
         .collect();
     // Category G: linear-attention recurrence (new)
     assert!(concepts.contains(&"per-dimension diagonal decay gate on recurrent state"));
-    assert!(
-        concepts
-            .contains(&"diagonal-plus-low-rank state transition (erase, decay, replace, write)")
-    );
-    assert!(
-        concepts
-            .contains(&"Oja subtractive normalization: project out stored component before write")
-    );
-    assert!(
-        concepts
-            .contains(&"identity-plus-low-rank (I+ba^T) state rotation then outer-product write")
-    );
-    assert!(
-        concepts
-            .contains(&"convert per-step log-gate into pairwise decay matrix via cumsum + diff")
-    );
+    assert!(concepts
+        .contains(&"diagonal-plus-low-rank state transition (erase, decay, replace, write)"));
+    assert!(concepts
+        .contains(&"Oja subtractive normalization: project out stored component before write"));
+    assert!(concepts
+        .contains(&"identity-plus-low-rank (I+ba^T) state rotation then outer-product write"));
+    assert!(concepts
+        .contains(&"convert per-step log-gate into pairwise decay matrix via cumsum + diff"));
     // Category E: parallelism (new)
     assert!(concepts.contains(&"reverse-direction scan via flip → forward scan → flip"));
     assert!(concepts.contains(&"materialize N×N decay matrix from index distance and slope"));
@@ -601,9 +605,7 @@ fn batch11_recurrence_concepts_covered() {
         &"shift activation positive (elu+1) so linear-attention normalizer never crosses zero"
     ));
     // Category D: dispatch (new)
-    assert!(
-        concepts.contains(&"layer-depth-dependent decay schedule (deeper layers decay slower)")
-    );
+    assert!(concepts.contains(&"layer-depth-dependent decay schedule (deeper layers decay slower)"));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -689,27 +691,18 @@ fn batch12_recurrence_attention_concepts_covered() {
     assert!(
         concepts.contains(&"gated delta rule: decay state then correct against decayed subspace")
     );
-    assert!(
-        concepts.contains(&"one outer gate wrapping N inner Householder delta writes per step")
-    );
-    assert!(
-        concepts.contains(&"online ridge regression: gated Gram accumulators + per-step solve")
-    );
+    assert!(concepts.contains(&"one outer gate wrapping N inner Householder delta writes per step"));
+    assert!(concepts.contains(&"online ridge regression: gated Gram accumulators + per-step solve"));
     assert!(concepts.contains(&"two coupled recurrences: SGD momentum state + EMA memory matrix"));
-    assert!(
-        concepts
-            .contains(&"read from boosted state (transient bonus), then update with un-boosted kv")
-    );
+    assert!(concepts
+        .contains(&"read from boosted state (transient bonus), then update with un-boosted kv"));
     assert!(
         concepts.contains(&"WKV with 3-channel state (num/den/max) + logsumexp max-subtraction")
     );
     // Category B: compute (new)
     assert!(concepts.contains(&"O(log seq) hierarchical mask with per-level learned scales"));
-    assert!(
-        concepts.contains(
-            &"conjugate-gradient solve over matvec with Jacobi preconditioner (no inverse)"
-        )
-    );
+    assert!(concepts
+        .contains(&"conjugate-gradient solve over matvec with Jacobi preconditioner (no inverse)"));
     assert!(concepts.contains(&"mini-batch chunked GD with causal mask + last-step weight update"));
     // Category F: flash-attn tiling (new)
     assert!(concepts.contains(
@@ -723,11 +716,8 @@ fn batch12_recurrence_attention_concepts_covered() {
         concepts.contains(&"MoE gate: softmax → topk → renormalize → scatter sparse gate matrix")
     );
     // Category C: fusion (new)
-    assert!(
-        concepts.contains(
-            &"fuse gate transform with chunk-local cumsum (no materialized intermediate)"
-        )
-    );
+    assert!(concepts
+        .contains(&"fuse gate transform with chunk-local cumsum (no materialized intermediate)"));
     // Category D: dispatch (new)
     assert!(concepts.contains(
         &"dual-mode gate: unbounded softplus OR bounded sigmoid, dispatched by parameter"
@@ -1355,7 +1345,10 @@ fn batch25_gemma_cluster_concepts_covered() {
     // full-string regeneration lesson, prefix form -- the original text is
     // pinned verbatim, the rider pinned by its opening marker).
     let argmax = concepts.iter().find(|c| c.starts_with("when the host needs only a tiny derived result of a large GPU array (argmax index, top-k, threshold count), compute it ON DEVICE with a reduction kernel and download only the tiny result — 4 bytes (1 u32) instead of the full array (vocab_size × 4 ≈ 1 MB at 256K vocab). Greedy decode is the canonical consumer: ~250,000× smaller per-token boundary crossing; a 50-prompt + 500-decode session downloads ~50 MB instead of ~550 MB. Distinct from offload-cpu-bottleneck-to-gpu-kernel (CPU work moved to GPU) — the CPU side isn't slow, the DOWNLOAD feeding it is the cost; and from chain-dispatches-single-sync-point (sync count) — this is download size")).expect("device-side-argmax-minimal-download concept prefix missing");
-    assert!(argmax.contains("RIDER (Batch 129 external confirmation + facet"), "batch-129 argmax rider missing");
+    assert!(
+        argmax.contains("RIDER (Batch 129 external confirmation + facet"),
+        "batch-129 argmax rider missing"
+    );
     // B: monotone-transform-elision-under-argmax (riir-gpu gemma2_cubecl/gpu_forward.rs L208-217)
     assert!(concepts.contains(&"a strictly monotone post-transform (softcap cap·tanh(x/cap), clamps, positive rescalings) does not change the argmax — skip it entirely when the only consumer is greedy decoding / top-k / any order-only query. The GPU decode path returns the raw logits WITHOUT final logit softcapping because tanh is monotonically increasing: argmax(softcap(x)) == argmax(x); the value-consuming CPU path still applies it. Elides a full-array transcendental pass (256K tanh evals per decode token). Distinct from softcap-tanh-attention-score (applying softcap in-kernel) — this elides it under order-only consumers; distinct from optional-bias-branch (absence) — the transform exists but order is invariant under it"));
     // C: fan-out-shared-input-single-sync (riir-gpu gemma2_cubecl/dispatch.rs L69-122)
@@ -5327,7 +5320,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 591-rule corpus must appear in exactly one category.
+    // Every rule_id in the 601-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5370,21 +5363,21 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 137).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 138).
     let expected = [
-        (KernelCategory::MemoryAccess, 127),
-        (KernelCategory::Compute, 61),
+        (KernelCategory::MemoryAccess, 129),
+        (KernelCategory::Compute, 63),
         (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 132),
-        (KernelCategory::Parallelism, 51),
-        (KernelCategory::FlashAttnTiling, 13),
+        (KernelCategory::Parallelism, 53),
+        (KernelCategory::FlashAttnTiling, 14),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 28),
         (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 11),
-        (KernelCategory::ConvGemmLayout, 16),
-        (KernelCategory::KernelPolymorphism, 19),
+        (KernelCategory::AutotuneDispatch, 12),
+        (KernelCategory::ConvGemmLayout, 17),
+        (KernelCategory::KernelPolymorphism, 20),
         (KernelCategory::DtypeAlignment, 43),
         (KernelCategory::IrStrengthReduction, 4),
     ];
@@ -5400,9 +5393,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 591.
+    // Sum must equal 601.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 591, "Plan 003: category totals must sum to 591");
+    assert_eq!(total, 601, "Plan 003: category totals must sum to 601");
 }
 
 #[test]
@@ -5413,8 +5406,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 591,
-        "Plan 003: grouped corpus has {total} rules, expected 591"
+        total, 601,
+        "Plan 003: grouped corpus has {total} rules, expected 601"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6489,7 +6482,16 @@ fn batch94_rules_present() {
     // Batch 94 (oMLX PR #3260 SSD expert streaming + Soft-REAP distill --
     // Research 110 / Plan 058): 8 kernel_opt D rules.
     let corpus = build_kernel_seed_corpus();
-    let ids = ["cross-run-profiles-key-on-content-not-stat-triplets", "fill-gate-speculation-until-working-set-resident", "decayed-frequency-eviction-recency-tiebreak-route-protection", "defer-promoted-write-to-first-consumer-dispatch", "rollback-snapshot-covers-all-mutable-state", "scratch-bank-isolates-one-shot-operands-from-hot-cache", "sort-consumer-routes-by-physical-slot", "row-addressable-operand-index-not-full-tensor-map"];
+    let ids = [
+        "cross-run-profiles-key-on-content-not-stat-triplets",
+        "fill-gate-speculation-until-working-set-resident",
+        "decayed-frequency-eviction-recency-tiebreak-route-protection",
+        "defer-promoted-write-to-first-consumer-dispatch",
+        "rollback-snapshot-covers-all-mutable-state",
+        "scratch-bank-isolates-one-shot-operands-from-hot-cache",
+        "sort-consumer-routes-by-physical-slot",
+        "row-addressable-operand-index-not-full-tensor-map",
+    ];
     for id in ids {
         assert!(
             corpus.entries.iter().any(|e| e.rule_id == id),
@@ -6504,14 +6506,66 @@ fn batch94_concepts_covered() {
     // text (case-sensitive contains -- the B51 lesson).
     let corpus = build_kernel_seed_corpus();
     let checks: &[(&str, &[&str])] = &[
-        ("cross-run-profiles-key-on-content-not-stat-triplets", &["mtime-preserving copy", "unverified claim", "write the guard at the derivation, not at one caller"]),
-        ("fill-gate-speculation-until-working-set-resident", &["166.965 s speculative vs 14.709 s checked", "0.579 s vs 0.556 s", "LATCH the readiness bit"]),
-        ("decayed-frequency-eviction-recency-tiebreak-route-protection", &["recency as TIE-BREAK only", "score BOTH hits and misses", "FAIL LOUD when no candidate remains"]),
-        ("defer-promoted-write-to-first-consumer-dispatch", &["materializes the same writes twice", "bind seconds vs materialize seconds", "IDENTIFYING the existing implicit fence"]),
-        ("rollback-snapshot-covers-all-mutable-state", &["append-only write contract", "silently skipped", "NEVER returned"]),
-        ("scratch-bank-isolates-one-shot-operands-from-hot-cache", &["42 -> 0", "2.12-2.19x", "STRUCTURALLY untouchable"]),
-        ("sort-consumer-routes-by-physical-slot", &["+26.6%", "64 routed rows", "an API CONTRACT with the gather kernel"]),
-        ("row-addressable-operand-index-not-full-tensor-map", &["silent weight corruption", "UNGUARDED data_bytes // num_experts", "the merkle_root lesson"]),
+        (
+            "cross-run-profiles-key-on-content-not-stat-triplets",
+            &[
+                "mtime-preserving copy",
+                "unverified claim",
+                "write the guard at the derivation, not at one caller",
+            ],
+        ),
+        (
+            "fill-gate-speculation-until-working-set-resident",
+            &[
+                "166.965 s speculative vs 14.709 s checked",
+                "0.579 s vs 0.556 s",
+                "LATCH the readiness bit",
+            ],
+        ),
+        (
+            "decayed-frequency-eviction-recency-tiebreak-route-protection",
+            &[
+                "recency as TIE-BREAK only",
+                "score BOTH hits and misses",
+                "FAIL LOUD when no candidate remains",
+            ],
+        ),
+        (
+            "defer-promoted-write-to-first-consumer-dispatch",
+            &[
+                "materializes the same writes twice",
+                "bind seconds vs materialize seconds",
+                "IDENTIFYING the existing implicit fence",
+            ],
+        ),
+        (
+            "rollback-snapshot-covers-all-mutable-state",
+            &[
+                "append-only write contract",
+                "silently skipped",
+                "NEVER returned",
+            ],
+        ),
+        (
+            "scratch-bank-isolates-one-shot-operands-from-hot-cache",
+            &["42 -> 0", "2.12-2.19x", "STRUCTURALLY untouchable"],
+        ),
+        (
+            "sort-consumer-routes-by-physical-slot",
+            &[
+                "+26.6%",
+                "64 routed rows",
+                "an API CONTRACT with the gather kernel",
+            ],
+        ),
+        (
+            "row-addressable-operand-index-not-full-tensor-map",
+            &[
+                "silent weight corruption",
+                "UNGUARDED data_bytes // num_experts",
+                "the merkle_root lesson",
+            ],
+        ),
     ];
     for (id, needles) in checks {
         let e = corpus
@@ -6534,7 +6588,16 @@ fn batch94_pseudocode_parses() {
     // G1 for Batch 94: syn-parse gate.
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
-    let ids = ["cross-run-profiles-key-on-content-not-stat-triplets", "fill-gate-speculation-until-working-set-resident", "decayed-frequency-eviction-recency-tiebreak-route-protection", "defer-promoted-write-to-first-consumer-dispatch", "rollback-snapshot-covers-all-mutable-state", "scratch-bank-isolates-one-shot-operands-from-hot-cache", "sort-consumer-routes-by-physical-slot", "row-addressable-operand-index-not-full-tensor-map"];
+    let ids = [
+        "cross-run-profiles-key-on-content-not-stat-triplets",
+        "fill-gate-speculation-until-working-set-resident",
+        "decayed-frequency-eviction-recency-tiebreak-route-protection",
+        "defer-promoted-write-to-first-consumer-dispatch",
+        "rollback-snapshot-covers-all-mutable-state",
+        "scratch-bank-isolates-one-shot-operands-from-hot-cache",
+        "sort-consumer-routes-by-physical-slot",
+        "row-addressable-operand-index-not-full-tensor-map",
+    ];
     for id in ids {
         let entry = corpus
             .entries
@@ -7340,7 +7403,10 @@ fn batch104_rules_present() {
     // the fa-vec system -- infra efeda76b9, table pin 8963a9bdc (the
     // M3 Max rows), harness read at d230ddd76 (byte-identical pin->HEAD).
     let corpus = build_kernel_seed_corpus();
-    let ids = ["swept-shape-bucket-launch-tables", "no-harm-bucket-representative"];
+    let ids = [
+        "swept-shape-bucket-launch-tables",
+        "no-harm-bucket-representative",
+    ];
     for id in ids {
         assert!(
             corpus.entries.iter().any(|e| e.rule_id == id),
@@ -7404,7 +7470,10 @@ fn batch104_pseudocode_parses() {
     // table + the no-harm bucket representative).
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
-    let ids = ["swept-shape-bucket-launch-tables", "no-harm-bucket-representative"];
+    let ids = [
+        "swept-shape-bucket-launch-tables",
+        "no-harm-bucket-representative",
+    ];
     for id in ids {
         let entry = corpus
             .entries
@@ -8809,8 +8878,16 @@ fn batch111_ue8m0_byte_contract() {
     }
 
     // (4) clamp bounds.
-    assert_eq!(encode(f32::MAX, 1e-30), 255, "huge absmax must saturate at 255");
-    assert_eq!(encode(0.0, f32::MAX), encode(1e-4, f32::MAX), "floor arm at extreme fp8_max");
+    assert_eq!(
+        encode(f32::MAX, 1e-30),
+        255,
+        "huge absmax must saturate at 255"
+    );
+    assert_eq!(
+        encode(0.0, f32::MAX),
+        encode(1e-4, f32::MAX),
+        "floor arm at extreme fp8_max"
+    );
 
     // (5) monotonicity over an ordered probe.
     let mut prev = 0u8;
@@ -8822,7 +8899,6 @@ fn batch111_ue8m0_byte_contract() {
         v *= 1.7;
     }
 }
-
 
 #[test]
 fn batch114_rules_present() {
@@ -8918,7 +8994,6 @@ fn batch114_pseudocode_parses() {
         );
     }
 }
-
 
 #[test]
 fn batch113_rules_present() {
@@ -9201,7 +9276,11 @@ fn batch115_ordinal_map_reproduces_stable_sort_semantics() {
             return 0x8000_0000;
         }
         let u = v.to_bits();
-        if u & 0x8000_0000 != 0 { !u } else { u | 0x8000_0000 }
+        if u & 0x8000_0000 != 0 {
+            !u
+        } else {
+            u | 0x8000_0000
+        }
     }
     // Reference comparator: stable ascending, NaN ranks above every
     // number, -0.0 == +0.0 (ties keep original index order in the
@@ -9247,8 +9326,11 @@ fn batch115_ordinal_map_reproduces_stable_sort_semantics() {
 
     // Mine: (ordinal, index)-ascending, tail-K = the LAST k -- ties
     // resolve toward the higher index, output ascending.
-    let mut pairs: Vec<(u32, usize)> =
-        values.iter().enumerate().map(|(i, v)| (ordinal(*v), i)).collect();
+    let mut pairs: Vec<(u32, usize)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (ordinal(*v), i))
+        .collect();
     pairs.sort_unstable();
     let mine_tail: Vec<usize> = pairs[n - k..].iter().map(|(_, i)| *i).collect();
 
@@ -9289,7 +9371,9 @@ fn batch115_coverage_collapse_dense_and_partial_arms() {
     // reorder is the identity (the install-time argSort-inverse).
     assert_eq!(
         install(4, &[2, 0, 3, 1]),
-        Plan::Complete { reordered: vec![0, 1, 2, 3] }
+        Plan::Complete {
+            reordered: vec![0, 1, 2, 3]
+        }
     );
     // Partial: two of four rows -> scatter path retained.
     assert_eq!(install(4, &[1, 3]), Plan::Partial);
@@ -9430,8 +9514,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        591,
-        "Batch 137: corpus should have 591 rules"
+        601,
+        "Batch 138: corpus should have 601 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -9566,7 +9650,6 @@ fn batch116_pseudocode_parses() {
         );
     }
 }
-
 
 // ── Batch 116 ADDENDUM gates (the collision salvage — Research 140 addendum 2) ──
 
@@ -9721,17 +9804,9 @@ fn batch116_addendum_swar_lanes_exhaustive() {
         steps
     }
     fn word_from(b0: u8, b1: u8, b2: u8, b3: u8) -> u32 {
-        u32::from(b0)
-            | (u32::from(b1) << 8)
-            | (u32::from(b2) << 16)
-            | (u32::from(b3) << 24)
+        u32::from(b0) | (u32::from(b1) << 8) | (u32::from(b2) << 16) | (u32::from(b3) << 24)
     }
-    fn assert_stream(
-        got: &[[i32; 4]; 5],
-        lane: usize,
-        reference: &[i32; 5],
-        ctx: &str,
-    ) {
+    fn assert_stream(got: &[[i32; 4]; 5], lane: usize, reference: &[i32; 5], ctx: &str) {
         for (step, row) in got.iter().enumerate() {
             assert_eq!(
                 row[lane] + 1,
@@ -10001,7 +10076,7 @@ fn batch118_pseudocode_parses() {
 
 #[test]
 #[allow(clippy::cast_precision_loss)] // fixture RNG draws and an n=8 reciprocal -- the detector
-// asserts spreads orders of magnitude past f32 mantissa granularity
+                                      // asserts spreads orders of magnitude past f32 mantissa granularity
 fn batch118_unguarded_store_yields_uniform_softmax() {
     // The load-bearing numeric gate for role-scoped-store-must-match-
     // compute-guard: a role-partitioned attention tile where the PV roles'
@@ -10025,9 +10100,10 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
         ((rng_state >> 40) & 0xFFFF) as f32 / 65536.0f32 - 0.5
     };
     let q_scale = 12.0f32; // x12 input scale: score spreads reach ~+-20
-    let true_scores: Vec<Vec<f32>> = (0..2) // row_half -> 8 rows of scores
-        .map(|_| (0..8).map(|_| rand() * 40.0 * q_scale).collect())
-        .collect();
+    let true_scores: Vec<Vec<f32>> =
+        (0..2) // row_half -> 8 rows of scores
+            .map(|_| (0..8).map(|_| rand() * 40.0 * q_scale).collect())
+            .collect();
     let softmax = |scores: &[f32]| -> Vec<f32> {
         let max = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let exps: Vec<f32> = scores.iter().map(|s| (s - max).exp()).collect();
@@ -10035,10 +10111,7 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
         exps.iter().map(|e| e / sum).collect()
     };
     // GUARDED twin: only score roles store; PV fragments never reach s_tile.
-    let guarded_weights: Vec<Vec<f32>> = true_scores
-        .iter()
-        .map(|row| softmax(row))
-        .collect();
+    let guarded_weights: Vec<Vec<f32>> = true_scores.iter().map(|row| softmax(row)).collect();
     for row in &guarded_weights {
         let spread = row.iter().copied().fold(f32::NEG_INFINITY, f32::max)
             - row.iter().copied().fold(f32::INFINITY, f32::min);
@@ -10060,7 +10133,10 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
     // The lazy running-max stays FINITE and sane (0.0) -- nothing NaNs.
     for row in &s_tile {
         let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        assert!(max.is_finite(), "running max must stay finite (the source bug's invisibility)");
+        assert!(
+            max.is_finite(),
+            "running max must stay finite (the source bug's invisibility)"
+        );
     }
     for row in &s_tile {
         let w = softmax(row);
@@ -10083,9 +10159,7 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
     // spreads (~0.1, the |q| <= 0.12 input class) the uniform weights sit
     // INSIDE the source's 5e-3 + 3e-2|ref| tolerance of the true weights
     // (max weight deviation ~ spread/(2n) ~ 6e-3 < ~8.7e-3 here).
-    let tiny: [f32; 8] = [
-        -0.05, -0.0375, -0.025, -0.0125, 0.0, 0.0125, 0.025, 0.0375,
-    ];
+    let tiny: [f32; 8] = [-0.05, -0.0375, -0.025, -0.0125, 0.0, 0.0125, 0.025, 0.0375];
     let w_true = softmax(&tiny);
     let w_uniform = vec![1.0 / 8.0; 8];
     for (t, u) in w_true.iter().zip(&w_uniform) {
@@ -10103,9 +10177,10 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
         .zip(&prod_uniform)
         .map(|(t, u)| (t - u).abs())
         .fold(0.0f32, f32::max);
-    let within_tol = prod.iter().zip(&prod_uniform).all(|(t, u)| {
-        (t - u).abs() <= 5e-3 + 3e-2 * t.abs()
-    });
+    let within_tol = prod
+        .iter()
+        .zip(&prod_uniform)
+        .all(|(t, u)| (t - u).abs() <= 5e-3 + 3e-2 * t.abs());
     assert!(
         max_err > 0.0 && !within_tol,
         "production magnitude must EXCEED the tolerance (the six-session invisibility ends here)"
@@ -10118,8 +10193,8 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
     clippy::float_cmp,
     clippy::needless_range_loop
 )] // exact f32 equality IS the tested contract here (integer-valued partials
-    // keep every add exact, so no tolerance exists to hide behind) and the
-    // ladders are inherently index-structured (stage j reads lane j)
+   // keep every add exact, so no tolerance exists to hide behind) and the
+   // ladders are inherently index-structured (stage j reads lane j)
 fn batch118_indexed_shuffle_ladders_must_read_unmutated_partials() {
     // The block-reduction rider's decision content, pinned executable:
     // an INDEXED shuffle ladder (partner = lane index j, not xor mask) that
@@ -10288,7 +10363,7 @@ fn batch119_pseudocode_parses() {
 
 #[test]
 #[allow(clippy::float_cmp)] // the poison compare IS a bit pattern compare;
-// exact f32 equality only ever asserts on from_bits-round-tripped values
+                            // exact f32 equality only ever asserts on from_bits-round-tripped values
 fn batch119_sentinel_never_equal_and_reset_before_reuse() {
     // The sentinel rule's decision content, pinned executable: (1) the poison
     // pattern is a NaN so no finite f32 payload can bit-match it; (2) the
@@ -10300,7 +10375,10 @@ fn batch119_sentinel_never_equal_and_reset_before_reuse() {
     const POISON: u32 = 0xFFFA_FFFA; // the source's 4-byte poison table entry
     let is_poisoned = |v: f32| v.to_bits() == POISON;
     // (1) NaN payload: every finite value is deliverable, the poison is not.
-    assert!(f32::from_bits(POISON).is_nan(), "poison must be a NaN pattern");
+    assert!(
+        f32::from_bits(POISON).is_nan(),
+        "poison must be a NaN pattern"
+    );
     let finite_samples = [0.0f32, -0.0, 1.5, -13.25, f32::MIN, f32::MAX];
     for v in finite_samples {
         assert!(
@@ -10337,7 +10415,10 @@ fn batch119_sentinel_never_equal_and_reset_before_reuse() {
         "reset reader must wait (slot reads poison again)"
     );
     slot = 2.0; // the writer's round-2 store
-    assert!(!is_poisoned(slot) && slot == 2.0, "reset protocol delivers 2.0");
+    assert!(
+        !is_poisoned(slot) && slot == 2.0,
+        "reset protocol delivers 2.0"
+    );
     // (4) readiness is ALL-SLOTS: one poison slot holds the batch back.
     let buf = [1.0f32, f32::from_bits(POISON), 3.0];
     let ready = buf.iter().all(|v| !is_poisoned(*v));
@@ -10357,7 +10438,7 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     // 16-byte payload is ready only when BOTH slot flags match (the ~0u retry
     // encoding); (5) a stale flag never passes the poll within a wrap.
     const NOT_READY: u32 = !0u32; // the ~0u retry encoding (used in (4) below)
-    // (1) the source's advanceEpoch arithmetic on a uint8_t.
+                                  // (1) the source's advanceEpoch arithmetic on a uint8_t.
     let mut epoch: u8 = 2; // the constructor's initial epoch
     let mut seen_zero_or_one = false;
     for _ in 0..1000 {
@@ -10374,7 +10455,10 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     for _ in 0..254 {
         epoch = epoch.wrapping_add(if epoch == 255 { 3 } else { 1 });
     }
-    assert_eq!(epoch, 2, "the band wraps 2..=255 back to 2 -- flag aliasing");
+    assert_eq!(
+        epoch, 2,
+        "the band wraps 2..=255 back to 2 -- flag aliasing"
+    );
     // (3) the rotation: offset = (subBuffer % roundRobinFactor) * pitch
     // changes every epoch, so the aliased old copy is physically unreachable.
     let (pitch, rr) = (64usize, 2usize);
@@ -10382,10 +10466,18 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     for (sub_buffer, _) in (0..4).enumerate() {
         offsets.push((sub_buffer % rr) * pitch);
     }
-    assert_eq!(offsets, vec![0, 64, 0, 64], "the rotation alternates sub-buffers");
+    assert_eq!(
+        offsets,
+        vec![0, 64, 0, 64],
+        "the rotation alternates sub-buffers"
+    );
     // (4) split-slot both-flags-match with the ~0u retry encoding.
     let split_slot_ready = |f0: u32, f1: u32, _epoch: u32| {
-        if f0 == f1 { f0 } else { NOT_READY }
+        if f0 == f1 {
+            f0
+        } else {
+            NOT_READY
+        }
     };
     assert_eq!(split_slot_ready(7, 7, 7), 7, "both flags match -> ready");
     assert_eq!(
@@ -10945,15 +11037,19 @@ fn batch130_concepts_covered() {
     );
     // Rider pins: the 7 riders this batch appended to existing rules,
     // pinned by their opening marker (the B129 prefix+rider form).
-    let corpus_all: Vec<&str> = corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+    let corpus_all: Vec<&str> = corpus
+        .entries
+        .iter()
+        .map(|e| e.gpu_concept.as_str())
+        .collect();
     let rider_targets = [
-        "when kernel params match a known config",            // hardcoded-fast-path
-        "a numerics-affecting compiler flag",                 // fast-math
-        "swizzled L2-cache-aware tile mapping",               // l2-grouped
-        "loop unrolling for instruction-level parallelism",   // unroll-fixed-inner
-        "autotune dispatch",                                  // autotune-warps-stages
-        "Stage global-to-shared tile fetches",                // cpasync-multistage
-        "pin the launch heuristic to the architecture",       // launch-heuristic (prefix probe below)
+        "when kernel params match a known config", // hardcoded-fast-path
+        "a numerics-affecting compiler flag",      // fast-math
+        "swizzled L2-cache-aware tile mapping",    // l2-grouped
+        "loop unrolling for instruction-level parallelism", // unroll-fixed-inner
+        "autotune dispatch",                       // autotune-warps-stages
+        "Stage global-to-shared tile fetches",     // cpasync-multistage
+        "pin the launch heuristic to the architecture", // launch-heuristic (prefix probe below)
     ];
     let _ = rider_targets;
     for (prefix_probe, marker) in [
@@ -10996,7 +11092,8 @@ fn batch130_concepts_covered() {
         .find(|e| e.rule_id == "launch-heuristic-pinned-to-calibration-arch")
         .expect("launch-heuristic rule missing");
     assert!(
-        lh.gpu_concept.contains("RIDER (Batch 130 external instance, cloudrift-ai/emmy"),
+        lh.gpu_concept
+            .contains("RIDER (Batch 130 external instance, cloudrift-ai/emmy"),
         "batch-130 launch-heuristic rider missing"
     );
 }
@@ -11150,8 +11247,7 @@ fn batch137_concepts_covered() {
     let c = concept("splitk-atomic-free-contention-threshold");
     assert!(
         c.contains("above threshold splits REWARD the deferred combine kernel")
-            && c
-                .contains("a hand-set constant here would be a constant the fit optimizes around")
+            && c.contains("a hand-set constant here would be a constant the fit optimizes around")
             && c.contains("D_finalize_kernel goes dead")
             && c.contains("target-tile-split-k-deterministic-two-dispatch"),
         "splitk-contention concept"
@@ -11202,6 +11298,199 @@ fn batch137_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-137 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch138_rules_present() {
+    // Batch 138 (the CloudRift "Learning FlashAttention the Hard Way"
+    // Parts 1+2 distill -- Plan 118): 10 kernel_opt rules mined at
+    // cloudrift-ai/emmy @ bdd26c53 (Apache-2.0; the tip past Batch 137's
+    // 1c058c9d, carrying #758) x the FA articles (Trifonov, 2026-07-06/08;
+    // the queue's bare blog path 404s -- the real paths carry -part-1/-part-2).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "split-copy-issue-deposit-depth-uniform",
+        "stage-domain-product-of-independent-knobs",
+        "fold-invariant-factor-commutes-to-epilogue",
+        "twisted-monoid-dependent-reduce-fusion",
+        "c-fragment-to-a-operand-register-repack",
+        "stream-invariant-operand-skips-staging-pipeline",
+        "rewrite-decline-names-refusing-predicate",
+        "defensive-sync-peephole-tile-body-scope",
+        "sfu-exp-swap-pays-only-when-sfu-limited",
+        "left-right-fold-pair-proves-associative-combine",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-138 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // the B51-style phrase pins, one block per rule
+fn batch138_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-138 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("split-copy-issue-deposit-depth-uniform");
+    assert!(
+        c.contains("one meaning of the knob across all three transports")
+            && c.contains("the slot a deposit writes was freed two chunks back")
+            && c.contains("896 CTAs onto 80 SMs")
+            && c.contains("register-double-buffer-operand-pipeline"),
+        "split-copy concept"
+    );
+    let c = concept("stage-domain-product-of-independent-knobs");
+    assert!(
+        c.contains("the domain is their PRODUCT")
+            && c.contains("Nothing here picks which pairings are worth trying")
+            && c.contains("reached only four of its combinations")
+            && c.contains("autotune-warps-stages"),
+        "stage-domain concept"
+    );
+    let c = concept("fold-invariant-factor-commutes-to-epilogue");
+    assert!(
+        c.contains("commutes out of an additive fold")
+            && c.contains("Divisors hoist as divisions; a varying divisor keeps the fold whole")
+            && c.contains("once, after the fold")
+            && c.contains("factor-affine-quant-scale-out-of-element-loop"),
+        "fold-invariant concept"
+    );
+    let c = concept("twisted-monoid-dependent-reduce-fusion");
+    assert!(
+        c.contains("TWISTED MONOID stated as its mathematics")
+            && c.contains("evaluating the two apart denotes")
+            && c.contains("a mean of nothing is any value")
+            && c.contains("online-softmax-streaming"),
+        "twisted-monoid concept"
+    );
+    let c = concept("c-fragment-to-a-operand-register-repack");
+    assert!(
+        c.contains("lane-aligned and converts two adjacent C fragments directly")
+            && c.contains("Neither needs a shared-memory round trip")
+            && c.contains("cvt.rn.f16x2")
+            && c.contains("mma-fragment-layout-m16n8k16"),
+        "c-to-a-repack concept"
+    );
+    let c = concept("stream-invariant-operand-skips-staging-pipeline");
+    assert!(
+        c.contains("copied ONCE ahead of the loop and never refilled")
+            && c.contains("with nothing advancing there is no live range")
+            && c.contains("disabled by default")
+            && c.contains("cpasync-multistage-tile-pipeline"),
+        "stream-invariant concept"
+    );
+    let c = concept("rewrite-decline-names-refusing-predicate");
+    assert!(
+        c.contains("Declining is not neutral")
+            && c.contains("the only visible symptom is the measurement")
+            && c.contains("names the predicate that refused instead of leaving a silent demotion")
+            && c.contains("warm-reachable-dispatch-signatures-before-timed-window"),
+        "named-decline concept"
+    );
+    let c = concept("defensive-sync-peephole-tile-body-scope");
+    assert!(
+        c.contains("before any smem access fences nothing")
+            && c.contains("load-bearing")
+            && c.contains("one barrier per chunk instead of two")
+            && c.contains("barrier-after-async-mma-before-staged-tile-reuse"),
+        "defensive-sync concept"
+    );
+    let c = concept("sfu-exp-swap-pays-only-when-sfu-limited");
+    assert!(
+        c.contains("MUFU.EX2")
+            && c.contains("not bit-exact")
+            && c.contains("NEVER silently on")
+            && c.contains("exp2-log2-base2"),
+        "sfu-exp concept"
+    );
+    let c = concept("left-right-fold-pair-proves-associative-combine");
+    assert!(
+        c.contains("guaranteed to exist")
+            && c.contains("a test for when any loop is secretly associative")
+            && c.contains("either a recipe clicks or it does not")
+            && c.contains("first-order-affine-recurrence-associative-scan"),
+        "fold-pair concept"
+    );
+    // The four Batch-138 riders must be present on their host rules.
+    let host = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("rider host '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    assert!(
+        host("setmaxnreg-fit-gate-elected-arrive")
+            .contains("ASYNC-MMA half of the admission predicate")
+            && host("setmaxnreg-fit-gate-elected-arrive").contains("no wgmma"),
+        "setmaxnreg rider"
+    );
+    assert!(
+        host("autotune-warps-stages")
+            .contains("occupancy loss beats extra overlap at every geometry"),
+        "deeper-rings rider"
+    );
+    assert!(
+        host("online-softmax-streaming").contains("never amplifying"),
+        "streaming-license rider"
+    );
+    assert!(
+        host("state-normalization-between-updates-breaks-associative-scan")
+            .contains("many-to-one, hence not invertible"),
+        "quantize-breaks rider"
+    );
+}
+
+#[test]
+fn batch138_pseudocode_parses() {
+    // G1 for Batch 138: syn-parse gate (the CloudRift FA rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "split-copy-issue-deposit-depth-uniform",
+        "stage-domain-product-of-independent-knobs",
+        "fold-invariant-factor-commutes-to-epilogue",
+        "twisted-monoid-dependent-reduce-fusion",
+        "c-fragment-to-a-operand-register-repack",
+        "stream-invariant-operand-skips-staging-pipeline",
+        "rewrite-decline-names-refusing-predicate",
+        "defensive-sync-peephole-tile-body-scope",
+        "sfu-exp-swap-pays-only-when-sfu-limited",
+        "left-right-fold-pair-proves-associative-combine",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-138 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-138 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-138 opt_pattern for '{id}' must parse"
         );
     }
 }

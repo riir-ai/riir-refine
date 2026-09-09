@@ -340,8 +340,10 @@ mod tests {
                 for &k in &[0.1, 0.5, 0.9] {
                     let activity = build_activity(m, n, k, 0.5, 0.5, false, false, false);
                     let idx = router.route(&activity);
-                    assert!(idx < NUM_KERNEL_EXPERTS,
-                        "route returned {idx}, must be < {NUM_KERNEL_EXPERTS}");
+                    assert!(
+                        idx < NUM_KERNEL_EXPERTS,
+                        "route returned {idx}, must be < {NUM_KERNEL_EXPERTS}"
+                    );
                 }
             }
         }
@@ -353,13 +355,17 @@ mod tests {
         // Large-M only → memory access.
         let activity = build_activity(0.9, 0.0, 0.0, 0.0, 0.0, false, false, false);
         let name = router.route_named(&activity);
-        assert_eq!(name, "A: memory access",
-            "large-M-only should route to category A, got '{name}'");
+        assert_eq!(
+            name, "A: memory access",
+            "large-M-only should route to category A, got '{name}'"
+        );
         // Large-hw → dispatch.
         let activity = build_activity(0.0, 0.0, 0.0, 0.0, 0.9, false, false, false);
         let name = router.route_named(&activity);
-        assert_eq!(name, "D: dispatch",
-            "large-hw-only should route to category D, got '{name}'");
+        assert_eq!(
+            name, "D: dispatch",
+            "large-hw-only should route to category D, got '{name}'"
+        );
     }
 
     #[test]
@@ -424,8 +430,11 @@ mod tests {
         for idx in 0..NUM_KERNEL_EXPERTS {
             let cat = KernelExpertRouter::category_for_expert(idx)
                 .unwrap_or_else(|| panic!("Plan 003: expert {idx} has no category"));
-            assert_eq!(cat as u8, u8::try_from(idx).unwrap(),
-                "Plan 003: category discriminant must match expert index");
+            assert_eq!(
+                cat as u8,
+                u8::try_from(idx).unwrap(),
+                "Plan 003: category discriminant must match expert index"
+            );
         }
     }
 
@@ -439,9 +448,11 @@ mod tests {
     fn rules_for_expert_returns_nonempty_slices() {
         for idx in 0..NUM_KERNEL_EXPERTS {
             let rules = KernelExpertRouter::rules_for_expert(idx);
-            assert!(!rules.is_empty(),
+            assert!(
+                !rules.is_empty(),
                 "Plan 003: expert {idx} ({:?}) has zero rules",
-                KernelExpertRouter::category_for_expert(idx));
+                KernelExpertRouter::category_for_expert(idx)
+            );
         }
     }
 
@@ -458,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 591, "Plan 003: experts cover all 591 corpus rules");
+        assert_eq!(total, 601, "Plan 003: experts cover all 601 corpus rules");
     }
 
     #[test]
@@ -483,7 +494,10 @@ mod tests {
 
     #[test]
     fn expert_for_rule_unknown_returns_none() {
-        assert_eq!(KernelExpertRouter::expert_for_rule("nonexistent-rule"), None);
+        assert_eq!(
+            KernelExpertRouter::expert_for_rule("nonexistent-rule"),
+            None
+        );
         assert_eq!(KernelExpertRouter::expert_for_rule(""), None);
     }
 
@@ -501,8 +515,10 @@ mod tests {
         // the same expert index.
         let first_rule = rules[0];
         let reverse = KernelExpertRouter::expert_for_rule(first_rule).unwrap();
-        assert_eq!(reverse, expert_idx,
-            "Plan 003: route→category→rules→expert_for_rule round-trip mismatch");
+        assert_eq!(
+            reverse, expert_idx,
+            "Plan 003: route→category→rules→expert_for_rule round-trip mismatch"
+        );
         // Category display name should match the expert name.
         assert_eq!(category.as_str(), KERNEL_EXPERT_NAMES[expert_idx]);
     }
@@ -550,9 +566,7 @@ mod tests {
                             for &attn in &[0.0, 1.0] {
                                 for &fus in &[0.0, 1.0] {
                                     for &ir in &[0.0, 1.0] {
-                                        let idx = router.route(&[
-                                            m, n, k, d, h, attn, fus, ir,
-                                        ]);
+                                        let idx = router.route(&[m, n, k, d, h, attn, fus, ir]);
                                         reachable.insert(idx);
                                     }
                                 }
@@ -562,11 +576,16 @@ mod tests {
                 }
             }
         }
-        assert_eq!(reachable.len(), NUM_KERNEL_EXPERTS,
+        assert_eq!(
+            reachable.len(),
+            NUM_KERNEL_EXPERTS,
             "Plan 004: expected all {NUM_KERNEL_EXPERTS} categories reachable, \
              got {}: missing = {:?}",
             reachable.len(),
-            (0..NUM_KERNEL_EXPERTS).filter(|i| !reachable.contains(i)).collect::<Vec<_>>());
+            (0..NUM_KERNEL_EXPERTS)
+                .filter(|i| !reachable.contains(i))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -578,21 +597,66 @@ mod tests {
         let cases: [(KernelCategory, [f32; ACTIVITY_DIM]); NUM_KERNEL_EXPERTS] = [
             // Canonical activity vectors found via fine-grid max-margin search.
             // Each maximizes (target_score - max_other_score) over a 21^5×2^3 grid.
-            (KernelCategory::MemoryAccess,          build_activity(1.0, 0.05, 0.0, 0.0, 0.0, false, false, false)),
-            (KernelCategory::Compute,               build_activity(0.0, 0.0, 1.0, 0.0, 0.0, false, false, false)),
-            (KernelCategory::Fusion,                build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, true, false)),
-            (KernelCategory::Dispatch,              build_activity(0.0, 0.0, 0.0, 0.0, 1.0, false, false, false)),
-            (KernelCategory::Parallelism,           build_activity(0.3, 0.85, 0.0, 0.0, 1.0, false, false, false)),
-            (KernelCategory::FlashAttnTiling,       build_activity(1.0, 1.0, 1.0, 0.0, 0.0, true, false, false)),
-            (KernelCategory::LinearAttnRecurrence,  build_activity(0.0, 0.0, 0.05, 1.0, 0.0, true, false, false)),
-            (KernelCategory::MoeDispatchBackward,   build_activity(0.5, 0.0, 0.85, 1.0, 0.0, false, false, false)),
-            (KernelCategory::NsaBlockSparse,        build_activity(0.0, 1.0, 0.0, 0.0, 0.0, true, false, false)),
-            (KernelCategory::VarlenChunkedReduction,build_activity(1.0, 0.0, 0.0, 1.0, 0.0, false, false, false)),
-            (KernelCategory::AutotuneDispatch,      build_activity(0.0, 0.0, 0.0, 1.0, 1.0, false, false, false)),
-            (KernelCategory::ConvGemmLayout,        build_activity(0.25, 0.9, 0.0, 1.0, 0.0, false, false, false)),
-            (KernelCategory::KernelPolymorphism,    build_activity(0.15, 0.9, 0.0, 0.95, 0.55, false, false, false)),
-            (KernelCategory::DtypeAlignment,        build_activity(0.0, 0.0, 0.0, 1.0, 0.0, false, false, false)),
-            (KernelCategory::IrStrengthReduction,   build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, false, true)),
+            (
+                KernelCategory::MemoryAccess,
+                build_activity(1.0, 0.05, 0.0, 0.0, 0.0, false, false, false),
+            ),
+            (
+                KernelCategory::Compute,
+                build_activity(0.0, 0.0, 1.0, 0.0, 0.0, false, false, false),
+            ),
+            (
+                KernelCategory::Fusion,
+                build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, true, false),
+            ),
+            (
+                KernelCategory::Dispatch,
+                build_activity(0.0, 0.0, 0.0, 0.0, 1.0, false, false, false),
+            ),
+            (
+                KernelCategory::Parallelism,
+                build_activity(0.3, 0.85, 0.0, 0.0, 1.0, false, false, false),
+            ),
+            (
+                KernelCategory::FlashAttnTiling,
+                build_activity(1.0, 1.0, 1.0, 0.0, 0.0, true, false, false),
+            ),
+            (
+                KernelCategory::LinearAttnRecurrence,
+                build_activity(0.0, 0.0, 0.05, 1.0, 0.0, true, false, false),
+            ),
+            (
+                KernelCategory::MoeDispatchBackward,
+                build_activity(0.5, 0.0, 0.85, 1.0, 0.0, false, false, false),
+            ),
+            (
+                KernelCategory::NsaBlockSparse,
+                build_activity(0.0, 1.0, 0.0, 0.0, 0.0, true, false, false),
+            ),
+            (
+                KernelCategory::VarlenChunkedReduction,
+                build_activity(1.0, 0.0, 0.0, 1.0, 0.0, false, false, false),
+            ),
+            (
+                KernelCategory::AutotuneDispatch,
+                build_activity(0.0, 0.0, 0.0, 1.0, 1.0, false, false, false),
+            ),
+            (
+                KernelCategory::ConvGemmLayout,
+                build_activity(0.25, 0.9, 0.0, 1.0, 0.0, false, false, false),
+            ),
+            (
+                KernelCategory::KernelPolymorphism,
+                build_activity(0.15, 0.9, 0.0, 0.95, 0.55, false, false, false),
+            ),
+            (
+                KernelCategory::DtypeAlignment,
+                build_activity(0.0, 0.0, 0.0, 1.0, 0.0, false, false, false),
+            ),
+            (
+                KernelCategory::IrStrengthReduction,
+                build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, false, true),
+            ),
         ];
         for (expected_cat, activity) in cases {
             let expert_idx = router.route(&activity);
@@ -609,8 +673,8 @@ mod tests {
         // Verify the Plan 003/004 composition: route → narrow → draft.
         // This is the automated test behind the `kernel_heal_demo` example —
         // it asserts the composition works, not just that it prints.
-        use crate::drafter::TernaryDrafter;
         use crate::domains::kernel_opt::corpus::build_kernel_seed_corpus;
+        use crate::drafter::TernaryDrafter;
 
         let router = KernelExpertRouter::new();
         let corpus = build_kernel_seed_corpus();
@@ -620,8 +684,11 @@ mod tests {
         let expert = router.route(&activity);
         let category = KernelExpertRouter::category_for_expert(expert)
             .expect("routed expert must have a category");
-        assert_eq!(category, KernelCategory::FlashAttnTiling,
-            "flash-attn signature should route to F, got {category:?}");
+        assert_eq!(
+            category,
+            KernelCategory::FlashAttnTiling,
+            "flash-attn signature should route to F, got {category:?}"
+        );
 
         // Narrow candidates to the routed category.
         let rule_ids = KernelExpertRouter::rules_for_expert(expert);
@@ -633,24 +700,31 @@ mod tests {
             .collect();
 
         // The narrowed set must be smaller than the full corpus.
-        assert!(candidates.len() < corpus.entries.len(),
+        assert!(
+            candidates.len() < corpus.entries.len(),
             "narrowed set ({}) should be smaller than full corpus ({})",
-            candidates.len(), corpus.entries.len());
-        assert!(!candidates.is_empty(),
-            "narrowed set should not be empty");
+            candidates.len(),
+            corpus.entries.len()
+        );
+        assert!(!candidates.is_empty(), "narrowed set should not be empty");
 
         // Draft a fix from the narrowed set.
         let mut drafter = TernaryDrafter::fallback();
         let rule_id = &candidates[0].rule_id;
         let buggy = &candidates[0].ref_shape;
         let fix = drafter.draft_fix(rule_id, buggy, &candidates);
-        assert!(fix.is_some(), "drafter should produce a fix from narrowed candidates");
+        assert!(
+            fix.is_some(),
+            "drafter should produce a fix from narrowed candidates"
+        );
 
         // The drafted fix must come from the narrowed category.
         let result = fix.unwrap();
         let matching = candidates.iter().any(|c| c.opt_pattern == result.code);
-        assert!(matching,
-            "drafted fix must come from the narrowed candidate set");
+        assert!(
+            matching,
+            "drafted fix must come from the narrowed candidate set"
+        );
     }
 
     #[test]
@@ -673,26 +747,42 @@ mod tests {
         let rules_o = KernelExpertRouter::rules_for_expert(expert_o);
 
         // Different experts.
-        assert_ne!(expert_a, expert_o,
-            "memory-access vs IR-strength-reduction should route to different experts");
+        assert_ne!(
+            expert_a, expert_o,
+            "memory-access vs IR-strength-reduction should route to different experts"
+        );
 
         // Different rule sets.
-        assert_ne!(rules_a, rules_o,
-            "different experts should have different rule sets");
+        assert_ne!(
+            rules_a, rules_o,
+            "different experts should have different rule sets"
+        );
 
         // Both must have non-empty rule sets in the corpus.
-        let candidates_a: Vec<_> = corpus.entries.iter()
-            .filter(|e| rules_a.contains(&e.rule_id.as_str())).collect();
-        let candidates_o: Vec<_> = corpus.entries.iter()
-            .filter(|e| rules_o.contains(&e.rule_id.as_str())).collect();
-        assert!(!candidates_a.is_empty(), "category A should have corpus rules");
-        assert!(!candidates_o.is_empty(), "category O should have corpus rules");
+        let candidates_a: Vec<_> = corpus
+            .entries
+            .iter()
+            .filter(|e| rules_a.contains(&e.rule_id.as_str()))
+            .collect();
+        let candidates_o: Vec<_> = corpus
+            .entries
+            .iter()
+            .filter(|e| rules_o.contains(&e.rule_id.as_str()))
+            .collect();
+        assert!(
+            !candidates_a.is_empty(),
+            "category A should have corpus rules"
+        );
+        assert!(
+            !candidates_o.is_empty(),
+            "category O should have corpus rules"
+        );
 
         // No overlap — categories partition the corpus.
-        let overlap: Vec<_> = rules_a.iter()
-            .filter(|r| rules_o.contains(r))
-            .collect();
-        assert!(overlap.is_empty(),
-            "categories A and O should not share rules (found: {overlap:?})");
+        let overlap: Vec<_> = rules_a.iter().filter(|r| rules_o.contains(r)).collect();
+        assert!(
+            overlap.is_empty(),
+            "categories A and O should not share rules (found: {overlap:?})"
+        );
     }
 }

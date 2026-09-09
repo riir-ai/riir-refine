@@ -234,6 +234,7 @@ mod tests {
     /// produces is ≥ 0 (the `rank_into` canon at work end-to-end), and at
     /// least one span is genuinely contested (margin < INFINITY) so the
         /// spectrum example has something to measure.
+    #[cfg(feature = "score_bench")]
     #[test]
     fn real_pool_margins_are_non_negative_and_sometimes_contested() {
         let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");

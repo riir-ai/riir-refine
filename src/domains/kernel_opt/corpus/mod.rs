@@ -1559,6 +1559,56 @@
 //!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
 //!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
 //!   (fmad split from `use_fast_math`).
+//! - **Batch 138 (2026-09-09, the `CloudRift` "Learning `FlashAttention` the Hard
+//!   Way" Parts 1+2 distill, Plan 118):** 10 rules, corpus 591 -> 601 (A 127 ->
+//!   129, B 61 -> 63, E 51 -> 53, F 13 -> 14, K 11 -> 12, L 16 -> 17, M 19 ->
+//!   20). Source: `cloudrift-ai/emmy` @ `bdd26c53` (Apache-2.0; the tip past
+//!   Batch 137's `1c058c9d` — carries #758, post-article content) x the FA
+//!   articles (Trifonov, 2026-07-06/08; the queue's bare blog path 404s — the
+//!   real paths carry `-part-1`/`-part-2`). `split-copy-issue-deposit-depth-
+//!   uniform` (A — #758: split the blocking gmem→smem copy into issue+deposit
+//!   halves either side of the drain so the depth knob means "chunks in flight"
+//!   on EVERY transport; V100 1.53x/1.69x with an honest −39% loser row that
+//!   keeps depth 1), `stage-domain-product-of-independent-knobs` (K — the
+//!   staging search domain is the PRODUCT of transport×depth×reg-depth,
+//!   capability-filtered + resolver-sized; the hand-picked catalog reached only
+//!   4 of the register double-buffer's combinations, 16→24 recovery),
+//!   `fold-invariant-factor-commutes-to-epilogue` (B — the twist pass algebra:
+//!   a factor constant along the fold axis commutes out; divisors hoist as
+//!   divisions, a varying divisor keeps the fold whole; exposes the expectation
+//!   channel — 1/l applied once, after the fold), `twisted-monoid-dependent-
+//!   reduce-fusion` (F — the RECOGNITION mechanism: a dependent reduce fuses
+//!   with its producer reduce under a bijection-conjugated monoid, recipes
+//!   tried to fixpoint, stable form spelled, singleton injection read, RECIPES
+//!   = (SOFTMAX, WELFORD); the FA-2-parity convergence factoid rides here),
+//!   `c-fragment-to-a-operand-register-repack` (L — P converts in registers
+//!   when fragment lane maps align, four `cvt.rn.f16x2` — the 271µs rung;
+//!   Volta m8n8k4 shuffles variant), `stream-invariant-operand-skips-staging-
+//!   pipeline` (A — delta-0 operands fill once in the prologue and never enter
+//!   the pipeline schedule; the Q hoist, 233µs rung; FA-2 ships it disabled by
+//!   default — per-geometry evidence decides), `rewrite-decline-names-refusing-
+//!   predicate` (M — "Declining is not neutral": name the refusing predicate
+//!   at -vv + report residual clusters post-fixpoint; the only visible symptom
+//!   of a silent demotion is the measurement), `defensive-sync-peephole-tile-
+//!   body-scope` (E — drop provably-no-op template syncs, tile-body scope only,
+//!   nested Loop/Cond bodies are load-bearing), `sfu-exp-swap-pays-only-when-
+//!   sfu-limited` (B — the fast-exp refusal twice-measured: an SFU-side swap
+//!   pays only when the SFU binds; tensor-bound at ~80% roofline it moves
+//!   nothing, and FA-4's FMA-exp answers a DATACENTER-Blackwell imbalance),
+//!   `left-right-fold-pair-proves-associative-combine` (E — the 3HT licenser:
+//!   foldl + foldr both exist ⇒ an associative combine exists, constructible
+//!   from the two folds; "a test for when any loop is secretly associative").
+//!   Riders: `setmaxnreg-fit-gate-elected-arrive` (+ the async-MMA admission
+//!   half: WS without wgmma/tcgen05 is a pessimization, 213 vs 206 measured),
+//!   `autotune-warps-stages` (+ deeper-rings d3/d4 tie→loss),
+//!   `online-softmax-streaming` (+ the never-amplifies accuracy license),
+//!   `state-normalization-between-updates-breaks-associative-scan` (+ the
+//!   injectivity breaker: quantize-in-the-loop voids the scan license,
+//!   dequant-precision carrier is the counter-arm). Lane intel: the 4090 lane
+//!   is consumer silicon — FA-2 parity is the honest frontier there (the
+//!   Q-hoist + C→A repack + split-copy moves are the transferable set; the
+//!   FA-3/4 asynchronous-MMA rungs stay locked behind datacenter parts).
+//!   Records: Plan 118 / Research 157.
 //! - **Batch 137 (2026-09-09, the `CloudRift` matmul-optimization distill,
 //!   Plan 116):** 11 rules, corpus 580 -> 591 (A 122 -> 127, E 47 -> 51,
 //!   L 15 -> 16, N 42 -> 43). Source: `cloudrift-ai/emmy` @ `1c058c9d`
@@ -1706,6 +1756,7 @@ mod entries_gpu_34;
 mod entries_gpu_35;
 mod entries_gpu_36;
 mod entries_gpu_37;
+mod entries_gpu_38;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1719,6 +1770,7 @@ mod tests;
 #[allow(clippy::too_many_lines)] // data table, not logic — grows with distillation batches
 pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     let mut entries = entries_popcorn::entries();
+    entries.extend(entries_gpu_38::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1768,7 +1820,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 591-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 601-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1776,11 +1828,13 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (127 rules)
+    // A: Memory access patterns (129 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            "stream-invariant-operand-skips-staging-pipeline",
+            "split-copy-issue-deposit-depth-uniform",
             "smem-pad-transport-gated",
             "ptxas-reschedules-load-order-wash",
             "ptxas-recoalesces-scalar-runs-wash",
@@ -1880,7 +1934,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "weight-stream-non-temporal-loads",
             "vectorized-smem-write-no-bank-padding",
             "virtual-tail-packed-tree-verify-over-paged-kv",
-            "staged-append-rollback-lifo-retry-blocks",            "cpasync-multistage-tile-pipeline",
+            "staged-append-rollback-lifo-retry-blocks",
+            "cpasync-multistage-tile-pipeline",
             "register-double-buffer-operand-pipeline",
             "xor-swizzle-smem-static-index-tables",
             "multi-pointer-dependency-break",
@@ -1906,14 +1961,16 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kv-reuse-prefix-ends-at-last-evaluated-token",
             "sm90a-window-shape-gated-wgmma-dispatch",
             "streamk-starved-tile-grid-dispatch",
-            "extent-clamped-operand-views-partial-k-tile"
+            "extent-clamped-operand-views-partial-k-tile",
         ],
     ),
-    // B: Compute patterns (61 rules)
+    // B: Compute patterns (63 rules)
     (
         KernelCategory::Compute,
         "B: compute",
         &[
+            "sfu-exp-swap-pays-only-when-sfu-limited",
+            "fold-invariant-factor-commutes-to-epilogue",
             "lds-cluster-cross-warp-phase-not-static-distance",
             "autotune-warps-stages",
             "upcast-before-reduction",
@@ -1967,14 +2024,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-hoist-out-of-weighted-v",
             "per-key-projection-hoist-out-of-query-sweep",
             "regularizer-above-noise-floor-coupled-to-damping-cap",
-            "masked-branchless-wait-collapse",            "mma-fragment-layout-m16n8k16",
+            "masked-branchless-wait-collapse",
+            "mma-fragment-layout-m16n8k16",
             "fwht-shuffle-xor-butterfly-register-resident",
-
             "fused-vector-site-transcendental-form-nonportable",
             "per-row-scale-folded-into-rhs-staging-tile",
             "rope-pair-partner-via-cross-lane-shuffle",
             "degenerate-selection-falls-back-to-identity-uniform",
-            "lut-free-bit-spread-vadd4-unpack"
+            "lut-free-bit-spread-vadd4-unpack",
         ],
     ),
     // C: Fusion patterns (46 rules)
@@ -2027,7 +2084,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gumbel-argmax-filtered-sampling-descent",
             "softmax-denominator-cancels-through-scale-invariant-norm",
             "batch-verify-rows-single-dispatch",
-            "fused-residual-update-writes-separate-next-buffer"
+            "fused-residual-update-writes-separate-next-buffer",
         ],
     ),
     // D: Dispatch patterns (132 rules)
@@ -2166,14 +2223,16 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "same-input-folded-transform-memo-per-build",
             "speculation-scheduler-break-even-flip",
             "new-syntax-family-enumerates-every-keyed-surface",
-            "one-time-dense-repack-keyed-sync-publish"
+            "one-time-dense-repack-keyed-sync-publish",
         ],
     ),
-    // E: Parallelism patterns (51 rules)
+    // E: Parallelism patterns (53 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            "left-right-fold-pair-proves-associative-combine",
+            "defensive-sync-peephole-tile-body-scope",
             "splitk-atomic-free-contention-threshold",
             "splitk-width-shape-need-gate",
             "setmaxnreg-fit-gate-elected-arrive",
@@ -2224,14 +2283,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fwht-wide-block-row-per-threadgroup-exchange-ladder",
             "sentinel-readiness-over-separate-flag",
             "ll-flag-in-data-packed-poll",
-            "interleave-independent-accumulators-only"
+            "interleave-independent-accumulators-only",
         ],
     ),
-    // F: Flash-attention tiling (13 rules)
+    // F: Flash-attention tiling (14 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
         &[
+            "twisted-monoid-dependent-reduce-fusion",
             "online-softmax-streaming",
             "exp2-log2-base2",
             "block-pointer-2d",
@@ -2244,7 +2304,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
             "mask-block-classification-skip-placement",
             "split-k-two-pass-attention-decode-long-context",
-            "dense-fast-path-bounded-by-selector-coverage"
+            "dense-fast-path-bounded-by-selector-coverage",
         ],
     ),
     // G: Linear-attention recurrence (29 rules)
@@ -2343,11 +2403,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (11 rules)
+    // K: Autotune dispatch (12 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
         &[
+            "stage-domain-product-of-independent-knobs",
             "panic-safe-autotune-candidate",
             "multi-priority-tune-groups",
             "shape-kind-dispatch",
@@ -2361,11 +2422,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tuned-config-resource-limit-fallback",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (16 rules)
+    // L: Conv-as-GEMM + memory layout (17 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
         &[
+            "c-fragment-to-a-operand-register-repack",
             "ldmatrix-pair-x2-to-x4-adjacency",
             "conv-1x1-as-matmul",
             "contiguity-guard-before-reshape",
@@ -2377,18 +2439,19 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bool-fields-over-bitset-hot-reads",
             "pre-transposed-consumer-layout-handles-build-once",
             "stream-drain-free-source-during-build",
-            "fold-tile-transpose-into-dequant-scatter",            "ldmatrix-mma-layout-loads",
-
+            "fold-tile-transpose-into-dequant-scatter",
+            "ldmatrix-mma-layout-loads",
             "dequant-byte-pairs-as-aligned-u16-loads",
             "device-affine-scratch-admission-with-pool-fallback",
-            "window-recurrence-halo-snapshot-block-parallel"
+            "window-recurrence-halo-snapshot-block-parallel",
         ],
     ),
-    // M: Kernel parametric polymorphism (19 rules)
+    // M: Kernel parametric polymorphism (20 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
         &[
+            "rewrite-decline-names-refusing-predicate",
             "op-family-type-dispatch",
             "inplace-output-alias",
             "layout-permute-for-coalescing",
@@ -2407,7 +2470,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "derived-index-from-pinned-checkpoint-is-a-cache",
             "warm-reachable-dispatch-signatures-before-timed-window",
             "row-aware-indexing-reuses-static-single-token-kernel",
-            "pipeline-cache-key-covers-every-function-constant"
+            "pipeline-cache-key-covers-every-function-constant",
         ],
     ),
     // N: dtype + alignment specialization (43 rules)
@@ -2437,7 +2500,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-placement-by-component-traffic-share",
             "outlier-span-escapes-quantization-via-lossless-sidecar",
             "pre-gate-recovery-by-division-cancels-algebraically",
-            "token-local-only-approximate-accelerator",            "lop3-int4-to-half2-dequant",
+            "token-local-only-approximate-accelerator",
+            "lop3-int4-to-half2-dequant",
             "prmt-int8-to-half2-dequant",
             "telescoped-digit-coefficients-byte-fma-dot",
             "bit-plane-plane-sums-input-side-offset-dot",
@@ -2456,7 +2520,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-block-int32-chunk-rescale-fp32-accum",
             "kv-dequant-materialization-batch-threshold-gate",
             "quantize-scale-math-wide-precision-denorm-safe",
-            "block-quant-weight-pad-never-extends-activations"
+            "block-quant-weight-pad-never-extends-activations",
         ],
     ),
     // O: IR strength reduction (4 rules)
