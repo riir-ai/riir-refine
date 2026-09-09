@@ -8,6 +8,39 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Issues 077 + 082 resolved — margin-weighted mining + the OOD axis (2026-09-09)
+
+Resolved-record for the two now-removed issue files (full narratives live in
+`.benchmarks/080_margin_mining_ab.md`, `.benchmarks/081_ood_fresh_family_convergent_validity.md`,
+and `.docs/08_benchmarks/entropy_gap_ood_axis.md`; removed files: git history).
+
+- **Issue 077** (margin-weighted rule mining + entropy-gap OOD axis,
+  arXiv:2604.26841; consumes katgpt-rs Issue 740 / `katgpt-core::regime_probe`):
+  T1+T4 `1994a8a` (score_bench forwards the katgpt-core regime probe — zero
+  local entropy arithmetic; the OOD row is always-on + the additive `ood`
+  JSONL field; first measured row run #84: gap −0.729 nats, d −1.11 →
+  anomalous_negative), T2 `2e3ce9a` (`draft::margin_weight` — the e^{−2M}
+  sigmoid-shaped score-delta law, never softmax; concentration premise
+  MEASURED on labeled material: the lowest-margin half carries 91.4% of total
+  mass), T3 `095686a` (`margin_mining` opt-in + the pre-registered `--ab`
+  protocol; verdict **DEMOTE** — tie at every budget, 40 compiled raw carves
+  100% lint-clean: retrieval-similarity margins do not select lint-bearing
+  spans; miner default stays count-desc, no generation frozen), T5 `80e8667`
+  (per-set provenance families — #84's anomalous_negative is a set-COMPOSITION
+  fact: v1 = 4 families mostly authored, gen6 = 5 real).
+- **Issue 082** (OOD fresh-family pairing — the convergent-validity
+  experiment that tested 077's composition attribution): `b3636b5` —
+  composition held constant (real vs real), provenance held disjoint (gen6
+  reference vs `riir-neuron-db`@`2f30800` / `riir-dapps`@`c4c6ffe` carves);
+  verdict **R1 — CONVERGENT VALIDITY DEMONSTRATED** (gap −0.7608, d −1.026 on
+  BOTH fresh families) — the composition attribution was tested and held.
+  Honest caveat in the record: the fresh signal is all-or-nothing (0/48 fresh
+  carves fire ANY proposer rule); promotion is NOT on this axis —
+  `regime_probe` stays opt-in (no default-path consumer exists).
+- **Issue 080 stays OPEN** (IN PROGRESS by design): client half landed
+  (`587132b`, the truth-wins gate); the dated removal of `kat_contribution`'s
+  legacy marker read waits on fleet v3 (server half = riir-dapps Issue 027).
+
 ## Plan 117 — `cargo heal --refill`, the dev/test faucet refill (2026-09-09)
 
 Plan: `.plans/117_kat_refill_cli_devnet_faucet.md`. The depleted-account
