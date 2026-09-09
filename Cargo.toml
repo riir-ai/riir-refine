@@ -1018,3 +1018,11 @@ required-features = ["kernel_heal"]
 [[test]]
 name = "wgsl_t5_control"
 required-features = ["kernel_heal"]
+
+# Issue 086: a whole-file `#![cfg(feature = "dist")]` target with no row is
+# a silent-now green zero — the row makes `cargo test --features dist`
+# (EXACTLY) build it, and the guard's Layer 5d runs it with a passed-count
+# floor.
+[[test]]
+name = "dist_gates"
+required-features = ["dist"]

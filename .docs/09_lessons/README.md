@@ -13,6 +13,7 @@
 | [`freeze_thaw_pattern.md`](freeze_thaw_pattern.md) | BLAKE3-committed freeze/thaw for the corpus |
 | [`honest_poc_caveats.md`](honest_poc_caveats.md) | What the pipeline does NOT do (documented limitations) |
 | [`sigmoid_not_softmax.md`](sigmoid_not_softmax.md) | Why sigmoid, never softmax |
+| [`silent_now_gates.md`](silent_now_gates.md) | A `#![cfg]`-gated test nobody names is a green zero — the row + exact-set proof discipline |
 
 ## See also
 
