@@ -58,7 +58,10 @@ Until then: `cargo install --path . --features latent_retrieval`.
 cargo heal login              # or: cargo heal login --key ~/.ssh/id_ed25519
 ```
 
-Adopts the machine's default SSH key unless `RIIR_HEAL_KAT_KEY` overrides.
+Adopts the machine's default SSH key unless `RIIR_AUTH_ACCOUNT_KEY`
+overrides (the deprecated `RIIR_HEAL_KAT_KEY` is still honored with a
+loud warning through the Issue-081 window, and a pre-081 legacy kat
+account is adopted loudly before any SSH adoption — identity preserved).
 Idempotent: an existing key is loaded, never regenerated. The account id is
 `BLAKE3(pubkey)`, which is the same derivation the sync plane's
 `submitter_for` uses — golden-pinned across repos, because a drift there

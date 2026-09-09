@@ -184,15 +184,18 @@ construction); a vote decides membership only — it never moves funds.
 Record: [Bench 005](../../.benchmarks/) lives in riir-dapps (the G9-GOV
 e2e); this repo's half is the CLI + the signed-intent queue.
 
-**Onboarding (kat-011 T0.2, [Plan 059](../../.plans/059_kat011_t02_and_corpus_runtime_counts.md)):**
+**Onboarding (kat-011 T0.2, [Plan 059](../../.plans/059_kat011_t02_and_corpus_runtime_counts.md); canonical-identity chain per Issue 081):**
 `login` on a fresh machine adopts the default `~/.ssh/id_ed25519` as the
 account identity when it parses as an unencrypted Ed25519 OpenSSH key —
 the BLAKE3(pubkey) id then matches what the GitHub `.keys` key-match
-derives, so zero configuration; `RIIR_HEAL_KAT_KEY` overrides the key
-path (failing LOUDLY when set but unusable — explicit config never
-silently falls back), and anything else generates with the fallback
-reason disclosed + the exact source path printed. `account --history`
-renders the LOCAL view (earned = login-grant projection, spent = the
+derives, so zero configuration. The chain is legacy-aware (in order):
+existing canonical account → `RIIR_HEAL_KAT_KEY` (DEPRECATED — still
+honored with a loud deprecation line so scripted setups keep working;
+the canonical override is `RIIR_AUTH_ACCOUNT_KEY`) → a pre-081 legacy
+kat account (adopted LOUDLY into the canonical dir, copied not moved —
+the KAT-ledger identity survives) → anything else generates with the
+fallback reason disclosed + the exact source path printed. `account
+--history` renders the LOCAL view (earned = login-grant projection, spent = the
 repo-local `kat_charge.json` burn, balance = the projection) + a welcome
 line when fresh; the live `/balance` + nodes-healthy gate is 011 T0.2b
 (riir-dapps routes, not renderable honestly from here).
