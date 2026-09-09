@@ -170,6 +170,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `clippy_lora` (opt-in): DEAD PLACEHOLDER — superseded by `l4_lora`; kept only to avoid breaking external `--features clippy_lora` invocations; do not add code behind it.
 - `contrastive_scope` (opt-in): the input-scope gate at the `heal()` seam (`ScopeModel` over katgpt-core's `contrastive_scope`); declines out-of-scope input, bit-identical in-distribution.
 - `ternary_inference` (opt-in): katgpt ternary generation on clippy prompts (inference arm; pulls `riir-engine` + `riir-gpu`).
+- `dist` (opt-in, Issue 085): the `dist` domain — shipped-artifact build-config advice over name-matched `Cargo.toml` manifests (release-profile size knobs for bin crates + the workspace-member profile trap). SUGGEST-ONLY Phase 1; measured provenance 11.9 MB → 4.5 MB (-61%) on this tool itself. Second no-`syn` scanner (zero new deps); the `--domain dist` lane is suggest-citations only, never a manifest write.
 
 Doctrine: the modelless path (L0–L3) is PRIMARY; LoRA (L4) is the conservative last resort and that is enforced in code, not by convention. **A syntactic check (`parses`) is not a relevance check** (the Issue 030 lesson) — any stage deciding "did the modelless path succeed?" must test whether the answer pertains to the input. Annotated rules carry `context_notes`, propagated end-to-end via `HealEntry::context_notes()`; the drafter surfaces the annotation, the consumer decides whether their context matches.
 

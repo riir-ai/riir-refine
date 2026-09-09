@@ -392,6 +392,23 @@ docker_verify = ["docker"]
 # ~1.3-2.2 s each, and it does not warm). Never runs in the heal path.
 docker_buildcheck = ["docker", "docker_verify"]
 
+# Issue 085: the `dist` domain — shipped-artifact build-config advice over
+# name-matched Cargo.toml manifests: release-profile size knobs (strip / size
+# profile / panic) for crates that SHIP a binary, + the workspace-member
+# profile trap. Measured provenance: 11,903,168 -> 4,546,448 bytes (-61%) on
+# this tool's own shipping set (2026-09-09) — found by the OWNER after v0.1.4
+# shipped on plain --release; the domain fires at dev time on every scanned
+# manifest, which the release-lane size gate cannot. SUGGEST-ONLY in Phase 1
+# (no --fix writes to manifests). Opt-in until the issue's GOAT gate passes:
+# suggest precision fixtures + score-bench FLAT + router floor re-measured +
+# a real consumer cite. ZERO new deps: the section-aware line scanner is the
+# second hand-written one after docker (no toml crate, no regex).
+#
+# NOT a general TOML linter; NEVER advice that edits [profile.release]
+# directly ([profile.bench] inherits release — that edit poisons criterion
+# benches; the refuses() table pins it).
+dist = []
+
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).
 ruliology_search = ["clippy_lints"]

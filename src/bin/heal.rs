@@ -2510,7 +2510,7 @@ fn usage() -> ! {
 USAGE:
     cargo heal                                        <- DRY RUN: review what would be fixed (no edits)
     cargo heal --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
-    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker>] [--top-k <N>] <path>...
+    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker|dist>] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --mine                                 <- what mining is + policy + how to earn KAT
     cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
@@ -2677,12 +2677,16 @@ USAGE:
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
-                    suggest-only citations, never touched by --fix).
+                    suggest-only citations, never touched by --fix); with
+                    the dist feature, `Cargo.toml` manifests join the walk
+                    (Issue 085 — suggest-only build-config advice).
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
 --features kernel_heal, sec needs --features sec, docker needs --features
 docker (Dockerfiles are matched by NAME — `Dockerfile`, `<n>.Dockerfile`,
-`Dockerfile.<n>`; `docker_verify` adds the hadolint agreement oracle).
+`Dockerfile.<n>`; `docker_verify` adds the hadolint agreement oracle), dist
+needs --features dist (Cargo.toml manifests are matched by NAME; suggest-only,
+Issue 085).
 Requesting a domain whose feature is off is an error (T2.4 gating). --verify needs --features fix_verify.
 --fix-compile needs --features rustc_errors.",
         FIXABLE_RULES.len(),
@@ -3059,8 +3063,9 @@ fn parse_args() -> Args {
                     "kernel" => args.domain = Some(DomainId::Kernel),
                     "sec" => args.domain = Some(DomainId::Sec),
                     "docker" => args.domain = Some(DomainId::Docker),
+                    "dist" => args.domain = Some(DomainId::Dist),
                     other => {
-                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec|docker)");
+                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec|docker|dist)");
                         usage();
                     }
                 }
@@ -3361,6 +3366,34 @@ fn collect_dockerfiles(root: &Path, out: &mut Vec<PathBuf>) {
         }
         return;
     }
+    collect_named_walk(root, &is_dockerfile_name, out);
+}
+
+/// Whether a file name is a Cargo.toml manifest (Issue 085). Deliberately
+/// narrow: the NAME is exact — `Cargo.toml`. A `Cargo.toml.orig` or a
+/// `Cargo.lock` never matches; a crate inside `target/` or `vendor/` is
+/// already excluded by the walker.
+fn is_cargo_toml_name(name: &str) -> bool {
+    name == "Cargo.toml"
+}
+
+/// Collect Cargo.toml manifests under `root` (Issue 085) — the name-matched
+/// twin of [`collect_dockerfiles`].
+fn collect_cargo_tomls(root: &Path, out: &mut Vec<PathBuf>) {
+    if root.is_file() {
+        let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if is_cargo_toml_name(name) {
+            out.push(root.to_path_buf());
+        }
+        return;
+    }
+    collect_named_walk(root, &is_cargo_toml_name, out);
+}
+
+/// The shared walk behind both name-matched collectors: depth-first over
+/// real directories, skipping hidden dirs + `target`/`vendor` build noise,
+/// pushing every file whose name satisfies `keep`.
+fn collect_named_walk(root: &Path, keep: &dyn Fn(&str) -> bool, out: &mut Vec<PathBuf>) {
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
     queue.push_back(root.to_path_buf());
     while let Some(dir) = queue.pop_front() {
@@ -3377,7 +3410,7 @@ fn collect_dockerfiles(root: &Path, out: &mut Vec<PathBuf>) {
             }
             if path.is_dir() {
                 queue.push_back(path);
-            } else if is_dockerfile_name(name) {
+            } else if keep(name) {
                 out.push(path);
             }
         }
@@ -4241,6 +4274,9 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     // 066). `    rule(` matches exactly the 8-space-indented entry calls;
     // the count-pin test below fails loud if a re-indent moves it.
     ("docker", "src/domains/docker/corpus.rs", "    rule("),
+    // Issue 085: dist uses the positional `rule()` shorthand like docker —
+    // same 4-space-indent needle convention.
+    ("dist", "src/domains/dist/corpus.rs", "    rule("),
 ];
 
 /// Whether the domain's feature is compiled into THIS binary (the honest
@@ -4254,6 +4290,7 @@ fn domain_compiled(domain: &str) -> bool {
         "clippy_lints" => cfg!(feature = "clippy_lints"),
         "sec" => cfg!(feature = "sec"),
         "docker" => cfg!(feature = "docker"),
+        "dist" => cfg!(feature = "dist"),
         _ => false,
     }
 }
@@ -4286,6 +4323,11 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
         #[cfg(feature = "docker")]
         "docker" => Some(
             u32::try_from(riir_clippy::build_docker_seed_corpus().entries.len())
+                .unwrap_or(u32::MAX),
+        ),
+        #[cfg(feature = "dist")]
+        "dist" => Some(
+            u32::try_from(riir_clippy::build_dist_seed_corpus().entries.len())
                 .unwrap_or(u32::MAX),
         ),
         _ => None,
@@ -5609,8 +5651,18 @@ fn main() {
     for path in &args.paths {
         collect_dockerfiles(path, &mut dockerfiles);
     }
-    if files.is_empty() && wgsl_files.is_empty() && dockerfiles.is_empty() {
-        eprintln!("no .rs/.wgsl/Dockerfile files under the given paths");
+    // Issue 085: the third name-matched surface — Cargo.toml manifests for
+    // the dist domain (suggest-only build-config advice).
+    let mut cargo_tomls = Vec::new();
+    for path in &args.paths {
+        collect_cargo_tomls(path, &mut cargo_tomls);
+    }
+    if files.is_empty()
+        && wgsl_files.is_empty()
+        && dockerfiles.is_empty()
+        && cargo_tomls.is_empty()
+    {
+        eprintln!("no .rs/.wgsl/Dockerfile/Cargo.toml files under the given paths");
         std::process::exit(1);
     }
     #[cfg(not(feature = "docker"))]
@@ -5618,6 +5670,13 @@ fn main() {
         eprintln!(
             "note: {} Dockerfile(s) found but the docker domain needs --features docker (Plan 030)",
             dockerfiles.len()
+        );
+    }
+    #[cfg(not(feature = "dist"))]
+    if !cargo_tomls.is_empty() {
+        eprintln!(
+            "note: {} Cargo.toml manifest(s) found but the dist domain needs --features dist (Issue 085)",
+            cargo_tomls.len()
         );
     }
     #[cfg(not(feature = "kernel_heal"))]
@@ -6239,6 +6298,20 @@ fn main() {
     let n_docker = 0usize;
     let _ = n_docker;
 
+    // ── Issue 085: the dist lane — the third non-syn surface. SUGGEST-ONLY
+    // by construction (Phase 1): findings are corpus-rule citations with
+    // advice text over name-matched Cargo.toml manifests; no proposer
+    // exists, so this never joins the --fix edit path.
+    #[cfg(feature = "dist")]
+    let n_dist = if args.suggest && args.domain.is_none_or(|d| d == DomainId::Dist) {
+        run_dist_lane(&cargo_tomls)
+    } else {
+        0
+    };
+    #[cfg(not(feature = "dist"))]
+    let n_dist = 0usize;
+    let _ = n_dist;
+
     // ── Issue 025 T4: the non-syn surface suggest pass — `.wgsl` kernel
     // files + `#[cube]` bodies inside `.rs` files, keyed to the kernel
     // domain. SUGGEST-ONLY by construction: findings are corpus-rule
@@ -6845,6 +6918,58 @@ fn main() {
 /// committed `Cargo.lock` beside the build context. Evidence we cannot
 /// derive stays `None`, so those rules do not fire.
 #[cfg(feature = "docker")]
+/// Derive what the repo around a manifest can prove, for the caller-gated
+/// rules (Issue 085 — the docker `ScanContext` pattern): walk UP from the
+/// manifest's PARENT directory (a manifest is never its own ancestor); the
+/// first ancestor carrying a `Cargo.toml` with a `[workspace]` section
+/// marks this manifest as sitting under a workspace root.
+#[cfg(feature = "dist")]
+fn dist_scan_context(path: &Path) -> riir_clippy::domains::dist::DistContext {
+    let mut dir = path.parent().and_then(Path::parent);
+    while let Some(d) = dir {
+        let candidate = d.join("Cargo.toml");
+        if candidate.is_file() {
+            if let Ok(src) = std::fs::read_to_string(&candidate) {
+                // Section-presence only — the same cheap scan the lane uses.
+                if riir_clippy::domains::dist::rules::scan(&src).has_workspace {
+                    return riir_clippy::domains::dist::DistContext {
+                        under_workspace_root: true,
+                    };
+                }
+            }
+        }
+        dir = d.parent();
+    }
+    riir_clippy::domains::dist::DistContext::default()
+}
+
+/// Issue 085 — the dist lane over Cargo.toml manifests. Suggest-only: every
+/// finding is a citation + advice line; nothing is ever written.
+#[cfg(feature = "dist")]
+fn run_dist_lane(paths: &[PathBuf]) -> usize {
+    use riir_clippy::domains::dist::rules::scan_source_with;
+
+    let mut printed = 0usize;
+    for path in paths {
+        let Ok(src) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let ctx = dist_scan_context(path);
+        for f in scan_source_with(&src, ctx) {
+            println!(
+                "{}:{} [dist  ] {:<40} — {}",
+                path.display(),
+                f.line,
+                f.rule_id,
+                f.excerpt.trim()
+            );
+            println!("           ↳ {}", f.advice);
+            printed += 1;
+        }
+    }
+    printed
+}
+
 fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
     use riir_clippy::domains::docker::proposers::fix_all;
     use riir_clippy::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
@@ -6988,6 +7113,7 @@ fn run_overlay_with_promotion(
                 "kernel" => Some(DomainId::Kernel),
                 "sec" => Some(DomainId::Sec),
                 "docker" => Some(DomainId::Docker),
+                "dist" => Some(DomainId::Dist),
                 _ => None,
             }?;
             Some((id, triples))
@@ -7009,7 +7135,7 @@ fn lease_overlay_for_run(
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_clippy::kat_lease_client::{
         overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF,
-        PACK_DOMAIN_DOCKER, PACK_DOMAIN_SEC,
+        PACK_DOMAIN_DOCKER, PACK_DOMAIN_SEC, PACK_DOMAIN_DIST,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -7020,6 +7146,7 @@ fn lease_overlay_for_run(
             PACK_DOMAIN_KERNEL => Some(DomainId::Kernel),
             PACK_DOMAIN_SEC => Some(DomainId::Sec),
             PACK_DOMAIN_DOCKER => Some(DomainId::Docker),
+            PACK_DOMAIN_DIST => Some(DomainId::Dist),
             other => {
                 eprintln!("corpus lease: ignoring unknown pack domain {other:?} (client too old?)");
                 None

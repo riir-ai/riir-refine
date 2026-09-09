@@ -546,6 +546,7 @@ pub(crate) fn domain_index(d: DomainId) -> usize {
         DomainId::Kernel => 2,
         DomainId::Sec => 3,
         DomainId::Docker => 4,
+        DomainId::Dist => 5,
     }
 }
 
@@ -719,7 +720,7 @@ pub fn run_eval_inner(
 #[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
 pub fn print_report(report: &EvalReport) {
     println!("== Issue 017 retrieval-precision eval ==");
-    let names = ["clippy", "perf  ", "kernel", "sec   ", "docker"];
+    let names = ["clippy", "perf  ", "kernel", "sec   ", "docker", "dist  "];
     println!("{:<8} {:>8} {:>9} {:>9} {:>9}", "domain", "labeled", "top-1", "top-3", "top-5");
     for (i, name) in names.iter().enumerate() {
         let m = &report.per_domain[i];
@@ -1238,6 +1239,16 @@ mod tests {
         /// silently.
         #[must_use]
         pub fn router_annotation_floor() -> f32 {
+            // Issue 085 dist axis: the ONLY buildable gated dist-on state is
+            // `default + dist` = (k=false, s=false, d=true, dist=true),
+            // MEASURED 2026-09-09: 74/101 (73.3%) vs its dist-off twin's
+            // 73/101 (72.3%) — +1 span, the SAME docker-precedent mechanism
+            // (a TOML off-vocabulary centroid absorbs fewer generic Rust
+            // spans). Floor = measured − 5 per the Plan-030 convention.
+            // Every other dist-on combo is not gated anywhere and inherits
+            // its dist-off twin's floor until one becomes a gated state
+            // (then it gets its own measured pin, never a silent inherit).
+            let dist_on = cfg!(feature = "dist");
             match (
                 cfg!(feature = "kernel_heal"),
                 cfg!(feature = "sec"),
@@ -1275,7 +1286,14 @@ mod tests {
                 // than a Rust-shaped one does. That is the measured answer
                 // to Proposal 006's open question about a 5th domain's cost
                 // to the router: for THIS domain it is not a cost.
-                (false, false, true) => 68.0 / 101.0, // measured 73/101 (72.3%)
+                (false, false, true) => {
+                    if dist_on {
+                        // Issue 085 measured arm (see the fn header).
+                        69.0 / 101.0 // measured 74/101 (73.3%)
+                    } else {
+                        68.0 / 101.0 // measured 73/101 (72.3%)
+                    }
+                }
                 // Batch 130 (2026-09-08, Plan 111): the 5 kernel CloudRift
                 // adds re-measured 93/131 (71.0%, was 88/131 = 67.2% at
                 // B129) -- the rich TMA/dispatch concept text sharpened the
@@ -1287,7 +1305,11 @@ mod tests {
                 // vocabulary attracts 2 more generic Rust spans to the
                 // kernel centroids (the B131 sec-centroid mechanism, kernel
                 // flavor); floor = measured - 5 per the Plan-030 convention.
-                (true, false, true) => 86.0 / 131.0,  // measured 91/131 (69.5%)
+                (true, false, true) => {
+                    // dist-on combo not gated anywhere (Issue 085) — inherits
+                    // the dist-off twin until it becomes a gated state.
+                    86.0 / 131.0 // measured 91/131 (69.5%)
+                }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file
                 // create) re-measured 35/101 (34.7%, was 41/101 = 40.6% at
@@ -1301,7 +1323,7 @@ mod tests {
                 // = 34.7% at B131) -- the read_to_end/TcpStream vocabulary
                 // keeps the B131 sec-centroid drift ticking (-1 span);
                 // floor = 34 - 5 = 29.
-                (false, true, true) => 29.0 / 101.0,  // measured 34/101 (33.7%)
+                (false, true, true) => 29.0 / 101.0, // measured 34/101 (33.7%); no dist-on gated state
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.
@@ -1311,7 +1333,14 @@ mod tests {
                 // the full-state boundary here (cross-arm divergence is
                 // consistent with the B130 kernel-vocabulary raise); floor
                 // = 83 - 5 = 78.
-                (true, true, true) => 78.0 / 131.0,   // measured 83/131 (63.4%)
+                (true, true, true) => {
+                    // ALL-ON dist-on: currently red at HEAD from the
+                    // PRE-EXISTING kernel_verify `.parses` conflict (Batch
+                    // 138/139 tests vs the KernelVerifyResult fields —
+                    // unrelated to dist); inherits the dist-off twin until
+                    // that lane is repaired and this state re-measures.
+                    78.0 / 131.0 // measured 83/131 (63.4%)
+                }
             }
         }
     }

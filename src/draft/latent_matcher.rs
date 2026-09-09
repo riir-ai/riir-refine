@@ -89,6 +89,7 @@ pub struct LatentMatcher {
     kernel: Option<RuleIndex>,
     sec: Option<RuleIndex>,
     docker: Option<RuleIndex>,
+    dist: Option<RuleIndex>,
     rule_book: std::collections::HashMap<String, RuleInfo>,
     /// G4 scratch — reused across every span + domain query.
     scratch: super::corpus_index::SuggestScratch,
@@ -296,13 +297,33 @@ impl LatentMatcher {
         #[cfg(not(feature = "docker"))]
         let docker = None;
 
+        #[cfg(feature = "dist")]
+        let dist = index_domain!(
+            dist,
+            DomainId::Dist,
+            overlay_for(DomainId::Dist).unwrap_or_else(|| {
+                crate::domains::dist::DistDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.rule_id().to_string(),
+                            e.buggy_code().to_string(),
+                            e.fixed_code().to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+        );
+        #[cfg(not(feature = "dist"))]
+        let dist = None;
+
         if router_domains.is_empty() {
             // Single-domain-less feature combos (latent_retrieval alone):
             // the config + overlay are only consumed inside `index_domain!`
             // — reference them so the no-domain build stays warning-clean.
             let _ = (&config, &overlay_for);
             return Err(
-                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal/sec/docker)"
+                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal/sec/docker/dist)"
                     .to_string(),
             );
         }
@@ -325,6 +346,7 @@ impl LatentMatcher {
             kernel,
             sec,
             docker,
+            dist,
             rule_book,
             scratch: super::corpus_index::SuggestScratch::default(),
         })
@@ -363,6 +385,7 @@ impl LatentMatcher {
             DomainId::Kernel => self.kernel.is_some(),
             DomainId::Sec => self.sec.is_some(),
             DomainId::Docker => self.docker.is_some(),
+            DomainId::Dist => self.dist.is_some(),
         }
     }
 
@@ -425,6 +448,7 @@ impl LatentMatcher {
                 DomainId::Kernel => self.kernel.as_ref(),
                 DomainId::Sec => self.sec.as_ref(),
                 DomainId::Docker => self.docker.as_ref(),
+                DomainId::Dist => self.dist.as_ref(),
             };
             if let Some(index) = index {
                 // Retrieve a POOL deeper than the caller's top_k: re-ranking
@@ -469,6 +493,7 @@ impl LatentMatcher {
             DomainId::Kernel => self.kernel.as_ref(),
             DomainId::Sec => self.sec.as_ref(),
             DomainId::Docker => self.docker.as_ref(),
+            DomainId::Dist => self.dist.as_ref(),
         }?;
         let pool = index
             .suggest_deep_into(code, super::instantiation_rerank::RERANK_POOL, &mut self.scratch)

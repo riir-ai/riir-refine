@@ -61,16 +61,19 @@ pub enum DomainId {
     Sec,
     /// `docker` — Dockerfile bounded-fix patterns (Plan 030).
     Docker,
+    /// `dist` — shipped-artifact build-config advice (Issue 085).
+    Dist,
 }
 
 impl DomainId {
     /// All domains, in router order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Clippy,
         Self::Perf,
         Self::Kernel,
         Self::Sec,
         Self::Docker,
+        Self::Dist,
     ];
 
     /// Stable label (feature-independent).
@@ -82,6 +85,7 @@ impl DomainId {
             Self::Kernel => "kernel",
             Self::Sec => "sec",
             Self::Docker => "docker",
+            Self::Dist => "dist",
         }
     }
 }

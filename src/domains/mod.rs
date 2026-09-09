@@ -13,6 +13,10 @@
 //!   by error code: the E0597 + borrowck (E0502/E0499/E0505) playbook
 //!   families behind the `--fix-compile` driver, plus the premise probe
 //!   and the `cargo fix` floor that bound the territory.
+//! - `dist` (opt-in, Issue 085) — shipped-artifact build-config advice:
+//!   release-profile size knobs + the workspace-member profile trap, over
+//!   name-matched `Cargo.toml` manifests. Suggest-only in Phase 1; the
+//!   second no-`syn` scanner after docker.
 
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;
@@ -31,3 +35,6 @@ pub mod sec;
 
 #[cfg(feature = "docker")]
 pub mod docker;
+
+#[cfg(feature = "dist")]
+pub mod dist;

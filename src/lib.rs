@@ -486,6 +486,14 @@ pub use domains::docker::{
 #[cfg(feature = "docker")]
 pub use domains::docker::corpus::build_docker_seed_corpus;
 
+// ── dist domain re-exports (behind `dist` feature, opt-in) ─────────────────
+#[cfg(feature = "dist")]
+pub use domains::dist::{refuses as dist_refusals, DistContext, DistDomain, DistFamily, DistRule, DistVerdict};
+
+/// The dist seed corpus (behind `dist`).
+#[cfg(feature = "dist")]
+pub use domains::dist::corpus::build_dist_seed_corpus;
+
 /// `kernel_opt` thermal router (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::thermal::{KernelThermalRouter, ThermalTier};

@@ -205,7 +205,7 @@ fn slice(patterns: &[(String, String)], even: bool) -> Vec<(String, String)> {
         .collect()
 }
 
-/// `DomainId::ALL` order (clippy, perf, kernel, sec, docker) — mirrors
+/// `DomainId::ALL` order (clippy, perf, kernel, sec, docker, dist) — mirrors
 /// `retrieval_eval::domain_index` for the eval-report rows used here.
 fn eval_domain_index(d: DomainId) -> usize {
     match d {
@@ -214,6 +214,7 @@ fn eval_domain_index(d: DomainId) -> usize {
         DomainId::Kernel => 2,
         DomainId::Sec => 3,
         DomainId::Docker => 4,
+        DomainId::Dist => 5,
     }
 }
 

@@ -498,6 +498,9 @@ pub const PACK_DOMAIN_PERF: &str = "perf";
 pub const PACK_DOMAIN_KERNEL: &str = "kernel";
 pub const PACK_DOMAIN_SEC: &str = "sec";
 pub const PACK_DOMAIN_DOCKER: &str = "docker";
+/// Issue 085 — the dist domain's pack spelling. No server packs it yet; the
+/// client decodes it so an older binary never rejects a newer pack loudly.
+pub const PACK_DOMAIN_DIST: &str = "dist";
 
 /// One evolved corpus entry (the retrieval triple).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

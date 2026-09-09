@@ -16,6 +16,7 @@
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
 | [`sec.md`](sec.md) | Plan 018: `SecDomain` + `SecRule` + the geiger-taxonomy unsafe counter + the banned-list boundary gate + 15 rules across five intake waves (6 fixable proposers + the Batch-131/140 suggest-only detectors) |
 | [`docker.md`](docker.md) | Plan 030: `DockerDomain` + `DockerRule` + the stanza scanner (no `syn`) + the hadolint oracle tier (incl. the Tier-2 `docker build --check` oracle) + the DL3059-refusal gate + 31 rules (14 bounded fixes) |
+| [`dist.md`](dist.md) | Issue 085: `DistDomain` + `DistRule` + the section-aware manifest scanner (no `syn`, no `toml`) + the refuses gate + 4 suggest-only rules (release-profile size knobs + the workspace-member profile trap) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 
 ## Source
@@ -39,6 +40,7 @@
 | `docker` | off | — | Dockerfile bounded-fix healing (Plan 030) |
 | `docker_verify` | off | `docker` | hadolint agreement oracle |
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` agreement oracle |
+| `dist` | off | — | shipped-artifact build-config advice (Issue 085) |
 
 ## Status
 
