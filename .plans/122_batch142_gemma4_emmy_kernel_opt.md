@@ -56,6 +56,16 @@
       `batch142_concepts_covered` / `batch142_pseudocode_parses`) + count pins
       (corpus.rs header ×2, category table, KERNEL_CATEGORIES slices, mod.rs
       history paragraph + entries.len, AGENTS ×2, README ×2, `.docs/11_domains/`).
+      **STATIC PRE-CLEARANCE 09-10 (zero-cargo review, this session): all 8
+      string fields (2 rules × 4) escape-aware delimiter-balanced; field sets
+      complete; vec structure closed; import already in the clippy brace-less
+      single-item form (sibling's 27–35 fixups do not touch this file); mod.rs
+      wiring + slices + counts verified consistent (605→607; A 130 @ mod.rs:1887,
+      N 44 @ :2537, both rule_ids present in the correct slices); all 6 rider
+      splices (02/07/18/36/38/39) end with intact `.to_string(),` terminators +
+      RIDER attribution. The syn-parse hazard class is pre-cleared statically —
+      T3b's real work at the window is the compile gates + the doc-surface
+      pins, nothing else.**
 - [ ] T4 — (CARGO-GATED) GOAT: G1 batch gates by name; G2 lib in all feature
       states; G3 clippy 0 both/all states + retrieval-precision re-measure
       (floors: kernel 100/100/100, blended — re-read the current pins at run
