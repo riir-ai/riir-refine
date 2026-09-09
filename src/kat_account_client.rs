@@ -22,6 +22,12 @@
 //! host — the `node-sync` probe, Issue 061 **T3.2**, which this deliberately
 //! does not pretend to be.
 //!
+//! One more read is DISPLAY-ONLY: `GET /` service info (dapps Issue 029
+//! Rider 1) renders `service: devnet (virtual clock)` from the
+//! deployment's self-declared `env` label + `tick_source`. It is never a
+//! gate input, and the probe reads it LAST — the fail-fast rule below
+//! still bounds an offline run at ONE timeout.
+//!
 //! # Three states, never two
 //!
 //! [`WelcomeGate`] separates *"read the network, it is not settled"*
@@ -114,6 +120,32 @@ pub fn parse_balance(body: &[u8]) -> Result<ServiceBalance, String> {
             .and_then(serde_json::Value::as_bool)
             .ok_or("the balance carried no `granted`")?,
     })
+}
+
+/// The `GET /` service-info label line — dapps Issue 029 Rider 1.
+///
+/// The wire (pinned by the kat-service contract test
+/// `service_info_carries_tick_source_and_optional_env_label`):
+/// `{"service":"kat",…[,"env":"<KAT_ENV_LABEL>"],"tick_source":"virtual"|"wall"}`
+/// — `tick_source` always rides, `env` only when the deployment declares a
+/// label. The client renders ONE display line and nothing else; the fields
+/// are never a gate input, and a body that does not identify as the kat
+/// service (or carries neither field) renders NOTHING rather than a
+/// guessed label.
+#[must_use]
+pub fn service_info_line(body: &[u8]) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_slice(body).ok()?;
+    if v.get("service").and_then(serde_json::Value::as_str) != Some("kat") {
+        return None;
+    }
+    let env = v.get("env").and_then(serde_json::Value::as_str);
+    let tick = v.get("tick_source").and_then(serde_json::Value::as_str);
+    match (env, tick) {
+        (Some(env), Some(tick)) => Some(format!("service: {env} ({tick} clock)")),
+        (Some(env), None) => Some(format!("service: {env}")),
+        (None, Some(tick)) => Some(format!("service: ({tick} clock)")),
+        (None, None) => None,
+    }
 }
 
 /// The ledger plane's health — `GET /health`.
@@ -422,6 +454,15 @@ pub trait AccountTransport {
     fn get_mining_health(&self) -> HttpResponse;
     /// `GET /balance?acct=<32 hex>`.
     fn get_balance(&self, acct_hex: &str) -> HttpResponse;
+    /// `GET /` — the service-info body (dapps Issue 029 Rider 1,
+    /// display-only). The DEFAULT is a 404: "this channel does not serve
+    /// the service-info route" — which renders no label, the honest
+    /// degradation for transports composed from narrower planes (the
+    /// wetrun adapter spans three plane reads; `/` is not one of them).
+    /// [`HttpAccountTransport`] overrides with the real read.
+    fn get_service_info(&self) -> HttpResponse {
+        HttpResponse::Status(404)
+    }
 }
 
 /// The ureq HTTP transport over the shared service base URL (the
@@ -489,6 +530,22 @@ impl AccountTransport for HttpAccountTransport {
     fn get_balance(&self, acct_hex: &str) -> HttpResponse {
         self.get(&format!("/balance?acct={acct_hex}"))
     }
+
+    fn get_service_info(&self) -> HttpResponse {
+        self.get("/")
+    }
+}
+
+/// One `GET /` read → the display label, or `None` (the service answered
+/// unhappily, or the body carried nothing labelable). Display-only by
+/// contract: a missing label must never read as a probe failure.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn service_line_via(transport: &dyn AccountTransport) -> Option<String> {
+    match transport.get_service_info() {
+        HttpResponse::Ok(b) => service_info_line(&b),
+        _ => None,
+    }
 }
 
 /// What the service plane said about this account (the probe's product).
@@ -499,6 +556,9 @@ pub struct AccountServiceView {
     pub gate: WelcomeGate,
     /// The authoritative row, when it read.
     pub balance: Option<ServiceBalance>,
+    /// The `GET /` deployment label (dapps Issue 029 Rider 1), when the
+    /// service answered with a body that carries one. Display-only.
+    pub service_line: Option<String>,
 }
 
 /// Probe the service plane for one account.
@@ -533,6 +593,9 @@ pub fn account_service_view(
                     reason: format!("the ledger plane's health did not read: {e}"),
                 },
                 balance: None,
+                // No second timeout on a dead service: the label read
+                // would answer the same `unreachable`.
+                service_line: None,
             };
         }
     }
@@ -544,6 +607,9 @@ pub fn account_service_view(
     AccountServiceView {
         gate: evaluate_welcome(&ledger, &mining, &balance),
         balance: balance.ok(),
+        // LAST (dapps Issue 029 Rider 1): an offline run still costs the
+        // short-circuit's ONE timeout, never a second for the label.
+        service_line: service_line_via(transport),
     }
 }
 
@@ -780,7 +846,7 @@ mod tests {
     /// transport implements.
     #[cfg(feature = "kat_transport")]
     #[test]
-    fn the_probe_reads_all_three_routes_and_opens_the_gate() {
+    fn the_probe_reads_all_four_routes_and_opens_the_gate() {
         use std::cell::RefCell;
 
         struct Mock {
@@ -799,6 +865,14 @@ mod tests {
                 self.seen.borrow_mut().push(format!("/balance?acct={acct_hex}"));
                 HttpResponse::Ok(balance_json(acct_hex, 5_000_000, true))
             }
+            fn get_service_info(&self) -> HttpResponse {
+                self.seen.borrow_mut().push("/".into());
+                HttpResponse::Ok(
+                    serde_json::json!({"service":"kat","env":"devnet","tick_source":"virtual"})
+                        .to_string()
+                        .into_bytes(),
+                )
+            }
         }
         let acct = "ab".repeat(16);
         let mock = Mock { seen: RefCell::new(Vec::new()) };
@@ -809,16 +883,61 @@ mod tests {
         );
         assert_eq!(view.balance.as_ref().map(|b| b.balance_micro), Some(5_000_000));
         assert_eq!(
+            view.service_line.as_deref(),
+            Some("service: devnet (virtual clock)"),
+            "the probe carries the display label through"
+        );
+        assert_eq!(
             *mock.seen.borrow(),
             vec![
                 "/health".to_string(),
                 "/mining/health".to_string(),
                 format!("/balance?acct={acct}"),
+                "/".to_string(),
             ]
         );
     }
 
-    /// Fail-fast: an unreachable service costs ONE read, not three. A
+    /// The `GET /` display label (dapps Issue 029 Rider 1): every shape
+    /// the service may send, and the bodies that must render NOTHING.
+    #[test]
+    fn service_info_label_renders_what_the_service_declares_and_nothing_else() {
+        // The full labeled body (the deployed shape — wrangler sets
+        // KAT_ENV_LABEL = "devnet").
+        let labeled = serde_json::json!({
+            "service": "kat", "planes": ["ledger", "lease", "mining"],
+            "leaderboard": "/leaderboard", "env": "devnet", "tick_source": "virtual"
+        })
+        .to_string();
+        assert_eq!(
+            service_info_line(labeled.as_bytes()).as_deref(),
+            Some("service: devnet (virtual clock)")
+        );
+
+        // The unlabeled deployment omits `env` — the tick is still a fact
+        // the service itself declared (absence is honest, so no guess).
+        let unlabeled = serde_json::json!({"service": "kat", "tick_source": "wall"}).to_string();
+        assert_eq!(
+            service_info_line(unlabeled.as_bytes()).as_deref(),
+            Some("service: (wall clock)")
+        );
+
+        // Degenerate shapes render NOTHING — never a guessed label.
+        assert_eq!(service_info_line(br#"{"service":"kat"}"#), None);
+        // A body that does not identify as the kat service is not ours to
+        // label (a proxy answering `/` with its own page, say).
+        assert_eq!(service_info_line(br#"{"service":"other","env":"x"}"#), None);
+        assert_eq!(service_info_line(b"not json at all"), None);
+        assert_eq!(service_info_line(b""), None);
+
+        // env-only still renders — the fields are independent facts.
+        assert_eq!(
+            service_info_line(br#"{"service":"kat","env":"localnet"}"#).as_deref(),
+            Some("service: localnet")
+        );
+    }
+
+    /// Fail-fast: an unreachable service costs ONE read, not four. A
     /// three-timeout `account` is the regression this pins (an offline
     /// user waits 1× the budget, not 3×).
     #[cfg(feature = "kat_transport")]
@@ -848,6 +967,10 @@ mod tests {
                 self.reads.set(self.reads.get() + 1);
                 HttpResponse::Error("connection refused".to_string())
             }
+            fn get_service_info(&self) -> HttpResponse {
+                self.reads.set(self.reads.get() + 1);
+                HttpResponse::Error("connection refused".to_string())
+            }
         }
         impl AccountTransport for Refusing {
             fn get_ledger_health(&self) -> HttpResponse {
@@ -862,19 +985,26 @@ mod tests {
                 self.reads.set(self.reads.get() + 1);
                 HttpResponse::Status(500)
             }
+            fn get_service_info(&self) -> HttpResponse {
+                self.reads.set(self.reads.get() + 1);
+                HttpResponse::Status(500)
+            }
         }
 
         let dead = Dead { reads: Cell::new(0) };
         let view = account_service_view(&dead, &"ab".repeat(16));
         assert!(matches!(view.gate, WelcomeGate::Unknown { .. }), "{:?}", view.gate);
         assert!(view.balance.is_none());
+        assert!(view.service_line.is_none(), "a dead service renders no label");
         assert_eq!(dead.reads.get(), 1, "an unreachable service must cost ONE timeout");
 
         // A non-200 STATUS is different: the service answered, so the
-        // other routes still carry information and are still read.
+        // other routes still carry information and are still read — the
+        // label among them, and an unhappy `/` still renders no label.
         let refusing = Refusing { reads: Cell::new(0) };
         let view = account_service_view(&refusing, &"ab".repeat(16));
         assert!(matches!(view.gate, WelcomeGate::Unknown { .. }));
-        assert_eq!(refusing.reads.get(), 3);
+        assert!(view.service_line.is_none());
+        assert_eq!(refusing.reads.get(), 4);
     }
 }

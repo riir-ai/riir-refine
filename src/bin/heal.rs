@@ -865,6 +865,13 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 // the probe fail-fasts, so an offline run costs one budget.
                 let transport = svc::HttpAccountTransport::new(&url, 5);
                 let view = svc::account_service_view(&transport, acct);
+                // dapps Issue 029 Rider 1 (client half): label the
+                // deployment being asked — display-only, so an unlabeled
+                // or unreadable service prints nothing. Printed from the
+                // FIRST probe only (the post-claim re-probe would repeat it).
+                if let Some(line) = &view.service_line {
+                    println!("{line}");
+                }
                 for line in svc::welcome_gate_lines(&view.gate) {
                     println!("{line}");
                 }
@@ -1763,6 +1770,14 @@ fn run_kat_refill(wait_secs: u64) {
             std::time::Duration::from_secs(riir_clippy::kat_refill::REFILL_POLL_INTERVAL_SECS),
         );
         for line in riir_clippy::kat_refill::refill_display_lines(&outcome, &url) {
+            println!("{line}");
+        }
+        // dapps Issue 029 Rider 1 (client half): the same service label,
+        // read through the account transport AFTER the flow — a dead
+        // service fails the flow above with its own honest errors and the
+        // label never adds a second timeout ahead of them.
+        let svc_transport = riir_clippy::kat_account_client::HttpAccountTransport::new(&url, 5);
+        if let Some(line) = riir_clippy::kat_account_client::service_line_via(&svc_transport) {
             println!("{line}");
         }
 
