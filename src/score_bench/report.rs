@@ -46,6 +46,15 @@ pub struct HistoryRecord {
     /// and deserialize as 1 — the v1 series is never renumbered.
     #[serde(default = "default_generation")]
     pub generation: u8,
+    /// Issue 077 T4 — the entropy-gap OOD axis (see [`super::ood`]). Always
+    /// present on rows written by builds carrying this module; rows predating
+    /// the axis deserialize as `None`. Instrumentation, not a scored axis:
+    /// the SVG renderer and the saturation detector ignore it, and the
+    /// Warm-tier [`crate::traj_store::ScoreRunRow`] mirror deliberately drops
+    /// it (the jsonl stays the committed projection — pinned by the
+    /// traj-store schema-identity test).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ood: Option<super::ood::OodRow>,
 }
 
 /// The serde default for pre-generation rows (issue 072 T4).
@@ -200,7 +209,9 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 
 impl HistoryRecord {
     /// Build the record from a finished bench run (generation 1 — the v1
-    /// frozen set; gen-2 runs call [`Self::with_generation`] after).
+    /// frozen set; gen-2 runs call [`Self::with_generation`] after). The OOD
+    /// axis rides every row (issue 077 T4): cached per process, so the
+    /// appended row and the console report share one measurement.
     #[must_use]
     pub fn from_score(score: &super::BenchScore, sha: String) -> Self {
         let n_healable = score
@@ -221,6 +232,7 @@ impl HistoryRecord {
             edits_total: score.edits_total,
             vocab_size: score.vocab_size,
             generation: 1,
+            ood: Some(super::ood::ood_axis().clone()),
         }
     }
 
@@ -321,6 +333,18 @@ pub fn print_report(score: &super::BenchScore) {
     if drifted > 0 {
         println!("drift warnings: {drifted} fixture(s) — frozen labels stale vs this toolchain");
     }
+    // Issue 077 T4 — the entropy-gap OOD axis (always-on; the same cached
+    // measurement that rides the appended JSONL row).
+    let ood = super::ood::ood_axis();
+    println!(
+        "entropy-gap OOD axis: ref={} ({} skipped) vs ood={} ({} skipped)",
+        ood.ref_set, ood.n_ref_skipped, ood.ood_set, ood.n_ood_skipped
+    );
+    println!(
+        "  mean_ref {:.3} nats | mean_ood {:.3} nats | gap {:+.3} nats (d={:+.2}) → {:?}",
+        ood.mean_ref_entropy, ood.mean_ood_entropy, ood.mean_gap, ood.standardized_gap, ood.regime
+    );
+    println!("  artifact blake3:{}…", &ood.artifact[..16]);
     println!("───────────────────────────────────────────────────────");
 }
 
@@ -522,6 +546,7 @@ mod tests {
             edits_total: 41,
             vocab_size: 33,
             generation: 1,
+            ood: None,
         }
     }
 
@@ -575,6 +600,48 @@ mod tests {
             "vocab_size":38}"#;
         let parsed: HistoryRecord = serde_json::from_str(legacy).unwrap();
         assert_eq!(parsed.generation, 1);
+    }
+
+    #[test]
+    fn pre_ood_rows_deserialize_with_ood_none() {
+        // A row written before the OOD axis existed (issue 077 T4) reads
+        // back with `ood: None` — the additive-field backward contract.
+        let legacy = r#"{"ts":"2026-09-08T10:00:00","sha":"abc1234","n_ran":30,
+            "n_healable":24,"n_clean":6,"heal_rate":0.9,"created_rate":0.02,
+            "parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,
+            "vocab_size":38,"generation":1}"#;
+        let parsed: HistoryRecord = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.ood, None);
+    }
+
+    #[test]
+    fn ood_payload_roundtrips_and_is_skipped_when_absent() {
+        // A row carrying the axis serializes it and reads it back intact;
+        // a row without it writes NO ood key (the field is additive — old
+        // jsonl consumers see the exact legacy shape).
+        let mut with_ood = rec("2026-09-09T10:00:00", 0.9);
+        with_ood.ood = Some(crate::score_bench::ood::OodRow {
+            ref_set: "v1_frozen".to_string(),
+            ood_set: "gen6_real_repo".to_string(),
+            n_ref: 34,
+            n_ood: 17,
+            n_ref_skipped: 0,
+            n_ood_skipped: 0,
+            mean_ref_entropy: 0.25,
+            mean_ood_entropy: 1.1,
+            mean_gap: 0.85,
+            standardized_gap: 2.0,
+            regime: crate::score_bench::ood::OodRegime::Memorizing,
+            artifact: "ab".repeat(32),
+        });
+        let line = serde_json::to_string(&with_ood).unwrap();
+        assert!(line.contains("\"ood\":{"));
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, with_ood);
+
+        let without = rec("2026-09-09T10:00:00", 0.9);
+        let line = serde_json::to_string(&without).unwrap();
+        assert!(!line.contains("ood"), "absent axis writes no key: {line}");
     }
 
     fn gen_rec(i: usize, heal: f32, generation: u8) -> HistoryRecord {

@@ -212,7 +212,10 @@ fn is_first_hand_corpus_source(note: &str) -> bool {
 /// `.benchmarks/score_history.jsonl` line. The first eleven fields are the
 /// `score_bench::report::HistoryRecord` shape VERBATIM (schema-identity
 /// jsonl ↔ store is pinned by a test); `recorded_unix` is the ordering key
-/// derived from `ts` (0 when the timestamp does not parse). Key:
+/// derived from `ts` (0 when the timestamp does not parse). The one
+/// deliberate exception: `HistoryRecord`'s `ood` OOD-axis instrumentation
+/// (issue 077 T4) is dropped here — the jsonl stays the committed
+/// projection (pinned by the same test). Key:
 /// `scorerun:{recorded_unix}:{sha-or-"nosh"}` — upsert semantics, so a
 /// re-import or a dual-write of the same run is idempotent by construction.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
@@ -2643,8 +2646,12 @@ mod tests {
     #[test]
     fn score_run_row_is_schema_identical_to_history_record() {
         // The jsonl ↔ store schema-identity contract (Issue 050 T2): a
-        // HistoryRecord round-trips through ScoreRunRow with every field
-        // preserved — only `recorded_unix` is added.
+        // HistoryRecord round-trips through ScoreRunRow with every scored
+        // field preserved — only `recorded_unix` is added. The one DELIBERATE
+        // exception (issue 077 T4): the `ood` axis. It is run
+        // instrumentation, not a scored axis — the store row drops it and the
+        // jsonl stays the committed projection; the asymmetry is pinned by
+        // the second half of this test (an ood-carrying line still imports).
         let rec = crate::score_bench::report::HistoryRecord {
             ts: "2026-08-19T04:49:29".to_string(),
             sha: "72bac03".to_string(),
@@ -2658,6 +2665,7 @@ mod tests {
             edits_total: 60,
             vocab_size: 33,
             generation: 1,
+            ood: None,
         };
         let row = ScoreRunRow::from(&rec);
         assert_eq!(row.ts, rec.ts);
@@ -2685,6 +2693,31 @@ mod tests {
         let from_jsonl: ScoreRunRow = serde_json::from_str(&line).unwrap();
         assert_eq!(from_jsonl.recorded_unix, 0, "jsonl shape carries no unix stamp");
         assert_eq!(from_jsonl.ts, rec.ts);
+
+        // The ood asymmetry is TOLERANT in both directions: an ood-carrying
+        // jsonl line imports into the store row with the scored fields
+        // intact (serde ignores the unknown key on the row side), and the
+        // dropped axis never corrupts the scored projection.
+        let mut instrumented = rec.clone();
+        instrumented.ood = Some(crate::score_bench::ood::OodRow {
+            ref_set: "v1_frozen".to_string(),
+            ood_set: "gen6_real_repo".to_string(),
+            n_ref: 34,
+            n_ood: 17,
+            n_ref_skipped: 0,
+            n_ood_skipped: 0,
+            mean_ref_entropy: 0.5,
+            mean_ood_entropy: 1.5,
+            mean_gap: 1.0,
+            standardized_gap: 1.25,
+            regime: crate::score_bench::ood::OodRegime::Memorizing,
+            artifact: "cd".repeat(32),
+        });
+        let line = serde_json::to_string(&instrumented).unwrap();
+        let from_ood_line: ScoreRunRow = serde_json::from_str(&line).unwrap();
+        let mut expected = ScoreRunRow::from(&rec);
+        expected.recorded_unix = 0; // the jsonl shape carries no unix stamp
+        assert_eq!(from_ood_line, expected, "the dropped axis must not move any scored field");
     }
 
     // ── Issue 072 T1/T3: the construction-pair family ────────────

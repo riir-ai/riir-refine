@@ -45,6 +45,7 @@
 
 pub mod fixtures;
 pub mod generations;
+pub mod ood;
 pub mod report;
 
 use std::collections::BTreeMap;
