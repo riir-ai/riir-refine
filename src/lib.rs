@@ -318,8 +318,10 @@ pub mod kat_contribution;
 // Issue 075 (owner soft gate, 2026-09-08): the depleted-account refusal —
 // the pure four-leg predicate over the last SYNCED server balance (the burn
 // ack's `last_balance_micro`, never the local projection), the account, and
-// the contribution marker. Warn-only (no honest gate) for no-transport,
-// anonymous, and never-synced inputs. Feature-free: the cfg lives at the
+// the contribution truth — the burn-ack v3 `contributed` server truth, the
+// machine-local marker only as the pre-v3 fallback (issue 080). Warn-only
+// (no honest gate) for no-transport, anonymous, and never-synced inputs.
+// Feature-free: the cfg lives at the
 // bin's call site, where the capability is known.
 pub mod kat_soft_gate;
 

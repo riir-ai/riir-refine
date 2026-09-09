@@ -240,6 +240,26 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
     }
 }
 
+/// Issue 080 — the sticky-grace leg, SERVER TRUTH WINS: the burn-ack v3
+/// `contributed` field (written only from the authenticated burn-push
+/// response) decides when the server has stated it — `Some(false)` refuses
+/// even when a machine-local marker is present, planted or stale, which is
+/// what closes the `contributed_once.json` forge. The marker fills in ONLY
+/// while the server has never said otherwise (`None`, a pre-v3 ack/server)
+/// so the fleet transition never bricks a real contributor. (NB: the
+/// issue's shorthand `Some(true) || marker` would let a planted marker
+/// lift the gate under `Some(false)` — the unwrapped form below is the
+/// contract; the CLI test pins it.)
+// TODO(issue 080): remove legacy marker read after fleet v3
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn sticky_grace(
+    ack: &riir_clippy::kat_burn_client::KatBurnAck,
+    account_dir: &std::path::Path,
+) -> bool {
+    ack.contributed
+        .unwrap_or_else(|| riir_clippy::kat_contribution::has_contributed(account_dir))
+}
+
 /// Issue 075 (owner soft gate, 2026-09-08): the depleted-account refusal.
 /// Fires for the scan flow — EVERY mode that processes source burns fuel
 /// (the bare dry run settles charge too; measured by `kat_burn_stack`), so
@@ -269,7 +289,7 @@ fn enforce_kat_soft_gate(args: &Args) {
         transport_capable: true,
         account_present: riir_clippy::kat_account::KatAccount::load(&account_dir).is_ok(),
         last_synced_balance_micro: ack.last_balance_micro,
-        contributed_and_synced: riir_clippy::kat_contribution::has_contributed(&account_dir),
+        contributed_and_synced: sticky_grace(&ack, &account_dir),
     });
 
     // Issue 079 (owner ask, 2026-09-09): a flat refusal gives a depleted
@@ -296,9 +316,7 @@ fn enforce_kat_soft_gate(args: &Args) {
                     account_present: riir_clippy::kat_account::KatAccount::load(&account_dir)
                         .is_ok(),
                     last_synced_balance_micro: reloaded.last_balance_micro,
-                    contributed_and_synced: riir_clippy::kat_contribution::has_contributed(
-                        &account_dir,
-                    ),
+                    contributed_and_synced: sticky_grace(&reloaded, &account_dir),
                 });
             (verdict, true)
         } else {

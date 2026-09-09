@@ -1,6 +1,6 @@
 # Issue 080 — the sticky-grace input is a locally forgeable file: swap the gate to server truth (burn-ack v3 `contributed`), retire `contributed_once.json`
 
-**Status:** OPEN — filed 2026-09-09 (owner: "data should be in neuron-db as possible so no one can hack it and can be synced to system"); consumed by riir-neuron-db Plan 327 (substrate + sizing) and riir-dapps Issue 027 (server half)
+**Status:** IN PROGRESS — filed 2026-09-09; client half LANDED on develop (Plan 327 T3: burn-ack v3 `contributed` + `first_commitment_hex`, truth-wins gate, CLI regression tests, docs); server half = riir-dapps Issue 027; REMAINS: the dated removal of `kat_contribution` + the legacy marker read after fleet v3 (docs re-update then)
 
 ## The finding
 
@@ -28,6 +28,14 @@ content as CONTRIBUTED (anti-brick: corrupt reads permissive). That means:
   Some(true) || legacy_marker_present()` — **server truth wins**; the legacy
   marker only fills in while the server fleet is pre-v3, so the transition
   never bricks a real contributor and never widens the forge beyond today.
+  ⚠ **T3 correction (landed):** the shorthand above is WRONG as written —
+  under `Some(false)` the `||` still reads the marker, so a planted file
+  lifts the gate. The landed form is
+  `ack.contributed.unwrap_or_else(legacy_marker_present)`: server truth
+  when stated, marker ONLY when `None`. The prose ("server truth wins")
+  was the contract; the CLI regression test
+  (`issue_080_server_said_false_closes_the_planted_marker_forge` in
+  `tests/kat_soft_gate_cli.rs`) pins it.
 - After fleet v3: delete the legacy read and `kat_contribution`'s gate use
   (dated removal task — the file itself stays gone with it).
 - Anti-brick preserved: a corrupt/missing ack reads empty → `NeverSynced` →

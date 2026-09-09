@@ -326,15 +326,20 @@ the transport compiles it to nothing.
 Prepaid fuel, not an interactive gate: when the account's **last synced
 server balance** is ≤ 0 and the machine has never contributed-and-synced,
 scanning runs REFUSE at start (exit 1) until the user contributes
-(`cargo heal --mine`, then one accepted `cargo heal sync` — the push
-acceptance records a machine-global marker that lifts the gate for good) or
-tops up. Logged-out, offline, and never-synced machines stay warn-only — no
-server authority, no honest gate. The refusal names both refuel paths.
-`RIIR_HEAL_KAT_GATE=0` (or the shared `RIIR_HEAL_KAT_METER=0` billing
-switch) disarms the gate; the burn push itself keeps its never-blocks
-contract. Contributed accounts are never re-gated while depleted — mining
-payouts land at the 7-day epoch settle, and bricking a contributor mid-epoch
-is the exact failure the gate exists to avoid.
+(`cargo heal --mine`, then one accepted `cargo heal sync` — the burn-push
+ack records the server's `contributed` truth, which lifts the gate for
+good) or tops up. Since Issue 080 the sticky grace is **server truth**:
+the burn-ack v3 `contributed` field decides — `false` refuses even when a
+machine-local marker exists (the forgeable `contributed_once.json` input
+is closed), and the marker is honored only while a pre-v3 server has never
+said otherwise (removed once the fleet upgrades). Logged-out, offline, and
+never-synced machines stay warn-only — no server authority, no honest
+gate. The refusal names both refuel paths. `RIIR_HEAL_KAT_GATE=0` (or the
+shared `RIIR_HEAL_KAT_METER=0` billing switch) disarms the gate; the burn
+push itself keeps its never-blocks contract. Contributed accounts are
+never re-gated while depleted — mining payouts land at the 7-day epoch
+settle, and bricking a contributor mid-epoch is the exact failure the gate
+exists to avoid.
 
 ## Automatic rustfmt (`--fix --write`)
 

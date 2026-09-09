@@ -112,6 +112,16 @@ pub struct BurnReportAck {
     /// The account balance AFTER the warn-and-pay debit, micro-units
     /// (1 KAT = 10⁶ micro; may go negative — warn-and-pay, never brick).
     pub balance_micro: i64,
+    /// Whether the service says this account has EVER had an accepted
+    /// mining batch (issue 080) — the sticky-grace SERVER truth, persisted
+    /// into the ack verbatim. `None` = the field was absent or not a bool
+    /// (a pre-v3 server answer); the client then falls back to the legacy
+    /// machine-local marker.
+    pub contributed: Option<bool>,
+    /// The commitment hex of the first accepted batch (64 hex chars per
+    /// the contract; provenance only — the gate never reads it). `None`
+    /// when absent or not a string.
+    pub first_commitment_hex: Option<String>,
 }
 
 /// Parse the `200` body. The `error` field is read FIRST so a refusal
@@ -147,6 +157,13 @@ pub fn parse_burn_response(body: &[u8]) -> Result<BurnReportAck, String> {
             .get("balance_micro")
             .and_then(serde_json::Value::as_i64)
             .ok_or("the burn response carried no `balance_micro`")?,
+        // v3 additions (issue 080), parsed DEFENSIVELY: absent or typed
+        // wrong → None — a pre-v3 server answer must keep parsing.
+        contributed: v.get("contributed").and_then(serde_json::Value::as_bool),
+        first_commitment_hex: v
+            .get("first_commitment_hex")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
     })
 }
 
@@ -157,8 +174,11 @@ pub fn parse_burn_response(body: &[u8]) -> Result<BurnReportAck, String> {
 /// History: v1 = the 076 shape (total, meter watermark, ack time). v2 adds
 /// `last_balance_micro` (Issue 075) — the last-synced server balance the
 /// soft gate reads; the one-time v1→v2 reset re-reports the full cumulative
-/// total, a server-side no-op.
-pub const BURN_ACK_VERSION: u8 = 2;
+/// total, a server-side no-op. v3 adds `contributed` +
+/// `first_commitment_hex` (Issue 080) — the sticky-grace server truth;
+/// ADDITIVE (optional fields), so a v2 file upgrades in place — see
+/// [`KatBurnAck::load_at`].
+pub const BURN_ACK_VERSION: u8 = 3;
 
 /// What the service last ACKNOWLEDGED — the local-commit book of the burn
 /// sync. Persisted per-repo at `<root>/.heal/kat_burn_ack.json` (beside the
@@ -176,11 +196,22 @@ pub struct KatBurnAck {
     /// Unix seconds of the accepted report (informational).
     pub acked_unix: u64,
     /// The account balance AFTER the warn-and-pay debit, as the server
-    /// answered (`None` = pre-v2 ack / never synced). The 075 soft gate
+    /// answered (`None` = a pre-v3 ack / never synced). The 075 soft gate
     /// reads THIS — the last-synced server truth — never the local
     /// projection (which models neither the faucet drip nor mining credits).
     #[serde(default)]
     pub last_balance_micro: Option<i64>,
+    /// Whether the service has ever ACCEPTED a mining batch from this
+    /// account, exactly as the burn-push response answered (`None` = a
+    /// pre-v3 ack / pre-v3 server). Issue 080: the sticky-grace SERVER
+    /// truth — when `Some(false)` the legacy machine-local marker must
+    /// NOT lift the gate; the marker only fills in while this is `None`.
+    #[serde(default)]
+    pub contributed: Option<bool>,
+    /// The first accepted batch's commitment hex (provenance only — the
+    /// gate never reads it). `None` when the server did not send it.
+    #[serde(default)]
+    pub first_commitment_hex: Option<String>,
 }
 
 impl Default for KatBurnAck {
@@ -202,19 +233,32 @@ impl KatBurnAck {
             meter_watermark_tokens: 0,
             acked_unix: 0,
             last_balance_micro: None,
+            contributed: None,
+            first_commitment_hex: None,
         }
     }
 
     /// Exact-path loader (tests + the env-override pattern). Never aborts:
     /// missing → empty (bootstrap, no warning); corrupt / version mismatch
-    /// → empty + warning. Over-reporting after a reset is a server-side
-    /// no-op (monotone watermark), so zero is the fail-safe direction —
-    /// never under-reporting.
+    /// → empty + warning; the PRIOR version upgrades in place (see below).
+    /// Over-reporting after a reset is a server-side no-op (monotone
+    /// watermark), so zero is the fail-safe direction — never
+    /// under-reporting.
     #[must_use]
     pub fn load_at(path: &Path) -> (Self, Option<String>) {
         match std::fs::read_to_string(path) {
             Ok(text) => match serde_json::from_str::<Self>(&text) {
                 Ok(a) if a.version == BURN_ACK_VERSION => (a, None),
+                // v2 → v3 (issue 080) is ADDITIVE: the new fields are
+                // Option with serde defaults, so an old file parses as-is
+                // — keep every truth it carries (balance + watermark) and
+                // let the next save rewrite it at the current version. A
+                // reset here would drop the gate's synced balance + sticky
+                // grace for every existing machine until the next push.
+                Ok(mut a) if a.version == BURN_ACK_VERSION - 1 => {
+                    a.version = BURN_ACK_VERSION;
+                    (a, None)
+                }
                 Ok(a) => {
                     let warn = format!(
                         "burn-sync: {} carries ack version {} (this build defines \
@@ -475,6 +519,12 @@ pub fn run_burn_sync_at(
                 meter_watermark_tokens,
                 acked_unix: now_unix(),
                 last_balance_micro: Some(server.balance_micro),
+                // The server truth rides the SAME authenticated response —
+                // nowhere else may write it (issue 080). Cloned (one small
+                // String per accepted push, a network-dominated path) so
+                // the response still reports to the caller.
+                contributed: server.contributed,
+                first_commitment_hex: server.first_commitment_hex.clone(),
             };
             if let Err(e) = record.save(&ack_path) {
                 eprintln!(
@@ -614,8 +664,15 @@ mod tests {
         .expect("documented shape must parse");
         assert_eq!(
             ok,
-            BurnReportAck { burn_kat_total: 12_345, increment_kat: 200, balance_micro: 99_900_000 }
+            BurnReportAck {
+                burn_kat_total: 12_345,
+                increment_kat: 200,
+                balance_micro: 99_900_000,
+                contributed: None,
+                first_commitment_hex: None
+            }
         );
+        assert_eq!(ok.contributed, None, "a v2-shaped answer reads None");
 
         // A REPLAY: 200, accepted, increment 0.
         let replay = parse_burn_response(
@@ -639,6 +696,33 @@ mod tests {
         )
         .expect("a negative balance is the documented warn-and-pay shape");
         assert_eq!(negative.balance_micro, -5);
+
+        // v3 (issue 080): the server-truth fields parse when present.
+        let hex = "ab".repeat(32);
+        let v3 = parse_burn_response(
+            format!(
+                r#"{{"accepted":true,"burn_kat_total":1,"increment_kat":1,"balance_micro":2,"contributed":true,"first_commitment_hex":"{hex}"}}"#
+            )
+            .as_bytes(),
+        )
+        .expect("the v3 shape must parse");
+        assert_eq!(v3.contributed, Some(true));
+        assert_eq!(v3.first_commitment_hex.as_deref(), Some(hex.as_str()));
+        let false_arm = parse_burn_response(
+            br#"{"accepted":true,"burn_kat_total":1,"increment_kat":1,"balance_micro":2,"contributed":false}"#,
+        )
+        .expect("the false arm must parse");
+        assert_eq!(false_arm.contributed, Some(false));
+        assert_eq!(false_arm.first_commitment_hex, None);
+
+        // Defensive: wrong-typed optionals are None, never a failure — a
+        // hostile/misbehaving endpoint must not break the billing push.
+        let wrong = parse_burn_response(
+            br#"{"accepted":true,"burn_kat_total":1,"increment_kat":1,"balance_micro":2,"contributed":"yes","first_commitment_hex":7}"#,
+        )
+        .expect("a wrong-typed optional is not a failure");
+        assert_eq!(wrong.contributed, None);
+        assert_eq!(wrong.first_commitment_hex, None);
     }
 
     #[test]
@@ -678,19 +762,37 @@ mod tests {
         assert_eq!(ack, KatBurnAck::empty());
         assert!(warning.is_none(), "a missing ack is the normal first run");
 
-        // Round trip (v2 carries the last-synced server balance — the 075
-        // soft gate's input).
+        // Round trip (v3 carries the last-synced server balance — the 075
+        // soft gate's input — plus the 080 sticky-grace server truth).
         let record = KatBurnAck {
             version: BURN_ACK_VERSION,
             burn_kat_total: 4_242,
             meter_watermark_tokens: 9_999,
             acked_unix: 1_700_000_000,
             last_balance_micro: Some(12_345_678),
+            contributed: Some(true),
+            first_commitment_hex: Some("ab".repeat(32)),
         };
         record.save(&path).expect("save");
         let (ack, warning) = KatBurnAck::load_at(&path);
         assert_eq!(ack, record);
         assert!(warning.is_none());
+
+        // A v2-shaped FILE (issue 080's additive upgrade): the same truths
+        // survive, the new fields read None, and NO warning — read-back
+        // compat is required; the next save rewrites it at v3.
+        std::fs::write(
+            &path,
+            r#"{"version":2,"burn_kat_total":77,"meter_watermark_tokens":8,"acked_unix":9,"last_balance_micro":-1}"#,
+        )
+        .expect("write v2 shape");
+        let (ack, warning) = KatBurnAck::load_at(&path);
+        assert!(warning.is_none(), "a v2 file must upgrade silently");
+        assert_eq!(ack.version, BURN_ACK_VERSION);
+        assert_eq!(ack.burn_kat_total, 77);
+        assert_eq!(ack.last_balance_micro, Some(-1));
+        assert_eq!(ack.contributed, None);
+        assert_eq!(ack.first_commitment_hex, None);
 
         // A v1-shaped file (no balance field): version 1 is now a MISMATCH,
         // so the documented v1→v2 path is the re-watermark (never the
@@ -699,7 +801,7 @@ mod tests {
         let (ack, warning) = KatBurnAck::load_at(&path);
         assert_eq!(ack, KatBurnAck::empty());
         assert_eq!(ack.last_balance_micro, None);
-        let warning = warning.expect("a v1 ack must warn after the v2 bump");
+        let warning = warning.expect("a v1 ack must warn after the version bumps");
         assert!(warning.contains("re-watermarking at zero"), "{warning}");
 
         // Corrupt → fresh at zero + the honest warning.
@@ -883,7 +985,13 @@ mod transport_tests {
         let ack = report_burn(&Scripted(ok), &key, 500, 1_000).expect("documented answer");
         assert_eq!(
             ack,
-            BurnReportAck { burn_kat_total: 500, increment_kat: 500, balance_micro: 99_500_000 }
+            BurnReportAck {
+                burn_kat_total: 500,
+                increment_kat: 500,
+                balance_micro: 99_500_000,
+                contributed: None,
+                first_commitment_hex: None
+            }
         );
 
         // A replay (increment 0) and a server-ahead clamp both advance —
@@ -1019,6 +1127,71 @@ mod transport_tests {
             "a failed push must not create the ack"
         );
 
+        let _ = std::fs::remove_dir_all(&account_dir);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Issue 080: the burn-push response's sticky-grace server truth
+    /// (`contributed` + `first_commitment_hex`) lands in the persisted ack
+    /// — written ONLY from that authenticated response, the same channel
+    /// as the balance. Both arms persist: `Some(true)` is the sticky
+    /// grace, `Some(false)` is the forge-closure input the gate reads.
+    #[test]
+    fn the_burn_response_server_truth_persists_into_the_ack() {
+        let account_dir = temp_root("acct080");
+        KatAccount::login(&account_dir).expect("hermetic login");
+        let hex = "ab".repeat(32);
+
+        // The true arm, over a real socket.
+        let root = temp_root("root080");
+        let mock = spawn_status_mock(
+            200,
+            "OK",
+            &format!(
+                r#"{{"accepted":true,"burn_kat_total":50,"increment_kat":50,"balance_micro":99000000,"contributed":true,"first_commitment_hex":"{hex}"}}"#
+            ),
+        );
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 50, 50);
+        let BurnSync::Reported(ack) = outcome else {
+            panic!("expected Reported, got {outcome:?}");
+        };
+        assert_eq!(ack.contributed, Some(true));
+        assert_eq!(ack.first_commitment_hex.as_deref(), Some(hex.as_str()));
+        let ack_path = root.join(".heal").join(KatBurnAck::FILE_NAME);
+        let (on_disk, warning) = KatBurnAck::load_at(&ack_path);
+        assert!(warning.is_none());
+        assert_eq!(on_disk.contributed, Some(true));
+        assert_eq!(on_disk.first_commitment_hex.as_deref(), Some(hex.as_str()));
+        assert_eq!(on_disk.last_balance_micro, Some(99_000_000));
+        let _ = std::fs::remove_dir_all(&root);
+
+        // The false arm persists too — and a pre-v3 server (fields absent)
+        // still reads None (the transition arm).
+        let root = temp_root("root080b");
+        let mock = spawn_status_mock(
+            200,
+            "OK",
+            r#"{"accepted":true,"burn_kat_total":5,"increment_kat":5,"balance_micro":0,"contributed":false}"#,
+        );
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 5, 5);
+        let BurnSync::Reported(ack) = outcome else {
+            panic!("expected Reported, got {outcome:?}");
+        };
+        assert_eq!(ack.contributed, Some(false));
+        assert_eq!(ack.first_commitment_hex, None);
+        let ack_path = root.join(".heal").join(KatBurnAck::FILE_NAME);
+        let (on_disk, _) = KatBurnAck::load_at(&ack_path);
+        assert_eq!(on_disk.contributed, Some(false));
+        let _ = std::fs::remove_dir_all(&root);
+
+        // Pre-v3 server: no fields → the ack stays None (marker fallback).
+        let root = temp_root("root080c");
+        let mock = spawn_echo_burn_mock();
+        let outcome = run_burn_sync_at(&account_dir, &root, &mock.base(), 7, 7);
+        let BurnSync::Reported(ack) = outcome else {
+            panic!("expected Reported, got {outcome:?}");
+        };
+        assert_eq!(ack.contributed, None, "a pre-v3 answer must read None");
         let _ = std::fs::remove_dir_all(&account_dir);
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -24,6 +24,18 @@
 //! valid file untouched. `--unmine` does NOT erase it — a past contribution
 //! is a historical fact, not a consent state (the consent record is
 //! [`crate::kat_mining_consent`]'s concern and stays separate).
+//!
+//! # TRANSITIONAL since Issue 080 (the server-truth swap)
+//!
+//! The 075 gate NO LONGER trusts this marker alone: the burn-ack v3
+//! `contributed` field (written only from the authenticated burn-push
+//! response) is the sticky-grace SERVER truth, and `Some(false)` refuses
+//! even when a marker is present — a planted `contributed_once.json` no
+//! longer lifts the gate. This marker now fills in ONLY while the server
+//! has never said otherwise (`None`, a pre-v3 ack/server), so existing
+//! contributed machines survive the fleet transition. DATED REMOVAL: once
+//! the fleet is v3, `has_contributed` and this file die together (the
+//! follow-up task on issue 080).
 
 use std::path::Path;
 
@@ -73,6 +85,10 @@ pub fn mark(dir: &Path, commitment_hex: &str) -> Result<(), String> {
 /// The gate's input: has this machine's account ever had a telemetry batch
 /// ACCEPTED? Missing → false (fresh account); valid → true; corrupt →
 /// **true** (anti-brick; the module docs carry the direction argument).
+///
+/// Since issue 080 the gate calls this ONLY as the fallback while the burn
+/// ack's `contributed` is `None` (a pre-v3 server) — never as the primary
+/// truth; see the module docs.
 #[must_use]
 pub fn has_contributed(dir: &Path) -> bool {
     // Presence IS the fact: the file is only ever written by an accepted

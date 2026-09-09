@@ -21,6 +21,19 @@
 //! | 079 offer (auto-yes) | depleted ack + `RIIR_HEAL_KAT_PROMPT_YES=1` | 1 + `contributing now` + the sync output, then still `REFUSED` (closed port / no store → no marker) |
 //! | 079 offer (TTY ask) | depleted ack, no env, piped stdin | 1 + plain refusal, NO `contributing now` (no TTY → the 075 shape) |
 //!
+//! Issue 080 rows — the sticky grace became SERVER TRUTH (the burn-ack v3
+//! `contributed` field, written only from the authenticated burn-push
+//! response):
+//!
+//! | server truth | marker | exit |
+//! |---|---|---|
+//! | `Some(false)` | planted | **1** (the forge-closure regression — the marker can no longer lift the gate) |
+//! | `Some(true)` | none | 0 (sticky grace, unchanged) |
+//! | `None` (pre-v3) | planted | 0 (the fleet transition) |
+//! | `None` + no balance, no marker | none | 0 (never-synced warn-only, the unchanged 075 shape) |
+//! | a v2 ack FILE (no new fields) | none | 1 (read-back compat: old files still gate) |
+//! | a v2 ack FILE (no new fields) | planted | 0 (read-back compat: the transition survives)
+//!
 //! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
 //! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`); the service URL points at a closed
 //! loopback port so an allowed run's post-run burn push fails fast (stacked)
@@ -94,7 +107,9 @@ fn login(dir: &Path) {
     assert_eq!(code, Some(0), "hermetic login must succeed. output:\n{text}");
 }
 
-/// Seed the v2 ack with the given server balance — the gate's input.
+/// Seed an ack with the given server balance — the gate's input.
+/// `contributed` stays `None`: the pre-v3 transition state the existing
+/// issue-075 rows were written against (issue 080 adds the truth fields).
 fn seed_ack(dir: &Path, balance_micro: i64) {
     let ack = KatBurnAck {
         version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
@@ -102,10 +117,45 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
         meter_watermark_tokens: 500,
         acked_unix: 1_700_000_000,
         last_balance_micro: Some(balance_micro),
+        contributed: None,
+        first_commitment_hex: None,
     };
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+}
+
+/// Seed a v3 ack carrying the server's sticky-grace truth (issue 080) —
+/// exactly what an accepted burn push writes when the server answers the
+/// v3 shape.
+fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option<bool>) {
+    let ack = KatBurnAck {
+        version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
+        burn_kat_total: 1_000,
+        meter_watermark_tokens: 500,
+        acked_unix: 1_700_000_000,
+        last_balance_micro: Some(balance_micro),
+        contributed,
+        first_commitment_hex: (contributed == Some(true)).then(|| "ab".repeat(32)),
+    };
+    let heal_dir = dir.join(".heal");
+    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+}
+
+/// Seed a literal pre-v3 (v2) ack FILE — no new fields — the shape every
+/// existing machine has on disk before the upgrade (issue 080 read-back
+/// compat).
+fn seed_v2_ack_file(dir: &Path, balance_micro: i64) {
+    let heal_dir = dir.join(".heal");
+    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    std::fs::write(
+        heal_dir.join(KatBurnAck::FILE_NAME),
+        format!(
+            r#"{{"version":2,"burn_kat_total":1000,"meter_watermark_tokens":500,"acked_unix":1700000000,"last_balance_micro":{balance_micro}}}"#
+        ),
+    )
+    .expect("seed v2 ack file");
 }
 
 /// Seed the contribution marker (the sticky grace) in the account dir.
@@ -281,4 +331,114 @@ fn never_synced_stays_warn_only() {
 
 fn write_a_rs(dir: &Path) {
     std::fs::write(dir.join("a.rs"), A_RS).expect("write a.rs");
+}
+
+// ── Issue 080 — the sticky grace became SERVER TRUTH ─────────────────
+
+/// THE forge-closure regression (issue 080): the server said
+/// `contributed: false` on the authenticated burn-push ack, so a planted
+/// machine-local `contributed_once.json` must NOT lift the gate — server
+/// truth wins, the marker forge is closed.
+#[test]
+fn issue_080_server_said_false_closes_the_planted_marker_forge() {
+    let dir = scratch("forge080");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_ack_with_contributed(&dir, 0, Some(false));
+    seed_marker(&dir); // the forged/stale legacy marker
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(
+        code,
+        Some(1),
+        "a planted marker must NOT lift the gate once the server said false. output:\n{text}"
+    );
+    assert!(text.contains("REFUSED"), "output:\n{text}");
+    assert!(!text.contains("scanned "), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Server truth `Some(true)` lifts the gate — the sticky grace, unchanged
+/// shape, now server-sourced (issue 080).
+#[test]
+fn issue_080_server_said_true_lifts_the_gate() {
+    let dir = scratch("true080");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_ack_with_contributed(&dir, 0, Some(true));
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The fleet transition (issue 080): a pre-v3 server answer (`None`) falls
+/// back to the legacy marker, which still lifts the gate — no contributor
+/// is bricked mid-rollout.
+#[test]
+fn issue_080_server_silent_marker_still_lifts_the_gate() {
+    let dir = scratch("trans080");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_ack_with_contributed(&dir, 0, None);
+    seed_marker(&dir);
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The unchanged 075 warn-only shape over a v3 ack (issue 080): absent
+/// fields serde-default to `None`, and a never-synced balance with no
+/// marker anywhere stays warn-only — never gated.
+#[test]
+fn issue_080_v3_ack_without_truth_and_no_marker_stays_warn_only() {
+    let dir = scratch("empty080");
+    write_a_rs(&dir);
+    login(&dir);
+    // A v3 ack that has synced NOTHING usable: no balance, no contributed
+    // — `empty()` is exactly the never-synced shape at the current version.
+    let ack = riir_clippy::kat_burn_client::KatBurnAck::empty();
+    assert_eq!(ack.last_balance_micro, None);
+    assert_eq!(ack.contributed, None);
+    let heal_dir = dir.join(".heal");
+    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Read-back compat (issue 080): a pre-existing v2 ack FILE — no new
+/// fields — must keep working both ways: its balance still gates (the gate
+/// did not go blind to old files), and its transition still honors the
+/// legacy marker (existing contributed machines survive the upgrade).
+#[test]
+fn issue_080_v2_ack_files_keep_gating_and_transition() {
+    // v2 file, balance 0, no marker → still REFUSED.
+    let dir = scratch("v2refuse");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_v2_ack_file(&dir, 0);
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(1), "a v2 file must still gate. output:\n{text}");
+    assert!(text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // v2 file + legacy marker → allowed (the transition survives).
+    let dir = scratch("v2marker");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_v2_ack_file(&dir, 0);
+    seed_marker(&dir);
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
