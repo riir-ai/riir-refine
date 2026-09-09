@@ -41,6 +41,38 @@ and `.docs/08_benchmarks/entropy_gap_ood_axis.md`; removed files: git history).
   (`587132b`, the truth-wins gate); the dated removal of `kat_contribution`'s
   legacy marker read waits on fleet v3 (server half = riir-dapps Issue 027).
 
+## Issues 083 + 084 resolved — the green-zero class and the telemetry-key consumer (2026-09-09)
+
+Resolved-record for the two now-removed issue files (removed per the
+noise-reduction rule; full narratives in git history,
+`git log -- .issues/083_cfg_gated_tests_report_a_green_zero.md
+.issues/084_telemetry_json_key_rename_consumer.md`).
+
+- **Issue 083** (16 `#![cfg]`-gated test targets had no `[[test]]` row, so
+  naming one printed `ok. 0 passed`): fix `2c7be78` — all 16 rows added,
+  each mirroring its file's `#![cfg]` header verbatim, and verified in BOTH
+  directions: sufficiency via 13 exact feature-set builds (13/13, 0 fails,
+  never a superset), population unchanged (102 targets / 67 gated;
+  `SILENT-NOW` 16 → 0, `w/ req-f` 35 → 51). `load-bear` was 0 and stays 0.
+  Workspace standing after game-sdk 028 (`2380fc7`) and dao 003 (`f3a0578`):
+  177 SILENT-NOW over six repos, owned by those repos; katgpt-rs's 42 is the
+  pinned ratchet. The classifier-vocabulary caveat that fell out of this
+  work is katgpt-rs `.issues/741` (still open, that repo).
+- **Issue 084** — filed as 082 (`07dece1`), **renumbered 084 before removal**:
+  the OOD issue had already consumed 082 that morning (removed `f714fea`),
+  so the telemetry filing was a silent reuse — the standing fix is
+  renumber + citation rewrite, applied here. (`git log --follow` resolves
+  the rename; consumers citing "clippy `.issues/082`" were rewritten to 084
+  in riir-dapps `.issues/033` + riir-dao `.issues/003`.) Substance: fix
+  `97d878e` — `kat_wetrun::parse_supply` reads `*_micro` first and falls
+  back to `*_kat` (the dao-soak `u_micro(new, legacy)` pattern), struct
+  fields renamed to `*_micro` byte-neutrally (offsets + `ENCODED_LEN = 40`
+  untouched), unit prose corrected, the G-WET supply line rendered through
+  `render_kat`, and the legacy arm pinned by a dedicated unit test.
+  Verified: `--lib kat_wetrun` 12/12, `--test kat_wetrun_gwet` 11/11,
+  clippy clean at the five-feature set. This closed the consumer interlock
+  on riir-dapps `.issues/033`'s key-drop task (deploy-gated there).
+
 ## Plan 117 — `cargo heal --refill`, the dev/test faucet refill (2026-09-09)
 
 Plan: `.plans/117_kat_refill_cli_devnet_faucet.md`. The depleted-account
