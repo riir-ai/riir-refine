@@ -62,3 +62,35 @@ edge clean (boundary-guard T8 in the plan).
 AGENTS.md CLI-contract soft-gate bullet + `kat_contribution` module docs
 update in the SAME commit as T3; removal task updates them again when the
 legacy read dies.
+
+## Transition edge (found in recheck 2026-09-09, after `587132b` + `e381a22`)
+
+**Pre-fleet contributors** (fact predates the v3 server): their local marker
+says CONTRIBUTED but the server has no `kat:contrib:` row — the fact is only
+recorded by a `/sync` push AFTER the fleet upgrade. Their first v3 burn push
+answers `Some(false)`, truth-wins ignores the marker, and if they are ALSO
+depleted with nothing new to push (`rows_included == 0` — no new acceptance
+→ no fact ever recorded), the contribute-now loop cannot lift the gate: the
+push half never fires, the drain keeps answering `Some(false)`. Permanent
+refusal for a historical contributor with a quiet outbox.
+
+Scope: deployment-window only (accounts that contributed pre-upgrade AND
+depleted AND nothing new to queue). Fresh contributors are fine after
+`e381a22` (push-first ⇒ the drain answers `Some(true)` on the same sync).
+
+Mitigations (owner call, pick one before the fleet is treated as v3):
+1. **Accept + document** — a historical contributor queues any one fix
+   (trajectories accumulate naturally) and syncs; the fact records; the
+   next drain lifts. Cheap, honest, small population (the tool's user base
+   is the owner's own fleet today).
+2. **Server-side backfill** — import the historical contributor set into
+   `kat:contrib:` at upgrade time (the ingest R2/DO history holds the
+   accepted batch submitters; a one-time derivation pass). Closes the edge
+   entirely; needs a dapps migration task.
+3. **Presence re-attestation** — client: when the push half has nothing new
+   AND the marker exists AND the ack says `Some(false)`, re-sign + push an
+   explicit empty re-attestation the ingest accepts (a wire change —
+   rejected for now: new surface for a corner).
+
+Default = (1) until real users exist; revisit at fleet v3 sign-off (the
+same gate as the dated marker removal).
