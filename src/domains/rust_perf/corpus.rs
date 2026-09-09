@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 121 entries across 12 categories (complexity 19, allocation 23, simd 8,
-//! layout 10, iterators 10, concurrency 13, io 19, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 90 are benchable; 27 are honestly
+//! 124 entries across 12 categories (complexity 19, allocation 24, simd 8,
+//! layout 10, iterators 10, concurrency 13, io 21, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 90 are benchable; 30 are honestly
 //! NotBenchable — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) (8 external-runtime/size-class + 2
@@ -33,7 +33,10 @@
 //! proxy-vs-endpoint, null-arm identity; experimental-design content, not
 //! speed) plus the oracle-contract annotation (Batch 125 — baseline-
 //! reproduction triage, compute-shape-matched oracles, consumed-outputs
-//! comparison; oracle-contract content, not speed).
+//! comparison; oracle-contract content, not speed) plus the three agent-
+//! context annotations (Batch 141 — measured reserve for a destructive
+//! rewrite, semantic truncation boundaries, pattern-bounded stream holdback;
+//! budget/boundary/stream discipline, not speed).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -231,12 +234,15 @@
 //! - `dynamic-work-parallelism-ladder` (work-unknown-in-advance structure ladder: scoped spawning is the composition-safe default despite the boxing — spawn_broadcast starves the pool, channel+par_bridge does not compose; Batch 136, rayon-graph blog distill)
 //! - `sender-per-work-item-terminates-channel` (dynamic queue shutdown is ownership-driven: seed sender clones per item, drop the original, the channel closes when the last item drops; Batch 136, rayon-graph blog distill)
 //! - `nested-par-inside-channel-bridge-deadlocks` (a nested par_iter in par_bridge-fed work steals, blocks on the SAME channel, and the interrupted item's sender clone keeps it open — thread-tied tasks hang; Batch 136, rayon-graph blog distill)
+//! - `compaction-reserve-before-prompt-build` (a destructive rewrite's reserve is MEASURED from the real prompt — tokenize it, add slack + output budget — and every headroom consumer reads that one figure; Batch 141, ds4 Part-B distill)
+//! - `compaction-tail-boundary-prefers-complete-turn` (truncation boundaries are semantic: bounded walk-back to the latest complete user turn, atomic spans snap the boundary to their start; Batch 141, ds4 Part-B distill)
+//! - `streaming-prefix-holdback-bounded-buffer` (a stream recognizer holds back at most the marker's own length, gated to the line boundary, flushing verbatim on mismatch — no line-length pending window; Batch 141, ds4 Part-B distill)
 //! - `prefault-admission-keyed-to-ram-headroom` (admission-policy annotation,
 //!   source-reported — the DECISION CONTENT is the headroom predicate + the
 //!   fail-closed direction + the mincore instrument refusal; page-cache state
 //!   dominates any microbench; Batch 139, ds4-metal PR #5 PLE prefault)
 //!
-//! Not benchable (31/121) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
+//! Not benchable (34/124) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -358,11 +364,14 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 /// deadlock);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the DestProp branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 19 (Batch
-/// 68/69 added 1 each + Batch 85 added 1 + Batch 94 added the cacheability-
-/// coupled coalescing rule + Batch 118 added the disjoint-pread latency-
-/// overlap rule + Batch 122/123/129 added the measurement-honesty io rules
-/// + Batch 139 added the prefault-admission rule); bevy + wasm have 1 each.
+/// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76
+/// added 1 each); io has 21 (Batch 68/69 added 1 each + Batch 85 added 1 +
+/// Batch 94 added the cacheability-coupled coalescing rule + Batch 118
+/// added the disjoint-pread latency-overlap rule + Batch 122/123/129 added
+/// the measurement-honesty io rules + Batch 139 added the prefault-admission
+/// rule + Batch 141 added the tail-boundary and stream-holdback rules);
+/// bevy + wasm have 1 each. allocation has 24 (Batch 91 + 111 + 112 added;
+/// Batch 141 added the measured-reserve rule).
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -3338,6 +3347,45 @@ fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<It
     drop(tx);
 }".to_string(),
             context_notes: Some("CORRECTNESS LEAD, source-explained (the mechanism paragraph is the post's own subtle-case walkthrough; honestly NotBenchable — a deadlock is not an A/B axis). THE DEADLOCK CHAIN, each link load-bearing: (1) par_bridge workers PULL from the channel, and rayon's par_iter may STEAL the pull task from a blocked worker's thread; (2) the stolen pull BLOCKS on rx.recv() for the next item; (3) the channel stays open because the work item that was interrupted still holds its SENDER clone; (4) rayon tasks are thread-TIED — the blocked stealer never resumes far enough to drop anything. Result: silent hang, no panic. REGIME: any queue shape where work items hold channel senders AND their processing runs nested rayon collectors. FIXES in order: serialize the inner section (the queue already parallelizes), pre-materialize inner inputs before the parallel section, or move the whole traversal to scoped spawning (composition-safe default — see dynamic-work-parallelism-ladder). FUTURE axis: async tasks are NOT thread-tied, so steal-then-block would migrate — the author's speculation, unimplemented. Distinct from nested-parallelism-deadlock notes in rayon docs (that warns scoped spawning is expensive; this is the channel-queue interaction the docs do not name) and from sender-per-work-item-terminates-channel (the correct shutdown idiom this hazard breaks). Fixtures original. Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── Batch 141 (2026-09-09, Plan 121 — the antirez/ds4 Part-B walk,
+// Research 162's staged batch; executed after the Issue-085 dist lane
+// landed). Three decision-content rules from the agent/context layer of
+// ds4 @ 6289c516 — the same host-side slice shape as Batches 121–125.
+// All NotBenchable: the decision content is budget/boundary/stream
+// discipline, not an A/B axis.
+// ── allocation: reserve measured from the thing actually written ────
+        PerfRule {
+            rule_id: "compaction-reserve-before-prompt-build".to_string(),
+            name: "the reserve for a destructive context rewrite is MEASURED from the real payload, never a constant guess: build the actual prompt, tokenize it, and derive reserve = measured_tokens + slack + output_budget — then lift EVERY free-threshold check to max(threshold, reserve) so no check can fire inside the space the rewrite itself needs".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "// The compaction trigger uses a hand-picked constant for how much\n// room the summary exchange needs, while the actual summary prompt is\n// built later from a template that grew over months. When the template\n// crosses the constant, the rewrite fires with less headroom than the\n// exchange itself consumes: the summarizer's own prompt overflows the\n// window mid-rewrite, and the session dies inside the recovery path.\nconst COMPACT_RESERVE_TOKENS: usize = 2_048;\n\nfn should_compact(ctx: &Context) -> bool {\n    ctx.len >= ctx.window - COMPACT_RESERVE_TOKENS\n}\n\nfn compact(ctx: &mut Context) -> Summary {\n    // the REAL cost: prompt template + chat framing + summary budget\n    let prompt = build_summary_prompt(ctx);\n    let cost = prompt.len() + SUMMARY_BUDGET;\n    let _ = cost; // never checked against the threshold above\n    summarize(ctx, &prompt)\n}".to_string(),
+            fixed_code: "// The reserve is MEASURED: build the real prompt once, tokenize it,\n// and add the fixed slack + the output budget. Every threshold derives\n// from the same measured figure, so the rewrite can never fire with\n// less headroom than the exchange consumes.\nfn compact_reserve(window: usize) -> usize {\n    // the REAL prompt, not an estimate of it\n    let prompt = build_summary_prompt_for_measure();\n    let measured = tokenize(&prompt).len();\n    measured + 64 /* framing slack */ + summary_budget(window)\n}\n\nfn should_compact(ctx: &Context) -> bool {\n    let reserve = compact_reserve(ctx.window);\n    ctx.len >= ctx.window.saturating_sub(reserve)\n}\n\nfn room_for_generation(ctx: &Context) -> usize {\n    // the SAME reserve bounds every other consumer of the headroom\n    ctx.window.saturating_sub(ctx.len) - compact_reserve(ctx.window)\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, source-shipped (the reserve function BUILDS the real prompt to measure it: 'agent_compact_make_prompt(...)' + chat framing appends, then 'reserve = tokens.len + 64 + agent_compact_summary_budget(ctx)' — and BOTH free-threshold consumers derive from it: 'compact = agent_compact_reserve_tokens(w) + 128' and 'generation_room = room - agent_compact_reserve_tokens(w)'; honestly NotBenchable — control-flow sizing, not an A/B axis). THE DECISION CONTENT: a capacity reserve for a DESTRUCTIVE rewrite must be measured from the thing actually written — tokenizing the real prompt — never a hand-picked constant; the reserve quantity is a tokenization of the actual payload, one level above reserve-before-insert (vec-with-capacity reserves by element COUNT of a KNOWN collection; this reserves by MEASURING an input whose size is only known by building it). The reserve must be the SINGLE figure every headroom consumer reads (trigger, generation room, mid-rewrite re-checks) — two figures for the same headroom is the constant-drift failure this rule exists to kill. Composes with renderer-error-is-not-capacity-overflow (B123, same source file: the tri-state validator decides WHETHER to compact; this decides HOW MUCH room the compaction keeps — the destructive handler is gated by the tri-state, and its budget comes from here). Regime: any context/window manager whose rewrite cost includes a prompt/template that lives in code and drifts — chat compaction, log rotation summaries, cache-rebuild planners. ANTI-REGIME: the payload size is statically known (just size_of/count it — no measurement needed). Distinct from vec-with-capacity (count-known collection; this is measure-the-real-input), from the B123 tri-state rule (classification vs budget, same pipeline), and from length-prefix-validate-before-alloc (sec — that bounds UNTRUSTED input before allocation; this measures OWNED template cost before a threshold). Suggestion-only (a parse-only proposer cannot see that the constant and the measured cost can diverge). Fixtures original. Source: antirez/ds4 @ 6289c516 (MIT) — ds4_agent.c:9354-9364 (the reserve = measured prompt + 64 + summary_budget), :6537/:9273/:9602/:10010 (the four call sites: compact budget, free-threshold, generation room). Batch 141 / Plan 121 / Research 162.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── io: truncation boundaries are semantic, not arithmetic ─────────
+        PerfRule {
+            rule_id: "compaction-tail-boundary-prefers-complete-turn".to_string(),
+            name: "a lossy truncation boundary is SEMANTIC: walk back over a bounded extra budget to the most recent COMPLETE unit (a whole user turn), fall back to the arithmetic target only when no complete unit fits, and NEVER split an atomic span (an image/embedding block snaps the boundary to the span's START) — a slightly longer complete unit beats a fragment that loses the constraints".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The tail keeps exactly tail_budget tokens: an arithmetic slice.\n// When the budget lands mid-turn, the surviving fragment has our\n// answer without the user's constraints that prompted it — and when\n// it lands mid-image, the summary consumes a torn token span that\n// neither renders nor embeds.\nfn tail_start(tokens: &[Token], sys_len: usize, tail_budget: usize) -> usize {\n    tokens.len().saturating_sub(tail_budget).max(sys_len)\n}\n\nfn compact(tokens: &[Token], images: &[Span], sys_len: usize) -> Vec<Token> {\n    let start = tail_start(tokens, sys_len, 2_048);\n    let _ = images; // spans are not considered at the boundary\n    tokens[start..].to_vec()\n}".to_string(),
+            fixed_code: "// Two semantic gates on the same boundary: (1) walk back up to one\n// extra budget to the latest COMPLETE user turn — a slightly longer\n// complete turn is preferable to losing the user's constraints and\n// keeping only a fragment of our answer; (2) if the chosen position\n// falls strictly inside an atomic span, snap to the span's START.\nfn tail_start(\n    tokens: &[Token], images: &[Span], sys_len: usize, tail_budget: usize,\n) -> usize {\n    let bottom = tokens.len();\n    let mut target = bottom.saturating_sub(tail_budget).max(sys_len);\n    // complete-turn walk: [bottom - 2*budget, bottom) — the floor holds\n    let earliest = bottom.saturating_sub(2 * tail_budget).max(sys_len);\n    for i in (earliest..bottom).rev() {\n        if tokens[i].is_user_turn_start() {\n            target = i;\n            break;\n        }\n    }\n    snap_out_of_spans(target, images) // never sever an atomic span\n}\n\nfn snap_out_of_spans(mut pos: usize, spans: &[Span]) -> usize {\n    for s in spans {\n        if pos > s.start && pos < s.end {\n            pos = s.start; // the span survives whole or not at all\n        }\n    }\n    pos\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, source-shipped (the boundary walk + the verbatim rule: 'A slightly longer complete turn is preferable to losing the user\'s constraints and keeping only a fragment of our answer' — the walk scans [bottom - 2*tail_budget, bottom) floor sys_len for the latest user-turn token and returns the arithmetic target as fallback; the image gate: 'if (pos > start && pos < end) return start' — strictly-inside snaps to the span START; honestly NotBenchable — boundary semantics, not an A/B axis). THE DECISION CONTENT: lossy truncation boundaries are SEMANTIC, not arithmetic — (1) prefer a complete UNIT over an exact budget (the walk-back window is bounded at 2× the budget, the floor at the protected prefix, the fallback the arithmetic target, so the scan terminates and the budget can only be exceeded, never the protected prefix severed); (2) ATOMIC SPANS gate the boundary regardless of how it was chosen — a boundary strictly inside a span moves to the span start (spans that survive whole or not at all). Regime: any lossy truncate-and-summarize over linear content with turn/span structure — chat compaction, log buffers, transcript windows, retrieval chunking. ANTI-REGIME: content with no internal unit structure (a raw byte stream has no complete-turn to prefer — the arithmetic slice IS the semantics). Distinct from tri-state fits validation (B123 — WHETHER to compact; this WHERE the boundary lands), from compaction-reserve-before-prompt-build (Batch 141 — HOW MUCH headroom; this WHICH content survives), from bounded-gap read coalescing (B94 — merges READS by gap; this places a WRITE-side truncation boundary), and from streaming-prefix-holdback (Batch 141 — the OUTPUT side of the same never-tear-a-unit discipline: holdback defers emission, this moves the cut). Suggestion-only (a parse-only proposer cannot see turn/span structure). Fixtures original. Source: antirez/ds4 @ 6289c516 (MIT) — ds4_agent.c:9286-9300 (agent_compact_tail_boundary + the verbatim preference comment), :9367-9377 (agent_compact_image_boundary strictly-inside snap), :9411/:9560 (both consumers gate their boundaries through the snap). Batch 141 / Plan 121 / Research 162.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── io: streaming matchers hold back O(pattern), never O(stream) ───
+        PerfRule {
+            rule_id: "streaming-prefix-holdback-bounded-buffer".to_string(),
+            name: "a streaming output matcher that must recognize a marker BEFORE the marker's bytes reach the wire holds back AT MOST the marker's own length in a fixed buffer, matches only at the gated position (a prose line boundary), and flushes the held bytes verbatim on the first mismatch — ordinary text streams immediately, and no unbounded pending window ever exists".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The decorator wants to style hint markers, so it buffers the\n// stream until it KNOWS the line is ordinary prose. A long code line\n// (or a chatty generator) builds a megabyte pending window before\n// the newline that finally resolves it — latency and memory both\n// scale with the LINE, not with the marker.\n#[derive(Default)]\nstruct Decorator {\n    pending: Vec<u8>, // grows until a newline arrives\n}\n\nimpl Decorator {\n    fn feed(&mut self, b: u8, out: &mut Vec<u8>) {\n        self.pending.push(b);\n        if b == b'\\n' {\n            if self.pending.starts_with(b\"> **Hint:**\") {\n                out.extend_from_slice(b\"[hint]\");\n                out.extend_from_slice(&self.pending[10..]);\n            } else {\n                out.extend_from_slice(&self.pending); // held far too long\n            }\n            self.pending.clear();\n        }\n    }\n}".to_string(),
+            fixed_code: "// Match the marker INCREMENTALLY: hold at most marker.len() bytes,\n// compare one byte per feed at the gated position (line start, not\n// inside code blocks), and on the first mismatch replay the held\n// bytes verbatim. Ordinary text is delayed by at most marker.len(),\n// and a real marker is recognized at its LAST byte — no line-length\n// window ever exists.\n#[derive(Default)]\nstruct Decorator {\n    held: [u8; 11], // the bound IS the marker: > **Hint:** is 11 bytes\n    held_len: usize,\n}\n\nconst MARKER: &[u8] = b\"> **Hint:**\";\n\nimpl Decorator {\n    fn feed(&mut self, b: u8, out: &mut Vec<u8>) {\n        if self.held_len < MARKER.len() && b == MARKER[self.held_len] {\n            self.held[self.held_len] = b;\n            self.held_len += 1;\n            if self.held_len == MARKER.len() {\n                out.extend_from_slice(b\"[hint]\"); // matched at the last byte\n                self.held_len = 0;\n            }\n            return;\n        }\n        // first mismatch (or the gate declined): flush what we held...\n        out.extend_from_slice(&self.held[..self.held_len]);\n        self.held_len = 0;\n        out.push(b); // ...then the current byte streams too\n    }\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, source-shipped (the bound IS the type: 'char md_hint_prefix[sizeof(\"> **Hint:**\") - 1]' with a parallel len; the gate: 'Recognize only the advertised hint marker at a prose line boundary. Hold at most that short prefix; ordinary text still streams immediately. Explicit quote lines continue the aside. No width-dependent repainting.'; the mismatch path replays the held bytes byte-by-byte before feeding the current one; the match path fires at the marker's LAST byte with no lookahead beyond it; honestly NotBenchable — streaming-latency discipline, not an A/B axis). THE DECISION CONTENT: a stream recognizer's pending window is bounded by the PATTERN, never by the line/stream — the bound lives in the TYPE (a fixed array sized by sizeof(marker)), the match is incremental (one byte per feed against the next pattern byte), the GATE (line boundary / not-in-code-block) decides whether matching is even armed, and mismatch flushes verbatim so ordinary bytes are delayed O(pattern) worst-case and usually O(1). Regime: decorating/transforming a live stream (LLM token output, log tails, protocol framing) where a marker must be caught before its bytes render. ANTI-REGIMES: the whole-line transformation is genuinely needed (buffer deliberately — but then the bound is the documented line cap, not an accident); the marker can be rewritten after the fact (post-pass over a stored buffer — no holdback needed). Distinct from bounded-channel-backpressure (queue DEPTH bounds; this is a PATTERN-sized deferral inside one stream), from compaction-tail-boundary-prefers-complete-turn (Batch 141 — the truncation side of never-tear-a-unit; this is the emission side), and from buffered-io (a fixed throughput window chosen for syscall amortization; the holdback exists for RECOGNITION and is sized by the pattern it matches). Suggestion-only (a parse-only proposer cannot see the marker semantics). Fixtures original. Source: antirez/ds4 @ 6289c516 (MIT) — ds4_agent.c:225-226 (the sized buffer + len), :3294-3299 (the boundary-gate comment), :3301-3311 (incremental match, fires at the last byte), :3317-3325 (mismatch flushes the held prefix verbatim). Batch 141 / Plan 121 / Research 162.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -8648,7 +8696,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 121); // Batch 139 (ds4 PR#5 prefault) 120 → 121
+        assert_eq!(corpus.entries.len(), 124); // Batch 141 (ds4 Part-B) 121 → 124
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -10182,7 +10230,7 @@ mod tests {
         // annotations (13 rules) were never counted here — the pin sat at the
         // Batch-109-era 14 while reality moved to 27. The test only compiles
         // under `rust_perf_bench`, so nobody ran it.
-        assert_eq!(without_spec.len(), 31); // 121 total − 90 benchable
+        assert_eq!(without_spec.len(), 34); // 124 total − 90 benchable
         assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
         assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -10190,6 +10238,9 @@ mod tests {
         assert!(without_spec.contains(&"dynamic-work-parallelism-ladder")); // Batch 136 — qualitative ladder, the author's verdict IS the content
         assert!(without_spec.contains(&"sender-per-work-item-terminates-channel")); // Batch 136 — termination/ownership shape, not an A/B axis
         assert!(without_spec.contains(&"nested-par-inside-channel-bridge-deadlocks")); // Batch 136 — a deadlock is not an A/B axis
+        assert!(without_spec.contains(&"compaction-reserve-before-prompt-build")); // Batch 141 — control-flow sizing, not an A/B axis
+        assert!(without_spec.contains(&"compaction-tail-boundary-prefers-complete-turn")); // Batch 141 — boundary semantics, not an A/B axis
+        assert!(without_spec.contains(&"streaming-prefix-holdback-bounded-buffer")); // Batch 141 — streaming-latency discipline, not an A/B axis
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -10251,7 +10302,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 64, "expected 64 context-annotated rules (Batch 139 added the prefault-admission annotation)");
+        assert_eq!(annotated.len(), 67, "expected 67 context-annotated rules (Batch 141 added the three ds4-Part-B annotations)");
         assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
@@ -10322,7 +10373,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 64); // Batch 139: 63 → 64
+        assert_eq!(annotated, 67); // Batch 141: 64 → 67
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -10354,9 +10405,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 64 annotated rules.
+        // Filter to the 67 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 64, "expected 64 annotated rules");
+        assert_eq!(annotated.len(), 67, "expected 67 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -11762,6 +11813,174 @@ mod tests {
             MODEL,
             SIDECAR
         ), "128 GiB machines prefault again");
+    }
+
+    /// Batch 141 (2026-09-09, Plan 121 — the antirez/ds4 Part-B distill,
+    /// Research 162's staged batch): the three new rules are present, parse,
+    /// carry the concept needles, and sit in their categories. All
+    /// NotBenchable by design — the without_spec membership pin above carries
+    /// the count half; the G1 function tests below carry the semantics.
+    #[test]
+    fn batch141_rules_present_and_parse() {
+        let corpus = build_perf_seed_corpus();
+        for (rid, category, needles) in [
+            (
+                "compaction-reserve-before-prompt-build",
+                "allocation",
+                vec!["MEASURED", "tokenize", "summary_budget", "free-threshold"],
+            ),
+            (
+                "compaction-tail-boundary-prefers-complete-turn",
+                "io",
+                vec!["COMPLETE unit", "snap", "span", "fragment"],
+            ),
+            (
+                "streaming-prefix-holdback-bounded-buffer",
+                "io",
+                vec!["marker", "flush", "verbatim", "line boundary"],
+            ),
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-141 rule '{rid}' missing from corpus"));
+            assert_eq!(e.category, category, "batch-141 rule '{rid}' category");
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "batch-141 '{rid}' buggy/fixed must both parse"
+            );
+            assert!(
+                e.context_notes.is_some(),
+                "batch-141 '{rid}' must carry its NotBenchable rationale in context_notes"
+            );
+            let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+            for needle in needles {
+                assert!(text.contains(needle), "batch-141 {rid} concept {needle:?} missing");
+            }
+        }
+    }
+
+    /// Batch 141 — G1 semantics, as plain functions (the rules' own
+    /// contracts, mirrored std-only):
+    /// (1) the reserve LIFTS the threshold — max(threshold, measured+slack+
+    /// budget) never fires inside the space the rewrite needs;
+    /// (2) the tail boundary prefers the complete turn inside the walk-back
+    /// window and snaps out of atomic spans;
+    /// (3) the stream holdback never exceeds the marker length and flushes
+    /// verbatim on the first mismatch.
+    #[test]
+    fn batch141_reserve_boundary_holdback_semantics() {
+        // (1) Reserve: measured reserve lifts a naive constant threshold.
+        let summary_budget = |window: usize| (window / 8).clamp(256, 8_192);
+        let reserve = |measured: usize, window: usize| measured + 64 + summary_budget(window);
+        let naive: usize = 2_048;
+        let window: usize = 32_768;
+        let measured: usize = 3_400; // the prompt template grew past the constant
+        let effective = naive.max(reserve(measured, window));
+        assert!(
+            effective > naive,
+            "a template larger than the constant must lift the reserve"
+        );
+        assert_eq!(
+            effective,
+            reserve(measured, window),
+            "every consumer reads the SAME measured figure"
+        );
+
+        // (2) Tail boundary: complete-turn walk + span snap.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Tok {
+            Sys,
+            UserTurn,
+            Filler,
+        }
+        let toks = [
+            Tok::Sys, // 0: protected prefix
+            Tok::UserTurn, // 1: turn A
+            Tok::Filler, // 2
+            Tok::UserTurn, // 3: turn B (the latest complete turn)
+            Tok::Filler, // 4
+            Tok::Filler, // 5
+        ];
+        let bottom = toks.len();
+        let sys_len = 1usize;
+        let tail_budget = 2usize;
+        let target = bottom.saturating_sub(tail_budget).max(sys_len); // 4
+        let earliest = bottom.saturating_sub(2 * tail_budget).max(sys_len); // 2
+        let walked = (earliest..bottom)
+            .rev()
+            .find(|&i| toks[i] == Tok::UserTurn)
+            .unwrap_or(target);
+        assert_eq!(walked, 3, "the latest COMPLETE user turn inside the window wins");
+        // window too small: no turn inside -> the arithmetic target stands
+        let tight = (bottom - 1..bottom)
+            .rev()
+            .find(|&i| toks[i] == Tok::UserTurn)
+            .unwrap_or(target);
+        assert_eq!(tight, target, "no complete unit fits -> bounded fragment fallback");
+        // span snap: a boundary strictly inside a span moves to its START
+        let snap = |pos: usize, spans: &[(usize, usize)]| {
+            spans
+                .iter()
+                .find(|&&(s, e)| pos > s && pos < e)
+                .map_or(pos, |&(s, _)| s)
+        };
+        let spans = [(10usize, 14usize)];
+        assert_eq!(snap(12, &spans), 10, "inside the span snaps to its start");
+        assert_eq!(snap(10, &spans), 10, "already at the start stays");
+        assert_eq!(snap(14, &spans), 14, "at/after the end is untouched");
+        assert_eq!(snap(9, &spans), 9, "before the span is untouched");
+
+        // (3) Stream holdback: bounded window + verbatim mismatch flush.
+        const MARKER: &[u8] = b"> **Hint:**"; // 11 bytes, the source's exact marker
+        #[derive(Default)]
+        struct Holder {
+            held: [u8; 11], // the bound IS the marker length
+            held_len: usize,
+        }
+        let mut h = Holder::default();
+        let mut out: Vec<u8> = Vec::new();
+        let mut feed = |h: &mut Holder, out: &mut Vec<u8>, b: u8| {
+            if h.held_len < MARKER.len() && b == MARKER[h.held_len] {
+                h.held[h.held_len] = b;
+                h.held_len += 1;
+                if h.held_len == MARKER.len() {
+                    out.extend_from_slice(b"[hint]");
+                    h.held_len = 0;
+                }
+                return;
+            }
+            out.extend_from_slice(&h.held[..h.held_len]);
+            h.held_len = 0;
+            out.push(b);
+        };
+        // ordinary text: every byte streams, the holdback stays empty
+        for &b in b"hello" {
+            feed(&mut h, &mut out, b);
+            assert_eq!(h.held_len, 0, "mismatch on byte {b} flushed immediately");
+        }
+        assert_eq!(out, b"hello");
+        // partial marker then a mismatch: held bytes replay verbatim, in order
+        out.clear();
+        for &b in &MARKER[..4] {
+            feed(&mut h, &mut out, b);
+        }
+        assert_eq!(h.held_len, 4, "prefix bytes are held, not emitted");
+        feed(&mut h, &mut out, b'x'); // mismatch at position 4
+        assert_eq!(h.held_len, 0, "mismatch clears the holdback");
+        assert_eq!(&out[..4], &MARKER[..4], "held bytes replay verbatim, in order");
+        assert_eq!(out[4], b'x', "the mismatching byte streams too");
+        // full match: recognized exactly at the marker's last byte
+        out.clear();
+        for &b in MARKER {
+            feed(&mut h, &mut out, b);
+        }
+        assert_eq!(out, b"[hint]", "the marker is replaced at its last byte");
+        assert_eq!(h.held_len, 0);
+        // the holdback's bound IS the marker's length: held: [u8; 11] and
+        // MARKER.len() == 11 — the type-level bound the rule demands.
+        assert_eq!(MARKER.len(), 11);
     }
 }
 

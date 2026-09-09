@@ -23,9 +23,28 @@
 
 ## Corpus
 
-121 rules across 12 categories (rust-optimize skill checklist +
+124 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 121 rules — Batch 139 (2026-09-09,
+profiling guide, Research 032; **now 124 rules — Batch 141 (2026-09-09,
+Plan 121 / Research 162 — the antirez/ds4 Part-B walk, the batch Research 162
+staged behind the Issue-085 lane; three NotBenchable-annotated decision-content
+rules from the agent/context layer at pin `6289c516`):
+`compaction-reserve-before-prompt-build` (allocation — a destructive context
+rewrite's reserve is MEASURED from the real prompt (build it, tokenize it,
+`tokens.len + 64 + summary_budget`), and every free-threshold consumer reads
+that ONE figure — a hand-picked constant is the drift failure; ds4_agent.c
+:9354-9364 + four call sites), `compaction-tail-boundary-prefers-complete-turn`
+(io — truncation boundaries are semantic: a bounded walk-back (2× budget,
+floor sys_len) to the latest COMPLETE user turn — the source's own rule:
+"A slightly longer complete turn is preferable to losing the user's
+constraints and keeping only a fragment of our answer" — and atomic spans
+(image blocks) snap a strictly-inside boundary to their START; :9286-9300 +
+:9367-9377), and `streaming-prefix-holdback-bounded-buffer` (io — a stream
+recognizer holds back at most the marker's own length in a type-sized buffer
+(`sizeof("> **Hint:**") - 1`), matches incrementally at the prose-line-boundary
+gate, flushes verbatim on first mismatch — ordinary text streams immediately,
+no line-length pending window; :225-226 + :3294-3325). Previously
+121 — Batch 139 (2026-09-09,
 Plan 119 / Research 154 — the ds4-metal PR #5 distill, part (c) of the ds4
 lanes; one NotBenchable-annotated io rule, decision-content): `prefault-admission-keyed-to-ram-headroom`
 (a whole-file WILLNEED prefault of a huge mmap sidecar must be ADMITTED by
@@ -278,7 +297,7 @@ annotation is x86-source-cited only, the Batch 86 bitflag rule is a
 deterministic size axis, the Batch 94 read-coalescing annotation is
 workload-level (source-reported, the cacheability coupling is the decision
 content), and the Batch 109 rule is the measurement-honesty axis itself (a
-timing gate whose work folds away has no nonzero baseline to ratio). 64 of 121 carry
+timing gate whose work folds away has no nonzero baseline to ratio). 67 of 124 carry
 `context_notes` — the class ledger that follows is the early-corpus
 accounting; Batches 83–112 kept adding to the annotated set, and the per-rule
 verdicts live in the table below — 11 verdict-class (4 `ParetoDominated` + 7

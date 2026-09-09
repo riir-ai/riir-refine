@@ -12,7 +12,7 @@
 | File | Scope |
 |---|---|
 | [`heal_domain_trait.md`](heal_domain_trait.md) | `HealDomain` + `HealEntry` traits — the one new abstraction |
-| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + seed corpus (now 120 rules — measured-GOAT + external distills, per-batch ledger inside) + `PerfVerifier` (`cargo test`); Phase 4: top-5 `syn` AST proposers (`--fix` upgrade) |
+| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + seed corpus (now 124 rules — measured-GOAT + external distills, per-batch ledger inside) + `PerfVerifier` (`cargo test`); Phase 4: top-5 `syn` AST proposers (`--fix` upgrade) |
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
 | [`sec.md`](sec.md) | Plan 018: `SecDomain` + `SecRule` + the geiger-taxonomy unsafe counter + the banned-list boundary gate + 15 rules across five intake waves (6 fixable proposers + the Batch-131/140 suggest-only detectors) |
 | [`docker.md`](docker.md) | Plan 030: `DockerDomain` + `DockerRule` + the stanza scanner (no `syn`) + the hadolint oracle tier (incl. the Tier-2 `docker build --check` oracle) + the DL3059-refusal gate + 31 rules (14 bounded fixes) |
