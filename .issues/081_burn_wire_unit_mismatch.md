@@ -65,12 +65,15 @@ books / proposal prose).
    watermark applies to every account that ever settled a burn. If the
    deployment grows past the owner's own account, option (a) needs a
    per-account migration pass, not a hand edit.
-3. **The proposal prose** (`.proposals/005` "1 KAT = 1 code word token",
-   "free 100,000,000 KAT") still documents the pre-deployment economics.
-   The token-equivalence intent (≈$300 of Claude-equivalent value) is
-   preserved by the deployed 1 KAT/M + 100 KAT grant; update the proposal
-   prose or annotate it superseded — owner call, not auto-edited (proposals
-   are history).
+3. ~~**The proposal prose**~~ — **DONE 2026-09-09 (owner un-gate: "proposals
+   can be edit, just noted to design change with date and git hash"):**
+   `.proposals/005`'s three economics sites (the login line, the §Unit
+   spec, the §Free tier) now carry dated `[DESIGN CHANGE 2026-09-09]`
+   annotations stating the deployed economics (1 KAT per 1M code word
+   tokens, 100 KAT grant — the ≈ 100M-token ≈ $300 intent preserved), the
+   reason (whole-KAT wire units, Issue 081's incident), and the fix hashes
+   (`e9eca71`, golden `3dd14dd` + riir-dapps `54d6965`). Original text
+   kept verbatim; annotations only.
 
 ## Lessons
 
