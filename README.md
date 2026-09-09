@@ -362,8 +362,9 @@ no server authority, no honest gate. The refusal names all three refuel
 paths. `RIIR_HEAL_KAT_GATE=0` (or the
 shared `RIIR_HEAL_KAT_METER=0` billing switch) disarms the gate; the burn
 push itself keeps its never-blocks contract. Contributed accounts are
-never re-gated while depleted — mining payouts land at the 7-day epoch
-settle, and bricking a contributor mid-epoch is the exact failure the gate
+never re-gated while depleted — mining payouts land at the closing settle
+of the claim's own epoch (≤7 days after that epoch closes; dapps issue 035),
+and bricking a contributor mid-epoch is the exact failure the gate
 exists to avoid.
 
 ## Automatic rustfmt (`--fix --write`)
