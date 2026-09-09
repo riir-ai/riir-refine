@@ -110,11 +110,26 @@ targets over SEVEN repos — riir-ai 76, katgpt-rs 42 (a **pinned ratchet**,
 `scripts/cfg_gated_floors.txt` `max_silent_now 42`, with `max_load_bearing 0`
 as the wall), riir-game-sdk 31, riir-chain 28, riir-train 19,
 riir-neuron-db 8, riir-mmorpg-examples 4 (= 208). **`load-bear` is 0 in every
-one**, so no gate's verdict is laundered today. riir-game-sdk is the
-worst-covered by proportion — 31 of its 50 gated targets unarmed, 18 of them
-`prod_e2e`, i.e. production end-to-end suites that green-zero when named —
-filed there as riir-game-sdk `.issues/028`. The rest belong to their owning
-repos; katgpt-rs's is already pinned and does not need one
+one**, so no gate's verdict is laundered today.
+
+riir-game-sdk was the worst by proportion — 31 of its 50 gated targets
+unarmed, 20 of them `prod_e2e` production end-to-end suites — and was fixed
+the same day as riir-game-sdk `.issues/028` (`2380fc7`), 31/31 verified both
+directions. **Standing after that: 177 over SIX repos** (riir-ai 76,
+katgpt-rs 42, riir-chain 28, riir-train 19, riir-neuron-db 8,
+riir-mmorpg-examples 4). The rest belong to their owning repos; katgpt-rs's
+is already pinned and does not need an issue.
+
+⛔ And the `load-bear = 0` above is softer than it reads. katgpt-rs
+`.issues/741`, filed off the back of the 028 work: `is_load_bearing`'s
+vocabulary names properties a file ASSERTS (`goat`, `gate`, `proof`,
+`correctness`, …) and is blind to the dialect that names the THREAT
+DEFENDED AGAINST. `prod_l4_security_rejections` classified load-bearing;
+`prod_l4_forgery_matrix`, `prod_l4_cpi_mitm` and `game_anticheat`, in the
+same directory, did not. A widened vocabulary over riir-game-sdk's pre-fix
+state flags **11** load-bearing SILENT-NOW targets — enough to red
+`max_load_bearing = 0`. So read `load-bear = 0` as "0 that the classifier
+can name", which is exactly the caveat this whole family keeps re-teaching
 
 ## Cross-refs
 
