@@ -92,8 +92,15 @@
 name: ops-dashboard-nightly
 
 on:
-  schedule:
-    - cron: "23 18 * * *" # nightly, off the top of the hour (UTC)
+  # SCHEDULE SUSPENDED (owner call 2026-09-09): scheduling belongs to the
+  # service/app layer at Cloudflare (DO alarms + worker cron triggers), not
+  # GitHub CI/CD — and this job was already the FALLBACK, not the primary
+  # (the M3 launchd nightly, scripts/ops_nightly.sh, runs it with zero
+  # Actions minutes). It was also INERT (OPS_DASHBOARD_ENABLED unset → the
+  # job skipped every night at zero cost). workflow_dispatch keeps the
+  # disaster-recovery path. Re-add to re-enable:
+  # schedule:
+  #   - cron: "23 18 * * *" # nightly, off the top of the hour (UTC)
   workflow_dispatch:
 
 jobs:
