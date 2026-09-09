@@ -823,11 +823,15 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     match &charge {
         Some(charge) => {
             let remaining = grant.saturating_sub(charge.charged_kat);
-            println!("local burn:          {} KAT charged this repo ({} tokens, watermark {})",
-                charge.charged_kat, charge.meter_watermark_tokens, charge.meter_watermark_tokens);
-            println!("balance projection:  {remaining} of {grant} KAT (per-repo until server aggregation)");
+            let kat = |micro: u64| {
+                riir_clippy::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+            };
+            println!("local burn:          {} charged this repo ({} tokens, watermark {})",
+                kat(charge.charged_kat), charge.meter_watermark_tokens, charge.meter_watermark_tokens);
+            println!("balance projection:  {} of {} (per-repo until server aggregation)",
+                kat(remaining), kat(grant));
             if remaining <= KAT_WARN_REMAINING {
-                println!("kat: WARN balance ≤ {KAT_WARN_REMAINING} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)");
+                println!("kat: WARN balance ≤ {} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)", kat(KAT_WARN_REMAINING));
             }
         }
         None => {
@@ -885,12 +889,15 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                         let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
                         match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
                             Ok(Some(claim)) => {
+                                let kat = |micro: i64| {
+                                    riir_clippy::kat_payreq_client::render_kat(micro)
+                                };
                                 if claim.already {
-                                    println!("grant:  already claimed (balance {} micro)", claim.balance_micro);
+                                    println!("grant:  already claimed (balance {})", kat(claim.balance_micro));
                                 } else {
                                     println!(
-                                        "grant:  {} claimed — the free-tier grant is live (balance {} micro)",
-                                        claim.claimed_micro, claim.balance_micro
+                                        "grant:  {} claimed — the free-tier grant is live (balance {})",
+                                        kat(claim.claimed_micro), kat(claim.balance_micro)
                                     );
                                 }
                                 // Re-read through the service view so the
@@ -1087,16 +1094,39 @@ fn run_kat_sync() {
                     riir_clippy::kat_account::short_id(account.state().account_id.as_str()),
                     &payload.commitment[..12.min(payload.commitment.len())]
                 );
-                println!(
-                    "sync payload: {} row(s) included, {} blocked (batch {})",
-                    payload.rows_included,
-                    payload.rows_blocked,
-                    &payload.commitment[..12.min(payload.commitment.len())]
-                );
                 if payload.rows_included > 0 {
                     match transport.post_sync(&payload.ndjson) {
-                        riir_clippy::kat_lease_client::HttpResponse::Ok(_) => {
+                        riir_clippy::kat_lease_client::HttpResponse::Ok(body) => {
                             println!("sync: push accepted by {url}");
+                            // The server's ingest report (rows_new /
+                            // rows_refreshed / rows_terminal_skipped) is the
+                            // ONLY honest "what landed" answer — print it
+                            // (issue 031: a bare "accepted" hid a dropped
+                            // payload for a full day).
+                            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
+                                println!(
+                                    "sync: server ingest — rows_new {} refreshed {} terminal_skipped {} recorded {}",
+                                    v.get("rows_new").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                                    v.get("rows_refreshed").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                                    v.get("rows_terminal_skipped").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                                    v.get("recorded").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                                );
+                            }
+                            // The outbox copy of THIS batch is now delivered
+                            // mail — remove it (the queue is for UNDELIVERED
+                            // batches; re-push is idempotent server-side, so
+                            // an early crash between accept and unlink is
+                            // harmless). Pruned per-file, never the directory.
+                            let batch_file = root
+                                .join(".heal")
+                                .join("outbox")
+                                .join(format!(
+                                    "{}.ndjson",
+                                    &payload.commitment[..12.min(payload.commitment.len())]
+                                ));
+                            if batch_file.is_file() {
+                                let _ = std::fs::remove_file(&batch_file);
+                            }
                             // Issue 075: record the machine-global
                             // contributed-once fact (the soft gate's sticky
                             // grace). Fail-soft — the service already
@@ -1121,8 +1151,8 @@ fn run_kat_sync() {
                                     let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
                                     match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
                                         Ok(Some(claim)) if !claim.already => println!(
-                                            "sync: free-tier grant claimed ({} micro)",
-                                            claim.claimed_micro
+                                            "sync: free-tier grant claimed ({})",
+                                            riir_clippy::kat_payreq_client::render_kat(claim.claimed_micro)
                                         ),
                                         Ok(_) => {}
                                         Err(e) => println!("sync: grant not claimed — {e}"),
@@ -1134,7 +1164,9 @@ fn run_kat_sync() {
                             let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(
                                 &payload,
                             );
-                            if let Err(e) = wm.save(&root.join(".heal").join("kat_sync_watermark.json")) {
+                            if let Err(e) = wm
+                                .save(&root.join(".heal").join(riir_clippy::kat_pending_estimator::SyncWatermark::FILE_NAME))
+                            {
                                 eprintln!("sync: watermark save failed: {e}");
                             }
                         }
@@ -6599,6 +6631,9 @@ fn main() {
         }
         println!("{}", c.summary_line());
         let remaining = c.balance_projection();
+        let kat = |micro: u64| {
+            riir_clippy::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+        };
         if remaining == 0 {
             // §KAT warn-and-pay (T1.6), as amended by the 075 soft gate:
             // at 0 the evolved-corpus hot-push pauses at epoch end + the
@@ -6609,7 +6644,7 @@ fn main() {
             // local projection).
             eprintln!(
                 "kat-charge: 0 KAT remain of the {} grant projection — out-of-KAT",
-                riir_clippy::kat_meter::FREE_TIER_GRANT_KAT
+                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_KAT)
             );
             eprintln!(
                 "kat-charge: healing continues on the local corpus; the evolved-corpus \\
@@ -6636,9 +6671,10 @@ fn main() {
             // §KAT warn at ≤10M remaining: the top-up nudge (no QR until 0 —
             // the terminal render is the last-chance surface).
             eprintln!(
-                "kat-charge: warning — {remaining} KAT remain of the {} grant projection; \\
+                "kat-charge: warning — {} KAT remain of the {} grant projection; \\
                  healing continues offline (the server ledger is the authority)",
-                riir_clippy::kat_meter::FREE_TIER_GRANT_KAT
+                kat(remaining),
+                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_KAT)
             );
         }
     }

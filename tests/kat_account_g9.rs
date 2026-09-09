@@ -80,11 +80,14 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     let (first, outcome) = KatAccount::login(&dir).unwrap();
     assert!(matches!(outcome, LoginOutcome::Generated { .. }));
     // G9d post-081: the grant lives in the RENDER (the meter constant), not
-    // on the record state.
-    assert!(first
-        .summary_lines()
-        .iter()
-        .any(|l| l.contains("grant projection") && l.contains(&FREE_TIER_GRANT_KAT.to_string())));
+    // on the record state. Issue 031: the render is 6-decimal KAT (100 KAT
+    // at the meter constant), never raw micro.
+    assert!(first.summary_lines().iter().any(|l| {
+        l.contains("grant projection")
+            && l.contains(&riir_clippy::kat_payreq_client::render_kat(
+                i64::try_from(FREE_TIER_GRANT_KAT).unwrap_or(i64::MAX)
+            ))
+    }));
 
     // Re-login: Existing — the record (incl. grant + created_at) is preserved
     // byte-for-byte semantics: "granted once per account key".

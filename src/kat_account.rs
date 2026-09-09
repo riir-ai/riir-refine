@@ -242,6 +242,9 @@ impl KatAccount {
     /// only printed when the substrate record carries provenance.
     #[must_use]
     pub fn summary_lines(&self) -> Vec<String> {
+        let kat = |micro: u64| {
+            crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+        };
         let mut lines = vec![
             format!(
                 "account:            {}… ({})",
@@ -250,7 +253,8 @@ impl KatAccount {
             ),
             format!("key:                {}", self.0.key_path().display()),
             format!(
-                "grant projection:   {FREE_TIER_GRANT_KAT} KAT (free tier, once per account key)"
+                "grant projection:   {} (free tier, once per account key)",
+                kat(FREE_TIER_GRANT_KAT)
             ),
         ];
         if let Some(user) = &self.0.state().github_user {
@@ -279,13 +283,20 @@ impl KatAccount {
 /// [`tests::history_lines_obey_the_copy_rule`].
 #[must_use]
 pub fn history_lines(grant_kat: u64, spent_kat: u64, metered_tokens: u64) -> Vec<String> {
+    let kat = |micro: u64| {
+        crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+    };
     vec![
         "history (local view — server events land with the service half):".to_string(),
-        format!("  earned:  {grant_kat} KAT (login grant projection)"),
-        format!("  spent:   {spent_kat} KAT ({metered_tokens} tokens metered, this repo)"),
+        format!("  earned:  {} (login grant projection)", kat(grant_kat)),
         format!(
-            "  balance: {} KAT (per-repo projection)",
-            grant_kat.saturating_sub(spent_kat)
+            "  spent:   {} ({} tokens metered, this repo)",
+            kat(spent_kat),
+            metered_tokens
+        ),
+        format!(
+            "  balance: {} (per-repo projection)",
+            kat(grant_kat.saturating_sub(spent_kat))
         ),
     ]
 }
@@ -551,8 +562,13 @@ mod tests {
                 assert!(line.len() < 120, "render discipline: keep lines short");
             }
         }
-        assert!(lines[3].contains(&(FREE_TIER_GRANT_KAT - 1_234).to_string()),
-            "balance is the saturation subtraction, not a wrapped one");
+        // Issue 031: renders go through the shared 6-decimal formatter —
+        // the balance is the saturation subtraction, rendered as KAT.
+        let expected = crate::kat_payreq_client::render_kat(
+            i64::try_from(FREE_TIER_GRANT_KAT - 1_234).unwrap_or(i64::MAX),
+        );
+        assert!(lines[3].contains(&expected),
+            "balance is the saturation subtraction, rendered as KAT — got {:?}", lines[3]);
         assert!(!welcome_line().contains('$'));
         assert!(welcome_line().contains("KAT network"));
     }
@@ -563,12 +579,15 @@ mod tests {
         let (account, _) = KatAccount::login(&dir).unwrap();
         let lines = account.summary_lines();
         // The grant is the meter constant now (G9d) — the render still
-        // carries it.
+        // carries it, as 6-decimal KAT (issue 031).
         let grant_line = lines
             .iter()
             .find(|l| l.contains("grant projection"))
             .expect("the grant line survives the facade move");
-        assert!(grant_line.contains(&FREE_TIER_GRANT_KAT.to_string()), "{grant_line}");
+        let expected = crate::kat_payreq_client::render_kat(
+            i64::try_from(FREE_TIER_GRANT_KAT).unwrap_or(i64::MAX),
+        );
+        assert!(grant_line.contains(&expected), "{grant_line}");
         for line in &lines {
             assert!(!line.contains('$'), "copy rule: no $ — got {line:?}");
         }

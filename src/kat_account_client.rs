@@ -429,7 +429,11 @@ pub fn service_history_lines(
                 "grant not applied yet"
             }
         ),
-        format!("  spent:     {spent_kat} KAT service credit ({metered_tokens} tokens metered, this repo)"),
+        format!(
+            "  spent:     {} service credit ({} tokens metered, this repo)",
+            crate::kat_payreq_client::render_kat(i64::try_from(spent_kat).unwrap_or(i64::MAX)),
+            metered_tokens
+        ),
         format!(
             "  balance:   {} service credit (account {})",
             crate::kat_payreq_client::render_kat(balance.balance_micro),

@@ -521,19 +521,24 @@ impl KatCharge {
 
     /// One-line charge summary for the CLI. KAT figures only — no `$`
     /// (caveats #12/#15: pricing is server-side with an `as-of` date; a `$`
-    /// figure never renders beside KAT accounting).
+    /// figure never renders beside KAT accounting). Every figure is stored
+    /// in micro and rendered through the shared 6-decimal KAT formatter —
+    /// raw micro printed as whole KAT read 10⁶× too big (issue 031).
     #[must_use]
     pub fn summary_line(&self) -> String {
+        let kat = |micro: u64| {
+            crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+        };
         format!(
-            "kat-charge: {} KAT burned this run (charge v{}, {} KAT per M tokens, \
-             cumulative {} KAT — {} of the {} KAT grant projection remains; \
+            "kat-charge: {} burned this run (charge v{}, {} per M tokens, \
+             cumulative {} — {} of the {} grant projection remains; \
              accounting only, the server ledger reconciles at sync)",
-            self.session_kat,
+            kat(self.session_kat),
             self.state.charge_version,
-            CHARGE_KAT_PER_MILLION_TOKENS,
-            self.state.charged_kat,
-            self.balance_projection(),
-            FREE_TIER_GRANT_KAT
+            kat(CHARGE_KAT_PER_MILLION_TOKENS),
+            kat(self.state.charged_kat),
+            kat(self.balance_projection()),
+            kat(FREE_TIER_GRANT_KAT)
         )
     }
 }
