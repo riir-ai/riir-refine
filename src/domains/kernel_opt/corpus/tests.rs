@@ -1,6 +1,25 @@
 use super::*;
 use crate::domain::HealEntry;
 
+/// The stub-check accessor across the domain's two `Verdict` cfg states:
+/// without `kernel_verify` the verdict is `KernelVerdict` (`.parses`); with
+/// it, `verify::KernelVerifyResult` (`.compiles` — the stub verifier maps a
+/// parse failure to `compiles = false`, so both fields assert the same
+/// property). Every batch G1 below asserts through this helper so BOTH
+/// feature states compile the same test body (the all-features lib suite
+/// red at the Batch 138/139 conflict was exactly this asymmetry).
+#[cfg(not(feature = "kernel_verify"))]
+#[must_use]
+fn verdict_passes(v: &crate::domains::kernel_opt::KernelVerdict) -> bool {
+    v.parses
+}
+
+#[cfg(feature = "kernel_verify")]
+#[must_use]
+fn verdict_passes(v: &crate::domains::kernel_opt::verify::KernelVerifyResult) -> bool {
+    v.compiles
+}
+
 #[test]
 fn seed_corpus_round_trips() {
     let corpus = build_kernel_seed_corpus();
@@ -132,7 +151,7 @@ fn heal_domain_build_corpus_matches_seed() {
 fn validate_parses_valid_code() {
     use crate::domain::HealDomain;
     let verdict = KernelOptDomain::validate("matvec-coalesce", "fn foo() -> i32 { 42 }");
-    assert!(verdict.parses);
+    assert!(verdict_passes(&verdict));
 }
 
 #[test]
@@ -140,7 +159,7 @@ fn validate_parses_valid_code() {
 fn validate_rejects_garbage() {
     use crate::domain::HealDomain;
     let verdict = KernelOptDomain::validate("matvec-coalesce", "not valid rust {");
-    assert!(!verdict.parses);
+    assert!(!verdict_passes(&verdict));
 }
 
 #[test]
@@ -1679,12 +1698,12 @@ fn batch29_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-29 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-29 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-29 opt_pattern for '{id}' must parse"
         );
     }
@@ -1773,12 +1792,12 @@ fn batch30_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-30 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-30 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-30 opt_pattern for '{id}' must parse"
         );
     }
@@ -1852,12 +1871,12 @@ fn batch31_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-31 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-31 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-31 opt_pattern for '{id}' must parse"
         );
     }
@@ -2175,12 +2194,12 @@ fn batch32_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-32 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-32 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-32 opt_pattern for '{id}' must parse"
         );
     }
@@ -2213,12 +2232,12 @@ fn batch32b_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-32b rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-32b ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-32b opt_pattern for '{id}' must parse"
         );
     }
@@ -2423,12 +2442,12 @@ fn batch32c_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-32c rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-32c ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-32c opt_pattern for '{id}' must parse"
         );
     }
@@ -2557,12 +2576,12 @@ fn batch33_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-33 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-33 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-33 opt_pattern for '{id}' must parse"
         );
     }
@@ -2714,12 +2733,12 @@ fn batch34_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-34 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-34 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-34 opt_pattern for '{id}' must parse"
         );
     }
@@ -2859,12 +2878,12 @@ fn batch35_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-35 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-35 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-35 opt_pattern for '{id}' must parse"
         );
     }
@@ -2991,12 +3010,12 @@ fn batch36_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-36 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-36 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-36 opt_pattern for '{id}' must parse"
         );
     }
@@ -3136,12 +3155,12 @@ fn batch37_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-37 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-37 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-37 opt_pattern for '{id}' must parse"
         );
     }
@@ -3233,12 +3252,12 @@ fn batch38_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-38 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-38 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-38 opt_pattern for '{id}' must parse"
         );
     }
@@ -3386,12 +3405,12 @@ fn batch39_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-39 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-39 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-39 opt_pattern for '{id}' must parse"
         );
     }
@@ -3516,12 +3535,12 @@ fn batch40_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-40 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-40 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-40 opt_pattern for '{id}' must parse"
         );
     }
@@ -3633,12 +3652,12 @@ fn batch41_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-41 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-41 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-41 opt_pattern for '{id}' must parse"
         );
     }
@@ -3733,12 +3752,12 @@ fn batch42_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-42 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-42 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-42 opt_pattern for '{id}' must parse"
         );
     }
@@ -3843,12 +3862,12 @@ fn batch43_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-43 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-43 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-43 opt_pattern for '{id}' must parse"
         );
     }
@@ -4003,12 +4022,12 @@ fn batch44_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-44 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-44 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-44 opt_pattern for '{id}' must parse"
         );
     }
@@ -4089,12 +4108,12 @@ fn batch45_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-45 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-45 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-45 opt_pattern for '{id}' must parse"
         );
     }
@@ -4175,12 +4194,12 @@ fn batch46_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-46 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-46 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-46 opt_pattern for '{id}' must parse"
         );
     }
@@ -4262,12 +4281,12 @@ fn batch47_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-47 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-47 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-47 opt_pattern for '{id}' must parse"
         );
     }
@@ -4322,12 +4341,12 @@ fn batch49_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-49 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-49 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-49 opt_pattern for '{id}' must parse"
         );
     }
@@ -4410,12 +4429,12 @@ fn batch51_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-51 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-51 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-51 opt_pattern for '{id}' must parse"
         );
     }
@@ -4469,12 +4488,12 @@ fn batch52_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-52 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-52 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-52 opt_pattern for '{id}' must parse"
         );
     }
@@ -4530,12 +4549,12 @@ fn batch54_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-54 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-54 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-54 opt_pattern for '{id}' must parse"
         );
     }
@@ -4615,12 +4634,12 @@ fn batch55_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-55 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-55 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-55 opt_pattern for '{id}' must parse"
         );
     }
@@ -4704,12 +4723,12 @@ fn batch56_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-56 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-56 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-56 opt_pattern for '{id}' must parse"
         );
     }
@@ -4790,12 +4809,12 @@ fn batch57_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-57 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-57 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-57 opt_pattern for '{id}' must parse"
         );
     }
@@ -4949,12 +4968,12 @@ fn batch58_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-58 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-58 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-58 opt_pattern for '{id}' must parse"
         );
     }
@@ -5018,12 +5037,12 @@ fn batch60_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-60 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-60 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-60 opt_pattern for '{id}' must parse"
         );
     }
@@ -5117,12 +5136,12 @@ fn batch63_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-63 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-63 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-63 opt_pattern for '{id}' must parse"
         );
     }
@@ -5216,12 +5235,12 @@ fn batch70_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-70 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-70 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-70 opt_pattern for '{id}' must parse"
         );
     }
@@ -5302,12 +5321,12 @@ fn batch71_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-71 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-71 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-71 opt_pattern for '{id}' must parse"
         );
     }
@@ -5475,12 +5494,12 @@ fn batch72_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-72 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-72 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-72 opt_pattern for '{id}' must parse"
         );
     }
@@ -5603,12 +5622,12 @@ fn batch77_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-77 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-77 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-77 opt_pattern for '{id}' must parse"
         );
     }
@@ -5728,12 +5747,12 @@ fn batch79_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-79 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-79 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-79 opt_pattern for '{id}' must parse"
         );
     }
@@ -5831,12 +5850,12 @@ fn batch80_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-80 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-80 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-80 opt_pattern for '{id}' must parse"
         );
     }
@@ -5967,12 +5986,12 @@ fn batch81_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-81 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-81 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-81 opt_pattern for '{id}' must parse"
         );
     }
@@ -6069,12 +6088,12 @@ fn batch82_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-82 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-82 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-82 opt_pattern for '{id}' must parse"
         );
     }
@@ -6098,12 +6117,12 @@ fn batch84_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-84 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-84 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-84 opt_pattern for '{id}' must parse"
         );
     }
@@ -6135,12 +6154,12 @@ fn batch92_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-92 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-92 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-92 opt_pattern for '{id}' must parse"
         );
     }
@@ -6167,12 +6186,12 @@ fn batch95_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-95 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-95 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-95 opt_pattern for '{id}' must parse"
         );
     }
@@ -6274,12 +6293,12 @@ fn batch96_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-96 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-96 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-96 opt_pattern for '{id}' must parse"
         );
     }
@@ -6303,12 +6322,12 @@ fn batch87_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-87 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-87 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-87 opt_pattern for '{id}' must parse"
         );
     }
@@ -6606,12 +6625,12 @@ fn batch94_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-94 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-94 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-94 opt_pattern for '{id}' must parse"
         );
     }
@@ -6772,12 +6791,12 @@ fn batch97_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-97 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-97 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-97 opt_pattern for '{id}' must parse"
         );
     }
@@ -6955,12 +6974,12 @@ fn batch98_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-98 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-98 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-98 opt_pattern for '{id}' must parse"
         );
     }
@@ -7112,12 +7131,12 @@ fn batch100_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-100 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-100 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-100 opt_pattern for '{id}' must parse"
         );
     }
@@ -7250,12 +7269,12 @@ fn batch102_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-102 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-102 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-102 opt_pattern for '{id}' must parse"
         );
     }
@@ -7385,12 +7404,12 @@ fn batch103_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-103 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-103 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-103 opt_pattern for '{id}' must parse"
         );
     }
@@ -7482,12 +7501,12 @@ fn batch104_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-104 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-104 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-104 opt_pattern for '{id}' must parse"
         );
     }
@@ -7685,12 +7704,12 @@ fn batch105_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-105 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-105 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-105 opt_pattern for '{id}' must parse"
         );
     }
@@ -7810,12 +7829,12 @@ fn batch106_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-106 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-106 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-106 opt_pattern for '{id}' must parse"
         );
     }
@@ -7967,12 +7986,12 @@ fn batch107_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-107 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-107 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-107 opt_pattern for '{id}' must parse"
         );
     }
@@ -8090,12 +8109,12 @@ fn batch108_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-108 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-108 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-108 opt_pattern for '{id}' must parse"
         );
     }
@@ -8294,12 +8313,12 @@ fn batch110_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-110 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-110 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-110 opt_pattern for '{id}' must parse"
         );
     }
@@ -8747,12 +8766,12 @@ fn batch111_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-111 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-111 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-111 opt_pattern for '{id}' must parse"
         );
     }
@@ -8984,12 +9003,12 @@ fn batch114_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-114 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-114 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-114 opt_pattern for '{id}' must parse"
         );
     }
@@ -9105,12 +9124,12 @@ fn batch113_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-113 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-113 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-113 opt_pattern for '{id}' must parse"
         );
     }
@@ -9250,12 +9269,12 @@ fn batch115_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-115 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-115 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-115 opt_pattern for '{id}' must parse"
         );
     }
@@ -9489,12 +9508,12 @@ fn batch115_addendum_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-115 addendum rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-115 addendum ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-115 addendum opt_pattern for '{id}' must parse"
         );
     }
@@ -9640,12 +9659,12 @@ fn batch116_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-116 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-116 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-116 opt_pattern for '{id}' must parse"
         );
     }
@@ -9677,7 +9696,6 @@ fn batch116_addendum_rules_present_and_concepts() {
 }
 
 #[test]
-#[cfg(not(feature = "kernel_verify"))]
 fn batch116_addendum_pseudocode_parses() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
@@ -9687,11 +9705,11 @@ fn batch116_addendum_pseudocode_parses() {
         .find(|e| e.rule_id == "swar-lane-widened-base3-dp4a-dot")
         .expect("addendum rule missing");
     assert!(
-        KernelOptDomain::validate("swar", entry.buggy_code()).parses,
+        verdict_passes(&KernelOptDomain::validate("swar", entry.buggy_code())),
         "addendum ref_shape must parse"
     );
     assert!(
-        KernelOptDomain::validate("swar", entry.fixed_code()).parses,
+        verdict_passes(&KernelOptDomain::validate("swar", entry.fixed_code())),
         "addendum opt_pattern must parse"
     );
 }
@@ -9936,12 +9954,12 @@ fn batch117_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-117 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-117 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-117 opt_pattern for '{id}' must parse"
         );
     }
@@ -10063,12 +10081,12 @@ fn batch118_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-118 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-118 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-118 opt_pattern for '{id}' must parse"
         );
     }
@@ -10350,12 +10368,12 @@ fn batch119_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-119 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-119 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-119 opt_pattern for '{id}' must parse"
         );
     }
@@ -10589,12 +10607,12 @@ fn batch125_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-125 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-125 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-125 opt_pattern for '{id}' must parse"
         );
     }
@@ -10714,12 +10732,12 @@ fn batch127_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-127 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-127 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-127 opt_pattern for '{id}' must parse"
         );
     }
@@ -10829,12 +10847,12 @@ fn batch128_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-128 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-128 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-128 opt_pattern for '{id}' must parse"
         );
     }
@@ -10948,12 +10966,12 @@ fn batch129_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-129 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-129 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-129 opt_pattern for '{id}' must parse"
         );
     }
@@ -11121,12 +11139,12 @@ fn batch130_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-130 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-130 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-130 opt_pattern for '{id}' must parse"
         );
     }
@@ -11291,12 +11309,12 @@ fn batch137_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-137 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-137 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-137 opt_pattern for '{id}' must parse"
         );
     }
@@ -11484,12 +11502,12 @@ fn batch138_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-138 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-138 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-138 opt_pattern for '{id}' must parse"
         );
     }
@@ -11638,12 +11656,12 @@ fn batch139_pseudocode_parses() {
             .unwrap_or_else(|| panic!("batch-139 rule '{id}' missing"));
         let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
         assert!(
-            ref_verdict.parses,
+            verdict_passes(&ref_verdict),
             "batch-139 ref_shape for '{id}' must parse"
         );
         let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
         assert!(
-            opt_verdict.parses,
+            verdict_passes(&opt_verdict),
             "batch-139 opt_pattern for '{id}' must parse"
         );
     }
