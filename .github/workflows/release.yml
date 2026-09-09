@@ -258,6 +258,18 @@ jobs:
           cp THIRD_PARTY_LICENSES.md dist/
           ls -la dist/
 
+      - name: Binary size gate (ceiling, fires upward only — see script header)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bins=""
+          for d in artifacts/bin-*/; do
+            for b in "$d/cargo-heal" "$d/cargo-heal.exe"; do
+              [ -f "$b" ] && bins="$bins $b"
+            done
+          done
+          ./scripts/binary_size_gate.sh $bins
+
       - name: Leak scan (Proposal 003 G2 — fails the job before publish)
         shell: bash
         run: |
