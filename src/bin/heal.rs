@@ -457,7 +457,7 @@ fn run_mine_intro() {
     println!();
     println!("START (4 steps):");
     println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
-    println!("  2. login:      cargo heal login        <- claims your 100M KAT free grant");
+    println!("  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo heal login)");
     println!("  3. heal:       cargo heal --fix        <- real fixes, metered locally");
     println!("  4. mine:       cargo heal sync         <- push the redacted batch, pull the lease");
     println!();
@@ -468,13 +468,20 @@ fn run_mine_intro() {
     #[cfg(feature = "kat_service")]
     {
         use riir_clippy::kat_account::KatAccount;
-        match KatAccount::load(&KatAccount::default_dir()) {
-            Ok(account) => println!(
+        // Owner mandate 2026-09-10: --mine IS the join command — a missing
+        // account is a dead-end the explainer had to apologize for ("step 2
+        // first"). Run the zero-config login chain right here: LOCAL key ops
+        // only (no network, no prompt — the fallback chain ends in a
+        // generated key with a disclosed note), outcome printed via the same
+        // printer `cargo heal login` uses. The account dir is re-resolved
+        // after login so an adoption/generate on this run is what reports.
+        let account = ensure_logged_in();
+        if let Some(account) = account {
+            println!(
                 "status: logged in as {} (key: {})",
                 riir_clippy::kat_account::short_id(&account.state().account_id),
                 account.key_path().display()
-            ),
-            Err(_) => println!("status: NOT logged in — step 2 first"),
+            );
         }
         let wallet_base = riir_clippy::kat_lease_client::service_url_for_command();
         println!(
@@ -771,23 +778,71 @@ fn unmine_outbox_dir() -> PathBuf {
     resolve_heal_root(&[]).join(".heal").join("outbox")
 }
 
+/// The login-outcome lines, shared by `cargo heal login` and `--mine`'s
+/// auto-login (owner mandate 2026-09-10) — one printer, so the two entry
+/// points can never describe the same event differently. `prefix` is the
+/// command label ("kat" for login, "login" for --mine).
+#[cfg(feature = "kat_service")]
+fn print_login_outcome(outcome: &riir_clippy::kat_account::LoginOutcome, prefix: &str) {
+    use riir_clippy::kat_account::LoginOutcome;
+    match outcome {
+        LoginOutcome::Generated {
+            fallback_note: Some(note),
+            ..
+        } => println!("{prefix}: account key generated ({note})"),
+        LoginOutcome::Generated { .. } => println!("{prefix}: account key generated"),
+        LoginOutcome::Imported { .. } => println!("{prefix}: account key imported"),
+        LoginOutcome::Adopted { source, .. } => println!(
+            "{prefix}: account key adopted from {} (copied into the account dir — the original is untouched)",
+            source.display()
+        ),
+        LoginOutcome::Existing { .. } => println!("{prefix}: already logged in (key loaded)"),
+    }
+}
+
+/// The zero-config login chain, run in place. Returns `None` (and prints
+/// the remedy) when login FAILED — callers skip their account-bearing
+/// lines but keep running. Local key ops only: no network, no prompt (the
+/// fallback chain ends in a generated key with a disclosed note).
+#[cfg(feature = "kat_service")]
+fn ensure_logged_in() -> Option<riir_clippy::kat_account::KatAccount> {
+    use riir_clippy::kat_account::KatAccount;
+
+    match KatAccount::load(&KatAccount::default_dir()) {
+        Ok(account) => Some(account),
+        Err(_) => match KatAccount::login_default(&KatAccount::default_dir()) {
+            Ok((account, outcome)) => {
+                print_login_outcome(&outcome, "login");
+                for line in account.summary_lines() {
+                    println!("{line}");
+                }
+                Some(account)
+            }
+            Err(e) => {
+                eprintln!("login:   FAILED — {e}");
+                eprintln!("login:   run `cargo heal login` to set the account up, then --mine again");
+                None
+            }
+        },
+    }
+}
+
 /// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal login` — generate/import
 /// the account key + record the grant projection. Prints one outcome line,
 /// the account id, the key path, and the Phase-0 honesty note. No `$`
-/// figures (caveats #12/#15).
+/// figures (caveats #12/#15). The EXPLICIT login: `--mine` runs the same
+/// zero-config chain automatically (owner mandate 2026-09-10); this command
+/// stays for import (`--import-key`), repair, and scripts that want login
+/// as a distinct step.
 #[cfg(feature = "kat_service")]
 fn run_kat_login(import_key: Option<&Path>) {
-    use riir_clippy::kat_account::{KatAccount, LoginOutcome};
+    use riir_clippy::kat_account::KatAccount;
 
     let dir = KatAccount::default_dir();
     let result = match import_key {
         Some(source) => KatAccount::login_import(&dir, source),
-        // Proposal 011 T0.2 (ask 8.2), Issue 081 chain: existing canonical
-        // key → deprecated RIIR_HEAL_KAT_KEY override (warned) → the legacy
-        // kat account (adopted into the canonical dir) → RIIR_AUTH_ACCOUNT_KEY
-        // → the machine's default SSH key → generate fresh with a disclosed
-        // fallback note. Zero configuration, and the identity the KAT ledger
-        // knows survives the move to the canonical account dir.
+        // Issue 081 chain (see `ensure_logged_in`): canonical → deprecated
+        // override → legacy adoption → env key → machine SSH key → fresh.
         None => KatAccount::login_default(&dir),
     };
     let (account, outcome) = match result {
@@ -797,19 +852,7 @@ fn run_kat_login(import_key: Option<&Path>) {
             std::process::exit(1);
         }
     };
-    match outcome {
-        LoginOutcome::Generated {
-            fallback_note: Some(note),
-            ..
-        } => println!("kat: account key generated ({note})"),
-        LoginOutcome::Generated { .. } => println!("kat: account key generated"),
-        LoginOutcome::Imported { .. } => println!("kat: account key imported"),
-        LoginOutcome::Adopted { source, .. } => println!(
-            "kat: account key adopted from {} (copied into the account dir — the original is untouched)",
-            source.display()
-        ),
-        LoginOutcome::Existing { .. } => println!("kat: already logged in (key loaded)"),
-    }
+    print_login_outcome(&outcome, "kat");
     for line in account.summary_lines() {
         println!("{line}");
     }
@@ -2605,8 +2648,11 @@ USAGE:
                     drift + CRLF files are skipped — no formatting churn enters a
                     mechanical diff.)
     --mine          What KAT mining is, the policy warning, the web link, and
-                    the login → heal → sync → account loop (Proposal 008). Works in
-                    every build; the status halves need their features.
+                    the login → heal → sync → account loop (Proposal 008); LOGS
+                    YOU IN when no account exists (owner mandate 2026-09-10 —
+                    the zero-config chain `cargo heal login` runs, local key ops
+                    only). Works in every build; the status halves need their
+                    features.
     --unmine        Opt OUT of contributing (keeps your account): records
                     machine-global consent = opted out, so `cargo heal sync`
                     refuses its PUSH half (the lease pull still runs), and
@@ -3946,7 +3992,7 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(sb::generations::v5_is_removal_rule)
+        .filter(|rule| sb::generations::v5_is_removal_rule(rule))
         .collect();
 
     let mut members_total = 0usize;
