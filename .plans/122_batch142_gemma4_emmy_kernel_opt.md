@@ -30,14 +30,28 @@
       `scripts/bench_accum_error.py` (re-read or re-run the error harness),
       read #761 BEFORE quoting any baseline number, re-verify every quoted line
       against the live article text + repo files at the pin (B31 discipline).
-- [ ] T2 — (zero-build, network) Fresh clone `cloudrift-ai/emmy` → `.raw/emmy` at
-      then-current tip; quote re-verification lanes (2 parallel subagents per
-      Protocol A step 3; re-verify every quoted line). SCHEDULED at mine time —
-      the clone is brief but the batch slot opens with the build window, so the
-      clone rides T3a (`.raw/` rm at landing per discipline).
-- [ ] T3a — (zero-build write) Author corpus entries: 2 floor rules + adjudicated
-      riders into a NEW `entries_gpu_39.rs` (file number free — 37=B138's file
-      scope, 38=B138; verify at write time + re-scan mod.rs registry).
+- [x] T2 — (zero-build, network) DONE 09-10: fresh clone `cloudrift-ai/emmy` → `.raw/emmy` at
+      tip `321288d8` (HEAD == ls-remote verified); #761 (`e0d16cf0`) read BEFORE quoting —
+      its substance is golden/README.md:18-21+33 (the 5090 attention Emmy lane has NO
+      recorded goldens; the old 20015µs blocker no longer reproduces at bdd26c539 = 18.6µs);
+      quote re-verification executed as TWO parallel lanes (16 article claims via the live
+      full text — ALL VERIFIED; 15 repo quotes line-verified at the pin — 14 EXACT + 1
+      line-attribution fix). Soft spots honored: the plugin-boundary percent self-contradicts
+      (2-5% intro vs 1-5% conclusion → cite the conclusion); "dynamic-M" is our gloss of
+      `dynM`; "fail-closed admission" is our vocabulary.
+- [x] T3a — (zero-build write) DONE 09-10: authored `entries_gpu_40.rs` — NOT 39: the plan's
+      "file number free" expectation was stale at write time (Batch 139 = `entries_gpu_39.rs`
+      landed post-plan, 72c10f7); re-scan at write caught it. 2 floor rules
+      (`fast-accumulate-periodic-promote-bounded-error` N, `smem-budget-single-buffer-
+      refill-at-kill-points` A) + 6 riders landed (02 launch-count, 07 accuracy-refusal,
+      18 splitkv-trigger, 36 vendor-lag + stale-blocker corollary, 38 roofline-gated
+      transport, 39 reporting axis). RIDER ADJUDICATIONS: roofline-gates-transport-upgrade
+      → double-rider (38 SFU rule + 36 vendor rule) per its rule-or-double-rider grade;
+      geomean/wave-vs-drain → the B139 drift-protocol rule (kernel_opt, not rust_perf —
+      the target rule lives there). **DEFERRED [-]:** the dynM catalog-gap rider (B104/B128)
+      — its target `entries_gpu_34.rs` carries sibling WIP (mechanical import fixups);
+      lands with the next batch touching that file. mod.rs wired (decl + concat + slices
+      A 129→130, N 43→44 with count comments).
 - [ ] T3b — (CARGO-GATED) batch142 standing gates (`batch142_rules_present` /
       `batch142_concepts_covered` / `batch142_pseudocode_parses`) + count pins
       (corpus.rs header ×2, category table, KERNEL_CATEGORIES slices, mod.rs

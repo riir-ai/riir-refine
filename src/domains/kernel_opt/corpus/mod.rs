@@ -1810,6 +1810,7 @@ mod entries_gpu_36;
 mod entries_gpu_37;
 mod entries_gpu_38;
 mod entries_gpu_39;
+mod entries_gpu_40;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1825,6 +1826,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     let mut entries = entries_popcorn::entries();
     entries.extend(entries_gpu_38::entries());
     entries.extend(entries_gpu_39::entries());
+    entries.extend(entries_gpu_40::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1882,11 +1884,12 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (129 rules)
+    // A: Memory access patterns (130 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            "smem-budget-single-buffer-refill-at-kill-points",
             "stream-invariant-operand-skips-staging-pipeline",
             "split-copy-issue-deposit-depth-uniform",
             "smem-pad-transport-gated",
@@ -2531,7 +2534,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pipeline-cache-key-covers-every-function-constant",
         ],
     ),
-    // N: dtype + alignment specialization (43 rules)
+    // N: dtype + alignment specialization (44 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2579,6 +2582,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kv-dequant-materialization-batch-threshold-gate",
             "quantize-scale-math-wide-precision-denorm-safe",
             "block-quant-weight-pad-never-extends-activations",
+            "fast-accumulate-periodic-promote-bounded-error",
         ],
     ),
     // O: IR strength reduction (4 rules)
