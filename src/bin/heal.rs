@@ -1016,27 +1016,16 @@ fn run_kat_sync() {
         eprintln!("{w}");
     }
 
-    // ── burn sync (Issue 076 client half) ──────────────────────────────
-    // Account billing, NOT the consent-gated batch below: the burn debt
-    // rides the login, so it reports even while mining is opted out (the
-    // issue is explicit — billing ≠ contribution). Same stacking rules as
-    // the post-run hook: one line, ~5 s, fail-soft; drains whatever a
-    // failed run left stacked. The burn numbers come from the settled
-    // charge ledger on disk (the last heal run's save), never recomputed.
-    {
-        let meter = open_kat_meter(&[]);
-        let charge = open_kat_charge(&[], meter.as_ref());
-        if let Some(c) = charge.as_ref() {
-            let outcome = riir_clippy::kat_burn_client::run_burn_sync(
-                &root,
-                c.state().charged_kat,
-                c.state().meter_watermark_tokens,
-            );
-            print_burn_sync(&outcome);
-        }
-    }
-
     // ── push half ──────────────────────────────────────────────────
+    // ORDER IS LOAD-BEARING (Plan 327 T3 + Issue 079): the push must land
+    // BEFORE the burn drain below — the accepted batch is what makes the
+    // server record the contribution fact, and the drain's v3 response is
+    // what carries it into the ack. Drain-first answered `contributed:
+    // Some(false)` for a fresh contributor's own push, the truth-wins gate
+    // then refused the re-evaluation, and lifting the gate took a SECOND
+    // sync (the 079 contract is ONE accepted push). Opted-out / no-store
+    // machines are unaffected: the push half skips itself and the drain
+    // still runs.
     let kv = root.join(".heal").join("trajectories.kv");
     if !consent.push_allowed() {
         println!("sync: push SKIPPED — mining is opted out on this machine");
@@ -1154,6 +1143,30 @@ fn run_kat_sync() {
                 }
             }
             Err(e) => eprintln!("sync: trajectory store unreadable: {e}"),
+        }
+    }
+
+    // ── burn sync (Issue 076 client half) — AFTER the push half ──────
+    // Account billing, NOT the consent-gated batch above: the burn debt
+    // rides the login, so it reports even while mining is opted out (the
+    // issue is explicit — billing ≠ contribution). Same stacking rules as
+    // the post-run hook: one line, ~5 s, fail-soft; drains whatever a
+    // failed run left stacked. The burn numbers come from the settled
+    // charge ledger on disk (the last heal run's save), never recomputed.
+    // Runs AFTER the push (see the ORDER note there): the accepted batch
+    // records the contribution fact server-side FIRST, so this drain's v3
+    // response carries `contributed: Some(true)` into the ack and the 079
+    // contribute-now re-evaluation lifts on the same sync.
+    {
+        let meter = open_kat_meter(&[]);
+        let charge = open_kat_charge(&[], meter.as_ref());
+        if let Some(c) = charge.as_ref() {
+            let outcome = riir_clippy::kat_burn_client::run_burn_sync(
+                &root,
+                c.state().charged_kat,
+                c.state().meter_watermark_tokens,
+            );
+            print_burn_sync(&outcome);
         }
     }
 
