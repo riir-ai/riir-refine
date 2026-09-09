@@ -1,0 +1,32 @@
+# Research 162 — antirez/ds4 upstream Part-B walk (`f62ca29a..6289c516`) as a rust_perf seed source (next-batch candidate)
+
+**Status:** DISTILLED — verdict recorded 2026-09-09, scout executed to the dedup gate; batch execution deferred (the riir-clippy tree is sibling-mid-flight on Issue 085's `dist` domain — Protocol A never runs two sessions into one corpus). Re-clone at the pin when the batch slot opens.
+
+- **Source:** `antirez/ds4` (github.com/antirez/ds4) @ range `f62ca29a..6289c516` — 5 commits, tip `6289c516` == origin/main at scout time 2026-09-09. License MIT (repo-wide, re-verified at clone; fixtures remain ORIGINAL per the standing constraint — the source is cited as class provenance + line evidence only). Cloned to `/tmp/antirez-ds4b` for the scout (the `.raw/` discipline applies to the batch itself; `.raw` untouched — the tree is sibling-hot).
+- **The range (the "Part B" the Batch-134/139 verdicts staged as a separate axis from the ds4-metal PR branch):**
+
+| commit | what it is | insertions | surface |
+|---|---|---|---|
+| `6546ae5` | opt-in programming hints (`/hints on/off`): runtime preference struct, one-shot system-note injection | +162 | agent |
+| `81a7658` | preserve live vision context across server tool calls: Anthropic content-block parsing, image-marker nonce normalization, visible-prompt-key fingerprinting | +844 | server |
+| `e33a5b2` | keep agent tasks running across context compaction: reserve accounting, tail-boundary selection, image-block boundary guard | +541 | agent |
+| `74fbe54` | QA checklists for the above (release-gate prose) | +52 | docs |
+| `6289c51` | hint renderer: streaming `> **Hint:**` prefix holdback + label | +202 | agent/renderer |
+
+## Candidate rules (3 leads, assessed against the corpus)
+
+1. **`compaction-reserve-before-prompt-build`** (rust_perf/decision-content; suggest-only) — `agent_compact_reserve_tokens` builds the REAL summary prompt (`agent_compact_make_prompt` + chat append) to MEASURE its token cost, then reserves `tokens.len + 64 + summary_budget`; every free-threshold check derives from the measured reserve, never a constant guess. Decision content: **capacity reserve for a destructive rewrite must be measured from the thing actually written, not estimated** — the same discipline as reserve-before-insert, one level up (the reserve quantity is a tokenization of the actual payload). Distinct from every capacity rule in corpus (`vec-with-capacity` family reserves by COUNT; this reserves by measure-the-real-input). Source: `e33a5b2` ds4_agent.c `agent_compact_reserve_tokens` + both call sites (`compact = reserve + 128`; `if (free_threshold < reserve) free_threshold = reserve`). Honestly NotBenchable (control-flow sizing).
+2. **`compaction-tail-boundary-prefers-complete-turn`** (rust_perf/decision-content; suggest-only) — `agent_compact_tail_boundary` walks back over `2 × tail_budget` (floor: sys_len) to keep the most recent COMPLETE user turn, falling back to a bounded fragment; the comment is the rule: "A slightly longer complete turn is preferable to losing the user's constraints and keeping only a fragment of our answer." Plus the image-block guard: a boundary landing inside an image token span snaps to the span START (`agent_compact_image_boundary`) — a summary/tail must never split an image block. Decision content: **lossy truncation boundaries are semantic, not arithmetic** — snap to the nearest boundary that preserves a complete unit (turn) and never sever an atomic span. No corpus neighbor covers truncation-boundary semantics (B118's running-threshold prunes a MERGE, different surface). Source: `e33a5b2` ds4_agent.c both fns.
+3. **`streaming-prefix-holdback-bounded-buffer`** (rust_perf/decision-content; suggest-only) — the hint renderer recognizes `> **Hint:**` mid-stream by holding back AT MOST the prefix length (`char md_hint_prefix[sizeof("> **Hint:**") - 1]`), matching char-by-char only at a prose line boundary, flushing the held bytes unmodified on mismatch ("ordinary text still streams immediately. No width-dependent repainting"). Decision content: **streaming matchers hold back O(pattern) bytes, never O(stream)** — the bounded-holdback contract with the line-boundary gate that keeps the common path zero-delay. No `pending|holdback|speculative-emit` rule exists (grepped). Source: `6289c51` ds4_agent.c renderer_hint_* + the md_pending state block.
+
+Riders mapped (for the batch's rider sweep): `81a7658`'s visible-prompt-key (marker nonces memset to `\036` before fingerprinting so literal text cannot impersonate an image) rides the B106 cache-identity family (key must carry exactly the KV-determining set — here, normalize away what must NOT be keyed); `81a7658`'s nested tool-result image-append (`memcpy` + len/cap/0-len handoff before `chat_msg_free`) rides move-semantics-into-destination; `e33a5b2`'s image-boundary snap may fold INTO rule 2 rather than standing alone.
+
+## Dedup gate (executed)
+
+`ssd|glm|state.space` (the verdict's mandated first dedup): zero rule matches in the range — the GLM content here is prompt-vocabulary (`<|user|>` vs `<｜User｜>` special-token lookup), NOT the GLM SSD/cache axis Batches 123/129 already mined. Compaction vocab: `compaction_summary|reserve_tokens|tail_boundary` zero corpus hits; `tri-state fit validator` (Batch 123) COVERED the fit/compact classification and is NOT re-mined (the range builds ON it — the reserve accounting is the new layer). Prefix-cache identity (B106 family): the marker-normalization rider cites, does not duplicate. Hint vocab: zero hits.
+
+## Verdict
+
+**YES B (rust_perf, 3 rules + ~3 riders), all suggest-only / decision-content** — same shape as the Batch-122/123 host-side slices. No kernel_opt lane (no GPU math in the range), no league surface (host agent/server code; zero decode-path content), no sec lane. Yield honest-estimate: 3 rules is a full batch at this corpus's standards (Batches 135/136 landed 3); the rules are genuinely novel but all NotBenchable — the batch GOAT leans on G1/G3 + retrieval floors, no Pareto axis.
+
+**Execution block (for the batch session):** re-clone at pin `6289c516` into `.raw/antirez-ds4b` (re-verify HEAD == ls-remote — the repo is HOT, upstream commits daily), plan number from `.plans/.highwater` (120 → re-scan at write), research number 162 = this note. Lane split: one rust_perf lane suffices (3 rules, one file family `ds4_agent.c` + `ds4_server.c` reads).
