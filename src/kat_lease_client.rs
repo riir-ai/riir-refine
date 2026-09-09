@@ -1058,7 +1058,7 @@ impl ReheatReport {
 
 /// The service plane's default base URL (the payment page rides the same
 /// host: `<base>/pay?acct=<account_id>`).
-pub const DEFAULT_SERVICE_URL: &str = "https://heal.gist.rs";
+pub const DEFAULT_SERVICE_URL: &str = "https://ai.gist.rs";
 
 /// The payment-page URL for an account (the QR payload).
 #[must_use]
@@ -2068,8 +2068,8 @@ mod tests {
     #[test]
     fn payment_url_shape() {
         assert_eq!(
-            payment_url("https://heal.gist.rs", "9f3a"),
-            "https://heal.gist.rs/pay?acct=9f3a"
+            payment_url("https://ai.gist.rs", "9f3a"),
+            "https://ai.gist.rs/pay?acct=9f3a"
         );
         assert_eq!(
             payment_url("https://x.example/", "ab"),
@@ -2133,7 +2133,7 @@ mod tests {
     /// production service base (the T0.3 golden request id).
     #[cfg(feature = "kat_transport")]
     const QR_GOLDEN_URL: &str =
-        "https://heal.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
+        "https://ai.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
 
     /// Axis 2 (MEASURED): the **resolved** `qrcode` version in `Cargo.lock`
     /// is the one [`QRCODE_PINNED_VERSION`] declares, and the `Cargo.toml`
@@ -2287,7 +2287,7 @@ mod tests {
     /// is the guard that fails at the URL line next time.
     #[cfg(feature = "kat_transport")]
     const QR_COMMITMENT_GOLDEN: &str =
-        "a06a9976aa00bd745fff19d9412d788bd420a0ef591976ffda2dfb84cc24e5ea";
+        "4332593b3c38be168b11b8cd12d9737d0bdeb808b151360f689edff7828c68c5";
 
     /// Axis 1 (STRUCTURAL), and the anti-vacuity half: the commitment must
     /// MOVE on every pinned axis. An in-preimage field that no test varies
@@ -2374,7 +2374,7 @@ mod tests {
     /// pre-`f7cbe31` host's render.
     #[cfg(feature = "kat_transport")]
     const QR_ASCII_GOLDEN: &str =
-        "4f0f6ee5cd754bc932af5789bb0f6b8c9f6c86ba60beb61a554830327f850ade";
+        "a14d9f506952767acc65a2b4c8eda51f53d90eb7ffdcb89053d46bb0593d789d";
 
     /// Provenance tie (issue 078): the two goldens above are only meaningful
     /// for the URL the service actually issues. This fails at the URL line —
