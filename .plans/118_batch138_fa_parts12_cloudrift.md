@@ -139,7 +139,7 @@ lane runs on M3/4090 — both consumer). Record the verdict explicitly either wa
       born-complete: both URL shapes, the scoreboard table, the four refusals
       as recorded negatives, lane-intel verdict with the per-rule split,
       blog-vs-repo honesty, the full gate row; `.highwater` 156 → 157.
-- [ ] T8 — Landing sequence: commit per Protocol A (T3 authoring → T4 gates →
+- [x] T8 — Landing sequence: commit per Protocol A (T3 authoring → T4 gates →
       T6 docs → plan+snapshot+Research 157 → score-bench → plan close +
       snapshot LANDED + `.raw/emmy` rm). Queue snapshot updated in the same
       commit as each landing step.
