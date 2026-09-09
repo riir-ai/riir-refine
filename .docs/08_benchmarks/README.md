@@ -11,6 +11,7 @@
 | [`goat_methodology.md`](goat_methodology.md) | The 4-gate pattern (G1 correctness, G2 perf, G3 no-regression, G4 alloc-free) |
 | [`measured_results.md`](measured_results.md) | Consolidated results (M3 Max, commit `5b46556`) |
 | [`clippy_bench.md`](clippy_bench.md) | The frozen real-code healing bench + SVG score curve (Plan 014 — the "are we getting better?" number) |
+| [`entropy_gap_ood_axis.md`](entropy_gap_ood_axis.md) | The entropy-gap OOD axis on the bench (issue 077 T1/T4 — consumes `katgpt_core::regime_probe`; set choice, sign convention, first measured row) |
 
 ## Persisted results
 
