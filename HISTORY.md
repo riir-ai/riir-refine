@@ -9,6 +9,30 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## The domain swap — the client half + the config surface, post-flip state (2026-09-10, riir-dapps Plans 023+024)
+
+The riir-dapps-side record carries the server half (the export/import move,
+the flip, `4da667f`'s setup/teardown fixes). This is the client repo's half.
+
+- **The flip HAPPENED 2026-09-10**: the apex `https://ai.gist.rs` (= the
+  `DEFAULT_SERVICE_URL` const, never moved) IS MAINNET now — fresh ledger;
+  `devnet.ai.gist.rs` is its own worker hosting the fleet's MOVED ledger
+  (BLAKE3-identical, burn-acks + watermarks carried over). The fallback pair
+  (default→devnet ONLY) is now load-bearing in the other direction: a DEV
+  client can never fail over onto mainnet, and the default IS mainnet.
+- **Client config surface** (`cf236f1a`, Plan 023 S3): `cargo heal config
+  set --url <alias|url>` / `config get` — pinned alias map
+  devnet/testnet/mainnet, LOUD set, source-revealing get,
+  `RIIR_HEAL_KAT_SERVICE_URL` > config > default, per-command re-pointing
+  via `service_url_for_command()` while the ambient lease phase stays
+  env-only. Fleet state post-swap: M3 + 4090 both `config set --url devnet`
+  (devnet round-trips green — sync, refill, burn-ack v3, the soft gate).
+- **AGENTS.md sweep** (`60cc19a9` pre-landed the S2/S3 rows; the flip-state
+  halves landed after the swap): the service-environments bullet now
+  describes the post-flip world ("the apex IS mainnet"), the fallback-chain
+  bullet names the new load-bearing direction, the fleet-state line records
+  devnet.ai.gist.rs as the moved-ledger host.
+
 ## Issue 081 resolved — burn wire unit mismatch: end-to-end closed, rescale STOOD DOWN (2026-09-10)
 
 Resolved-record for the now-removed issue file (removed per the
