@@ -1,92 +1,57 @@
-# Issue 088 — extract the kat CLIENT PLANE into a workspace member crate (`crates/kat-client`)
+# Issue 088 — spin the kat CLIENT PLANE out of riir-clippy into a NEW PRIVATE REPO (`riir-kat-client`)
 
-**Status:** OPEN — REVISED 2026-09-10 (same day): scope widened from the minimal `kat_account` slice to the full client plane (15 of 18 modules) after owner challenge "why one by one?". Analysis complete; implementation not started.
+**Status:** OPEN — REVISED v3 2026-09-10: workspace-member plan replaced by new-repo spin-out (owner: consumers must not clone the whole healer repo). v2's move-set + tier analysis carries over unchanged; destination + bookkeeping change. Implementation not started.
 
-## Why
+## Why a repo, not a member crate (v1 → v2 → v3 history)
 
-Second Rust consumers for the kat service plane are REAL (owner-confirmed), and slicing per-module
-would repeat the same wiring churn (workspace, features, CI lanes, BOUNDARY.md) N times. Measured
-coupling supports one pass: 15 of 18 `kat_*` modules import ZERO healer internals — only each other
-plus std/serde/serde_json/ureq/qrcode/ssh-key/ed25519-dalek. Three modules are genuinely
-healer-coupled and STAY (moving them would drag the healer pipeline into the client crate — the
-exact anti-goal):
+- v1 (minimal slice): superseded — owner confirmed multiple consumers; per-module asks repeat the same churn.
+- v2 (workspace member `riir-clippy/crates/kat-client`): superseded — a consumer path-depping into riir-clippy must clone the ENTIRE healer repo (corpus tables, healing domains, workers). Compile isolation ≠ source isolation. Also flips riir-clippy's boundary role from developer-tooling to substrate, which its BOUNDARY.md domain test forbids.
+- v3 (this): **one new private repo** holding the whole 15-module client plane. Precedent: `riir-auth` (spun out when multiple parties needed account_key; riir-clippy became a consumer, Issue 081). `kat_account` is a facade over riir-auth/account_key — the plane belongs in a leaf beside its substrate, not inside its first customer.
 
-| stays (root) | healer imports (verified grep) |
+## The move set (15 modules → `riir-kat-client`, one repo)
+
+Healer-coupled and STAY in riir-clippy (verified grep, v2):
+
+| stays (root) | healer imports |
 |---|---|
-| `kat_promotion` | `crate::domain::{HealDomain, HealEntry}`, `crate::draft::clippy_oracle::ClippyOracle`, `crate::memory::EvidenceTier`, `crate::score_bench::{run_bench, run_bench_with, BenchFixture, BenchScore}` — it IS the score-bench promotion gate |
-| `kat_sync_payload` | `crate::traj_store::{shape_hash, TrajRowDoc}` (the healer's trajectory store) + `kat_redact` |
-| `kat_pending_estimator` | `crate::traj_store` + `kat_redact` + `kat_sync_payload` |
+| `kat_promotion` | `domain::HealDomain/HealEntry`, `draft::clippy_oracle`, `memory::EvidenceTier`, `score_bench::*` — it IS the score-bench promotion gate |
+| `kat_sync_payload` | `traj_store::{shape_hash, TrajRowDoc}` + `kat_redact` |
+| `kat_pending_estimator` | `traj_store` + `kat_redact` + `kat_sync_payload` |
 
-## The move set (15 modules → `crates/kat-client`, package `kat-client`, lib `kat_client`)
+Moves (zero healer imports — only each other + std/serde/serde_json/blake3/ureq/qrcode/ssh-key/ed25519-dalek):
 
-Tier 0 — feature-free, always compiled (these are UNGATED in root today and must stay so):
-`kat_mining_consent`, `kat_service_config`, `kat_soft_gate`, + NEW `kat_service_urls`
-(`DEFAULT_SERVICE_URL` + `FALLBACK_SERVICE_URL` consts lifted out of `kat_lease_client` so the
-ungated config tier can name the default without transport; the lease module re-exports the consts
-so every existing path is unchanged).
+- Tier 0 feature-free (UNGATED in root today, stay so): `kat_mining_consent`, `kat_service_config`, `kat_soft_gate`, + NEW `kat_service_urls` (`DEFAULT_SERVICE_URL`/`FALLBACK_SERVICE_URL` lifted out of `kat_lease_client`; lease re-exports them — paths unchanged).
+- `service` feature: `kat_units` (render_kat + FREE_TIER_GRANT_KAT lifted from kat_payreq_client/kat_meter), `kat_meter`, `kat_redact`.
+- `account_key` feature: `kat_account` (dep riir-auth/account_key — the facade keeps delegating; NO absorption of account_key itself).
+- `transport` feature: the nine HTTP clients — `kat_payreq_client`, `kat_burn_client`, `kat_stake_client`, `kat_vote_client`, `kat_lease_client`, `kat_account_client`, `kat_consent_client`, `kat_wetrun`, `kat_refill` (dep ureq, qrcode, ssh-key, ed25519-dalek; implies service + account_key).
 
-`service` feature — `kat_units` (render_kat + FREE_TIER_GRANT_KAT, lifted from
-kat_payreq_client/kat_meter), `kat_meter`, `kat_redact`.
+New repo dep graph: **riir-auth (optional, account_key) is the ONLY sibling dep — zero katgpt-core, zero game/chain/dapps**. Pure leaf. Downstream: riir-clippy + the owner's other app(s) + any future consumer. No cycles.
 
-`account_key` feature — `kat_account` (`dep:riir-auth` account_key substrate + `dep:ed25519-dalek`).
+## Landing steps
 
-`transport` feature — the nine HTTP clients: `kat_payreq_client`, `kat_burn_client`,
-`kat_stake_client`, `kat_vote_client`, `kat_lease_client`, `kat_account_client`,
-`kat_consent_client`, `kat_wetrun`, `kat_refill` (`dep:ureq`, `dep:qrcode`, `dep:ssh-key` —
-stake's `fresh_reference` uses it, `dep:ed25519-dalek`, implies `service` + `account_key`).
-
-Root feature rewiring:
-- dep `kat-client = { path = "crates/kat-client", default-features = false }` — NON-optional (tier 0
-  is ungated in every root build; zero new external packages: serde/serde_json already non-optional).
-- `kat_service = ["kat_client/service", "kat_client/account_key"]` — root's own `riir-auth` row and
-  `ssh-key` row are REMOVED (verified: after the move nothing in root uses `ssh_key::`; the
-  ed25519-dalek row STAYS — `kat_sync_payload` signs).
-- `kat_transport = ["kat_client/transport", "kat_service"]` — root `qrcode` row REMOVED; root `ureq`
-  row STAYS (`cf_workers_ai` + `groq_first` use it; same version unifies with the member's).
-
-Path contract — re-export, don't duplicate: root `lib.rs` re-exports every moved module at its
-existing path (`pub use kat_client::kat_mining_consent;` ungated; the rest behind their current
-`kat_service`/`kat_transport` cfg). Every existing call site — `bin/heal.rs` (~40 refs),
-`kat_promotion`/`kat_sync_payload`/`kat_pending_estimator` (`use crate::kat_redact::…` still
-resolves), `tests/*_cli.rs`, examples with `required-features` — compiles unchanged.
-
-Root keeps: `kat_promotion`, `kat_sync_payload`, `kat_pending_estimator` (table above).
-
-## Same-commit housekeeping
-
-- `BOUNDARY.md`: Owns gains the member-crate line; riir-auth row condition becomes "via member
-  crate `kat-client` (account_key), `kat_service` only"; allowlist unchanged (same sibling edges).
-- AGENTS.md: one note under the feature list (kat_service/kat_transport now activate member features).
-- CI (Gate Coverage rule — a suite nobody runs is documentation): `scripts/ci_feature_guard.sh` gains
-  `cargo test -p kat-client --lib` (tier 0) + a `--features service,account_key,transport` lib lane;
-  verify `scripts/standalone_dep_gate.sh` tolerates the member manifest (adds `../../../riir-auth` +
-  `../../../riir-ai`? NO — member deps are riir-auth only among siblings; same escaping-edge set).
-- Re-pin any root lib-test count floors (a large test population moves: account 11, consent 9, plus
-  meter/redact/config/stake/lease-goldens/burn/vote/payreq/wetrun/soft_gate suites).
-- Validation with `CARGO_TARGET_DIR=/tmp/kat-client-extract` — NEVER a bare `cargo build --release`
-  (the 00:21 global-binary-symlink lesson): root check default + `--features kat_service` +
-  `--features kat_transport`; member checks per tier; clippy both; then a commit-state compile in a
-  fresh `git worktree` to prove the committed tree (sibling WIP is live in this worktree:
-  `heal.rs`, `kat_lease_client.rs` (!), `kat_refill.rs`, `kat_wetrun.rs`, `lib.rs` + untracked
-  `kat_service_config.rs` — CONFLICT WARNING: the sibling's Plan 023 WIP edits `kat_lease_client.rs`
-  and `kat_refill.rs`, two files in the move set. Before landing: re-check `git status -sb`; either
-  wait for their commit, or rebase-scope this landing after theirs; lib.rs commits via the blob
-  technique (HEAD content + only my hunks); stage NAMED files only.
+1. **New repo** `gist-rs/riir-kat-client` (PRIVATE, under gist-rs — source secrecy per Research 003 holds: "anything riir-* is internal"; also `publish = false`). Owner creates the GitHub repo (manual — free-tier limit); local `git init` + `develop` default branch.
+2. Scaffold the fleet-standard set: root `BOUNDARY.md` (owns: kat service client plane; allowlist: riir-auth/account_key optional ONLY; does-not-own: healer pipeline, wire SERVER half = riir-dapps, promotion/payload machinery), `AGENTS.md`, `HISTORY.md`, `.issues/` + `.highwater`, `scripts/ci_feature_guard.sh` + `scripts/standalone_dep_gate.sh` (riir-auth's are the template), `.github/workflows/rust.yml` MAIN-ONLY + workflow_dispatch (the 2026-09-09 spending-limit convention; no schedules).
+3. Move the 15 modules + their tests into the 4-tier feature model; add `kat_service_urls`; the golden wire vectors (lease §golden, faucet, burn ack) move WITH their modules.
+4. riir-clippy becomes a CONSUMER: sibling path dep `riir-kat-client = { path = "../riir-kat-client", default-features = false }` (non-optional — tier 0 is ungated in every root build); `kat_service = ["riir_kat_client/service", "riir_kat_client/account_key"]`; `kat_transport = ["riir_kat_client/transport", "kat_service"]`; root `lib.rs` re-exports every moved module at its existing path — `bin/heal.rs` (~40 refs), the 3 keeper modules (`use crate::kat_redact` resolves via re-export), `tests/*_cli.rs`, examples: ALL compile unchanged. Remove root dep rows: `riir-auth`, `ssh-key`, `qrcode` (verified unused post-move); KEEP `ureq` (cf_workers_ai/groq_first) + `ed25519-dalek` (kat_sync_payload signs).
+5. Boundary bookkeeping, same commit: riir-clippy `BOUNDARY.md` allowlist +1 row (riir-kat-client, condition: kat_service/kat_transport only) + Owns updated; riir-kat-client's own BOUNDARY.md is the new repo's contract. `scripts/standalone_dep_gate.sh` (riir-clippy) escaping-dep set +1. NOTE the measured-graph check: ci_boundary_contract.sh derives from BOUNDARY.md + .git — the new repo joins the population automatically on first run.
+6. Workspace count pins (load-bearing — a count is a claim): katgpt-rs `scripts/repo_set.txt` + AGENTS.md repo-count prose (17 → 18) + any `*_floors.txt` membership rows that pin the workspace set (the drift-sweep family derives population, but membership pins must be edited by hand). Same for the 4090 box: the new repo joins the both-boxes sync set (no divergence).
+7. Validation: `CARGO_TARGET_DIR=/tmp/kat-client-spinout` — NEVER bare `cargo build --release` in riir-clippy (00:21 global-binary-symlink lesson). New repo: check/test per feature tier (tier0 / +service / +account_key / +transport) + clippy `-D warnings` + standalone_dep_gate + guard. riir-clippy: default + kat_service + kat_transport checks, member-path tests, clippy; keeper-module paths resolve. Final: commit-state compile in a fresh `git worktree` per repo.
+8. Pre-flight (sibling agents): `git status -sb` in riir-clippy before touching move-set files (`kat_lease_client.rs`, `kat_refill.rs` were Plan-023 WIP — now landed as cf236f1a, re-verify); lib.rs hunks committed via the blob technique if the tree is dirty again; stage NAMED files only.
+9. Docs: riir-clippy AGENTS.md feature-list note (kat_service/kat_transport now activate the sibling); katgpt-rs AGENTS.md §Repo count + BOUNDARY.md workspace list +1 (18 repos, product/distillation set stays 7); ref the spin-out commit hash here.
 
 ## Tasks
 
-- [ ] Pre-flight: `git status -sb` + `git --no-pager diff` on the sibling-WIP move-set files; coordinate or defer to their landing
-- [ ] Create `crates/kat-client` (Cargo.toml with the four-tier feature model + lib.rs + 15 module moves + the new `kat_service_urls`)
-- [ ] Root Cargo.toml: `[workspace]` + member dep + feature rewiring + remove root `riir-auth`/`ssh-key`/`qrcode` rows (keep ureq, ed25519-dalek)
-- [ ] Root lib.rs re-exports (blob-commit protocol for lib.rs); delete moved files from `src/`
-- [ ] Root keepers (`kat_promotion`, `kat_sync_payload`, `kat_pending_estimator`): confirm `use crate::kat_redact` paths resolve via re-exports
-- [ ] BOUNDARY.md + AGENTS.md updates
-- [ ] ci_feature_guard.sh member lanes + standalone_dep_gate.sh check + count-floor re-pins
-- [ ] Isolated-target-dir validation (root default / kat_service / kat_transport; member per-tier; clippy; fresh-worktree commit-state compile)
-- [ ] Commit `feat: issue 088 ...` on develop, push, ref hash here
+- [ ] Owner: create private `gist-rs/riir-kat-client` on GitHub (manual; free tier)
+- [ ] Local init + fleet scaffold (BOUNDARY/AGENTS/HISTORY/.issues/guards/CI MAIN-ONLY)
+- [ ] Move 15 modules + tests + goldens into the 4-tier model + kat_service_urls
+- [ ] riir-clippy consumer rewiring (dep rows, feature defs, lib.rs re-exports, delete moved files)
+- [ ] Boundary bookkeeping (both BOUNDARY.md rows, standalone_dep_gate, repo_set.txt, AGENTS counts 17→18, 4090 sync)
+- [ ] Full validation per tier (isolated target dirs) + fresh-worktree commit-state compiles
+- [ ] Commit `feat: issue 088 ...` both repos on develop, push, ref hashes here
 
 ## Non-goals
 
-- No healer-coupled module moves (table above) — they follow only if their substrate (traj_store/score_bench) ever moves.
-- No new repo, no public publishing (source secrecy, Proposal 003); member is `publish = false`.
-- No API changes — the re-export contract keeps every existing path bit-identical.
+- No healer-coupled module moves (kat_promotion / kat_sync_payload / kat_pending_estimator stay root — table above).
+- No account_key absorption (riir-auth stays THE identity substrate; the facade keeps delegating).
+- No public publishing ever (private repo, publish = false); no katgpt-core dep (the leaf stays clean).
+- No API change at the riir-clippy surface — re-export contract keeps every existing path bit-identical.
