@@ -482,7 +482,10 @@ pub use domains::docker::corpus::build_docker_seed_corpus;
 
 // ── dist domain re-exports (behind `dist` feature, opt-in) ─────────────────
 #[cfg(feature = "dist")]
-pub use domains::dist::{refuses as dist_refusals, DistContext, DistDomain, DistFamily, DistRule, DistVerdict};
+pub use domains::dist::{
+    refuses as dist_refusals, DistContext, DistDomain, DistFamily, DistRule, DistVerdict,
+    ProfileKnobs,
+};
 
 /// The dist seed corpus (behind `dist`).
 #[cfg(feature = "dist")]

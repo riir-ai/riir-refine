@@ -35,25 +35,20 @@
 //!   measured reason this repo keeps release clean). Encoded in
 //!   [`refuses`].
 //! - NOT profile surgery on library-only crates — every shipped-artifact
-//!   rule requires `[[bin]]`.
+//!   rule requires a shipped binary: an explicit `[[bin]]` section OR cargo's
+//!   autodiscovery (`src/main.rs` / `src/bin/*.rs` — blind spot B1).
+//!   Workspace-aware knob resolution (a member inherits the ROOT manifest's
+//!   profiles — blind spot B2) lives in [`context`].
 
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{HealDomain, HealEntry};
 
+pub mod context;
 pub mod corpus;
 pub mod rules;
 
-/// Caller evidence from outside the manifest (the docker `ScanContext`
-/// pattern). Absent evidence keeps its rule silent — never guessed.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct DistContext {
-    /// `true` when a PARENT directory's `Cargo.toml` declares
-    /// `[workspace]` — enables `member-profile-ignored`. Derived by walking
-    /// up from the manifest's own directory; an `exclude`d member gets the
-    /// hedged advice text, accepted at Phase-1 precision.
-    pub under_workspace_root: bool,
-}
+pub use context::{DistContext, ProfileKnobs};
 
 /// The rule family (parallel to `SecFamily` / `DockerFamily`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

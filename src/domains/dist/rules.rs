@@ -25,8 +25,19 @@
 //! - Whether a `[workspace]` parent actually LISTS this crate as a member —
 //!   the `member-profile-ignored` evidence is a nearest-ancestor walk, and
 //!   an `exclude`d member gets a hedged suggestion text (see the rule).
+//!
+//! ## Caller evidence (Bench 082 blind spots B1 + B2, landed 2026-09-10)
+//!
+//! Two facts the manifest text alone cannot prove ride in on
+//! [`DistContext`](super::DistContext): binary autodiscovery
+//! (`src/main.rs` / `src/bin/*.rs` beside the manifest — tree evidence,
+//! gated on `[package]` by [`ships_bin`]) and the workspace ROOT's profile
+//! knobs (a member cannot carry effective profiles, so [`effective_knobs`]
+//! resolves self-or-root). Both are derived once per scanned manifest by
+//! [`DistContext::derive`](super::DistContext::derive); absent evidence
+//! keeps the affected rules exactly at their Phase-1 behavior.
 
-use super::DistContext;
+use super::context::{DistContext, ProfileKnobs};
 
 /// Every rule this module can emit, in documentation order.
 pub const DIST_RULES: &[&str] = &[
@@ -96,7 +107,8 @@ pub fn scan(source: &str) -> ManifestScan {
         if let Some((array, name)) = section_header(trimmed) {
             if let Some(profile_name) = name.strip_prefix("profile.").map(str::trim) {
                 if !profile_name.is_empty() {
-                    m.profiles.push((profile_name.to_string(), line_no, Vec::new()));
+                    m.profiles
+                        .push((profile_name.to_string(), line_no, Vec::new()));
                     current = Some((false, name));
                     continue;
                 }
@@ -145,16 +157,47 @@ pub fn well_formed_enough(scan: &ManifestScan) -> bool {
     // section_header, which already refused exotics, so the gate reduces to
     // "scan ran" — kept as a function so the contract has ONE home and the
     // exotic-name refusal stays testable in one place.
-    scan
-        .profiles
+    scan.profiles
         .iter()
         .all(|(name, _, _)| !name.contains('"') && !name.contains('=') && !name.contains('#'))
 }
 
-fn any_profile_key(scan: &ManifestScan, key: &str) -> bool {
+/// Key presence across every `[profile.*]` section (crate-visible so the
+/// context's `ProfileKnobs::from_scan` reads the same fact the rules read).
+pub(crate) fn any_profile_key(scan: &ManifestScan, key: &str) -> bool {
     scan.profiles
         .iter()
         .any(|(_, _, keys)| keys.iter().any(|k| k == key))
+}
+
+/// Does this manifest ship a binary? An explicit `[[bin]]` section, or —
+/// blind spot B1 (Bench 082) — cargo's package autodiscovery: `src/main.rs`
+/// or a directly-nested `src/bin/*.rs`, carried as tree evidence on the
+/// context. Autodiscovery additionally requires `[package]`: a virtual root
+/// (workspace-only) manifest discovers no targets, so stray `src/` beside a
+/// `[workspace]` table must not fire the ship-size rules. A literal `[[bin]]`
+/// keeps its Phase-1 shape (no package requirement) — the section itself is
+/// the older, explicit contract.
+fn ships_bin(scan: &ManifestScan, ctx: DistContext) -> bool {
+    scan.has_bin || (scan.has_package && ctx.autodiscovered_bin)
+}
+
+/// The effective knob set — blind spot B2 (Bench 082): what THIS manifest's
+/// `[profile.*]` sections set, OR — under a workspace root — what the ROOT
+/// manifest sets. `cargo build` from a workspace root applies the root's
+/// profiles to every member and ignores member profiles (the mirror image of
+/// the `member-profile-ignored` rule), so a root knob satisfies the check for
+/// a member manifest. The union is deliberate: a standalone build honors self
+/// knobs, a root build honors root knobs, and we cannot know which one the
+/// reader will run.
+fn effective_knobs(scan: &ManifestScan, ctx: DistContext) -> ProfileKnobs {
+    let own = ProfileKnobs::from_scan(scan);
+    let root = ctx.root_profile_knobs.unwrap_or_default();
+    ProfileKnobs {
+        strip: own.strip || root.strip,
+        lto: own.lto || root.lto,
+        panic: own.panic || root.panic,
+    }
 }
 
 /// One finding: a rule citation at one line with advice text. Phase 1
@@ -192,7 +235,8 @@ pub fn scan_source_with(source: &str, ctx: DistContext) -> Vec<DistFinding> {
 fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
     // Rules 1–3 are about SHIPPED binaries: a lib-only crate has no artifact
     // whose bytes anyone downloads, so the advice would be noise.
-    if scan.has_bin {
+    if ships_bin(scan, ctx) {
+        let knobs = effective_knobs(scan, ctx);
         let anchor = scan
             .profiles
             .first()
@@ -204,11 +248,13 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
                     .map(|(_, line)| *line)
             })
             .unwrap_or(1);
-        let excerpt = scan
-            .profiles
-            .first().map_or_else(|| "[[bin]]".to_string(), |(name, _, _)| format!("[profile.{name}]"));
+        let excerpt = match scan.profiles.first() {
+            Some((name, _, _)) => format!("[profile.{name}]"),
+            None if !scan.has_bin => "autodiscovered bin (src/main.rs or src/bin/)".to_string(),
+            None => "[[bin]]".to_string(),
+        };
 
-        if !any_profile_key(scan, "strip") {
+        if !knobs.strip {
             out.push(DistFinding {
                 rule_id: "shipped-binary-unstripped",
                 line: anchor,
@@ -216,7 +262,7 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
                 advice: "add `strip = true` — the default keeps the symbol table, and a shipped binary's symtab IS the internal architecture (14,485 symbols measured on this tool's own v0.1.3)",
             });
         }
-        if !any_profile_key(scan, "lto") {
+        if !knobs.lto {
             out.push(DistFinding {
                 rule_id: "shipped-binary-missing-size-profile",
                 line: anchor,
@@ -224,7 +270,7 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
                 advice: "add a size profile ([profile.dist]: lto = \"fat\" + codegen-units = 1 + opt-level = \"s\" + panic = \"abort\" + strip = true) and build releases with --profile dist — measured -61% on this tool itself; NEVER put opt-level/codegen-units into [profile.release] (the bench profile inherits release)",
             });
         }
-        if !any_profile_key(scan, "panic") {
+        if !knobs.panic {
             out.push(DistFinding {
                 rule_id: "cli-panic-unwind-tables",
                 line: anchor,
@@ -274,7 +320,10 @@ mod tests {
     #[test]
     fn comments_do_not_hide_or_invent_keys() {
         let m = scan("[profile.release]\n# strip = true\nlto = \"fat\" # real key\n");
-        assert!(!any_profile_key(&m, "strip"), "commented key must not count");
+        assert!(
+            !any_profile_key(&m, "strip"),
+            "commented key must not count"
+        );
         assert!(any_profile_key(&m, "lto"));
     }
 
@@ -308,6 +357,9 @@ mod tests {
         let upper_key = scan("[profile.release]\nSTRIP = true\n");
         assert!(any_profile_key(&upper_key, "strip"));
         let wrong_case = scan("[Profile.Release]\nstrip = true\n");
-        assert!(wrong_case.profiles.is_empty(), "a case-variant header is not a profile section");
+        assert!(
+            wrong_case.profiles.is_empty(),
+            "a case-variant header is not a profile section"
+        );
     }
 }

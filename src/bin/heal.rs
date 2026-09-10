@@ -7092,32 +7092,6 @@ fn main() {
 /// the repo around the file — here, the presence of a `.dockerignore` and a
 /// committed `Cargo.lock` beside the build context. Evidence we cannot
 /// derive stays `None`, so those rules do not fire.
-#[cfg(feature = "docker")]
-/// Derive what the repo around a manifest can prove, for the caller-gated
-/// rules (Issue 085 — the docker `ScanContext` pattern): walk UP from the
-/// manifest's PARENT directory (a manifest is never its own ancestor); the
-/// first ancestor carrying a `Cargo.toml` with a `[workspace]` section
-/// marks this manifest as sitting under a workspace root.
-#[cfg(feature = "dist")]
-fn dist_scan_context(path: &Path) -> riir_clippy::domains::dist::DistContext {
-    let mut dir = path.parent().and_then(Path::parent);
-    while let Some(d) = dir {
-        let candidate = d.join("Cargo.toml");
-        if candidate.is_file() {
-            if let Ok(src) = std::fs::read_to_string(&candidate) {
-                // Section-presence only — the same cheap scan the lane uses.
-                if riir_clippy::domains::dist::rules::scan(&src).has_workspace {
-                    return riir_clippy::domains::dist::DistContext {
-                        under_workspace_root: true,
-                    };
-                }
-            }
-        }
-        dir = d.parent();
-    }
-    riir_clippy::domains::dist::DistContext::default()
-}
-
 /// Issue 085 — the dist lane over Cargo.toml manifests. Suggest-only: every
 /// finding is a citation + advice line; nothing is ever written.
 #[cfg(feature = "dist")]
@@ -7129,7 +7103,10 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
         let Ok(src) = std::fs::read_to_string(path) else {
             continue;
         };
-        let ctx = dist_scan_context(path);
+        // Caller evidence (workspace root, autodiscovered bins, root profile
+        // knobs) — derived once per manifest inside the domain, one bounded
+        // ancestor walk, cached in the returned Copy context.
+        let ctx = riir_clippy::domains::dist::DistContext::derive(path);
         for f in scan_source_with(&src, ctx) {
             println!(
                 "{}:{} [dist  ] {:<40} — {}",

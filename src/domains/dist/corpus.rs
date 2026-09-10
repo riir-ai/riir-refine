@@ -97,7 +97,11 @@ mod tests {
     fn rule_ids_unique_and_kebab() {
         let mut seen = std::collections::BTreeSet::new();
         for r in entries() {
-            assert!(seen.insert(r.rule_id.clone()), "duplicate rule id {}", r.rule_id);
+            assert!(
+                seen.insert(r.rule_id.clone()),
+                "duplicate rule id {}",
+                r.rule_id
+            );
             assert!(
                 r.rule_id
                     .chars()
@@ -160,10 +164,14 @@ mod tests {
     fn member_rule_fires_with_workspace_evidence() {
         let ctx = DistContext {
             under_workspace_root: true,
+            ..DistContext::default()
         };
-        let buggy = "[package]\nname = \"m\"\n\n[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\n";
+        let buggy =
+            "[package]\nname = \"m\"\n\n[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\n";
         let findings = scan_source_with(buggy, ctx);
-        assert!(findings.iter().any(|f| f.rule_id == "member-profile-ignored"));
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "member-profile-ignored"));
         // A virtual root (workspace, no package/bin) is silent even with the
         // evidence flag — nothing ships from it.
         let root = "[workspace]\nmembers = [\"m\"]\n";
