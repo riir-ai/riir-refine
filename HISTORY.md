@@ -9,6 +9,46 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 081 resolved — burn wire unit mismatch: end-to-end closed, rescale STOOD DOWN (2026-09-10)
+
+Resolved-record for the now-removed issue file (removed per the
+noise-reduction rule; full narrative in git history,
+`git log -- .issues/081_burn_wire_unit_mismatch.md`). The client half
+was already recorded here; this entry closes the whole arc.
+
+- **Incident** (2026-09-09, owner's live e2e): the burn client sent its
+  micro-KAT book value unconverted in the whole-KAT `burn_kat_total`
+  wire field — the first settlement clamp-wiped the account's 100 KAT
+  grant and poisoned the server watermark at 2,323,993.
+- **Client fix `e9eca71d`**: `wire_kat_total = charged_micro /
+  1_000_000` at the single sync boundary + the sub-KAT accumulation
+  rule + the cross-repo unit golden `3dd14dd` (this repo's
+  `kat_burn_client.rs::cross_repo_unit_golden_book_micro_to_wire_to_debit`
+  mirrored by dapps `tests/kat_burn.rs` — the symmetric-mock /
+  asymmetric-unit gap is now a drift tripwire on both sides).
+- **Server migration surface**: dapps `791fed5` —
+  `POST /admin/burn-watermark/rescale` (bearer + typed ack + CAS +
+  whole-scale guard) + `tests/burn_wm_rescale.rs` (7 tests).
+- **Execution STOOD DOWN (dapps HISTORY 2026-09-10, runbook branch 2)**:
+  the CAS curl answered `200 idempotent_no_op:true,
+  before_kat_total:14` — the watermark row was already WHOLE-SCALE at
+  14, the poison healed by the shipped client fix itself (a later
+  accepted push re-answered whole-scale and advanced the ack), and the
+  clamp-wiped grant was already refilled (99,999,998 KAT, the faucet
+  arc). The guard refused without touching the row — the designed
+  safety. Replay-is-the-read satisfied trivially.
+- **Supersessions**: the fleet-wide per-account pass (item 2) stays
+  conditional on the deployment growing past the owner's account; the
+  server-truth `contributed` field (Issue 080, fleet v3 live) removed
+  the residual gate surface this incident's ack-poisoning used to
+  threaten. Proposal 005 prose carried the dated DESIGN CHANGE
+  annotations (item 3, done 2026-09-09). Mirror issue file removed in
+  riir-dapps at `45c8191`.
+- **Lesson** (recorded at the fix, still standing): a money unit has
+  ONE name per side, and a contract change must re-pin its e2e the same
+  day, not just its unit goldens (Issue 087's finding generalized
+  this).
+
 ## Issue 087 resolved — kat_burn_stack e2e: stale harness units, not the account plane (2026-09-10)
 
 Resolved-record for the now-removed issue file (removed per the
