@@ -1,0 +1,528 @@
+//! Entries slice 06 of 06 — rules 116–126 of 126 — moved VERBATIM from the
+//! former corpus.rs monolith (2026-09-10 split, scripted by
+//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! LAST slice or open a new one past ~1800 lines.
+
+use crate::domains::rust_perf::PerfRule;
+
+#[cfg(feature = "rust_perf_bench")]
+use crate::domains::rust_perf::bench::BenchSpec;
+
+/// Data table, not logic — grows with distillation batches.
+#[allow(clippy::too_many_lines)]
+pub(super) fn entries() -> Vec<PerfRule> {
+    vec![
+        // ── Batch 135 (2026-09-09, Plan 114 / Research 155): the Wild-linker
+        // "RustForge wild performance tricks" article distill — three rules,
+        // all benchable + measured. The article is an unlicensed-format blog
+        // post by the Wild linker author — cite-shape only; the fixtures
+        // below are original reproductions of the patterns.
+        //
+        // ── concurrency: permanent atomic storage / transmute → zero-cost
+        // representation conversion (the Vec<AtomicT> mirror) ────────────
+        // The naive way to get &-aliased random writes into a Vec<T> is to
+        // rebuild it as Vec<AtomicT> with Atomic::new per element (fresh
+        // allocation + a full copy every conversion), or to transmute, or to
+        // keep the data permanently atomic. When size_of + align_of match
+        // (AtomicU32 has the layout of u32), consuming the owned vec via
+        // into_iter().map(Atomic::new).collect() reuses the SAME heap
+        // allocation and the map loop compiles out entirely (the article's
+        // x86 asm: a few movups/mov, no loop, no branch) — so switching the
+        // representation per phase is free and there is no excuse for either
+        // transmute or permanent atomics. Back-conversion must CONSUME via
+        // into_inner(), never load per element; core::mem::take moves the
+        // vec across the phase boundary without touching the heap (an empty
+        // Vec does not allocate).
+        PerfRule {
+            rule_id: "atomic-vec-zero-cost-convert".to_string(),
+            name: "Vec<T> ↔ Vec<AtomicT> conversion by Atomic::new-per-element collect (fresh alloc + full copy) → into_iter().map(Atomic::new).collect() on the OWNED vec — same size+align makes std reuse the buffer and the loop vanish; switch representation per phase instead of paying atomics everywhere or transmuting".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::atomic::AtomicU32;\n\n// Rebuild the atomic mirror from the shared plain vec: the source is only\n// borrowed, so a fresh allocation + an element-by-element copy is forced\n// on EVERY conversion. Teams that need &-aliased writes often keep the\n// data permanently atomic instead — paying atomic costs in every reader\n// — or reach for transmute.\nfn to_atomic(plain: &[u32]) -> Vec<AtomicU32> {\n    plain.iter().map(|&v| AtomicU32::new(v)).collect()\n}".to_string(),
+            fixed_code: "use std::sync::atomic::AtomicU32;\n\n// The vec is OWNED, so into_iter() iterates in place; with matching\n// size_of/align_of (AtomicU32 is layout-identical to u32) the collect\n// reuses the SAME heap allocation and the map loop compiles out — the\n// conversion is free, so keep the plain representation for the owned\n// phases and convert only for the shared-write phase. Convert BACK by\n// consuming: into_iter().map(|a| a.into_inner()).collect() — never\n// per-element loads — and move the vec across phases with mem::take.\nfn to_atomic(plain: Vec<u32>) -> Vec<AtomicU32> {\n    plain.into_iter().map(AtomicU32::new).collect()\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 4/0/0, verdict-stable x2 (M3 Max, release, 2026-09-09 — Batch 135 benches): 1.83x/1.78x/1.57x/1.33x at n=100/1K/10K/100K, alloc axis EXACT 2 → 1 at every size (both arms pay one shared clone; the buggy conversion adds a second malloc + full copy, the fixed one reuses the buffer). REGIME: the conversion is free ONLY when size_of::<T>() == size_of::<AtomicT>() and align matches (std's in-place collect specialization for vec::IntoIter) — u32/i32/u64/i64/usize and their Atomic twins all match; wider/newtype wrappers match when the wrapper is a transparent single-field struct. ANTI-REGIMES: converting a BORROWED source still needs the fresh allocation (the source outlives the result — the fixed form requires ownership); a wrapper with Drop or a different layout falls back to a real copy loop. THE DECISION CONTENT: switch the representation per phase (plain owned storage, atomic only for the shared-write window) instead of keeping data permanently atomic (pays atomic costs in every reader) or transmuting (unsound under noalias). Back-conversion consumes via into_inner() — per-element loads re-copy the buffer for nothing. mem::take moves the vec across the phase boundary without touching the heap. Distinct from mutex-to-atomic (permanent-storage direction: replace a Mutex with one atomic; this switches a WHOLE VEC's representation for a phase, then switches back) and from mem-take (the move idiom this rule uses at the boundary — different mechanism, they compose). Fixtures are original reproductions of the pattern; source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — the Wild linker's symbol-resolution phase conversion, technique 3. Batch 135 / Plan 114 / Research 155.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(atomic_vec_zero_cost_convert_bench_spec()),
+        },
+        // ── allocation: alloc-per-iteration because the hoisted buffer can't
+        // be TYPED → reuse the heap allocation across a lifetime/type change
+        // (the reuse_vec pattern) ─────────────────────────────────────────
+        // reuse-allocation-clear covers the caller-passed scratch buffer.
+        // This rule covers the case that shape CANNOT express: the buffer's
+        // element type (or lifetime) differs per iteration — Vec<&'iter T> —
+        // so no single borrowed-scratch signature typechecks. The fix keeps
+        // the buffer OWNED and retargets it in place: clear() makes the map
+        // body unreachable (the loop compiles out), the const size/align
+        // assert turns an incompatible T/U into a COMPILE error at the call
+        // site, and std's in-place collect preserves the heap allocation.
+        PerfRule {
+            rule_id: "vec-reuse-across-lifetime-change".to_string(),
+            name: "hot loop allocates a fresh Vec<&'iter T> (or any same-layout Vec<U>) every iteration because the hoisted buffer cannot be typed across the element lifetime → own the buffer and retarget it in place with a const size/align assert + clear() + into_iter().map(unreachable).collect() — the allocation is reused, the loop compiles out, incompatible T/U is a compile error".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "// Every call allocates: the picked refs live only for this call, so\n// a hoisted Vec<&[u32]> buffer cannot be typed to outlive one call's\n// borrow — the borrow checker rejects every signature that tries.\nfn row_lens(rows: &[Vec<u32>]) -> u64 {\n    let picked: Vec<&[u32]> = rows.iter().map(|r| &r[..]).collect();\n    picked.iter().map(|s| s.len() as u64).sum()\n}".to_string(),
+            fixed_code: "// The buffer is OWNED and retargeted per call: the const assert makes\n// a layout-mismatched T/U a compile error; clear() empties the buffer\n// so the map body is unreachable and the loop compiles out; std's\n// in-place collect hands the SAME heap allocation back re-typed.\n// SAFETY CONTRACT (caller-enforced): the stored refs are cleared (or\n// the buffer dropped) before any referent dies — a panic between take\n// and restore only loses the buffer, never reads a dead ref.\nfn reuse_vec<T, U>(mut v: Vec<T>) -> Vec<U> {\n    const {\n        assert!(\n            std::mem::size_of::<T>() == std::mem::size_of::<U>()\n                && std::mem::align_of::<T>() == std::mem::align_of::<U>(),\n        );\n    }\n    v.clear();\n    v.into_iter().map(|_| unreachable!()).collect()\n}\n\nfn row_lens(rows: &[Vec<u32>], buf: &mut Vec<&'static [u32]>) -> u64 {\n    let mut cur: Vec<&[u32]> = reuse_vec(std::mem::take(buf));\n    cur.clear();\n    cur.extend(rows.iter().map(|r| &r[..]));\n    let total: u64 = cur.iter().map(|s| s.len() as u64).sum();\n    *buf = reuse_vec(cur);\n    total\n}".to_string(),
+            context_notes: Some("MEASURED (M3 Max, release, 2026-09-09 — Batch 135 benches, verdict-stable x2): **Mixed 2/0/2 timing (1.49x@100 / 1.07x@1K / Tie@10K/100K) + alloc axis EXACT 1 → 0 at every size** — the deterministic alloc axis is the load-bearing cell (the elision is proven by integers, not wall-clock); timing ties once the refill dominates the malloc (the reuse-allocation-clear Mixed shape — its L2 note covers the large-N regime). REGIME: same-layout element types ONLY — the const assert (inline const, stable 1.79) fires at MONOMORPHIZATION, so a mismatched T/U is a compile error at the call site, not a runtime panic; &T → &'static T retargeting is the canonical case (8-byte slices, references, Box-backed handles, NonNull). THE SAFETY CONTRACT is the rule's load-bearing content: the 'static element type is only sound because the buffer is cleared before any referent can die and consumers never observe a cleared slot — the caller owns the contract, the compiler only checks the LAYOUT half; on panic between take and restore the buffer is dropped (freed), never read dead. Distinct from reuse-allocation-clear (a caller-passed &mut Vec<T> scratch of ONE fixed element type — the shape that cannot typecheck when the element lifetime differs per iteration; that rule removes the compiler-can't-hoist obstacle, this one the borrow-checker-can't-type obstacle) and from mem-take (the boundary move this pattern uses). EXTENSION ARM (recorded, not landed): types that mix owned + borrowed fields (Foo<'a> {owned: String, borrowed: &'a str}) cross the same barrier via a MaybeUninit<&'static> shadow-struct field-wise map — sound only while the shadowed field is never observed empty (the article's own panic caveat). Suggestion-only (a parse-only proposer cannot prove the caller contract). Fixtures original; source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — technique 4, the Wild linker's buffer reuse. Batch 135 / Plan 114 / Research 155.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(vec_reuse_across_lifetime_change_bench_spec()),
+        },
+        // ── concurrency: shared Vec under one Mutex (or atomics everywhere)
+        // → partition into disjoint &mut slices, ZERO synchronization ─────
+        // When each worker's writes provably land in a DISJOINT contiguous
+        // range (the Wild linker's per-object symbol-id ranges), a lock
+        // serializes work that cannot conflict. split the buffer once and
+        // hand each worker its own &mut [T]: no locks, no atomics, no
+        // contention — the writes are ordinary stores.
+        PerfRule {
+            rule_id: "partitioned-mut-slices-zero-sync".to_string(),
+            name: "shared Vec mutated through one Mutex (or atomics) although each worker writes a known DISJOINT contiguous range → partition once (chunks_mut / split_at_mut) and hand each worker its own &mut [T] — zero locks, zero atomics; applies only when the access pattern is provably disjoint".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::Mutex;\n\n// One lock guards the whole array: the workers' index ranges never\n// overlap, but every single bump serializes on the Mutex — the sync\n// buys nothing the partition would not give for free.\nfn bump_all(grid: &Mutex<Vec<u64>>, cells: usize, workers: usize, iters: usize) {\n    std::thread::scope(|s| {\n        for w in 0..workers {\n            s.spawn(move || {\n                for cell_idx in (w..cells).step_by(workers) {\n                    for _ in 0..iters {\n                        let mut g = grid.lock().unwrap();\n                        g[cell_idx] = g[cell_idx].wrapping_add(1);\n                    }\n                }\n            });\n        }\n    });\n}".to_string(),
+            fixed_code: "// Partition ONCE into disjoint contiguous ranges and give each\n// worker exclusive &mut ownership of its slice: the writes are plain\n// stores — no lock, no atomic, no contention, and the per-cell result\n// is identical (each cell is bumped by exactly one owner).\nfn bump_all(grid: &mut Vec<u64>, workers: usize, iters: usize) {\n    let per = grid.len().div_ceil(workers);\n    std::thread::scope(|s| {\n        for chunk in grid.chunks_mut(per) {\n            s.spawn(move || {\n                for _ in 0..iters {\n                    for cell in chunk.iter_mut() {\n                        *cell = cell.wrapping_add(1);\n                    }\n                }\n            });\n        }\n    });\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 4/0/0, verdict-stable x2 (M3 Max, release, 2026-09-09 — Batch 135 benches; sizes = THREAD counts per the align-64 precedent): 6.90x/9.12x/11.81x/6.13x at 1/2/4/8 threads — the per-bump Mutex serializes even UNCONTENDED (a lock/unlock per bump is ~20ns against a plain store), and contention widens it; alloc axis EXEMPT (see bench.rs ALLOC_AXIS_EXEMPT): the contended std Mutex allocates nondeterministically on macOS in the pthread slow path — the Batch-78 probe evidence covers the same platform class. THE DECISION CONTENT is the disjointness proof: the transform is legal exactly when each worker's writes land in a known contiguous range (contiguous id ranges per object — the Wild linker shape; per-thread partitions of an image/row band; per-shard cells). ANTI-REGIMES: scattered/overlapping access patterns (use fine-grained locks or atomics), read-share-write-rare workloads (RwLock), or when the partition itself costs more than the contention (tiny arrays). Composes with vec-with-capacity (reserve before partition) and reuse-allocation-clear (persistent per-worker buffers). Distinct from cache-line-block-partitioned-lock (that REDUCES contention by partitioning LOCK GRANULARITY — still locks, for scattered per-item writes; this ELIMINATES synchronization via ownership partition for provably-ranged writes — the two answer different access patterns and can compose: partition into worker regions, block-partition the remainder) and from parallel-disjoint-pread-hides-cold-page-latency (io positional reads on a shared fd; this is shared-MEMORY mutation). Fixtures original, std-only (thread::scope + chunks_mut — no rayon dep); the article's split_off_mut form is nightly-shaped and the portable split_at_mut/chunks_mut core is what lands. Source: David Lattimore, \"RustForge wild performance tricks\" (davidlattimore.github.io, 2025-09-02) — technique 1. Batch 135 / Plan 114 / Research 155.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(partitioned_mut_slices_zero_sync_bench_spec()),
+        },
+        // ── Batch 136 (2026-09-09, Plan 115 — the Lattimore "Graph Algorithms
+// in Rayon" blog distill): dynamic work (graph traversal — work unknown
+// in advance) on a rayon pool. All three rules are NotBenchable — the
+// source is a QUALITATIVE approach comparison with NO measured numbers,
+// and the author's own closing verdict is the decision content.
+// ── concurrency: dynamic-work parallelism ladder ────────────────────
+        PerfRule {
+            rule_id: "dynamic-work-parallelism-ladder".to_string(),
+            name: "parallel work whose amount is UNKNOWN IN ADVANCE (graph traversal from roots) needs a STRUCTURE decision, not a perf decision: scoped spawning is the composition-safe default despite the per-task heap boxing — pick by composition requirements first, allocation second; spawn_broadcast + private job control starves the pool (parked threads are unavailable to rayon), and a channel + par_bridge queue does not compose with borrowed work".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "// The team picked the queue structure for ALLOCATION reasons (rayon\n// documents scoped spawning as 'more expensive' — it heap-boxes each\n// task), then the algorithm grew: two traversal jobs need to combine,\n// and one work item must split an owned value into borrowed sub-work.\n// Neither fits the channel shape: the borrows cannot cross work items,\n// so the queue's WorkItem enum accretes every job's variants and the\n// jobs end up hand-inlined into one monster enum.\nenum WorkItem {\n    Visit(Node),\n    ProcessChunk(/* borrowed from an earlier item? impossible */),\n}".to_string(),
+            fixed_code: "// Composition first: scoped spawning keeps rayon's work-stealing\n// available to every task (nested par_iter works), borrows cross\n// freely within the scope, and jobs compose by spawning, not by enum\n// accretion. The per-task heap boxing is the PRICE of that default;\n// pay it until profiling proves the allocations matter.\nuse rayon::Scope;\n\nfn explore_all(roots: &[Node]) {\n    rayon::scope(|s| {\n        for node in roots {\n            s.spawn(|s: &Scope<'_>| explore(node, s));\n        }\n    });\n}\n\nfn explore(node: &Node, s: &Scope<'_>) {\n    // nested par_iter INSIDE the traversal works — the pool is not\n    // privately captured;\n    for child in node.children() {\n        s.spawn(|s| explore(child, s));\n    }\n}".to_string(),
+            context_notes: Some("QUALITATIVE LADDER, source-shipped (the author's own measured trade: 'a channel works fine for simple tasks and avoids the heap allocations, but it really doesn't compose at all well' — he RETURNED to scoped spawning; honestly NotBenchable — the decision content is the ladder, not a speed claim). THE LADDER for work-unknown-in-advance parallelism: (1) spawn_broadcast + own job control — COMPLEX and STARVES the pool: the thread that would run a nested par_iter finds all other threads parked in private job control, unavailable to rayon; (2) channel + par_bridge — alloc-light but deadlocks under nested par_iter (see nested-par-inside-channel-bridge-deadlocks) and fails composition (an owned value created in one work item cannot be split into borrowed work items — the borrow checker refuses; two queue jobs needing sequenced borrows cannot combine); (3) SCOPED SPAWNING — the composition-safe default; rayon's 'more expensive' doc warning refers to the per-task heap boxing, which is the price of stealable, composable tasks. THE DECISION CONTENT: choose by composition first, allocations second — the doc warning is the trap. FUTURE axis (recorded, not a rule): async/await detaches tasks from threads, so a steal-then-block would resume elsewhere — the author speculates, has not tried. Related upstream note: rayon try_for_each_init runs init per WORK ITEM, not per thread — per-thread arenas multiply. Distinct from partitioned-mut-slices-zero-sync (KNOWN disjoint work — this is UNKNOWN work) and from channel-send-batching-unpark (producer-side send batching on a FIXED worker set — this is queue STRUCTURE for dynamic work). Fixtures original (rayon + a Node shape). Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── concurrency: the dynamic-queue shutdown idiom ────────────────
+        PerfRule {
+            rule_id: "sender-per-work-item-terminates-channel".to_string(),
+            name: "a dynamic work queue over an unbounded channel terminates only when the LAST sender drops — seed each work item with a CLONE of the send end, drop the ORIGINAL after seeding, and let completion be implicit: when the final item is processed its sender clone drops and the receiver's iterator ends".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::mpsc;
+
+// The seed loop keeps the original sender alive in the spawning
+// closure, and work items have NO way to enqueue children — so the
+// traversal terminates only because it cannot express discovered
+// work. Add child-discovery and the receiver never sees a close:
+// the original sender outlives the loop inside the worker's closure
+// capture, and the for-iterator blocks forever on the next recv.
+fn walk(roots: Vec<Node>) {
+    let (tx, rx) = mpsc::channel();
+    for r in roots {
+        tx.send(r).unwrap();
+    }
+    for node in rx {                       // blocks: tx never drops
+        for child in node.children() {     // ...and cannot enqueue them
+            // tx.send(child) — tx is not reachable here
+        }
+    }
+}".to_string(),
+            fixed_code: "// Every work item CARRIES a clone of the sender; the original is
+// dropped after seeding. Discovering children is just sending from
+// the clone the item holds, and when the LAST item finishes, the
+// last clone drops — the channel closes and the par_bridge/enumerate
+// ends by construction. No sentinel, no count, no close() call.
+fn walk(roots: Vec<Node>) {
+    let (tx, rx) = crossbeam_channel::unbounded();
+    for r in roots {
+        tx.send(Work::Visit(r, tx.clone())).unwrap();
+    }
+    drop(tx); // the seed's copy must go, or nothing ever closes
+    for Work::Visit(node, tx) in rx {
+        for child in node.children() {
+            tx.send(Work::Visit(child, tx.clone())).unwrap();
+        }
+    } // last sender dropped inside the loop — iteration ends here
+}".to_string(),
+            context_notes: Some("IDIOM RULE, source-shipped (the working example is the post's channel+par_bridge approach; honestly NotBenchable — it is the CORRECTNESS/termination shape, not a speed claim). THE DECISION CONTENT: termination of a dynamically-discovered work queue must be OWNERSHIP-DRIVEN — 'the channel closes when the last work item drops its sender clone' replaces sentinel values, atomic counters + an explicit close, or a separate done-flag thread. The drop(tx) after seeding is LOAD-BEARING: forgetting it hangs the receiver forever (the classic bug this idiom exists to prevent). Regime: unbounded channels feeding par_bridge or a plain for-over-rx loop where work is DISCOVERED during processing (graph reachability, transitive deps, crawl frontiers). ANTI-REGIMES: fixed work known upfront (just par_iter over the collection — no channel needed); producer/consumer THROUGHPUT shaping (that is bounded-channel-backpressure / channel-send-batching-unpark — different axis entirely); cancellation mid-queue needs an explicit flag, ownership close alone cannot signal abort. Distinct from nested-par-inside-channel-bridge-deadlocks (the FAILURE mode of this same queue shape under nested rayon work — the idiom is correct; the hazard is mixing it with par_bridge's steal behavior). Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── concurrency: nested par_iter inside par_bridge work = deadlock ─
+        PerfRule {
+            rule_id: "nested-par-inside-channel-bridge-deadlocks".to_string(),
+            name: "a nested par_iter inside par_bridge-fed work can DEADLOCK: the inner parallel iterator steals a task from another worker, blocks pulling the NEXT item from the same channel, and the work item it interrupted still holds a sender clone — rayon tasks are THREAD-TIED, so the blocked stealer never releases it and the channel never closes".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use crossbeam_channel::unbounded;
+use rayon::prelude::*;
+
+// The queue feeds work out; each item ALSO runs a nested parallel
+// section. One worker's inner par_iter steals a task from another
+// thread; that stolen task's own for_in_rx.next() blocks waiting for
+// MORE work — but the interrupted work item holds a sender clone, so
+// the channel cannot close. Thread-tied tasks wait on themselves:
+// four workers, zero progress, no panic — just a silent hang.
+fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<Item>) {
+    for item in rx.into_iter().par_bridge() {
+        let parts = split(item);
+        parts.par_iter().for_each(|p| process(p)); // steals ...
+        let _ = tx.clone(); // ... while this clone is still held
+    }
+}".to_string(),
+            fixed_code: "// Keep nested parallel sections OUT of bridge-fed items: either run
+// the inner work SEQUENTIALLY inside queue items (the queue already
+// parallelizes across items), or hand the nested section its own
+// pre-materialized inputs so it cannot block on the queue it feeds
+// from. If nested rayon work is unavoidable per item, switch the
+// whole job to scoped spawning — stealable scope tasks resume on
+// other threads instead of pinning a worker.
+fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<Item>) {
+    for item in rx {                       // sequential recv loop
+        for p in split(&item) {
+            process(p);                    // inner work inline, no steal
+        }
+    }
+    drop(tx);
+}".to_string(),
+            context_notes: Some("CORRECTNESS LEAD, source-explained (the mechanism paragraph is the post's own subtle-case walkthrough; honestly NotBenchable — a deadlock is not an A/B axis). THE DEADLOCK CHAIN, each link load-bearing: (1) par_bridge workers PULL from the channel, and rayon's par_iter may STEAL the pull task from a blocked worker's thread; (2) the stolen pull BLOCKS on rx.recv() for the next item; (3) the channel stays open because the work item that was interrupted still holds its SENDER clone; (4) rayon tasks are thread-TIED — the blocked stealer never resumes far enough to drop anything. Result: silent hang, no panic. REGIME: any queue shape where work items hold channel senders AND their processing runs nested rayon collectors. FIXES in order: serialize the inner section (the queue already parallelizes), pre-materialize inner inputs before the parallel section, or move the whole traversal to scoped spawning (composition-safe default — see dynamic-work-parallelism-ladder). FUTURE axis: async tasks are NOT thread-tied, so steal-then-block would migrate — the author's speculation, unimplemented. Distinct from nested-parallelism-deadlock notes in rayon docs (that warns scoped spawning is expensive; this is the channel-queue interaction the docs do not name) and from sender-per-work-item-terminates-channel (the correct shutdown idiom this hazard breaks). Fixtures original. Source: David Lattimore, \"Graph Algorithms in Rayon\" (davidlattimore.github.io, 2025-11-27). Batch 136 / Plan 115.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── Batch 141 (2026-09-09, Plan 121 — the antirez/ds4 Part-B walk,
+// Research 162's staged batch; executed after the Issue-085 dist lane
+// landed). Three decision-content rules from the agent/context layer of
+// ds4 @ 6289c516 — the same host-side slice shape as Batches 121–125.
+// All NotBenchable: the decision content is budget/boundary/stream
+// discipline, not an A/B axis.
+// ── allocation: reserve measured from the thing actually written ────
+        PerfRule {
+            rule_id: "compaction-reserve-before-prompt-build".to_string(),
+            name: "the reserve for a destructive context rewrite is MEASURED from the real payload, never a constant guess: build the actual prompt, tokenize it, and derive reserve = measured_tokens + slack + output_budget — then lift EVERY free-threshold check to max(threshold, reserve) so no check can fire inside the space the rewrite itself needs".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "// The compaction trigger uses a hand-picked constant for how much\n// room the summary exchange needs, while the actual summary prompt is\n// built later from a template that grew over months. When the template\n// crosses the constant, the rewrite fires with less headroom than the\n// exchange itself consumes: the summarizer's own prompt overflows the\n// window mid-rewrite, and the session dies inside the recovery path.\nconst COMPACT_RESERVE_TOKENS: usize = 2_048;\n\nfn should_compact(ctx: &Context) -> bool {\n    ctx.len >= ctx.window - COMPACT_RESERVE_TOKENS\n}\n\nfn compact(ctx: &mut Context) -> Summary {\n    // the REAL cost: prompt template + chat framing + summary budget\n    let prompt = build_summary_prompt(ctx);\n    let cost = prompt.len() + SUMMARY_BUDGET;\n    let _ = cost; // never checked against the threshold above\n    summarize(ctx, &prompt)\n}".to_string(),
+            fixed_code: "// The reserve is MEASURED: build the real prompt once, tokenize it,\n// and add the fixed slack + the output budget. Every threshold derives\n// from the same measured figure, so the rewrite can never fire with\n// less headroom than the exchange consumes.\nfn compact_reserve(window: usize) -> usize {\n    // the REAL prompt, not an estimate of it\n    let prompt = build_summary_prompt_for_measure();\n    let measured = tokenize(&prompt).len();\n    measured + 64 /* framing slack */ + summary_budget(window)\n}\n\nfn should_compact(ctx: &Context) -> bool {\n    let reserve = compact_reserve(ctx.window);\n    ctx.len >= ctx.window.saturating_sub(reserve)\n}\n\nfn room_for_generation(ctx: &Context) -> usize {\n    // the SAME reserve bounds every other consumer of the headroom\n    ctx.window.saturating_sub(ctx.len) - compact_reserve(ctx.window)\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, source-shipped (the reserve function BUILDS the real prompt to measure it: 'agent_compact_make_prompt(...)' + chat framing appends, then 'reserve = tokens.len + 64 + agent_compact_summary_budget(ctx)' — and BOTH free-threshold consumers derive from it: 'compact = agent_compact_reserve_tokens(w) + 128' and 'generation_room = room - agent_compact_reserve_tokens(w)'; honestly NotBenchable — control-flow sizing, not an A/B axis). THE DECISION CONTENT: a capacity reserve for a DESTRUCTIVE rewrite must be measured from the thing actually written — tokenizing the real prompt — never a hand-picked constant; the reserve quantity is a tokenization of the actual payload, one level above reserve-before-insert (vec-with-capacity reserves by element COUNT of a KNOWN collection; this reserves by MEASURING an input whose size is only known by building it). The reserve must be the SINGLE figure every headroom consumer reads (trigger, generation room, mid-rewrite re-checks) — two figures for the same headroom is the constant-drift failure this rule exists to kill. Composes with renderer-error-is-not-capacity-overflow (B123, same source file: the tri-state validator decides WHETHER to compact; this decides HOW MUCH room the compaction keeps — the destructive handler is gated by the tri-state, and its budget comes from here). Regime: any context/window manager whose rewrite cost includes a prompt/template that lives in code and drifts — chat compaction, log rotation summaries, cache-rebuild planners. ANTI-REGIME: the payload size is statically known (just size_of/count it — no measurement needed). Distinct from vec-with-capacity (count-known collection; this is measure-the-real-input), from the B123 tri-state rule (classification vs budget, same pipeline), and from length-prefix-validate-before-alloc (sec — that bounds UNTRUSTED input before allocation; this measures OWNED template cost before a threshold). Suggestion-only (a parse-only proposer cannot see that the constant and the measured cost can diverge). Fixtures original. Source: antirez/ds4 @ 6289c516 (MIT) — ds4_agent.c:9354-9364 (the reserve = measured prompt + 64 + summary_budget), :6537/:9273/:9602/:10010 (the four call sites: compact budget, free-threshold, generation room). Batch 141 / Plan 121 / Research 162.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── io: truncation boundaries are semantic, not arithmetic ─────────
+        PerfRule {
+            rule_id: "compaction-tail-boundary-prefers-complete-turn".to_string(),
+            name: "a lossy truncation boundary is SEMANTIC: walk back over a bounded extra budget to the most recent COMPLETE unit (a whole user turn), fall back to the arithmetic target only when no complete unit fits, and NEVER split an atomic span (an image/embedding block snaps the boundary to the span's START) — a slightly longer complete unit beats a fragment that loses the constraints".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The tail keeps exactly tail_budget tokens: an arithmetic slice.\n// When the budget lands mid-turn, the surviving fragment has our\n// answer without the user's constraints that prompted it — and when\n// it lands mid-image, the summary consumes a torn token span that\n// neither renders nor embeds.\nfn tail_start(tokens: &[Token], sys_len: usize, tail_budget: usize) -> usize {\n    tokens.len().saturating_sub(tail_budget).max(sys_len)\n}\n\nfn compact(tokens: &[Token], images: &[Span], sys_len: usize) -> Vec<Token> {\n    let start = tail_start(tokens, sys_len, 2_048);\n    let _ = images; // spans are not considered at the boundary\n    tokens[start..].to_vec()\n}".to_string(),
+            fixed_code: "// Two semantic gates on the same boundary: (1) walk back up to one\n// extra budget to the latest COMPLETE user turn — a slightly longer\n// complete turn is preferable to losing the user's constraints and\n// keeping only a fragment of our answer; (2) if the chosen position\n// falls strictly inside an atomic span, snap to the span's START.\nfn tail_start(\n    tokens: &[Token], images: &[Span], sys_len: usize, tail_budget: usize,\n) -> usize {\n    let bottom = tokens.len();\n    let mut target = bottom.saturating_sub(tail_budget).max(sys_len);\n    // complete-turn walk: [bottom - 2*budget, bottom) — the floor holds\n    let earliest = bottom.saturating_sub(2 * tail_budget).max(sys_len);\n    for i in (earliest..bottom).rev() {\n        if tokens[i].is_user_turn_start() {\n            target = i;\n            break;\n        }\n    }\n    snap_out_of_spans(target, images) // never sever an atomic span\n}\n\nfn snap_out_of_spans(mut pos: usize, spans: &[Span]) -> usize {\n    for s in spans {\n        if pos > s.start && pos < s.end {\n            pos = s.start; // the span survives whole or not at all\n        }\n    }\n    pos\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, source-shipped (the boundary walk + the verbatim rule: 'A slightly longer complete turn is preferable to losing the user\'s constraints and keeping only a fragment of our answer' — the walk scans [bottom - 2*tail_budget, bottom) floor sys_len for the latest user-turn token and returns the arithmetic target as fallback; the image gate: 'if (pos > start && pos < end) return start' — strictly-inside snaps to the span START; honestly NotBenchable — boundary semantics, not an A/B axis). THE DECISION CONTENT: lossy truncation boundaries are SEMANTIC, not arithmetic — (1) prefer a complete UNIT over an exact budget (the walk-back window is bounded at 2× the budget, the floor at the protected prefix, the fallback the arithmetic target, so the scan terminates and the budget can only be exceeded, never the protected prefix severed); (2) ATOMIC SPANS gate the boundary regardless of how it was chosen — a boundary strictly inside a span moves to the span start (spans that survive whole or not at all). Regime: any lossy truncate-and-summarize over linear content with turn/span structure — chat compaction, log buffers, transcript windows, retrieval chunking. ANTI-REGIME: content with no internal unit structure (a raw byte stream has no complete-turn to prefer — the arithmetic slice IS the semantics). Distinct from tri-state fits validation (B123 — WHETHER to compact; this WHERE the boundary lands), from compaction-reserve-before-prompt-build (Batch 141 — HOW MUCH headroom; this WHICH content survives), from bounded-gap read coalescing (B94 — merges READS by gap; this places a WRITE-side truncation boundary), and from streaming-prefix-holdback (Batch 141 — the OUTPUT side of the same never-tear-a-unit discipline: holdback defers emission, this moves the cut). Suggestion-only (a parse-only proposer cannot see turn/span structure). Fixtures original. Source: antirez/ds4 @ 6289c516 (MIT) — ds4_agent.c:9286-9300 (agent_compact_tail_boundary + the verbatim preference comment), :9367-9377 (agent_compact_image_boundary strictly-inside snap), :9411/:9560 (both consumers gate their boundaries through the snap). Batch 141 / Plan 121 / Research 162.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── io: streaming matchers hold back O(pattern), never O(stream) ───
+        PerfRule {
+            rule_id: "streaming-prefix-holdback-bounded-buffer".to_string(),
+            name: "a streaming output matcher that must recognize a marker BEFORE the marker's bytes reach the wire holds back AT MOST the marker's own length in a fixed buffer, matches only at the gated position (a prose line boundary), and flushes the held bytes verbatim on the first mismatch — ordinary text streams immediately, and no unbounded pending window ever exists".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// The decorator wants to style hint markers, so it buffers the\n// stream until it KNOWS the line is ordinary prose. A long code line\n// (or a chatty generator) builds a megabyte pending window before\n// the newline that finally resolves it — latency and memory both\n// scale with the LINE, not with the marker.\n#[derive(Default)]\nstruct Decorator {\n    pending: Vec<u8>, // grows until a newline arrives\n}\n\nimpl Decorator {\n    fn feed(&mut self, b: u8, out: &mut Vec<u8>) {\n        self.pending.push(b);\n        if b == b'\\n' {\n            if self.pending.starts_with(b\"> **Hint:**\") {\n                out.extend_from_slice(b\"[hint]\");\n                out.extend_from_slice(&self.pending[10..]);\n            } else {\n                out.extend_from_slice(&self.pending); // held far too long\n            }\n            self.pending.clear();\n        }\n    }\n}".to_string(),
+            fixed_code: "// Match the marker INCREMENTALLY: hold at most marker.len() bytes,\n// compare one byte per feed at the gated position (line start, not\n// inside code blocks), and on the first mismatch replay the held\n// bytes verbatim. Ordinary text is delayed by at most marker.len(),\n// and a real marker is recognized at its LAST byte — no line-length\n// window ever exists.\n#[derive(Default)]\nstruct Decorator {\n    held: [u8; 11], // the bound IS the marker: > **Hint:** is 11 bytes\n    held_len: usize,\n}\n\nconst MARKER: &[u8] = b\"> **Hint:**\";\n\nimpl Decorator {\n    fn feed(&mut self, b: u8, out: &mut Vec<u8>) {\n        if self.held_len < MARKER.len() && b == MARKER[self.held_len] {\n            self.held[self.held_len] = b;\n            self.held_len += 1;\n            if self.held_len == MARKER.len() {\n                out.extend_from_slice(b\"[hint]\"); // matched at the last byte\n                self.held_len = 0;\n            }\n            return;\n        }\n        // first mismatch (or the gate declined): flush what we held...\n        out.extend_from_slice(&self.held[..self.held_len]);\n        self.held_len = 0;\n        out.push(b); // ...then the current byte streams too\n    }\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, source-shipped (the bound IS the type: 'char md_hint_prefix[sizeof(\"> **Hint:**\") - 1]' with a parallel len; the gate: 'Recognize only the advertised hint marker at a prose line boundary. Hold at most that short prefix; ordinary text still streams immediately. Explicit quote lines continue the aside. No width-dependent repainting.'; the mismatch path replays the held bytes byte-by-byte before feeding the current one; the match path fires at the marker's LAST byte with no lookahead beyond it; honestly NotBenchable — streaming-latency discipline, not an A/B axis). THE DECISION CONTENT: a stream recognizer's pending window is bounded by the PATTERN, never by the line/stream — the bound lives in the TYPE (a fixed array sized by sizeof(marker)), the match is incremental (one byte per feed against the next pattern byte), the GATE (line boundary / not-in-code-block) decides whether matching is even armed, and mismatch flushes verbatim so ordinary bytes are delayed O(pattern) worst-case and usually O(1). Regime: decorating/transforming a live stream (LLM token output, log tails, protocol framing) where a marker must be caught before its bytes render. ANTI-REGIMES: the whole-line transformation is genuinely needed (buffer deliberately — but then the bound is the documented line cap, not an accident); the marker can be rewritten after the fact (post-pass over a stored buffer — no holdback needed). Distinct from bounded-channel-backpressure (queue DEPTH bounds; this is a PATTERN-sized deferral inside one stream), from compaction-tail-boundary-prefers-complete-turn (Batch 141 — the truncation side of never-tear-a-unit; this is the emission side), and from buffered-io (a fixed throughput window chosen for syscall amortization; the holdback exists for RECOGNITION and is sized by the pattern it matches). Suggestion-only (a parse-only proposer cannot see the marker semantics). Fixtures original. Source: antirez/ds4 @ 6289c516 (MIT) — ds4_agent.c:225-226 (the sized buffer + len), :3294-3299 (the boundary-gate comment), :3301-3311 (incremental match, fires at the last byte), :3317-3325 (mismatch flushes the held prefix verbatim). Batch 141 / Plan 121 / Research 162.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── Batch 143 (2026-09-10, Plan 123 — the nnethercote Dec-2025
+// rustc-perf post distill; the PERF-SEARCH intake row staged at cf9e44ae).
+// Two rules from the compiler-perf trenches: one classic runtime gate
+// (benchable — the win is measured, not asserted), one build-time
+// emission discipline (annotated NotBenchable — compile-time content).
+// ── complexity: the computation a disabled log call still pays ────
+        PerfRule {
+            rule_id: "debug-level-gated-computation".to_string(),
+            name: "a hot-path value computed into a binding whose ONLY consumer is a debug!/trace! call runs on every iteration even with the level off — the binding is a real statement and the level check is a runtime atomic load LLVM cannot const-fold (without release_max_level_* features), so gate the computation itself with log_enabled! (or move it into the macro's lazy format args) instead of computing first and logging after".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// The tick loop builds a per-event summary for a debug! that is\n// effectively always off in production (no logger configured). The\n// summary binding is a REAL statement: it executes on every event\n// even though the macro drops it — the level check happens inside\n// the macro expansion, AFTER the computation already ran.\nfn tick(events: &[Event], stats: &mut Stats) {\n    for e in events {\n        apply(e, stats);\n        let summary = format!(\"{:?}\", summarize(e)); // paid every event\n        debug!(\"event summary: {summary}\");\n    }\n}".to_string(),
+            fixed_code: "// The computation lives INSIDE the level gate: with the level off\n// (or no logger) the summary is never built; with the level on, both\n// arms emit identical records. Moving the computation into the\n// macro's format args is the equivalent lazy form.\nfn tick(events: &[Event], stats: &mut Stats) {\n    for e in events {\n        apply(e, stats);\n        if log_enabled!(log::Level::Debug) {\n            let summary = format!(\"{:?}\", summarize(e));\n            debug!(\"event summary: {summary}\");\n        }\n    }\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 verdict-stable (batch143_pareto: 2184-2534x at 100-10K items, alloc axis EXACT 2200/22000/220000 → 0 — with no logger installed the gated arm builds ZERO summaries; the magnitude is the whole log-only computation's share, not a representative tick: real-world speedup = the summary cost ÷ the whole loop body). SOURCE-CITED (nnethercote, \"How to speed up the Rust compiler in December 2025\", 2025-12-05, #147293 verbatim: 'In the query system there was a value computed on a hot path that was only used within a debug! call. In this PR I avoided doing that computation unless necessary, which gave icount reductions across many benchmark results, more than 3% in the best case. This was such a classic micro-optimization that I added it as an example to the Logging and Debugging chapter of the The Rust Performance Book' — the doubled 'The' is in the original). THE MECHANISM: log's max level is a RUNTIME atomic (AtomicUsize), so LLVM cannot const-fold the disabled macro branch — a binding computed on its own line and consumed only by the macro's enabled-arm is still a real statement that executes every iteration; log_enabled! reads the SAME atomic but gates the computation itself, and moving the computation into the macro's format args is the equivalent lazy form (log macros evaluate args only on the enabled path). MEASUREMENT-HONESTY RIDER (same post, #143684): the LLVM-21 bump measured mean icount −1.70% and cycles −0.90% while mean wall-time went UP 0.26% — 'Wall-time is the true metric, because it's what users perceive' — third-party confirmation of this corpus's wall-clock GOAT discipline: an instruction-count A/B can invert on wall; never promote on icount alone. Regime: hot loops (tick handlers, per-request paths, query kernels) whose diagnostic summaries are built unconditionally beside their log calls. ANTI-REGIMES: the value has ANY other consumer (compute once, log freely — the binding is live); the crate enables release_max_level_* (the branch is compiled out either way — the fix is moot); the level is compile-time static (cfg'd-out logging). Distinct from log-write-direct (the ALLOCATION of formatting — push_str(&format!) vs write! into the buffer; this is whether the formatting COMPUTATION runs at all), from debug-stat-full-scan-out-of-hot-path (that diagnostic IS consumed every call and moved out; this one is consumed only when a level is on and gated in place), from debug-assert-length-hoist (assertion ERASURE changes optimization — the opposite direction: there the check must run, here it must not). Fixtures original. Source: nnethercote.github.io Dec-2025 post (#147293 + #143684), the mechanism home the perf-book Logging and Debugging chapter. Batch 143 / Plan 123 / Research 164.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(debug_level_gate_bench_spec()),
+        },
+        // ── complexity: build-time content the compiler deletes anyway ────
+        PerfRule {
+            rule_id: "macro-generated-code-optimize-at-generation-point".to_string(),
+            name: "code a proc macro emits should be trimmed and deduped AT the generation point — where the emitter's context makes redundancy visible — not left for downstream optimization machinery to reconstruct: measure the emitted volume with -Zmacro-stats, then hoist invariant emission out of per-field loops, drop dead blocks, and dedupe repeated bounds once per impl instead of once per method".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// The derive emitter writes, for EVERY field: a no-op const block,\n// the trait bound repeated per method, and a closure that only\n// forwards to a call. rustc parses, type-checks, and optimizes the\n// redundancy away — every compile, every crate, forever.\nfn emit_reflect_impl(fields: &[Field]) -> String {\n    let mut out = String::new();\n    for f in fields {\n        out.push_str(\"const _: () = ();\\n\");            // dead in every impl\n        out.push_str(&format!(\"fn get_{n}(v: &{t}) -> &{t} where {t}: Reflect, {t}: Reflect {{\n\", n = f.name, t = f.ty));\n        out.push_str(&format!(\"    |v: &{t}| v.field()\\n}}\\n\", t = f.ty)); // closure forwards only\n    }\n    out\n}".to_string(),
+            fixed_code: "// The impl's shared parts are emitted ONCE; per field, only what\n// actually varies. Same generated semantics — a fraction of the\n// tokens for rustc to parse, check, and represent in memory.\nfn emit_reflect_impl(fields: &[Field]) -> String {\n    let mut out = String::new();\n    out.push_str(\"fn dispatch(v: &Self, idx: usize) -> &Field { ... }\\n\"); // once\n    for f in fields {\n        // per field: only the accessor table entry\n        out.push_str(&format!(\"    /* {} => slot {} */\\n\", f.name, f.idx));\n    }\n    out\n}".to_string(),
+            context_notes: Some("HONESTLY NotBenchable, build-time content (upstream-measured, no runtime A/B axis — the corpus benches RUNTIME loops; a proc-macro emitter's cost is cargo-check wall and peak memory on CRATES that use the macro, not a runnable fixture pair). SOURCE (nnethercote, \"How to speed up the Rust compiler in December 2025\", 2025-12-05 section 'Proc macro wins in Bevy', quotes verbatim): bevy_ui was \"around 16,000 lines and 563,000 bytes of source code\" while its #[derive(Reflect)] output was \"around 27,000 lines and 1,544,000 bytes\" — \"Macro expansion almost quadrupled the size of the code, mostly because of this one macro!\"; after the cleanup PRs, \"[t]he size of the code generated by #[derive(Reflect)] was reduced by 39%, which reduced cargo check wall-time for that crate by 16%, and peak memory usage by 5%\". THE LOAD-BEARING SENTENCE: \"it is more efficient to optimize away redundancies at the generation point, where context-specific and domain-specific information is available, rather than relying on sophisticated optimization machinery further down the compilation pipeline that has to reconstruct information. And it's just less code to parse and represent in memory.\" THE INSTRUMENT: -Zmacro-stats (introduced June 2025 — \"How much code does that proc macro generate?\", same blog; measure BEFORE and AFTER, per crate). DECISION CONTENT: an emitter's per-field redundancy (bounds repeated per method, dead const blocks, forwarding closures) is invisible in source and enormous in expansion; the emitter KNOWS the field set at generation and can hoist/dedupe what downstream must rediscover. Regime: derive-like proc macros over large crates, build-heavy workspaces, compile-time-sensitive CI. ANTI-REGIMES: handwritten code (the compiler's optimizer IS the right tool there — no generation point exists); emission already at the measured floor. Suggestion-only (a parse-only proposer cannot see macro emission volume; -Zmacro-stats is nightly-only). Fixtures original. Batch 143 / Plan 123 / Research 164.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
+        ]
+}
+
+/// Bench spec for `debug-level-gated-computation`: a log-only summary built
+/// unconditionally beside its `debug!` call vs the same computation behind
+/// `log_enabled!`.
+///
+/// With no logger configured (the bench crate never installs one), the fixed
+/// arm builds ZERO summaries; the buggy arm builds one per item — the binding
+/// is a real statement and log's runtime max-level atomic keeps the disabled
+/// branch from being const-folded. Expected ParetoDominant (the fixed arm
+/// does strictly less work; the observable log output is identical: nothing).
+/// Default `log` features ONLY — a `release_max_level_*` feature would compile
+/// the whole regime away and make both arms tie at zero.
+#[cfg(feature = "rust_perf_bench")]
+fn debug_level_gate_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000],
+        harness: "// [dep: log = \"0.4\"]\n\nconst EVENT_PARTS: usize = 8;\n\nfn summarize(item: &str) -> String {\n    // an expensive, log-only diagnostic: bracket every part, then fold\n    let mut acc = String::new();\n    for part in item.split('/') {\n        acc.push_str(&format!(\"[{part}]\"));\n    }\n    let mut digest = acc.len();\n    for b in acc.bytes() {\n        digest = digest.wrapping_mul(31).wrapping_add(b as usize);\n    }\n    format!(\"{acc} (len={digest})\")\n}\n\nmod buggy {\n    use super::summarize;\n    // The binding is a REAL statement: log's max level is a runtime atomic,\n    // so the macro's enabled branch is never const-folded away — the summary\n    // executes on every item even though the record is never emitted.\n    pub fn tick(items: &[String]) {\n        for it in items {\n            let summary = summarize(it);\n            log::debug!(\"event summary: {summary}\");\n        }\n    }\n}\n\nmod fixed {\n    use super::summarize;\n    // The computation lives INSIDE the level gate. With no logger (the bench\n    // regime) `log_enabled!` is false and the summary is never built.\n    pub fn tick(items: &[String]) {\n        for it in items {\n            if log::log_enabled!(log::Level::Debug) {\n                let summary = summarize(it);\n                log::debug!(\"event summary: {summary}\");\n            }\n        }\n    }\n}\n\npub fn make_input(n: usize) -> Vec<String> {\n    (0..n)\n        .map(|i| {\n            (0..EVENT_PARTS)\n                .map(|p| format!(\"p{}x{}\", p, (i * 31 + p) % 97))\n                .collect::<Vec<_>>()\n                .join(\"/\")\n        })\n        .collect()\n}\n\npub fn run_buggy(input: &[String]) {\n    buggy::tick(std::hint::black_box(input));\n}\n\npub fn run_fixed(input: &[String]) {\n    fixed::tick(std::hint::black_box(input));\n}\n".to_string(),
+    }
+}
+
+/// Bench spec for `atomic-vec-zero-cost-convert` (Batch 135, Plan 114 —
+/// the Wild-linker article distill): both arms pay ONE shared `clone()` so
+/// the timing delta is exactly the conversion; the buggy conversion then
+/// adds a fresh malloc + element copy while the fixed one consumes the
+/// owned clone in place (std's same-layout collect reuse — the alloc axis
+/// pins the elision EXACTLY: 2 → 1). G1: both arms read the same values,
+/// so the Relaxed-load checksums must match exactly.
+#[cfg(feature = "rust_perf_bench")]
+fn atomic_vec_zero_cost_convert_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    // The source is only BORROWED: a fresh allocation + element-by-element
+    // copy is forced on every conversion.
+    pub fn to_atomic(plain: &[u32]) -> Vec<AtomicU32> {
+        plain.iter().map(|&v| AtomicU32::new(v)).collect()
+    }
+
+    pub fn convert(owned: Vec<u32>) -> u64 {
+        let atomic = to_atomic(&owned);
+        std::hint::black_box(&atomic); // keep the allocation observable
+        atomic.iter().map(|a| a.load(Ordering::Relaxed) as u64).sum()
+    }
+}
+
+mod fixed {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    // The vec is OWNED: into_iter walks in place and the same-layout
+    // collect reuses the buffer — no new allocation, no copy loop.
+    pub fn to_atomic(plain: Vec<u32>) -> Vec<AtomicU32> {
+        plain.into_iter().map(AtomicU32::new).collect()
+    }
+
+    pub fn convert(owned: Vec<u32>) -> u64 {
+        let atomic = to_atomic(owned);
+        std::hint::black_box(&atomic);
+        atomic.iter().map(|a| a.load(Ordering::Relaxed) as u64).sum()
+    }
+}
+
+pub struct Input {
+    a: Vec<u32>,
+    b: Vec<u32>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed = 0x853C_49E6_748F_EA9Bu64;
+    let mut next = move || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        seed >> 33
+    };
+    let mut mk = || (0..n).map(|_| next() as u32 | 1).collect::<Vec<u32>>();
+    Input { a: mk(), b: mk() }
+}
+
+pub fn run_buggy(input: &Input) {
+    let owned = input.a.clone(); // shared ownership gain: both arms pay it
+    std::hint::black_box(buggy::convert(owned));
+}
+
+pub fn run_fixed(input: &Input) {
+    let owned = input.b.clone();
+    std::hint::black_box(fixed::convert(owned));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `vec-reuse-across-lifetime-change` (Batch 135): the buggy
+/// arm builds a fresh `Vec<&[u32]>` per call (malloc + fill + consume); the
+/// fixed arm owns a `'static`-typed buffer (thread_local), retargets it per
+/// call via the reuse_vec pattern, and refills — capacity retained, so the
+/// steady-state alloc axis is 1 → 0. The rows are `Box::leak`ed so the
+/// `'static` element type is sound inside the harness (the rule text carries
+/// the real-world caller contract). G1: identical sums.
+#[cfg(feature = "rust_perf_bench")]
+fn vec_reuse_across_lifetime_change_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    // Fresh vec of row refs per call: one malloc + fill + consume.
+    pub fn row_lens(rows: &[Vec<u32>]) -> u64 {
+        let picked: Vec<&[u32]> = rows.iter().map(|r| &r[..]).collect();
+        std::hint::black_box(&picked); // keep the allocation observable
+        picked.iter().map(|s| s.len() as u64).sum()
+    }
+}
+
+mod fixed {
+    use std::cell::RefCell;
+
+    // The buffer is OWNED and retargeted per call: the const size/align
+    // assert makes a mismatched T/U a compile error; clear() empties the
+    // buffer so the map body is unreachable and the loop compiles out;
+    // std's in-place collect hands the SAME allocation back re-typed.
+    pub fn reuse_vec<T, U>(mut v: Vec<T>) -> Vec<U> {
+        const {
+            assert!(
+                std::mem::size_of::<T>() == std::mem::size_of::<U>()
+                    && std::mem::align_of::<T>() == std::mem::align_of::<U>(),
+            );
+        }
+        v.clear();
+        v.into_iter().map(|_| unreachable!()).collect()
+    }
+
+    thread_local! {
+        // 'static-typed BY CONTRACT: rows are leaked for the whole bench,
+        // and the buffer is cleared before any stored ref could be read.
+        static BUF: RefCell<Vec<&'static [u32]>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub fn row_lens(rows: &[Vec<u32>]) -> u64 {
+        BUF.with(|b| {
+            let mut buf = b.borrow_mut();
+            let mut cur: Vec<&[u32]> = reuse_vec(std::mem::take(&mut buf));
+            cur.clear();
+            cur.extend(rows.iter().map(|r| &r[..]));
+            let total: u64 = cur.iter().map(|s| s.len() as u64).sum();
+            let retargeted: Vec<&'static [u32]> = reuse_vec(cur);
+            *buf = retargeted;
+            total
+        })
+    }
+}
+
+pub struct Input {
+    rows: &'static [Vec<u32>],
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed = 0xA24B_5D3F_6C17_E890u64;
+    let mut next = move || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        seed >> 33
+    };
+    let rows: Vec<Vec<u32>> = (0..n)
+        .map(|_| (0..4).map(|_| next() as u32).collect())
+        .collect();
+    Input { rows: Box::leak(rows.into_boxed_slice()) }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::row_lens(input.rows));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::row_lens(input.rows));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `partitioned-mut-slices-zero-sync` (Batch 135): the buggy
+/// arm locks a single Mutex PER BUMP across all workers (contended); the
+/// fixed arm partitions once into disjoint contiguous chunks and runs plain
+/// stores with zero synchronization. Sizes = THREAD counts per the align-64
+/// precedent. G1: the closed-form checksum (every cell bumped ITERS times)
+/// is asserted in-harness. The alloc axis is EXEMPT for this rule (see
+/// ALLOC_AXIS_EXEMPT — contended macOS pthread mutex slow path).
+#[cfg(feature = "rust_perf_bench")]
+fn partitioned_mut_slices_zero_sync_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1, 2, 4, 8],
+        harness: r#"
+use std::sync::Mutex;
+
+const CELLS: usize = 4_096;
+const ITERS: usize = 8;
+
+mod buggy {
+    use std::sync::Mutex;
+
+    // One lock guards the whole array; every bump serializes even though
+    // the workers' index ranges never overlap.
+    pub fn bump(grid: &Mutex<Vec<u64>>, workers: usize) {
+        std::thread::scope(|s| {
+            for w in 0..workers {
+                s.spawn(move || {
+                    for cell_idx in (w..super::CELLS).step_by(workers) {
+                        for _ in 0..super::ITERS {
+                            let mut g = grid.lock().unwrap();
+                            g[cell_idx] = g[cell_idx].wrapping_add(1);
+                        }
+                    }
+                });
+            }
+        });
+    }
+}
+
+mod fixed {
+    // Partition ONCE into disjoint contiguous ranges: plain stores, no
+    // lock, no atomic — each cell is bumped by exactly one owner.
+    pub fn bump(grid: &mut Vec<u64>, workers: usize) {
+        let per = grid.len().div_ceil(workers);
+        std::thread::scope(|s| {
+            for chunk in grid.chunks_mut(per) {
+                s.spawn(move || {
+                    for _ in 0..super::ITERS {
+                        for cell in chunk.iter_mut() {
+                            *cell = cell.wrapping_add(1);
+                        }
+                    }
+                });
+            }
+        });
+    }
+}
+
+pub struct Input {
+    workers: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // n = THREAD COUNT (the contention axis is the size axis).
+    Input { workers: n }
+}
+
+fn expected() -> u64 {
+    (CELLS * ITERS) as u64
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let grid = Mutex::new(vec![0u64; CELLS]);
+    buggy::bump(&grid, input.workers);
+    let cs: u64 = grid.lock().unwrap().iter().sum();
+    debug_assert_eq!(cs, expected());
+    std::hint::black_box(cs);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut grid = vec![0u64; CELLS];
+    fixed::bump(&mut grid, input.workers);
+    let cs: u64 = grid.iter().sum();
+    debug_assert_eq!(cs, expected());
+    std::hint::black_box(cs);
+}
+"#
+        .to_string(),
+    }
+}

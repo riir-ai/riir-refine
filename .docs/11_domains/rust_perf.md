@@ -666,7 +666,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 78 `BenchSpec`s (10 rules are honestly NotBenchable)
+- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged, 126 rules / 91 `BenchSpec`s)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)

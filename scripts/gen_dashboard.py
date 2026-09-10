@@ -309,13 +309,13 @@ def store_series() -> dict | None:
 # ── corpus size per domain (mined from git history of the sources) ─────────
 # Counting is deterministic greps over the corpus files at each rev:
 #   kernel_opt  rule_id:   over src/domains/kernel_opt/corpus/*.rs   → 393
-#   rust_perf   rule_id:   over src/domains/rust_perf/corpus.rs      → 88
+#   rust_perf   rule_id:   over src/domains/rust_perf/corpus/*.rs    → 126
 #   clippy      lint_name: over src/domains/clippy_lints/corpus.rs   → 40
 #   sec         rule_id:   over src/domains/sec/corpus.rs            → 6
 # (HEAD counts verified against the pinned batch totals 2026-08-28.)
 CORPUS_DOMAINS = [
     ("kernel_opt", "src/domains/kernel_opt/corpus", "rule_id:"),
-    ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
+    ("rust_perf", "src/domains/rust_perf/corpus", "rule_id:"),
     ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
     ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
     # Docker's corpus uses the positional `rule()` shorthand constructor, so
