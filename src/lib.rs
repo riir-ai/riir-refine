@@ -163,74 +163,32 @@ pub mod groq;
 #[cfg(feature = "contrastive_scope")]
 pub mod scope_model;
 
-// Proposal 005 Phase 0 T0.5 (Plan 023): the KAT code-token meter — the
-// alloc-free, version-stamped, raw-span-byte word-token counter + its local
-// burn ledger. Accounting-only (G9d): client counts never mint or spend;
-// the burn reconciles at sync (T0.3+). Opt-in — the default build stays
-// bit-identical with zero meter code compiled (G3).
+// ── issue 088: the kat service plane moved to the riir-kat repo ──────────
+// The whole plane (protocol tier + client plane + transports) now lives in
+// the sibling leaf crate; these re-exports preserve EVERY historical path
+// (`riir_clippy::kat_meter`, `crate::kat_redact`, `bin/heal.rs`'s ~40 refs,
+// the integration tests) bit-identically. Gate-match = the historical root
+// availability, mapped onto the member's tier features (root kat_service →
+// member client tier; root kat_transport → member kat_transport tier;
+// refill/consent need BOTH). Keepers below (sync_payload, pending
+// estimator, promotion) stay healer-side: they import traj_store/score_bench.
 #[cfg(feature = "kat_service")]
-pub mod kat_meter;
-
-// Proposal 005 Phase 0 T0.1 (Plan 025): the KAT account key — Ed25519
-// keypair in OpenSSH format, account id = BLAKE3(pubkey), machine-global.
-// `login`/`account` are the local view (no cloud until Phase 1); the grant
-// line is a projection (accounting-only, G9d).
-#[cfg(feature = "kat_service")]
-pub mod kat_account;
-
-// Owner mandate 2026-09-08: machine-global mining consent — the persisted
-// state behind `cargo heal --mine` (opt IN) / `--unmine` (opt OUT), and the
-// three-tier engagement story the ai.gist.rs front page documents.
-// DELIBERATELY UNGATED: `--unmine` must work in EVERY feature build (a user
-// on a build without `kat_service` still deserves an off switch), and it
-// owns the account-dir resolution that `kat_account::KatAccount::default_dir`
-// delegates to, so the two cannot drift. Zero new deps (serde_json only).
-pub mod kat_mining_consent;
-
-// riir-dapps Plan 023 (the domain swap): the persisted service-URL config
-// behind `cargo heal config set/get` — resolution env > config >
-// DEFAULT_SERVICE_URL (which never moves; the QR goldens pin it). Ungated
-// like kat_mining_consent: the surface is local-only (account dir, 0600)
-// while the money commands it re-points are the gated ones, and it owns the
-// `RIIR_HEAL_KAT_SERVICE_URL` read that `kat_lease_client` delegates to, so
-// the two cannot drift. Zero new deps (serde_json only).
-pub mod kat_service_config;
-
-// ── issue 088: the KAT protocol tier (the `riir-kat` spin-out prep) ──────
-// Pure serde wire types extracted per client area + the unit system + the
-// pinned hosts. Dependency-free by construction — the shared vocabulary
-// both sides of the KAT network speak (client here, riir-dapps ledger plane
-// server-side). `kat_units` + `kat_service_urls` are UNGATED: the ungated
-// config tier names the hosts, and rendering a KAT amount is not client
-// behavior. The protocol modules gate-match their client consumers for now;
-// the spin-out makes them the member's ungated protocol tier.
-pub mod kat_service_urls;
-pub mod kat_units;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_payreq;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_burn;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_lease;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_account;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_stake;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_vote;
-#[cfg(feature = "kat_service")]
-pub mod kat_protocol_wetrun;
+pub use riir_kat::{
+    kat_account, kat_account_client, kat_burn_client, kat_lease_client, kat_meter,
+    kat_payreq_client, kat_protocol_account, kat_protocol_burn, kat_protocol_lease,
+    kat_protocol_payreq, kat_protocol_stake, kat_protocol_vote, kat_protocol_wetrun,
+    kat_redact, kat_service_config, kat_stake_client, kat_vote_client, kat_wetrun,
+};
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
-pub mod kat_protocol_consent;
-
-// Proposal 005 Phase 0 T0.2 (Plan 026): the redaction gate — no payload
-// leaves the machine before passing it. Deny-by-default `.heal-sync-policy`
-// allowlist (origin + path glob + span cap) + a 12-rule secret scanner +
-// byte-exact redaction + a fingerprint-only JSONL block log. The fixer
-// harness gates every sample through this (`cf_workers_ai` implies the
-// feature); T0.3's sync payload consumes it the same way.
+pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
 #[cfg(feature = "kat_service")]
-pub mod kat_redact;
+pub use riir_kat::kat_units;
+// The ungated machine-local trio + the free-tier protocol plumbing: the
+// member keeps them behind `client`, but riir-clippy's contract is
+// UNGATED (--unmine must work in every feature build; the consent-module
+// rule) — the member compiles them for us at default features, and root
+// consumers reach them through these ungated re-exports.
+pub use riir_kat::{kat_mining_consent, kat_service_urls, kat_soft_gate};
 
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
@@ -256,133 +214,35 @@ pub mod kat_sync_payload;
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 pub mod kat_pending_estimator;
 
-// Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease CLIENT half — the
-// wire mirror of riir-dapps' lease.rs serialization (pinned by cross-repo
-// golden vectors; riir-dapps is NOT a dep — the boundary allowlist), the
-// local lease store with the swap-or-nothing pointer install, the corpus
-// pack contract, the delta-scoped reheat planner, the lease-charge
-// projection, + (behind `kat_transport`) the HTTP transport + the bounded
-// update phase + the QR render. `kat_service` alone gets everything except
-// the network/QR (std + blake3 + serde only — the feature stays dep-light).
-#[cfg(feature = "kat_service")]
-pub mod kat_lease_client;
+// (issue 088: `kat_lease_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Proposal 007 T2.1 (Plan 041): the staking CLI client — the render-only +
-// QR surface for `stake --usd` / `stake --info` / `unstake`. Mirrors the
-// riir-dapps service contract (base58 + the three-param transfer-request URL
-// + the tranche/pool views) WITHOUT a dep (the lease-client wire-mirror
-// precedent); service-first over `kat_transport`, with the honest
-// not-live local-queue fallbacks. The caveat-#15 copy rule is enforced by
-// test here (no $ beside a KAT accrual; service credit; no APY promise).
-#[cfg(feature = "kat_service")]
-pub mod kat_stake_client;
+// (issue 088: `kat_stake_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Proposal 008 T2.4: the governance voting CLI client — `cargo heal vote
-// --proposal <id> --yes|--no`. Mirrors riir-dapps' `kat::governance` voting
-// surface (the vote-signing domain + message bytes, the proposal view, the
-// /gov/proposal + /gov/vote wire shapes) WITHOUT a dep (the copy-gate
-// discipline); the mirror is pinned by the SAME vote-message golden hex
-// both repos assert. Signs with the login key (ssh-key → dalek; the direct
-// ed25519-dalek edge adds ZERO new packages — it is already in the tree via
-// ssh-key's own ed25519 feature). Service-first over `kat_transport`, with
-// the signed-intent local-queue fallback (`.heal/vote/pending.jsonl`).
-#[cfg(feature = "kat_service")]
-pub mod kat_vote_client;
+// (issue 088: `kat_vote_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Proposal 011 T1.3 (Plan 062): the pay-request CLI client — `cargo heal
-// pay --request [--amount N]`. The payee half of the §1 loop: sign a create
-// (the account-key Ed25519 over the canonical message — MIRROR of
-// riir-dapps' `kat::payreq` composer, golden-pinned both sides to an
-// independently computed digest), print the shareable LINK first (--qr
-// renders it as ASCII), then poll on credit until the view settles or the
-// wait budget ends. `kat_service` alone gets the mirrors + parses +
-// renders; the network half rides `kat_transport` (the vote-client
-// convention).
-#[cfg(feature = "kat_service")]
-pub mod kat_payreq_client;
+// (issue 088: `kat_payreq_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Proposal 011 T0.2b (Issue 061, Plan 064): the account SERVICE-plane
-// client — the half T0.2 deliberately left undone. The §8.3 welcome gate
-// evaluated from REAL service health (`GET /health` + `GET /mining/health`)
-// instead of the local `no burn yet` heuristic, and the §8.5 history read
-// from the authoritative `GET /balance?acct=` instead of the per-repo
-// projection. Three-state verdict (Open / Withheld / Unknown) so an
-// unreadable network is never rendered as either healthy or out-of-sync.
-// `kat_service` gets the parses/gate/renders; the transport is
-// `kat_transport` (the payreq/vote-client convention).
-#[cfg(feature = "kat_service")]
-pub mod kat_account_client;
+// (issue 088: `kat_account_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Owner mandate 2026-09-08: the consent-heartbeat client — the one-shot,
-// SIGNED tier note `--mine`/`--unmine` send so the network's web front can
-// show each machine's engagement tier (opted-in / opted-out). Best-effort
-// by contract: a failure is one skipped line, never an exit code. The note
-// carries the tier + machine label + signature ONLY — never heal data
-// (the module's golden-bytes test pins exactly what is signed). Behind
-// BOTH kat_service (the account key, the consent record, the base URL) AND
-// kat_transport (ureq): builds without either compile it to nothing and
-// the commands simply skip the line.
-#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
-pub mod kat_consent_client;
+// (issue 088: `kat_consent_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Issue 076 client half (owner mandate 2026-09-08): the burn auto-sync
-// client. After every run that settles a charge, the CUMULATIVE burn
-// (`ChargeState.charged_kat`) is reported to the service's `POST /burn`
-// with the account-key signature, and the fresh server balance rides back
-// on the same response. GIT-STYLE STACKING: the ack watermark
-// (`<root>/.heal/kat_burn_ack.json`) advances ONLY on a 200-accepted
-// response, so a failed push is a local commit — the full stacked total
-// reports with the NEXT run or `cargo heal sync` (the server's monotone
-// watermark makes a replay a no-op). Account billing, NOT mining consent:
-// it rides the login and is never consent-gated. Fail-soft: one status
-// line, ~5 s budget, never an exit-code change (the consent-heartbeat
-// contract). `kat_service` gets the message/body/parser/ack (pure,
-// golden-pinned); the transport rides `kat_transport` like every other
-// network surface in this repo (ureq) — a build without it compiles the
-// push to nothing.
-#[cfg(feature = "kat_service")]
-pub mod kat_burn_client;
+// (issue 088: `kat_burn_client` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Issue 075 (owner soft gate, 2026-09-08): the depleted-account refusal —
-// the pure four-leg predicate over the last SYNCED server balance (the burn
-// ack's `last_balance_micro`, never the local projection), the account, and
-// the contribution truth — the burn-ack v3 `contributed` server truth ONLY
-// (`Some(true)` lifts; issue 080's dated removal retired the machine-local
-// `contributed_once.json` marker + the `kat_contribution` module 2026-09-10,
-// fleet v3 live — any file left on disk is ignored). Warn-only (no honest
-// gate) for no-transport, anonymous, and never-synced inputs.
-// Feature-free: the cfg lives at the
-// bin's call site, where the capability is known.
-pub mod kat_soft_gate;
+// (issue 088: `kat_soft_gate` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Proposal 011 §7 / T4.1+T4.2 (Issue 061, Plan 066): the wet-run harness —
-// the six-step full-loop proof and the G-WET gate. Three things it exists
-// to make impossible: a faucet loop that moves a supply counter (the
-// caveat-#2 money printer — asserted BYTE-wise over a total-function
-// encoding of the whole counter struct, not a field subset), a crank SKIP
-// read as a pass (riir-dapps Issue 010 makes the treasury grant path
-// structurally unreachable at genesis defaults, so the skip is named and
-// FAILED, never retried), and a wet-run on mainnet (refused with NO
-// override — an env hatch would be an attack on our own bookkeeping).
-// `--dry-run` is steps 1+6, read-only, admitted on every network, and its
-// "touches nothing" claim is proven by a recorded call log.
-// `kat_service` gets the classification/parses/verdicts; the transport +
-// the run itself ride `kat_transport` (the payreq/account-client
-// convention).
-#[cfg(feature = "kat_service")]
-pub mod kat_wetrun;
+// (issue 088: `kat_wetrun` moved to the riir-kat repo — see the
+// re-export block above.)
 
-// Plan 117: the refill flow — `cargo heal --refill`, the dev/test faucet
-// refill. NOT a new money surface: it composes the shipped primitives
-// (the golden-pinned faucet POST + the wetrun's bearer crank POST + the
-// public balance read) and adds the one missing piece — the 075 soft-gate
-// input refresh, so a credited account's gate lifts from SERVER truth
-// without waiting for the next burn push. `kat_service` gets the pure
-// halves (the ack refresh + the exit decision + the renders); the flow +
-// transport ride `kat_transport` and COMPOSE the shipped HTTP transports
-// (zero HTTP re-derived).
-#[cfg(feature = "kat_service")]
-pub mod kat_refill;
+// (issue 088: `kat_refill` moved to the riir-kat repo — see the
+// re-export block above.)
 
 // Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
 // for network-learned corpus candidates — the frozen bench runs BEFORE any

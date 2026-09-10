@@ -144,7 +144,7 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          for repo in riir-ai riir-neuron-db riir-auth; do
+          for repo in riir-ai riir-neuron-db riir-auth riir-kat; do
             git clone --depth 1 \
               "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
               "sibling/${repo}"
@@ -154,7 +154,8 @@ jobs:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
 
       # $GITHUB_WORKSPACE is .../riir-clippy; the manifest's `../katgpt-rs`,
-      # `../riir-ai` and `../riir-neuron-db` path deps resolve into the parent
+      # `../riir-ai`, `../riir-neuron-db`, `../riir-auth` (riir-kat's
+      # transitive) and `../riir-kat` path deps resolve into the parent
       # — this puts the siblings exactly where cargo expects them.
       - name: Arrange the sibling layout
         if: steps.siblings.outputs.available == 'true'
@@ -187,7 +188,8 @@ jobs:
         run: |
           MSG="riir-clippy cannot load its workspace without katopz/katgpt-rs \
           (public, checked out above) and gist-rs/riir-ai + \
-          gist-rs/riir-neuron-db + gist-rs/riir-auth (private). Set/renew SIBLING_REPOS_TOKEN \
+          gist-rs/riir-neuron-db, gist-rs/riir-auth (riir-kat's transitive),
+          gist-rs/riir-kat (issue 088). Set/renew SIBLING_REPOS_TOKEN \
           (a fine-grained PAT expires ~90 days)."
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "::warning title=Feature guard SKIPPED::$MSG"

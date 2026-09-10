@@ -25,8 +25,10 @@
 #                             + cubecl-runtime, cubecl-wgpu, wgpu-hal
 #                             (the [patch.crates-io] vendor paths)
 #   riir-neuron-db (private)  riir-neuron-db
-#   riir-auth      (private)  riir-auth (Issue 081 — the account_key
-#                             substrate under kat_service)
+#   riir-kat       (private)  riir-kat (issue 088 — the service-plane leaf;
+#                             riir-auth left the set the same day: the row
+#                             swapped, not grown — the account substrate is
+#                             now riir-kat's dep, resolved transitively)
 #
 # Provisioning them is `.github/workflows/rust.yml`'s job (the feature-guard
 # job; the two private siblings need `SIBLING_REPOS_TOKEN`).
@@ -63,9 +65,9 @@ Cargo.toml cubecl-runtime
 Cargo.toml cubecl-wgpu
 Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
-Cargo.toml riir-auth
 Cargo.toml riir-engine
 Cargo.toml riir-gpu
+Cargo.toml riir-kat
 Cargo.toml riir-neuron-db
 Cargo.toml riir-rag
 Cargo.toml wgpu-hal

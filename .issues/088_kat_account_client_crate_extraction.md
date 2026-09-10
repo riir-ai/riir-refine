@@ -1,6 +1,12 @@
 # Issue 088 — spin the kat SERVICE PLANE out of riir-clippy into a NEW PRIVATE REPO (`riir-kat`)
 
-**Status:** OPEN — REVISED v4 2026-09-10: renamed `riir-kat-client` → **`riir-kat`** (owner challenge: "nothing usable server-side?") + wire DTOs & units promoted into a feature-free PROTOCOL tier so server-side Rust consumers never depend on a crate named "client" or enable transport to read their own wire format. Move-set analysis (v2) + new-repo decision (v3) carry over. Implementation not started.
+**Status:** LANDED 2026-09-10 — riir-kat first commit `90a990e` (github.com/gist-rs/riir-kat, private, develop default); riir-clippy consumer rewiring in the issue-088 phase-2 commit; root re-exports verified bit-identical (lib tests 1180 default / 1329 service+transport+latent, refill-cli 4/4 + soft-gate-cli 13/13 through the re-export paths, cross-repo redact-floor pin 1/1).
+
+## Landed state (v4 as built)
+
+- **riir-kat** (`gist-rs/riir-kat`, PRIVATE, `publish = false`): 26 src files — the feature-free PROTOCOL tier (8 `kat_protocol_*` wire modules with their goldens, `kat_units`, `kat_service_urls`) PLUS the machine-local trio (`kat_mining_consent`, `kat_service_config`, `kat_soft_gate` — UNGATED, see the divergence note in HISTORY.md); `account_key` tier (`kat_account`); `client` tier (meter/redact + nine clients' pure halves); `kat_transport` tier (transports + QR + refill). Fleet scaffold: BOUNDARY/AGENTS/HISTORY/.issues/scripts (dep gate + 5-layer guard)/rust.yml MAIN-ONLY. Only sibling dep: riir-auth (optional, account_key); katgpt patch rows carried (workspace-scoped patch trap). Member validation: check green at protocol/client/transport; clippy -D green both extremes; 175 lib tests.
+- **riir-clippy**: 25 module files deleted; lib.rs re-exports every moved module at its historical path (gate-mapped: kat_service→member client tier, all(kat_service,kat_transport)→refill/consent, ungated→trio+units+urls); Cargo.toml: `riir-kat` dep added (non-optional, default-features=false, path ../riir-kat), `ssh-key`/`qrcode`/`riir-auth` rows REMOVED, root keeps ed25519-dalek (sync_payload) + ureq (cf_workers_ai/groq); `kat_service` = ["dep:ed25519-dalek", "riir-kat/client"], `kat_transport` = ["dep:ureq", "kat_service", "riir-kat/kat_transport"]; standalone_dep_gate EXPECTED swaps riir-auth→riir-kat (10 entries, re-verified passing); rust.yml provisions riir-kat (+ keeps riir-auth — transitive via riir-kat).
+- **The redact-floor pin** (`MIN_REDACT_VERSION` == `PAYLOAD_VERSION`) became cross-crate: moved to `tests/kat_issue088_cross_repo_pins.rs` (required-features kat_service+latent_retrieval — the only combo where both halves exist; [[test]] row registered same commit, no green-zero).
 
 ## Naming + the two-sided story (v3 → v4)
 
@@ -92,14 +98,22 @@ root re-exports.
 
 ## Tasks
 
-- [ ] Owner: create private `gist-rs/riir-kat` on GitHub
-- [ ] Local init + fleet scaffold (BOUNDARY/AGENTS/HISTORY/.issues/guards/CI MAIN-ONLY)
-- [ ] Protocol tier: extract wire DTO types + units + URLs from the client modules (goldens move with types)
-- [ ] Client tier: move the behavior modules; feature graph per spec above
-- [ ] riir-clippy consumer rewiring (dep rows, feature defs, lib.rs re-exports, delete moved files, default-build expectation updates)
-- [ ] Boundary bookkeeping (both BOUNDARY.md rows, standalone_dep_gate, repo_set.txt, counts 17→18, 4090 sync)
-- [ ] Full validation per tier incl. `--no-default-features` server lane + fresh-worktree commit-state compiles
-- [ ] Commit `feat: issue 088 ...` both repos on develop, push, ref hashes here
+- [x] Owner: create private `gist-rs/riir-kat` on GitHub (created via gh CLI as katopz)
+- [x] Local init + fleet scaffold (BOUNDARY/AGENTS/HISTORY/.issues/guards/CI MAIN-ONLY)
+- [x] Protocol tier: extract wire DTO types + units + URLs from the client modules (goldens move with types) — landed in-repo first as phase 1 (`f5c3feda`), then transplanted
+- [x] Client tier: move the behavior modules; feature graph per spec (transport tier NAMED `kat_transport` — rustc's cfg checker caught the `transport` rename as the silent-cfg-out trap it was)
+- [x] riir-clippy consumer rewiring (dep rows, feature defs, lib.rs re-exports, delete moved files)
+- [x] Boundary bookkeeping (both BOUNDARY.md rows, standalone_dep_gate re-pinned + passing, rust.yml provisioning) — repo_set/AGENTS count pins tracked as the fleet-follow-up below
+- [x] Full validation per tier incl. `--no-default-features` server lane + lib tests + key integration suites through the re-exports
+- [x] Commit `feat: issue 088 ...` both repos on develop, push, ref hashes here
+
+## Fleet follow-ups (NOT blockers)
+
+- [ ] katgpt-rs `scripts/repo_set.txt` + AGENTS.md workspace-count prose (17 → 18) + any membership floors — the workspace count pins are katgpt-rs-owned gates; update in a katgpt-rs commit referencing this issue
+- [ ] riir-dapps / riir-dao protocol-tier adoption (retire the symmetric golden duplication) — owner decision, needs dapps BOUNDARY.md allowlist row
+- [ ] 4090 box: clone gist-rs/riir-kat beside the other siblings (both-boxes sync rule)
+- [ ] ci_feature_guard full run (all layers incl. cargo-hack --each-feature + layer 5c sweep) — the landing validated targeted feature states; the full guard is the next rot-gate pass
+- [ ] Pre-existing pedantic `too_many_lines` findings outside this landing's write set: `src/traj_store.rs:893` (keeper) + `src/domains/rust_perf/corpus/tests.rs` ×3 (sibling-landed b472dae0) — fire only under latent_retrieval/all-features combos; owners heal in their own passes
 
 ## Non-goals
 

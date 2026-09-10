@@ -15,6 +15,13 @@
 `HealDomain` trait (clippy_lints, rust_perf, kernel_opt). Borrows *patterns*
 from game crates but has zero game-domain coupling.
 
+**Issue 088 (2026-09-10):** the KAT service plane (protocol tier, client
+plane, transports — 25 modules) moved to the sibling leaf crate
+`../riir-kat`; root re-exports every moved module at its historical path
+(`riir_clippy::kat_meter` etc. resolve bit-identically). Root KEEPS the
+healer-coupled `kat_sync_payload` + `kat_pending_estimator` (traj_store)
+and `kat_promotion` (score_bench/domain).
+
 ## Does not own
 
 | Concern | Correct home |
@@ -31,7 +38,7 @@ from game crates but has zero game-domain coupling.
 | riir-engine, riir-gpu | `../riir-ai/crates/*` | opt-in `ternary_inference` only |
 | riir-rag | `../riir-ai/crates/riir-rag` | opt-in `latent_retrieval` only |
 | riir-neuron-db | `../riir-neuron-db` | `optional = true`, `default-features = false` (measured 2026-08-21) |
-| riir-auth | `../riir-auth` | `optional = true`, `default-features = false`; `kat_service` enables `riir-auth/account_key` only (NOT `github_login`) — the account-key login substrate (Plan 327 consolidation; landed with Issue 081, 2026-09-09). `src/kat_account.rs` is the kat-facing facade over it. |
+| riir-kat | `../riir-kat` | `default-features = false` (non-optional — root re-exports the member's free-tier trio ungated); `kat_service` enables `riir-kat/client`, `kat_transport` adds `riir-kat/kat_transport` (issue 088, 2026-09-10). riir-auth is no longer a ROOT dep — it enters the graph transitively through riir-kat's `account_key` (same sibling, resolution-load-bearing). |
 ## Standing invariants
 
 - **Source secrecy**: this repo's source never becomes public. Distribution is
@@ -47,4 +54,5 @@ from game crates but has zero game-domain coupling.
 
 **None.** Otherwise clean (surfaces clean at the 2026-08-19 guard run; the
 2026-08-25 Proposal-005 service-plane row closed with Issue 041 — home
-resolved to `../riir-dapps`, client half only, allowlist unchanged).
+resolved to `../riir-dapps`, client half now OWNED by `../riir-kat` per
+issue 088, allowlist updated same commit).
