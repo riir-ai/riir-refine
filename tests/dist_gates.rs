@@ -17,7 +17,10 @@ use riir_clippy::HealDomain;
 #[test]
 fn corpus_detector_and_fixable_tables_agree() {
     let entries = DistDomain::build_corpus();
-    assert_eq!(entries.len(), 4, "Phase 1 ships exactly 4 rules");
+    // Batch 143 (522f6947) joined large-api-dependency-mostly-unused-hint —
+    // its count-pin walk missed THIS pin (the failure that proves the gate
+    // is live); suggest-only still holds.
+    assert_eq!(entries.len(), 5, "Phase 1 ships exactly 5 rules");
     let ids: std::collections::BTreeSet<String> =
         entries.iter().map(|r| r.rule_id.clone()).collect();
     let detectors: std::collections::BTreeSet<String> =
