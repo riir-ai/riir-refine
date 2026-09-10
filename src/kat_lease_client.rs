@@ -1089,13 +1089,17 @@ impl ReheatReport {
 pub const DEFAULT_SERVICE_URL: &str = "https://ai.gist.rs";
 
 /// The failover PAIR of [`DEFAULT_SERVICE_URL`] — the other known service
-/// host. Born 2026-09-09: release binaries v0.1.2/v0.1.3 shipped
-/// `heal.gist.rs` as the default, that host has no public DNS record, and
-/// every fresh install died at DNS before the docs' env override could be
-/// discovered. The three HTTP clients (lease / payreq / wetrun-read) retry a
+/// host, REPOINTED 2026-09-10 from the retired `heal.gist.rs` to the devnet
+/// subdomain (riir-dapps Plan 023 S2): after the domain swap the apex IS
+/// mainnet, and a DEV client must never fail over onto MAINNET — the pair's
+/// direction is default→devnet only. A configured (`cargo heal config set`)
+/// or env-set URL has NO pair — the shipped "never custom" rule — so no
+/// cross-network failover can fire for an opted-in dev machine. Born
+/// 2026-09-09 when release binaries shipped a default with no public DNS
+/// record; the three HTTP clients (lease / payreq / wetrun-read) retry a
 /// HOST-level failure once against the pair (see [`failover_base`]) and
 /// stick to it for the process lifetime.
-pub const FALLBACK_SERVICE_URL: &str = "https://heal.gist.rs";
+pub const FALLBACK_SERVICE_URL: &str = "https://devnet.ai.gist.rs";
 
 /// The process-wide failover memo (see [`failover_base`]): once a host-level
 /// failure flips the CLI to the paired host, every later request in the same
@@ -1577,22 +1581,24 @@ fn update_phase_inner(
     UpdateStatus::Applied { epoch, charge_kat }
 }
 
-/// The run-start phase's service-URL resolution. The run-start phase only
-/// goes online when the operator EXPLICITLY configured a service URL —
-/// while the Worker shell is deferred (the honest not-yet-live posture);
-/// the explicit `update`/`sync` commands fall back to [`DEFAULT_SERVICE_URL`].
-/// The default-on flip is a one-line change when the service plane lands.
+/// The run-start phase's service-URL resolution — env ONLY, so the ambient
+/// lease phase goes online exactly when the operator EXPLICITLY configured
+/// a service URL (a persisted `cargo heal config set` record re-points the
+/// EXPLICIT commands via [`service_url_for_command`], never the ambient
+/// run-start phase). Delegates the read to `kat_service_config` so the var
+/// spelling has one owner.
 #[must_use]
 pub fn service_url_from_env() -> Option<String> {
-    std::env::var("RIIR_HEAL_KAT_SERVICE_URL")
-        .ok()
-        .filter(|u| !u.is_empty())
+    crate::kat_service_config::service_url_from_env()
 }
 
-/// The explicit-command URL resolution (env, else the production default).
+/// The explicit-command URL resolution (riir-dapps Plan 023):
+/// `RIIR_HEAL_KAT_SERVICE_URL` > the persisted config (`cargo heal config
+/// set`) > [`DEFAULT_SERVICE_URL`] — which never moves (the QR goldens pin
+/// it; the Solana-CLI model: default mainnet, devnet is opt-in).
 #[must_use]
 pub fn service_url_for_command() -> String {
-    service_url_from_env().unwrap_or_else(|| DEFAULT_SERVICE_URL.to_string())
+    crate::kat_service_config::resolved_service_url(DEFAULT_SERVICE_URL).0
 }
 
 /// Whether the whole lease phase (update + reheat) is kill-switched off
@@ -2535,6 +2541,34 @@ mod tests {
         assert_eq!(
             fallback_pair_for("https://ai.gist.rs/").as_deref(),
             Some(FALLBACK_SERVICE_URL)
+        );
+    }
+
+    /// Plan 023 S2 (re-derived 2026-09-10): the failover pair is the DEVNET
+    /// subdomain — a DEV client must never fail over onto MAINNET, and the
+    /// retired `heal.gist.rs` (no DNS) must not come back here. If this
+    /// fails, the pair moved: re-read Plan 023 S2 and move the pin in the
+    /// SAME commit (the issue-078 class — URL pins move consciously, or the
+    /// digests lie).
+    #[test]
+    fn fallback_pair_is_the_devnet_subdomain() {
+        assert_eq!(FALLBACK_SERVICE_URL, "https://devnet.ai.gist.rs");
+        assert_eq!(
+            FALLBACK_SERVICE_URL,
+            crate::kat_service_config::DEVNET_SERVICE_URL
+        );
+    }
+
+    /// The const-never-moves premise's GATED half (Plan 023): the baked
+    /// default IS the pinned mainnet host — the ungated `kat_service_config`
+    /// module passes its `MAINNET_SERVICE_URL` const as the default mirror,
+    /// and together the two pins keep the QR goldens from ever tripping at
+    /// the domain swap.
+    #[test]
+    fn default_service_url_is_the_pinned_mainnet_host() {
+        assert_eq!(
+            DEFAULT_SERVICE_URL,
+            crate::kat_service_config::MAINNET_SERVICE_URL
         );
     }
 

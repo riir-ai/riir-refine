@@ -99,10 +99,11 @@ impl Network {
 /// so a host carrying both words is refused rather than admitted.
 ///
 /// Loopback and RFC1918 hosts are devnet; anything else unnamed is
-/// [`Network::Unclassifiable`] and therefore refused. The production default
-/// (`heal.gist.rs`) carries no network word, so it lands there — which is
-/// the safe answer, not an oversight: it is the live service, and a wet-run
-/// against it must be an explicit, named choice.
+/// [`Network::Unclassifiable`] and therefore refused. The production
+/// default carries no network word, so it lands there — which is the safe
+/// answer, not an oversight: a wet-run against the apex must be an
+/// explicit, named choice (riir-dapps Plan 023: at the domain swap the
+/// apex IS mainnet and devnet is the named `devnet.ai.gist.rs`).
 #[must_use]
 pub fn classify_service_url(url: &str) -> Network {
     let host = url
@@ -1252,7 +1253,8 @@ mod tests {
             ("https://MAINNET-eu.gist.rs", Network::Mainnet),
             // A host naming BOTH is mainnet: refuse, never admit.
             ("https://testnet-mainnet.gist.rs", Network::Mainnet),
-            // The production default carries no network word → refused.
+            // A host with no network word → refused (the safe default;
+            // `heal.gist.rs` — retired 2026-09-10 — keeps pinning it).
             ("https://heal.gist.rs", Network::Unclassifiable),
             ("", Network::Unclassifiable),
         ] {

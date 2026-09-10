@@ -84,6 +84,11 @@ enum KatCommand {
     /// full-loop proof. Refuses mainnet with NO override (caveat #2);
     /// `--dry-run` is steps 1+6 only and runs on every network.
     Wetrun,
+    /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
+    /// the persisted service-url surface (env > config > default). Ungated:
+    /// local-only (the consent-record precedent); the money commands it
+    /// re-points are the gated ones.
+    Config,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -346,7 +351,7 @@ fn enforce_kat_soft_gate(args: &Args) {
         .map(|a| a.state().account_id.clone())
         .unwrap_or_default();
     let top_up = riir_clippy::kat_lease_client::payment_url(
-        riir_clippy::kat_lease_client::DEFAULT_SERVICE_URL,
+        riir_clippy::kat_lease_client::service_url_for_command(),
         &account_id,
     );
     eprintln!(
@@ -1404,6 +1409,89 @@ fn push_mining_batch(
     }
 }
 
+/// riir-dapps Plan 023: `cargo heal config get` / `config set --url
+/// <alias|url>` — the persisted service-url surface. The set is LOUD (g2):
+/// the resolved URL, whether it is a pinned network host, the env-override
+/// trap, and (for a custom/loopback host) the local-artifact caveat for
+/// payment links/QRs (g5). The get is the g3 diagnosis: the ACTIVE url AND
+/// its source. Local-only and ungated — works in every feature build.
+fn run_kat_config(set: bool, url: Option<&str>) {
+    use riir_clippy::kat_service_config as svc;
+    let dir = svc::account_dir();
+    if !set {
+        // `config get` (bare `config` behaves the same — a pure read).
+        let (file_url, warning) = svc::read_with_warning(&dir);
+        if let Some(w) = warning {
+            eprintln!("config: {w}");
+        }
+        let (active, source) = svc::resolved_from(
+            svc::service_url_from_env().as_deref(),
+            file_url.as_deref(),
+            // Ungated default mirror — the gated pin test asserts it IS
+            // `kat_lease_client::DEFAULT_SERVICE_URL`.
+            svc::MAINNET_SERVICE_URL,
+        );
+        println!("service url: {active}");
+        println!("     source: {}", source.label());
+        match source {
+            svc::ServiceUrlSource::Env => println!(
+                "             (env {var} wins over the config file while it is set)",
+                var = svc::SERVICE_URL_ENV_VAR
+            ),
+            svc::ServiceUrlSource::Config => {}
+            svc::ServiceUrlSource::Default => println!(
+                "             (the baked default never moves — opt in: cargo heal config set \
+                 --url devnet|testnet|mainnet)"
+            ),
+        }
+        if svc::service_url_from_env().is_some() && file_url.is_some() {
+            eprintln!(
+                "config: WARNING — {var} is set AND a config file exists; the env var wins \
+                 until it is unset",
+                var = svc::SERVICE_URL_ENV_VAR
+            );
+        }
+        return;
+    }
+    let Some(raw) = url else {
+        eprintln!("config set requires --url <devnet|testnet|mainnet|https://…>");
+        usage();
+    };
+    // g1: validate BEFORE any write; the rejection names the rule.
+    let validated = match svc::validate_service_url(raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("config set: {e}");
+            std::process::exit(2);
+        }
+    };
+    if let Err(e) = svc::store(&dir, &validated) {
+        eprintln!("config set: {e}");
+        std::process::exit(1);
+    }
+    println!(
+        "config: service url set → {validated} ({})",
+        svc::service_config_path(&dir).display()
+    );
+    match svc::pinned_alias_for(&validated) {
+        Some(alias) => println!(
+            "config: pinned network host ({alias}) — burn/mine/refill/claims will target it"
+        ),
+        None => println!(
+            "config: WARNING — not a pinned network host; burn/mine/refill/claims WILL target \
+             it, and payment links/QRs compose from it (on a custom/loopback host they are \
+             local-only artifacts — do not share)"
+        ),
+    }
+    if svc::service_url_from_env().is_some() {
+        eprintln!(
+            "config: WARNING — {var} is set; it overrides this config until unset",
+            var = svc::SERVICE_URL_ENV_VAR
+        );
+    }
+    println!("config: inspect anytime — cargo heal config get");
+}
+
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
     use riir_clippy::kat_lease_client::{
@@ -1510,9 +1598,7 @@ fn run_kat_sync() {
 /// mint (G9d — client counts never mint or spend).
 #[cfg(feature = "kat_service")]
 fn run_kat_claim(sig: Option<&str>) {
-    use riir_clippy::kat_lease_client::{
-        queue_claim, ClaimRequest, CLAIM_VERSION, DEFAULT_SERVICE_URL,
-    };
+    use riir_clippy::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
 
     let Some(sig) = sig else {
         eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
@@ -1564,7 +1650,10 @@ fn run_kat_claim(sig: Option<&str>) {
             );
             println!(
                 "claim: the queued claim submits when the Worker lands; payment page: {}",
-                riir_clippy::kat_lease_client::payment_url(DEFAULT_SERVICE_URL, &req.account_id)
+                riir_clippy::kat_lease_client::payment_url(
+                    riir_clippy::kat_lease_client::service_url_for_command(),
+                    &req.account_id
+                )
             );
             println!("claim: nothing is minted client-side (the server ledger is the authority)");
         }
@@ -2749,6 +2838,8 @@ USAGE:
     cargo heal pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
     cargo heal faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo heal wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
+    cargo heal config get                            (the ACTIVE service url + its source: env > config > default)
+    cargo heal config set --url <devnet|testnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
 
     (no mode)       DRY RUN (the just-works default): review what WOULD be
                     fixed — suggest output over the paths (default: `.`),
@@ -3043,6 +3134,13 @@ struct Args {
     /// T1.6: `--tx <sig>` — the Solana transaction signature `claim`
     /// submits/queues.
     claim_tx: Option<String>,
+    /// riir-dapps Plan 023: `--url <alias|url>` — with `config set` ONLY:
+    /// the service-url value to persist (a pinned alias — devnet | testnet |
+    /// mainnet — or an absolute https url; http only for loopback).
+    config_url: Option<String>,
+    /// riir-dapps Plan 023: the `config set` subcommand modifier (bare
+    /// `config` / `config get` is the pure read).
+    config_set: bool,
     /// Proposal 007 T2.1: `--usd <N>` — the stake amount (dollars, ≤6
     /// fractional digits, integer-exact into base units).
     stake_usd: Option<String>,
@@ -3148,6 +3246,8 @@ fn parse_args() -> Args {
         command: None,
         import_key: None,
         claim_tx: None,
+        config_url: None,
+        config_set: false,
         stake_usd: None,
         stake_info: false,
         vote_proposal: None,
@@ -3377,6 +3477,15 @@ fn parse_args() -> Args {
                 });
             }
             "--no-update" => args.no_update = true,
+            "--url" => {
+                let Some(value) = it.next() else {
+                    eprintln!(
+                        "--url requires a value (devnet | testnet | mainnet | an absolute https url)"
+                    );
+                    usage();
+                };
+                args.config_url = Some(value);
+            }
             "--history" => args.account_history = true,
             "--no-reheat" => args.no_reheat = true,
             "--candidates" => {
@@ -3401,7 +3510,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
-            | "pay" | "faucet" | "wetrun"
+            | "pay" | "faucet" | "wetrun" | "config"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -3415,14 +3524,24 @@ fn parse_args() -> Args {
                     "pay" => KatCommand::Pay,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
+                    "config" => KatCommand::Config,
                     _ => KatCommand::Claim,
                 });
+            }
+            // Plan 023: the `config set` modifier — a bare word after the
+            // `config` subcommand, before any path arm can eat it.
+            "set" if args.command == Some(KatCommand::Config) && args.paths.is_empty() => {
+                args.config_set = true;
             }
             path => args.paths.push(PathBuf::from(path)),
         }
     }
     if args.account_history && !matches!(args.command, Some(KatCommand::Account)) {
         eprintln!("--history requires the `account` command");
+        usage();
+    }
+    if args.config_url.is_some() && !(args.config_set && args.command == Some(KatCommand::Config)) {
+        eprintln!("--url requires `config set`");
         usage();
     }
     if args.purge && !args.unmine {
@@ -5035,6 +5154,15 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 
 fn main() {
     let args = parse_args();
+
+    // ── riir-dapps Plan 023: `config` — the LOCAL service-url surface ────
+    // Ungated (the kat_mining_consent precedent): a local record must be
+    // writable/readable in EVERY feature build, including before `login`.
+    // The money commands it re-points are the gated ones.
+    if args.command == Some(KatCommand::Config) {
+        run_kat_config(args.config_set, args.config_url.as_deref());
+        return;
+    }
 
     // ── Proposal 005 T0.1 + T1.6: KAT subcommands (standalone — no paths) ─
     #[cfg(feature = "kat_service")]
@@ -7146,7 +7274,7 @@ fn main() {
                     .map(|a| a.state().account_id.clone())
                     .unwrap_or_default();
                 let url = riir_clippy::kat_lease_client::payment_url(
-                    riir_clippy::kat_lease_client::DEFAULT_SERVICE_URL,
+                    riir_clippy::kat_lease_client::service_url_for_command(),
                     &acct,
                 );
                 eprintln!("kat-charge: top up — {url} (or: cargo heal --refill)");

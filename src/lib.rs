@@ -187,6 +187,15 @@ pub mod kat_account;
 // delegates to, so the two cannot drift. Zero new deps (serde_json only).
 pub mod kat_mining_consent;
 
+// riir-dapps Plan 023 (the domain swap): the persisted service-URL config
+// behind `cargo heal config set/get` — resolution env > config >
+// DEFAULT_SERVICE_URL (which never moves; the QR goldens pin it). Ungated
+// like kat_mining_consent: the surface is local-only (account dir, 0600)
+// while the money commands it re-points are the gated ones, and it owns the
+// `RIIR_HEAL_KAT_SERVICE_URL` read that `kat_lease_client` delegates to, so
+// the two cannot drift. Zero new deps (serde_json only).
+pub mod kat_service_config;
+
 // Proposal 005 Phase 0 T0.2 (Plan 026): the redaction gate — no payload
 // leaves the machine before passing it. Deny-by-default `.heal-sync-policy`
 // allowlist (origin + path glob + span cap) + a 12-rule secret scanner +

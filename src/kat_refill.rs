@@ -33,9 +33,10 @@
 //!   refused crank never fails the refill (the row still settles at the
 //!   next hourly alarm).
 //! * Mainnet is not special-cased client-side because the client cannot
-//!   name it: the wetrun's host-word classifier calls the production
-//!   default `heal.gist.rs` Unclassifiable too, and that host IS the devnet
-//!   front. The server config is the authority (Proposal 011 caveat #2).
+//!   name it: the wetrun's host-word classifier leaves the production
+//!   default Unclassifiable, so nothing auto-runs against it. The server
+//!   config is the authority (Proposal 011 caveat #2; riir-dapps Plan 023
+//!   moves the apex to mainnet and names devnet `devnet.ai.gist.rs`).
 //!
 //! # The exit contract
 //!
