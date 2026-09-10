@@ -351,7 +351,7 @@ fn enforce_kat_soft_gate(args: &Args) {
         .map(|a| a.state().account_id.clone())
         .unwrap_or_default();
     let top_up = riir_clippy::kat_lease_client::payment_url(
-        riir_clippy::kat_lease_client::service_url_for_command(),
+        &riir_clippy::kat_lease_client::service_url_for_command(),
         &account_id,
     );
     eprintln!(
@@ -1651,7 +1651,7 @@ fn run_kat_claim(sig: Option<&str>) {
             println!(
                 "claim: the queued claim submits when the Worker lands; payment page: {}",
                 riir_clippy::kat_lease_client::payment_url(
-                    riir_clippy::kat_lease_client::service_url_for_command(),
+                    &riir_clippy::kat_lease_client::service_url_for_command(),
                     &req.account_id
                 )
             );
@@ -5192,6 +5192,9 @@ fn main() {
                 eprintln!("update/sync require a build with --features kat_transport");
                 std::process::exit(2);
             }
+            // Exhaustiveness only — `config` is dispatched (ungated) before
+            // this match ever runs.
+            KatCommand::Config => unreachable!("config is dispatched before the gated match"),
         }
         return;
     }
@@ -7274,7 +7277,7 @@ fn main() {
                     .map(|a| a.state().account_id.clone())
                     .unwrap_or_default();
                 let url = riir_clippy::kat_lease_client::payment_url(
-                    riir_clippy::kat_lease_client::service_url_for_command(),
+                    &riir_clippy::kat_lease_client::service_url_for_command(),
                     &acct,
                 );
                 eprintln!("kat-charge: top up — {url} (or: cargo heal --refill)");
