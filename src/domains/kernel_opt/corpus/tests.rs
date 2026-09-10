@@ -101,8 +101,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        605,
-        "kernel batches through Batch 139 should have 605 rules"
+        607,
+        "kernel batches through Batch 142 should have 607 rules"
     );
 }
 
@@ -1436,7 +1436,7 @@ fn batch26_wgpu_forward_concepts_covered() {
     // D: derive-params-from-global-invocation-id (riir-gpu forward/batched_dispatch.rs L280-350)
     assert!(concepts.contains(&"instead of writing a per-item parameter (query position, head index, row offset) to a uniform from the host — which under the write_buffer ordering bug forces an encoder + submit PER ITEM — encode the parameter in the dispatch grid: flatten (head, item) into workgroup IDs and derive it in-kernel from global_invocation_id. The batched attention path dispatches n_head × seq_len workgroups in ONE call with causal masking + GQA mapping computed inside the kernel — zero per-position uniform writes, zero per-position submits (vs the encoder-per-position fallback paying ~1 submit/position). Distinct from fold-query-tokens-for-occupancy (goal: fill idle SMs — here the goal is eliminating the host-side parameter channel) and from grid-stride-loop (iteration coverage — the grid IS the parameter)"));
     // D: merge-dispatches-into-single-compute-pass (riir-gpu forward/adapter_merge.rs L410-424 + L654-770)
-    assert!(concepts.contains(&"dependent dispatches queued in ONE compute pass (set_pipeline/set_bind_group/dispatch × N inside a single begin/end) execute in order with memory ordering between them — the consumer dispatch reads the producer's writes without a separate pass, and N−1 pass begin/end boundaries disappear. The QKV LoRA path merges 6 dispatches (3× A pass + 3× B pass) into one pass; pure input-save copies ride the copy channel (encoder.copy_buffer_to_buffer) outside any pass. Distinct from chain-dispatches-single-sync-point (command-buffer-level sync amortization) — this is pass-level merging; composes with per-slot-uniform-buffer-write-ordering (all uniform writes precede the pass, into per-slot buffers) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- cache_kernels.cu:456-474): N per-layer cache inserts merge into ONE launch over a pointer-array workspace (grid = (num_tokens, num_layers), each layer rebinds its cache base from kv_cache_ptrs[layer]) -- the pointer-array indirection replacing per-layer launches."));
+    assert!(concepts.contains(&"dependent dispatches queued in ONE compute pass (set_pipeline/set_bind_group/dispatch × N inside a single begin/end) execute in order with memory ordering between them — the consumer dispatch reads the producer's writes without a separate pass, and N−1 pass begin/end boundaries disappear. The QKV LoRA path merges 6 dispatches (3× A pass + 3× B pass) into one pass; pure input-save copies ride the copy channel (encoder.copy_buffer_to_buffer) outside any pass. Distinct from chain-dispatches-single-sync-point (command-buffer-level sync amortization) — this is pass-level merging; composes with per-slot-uniform-buffer-write-ordering (all uniform writes precede the pass, into per-slot buffers) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- cache_kernels.cu:456-474): N per-layer cache inserts merge into ONE launch over a pointer-array workspace (grid = (num_tokens, num_layers), each layer rebinds its cache base from kv_cache_ptrs[layer]) -- the pointer-array indirection replacing per-layer launches. RIDER (Batch 142 external instance, cloudrift-ai/emmy @ 321288d8 Apache-2.0 -- the Gemma4-12B blog, quote authority): the launch-count regression is the measurable INTEGRATION-cost signature -- a vLLM plugin boundary runs ~1100 launches/step vs stock ~650 (attention seam + unfused norm/stat/scale glue where torch.compile fuses), worth 0.3-1.0 ms/token (the conclusion's 1-5% of decode performance; the intro's 2-5% self-contradicts -- cite the conclusion). Count LAUNCHES PER STEP, not just kernel time, when pricing an integration boundary; decode stays memory-bound so the loss is pure dispatch overhead, not kernel time."));
     // D: batched-downloads-single-sync-cycle (riir-gpu buffer.rs L263-280 — Issue 421 P0.5)
     assert!(concepts.contains(&"N GPU→CPU readbacks share ONE command encoder, ONE queue.submit, ONE map_async, and ONE device.poll(Wait) — pack each request into a contiguous, non-overlapping, 4-byte-aligned region of a single grow-only staging buffer, copy all sources in one encoder, map the whole range once, and slice per request. Sync overhead drops from N to 1 — the dominant cost in launch-overhead-bound paths (measured ~1.28 ms per sync regardless of data size; the 4-buffer LoRA-Muon step saves ~3.8 ms/step). Distinct from device-side-argmax-minimal-download (download SIZE) and chain-dispatches-single-sync-point (dispatch sync) — this is readback sync COUNT with the staging-layout + single-map mechanics"));
     // D: chunk-encoder-submits-below-driver-limit (riir-gpu forward/mod.rs L1403-1411 + L1456-1458)
@@ -5339,7 +5339,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 605-rule corpus must appear in exactly one category.
+    // Every rule_id in the 607-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5382,9 +5382,9 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 139).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 142).
     let expected = [
-        (KernelCategory::MemoryAccess, 129),
+        (KernelCategory::MemoryAccess, 130),
         (KernelCategory::Compute, 63),
         (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 133),
@@ -5397,7 +5397,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 12),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 43),
+        (KernelCategory::DtypeAlignment, 44),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5412,9 +5412,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 605.
+    // Sum must equal 607.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 605, "Plan 003: category totals must sum to 605");
+    assert_eq!(total, 607, "Plan 003: category totals must sum to 607");
 }
 
 #[test]
@@ -5425,8 +5425,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 605,
-        "Plan 003: grouped corpus has {total} rules, expected 605"
+        total, 607,
+        "Plan 003: grouped corpus has {total} rules, expected 607"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9533,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        605,
-        "Batch 139: corpus should have 605 rules"
+        607,
+        "Batch 142: corpus should have 607 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -11597,8 +11597,9 @@ fn batch139_concepts_covered() {
     assert!(
         host("output-buffer-rotation-pool-multi-forward")
             .contains("COMPLETE-OVERWRITE SNAPSHOT + SWAP-ADOPTION")
-            && host("write-before-read-state-skips-checkpoint")
-                .contains("the snapshot SET here is exactly this rule's read-modify classification"),
+            && host("write-before-read-state-skips-checkpoint").contains(
+                "the snapshot SET here is exactly this rule's read-modify classification"
+            ),
         "swap-restore riders"
     );
     assert!(
@@ -11607,7 +11608,8 @@ fn batch139_concepts_covered() {
         "stale-source rider"
     );
     assert!(
-        host("cpasync-multistage-tile-pipeline").contains("the METAL TENSOROPS double-buffer instance"),
+        host("cpasync-multistage-tile-pipeline")
+            .contains("the METAL TENSOROPS double-buffer instance"),
         "mpp-dbuf rider"
     );
     assert!(
@@ -11616,13 +11618,11 @@ fn batch139_concepts_covered() {
         "contraction rider"
     );
     assert!(
-        host("kv-dequant-materialization-batch-threshold-gate")
-            .contains("the PREFILL CHUNK WIDTH"),
+        host("kv-dequant-materialization-batch-threshold-gate").contains("the PREFILL CHUNK WIDTH"),
         "chunk-width rider"
     );
     assert!(
-        host("swept-shape-bucket-launch-tables")
-            .contains("the SINGLE-ROW launch-table entry"),
+        host("swept-shape-bucket-launch-tables").contains("the SINGLE-ROW launch-table entry"),
         "gdn-threads rider"
     );
     assert!(
@@ -11630,7 +11630,8 @@ fn batch139_concepts_covered() {
         "scorer-staging rider"
     );
     assert!(
-        host("register-rotation-prefetch-loop").contains("the FIXED-WIDTH BATCH form on a DEPENDENT chain"),
+        host("register-rotation-prefetch-loop")
+            .contains("the FIXED-WIDTH BATCH form on a DEPENDENT chain"),
         "merge-prefetch rider"
     );
 }
@@ -11663,6 +11664,134 @@ fn batch139_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-139 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch142_rules_present() {
+    // Batch 142 (the CloudRift Gemma4-12B distill -- Plan 122 / Research 163):
+    // 2 kernel_opt rules mined at cloudrift-ai/emmy @ 321288d8 (Apache-2.0;
+    // HEAD == ls-remote verified at mine; #761 e0d16cf0 read before quoting).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "fast-accumulate-periodic-promote-bounded-error",
+        "smem-budget-single-buffer-refill-at-kill-points",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-142 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // the B51-style phrase pins, one block per rule
+fn batch142_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-142 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("fast-accumulate-periodic-promote-bounded-error");
+    assert!(
+        c.contains("HALF the FP16-accumulate rate")
+            && c.contains("330.3 vs 165.2")
+            && c.contains("PROMOTE_CADENCE = 64 K-elements")
+            && c.contains("f32 shadow accumulator")
+            && c.contains("FLAT ~3.3e-4 at every K")
+            && c.contains("6.0e-4 -> 6.6e-3")
+            && c.contains("CONSTANT in K")
+            && c.contains("allow_fp16_accumulation")
+            && c.contains("per-block-int32-chunk-rescale-fp32-accum"),
+        "fast-accumulate concept"
+    );
+    let c = concept("smem-budget-single-buffer-refill-at-kill-points");
+    assert!(
+        c.contains("96 KB against a ~100 KB per-CTA budget")
+            && c.contains("min(depth, budget // slot_bytes)")
+            && c.contains("refills chunk i+1 at its kill point")
+            && c.contains("single-buffer degenerate")
+            && c.contains("re-fetched, never waited")
+            && c.contains("CTA-uniform"),
+        "smem-budget concept"
+    );
+    // The six Batch-142 riders must be present on their host rules.
+    let host = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("rider host '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    assert!(
+        host("merge-dispatches-into-single-compute-pass")
+            .contains("~1100 launches/step vs stock ~650"),
+        "launch-count rider"
+    );
+    assert!(
+        host("fusion-payback-gated-on-per-dispatch-overhead")
+            .contains("PER-REALIZED-FORM and fail-closed"),
+        "fusion-admission rider"
+    );
+    assert!(
+        host("split-k-two-pass-attention-decode-long-context").contains("OCCUPANCY patch"),
+        "splitkv-trigger rider"
+    );
+    assert!(
+        host("vendor-dispatch-verify-before-outsource")
+            .contains("forward-ported Ampere-era cutlass_80_* kernels")
+            && host("vendor-dispatch-verify-before-outsource")
+                .contains("no longer reproduces at bdd26c539"),
+        "vendor-lag + stale-blocker rider"
+    );
+    assert!(
+        concept("fast-accumulate-periodic-promote-bounded-error").contains("ENUMERATION knob"),
+        "enumeration-knob rider"
+    );
+    assert!(
+        concept("fast-accumulate-periodic-promote-bounded-error")
+            .contains("exact/lossy flag SPLIT"),
+        "exact-lossy-split rider"
+    );
+}
+
+#[test]
+fn batch142_pseudocode_parses() {
+    // G1 for Batch 142: syn-parse gate (the Gemma4-12B rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "fast-accumulate-periodic-promote-bounded-error",
+        "smem-budget-single-buffer-refill-at-kill-points",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-142 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-142 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-142 opt_pattern for '{id}' must parse"
         );
     }
 }

@@ -37,7 +37,7 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{CollapseVerdict, detect_collapse_rule_ids, rule_family};
+use super::instantiation_rerank::{detect_collapse_rule_ids, rule_family, CollapseVerdict};
 use super::latent_matcher::LatentMatcher;
 use crate::domain::{HealDomain, HealEntry};
 
@@ -642,8 +642,11 @@ pub fn run_eval_inner(
         // The small `ids` vec is measurement-path scratch — the production
         // heal path never calls the detector with an oracle.
         let ids: Vec<&str> = ranked.iter().map(|r| r.rule_id.as_str()).collect();
-        if let CollapseVerdict::Collapsed { family, pool_top_k, oracle_outside: true } =
-            detect_collapse_rule_ids(&ids, PROBE_TOP_K, Some(label))
+        if let CollapseVerdict::Collapsed {
+            family,
+            pool_top_k,
+            oracle_outside: true,
+        } = detect_collapse_rule_ids(&ids, PROBE_TOP_K, Some(label))
         {
             report.collapsed_pools.push(CollapseRecord {
                 label: label.to_string(),
@@ -721,7 +724,10 @@ pub fn run_eval_inner(
 pub fn print_report(report: &EvalReport) {
     println!("== Issue 017 retrieval-precision eval ==");
     let names = ["clippy", "perf  ", "kernel", "sec   ", "docker", "dist  "];
-    println!("{:<8} {:>8} {:>9} {:>9} {:>9}", "domain", "labeled", "top-1", "top-3", "top-5");
+    println!(
+        "{:<8} {:>8} {:>9} {:>9} {:>9}",
+        "domain", "labeled", "top-1", "top-3", "top-5"
+    );
     for (i, name) in names.iter().enumerate() {
         let m = &report.per_domain[i];
         if m.labeled == 0 {
@@ -899,12 +905,26 @@ pub fn router_eval_modes() -> Vec<super::domain_router::RoutingEmbedding> {
     use super::domain_router::SpectralOrder::{Discriminative, GlobalFreq};
     vec![
         RoutingEmbedding::Baseline,
-        SpectralDft { order: GlobalFreq, with_struct: false },
-        SpectralDft { order: GlobalFreq, with_struct: true },
-        SpectralDft { order: Discriminative, with_struct: false },
-        SpectralDft { order: Discriminative, with_struct: true },
+        SpectralDft {
+            order: GlobalFreq,
+            with_struct: false,
+        },
+        SpectralDft {
+            order: GlobalFreq,
+            with_struct: true,
+        },
+        SpectralDft {
+            order: Discriminative,
+            with_struct: false,
+        },
+        SpectralDft {
+            order: Discriminative,
+            with_struct: true,
+        },
         RoutingEmbedding::TfCosine { order: GlobalFreq },
-        RoutingEmbedding::TfCosine { order: Discriminative },
+        RoutingEmbedding::TfCosine {
+            order: Discriminative,
+        },
     ]
 }
 
@@ -965,7 +985,9 @@ pub fn run_router_eval() -> Vec<RouterEvalRow> {
 /// Print the router eval table (the `--nocapture` output).
 #[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
 pub fn print_router_eval(rows: &[RouterEvalRow]) {
-    println!("\n== Issue 020 router spectral POC (kill-bar: accuracy >= 85%, both mis-routes fixed) ==");
+    println!(
+        "\n== Issue 020 router spectral POC (kill-bar: accuracy >= 85%, both mis-routes fixed) =="
+    );
     for row in rows {
         println!(
             "  {:<22} {:>4}/{} ({:>5.1}%)  mis-routes: {}",
@@ -973,7 +995,11 @@ pub fn print_router_eval(rows: &[RouterEvalRow]) {
             row.correct,
             row.checked,
             row.accuracy() * 100.0,
-            if row.misroutes_fixed { "fixed" } else { "NOT fixed" },
+            if row.misroutes_fixed {
+                "fixed"
+            } else {
+                "NOT fixed"
+            },
         );
     }
 }
@@ -1071,7 +1097,11 @@ pub fn run_rerank_sweep() -> Vec<RerankSweepRow> {
     .into_iter()
     .map(|mode| {
         let r = run_eval_reranked(mode);
-        RerankSweepRow { mode, per_domain: r.per_domain, blended: r.blended }
+        RerankSweepRow {
+            mode,
+            per_domain: r.per_domain,
+            blended: r.blended,
+        }
     })
     .collect()
 }
@@ -1305,10 +1335,16 @@ mod tests {
                 // vocabulary attracts 2 more generic Rust spans to the
                 // kernel centroids (the B131 sec-centroid mechanism, kernel
                 // flavor); floor = measured - 5 per the Plan-030 convention.
+                // Batch 142 (2026-09-10, Plan 122): the 2 CloudRift Gemma4
+                // adds re-measured 92/131 (70.2%, was 91/131 = 69.5% at
+                // B137) -- +1 span back; the accumulation/staging concept
+                // vocabulary is closer to the existing kernel centroid
+                // mass than B137's was; floor = measured - 5 per the
+                // Plan-030 convention.
                 (true, false, true) => {
                     // dist-on combo not gated anywhere (Issue 085) — inherits
                     // the dist-off twin until it becomes a gated state.
-                    86.0 / 131.0 // measured 91/131 (69.5%)
+                    87.0 / 131.0 // measured 92/131 (70.2%)
                 }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file
@@ -1350,7 +1386,11 @@ mod tests {
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
     fn ratio(hits: usize, n: usize) -> f32 {
-        if n == 0 { 1.0 } else { hits as f32 / n as f32 }
+        if n == 0 {
+            1.0
+        } else {
+            hits as f32 / n as f32
+        }
     }
 
     #[test]
@@ -1394,7 +1434,10 @@ mod tests {
         let all_top1 = all.per_domain[0].recall(1).expect("clippy labeled");
 
         println!("\n== T3.5.4 circularity diagnostic (clippy) ==");
-        println!("  pool recall @{RERANK_POOL:<2}      : {:.1}% ({in_pool}/{labeled})", pool_recall * 100.0);
+        println!(
+            "  pool recall @{RERANK_POOL:<2}      : {:.1}% ({in_pool}/{labeled})",
+            pool_recall * 100.0
+        );
         println!("  RerankMode::All top-1 : {:.1}%", all_top1 * 100.0);
         println!(
             "  verdict: {}",
@@ -1419,9 +1462,8 @@ mod tests {
         let rows = super::run_rerank_sweep();
         super::print_rerank_sweep(&rows);
 
-        let get = |m: crate::draft::RerankMode| {
-            *rows.iter().find(|r| r.mode == m).expect("row present")
-        };
+        let get =
+            |m: crate::draft::RerankMode| *rows.iter().find(|r| r.mode == m).expect("row present");
         let off = get(crate::draft::RerankMode::Off);
         let structural = get(crate::draft::RerankMode::Structural);
 
@@ -1585,9 +1627,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clippy_fixture_labels_verify_via_proposers() {
-        use crate::domains::clippy_lints::proposers::{
-            propose_fix, FIXABLE_LINTS, VERIFY_LINTS,
-        };
+        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         let mut all: Vec<&str> = FIXABLE_LINTS.to_vec();
         all.extend_from_slice(VERIFY_LINTS);
         all.extend_from_slice(&[
@@ -1663,14 +1703,8 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clean_spans_fire_no_lint() {
-        use crate::domains::clippy_lints::proposers::{
-            propose_fix, FIXABLE_LINTS, VERIFY_LINTS,
-        };
-        let structural: Vec<&str> = FIXABLE_LINTS
-            .iter()
-            .chain(VERIFY_LINTS)
-            .copied()
-            .collect();
+        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
+        let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for (tag, code) in CLEAN_SPANS {
             for &lint in &structural {
                 assert!(
@@ -1742,8 +1776,13 @@ mod tests {
         assert!(!rows.is_empty());
         let again = run_router_eval();
         assert_eq!(
-            rows.iter().map(|r| (r.correct, r.misroutes_fixed)).collect::<Vec<_>>(),
-            again.iter().map(|r| (r.correct, r.misroutes_fixed)).collect::<Vec<_>>(),
+            rows.iter()
+                .map(|r| (r.correct, r.misroutes_fixed))
+                .collect::<Vec<_>>(),
+            again
+                .iter()
+                .map(|r| (r.correct, r.misroutes_fixed))
+                .collect::<Vec<_>>(),
             "router eval must be deterministic"
         );
     }
@@ -1758,12 +1797,11 @@ mod tests {
     #[cfg(feature = "sec")]
     #[test]
     fn sec_self_variants_retrieve_top1() {
-        use crate::domains::sec::SecDomain;
         use crate::domain::HealDomain;
+        use crate::domains::sec::SecDomain;
         let corpus = SecDomain::build_corpus();
         assert!(corpus.len() >= 6, "Phase-1 survival count");
-        let mut matcher = LatentMatcher::from_enabled_domains()
-            .expect("build matcher");
+        let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
         let mut misses = Vec::with_capacity(corpus.len());
         for rule in &corpus {
             let probe = mutate_shape(&rule.buggy_code);
@@ -1773,9 +1811,7 @@ mod tests {
                 .find(|(d, _)| *d == DomainId::Sec)
                 .map(|(_, rules)| rules)
                 .expect("sec domain present");
-            let top1 = sec_rules
-                .first()
-                .map_or("", |r| r.rule_id.as_str());
+            let top1 = sec_rules.first().map_or("", |r| r.rule_id.as_str());
             if top1 != rule.rule_id {
                 misses.push(format!(
                     "{}: top1={top1} (want {})",
@@ -1783,7 +1819,11 @@ mod tests {
                 ));
             }
         }
-        assert!(misses.is_empty(), "sec self-variant top-1 misses:\n{}", misses.join("\n"));
+        assert!(
+            misses.is_empty(),
+            "sec self-variant top-1 misses:\n{}",
+            misses.join("\n")
+        );
     }
 
     /// Issue 070 T1 — the cross-domain agreement pre-check (`ThoughtComm`
@@ -1827,7 +1867,11 @@ mod tests {
     /// structural invariants assert (A == 0, histogram sums, measurable > 0)
     /// — a measured rate must never be pinned by the instrument that
     /// measures it.
-    #[cfg(all(feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
+    #[cfg(all(
+        feature = "latent_retrieval",
+        feature = "clippy_lints",
+        feature = "rust_perf"
+    ))]
     #[test]
     // A report-first test: the three operationalizations + their printers are
     // one narrative unit — splitting it would separate the measurement from
@@ -1835,7 +1879,7 @@ mod tests {
     // precedent).
     #[allow(clippy::too_many_lines)]
     fn cross_domain_agreement_rate_report() {
-        use crate::draft::instantiation_rerank::{RERANK_POOL, RerankMode};
+        use crate::draft::instantiation_rerank::{RerankMode, RERANK_POOL};
         use std::collections::{HashMap, HashSet};
 
         let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
@@ -1932,7 +1976,10 @@ mod tests {
                         format!("{:?}:{}", d, fired.join(","))
                     })
                     .collect();
-                println!("   alpha={alpha} span '{name}' <- {}", witnesses.join(" | "));
+                println!(
+                    "   alpha={alpha} span '{name}' <- {}",
+                    witnesses.join(" | ")
+                );
             }
         }
 
@@ -1949,7 +1996,10 @@ mod tests {
             lab_n,
             measurable
         );
-        assert!(measurable > 0, "fan-out must serve >= 2 domain indexes per span");
+        assert!(
+            measurable > 0,
+            "fan-out must serve >= 2 domain indexes per span"
+        );
         println!(
             "A rule-id overlap:             {}/{} = {:.1}%",
             agree_id,
@@ -1968,9 +2018,7 @@ mod tests {
             measurable,
             pct(agree_alpha)
         );
-        println!(
-            "   composite-only: {comp_alpha}/{comp_n}   labeled-only: {lab_alpha}/{lab_n}"
-        );
+        println!("   composite-only: {comp_alpha}/{comp_n}   labeled-only: {lab_alpha}/{lab_n}");
         println!(
             "   alpha histogram (domains with a firing proposer): 0:{} 1:{} 2:{} 3:{} 4:{} 5+:{}",
             alpha_hist[0],

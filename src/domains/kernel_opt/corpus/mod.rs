@@ -1559,6 +1559,47 @@
 //!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
 //!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
 //!   (fmad split from `use_fast_math`).
+//! - **Batch 142 (2026-09-10, the `CloudRift` "Outperforming vLLM and
+//!   Llama.cpp on Gemma4-12B" distill, Plan 122):** 2 rules, corpus 605 ->
+//!   607 (A 129 -> 130, N 43 -> 44). Source: `cloudrift-ai/emmy` @
+//!   `321288d8` (Apache-2.0; the tip past Batch 138's `bdd26c53` — HEAD ==
+//!   ls-remote verified at mine) x the Gemma4-12B blog (2026-08-01,
+//!   fetched full-text; the #761 correction commit `e0d16cf0` read BEFORE
+//!   quoting baselines — the 5090 attention Emmy lane has no recorded
+//!   goldens, so article ATTENTION-baseline claims carry that caveat; the
+//!   accumulation-error table is the repo's own harness and unaffected).
+//!   `fast-accumulate-periodic-promote-bounded-error` (N — the A− GOAT
+//!   lead: keep the WHOLE consumer-die FP16-input mma chain on the
+//!   full-rate f16-accumulate atom (330.3 vs 165.2 TFLOPS on the 4090;
+//!   419 vs 209.5 on the 5090) + every 64 K-elements fold the packed f16x2
+//!   partials into an f32 shadow + rezero; error FLAT ~3.3e-4 at every K
+//!   vs pure-FP16's K-growing 6.0e-4 -> 6.6e-3; blocked promotion = the
+//!   bound CONSTANT in K (Blanchard); 1.24-1.55× over the same compiler's
+//!   FP32 lane; the UNPROTECTED `PyTorch` `allow_fp16_accumulation` is the
+//!   negative control; provenance `DeepGEMM` -> `CUTLASS` -> `Ootomo` ->
+//!   Blanchard -> Patterson), `smem-budget-single-buffer-refill-at-kill-
+//!   points` (A — the B79/B130 staging-depth family's budget-clamped
+//!   boundary arm: d256 FA holds Q+K+V at 96 KB of ~100 KB/CTA, the ring
+//!   clamps to 1 (`min(depth, budget // slot_bytes)`), and overlap shifts
+//!   from buffer COUNT to refill TIMING at each operand's KILL POINT,
+//!   lag 1; live-across-body is the single-buffer degenerate; split-KV is
+//!   the occupancy escape, never a deeper ring). Riders ×6: B58 launch-
+//!   count (the vLLM plugin-boundary instance, ~1100 vs ~650 launches/step
+//!   — count launches per step when pricing an integration boundary), B142
+//!   fusion-payback admission axis (a catalog-only fused form FAILED the
+//!   fp16 accuracy gate in isolation — admission is per-realized-form,
+//!   fail-closed), B18 splitkv trigger (occupancy-deficit read off the
+//!   profile: split+combine kernels + CTA count under SM count), B36
+//!   vendor-lag external confirmation (cuBLAS FP16 tensorop on consumer
+//!   Blackwell = forward-ported Ampere `cutlass_80_*` still on cp.async) +
+//!   the stale-blocker corollary (the 20015µs SDPA blocker no longer
+//!   reproduces at `bdd26c539`), B38 enumeration-knob governance face,
+//!   B130 exact/lossy flag SPLIT face. DEFERRED [-]: the dynM catalog-gap
+//!   rider (B104/B128, `entries_gpu_34.rs` — sibling WIP; lands with the
+//!   next batch touching the file). `NotBenchable` in this stack
+//!   (consumer-GeForce FP16-mma specific; riir-gpu scored lanes are
+//!   int8-mma/int32-accum); no league row (Research 163 lane-intel NONE
+//!   triple-crossed). Records: Plan 122 / Research 163.
 //! - **Batch 139 (2026-09-09, the ds4-metal PR #5 distill, Plan 119):** 4
 //!   rules, corpus 601 -> 605 (D 132 -> 133, E 53 -> 54, H 28 -> 29,
 //!   I 6 -> 7). Source: `ivanfioravanti/ds4-metal` branch `qwen3.8-flash-next`
@@ -1876,7 +1917,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 605-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 607-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.

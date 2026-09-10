@@ -1,4 +1,4 @@
-//! Entries slice -- Batch 142 (Plan 122 / Research 163) -- the CloudRift
+//! Entries slice -- Batch 142 (Plan 122 / Research 163) -- the `CloudRift`
 //! "Outperforming vLLM and Llama.cpp on Gemma4-12B" distill. Quote authority:
 //! the cloudrift.ai blog (2026-08-01, fetched full-text 09-10); repo
 //! cloudrift-ai/emmy Apache-2.0 @ 321288d8 (HEAD == ls-remote verified at
@@ -19,7 +19,7 @@
 //! percent self-contradicts 2-5% intro vs 1-5% conclusion -- riders cite the
 //! conclusion; "dynamic-M" is our gloss of the dynM kernel name).
 //!
-//! NotBenchable in this stack: the content is consumer-GeForce FP16-mma
+//! `NotBenchable` in this stack: the content is consumer-GeForce FP16-mma
 //! specific (riir-gpu's scored lanes are int8-mma/int32-accum -- no f16-mma
 //! lane, no rate cliff), so the measured error table is the G1 content; no
 //! league row (Research 163 lane-intel NONE triple-crossed).
