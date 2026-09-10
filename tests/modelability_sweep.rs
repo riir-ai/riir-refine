@@ -137,9 +137,14 @@ fn kernel_data() -> DomainData {
             .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
             .collect(),
         spans: {
-            // Mirrors retrieval_eval::kernel_fixture_spans(30) exactly.
+            // Mirrors retrieval_eval::kernel_fixture_spans(30), with the
+            // stride forced ODD: an even stride samples only even sorted
+            // positions, so the even/odd half-corpus slices (the slice-a /
+            // slice-b points below) degenerate — slice-b held zero labeled
+            // spans once the corpus passed 600 entries (607/30 = 20) and the
+            // vacuity assert correctly refused the point.
             let entries = build_kernel_seed_corpus().entries;
-            let step = (entries.len() / 30).max(1);
+            let step = (entries.len() / 30).max(1) | 1;
             entries
                 .iter()
                 .step_by(step)
