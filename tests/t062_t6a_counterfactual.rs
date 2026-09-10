@@ -25,9 +25,9 @@
 ))]
 
 use riir_clippy::draft::tpr_t6a_counterfactual::{
-    FixtureOutcome, T6A_MARGIN_PP, print_t6a, run_t6a,
+    print_t6a, run_t6a, FixtureOutcome, T6A_MARGIN_PP,
 };
-use riir_clippy::draft::withheld_pair_ood::{Binding, clippy_population};
+use riir_clippy::draft::withheld_pair_ood::{clippy_population, Binding};
 use riir_clippy::score_bench as sb;
 
 /// The Plan 049 T0.1 committed real-repo dataset — the T4a corpus's real

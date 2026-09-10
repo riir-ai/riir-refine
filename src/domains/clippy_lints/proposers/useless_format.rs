@@ -64,7 +64,10 @@ use syn::{Expr, ExprMacro, File, LitStr};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -176,9 +179,8 @@ mod tests {
 
     #[test]
     fn plain_string_becomes_to_string() {
-        let out =
-            propose_fix("useless_format", "fn f() -> String { format!(\"done\") }")
-                .expect("pattern matched");
+        let out = propose_fix("useless_format", "fn f() -> String { format!(\"done\") }")
+            .expect("pattern matched");
         assert_eq!(out, "fn f() -> String { \"done\".to_string() }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
@@ -240,9 +242,15 @@ mod tests {
         // fix, but the operand types are invisible to syn, so the whole
         // binary subfamily refuses.
         for (name, input) in [
-            ("binary", r#"fn f(v: u32) -> String { format!("{}", v * 2) }"#),
+            (
+                "binary",
+                r#"fn f(v: u32) -> String { format!("{}", v * 2) }"#,
+            ),
             ("unary", r#"fn f(v: bool) -> String { format!("{}", !v) }"#),
-            ("paren", r#"fn f(v: u64) -> String { format!("{}", (v as i64)) }"#),
+            (
+                "paren",
+                r#"fn f(v: u64) -> String { format!("{}", (v as i64)) }"#,
+            ),
         ] {
             let out = propose_fix("useless_format", input);
             assert!(out.is_none(), "{name} arg is oracle-silent: {out:?}");
@@ -256,7 +264,10 @@ mod tests {
         // The receiver's return type is invisible to syn → refuse both.
         let input = r#"fn f(s: &str) -> String { format!("{}", s.len()) }"#;
         let out = propose_fix("useless_format", input);
-        assert!(out.is_none(), "int-typed method arg is oracle-silent: {out:?}");
+        assert!(
+            out.is_none(),
+            "int-typed method arg is oracle-silent: {out:?}"
+        );
     }
 
     #[test]
@@ -301,12 +312,18 @@ mod tests {
             "useless_format",
             r#"fn f(v: u32) -> String { format!("n={}", v * 2) }"#,
         );
-        assert!(out.is_none(), "literal text keeps the format meaningful: {out:?}");
+        assert!(
+            out.is_none(),
+            "literal text keeps the format meaningful: {out:?}"
+        );
         let out2 = propose_fix(
             "useless_format",
             r#"fn f(v: u32) -> String { format!("{:>4}", v) }"#,
         );
-        assert!(out2.is_none(), "spec'd placeholder is a real format: {out2:?}");
+        assert!(
+            out2.is_none(),
+            "spec'd placeholder is a real format: {out2:?}"
+        );
     }
 
     #[test]

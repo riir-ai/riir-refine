@@ -50,10 +50,10 @@
 
 use std::path::{Path, PathBuf};
 
+use riir_auth::account_key::AccountKey;
 pub use riir_auth::account_key::{
     account_id_for, short_id, AccountState, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
 };
-use riir_auth::account_key::AccountKey;
 
 use crate::kat_meter::FREE_TIER_GRANT_KAT;
 
@@ -283,9 +283,8 @@ impl KatAccount {
 /// [`tests::history_lines_obey_the_copy_rule`].
 #[must_use]
 pub fn history_lines(grant_kat: u64, spent_kat: u64, metered_tokens: u64) -> Vec<String> {
-    let kat = |micro: u64| {
-        crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
-    };
+    let kat =
+        |micro: u64| crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX));
     vec![
         "history (local view — server events land with the service half):".to_string(),
         format!("  earned:  {} (login grant projection)", kat(grant_kat)),
@@ -363,7 +362,13 @@ mod tests {
     fn login_generates_key_and_record() {
         let dir = temp_dir("gen");
         let (account, outcome) = KatAccount::login(&dir).unwrap();
-        assert!(matches!(outcome, LoginOutcome::Generated { fallback_note: None, .. }));
+        assert!(matches!(
+            outcome,
+            LoginOutcome::Generated {
+                fallback_note: None,
+                ..
+            }
+        ));
         // The canonical file names.
         assert!(dir.join(KatAccount::KEY_FILE).is_file());
         assert!(dir.join(KatAccount::PUB_FILE).is_file());
@@ -387,7 +392,10 @@ mod tests {
         assert!(matches!(outcome, LoginOutcome::Existing { .. }));
         assert_eq!(second.state(), first.state());
         let after = std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
-        assert_eq!(before, after, "an idempotent re-login must not rewrite the record");
+        assert_eq!(
+            before, after,
+            "an idempotent re-login must not rewrite the record"
+        );
     }
 
     #[test]
@@ -474,8 +482,16 @@ mod tests {
         // The override arm is the DISCLOSED adoption (source in the outcome,
         // not the bare import) — the CLI prints exactly which key landed.
         assert!(matches!(outcome, LoginOutcome::Adopted { .. }));
-        assert_eq!(account.state().account_id, source_id, "the override key wins");
-        assert_ne!(account.state().account_id, other_id, "the legacy arm must not fire");
+        assert_eq!(
+            account.state().account_id,
+            source_id,
+            "the override key wins"
+        );
+        assert_ne!(
+            account.state().account_id,
+            other_id,
+            "the legacy arm must not fire"
+        );
     }
 
     #[test]
@@ -519,8 +535,7 @@ mod tests {
         let via_shim = account.signing_key().unwrap();
         let via_shim = via_shim.sign(msg);
 
-        let text =
-            std::fs::read_to_string(dir.join(KatAccount::KEY_FILE)).unwrap();
+        let text = std::fs::read_to_string(dir.join(KatAccount::KEY_FILE)).unwrap();
         let key = ssh_key::PrivateKey::from_openssh(&text).unwrap();
         let keypair = key.key_data().ed25519().unwrap();
         let direct = ed25519_dalek::SigningKey::from_bytes(keypair.private.as_ref());
@@ -557,7 +572,10 @@ mod tests {
         let lines = history_lines(FREE_TIER_GRANT_KAT, 1_234, 56_789);
         assert_eq!(lines.len(), 4);
         for line in &lines {
-            assert!(!line.contains('$'), "copy rule: no $ in a KAT render — got {line:?}");
+            assert!(
+                !line.contains('$'),
+                "copy rule: no $ in a KAT render — got {line:?}"
+            );
             if line.contains("KAT") {
                 assert!(line.len() < 120, "render discipline: keep lines short");
             }
@@ -567,8 +585,11 @@ mod tests {
         let expected = crate::kat_payreq_client::render_kat(
             i64::try_from(FREE_TIER_GRANT_KAT - 1_234).unwrap_or(i64::MAX),
         );
-        assert!(lines[3].contains(&expected),
-            "balance is the saturation subtraction, rendered as KAT — got {:?}", lines[3]);
+        assert!(
+            lines[3].contains(&expected),
+            "balance is the saturation subtraction, rendered as KAT — got {:?}",
+            lines[3]
+        );
         assert!(!welcome_line().contains('$'));
         assert!(welcome_line().contains("KAT network"));
     }

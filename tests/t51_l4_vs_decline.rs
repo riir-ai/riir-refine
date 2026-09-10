@@ -80,8 +80,8 @@ use std::time::Instant;
 use riir_clippy::l4_daemon::DaemonL4;
 use riir_clippy::l4_fallback::L4Fallback;
 use riir_clippy::{
-    ClippyFixEntry, ClippyVerifier, HealPipeline, HealSource, RustAnalyzerPruner, TernaryDrafter,
-    build_seed_corpus,
+    build_seed_corpus, ClippyFixEntry, ClippyVerifier, HealPipeline, HealSource,
+    RustAnalyzerPruner, TernaryDrafter,
 };
 
 /// The reachable set: real clippy lints verified ABSENT from the seed corpus.

@@ -55,7 +55,10 @@ use syn::{BinOp, Expr, ExprBinary, File};
 use super::{edit, src, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut scan = CmpScan { source, edits: Vec::new() };
+    let mut scan = CmpScan {
+        source,
+        edits: Vec::new(),
+    };
     scan.visit_file(file);
     scan.edits
 }
@@ -68,7 +71,10 @@ struct CmpScan<'a> {
 impl<'ast> Visit<'ast> for CmpScan<'_> {
     fn visit_expr(&mut self, e: &'ast Expr) {
         if let Expr::Binary(bin) = e {
-            if matches!(bin.op, BinOp::Lt(_) | BinOp::Gt(_) | BinOp::Le(_) | BinOp::Ge(_)) {
+            if matches!(
+                bin.op,
+                BinOp::Lt(_) | BinOp::Gt(_) | BinOp::Le(_) | BinOp::Ge(_)
+            ) {
                 if let Some(replacement) = self.try_rewrite(bin) {
                     self.edits.push(edit(bin, replacement));
                     return; // replaced span — do not recurse into it
@@ -121,13 +127,13 @@ fn is_sum_of_squares(e: &Expr, source: &str) -> bool {
     match e {
         Expr::Paren(p) => is_sum_of_squares(&p.expr, source),
         Expr::Binary(b) => match b.op {
-            BinOp::Add(_) => is_sum_of_squares(&b.left, source) && is_sum_of_squares(&b.right, source),
-            BinOp::Mul(_) => {
-                match (src(source, &b.left), src(source, &b.right)) {
-                    (Some(l), Some(r)) => l.trim() == r.trim(),
-                    _ => false,
-                }
+            BinOp::Add(_) => {
+                is_sum_of_squares(&b.left, source) && is_sum_of_squares(&b.right, source)
             }
+            BinOp::Mul(_) => match (src(source, &b.left), src(source, &b.right)) {
+                (Some(l), Some(r)) => l.trim() == r.trim(),
+                _ => false,
+            },
             _ => false,
         },
         _ => false,

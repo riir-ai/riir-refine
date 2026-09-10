@@ -229,9 +229,7 @@ pub fn run_headroom_probe() -> HeadroomReport {
 ///
 /// Panics if [`LatentMatcher::from_enabled_domains`] fails.
 #[must_use]
-pub fn run_headroom_probe_with(
-    rerank: super::instantiation_rerank::RerankMode,
-) -> HeadroomReport {
+pub fn run_headroom_probe_with(rerank: super::instantiation_rerank::RerankMode) -> HeadroomReport {
     run_headroom_probe_with_spans(rerank, &labeled_eval_spans())
 }
 
@@ -345,7 +343,8 @@ pub fn print_headroom_report(report: &HeadroomReport) {
         }
         println!(
             " {:>9}",
-            m.headroom_pp().map_or("-".to_string(), |pp| format!("{pp:+.1}pp"))
+            m.headroom_pp()
+                .map_or("-".to_string(), |pp| format!("{pp:+.1}pp"))
         );
     }
     println!("  (skipped: {})", report.skipped);
@@ -432,9 +431,7 @@ fn is_fixable(domain: DomainId, rule_id: &str) -> bool {
             FIXABLE_LINTS.contains(&rule_id) || VERIFY_LINTS.contains(&rule_id)
         }
         #[cfg(feature = "rust_perf")]
-        DomainId::Perf => {
-            crate::domains::rust_perf::proposers::FIXABLE_RULES.contains(&rule_id)
-        }
+        DomainId::Perf => crate::domains::rust_perf::proposers::FIXABLE_RULES.contains(&rule_id),
         #[cfg(feature = "sec")]
         DomainId::Sec => crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule_id),
         #[cfg(feature = "docker")]
@@ -516,13 +513,21 @@ pub fn decompose_headroom_with_spans(spans: &[OwnedEvalSpan]) -> HeadroomDecompo
         ..Default::default()
     };
 
-    for m in shipped.misses.iter().filter(|m| m.kind == MissKind::Selection) {
+    for m in shipped
+        .misses
+        .iter()
+        .filter(|m| m.kind == MissKind::Selection)
+    {
         let k = key(m);
         let label = format!(
             "{k} (rank {}, chosen {}{})",
             m.rank.map_or_else(|| "?".to_string(), |r| r.to_string()),
             m.chosen.as_deref().unwrap_or("(none)"),
-            if is_fixable(m.domain, &m.expected) { "" } else { ", NO PROPOSER" }
+            if is_fixable(m.domain, &m.expected) {
+                ""
+            } else {
+                ", NO PROPOSER"
+            }
         );
         out.shipped.push(label.clone());
         match strongest_misses.iter().find(|(sk, _)| *sk == k) {
@@ -556,10 +561,19 @@ pub fn print_headroom_decomposition(d: &HeadroomDecomposition) {
         pp(d.shipped.len())
     );
     for (tag, rows) in [
-        ("type-blind exclusion (RerankMode::All recovers)", &d.type_blind),
+        (
+            "type-blind exclusion (RerankMode::All recovers)",
+            &d.type_blind,
+        ),
         ("pool depth (deeper RERANK_POOL recovers)", &d.pool_depth),
-        ("unfixable target (no proposer -> selecting it heals nothing)", &d.unfixable),
-        ("SELECTOR-ADDRESSABLE (nothing shipped recovers, target fixable)", &d.selector_addressable),
+        (
+            "unfixable target (no proposer -> selecting it heals nothing)",
+            &d.unfixable,
+        ),
+        (
+            "SELECTOR-ADDRESSABLE (nothing shipped recovers, target fixable)",
+            &d.selector_addressable,
+        ),
     ] {
         println!("\n  -- {tag}: {} ({:.1}pp) --", rows.len(), pp(rows.len()));
         if rows.is_empty() {
@@ -623,7 +637,6 @@ mod tests {
         );
     }
 
-
     /// Substrate-first check: is the residual band already explained by the
     /// SHIPPED re-rank knob rather than by a missing selector?
     ///
@@ -673,10 +686,16 @@ mod tests {
             }
         }
 
-        let structural = rows.iter().find(|(m, _)| *m == RerankMode::Structural)
-            .map(|(_, r)| r.verdict()).expect("structural row");
-        let all = rows.iter().find(|(m, _)| *m == RerankMode::All)
-            .map(|(_, r)| r.verdict()).expect("all row");
+        let structural = rows
+            .iter()
+            .find(|(m, _)| *m == RerankMode::Structural)
+            .map(|(_, r)| r.verdict())
+            .expect("structural row");
+        let all = rows
+            .iter()
+            .find(|(m, _)| *m == RerankMode::All)
+            .map(|(_, r)| r.verdict())
+            .expect("all row");
         println!(
             "\n  substrate verdict: Structural {:+.1}pp -> All {:+.1}pp ({} -> {} selection misses) -- {}",
             structural.headroom_pp,
@@ -693,7 +712,6 @@ mod tests {
             }
         );
     }
-
 
     /// The T1 deliverable: the addressable band, and the stop-rule verdict
     /// read off it rather than off the raw band.
@@ -721,10 +739,19 @@ mod tests {
     fn t1_headroom_probe_is_deterministic() {
         let a = run_headroom_probe();
         let b = run_headroom_probe();
-        assert_eq!(a.blended, b.blended, "blended metrics must be deterministic");
         assert_eq!(
-            a.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
-            b.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
+            a.blended, b.blended,
+            "blended metrics must be deterministic"
+        );
+        assert_eq!(
+            a.misses
+                .iter()
+                .map(|m| (&m.expected, m.rank, m.kind))
+                .collect::<Vec<_>>(),
+            b.misses
+                .iter()
+                .map(|m| (&m.expected, m.rank, m.kind))
+                .collect::<Vec<_>>(),
             "miss taxonomy must be deterministic"
         );
     }
@@ -746,8 +773,16 @@ mod tests {
             "the default probe must measure the fixture set"
         );
         assert_eq!(
-            probe_default.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
-            probe_explicit.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
+            probe_default
+                .misses
+                .iter()
+                .map(|m| (&m.expected, m.rank, m.kind))
+                .collect::<Vec<_>>(),
+            probe_explicit
+                .misses
+                .iter()
+                .map(|m| (&m.expected, m.rank, m.kind))
+                .collect::<Vec<_>>(),
             "the default probe's miss taxonomy must match the explicit-fixture-set run"
         );
 
@@ -759,8 +794,7 @@ mod tests {
         assert_eq!(decomp_default.pool_depth, decomp_explicit.pool_depth);
         assert_eq!(decomp_default.unfixable, decomp_explicit.unfixable);
         assert_eq!(
-            decomp_default.selector_addressable,
-            decomp_explicit.selector_addressable,
+            decomp_default.selector_addressable, decomp_explicit.selector_addressable,
             "the default decomposition must match the explicit-fixture-set run"
         );
     }

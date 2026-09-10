@@ -41,7 +41,7 @@
 //! fully inert — no recording, no persistence, no log lines — for consumers
 //! who want the pure heal loop.
 
-use crate::embedder::{EMBED_DIM, embed_into};
+use crate::embedder::{embed_into, EMBED_DIM};
 use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory};
 
@@ -55,7 +55,10 @@ const NO_ORACLE: &str = "built without the clippy_verify oracle";
 /// Whether an env value selects the pure-loop opt-out.
 fn is_opt_out(val: Option<&str>) -> bool {
     match val {
-        Some(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "off" | "false" | "no"),
+        Some(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "0" | "off" | "false" | "no"
+        ),
         None => false,
     }
 }
@@ -170,8 +173,11 @@ impl EvolveRecorder {
         if self.opted_out {
             return;
         }
-        self.memory
-            .insert(FixTrajectory::new(rule_id.to_string(), buggy.to_string(), fixed.to_string()));
+        self.memory.insert(FixTrajectory::new(
+            rule_id.to_string(),
+            buggy.to_string(),
+            fixed.to_string(),
+        ));
         self.recorded += 1;
         self.maybe_log_degradation();
     }
@@ -256,9 +262,13 @@ impl EvolveRecorder {
             return;
         }
         // 1. Memory first — the always-on half.
+        self.memory.insert(FixTrajectory::new(
+            rule_id.to_string(),
+            buggy.to_string(),
+            fixed.to_string(),
+        ));
         self.memory
-            .insert(FixTrajectory::new(rule_id.to_string(), buggy.to_string(), fixed.to_string()));
-        self.memory.record_outcome(rule_id, fixed, success, verified);
+            .record_outcome(rule_id, fixed, success, verified);
         if let Some(class) = component {
             self.memory.tag_component(rule_id, fixed, class);
         }
@@ -352,7 +362,11 @@ mod tests {
         let mut r = EvolveRecorder::new();
         r.record_applied("needless_return", "return 42;", "42");
         r.record_applied("needless_return", "return 42;", "42"); // identical triple dedups
-        r.record_applied("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }");
+        r.record_applied(
+            "collapsible_if",
+            "if a { if b { x(); } }",
+            "if a && b { x(); }",
+        );
         assert_eq!(r.memory().len(), 2);
         assert_eq!(r.recorded_count(), 3);
     }
@@ -418,9 +432,10 @@ mod tests {
         assert!(!r.degradation_logged(), "opted-out recorder stays silent");
         // Explicit construction == from_env with the var set (env parsing is
         // tested separately; no global env mutation in parallel tests).
-        assert_eq!(EvolveRecorder::from_env().is_enabled(), !is_opt_out(
-            std::env::var(ENV_SELF_EVOLVE).ok().as_deref()
-        ));
+        assert_eq!(
+            EvolveRecorder::from_env().is_enabled(),
+            !is_opt_out(std::env::var(ENV_SELF_EVOLVE).ok().as_deref())
+        );
     }
 
     #[test]
@@ -429,14 +444,24 @@ mod tests {
         r.disable_learning("oracle unavailable (cargo failed to run)");
         assert!(!r.learning_enabled());
         if cfg!(feature = "clippy_verify") {
-            assert_eq!(r.degradation_reason(), Some("oracle unavailable (cargo failed to run)"));
+            assert_eq!(
+                r.degradation_reason(),
+                Some("oracle unavailable (cargo failed to run)")
+            );
         } else {
             // Already disabled at construction — the build-time reason stands
             // (more accurate than the runtime one).
-            assert_eq!(r.degradation_reason(), Some("built without the clippy_verify oracle"));
+            assert_eq!(
+                r.degradation_reason(),
+                Some("built without the clippy_verify oracle")
+            );
         }
         r.record_applied("needless_return", "return 42;", "42");
-        assert_eq!(r.memory().len(), 1, "memory must keep working after a runtime disable");
+        assert_eq!(
+            r.memory().len(),
+            1,
+            "memory must keep working after a runtime disable"
+        );
     }
 
     #[test]
@@ -459,7 +484,11 @@ mod tests {
         let mut r2 = EvolveRecorder::new();
         r2.load(&path).expect("load run 2");
         assert_eq!(r2.memory().len(), 1, "run 1 trajectories must survive");
-        r2.record_applied("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }");
+        r2.record_applied(
+            "collapsible_if",
+            "if a { if b { x(); } }",
+            "if a && b { x(); }",
+        );
         r2.save(&path).expect("save run 2");
 
         // Run 3: both accumulated.
@@ -477,17 +506,28 @@ mod tests {
     fn oracle_absent_learning_noops_memory_works_one_line() {
         let mut r = EvolveRecorder::new();
         assert!(!r.learning_enabled());
-        assert_eq!(r.degradation_reason(), Some("built without the clippy_verify oracle"));
+        assert_eq!(
+            r.degradation_reason(),
+            Some("built without the clippy_verify oracle")
+        );
 
         r.record_outcome("needless_return", "return 42;", "42", true);
         // Memory half works.
         assert_eq!(r.memory().len(), 1);
         assert_eq!(r.memory().get(0).unwrap().success_count, 1);
         // Learning half no-ops.
-        assert!(r.evolution().is_empty(), "no EMA direction may evolve without an oracle");
+        assert!(
+            r.evolution().is_empty(),
+            "no EMA direction may evolve without an oracle"
+        );
         // The one log line fired exactly once.
         assert!(r.degradation_logged());
-        r.record_outcome("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }", true);
+        r.record_outcome(
+            "collapsible_if",
+            "if a { if b { x(); } }",
+            "if a && b { x(); }",
+            true,
+        );
         assert!(r.degradation_logged(), "still one line (flag is sticky)");
     }
 
@@ -501,7 +541,10 @@ mod tests {
         r.record_outcome("needless_return", "return 42;", "42", true);
         assert_eq!(r.memory().len(), 1);
         assert_eq!(r.memory().get(0).unwrap().success_count, 1);
-        assert!(!r.evolution().is_empty(), "EMA must evolve under the oracle");
+        assert!(
+            !r.evolution().is_empty(),
+            "EMA must evolve under the oracle"
+        );
         assert_eq!(r.degradation_reason(), None);
         assert!(!r.degradation_logged());
     }
@@ -515,11 +558,8 @@ mod tests {
     fn memory_accumulates_after_fix_run() {
         let src = "fn f() -> usize {\n    return 42;\n}\n";
         let parsed = syn::parse_file(src).expect("fixture parses");
-        let edits = crate::domains::clippy_lints::proposers::collect_edits(
-            "needless_return",
-            src,
-            &parsed,
-        );
+        let edits =
+            crate::domains::clippy_lints::proposers::collect_edits("needless_return", src, &parsed);
         assert!(!edits.is_empty(), "fixture must trigger needless_return");
         let (fixed, splices) = crate::edit_emitter::apply_edits_traced(
             src,
@@ -545,7 +585,10 @@ mod tests {
 
         let mut rec = EvolveRecorder::new();
         rec.record_reviewed(&reviewed);
-        assert!(!rec.memory().is_empty(), "entries must accumulate after a --fix run");
+        assert!(
+            !rec.memory().is_empty(),
+            "entries must accumulate after a --fix run"
+        );
         let traj = rec.memory().get(0).expect("recorded");
         assert_eq!(traj.lint_name, "needless_return");
         assert_eq!(traj.fixed_code, "42");

@@ -48,7 +48,7 @@
 //!   than a competing gate.
 
 pub use katgpt_core::entropic_tilt::{
-    KL_BUDGET_LN2, solve_beta, tilt_advantages_into, tilted_weights,
+    solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2,
 };
 
 #[cfg(test)]

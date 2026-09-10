@@ -124,9 +124,14 @@ fn t01_manifest_records_the_stop_rule_inputs() {
     assert!(!repos.is_empty(), "no source repos recorded");
     for r in repos {
         assert!(!r["commit"].as_str().unwrap_or_default().is_empty());
-        assert!(r["lint_events"].as_u64().unwrap_or(0) > 0, "a repo scanned but fired nothing — check its clippy exit");
+        assert!(
+            r["lint_events"].as_u64().unwrap_or(0) > 0,
+            "a repo scanned but fired nothing — check its clippy exit"
+        );
     }
     // The expansion roadmap is present and count-sorted.
-    let hist = manifest["fired_histogram_top"].as_array().expect("histogram");
+    let hist = manifest["fired_histogram_top"]
+        .as_array()
+        .expect("histogram");
     assert!(hist.len() >= 10, "fired histogram too thin to route on");
 }

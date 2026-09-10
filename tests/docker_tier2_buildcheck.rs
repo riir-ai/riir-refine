@@ -43,9 +43,7 @@ fn daemon_version() -> String {
 #[test]
 fn every_buildkit_rule_agrees_with_docker_build_check() {
     if !available() {
-        println!(
-            "SKIP: `docker build --check` unusable — the Tier-2 gate cannot run (NOT a pass)"
-        );
+        println!("SKIP: `docker build --check` unusable — the Tier-2 gate cannot run (NOT a pass)");
         return;
     }
     let results = all_tier2_agreements();
@@ -92,10 +90,22 @@ fn the_tier2_set_is_the_four_measured_in_bench_056() {
     assert_eq!(
         names,
         vec![
-            ("cmd-entrypoint-exec-form".to_string(), "JSONArgsRecommended".to_string()),
-            ("instruction-casing".to_string(), "ConsistentInstructionCasing".to_string()),
-            ("legacy-key-value-format".to_string(), "LegacyKeyValueFormat".to_string()),
-            ("no-empty-continuation".to_string(), "NoEmptyContinuation".to_string()),
+            (
+                "cmd-entrypoint-exec-form".to_string(),
+                "JSONArgsRecommended".to_string()
+            ),
+            (
+                "instruction-casing".to_string(),
+                "ConsistentInstructionCasing".to_string()
+            ),
+            (
+                "legacy-key-value-format".to_string(),
+                "LegacyKeyValueFormat".to_string()
+            ),
+            (
+                "no-empty-continuation".to_string(),
+                "NoEmptyContinuation".to_string()
+            ),
         ]
     );
 }
@@ -118,7 +128,10 @@ fn a_resolve_failure_is_errored_not_a_short_finding_list() {
     match build_check(src) {
         CheckRun::Errored(msg) => {
             assert!(msg.contains("ERROR:"), "unexpected error text: {msg}");
-            assert!(findings(src).is_none(), "a truncated run must not yield findings");
+            assert!(
+                findings(src).is_none(),
+                "a truncated run must not yield findings"
+            );
         }
         // If a future BuildKit stops truncating and reports both, that is
         // strictly better — but it must then not be an error either.
@@ -143,5 +156,8 @@ fn clean_is_ran_empty_not_unavailable() {
         println!("SKIP: `docker build --check` unusable (NOT a pass)");
         return;
     }
-    assert_eq!(build_check("FROM scratch\nCMD [\"/app\"]\n"), CheckRun::Ran(vec![]));
+    assert_eq!(
+        build_check("FROM scratch\nCMD [\"/app\"]\n"),
+        CheckRun::Ran(vec![])
+    );
 }

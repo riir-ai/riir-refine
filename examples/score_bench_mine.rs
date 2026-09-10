@@ -54,7 +54,12 @@ fn main() {
         std::process::exit(1);
     }
     let vocab = vocabulary();
-    let repo_name = repo.trim_end_matches('/').rsplit('/').next().unwrap_or(&repo).to_string();
+    let repo_name = repo
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(&repo)
+        .to_string();
 
     for path in paths {
         let show = Command::new("git")
@@ -75,7 +80,11 @@ fn main() {
             eprintln!("{path}: parse failed — skipping");
             continue;
         };
-        let stem = path.rsplit('/').next().unwrap_or(&path).trim_end_matches(".rs");
+        let stem = path
+            .rsplit('/')
+            .next()
+            .unwrap_or(&path)
+            .trim_end_matches(".rs");
         let mut idx = 0usize;
         // Top-level fns only: impl blocks carry self-types/trait bounds that
         // rarely compile standalone — the oracle filter drops most anyway.
@@ -86,7 +95,9 @@ fn main() {
                 continue;
             }
             let range = item.span().byte_range();
-            let Some(text) = src.get(range.clone()) else { continue };
+            let Some(text) = src.get(range.clone()) else {
+                continue;
+            };
             let text = text.to_string();
             idx += 1;
             let verdict = oracle.lints_for(&wrap(&text));
@@ -123,7 +134,9 @@ fn freeze_composite() {
             .map(|s| format!("{s:?}"))
             .collect();
         if hits.is_empty() {
-            eprintln!("// SKIP {tag}: no vocabulary lints (clean candidate — use as decline fixture)");
+            eprintln!(
+                "// SKIP {tag}: no vocabulary lints (clean candidate — use as decline fixture)"
+            );
             continue;
         }
         let code_lit = rust_string_literal(code);
@@ -135,14 +148,7 @@ fn freeze_composite() {
 }
 
 /// Emit one `RawFixture` entry as Rust source (paste into fixtures.rs).
-fn emit_entry(
-    repo: &str,
-    sha: &str,
-    stem: &str,
-    idx: usize,
-    code: &str,
-    hits: &BTreeSet<String>,
-) {
+fn emit_entry(repo: &str, sha: &str, stem: &str, idx: usize, code: &str, hits: &BTreeSet<String>) {
     let clean = hits.is_empty();
     let emit_clean = std::env::var_os("RIIR_MINE_EMIT_CLEAN").is_some();
     if !clean {

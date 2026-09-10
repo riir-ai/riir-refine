@@ -24,7 +24,9 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use riir_clippy::domains::rustc_errors::diag::{Applicability, LabeledSpan, RustcErrorDiag, SuggestionSpan};
+use riir_clippy::domains::rustc_errors::diag::{
+    Applicability, LabeledSpan, RustcErrorDiag, SuggestionSpan,
+};
 use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
 use riir_clippy::recorder::EvolveRecorder;
 
@@ -159,7 +161,11 @@ fn json_backend_trajectory_survives_save_load_roundtrip() {
     // `recorded_count` is a SESSION counter (not persisted); what survives
     // is the memory: one trajectory for the applied fix.
     let mem = reloaded.memory();
-    assert_eq!(mem.len(), 1, "the applied trajectory survived the round-trip");
+    assert_eq!(
+        mem.len(),
+        1,
+        "the applied trajectory survived the round-trip"
+    );
     let traj = mem.iter().next().expect("iter yields the trajectory");
     assert_eq!(traj.lint_name, "E0502:e0502-deref-removal");
 

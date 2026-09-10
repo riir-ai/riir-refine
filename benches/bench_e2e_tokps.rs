@@ -88,10 +88,9 @@ fn main() {
         .nth(2)
         .unwrap_or_else(|| "/tmp/clippy_e2e.jsonl".to_string());
 
-    let case_file: CaseFile = serde_json::from_str(
-        &std::fs::read_to_string(&cases_path).expect("read cases fixture"),
-    )
-    .expect("parse cases fixture");
+    let case_file: CaseFile =
+        serde_json::from_str(&std::fs::read_to_string(&cases_path).expect("read cases fixture"))
+            .expect("parse cases fixture");
 
     // Repetitions per lint. The pipeline is deterministic, so repetitions
     // measure latency dispersion, not answer variance.
@@ -120,7 +119,10 @@ fn main() {
     let weights = realistic_weights();
     let mut drafter = ClippyTernaryDrafter::with_weights(weights.clone());
     let pruner = RustAnalyzerPruner::new();
-    let mut pipeline = HealPipeline::new(ClippyTernaryDrafter::with_weights(weights), RustAnalyzerPruner::new());
+    let mut pipeline = HealPipeline::new(
+        ClippyTernaryDrafter::with_weights(weights),
+        RustAnalyzerPruner::new(),
+    );
     if mode == "self_evolve" {
         pipeline.seed_from_corpus(&corpus.entries);
     }

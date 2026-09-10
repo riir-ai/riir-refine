@@ -191,7 +191,11 @@ impl DaemonL4 {
         }
 
         // An empty frame is the daemon's "I could not serve this" answer.
-        if body.trim().is_empty() { None } else { Some(body) }
+        if body.trim().is_empty() {
+            None
+        } else {
+            Some(body)
+        }
     }
 }
 
@@ -297,7 +301,9 @@ done
     fn prompt_uses_the_trained_instruction_and_omits_the_lint_name() {
         let bin = fake_daemon(ECHO_DAEMON);
         let mut d = DaemonL4::spawn(bin.to_str().unwrap(), "g", "c.bin", 96).unwrap();
-        let echoed = d.generate_fix("needless_return", "fn g() -> i32 {\n    return 7;\n}").unwrap();
+        let echoed = d
+            .generate_fix("needless_return", "fn g() -> i32 {\n    return 7;\n}")
+            .unwrap();
 
         assert!(
             echoed.starts_with("Fix all clippy lints in this Rust code."),
@@ -308,7 +314,10 @@ done
             "the lint name must NOT reach the prompt — all 1092 training rows \
              are lint-agnostic, so including it is off-distribution: {echoed}"
         );
-        assert!(echoed.contains("\\n"), "newlines must be escaped for the line protocol");
+        assert!(
+            echoed.contains("\\n"),
+            "newlines must be escaped for the line protocol"
+        );
     }
 
     #[cfg(unix)]
@@ -316,8 +325,14 @@ done
     fn dead_daemon_declines_instead_of_blocking() {
         let bin = fake_daemon("#!/bin/sh\necho \"<<<READY>>>\"\nexit 0\n");
         let mut d = DaemonL4::spawn(bin.to_str().unwrap(), "g", "c.bin", 96).unwrap();
-        assert!(d.generate_fix("x", "code").is_none(), "EOF must decline, not hang");
-        assert!(d.generate_fix("x", "code").is_none(), "second call must decline immediately");
+        assert!(
+            d.generate_fix("x", "code").is_none(),
+            "EOF must decline, not hang"
+        );
+        assert!(
+            d.generate_fix("x", "code").is_none(),
+            "second call must decline immediately"
+        );
     }
 
     #[cfg(unix)]
@@ -350,7 +365,10 @@ done
 
         // Request 2: balanced, parses.
         let good = "fn g() -> i32 {\n    7\n}";
-        assert!(pruner.validate(good, "needless_return").parses, "balanced fix should parse");
+        assert!(
+            pruner.validate(good, "needless_return").parses,
+            "balanced fix should parse"
+        );
 
         // Request 1: the adapter duplicated a line and dropped the closing
         // brace. Unbalanced — neither parse_file nor the fn _wrap fallback can

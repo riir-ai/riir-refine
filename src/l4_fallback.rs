@@ -105,7 +105,9 @@ mod tests {
     #[test]
     fn null_l4_declines_and_names_itself() {
         let mut null = NullL4;
-        assert!(null.generate_fix("needless_return", "fn f() -> i32 { return 1; }").is_none());
+        assert!(null
+            .generate_fix("needless_return", "fn f() -> i32 { return 1; }")
+            .is_none());
         assert_eq!(null.name(), "null-l4");
     }
 

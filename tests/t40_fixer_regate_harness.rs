@@ -16,9 +16,7 @@
 
 #![cfg(feature = "cf_workers_ai")]
 
-use riir_clippy::cf_workers_ai::{
-    self, MissClass, RegateHarness, SampleSource, reachable_samples,
-};
+use riir_clippy::cf_workers_ai::{self, reachable_samples, MissClass, RegateHarness, SampleSource};
 use riir_clippy::ClippyVerifier;
 
 fn harness() -> RegateHarness {
@@ -40,7 +38,11 @@ fn reachable_set_is_off_corpus_and_declined() {
     for s in reachable_samples() {
         let (class, modelless) = h.classify(&s.lints[0], &s.module);
         assert_eq!(class, MissClass::OffCorpus, "{}", s.id);
-        assert!(modelless.is_none(), "{}: expected decline, got a serve", s.id);
+        assert!(
+            modelless.is_none(),
+            "{}: expected decline, got a serve",
+            s.id
+        );
     }
 }
 
@@ -81,7 +83,10 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
     }
 
     // Negative: noop echo — findings unchanged, never kept.
-    let s = score("reachable:ptr_arg", "pub fn f(v: &Vec<u8>) -> usize { v.len() }");
+    let s = score(
+        "reachable:ptr_arg",
+        "pub fn f(v: &Vec<u8>) -> usize { v.len() }",
+    );
     assert!(!s.keep_oracle, "noop must not pass the oracle filter");
     assert!(s.noop);
 
@@ -93,7 +98,10 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
         "destructive control must pass the raw oracle filter (that is the point — the oracle alone cannot see it)"
     );
     assert!(!s.contract_ok, "contract veto must fire on a dropped item");
-    assert!(!s.keep_strict, "destructive control must NOT survive the strict filter");
+    assert!(
+        !s.keep_strict,
+        "destructive control must NOT survive the strict filter"
+    );
 
     // Negative: garbage never merges.
     let s = score("reachable:ptr_arg", "}}}not rust{{{");
@@ -118,8 +126,7 @@ fn behavioural_veto_refutes_the_real_route3_generation() {
 
     let dir = behav_dir("route3");
     let verifier = ClippyVerifier::new();
-    let wrong_but_passes_names =
-        "pub fn f(o: Option<u32>) -> u32 { o.unwrap_or(0) + 1 }";
+    let wrong_but_passes_names = "pub fn f(o: Option<u32>) -> u32 { o.unwrap_or(0) + 1 }";
     let sc = cf_workers_ai::score_case(&verifier, s, wrong_but_passes_names, Some(&dir));
     assert!(
         sc.contract_ok,
@@ -133,7 +140,10 @@ fn behavioural_veto_refutes_the_real_route3_generation() {
         "behavioural check must refute the silent logic change: {:?}",
         sc.behavioural
     );
-    assert!(!sc.keep_strict, "route-3 generation must NOT survive the strict filter");
+    assert!(
+        !sc.keep_strict,
+        "route-3 generation must NOT survive the strict filter"
+    );
 }
 
 /// v2edit self-consistency on chunk 00 (60 rows): EM must be 1.0 by
@@ -201,9 +211,7 @@ fn v2edit_full_corpus_self_consistency() {
         kept += usize::from(sc.keep_oracle);
     }
     assert_eq!(em, 408, "EM must be exact across the full corpus");
-    eprintln!(
-        "[t40] full corpus: merge {merge}/408, control {control}/408, keep_o {kept}/408"
-    );
+    eprintln!("[t40] full corpus: merge {merge}/408, control {control}/408, keep_o {kept}/408");
     // The recorded Bench 049 numbers (2026-08-25): merge 14/408, control
     // 341/408, keep_o 9/408. A drift here is a corpus or clippy-version
     // change worth noting, not necessarily a regression — but EM must hold.

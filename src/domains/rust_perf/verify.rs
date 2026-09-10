@@ -163,9 +163,7 @@ impl PerfVerifier {
         let crate_dir = match self.prepare_crate(code) {
             Ok(dir) => dir,
             Err(e) => {
-                return PerfVerifyResult::did_not_run(format!(
-                    "temp crate setup failed: {e}"
-                ))
+                return PerfVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
             }
         };
 
@@ -213,8 +211,7 @@ impl PerfVerifier {
         let dir = self.work_root.join(&hex[..16]);
 
         let src_dir = dir.join("src");
-        std::fs::create_dir_all(&src_dir)
-            .map_err(|e| format!("create_dir_all failed: {e}"))?;
+        std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
 
         // Write Cargo.toml (minimal, no deps).
         let cargo_toml = "[package]\n\
@@ -334,7 +331,9 @@ fn count_compile_errors(json_output: &str) -> usize {
         }
 
         // message.level == "error" → compilation failed.
-        if v.get("message").and_then(|m| m.get("level")).and_then(|l| l.as_str())
+        if v.get("message")
+            .and_then(|m| m.get("level"))
+            .and_then(|l| l.as_str())
             == Some("error")
         {
             errors += 1;

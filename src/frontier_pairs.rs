@@ -241,7 +241,11 @@ mod tests {
         let cases = generate_corpus();
         let pairs = construction_pairs();
         assert_eq!(pairs.len(), cases.len());
-        assert!(pairs.len() >= 200, "corpus contract N>=200, got {}", pairs.len());
+        assert!(
+            pairs.len() >= 200,
+            "corpus contract N>=200, got {}",
+            pairs.len()
+        );
     }
 
     #[test]
@@ -286,8 +290,20 @@ mod tests {
     #[test]
     fn fence_verdicts_agree_arithmetic() {
         let v = vec![
-            ("a", PairVerdict { good_resolves: true, bad_premise_holds: true }),
-            ("b", PairVerdict { good_resolves: true, bad_premise_holds: false }),
+            (
+                "a",
+                PairVerdict {
+                    good_resolves: true,
+                    bad_premise_holds: true,
+                },
+            ),
+            (
+                "b",
+                PairVerdict {
+                    good_resolves: true,
+                    bad_premise_holds: false,
+                },
+            ),
         ];
         let r = fence_verdicts(&v);
         assert_eq!(r.pairs_checked, 2);
@@ -324,8 +340,14 @@ mod tests {
         assert_eq!(s1.len(), 20);
         assert_eq!(s1, s2);
         // Spread: first and last sampled indices differ by more than 1.
-        let first = pairs.iter().position(|p| p.case_name == s1[0].case_name).unwrap();
-        let last = pairs.iter().position(|p| p.case_name == s1[19].case_name).unwrap();
+        let first = pairs
+            .iter()
+            .position(|p| p.case_name == s1[0].case_name)
+            .unwrap();
+        let last = pairs
+            .iter()
+            .position(|p| p.case_name == s1[19].case_name)
+            .unwrap();
         assert!(last > first);
     }
 

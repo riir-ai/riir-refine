@@ -11,8 +11,8 @@
 #![cfg(feature = "self_evolve")]
 
 use riir_clippy::{
-    ClippyFixEntry, ClippyTernaryDrafter, FixTrajectory, HealPipeline, RustAnalyzerPruner,
     memory::{LatentFixMemory, LatentQuery},
+    ClippyFixEntry, ClippyTernaryDrafter, FixTrajectory, HealPipeline, RustAnalyzerPruner,
 };
 use std::time::Instant;
 
@@ -102,7 +102,10 @@ fn g1_retrieval_relevance_top1_same_lint_family() {
 /// measurements that don't reflect production behavior.
 /// Mirrors the `g2_monster_ai_under_load` pattern (riir-mmorpg-examples).
 #[test]
-#[cfg_attr(debug_assertions, ignore = "release-only: perf gate needs optimizations")]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "release-only: perf gate needs optimizations"
+)]
 fn g2_retrieval_latency_p50_under_50us() {
     // G2: N=1000 trajectories, p50 query latency must be <50µs.
     let mut mem = LatentFixMemory::with_capacity(1000);
@@ -133,11 +136,7 @@ fn g2_retrieval_latency_p50_under_50us() {
 
     latencies_us.sort_unstable();
     let p50 = latencies_us[latencies_us.len() / 2];
-    assert!(
-        p50 < 50,
-        "G2 FAIL: p50 latency = {}µs, target <50µs",
-        p50
-    );
+    assert!(p50 < 50, "G2 FAIL: p50 latency = {}µs, target <50µs", p50);
     eprintln!("G2 PASS: p50 retrieval latency = {}µs (N=1000)", p50);
 }
 
@@ -152,13 +151,15 @@ fn g3_no_regression_self_evolve_compiles_and_runs() {
     let corpus = riir_clippy::build_seed_corpus();
     assert!(corpus.verify(), "seed corpus must still verify");
 
-    let mut pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     pipeline.seed_from_corpus(&corpus.entries);
 
-    let result = pipeline.heal("needless_return", "fn foo() -> i32 { return 42; }", &corpus.entries);
+    let result = pipeline.heal(
+        "needless_return",
+        "fn foo() -> i32 { return 42; }",
+        &corpus.entries,
+    );
     assert!(result.is_some(), "heal must work with self_evolve enabled");
 }
 
@@ -171,10 +172,8 @@ fn g4_alloc_free_steady_state() {
     // after warm-up. (A true counting-allocator test would be more rigorous
     // but requires a global allocator wrapper — deferred for the POC.)
     let corpus = riir_clippy::build_seed_corpus();
-    let mut pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     pipeline.seed_from_corpus(&corpus.entries);
 
     // Warm up.
@@ -190,7 +189,10 @@ fn g4_alloc_free_steady_state() {
         cap_retrieve_out,
         "G4 FAIL: retrieve_out capacity grew during steady state"
     );
-    eprintln!("G4 PASS: retrieve_out capacity stable ({}) across 100 heal calls", cap_retrieve_out);
+    eprintln!(
+        "G4 PASS: retrieve_out capacity stable ({}) across 100 heal calls",
+        cap_retrieve_out
+    );
 }
 
 // ─── G5: Self-evolution gain (THE HEADLINE GATE) ─────────────────────────
@@ -219,10 +221,30 @@ impl EvolutionFixture {
             // Rotate which slot the correct fix occupies, so candidates[0]
             // is correct only 1/4 of the time (matching random selection).
             let candidates = match i % 4 {
-                0 => vec![(correct, true), (wrong1, false), (wrong2, false), (wrong3, false)],
-                1 => vec![(wrong1, false), (correct, true), (wrong2, false), (wrong3, false)],
-                2 => vec![(wrong1, false), (wrong2, false), (correct, true), (wrong3, false)],
-                _ => vec![(wrong1, false), (wrong2, false), (wrong3, false), (correct, true)],
+                0 => vec![
+                    (correct, true),
+                    (wrong1, false),
+                    (wrong2, false),
+                    (wrong3, false),
+                ],
+                1 => vec![
+                    (wrong1, false),
+                    (correct, true),
+                    (wrong2, false),
+                    (wrong3, false),
+                ],
+                2 => vec![
+                    (wrong1, false),
+                    (wrong2, false),
+                    (correct, true),
+                    (wrong3, false),
+                ],
+                _ => vec![
+                    (wrong1, false),
+                    (wrong2, false),
+                    (wrong3, false),
+                    (correct, true),
+                ],
             };
             lints.push((lint_name, candidates));
         }
@@ -323,19 +345,18 @@ fn g5_self_evolution_gain_at_least_5pp() {
         .flat_map(|(lint, _)| fixture.corpus_entries(lint))
         .collect();
 
-    let mut baseline_pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut baseline_pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     baseline_pipeline.seed_from_corpus(&corpus_all);
     let baseline_rate = measure_healing_rate(&mut baseline_pipeline, &fixture);
-    eprintln!("G5 baseline healing rate (seeded, no evolution): {:.1}%", baseline_rate * 100.0);
+    eprintln!(
+        "G5 baseline healing rate (seeded, no evolution): {:.1}%",
+        baseline_rate * 100.0
+    );
 
     // ── Phase 2: evolve via 100 simulated fix attempts ──
-    let mut evolved_pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut evolved_pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
 
     // Seed the memory with all candidate fixes (so they're all retrievable).
     evolved_pipeline.seed_from_corpus(&corpus_all);
@@ -362,7 +383,10 @@ fn g5_self_evolution_gain_at_least_5pp() {
 
     // ── Phase 3: measure the EVOLVED healing rate ──
     let evolved_rate = measure_healing_rate(&mut evolved_pipeline, &fixture);
-    eprintln!("G5 evolved healing rate (after 100 attempts): {:.1}%", evolved_rate * 100.0);
+    eprintln!(
+        "G5 evolved healing rate (after 100 attempts): {:.1}%",
+        evolved_rate * 100.0
+    );
 
     // ── The gate: ≥5pp improvement ──
     let improvement_pp = (evolved_rate - baseline_rate) * 100.0;

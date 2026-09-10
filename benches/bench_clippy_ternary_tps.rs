@@ -183,16 +183,27 @@ fn main() {
 
     println!("\n=== Bench 010 — katgpt ternary, clippy prompts, M3 Metal ===");
     println!("model load: {load_s:.1}s   gpu init: {gpu_init_s:.1}s   (both excluded from tok/s)");
-    println!("decode path: {}", if use_speculative {
-        format!("speculative (K={DRAFT_K}, Issue 665)")
-    } else {
-        "sequential".to_string()
-    });
+    println!(
+        "decode path: {}",
+        if use_speculative {
+            format!("speculative (K={DRAFT_K}, Issue 665)")
+        } else {
+            "sequential".to_string()
+        }
+    );
     println!();
     if use_speculative {
         println!(
             "{:<24} {:>7} {:>7} {:>10} {:>10} {:>10} {:>10} {:>8} {:>6}",
-            "lint", "prompt", "decode", "prefill s", "decode s", "dec tok/s", "tot tok/s", "alpha", "rounds"
+            "lint",
+            "prompt",
+            "decode",
+            "prefill s",
+            "decode s",
+            "dec tok/s",
+            "tot tok/s",
+            "alpha",
+            "rounds"
         );
     } else {
         println!(
@@ -410,8 +421,14 @@ fn main() {
         let ds: f64 = rows.iter().map(|r| r.4).sum();
         println!();
         println!("aggregate over {} case(s):", rows.len());
-        println!("  prefill : {pt} tok / {ps:.2} s = {:.3} tok/s", pt as f64 / ps);
-        println!("  decode  : {dt} tok / {ds:.2} s = {:.3} tok/s", dt as f64 / ds);
+        println!(
+            "  prefill : {pt} tok / {ps:.2} s = {:.3} tok/s",
+            pt as f64 / ps
+        );
+        println!(
+            "  decode  : {dt} tok / {ds:.2} s = {:.3} tok/s",
+            dt as f64 / ds
+        );
         println!(
             "  total   : {} tok / {:.2} s = {:.3} tok/s",
             pt + dt,
@@ -570,7 +587,7 @@ fn decode_speculative(
         // 7. EOS check.
         if (*generated.last().unwrap() as usize) == eos_id {
             break;
-            }
+        }
     }
 
     let gen_usize: Vec<usize> = generated.iter().map(|&t| t as usize).collect();

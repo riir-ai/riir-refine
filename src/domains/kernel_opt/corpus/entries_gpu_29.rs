@@ -30,7 +30,7 @@
 //! gets the short-K occupancy-first face (1.7x on threadgroup bytes alone).
 //! Batch 118 / Plan 097 / Research 142.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

@@ -125,8 +125,7 @@ pub struct GenSpec {
 #[must_use]
 fn specs_over_atoms(prefix: &str, atom_list: &[V3Atom]) -> Vec<GenSpec> {
     let ids: Vec<String> = atom_list.iter().map(|a| a.id.clone()).collect();
-    let by_id: BTreeMap<&str, &V3Atom> =
-        atom_list.iter().map(|a| (a.id.as_str(), a)).collect();
+    let by_id: BTreeMap<&str, &V3Atom> = atom_list.iter().map(|a| (a.id.as_str(), a)).collect();
     let n = ids.len();
     let mut out = Vec::with_capacity(LADDER_KS.len());
     for &k in &LADDER_KS {
@@ -136,7 +135,9 @@ fn specs_over_atoms(prefix: &str, atom_list: &[V3Atom]) -> Vec<GenSpec> {
             let id = format!("{prefix}-k{k}-{}", picks.join("+"));
             let mut code = String::new();
             for (index, atom_id) in picks.iter().enumerate() {
-                let atom = by_id.get(atom_id.as_str()).expect("atom id drawn from the atom table");
+                let atom = by_id
+                    .get(atom_id.as_str())
+                    .expect("atom id drawn from the atom table");
                 code.push_str(&mod_wrap(index, &atom.code));
             }
             let expect_lints: BTreeSet<String> = picks
@@ -161,7 +162,11 @@ fn specs_over_atoms(prefix: &str, atom_list: &[V3Atom]) -> Vec<GenSpec> {
 pub fn specs() -> Vec<GenSpec> {
     let atom_list: Vec<V3Atom> = atoms()
         .into_iter()
-        .map(|a| V3Atom { id: a.lint.clone(), expect: vec![a.lint], code: a.code })
+        .map(|a| V3Atom {
+            id: a.lint.clone(),
+            expect: vec![a.lint],
+            code: a.code,
+        })
         .collect();
     specs_over_atoms("gen2", &atom_list)
 }
@@ -323,15 +328,18 @@ fn generation_fixtures(
     all.into_iter()
         .filter(|s| !excluded.contains(s.id.as_str()))
         .map(|s| {
-            let expect: &[&str] = label_map
-                .get(s.id.as_str())
-                .copied()
-                .unwrap_or_else(|| panic!("spec {} frozen but unlabeled — freeze_status hole", s.id));
+            let expect: &[&str] = label_map.get(s.id.as_str()).copied().unwrap_or_else(|| {
+                panic!("spec {} frozen but unlabeled — freeze_status hole", s.id)
+            });
             BenchFixture {
                 id: Box::leak(s.id.clone().into_boxed_str()),
                 provenance: Box::leak(
-                    format!("construction:gen{gen}:k{}:{}", s.k, s.expect_lints.join("+"))
-                        .into_boxed_str(),
+                    format!(
+                        "construction:gen{gen}:k{}:{}",
+                        s.k,
+                        s.expect_lints.join("+")
+                    )
+                    .into_boxed_str(),
                 ),
                 code: Box::leak(s.code.into_boxed_str()),
                 expect_lints: Box::leak(expect.to_vec().into_boxed_slice()),
@@ -349,7 +357,13 @@ fn generation_fixtures(
 /// The un-frozen state: how many specs lack oracle labels (or which
 /// exclusion rows no longer match the corpus-derived specs).
 pub fn v2_freeze_status() -> Result<usize, String> {
-    freeze_status_for(&specs(), 2, "generation_v2_freeze", FROZEN_LABELS, EXCLUDED_IDS)
+    freeze_status_for(
+        &specs(),
+        2,
+        "generation_v2_freeze",
+        FROZEN_LABELS,
+        EXCLUDED_IDS,
+    )
 }
 
 /// The admitted generation-v2 fixture set (the M5 ratchet's bench input).
@@ -610,7 +624,13 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
 ///
 /// The un-frozen state: how many specs lack oracle labels.
 pub fn v3_freeze_status() -> Result<usize, String> {
-    freeze_status_for(&specs_v3(), 3, "generation_v3_freeze", FROZEN_LABELS_V3, EXCLUDED_IDS_V3)
+    freeze_status_for(
+        &specs_v3(),
+        3,
+        "generation_v3_freeze",
+        FROZEN_LABELS_V3,
+        EXCLUDED_IDS_V3,
+    )
 }
 
 /// The admitted generation-v3 fixture set.
@@ -871,7 +891,13 @@ pub static FROZEN_LABELS_V5: &[(&str, &[&str])] = &[
 ///
 /// The un-frozen state: how many specs lack oracle labels.
 pub fn v5_freeze_status() -> Result<usize, String> {
-    freeze_status_for(&specs_v5(), 5, "generation_v5_freeze", FROZEN_LABELS_V5, EXCLUDED_IDS_V5)
+    freeze_status_for(
+        &specs_v5(),
+        5,
+        "generation_v5_freeze",
+        FROZEN_LABELS_V5,
+        EXCLUDED_IDS_V5,
+    )
 }
 
 // ── Generation 4: the rustc-errors-side ladder (Plan 093, Bench 069 reopen
@@ -900,8 +926,11 @@ pub fn v4_atoms() -> Vec<V3Atom> {
 
     let corpus = crate::domains::rustc_errors::corpus_gen::generate_corpus();
     let stride = (corpus.len() / GEN4_ATOM_TARGET).max(1);
-    let sliced: Vec<&GeneratedCase> =
-        corpus.iter().step_by(stride).take(GEN4_ATOM_TARGET).collect();
+    let sliced: Vec<&GeneratedCase> = corpus
+        .iter()
+        .step_by(stride)
+        .take(GEN4_ATOM_TARGET)
+        .collect();
 
     // Round-robin interleave by expected code: one atom per code group per
     // pass, groups in sorted-code order, within-group order preserved —
@@ -975,8 +1004,7 @@ pub fn v4_member_codes(spec_id: &str) -> Option<Vec<String>> {
 /// of member codes on a real `cargo check` — the composition-interference
 /// class) — landed by the freeze e2e. Empty pre-freeze (the dual-mode gate
 /// then asserts the un-frozen Err).
-pub static EXCLUDED_IDS_V4: &[&str] = &[
-];
+pub static EXCLUDED_IDS_V4: &[&str] = &[];
 
 /// The generation-4 frozen labels (spec id → the DISTINCT member error-code
 /// set real rustc produced on the composed broken file at freeze time) —
@@ -1068,9 +1096,14 @@ pub static FROZEN_LABELS_V4: &[(&str, &[&str])] = &[
 /// The un-frozen state: how many specs lack oracle labels.
 #[cfg(feature = "rustc_errors")]
 pub fn v4_freeze_status() -> Result<usize, String> {
-    freeze_status_for(&specs_v4(), 4, "generation_v4_freeze", FROZEN_LABELS_V4, EXCLUDED_IDS_V4)
+    freeze_status_for(
+        &specs_v4(),
+        4,
+        "generation_v4_freeze",
+        FROZEN_LABELS_V4,
+        EXCLUDED_IDS_V4,
+    )
 }
-
 
 // ── Generation 6: the real-repo shape ladder (Plan 095, Bench 069 reopen
 //    candidate #2 — SALVAGED, see §1a/§1b of the plan) ────────────────────
@@ -1396,7 +1429,6 @@ pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
 "#,
         expect: &["match_bool", "use_self"],
     },
-
     // gen6-svr-fn6-001 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
     RawSpanV6 {
         id: "gen6-svr-fn6-001",
@@ -1689,7 +1721,6 @@ pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
 "#,
         expect: &["match_bool", "use_self"],
     },
-
     // gen6-svr-fn7-002 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
     RawSpanV6 {
         id: "gen6-svr-fn7-002",
@@ -1982,7 +2013,6 @@ pub fn turn_reward(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRew
 "#,
         expect: &["match_bool", "use_self"],
     },
-
     // gen6-transposition-impl1-000 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/transposition.rs
     RawSpanV6 {
         id: "gen6-transposition-impl1-000",
@@ -2109,7 +2139,6 @@ impl TransEntry {
 ",
         expect: &["single_match_else", "use_self"],
     },
-
     // gen6-channel_draft_generator-fn1-002 | riir-ai@1e050442a~1:crates/riir-engine/src/channel_draft_generator.rs
     RawSpanV6 {
         id: "gen6-channel_draft_generator-fn1-002",
@@ -2193,7 +2222,6 @@ pub fn verify_draft_channels(
 ",
         expect: &["manual_let_else"],
     },
-
     // gen6-economy-impl3-000 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs
     RawSpanV6 {
         id: "gen6-economy-impl3-000",
@@ -2290,7 +2318,6 @@ impl CycleName {
 ",
         expect: &["use_self"],
     },
-
     // katgpt-rs-pruner_04_product_policy-fn | katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs
     RawSpanV6 {
         id: "gen6-pruner_04_product_policy-12",
@@ -2316,7 +2343,6 @@ fn argmax(probs: &[f32]) -> usize {
 }",
         expect: &["map_unwrap_or"],
     },
-
     // katgpt-rs-pruner_04_product_policy-fn | katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs
     RawSpanV6 {
         id: "gen6-pruner_04_product_policy-13",
@@ -2332,7 +2358,6 @@ fn argmax(probs: &[f32]) -> usize {
 }",
         expect: &["map_unwrap_or"],
     },
-
     // katgpt-rs-pruner_04_product_policy-fn | katgpt-rs@5b2d42970~1:examples/pruner_04_product_policy.rs
     RawSpanV6 {
         id: "gen6-pruner_04_product_policy-8",
@@ -2358,7 +2383,6 @@ fn argmax(probs: &[f32]) -> usize {
 }",
         expect: &["map_unwrap_or"],
     },
-
     // gen6-bridge_cap-impl5-001 | riir-chain@7421245a~1:src/economics/bridge_cap.rs
     RawSpanV6 {
         id: "gen6-bridge_cap-impl5-001",
@@ -2466,7 +2490,6 @@ impl BridgeCap {
 ",
         expect: &["match_bool"],
     },
-
     // gen6-economy-impl4-001 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs
     RawSpanV6 {
         id: "gen6-economy-impl4-001",
@@ -2545,7 +2568,6 @@ impl FrequencyComponent {
 ",
         expect: &["match_bool"],
     },
-
     // gen6-mod-fn1-006 | riir-train@e6084429~1:crates/riir-train-engine/src/rosetta/mod.rs
     RawSpanV6 {
         id: "gen6-mod-fn1-006",
@@ -2682,7 +2704,6 @@ pub fn pearson_correlation(a: &[f32], b: &[f32]) -> f32 {
 "#,
         expect: &["match_bool"],
     },
-
     // gen6-resource_credits-impl1-002 | riir-chain@7421245a~1:src/economics/resource_credits.rs
     RawSpanV6 {
         id: "gen6-resource_credits-impl1-002",
@@ -2807,7 +2828,6 @@ impl ResourceCredits {
 ",
         expect: &["match_bool"],
     },
-
     // katgpt-rs-attn_match_head_budget-fn | katgpt-rs@5b2d42970~1:examples/attn_match_head_budget.rs
     RawSpanV6 {
         id: "gen6-attn_match_head_budget-0",
@@ -2823,7 +2843,6 @@ fn hex_short(hash: &[u8; 32]) -> String {
 }"#,
         expect: &["uninlined_format_args"],
     },
-
     // katgpt-rs-bandit_01_basic-fn | katgpt-rs@5b2d42970~1:examples/bandit_01_basic.rs
     RawSpanV6 {
         id: "gen6-bandit_01_basic-1",
@@ -2861,7 +2880,6 @@ fn hex_short(hash: &[u8; 32]) -> String {
 }"#,
         expect: &["uninlined_format_args"],
     },
-
     // katgpt-rs-bandit_01_basic-fn | katgpt-rs@5b2d42970~1:examples/bandit_01_basic.rs
     RawSpanV6 {
         id: "gen6-bandit_01_basic-2",
@@ -2899,7 +2917,6 @@ fn hex_short(hash: &[u8; 32]) -> String {
 }"#,
         expect: &["uninlined_format_args"],
     },
-
     // katgpt-rs-clr_minimal-fn | katgpt-rs@5b2d42970~1:examples/clr_minimal.rs
     RawSpanV6 {
         id: "gen6-clr_minimal-3",
@@ -2909,8 +2926,6 @@ fn hex_short(hash: &[u8; 32]) -> String {
 }"#,
         expect: &["uninlined_format_args"],
     },
-
-
 ];
 
 /// The territory of a generation-6 span: `multi` (k≥2 — the organic
@@ -2920,7 +2935,11 @@ fn hex_short(hash: &[u8; 32]) -> String {
 pub fn v6_territory(spec_id: &str) -> &'static str {
     for s in RAW_SPANS_V6 {
         if s.id == spec_id {
-            return if s.expect.len() >= 2 { "multi" } else { "single" };
+            return if s.expect.len() >= 2 {
+                "multi"
+            } else {
+                "single"
+            };
         }
     }
     "single"
@@ -2956,23 +2975,26 @@ pub static EXCLUDED_IDS_V6: &[&str] = &[];
 // interference rung), single territory 13. Freeze cost 3.35 s (17
 // single-snippet oracle runs, release).
 pub static FROZEN_LABELS_V6: &[(&str, &[&str])] = &[
-    ("gen6-attn_match_head_budget-0", &["uninlined_format_args"]),  // k=1
-    ("gen6-bandit_01_basic-1", &["uninlined_format_args"]),  // k=1
-    ("gen6-bandit_01_basic-2", &["uninlined_format_args"]),  // k=1
-    ("gen6-bridge_cap-impl5-001", &["match_bool"]),  // k=1
-    ("gen6-channel_draft_generator-fn1-002", &["manual_let_else"]),  // k=1
-    ("gen6-clr_minimal-3", &["uninlined_format_args"]),  // k=1
-    ("gen6-economy-impl3-000", &["use_self"]),  // k=1
-    ("gen6-economy-impl4-001", &["match_bool"]),  // k=1
-    ("gen6-mod-fn1-006", &["match_bool"]),  // k=1
-    ("gen6-pruner_04_product_policy-12", &["map_unwrap_or"]),  // k=1
-    ("gen6-pruner_04_product_policy-13", &["map_unwrap_or"]),  // k=1
-    ("gen6-pruner_04_product_policy-8", &["map_unwrap_or"]),  // k=1
-    ("gen6-resource_credits-impl1-002", &["match_bool"]),  // k=1
-    ("gen6-svr-fn3-000", &["match_bool", "use_self"]),  // k=2
-    ("gen6-svr-fn6-001", &["match_bool", "use_self"]),  // k=2
-    ("gen6-svr-fn7-002", &["match_bool", "use_self"]),  // k=2
-    ("gen6-transposition-impl1-000", &["single_match_else", "use_self"]),  // k=2
+    ("gen6-attn_match_head_budget-0", &["uninlined_format_args"]), // k=1
+    ("gen6-bandit_01_basic-1", &["uninlined_format_args"]),        // k=1
+    ("gen6-bandit_01_basic-2", &["uninlined_format_args"]),        // k=1
+    ("gen6-bridge_cap-impl5-001", &["match_bool"]),                // k=1
+    ("gen6-channel_draft_generator-fn1-002", &["manual_let_else"]), // k=1
+    ("gen6-clr_minimal-3", &["uninlined_format_args"]),            // k=1
+    ("gen6-economy-impl3-000", &["use_self"]),                     // k=1
+    ("gen6-economy-impl4-001", &["match_bool"]),                   // k=1
+    ("gen6-mod-fn1-006", &["match_bool"]),                         // k=1
+    ("gen6-pruner_04_product_policy-12", &["map_unwrap_or"]),      // k=1
+    ("gen6-pruner_04_product_policy-13", &["map_unwrap_or"]),      // k=1
+    ("gen6-pruner_04_product_policy-8", &["map_unwrap_or"]),       // k=1
+    ("gen6-resource_credits-impl1-002", &["match_bool"]),          // k=1
+    ("gen6-svr-fn3-000", &["match_bool", "use_self"]),             // k=2
+    ("gen6-svr-fn6-001", &["match_bool", "use_self"]),             // k=2
+    ("gen6-svr-fn7-002", &["match_bool", "use_self"]),             // k=2
+    (
+        "gen6-transposition-impl1-000",
+        &["single_match_else", "use_self"],
+    ), // k=2
 ];
 
 /// Freeze readiness for generation 6 — Err until the freeze e2e lands the
@@ -2982,7 +3004,13 @@ pub static FROZEN_LABELS_V6: &[(&str, &[&str])] = &[
 ///
 /// The un-frozen state: how many specs lack oracle labels.
 pub fn v6_freeze_status() -> Result<usize, String> {
-    freeze_status_for(&specs_v6(), 6, "generation_v6_freeze", FROZEN_LABELS_V6, EXCLUDED_IDS_V6)
+    freeze_status_for(
+        &specs_v6(),
+        6,
+        "generation_v6_freeze",
+        FROZEN_LABELS_V6,
+        EXCLUDED_IDS_V6,
+    )
 }
 
 /// The admitted generation-6 fixture set.
@@ -3281,13 +3309,31 @@ pub fn pick(kind: Option<u8>) -> u8 {
 /// The pre-freeze label CLAIMS (the T1 probe + the sweep record); the freeze
 /// e2e adjudicates both directions and the fresh verdict wins at bench time.
 const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
-    ("gen7-flat-nrl-identity", &["needless_range_loop", "identity_op"]),
-    ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),
+    (
+        "gen7-flat-nrl-identity",
+        &["needless_range_loop", "identity_op"],
+    ),
+    (
+        "gen7-flat-cif-smx",
+        &["collapsible_if", "single_match_else"],
+    ),
     ("gen7-flat-nrl-format", &["needless_range_loop"]),
-    ("gen7-d2-nrl-identity", &["needless_range_loop", "identity_op"]),
-    ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),
-    ("gen7-d2-nrl-dblparen", &["needless_range_loop", "double_parens"]),
-    ("gen7-d2-smx-identity", &["single_match_else", "identity_op"]),
+    (
+        "gen7-d2-nrl-identity",
+        &["needless_range_loop", "identity_op"],
+    ),
+    (
+        "gen7-d2-nrl-semi",
+        &["needless_range_loop", "semicolon_if_nothing_returned"],
+    ),
+    (
+        "gen7-d2-nrl-dblparen",
+        &["needless_range_loop", "double_parens"],
+    ),
+    (
+        "gen7-d2-smx-identity",
+        &["single_match_else", "identity_op"],
+    ),
     ("gen7-d2-mm-identity", &["manual_map", "identity_op"]),
     ("gen7-d2-nrl-nrl", &["needless_range_loop"]),
     // The distance-sq member is a rust_perf rule — invisible to the clippy
@@ -3314,7 +3360,9 @@ pub fn specs_v7() -> Vec<GenSpec> {
             expect_lints: EXPECTED_LINTS_V7
                 .iter()
                 .find(|(i, _)| *i == *id)
-                .map_or_else(Vec::new, |(_, l)| l.iter().map(ToString::to_string).collect()),
+                .map_or_else(Vec::new, |(_, l)| {
+                    l.iter().map(ToString::to_string).collect()
+                }),
             code: (*code).to_string(),
         })
         .collect()
@@ -3385,22 +3433,40 @@ pub static EXCLUDED_IDS_V7: &[&str] = &[];
 /// see the atom comments). 16 specs, 0 exclusions; chain 10 / flat 3 /
 /// capped 2 / refused 1.
 pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[
-    ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]),  // depth=4
-    ("gen7-cap-cif6", &["collapsible_if"]),  // depth=4
-    ("gen7-d2-cif3", &["collapsible_if"]),  // depth=2
-    ("gen7-d2-mm-identity", &["identity_op", "manual_map"]),  // depth=2
-    ("gen7-d2-nrl-dblparen", &["double_parens", "needless_range_loop"]),  // depth=2
-    ("gen7-d2-nrl-identity", &["identity_op", "needless_range_loop"]),  // depth=2
-    ("gen7-d2-nrl-nrl", &["needless_range_loop"]),  // depth=2
-    ("gen7-d2-nrl-semi", &["needless_range_loop", "semicolon_if_nothing_returned"]),  // depth=2
-    ("gen7-d2-sme-distsq", &["single_match_else"]),  // depth=2
-    ("gen7-d2-smx-identity", &["identity_op", "single_match_else"]),  // depth=2
-    ("gen7-d3-cif4", &["collapsible_if"]),  // depth=3
-    ("gen7-d4-cif5", &["collapsible_if"]),  // depth=4
-    ("gen7-flat-cif-smx", &["collapsible_if", "single_match_else"]),  // depth=1
-    ("gen7-flat-nrl-format", &["needless_range_loop"]),  // depth=1
-    ("gen7-flat-nrl-identity", &["identity_op", "needless_range_loop"]),  // depth=1
-    ("gen7-ref-nrl-write", &["needless_range_loop"]),  // depth=1
+    ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]), // depth=4
+    ("gen7-cap-cif6", &["collapsible_if"]),                         // depth=4
+    ("gen7-d2-cif3", &["collapsible_if"]),                          // depth=2
+    ("gen7-d2-mm-identity", &["identity_op", "manual_map"]),        // depth=2
+    (
+        "gen7-d2-nrl-dblparen",
+        &["double_parens", "needless_range_loop"],
+    ), // depth=2
+    (
+        "gen7-d2-nrl-identity",
+        &["identity_op", "needless_range_loop"],
+    ), // depth=2
+    ("gen7-d2-nrl-nrl", &["needless_range_loop"]),                  // depth=2
+    (
+        "gen7-d2-nrl-semi",
+        &["needless_range_loop", "semicolon_if_nothing_returned"],
+    ), // depth=2
+    ("gen7-d2-sme-distsq", &["single_match_else"]),                 // depth=2
+    (
+        "gen7-d2-smx-identity",
+        &["identity_op", "single_match_else"],
+    ), // depth=2
+    ("gen7-d3-cif4", &["collapsible_if"]),                          // depth=3
+    ("gen7-d4-cif5", &["collapsible_if"]),                          // depth=4
+    (
+        "gen7-flat-cif-smx",
+        &["collapsible_if", "single_match_else"],
+    ), // depth=1
+    ("gen7-flat-nrl-format", &["needless_range_loop"]),             // depth=1
+    (
+        "gen7-flat-nrl-identity",
+        &["identity_op", "needless_range_loop"],
+    ), // depth=1
+    ("gen7-ref-nrl-write", &["needless_range_loop"]),               // depth=1
 ];
 
 /// Freeze readiness for generation 7 — Err until the freeze e2e lands the
@@ -3410,7 +3476,13 @@ pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[
 ///
 /// The un-frozen state: how many specs lack oracle labels.
 pub fn v7_freeze_status() -> Result<usize, String> {
-    freeze_status_for(&specs_v7(), 7, "generation_v7_freeze", FROZEN_LABELS_V7, EXCLUDED_IDS_V7)
+    freeze_status_for(
+        &specs_v7(),
+        7,
+        "generation_v7_freeze",
+        FROZEN_LABELS_V7,
+        EXCLUDED_IDS_V7,
+    )
 }
 
 /// The admitted generation-7 fixture set.
@@ -3441,7 +3513,11 @@ mod tests {
         // invariants, not a count the corpus may legitimately change.
         assert!(!lints.is_empty(), "atom table empty — factory broken");
         for a in atoms() {
-            assert!(vocab.contains(a.lint.as_str()), "atom {} not in vocabulary", a.lint);
+            assert!(
+                vocab.contains(a.lint.as_str()),
+                "atom {} not in vocabulary",
+                a.lint
+            );
             assert!(
                 syn::parse_file(&a.code).is_ok(),
                 "atom {} does not parse standalone",
@@ -3541,17 +3617,33 @@ mod tests {
         let vocab = super::super::vocabulary();
         assert!(!PERSIST_ATOMS.is_empty(), "persist table empty");
         for p in PERSIST_ATOMS {
-            assert!(p.id.starts_with("persist_"), "persist id {} not namespaced", p.id);
-            assert!(!p.expect.is_empty(), "persist atom {} expects nothing", p.id);
+            assert!(
+                p.id.starts_with("persist_"),
+                "persist id {} not namespaced",
+                p.id
+            );
+            assert!(
+                !p.expect.is_empty(),
+                "persist atom {} expects nothing",
+                p.id
+            );
             for l in p.expect {
-                assert!(vocab.contains(*l), "persist atom {} expects non-vocabulary lint {l}", p.id);
+                assert!(
+                    vocab.contains(*l),
+                    "persist atom {} expects non-vocabulary lint {l}",
+                    p.id
+                );
             }
             assert!(
                 syn::parse_file(p.code).is_ok(),
                 "persist atom {} does not parse standalone",
                 p.id
             );
-            assert!(!p.code.contains("mod gen_"), "persist atom {} carries the wrapper", p.id);
+            assert!(
+                !p.code.contains("mod gen_"),
+                "persist atom {} carries the wrapper",
+                p.id
+            );
         }
     }
 
@@ -3561,7 +3653,10 @@ mod tests {
         let s2 = specs_v3();
         assert_eq!(s1, s2, "gen3 specs must be byte-stable");
         let n = v3_atoms().len();
-        assert!(n > PERSIST_ATOMS.len(), "gen3 atom table lost its corpus half");
+        assert!(
+            n > PERSIST_ATOMS.len(),
+            "gen3 atom table lost its corpus half"
+        );
         let k1 = s1.iter().filter(|s| s.k == 1).count();
         assert_eq!(k1, count_for_k(1, n));
         // The stratification contract: the persist atoms sit at the list
@@ -3584,9 +3679,17 @@ mod tests {
             }
         }
         // Every persist atom appears in at least one k=2 composite.
-        let k2_code: String = s1.iter().filter(|s| s.k == 2).map(|s| s.code.as_str()).collect();
+        let k2_code: String = s1
+            .iter()
+            .filter(|s| s.k == 2)
+            .map(|s| s.code.as_str())
+            .collect();
         for p in PERSIST_ATOMS {
-            assert!(k2_code.contains(p.code), "persist atom {} absent from every k=2 composite", p.id);
+            assert!(
+                k2_code.contains(p.code),
+                "persist atom {} absent from every k=2 composite",
+                p.id
+            );
         }
     }
 
@@ -3637,12 +3740,25 @@ mod tests {
         let by_name: BTreeMap<&str, &crate::domains::rustc_errors::corpus_gen::GeneratedCase> =
             corpus.iter().map(|c| (c.name.as_str(), c)).collect();
         assert!(!a1.is_empty(), "gen4 atom table empty");
-        assert!(a1.len() <= GEN4_ATOM_TARGET, "gen4 slice overshot its target");
+        assert!(
+            a1.len() <= GEN4_ATOM_TARGET,
+            "gen4 slice overshot its target"
+        );
         for a in &a1 {
-            let case = by_name.get(a.id.as_str()).unwrap_or_else(|| panic!("gen4 atom {} is not a corpus case", a.id));
-            assert_eq!(a.code, case.broken, "gen4 atom {} must carry the broken half", a.id);
+            let case = by_name
+                .get(a.id.as_str())
+                .unwrap_or_else(|| panic!("gen4 atom {} is not a corpus case", a.id));
+            assert_eq!(
+                a.code, case.broken,
+                "gen4 atom {} must carry the broken half",
+                a.id
+            );
             assert_eq!(a.expect, vec![case.expect_code.to_string()]);
-            assert!(!a.code.contains("mod gen_"), "gen4 atom {} carries the wrapper", a.id);
+            assert!(
+                !a.code.contains("mod gen_"),
+                "gen4 atom {} carries the wrapper",
+                a.id
+            );
         }
         // The stride slice must span both territories — the bench reports
         // them separately, and a single-territory ladder would blend by
@@ -3693,9 +3809,22 @@ mod tests {
                 .filter(|s| s.k == k)
                 .flat_map(|s| s.expect_lints.iter().map(String::as_str))
                 .collect();
-            let has_uncontested = codes.iter().any(|c| matches!(territory_of(c), crate::domains::rustc_errors::corpus_gen::Territory::Uncontested));
-            let has_contested = codes.iter().any(|c| matches!(territory_of(c), crate::domains::rustc_errors::corpus_gen::Territory::Contested));
-            assert!(has_uncontested && has_contested, "k={k} rung lost a territory");
+            let has_uncontested = codes.iter().any(|c| {
+                matches!(
+                    territory_of(c),
+                    crate::domains::rustc_errors::corpus_gen::Territory::Uncontested
+                )
+            });
+            let has_contested = codes.iter().any(|c| {
+                matches!(
+                    territory_of(c),
+                    crate::domains::rustc_errors::corpus_gen::Territory::Contested
+                )
+            });
+            assert!(
+                has_uncontested && has_contested,
+                "k={k} rung lost a territory"
+            );
         }
         // Every distinct code appears in at least one k≥2 composite.
         let composite_codes: BTreeSet<&str> = s1
@@ -3722,7 +3851,11 @@ mod tests {
             assert_eq!(codes.len(), s.k, "member multiset size vs k: {}", s.id);
             let distinct: BTreeSet<&str> = codes.iter().map(String::as_str).collect();
             let want: BTreeSet<&str> = s.expect_lints.iter().map(String::as_str).collect();
-            assert_eq!(distinct, want, "member distinct set vs union gold: {}", s.id);
+            assert_eq!(
+                distinct, want,
+                "member distinct set vs union gold: {}",
+                s.id
+            );
         }
         assert_eq!(v4_member_codes("gen4-"), None);
         assert_eq!(v4_member_codes("gen2-k1-identity_op"), None);
@@ -3792,8 +3925,11 @@ mod tests {
                 a.expect[0]
             );
             if !a.id.starts_with("persist_") {
-                assert!(!a.id.starts_with("persist_") && covered.insert(a.expect[0].clone()),
-                    "corpus rule {} covered twice", a.expect[0]);
+                assert!(
+                    !a.id.starts_with("persist_") && covered.insert(a.expect[0].clone()),
+                    "corpus rule {} covered twice",
+                    a.expect[0]
+                );
             }
         }
         for r in fixable {
@@ -3849,16 +3985,30 @@ mod tests {
             let mut terrs: BTreeSet<&str> = BTreeSet::new();
             let by_id: BTreeMap<&str, &V3Atom> = atoms.iter().map(|a| (a.id.as_str(), a)).collect();
             for s in specs.iter().filter(|s| s.k == k) {
-                let members = v5_member_rules(&s.id).unwrap_or_else(|| panic!("member rules unresolvable for {}", s.id));
+                let members = v5_member_rules(&s.id)
+                    .unwrap_or_else(|| panic!("member rules unresolvable for {}", s.id));
                 assert_eq!(members.len(), s.k, "member count on {}", s.id);
-                for (i, name) in s.id.strip_prefix("gen5-k").unwrap().split_once('-').unwrap().1.split('+').enumerate() {
-                    let atom = by_id.get(name).unwrap_or_else(|| panic!("atom {name} missing"));
+                for (i, name) in
+                    s.id.strip_prefix("gen5-k")
+                        .unwrap()
+                        .split_once('-')
+                        .unwrap()
+                        .1
+                        .split('+')
+                        .enumerate()
+                {
+                    let atom = by_id
+                        .get(name)
+                        .unwrap_or_else(|| panic!("atom {name} missing"));
                     assert_eq!(atom.expect[0], members[i], "member order on {}", s.id);
                     terrs.insert(v5_territory(name));
                 }
             }
             assert!(terrs.contains("persist"), "k={k} rung lacks a persist atom");
-            assert!(terrs.contains("addressable"), "k={k} rung lacks an addressable atom");
+            assert!(
+                terrs.contains("addressable"),
+                "k={k} rung lacks an addressable atom"
+            );
         }
     }
 
@@ -3885,7 +4035,9 @@ mod tests {
             if a.id.starts_with("persist_") {
                 continue; // persist atoms have no fixed_code by definition
             }
-            let fixed = fixed_by_rule.get(rule.as_str()).unwrap_or_else(|| panic!("rule {rule} missing from corpus"));
+            let fixed = fixed_by_rule
+                .get(rule.as_str())
+                .unwrap_or_else(|| panic!("rule {rule} missing from corpus"));
             assert!(
                 !v5_persists(rule, fixed),
                 "marker for {rule} survives its own fixed_code (falsified claim)"
@@ -3925,10 +4077,7 @@ mod tests {
     #[test]
     fn v5_region_extractor_aligns_member_order() {
         let specs = specs_v5();
-        let s = specs
-            .iter()
-            .find(|s| s.k == 2)
-            .expect("k=2 rung exists");
+        let s = specs.iter().find(|s| s.k == 2).expect("k=2 rung exists");
         for i in 0..s.k {
             let region = v5_module_region(&s.code, i)
                 .unwrap_or_else(|| panic!("region gen_{i} missing in {}", s.id));
@@ -3982,7 +4131,11 @@ mod tests {
             all.extend(list.iter().map(|x| x.id.as_str()));
         }
         let set: BTreeSet<&str> = all.iter().copied().collect();
-        assert_eq!(set.len(), all.len(), "spec ids must be unique across generations");
+        assert_eq!(
+            set.len(),
+            all.len(),
+            "spec ids must be unique across generations"
+        );
     }
 
     // ── generation 6 (Plan 095): real-repo shape ladder ────────────────
@@ -3993,8 +4146,10 @@ mod tests {
     #[test]
     fn v6_span_set_meets_the_amended_floors() {
         let multi = RAW_SPANS_V6.iter().filter(|s| s.expect.len() >= 2).count();
-        let classes: BTreeSet<&str> =
-            RAW_SPANS_V6.iter().flat_map(|s| s.expect.iter().copied()).collect();
+        let classes: BTreeSet<&str> = RAW_SPANS_V6
+            .iter()
+            .flat_map(|s| s.expect.iter().copied())
+            .collect();
         let repos: BTreeSet<&str> = RAW_SPANS_V6
             .iter()
             .filter_map(|s| s.provenance.split('@').next())
@@ -4004,8 +4159,15 @@ mod tests {
             "real-shape population too thin: {} (floor 16)",
             RAW_SPANS_V6.len()
         );
-        assert!(multi >= 4, "organic multi rung lost: {multi} (floor 4 — the measured yield)");
-        assert!(classes.len() >= 6, "lint classes: {} (floor 6)", classes.len());
+        assert!(
+            multi >= 4,
+            "organic multi rung lost: {multi} (floor 4 — the measured yield)"
+        );
+        assert!(
+            classes.len() >= 6,
+            "lint classes: {} (floor 6)",
+            classes.len()
+        );
         assert!(repos.len() >= 4, "source repos: {repos:?} (floor 4)");
         // ≤4 fixtures per (repo, class) — the v1 diversity discipline.
         let mut per: BTreeSet<(&str, &str)> = BTreeSet::new();
@@ -4033,7 +4195,11 @@ mod tests {
                 "span {} does not parse standalone",
                 s.id
             );
-            let want = if s.expect.len() >= 2 { "multi" } else { "single" };
+            let want = if s.expect.len() >= 2 {
+                "multi"
+            } else {
+                "single"
+            };
             assert_eq!(v6_territory(s.id), want, "territory drift on {}", s.id);
         }
     }
@@ -4052,11 +4218,18 @@ mod tests {
             .map(|s| s.id.as_str())
             .collect();
         for id in earlier {
-            assert!(!v6.contains(id), "gen-6 id collides with an earlier spec: {id}");
+            assert!(
+                !v6.contains(id),
+                "gen-6 id collides with an earlier spec: {id}"
+            );
         }
         // v1 real fixtures start `<repo>-…`; gen-6 `gen6-…` — prefix disjoint.
         for f in crate::score_bench::fixtures::fixtures() {
-            assert!(!v6.contains(f.id), "gen-6 id collides with a v1 fixture: {}", f.id);
+            assert!(
+                !v6.contains(f.id),
+                "gen-6 id collides with a v1 fixture: {}",
+                f.id
+            );
         }
     }
 
@@ -4097,16 +4270,26 @@ mod tests {
     #[test]
     fn v7_atoms_parse_and_claims_are_vocabulary() {
         let vocab = super::super::vocabulary();
-        assert_eq!(RAW_ATOMS_V7.len(), EXPECTED_LINTS_V7.len(), "atom/claim tables aligned");
+        assert_eq!(
+            RAW_ATOMS_V7.len(),
+            EXPECTED_LINTS_V7.len(),
+            "atom/claim tables aligned"
+        );
         for (id, code) in RAW_ATOMS_V7 {
-            assert!(syn::parse_file(code).is_ok(), "atom {id} does not parse standalone");
+            assert!(
+                syn::parse_file(code).is_ok(),
+                "atom {id} does not parse standalone"
+            );
             let claims = EXPECTED_LINTS_V7
                 .iter()
                 .find(|(i, _)| i == id)
                 .map_or(&[] as &[&str], |(_, l)| *l);
             assert!(!claims.is_empty(), "atom {id} claims no lints");
             for c in claims {
-                assert!(vocab.contains(*c), "atom {id} claims non-vocabulary lint {c}");
+                assert!(
+                    vocab.contains(*c),
+                    "atom {id} claims non-vocabulary lint {c}"
+                );
             }
         }
     }
@@ -4158,7 +4341,10 @@ mod tests {
                     // territory claim cargo-less; the clippy after-verdict is
                     // the bench-time authority.
                     if *id == "gen7-cap-cif5-identity" {
-                        assert!(healed.contains("* 1"), "cap-cif5-identity lost its persist shape");
+                        assert!(
+                            healed.contains("* 1"),
+                            "cap-cif5-identity lost its persist shape"
+                        );
                     }
                     if *id == "gen7-ref-nrl-write" {
                         assert!(
@@ -4187,20 +4373,40 @@ mod tests {
             .iter()
             .filter(|(id, _)| matches!(v7_territory(id), "chain" | "capped"))
             .count();
-        let flat = RAW_ATOMS_V7.iter().filter(|(id, _)| v7_territory(id) == "flat").count();
-        let refused =
-            RAW_ATOMS_V7.iter().filter(|(id, _)| v7_territory(id) == "refused").count();
+        let flat = RAW_ATOMS_V7
+            .iter()
+            .filter(|(id, _)| v7_territory(id) == "flat")
+            .count();
+        let refused = RAW_ATOMS_V7
+            .iter()
+            .filter(|(id, _)| v7_territory(id) == "refused")
+            .count();
         let classes: BTreeSet<&str> = EXPECTED_LINTS_V7
             .iter()
             .flat_map(|(_, l)| l.iter().copied())
             .collect();
-        let rungs: BTreeSet<usize> = RAW_ATOMS_V7.iter().map(|(id, _)| v7_expected_k(id)).collect();
-        assert!(RAW_ATOMS_V7.len() >= 14, "chain population too thin: {}", RAW_ATOMS_V7.len());
+        let rungs: BTreeSet<usize> = RAW_ATOMS_V7
+            .iter()
+            .map(|(id, _)| v7_expected_k(id))
+            .collect();
+        assert!(
+            RAW_ATOMS_V7.len() >= 14,
+            "chain population too thin: {}",
+            RAW_ATOMS_V7.len()
+        );
         assert!(chains >= 10, "chain+capped rung lost: {chains} (floor 10)");
         assert!(flat >= 2, "flat control lost: {flat} (floor 2)");
         assert!(refused >= 1, "refused territory lost: {refused} (floor 1)");
-        assert!(classes.len() >= 7, "lint classes: {} (floor 7)", classes.len());
-        assert_eq!(rungs, BTreeSet::from([1, 2, 3, 4, 5]), "depth-ladder rungs: {rungs:?}");
+        assert!(
+            classes.len() >= 7,
+            "lint classes: {} (floor 7)",
+            classes.len()
+        );
+        assert_eq!(
+            rungs,
+            BTreeSet::from([1, 2, 3, 4, 5]),
+            "depth-ladder rungs: {rungs:?}"
+        );
     }
 
     /// ids unique including generation 7, and no collision with any earlier
@@ -4210,18 +4416,24 @@ mod tests {
     fn v7_ids_are_disjoint_from_earlier_generations() {
         let v7: BTreeSet<&str> = RAW_ATOMS_V7.iter().map(|(id, _)| *id).collect();
         assert_eq!(v7.len(), RAW_ATOMS_V7.len(), "duplicate gen-7 atom ids");
-        let earlier_specs: Vec<Vec<GenSpec>> =
-            vec![specs(), specs_v3(), specs_v5(), specs_v6()];
+        let earlier_specs: Vec<Vec<GenSpec>> = vec![specs(), specs_v3(), specs_v5(), specs_v6()];
         let earlier: Vec<&str> = earlier_specs
             .iter()
             .flatten()
             .map(|s| s.id.as_str())
             .collect();
         for id in earlier {
-            assert!(!v7.contains(id), "gen-7 id collides with an earlier spec: {id}");
+            assert!(
+                !v7.contains(id),
+                "gen-7 id collides with an earlier spec: {id}"
+            );
         }
         for f in crate::score_bench::fixtures::fixtures() {
-            assert!(!v7.contains(f.id), "gen-7 id collides with a v1 fixture: {}", f.id);
+            assert!(
+                !v7.contains(f.id),
+                "gen-7 id collides with a v1 fixture: {}",
+                f.id
+            );
         }
     }
 

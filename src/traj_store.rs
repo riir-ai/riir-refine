@@ -76,8 +76,8 @@ use std::path::{Path, PathBuf};
 use riir_neuron_db::bm25::Bm25Index;
 use riir_neuron_db::local_kv::LocalKvStore;
 
-use crate::embedder::{embed_into, EMBED_DIM};
 use crate::elo::EloTable;
+use crate::embedder::{embed_into, EMBED_DIM};
 use crate::memory::EvidenceTier;
 
 /// One durable trajectory row (JSON doc — numeric + text halves together).
@@ -493,8 +493,7 @@ impl TrajStore {
         for (k, v) in self.kv.scan_prefix(b"traj:") {
             match serde_json::from_slice::<TrajRowDoc>(&v) {
                 Ok(t) => {
-                    self.bm25
-                        .index(&k, &format!("{} {}", t.shape, t.fix));
+                    self.bm25.index(&k, &format!("{} {}", t.shape, t.fix));
                 }
                 Err(_) => bad += 1,
             }
@@ -644,13 +643,7 @@ impl TrajStore {
     /// Load the row at `key`, or create a fresh Heuristic one for
     /// `(lint_key, shape, fix)` (the shared load-or-create of
     /// [`record`](Self::record)/[`record_applied`](Self::record_applied)).
-    fn load_or_new_row(
-        &self,
-        key: &[u8],
-        lint_key: &str,
-        shape: &str,
-        fix: &str,
-    ) -> TrajRowDoc {
+    fn load_or_new_row(&self, key: &[u8], lint_key: &str, shape: &str, fix: &str) -> TrajRowDoc {
         self.kv
             .get_bytes(key)
             .and_then(|v| serde_json::from_slice::<TrajRowDoc>(&v).ok())
@@ -678,11 +671,11 @@ impl TrajStore {
     /// Encode + put one row + keep the BM25 axis live (the shared tail of
     /// every row-writing method).
     fn put_row(&self, key: &[u8], row: &TrajRowDoc) -> Result<(), String> {
-        let bytes =
-            serde_json::to_vec(row).map_err(|e| format!("encode row: {e}"))?;
-        self.kv.put(key, &bytes).map_err(|e| format!("put row: {e}"))?;
-        self.bm25
-            .index(key, &format!("{} {}", row.shape, row.fix));
+        let bytes = serde_json::to_vec(row).map_err(|e| format!("encode row: {e}"))?;
+        self.kv
+            .put(key, &bytes)
+            .map_err(|e| format!("put row: {e}"))?;
+        self.bm25.index(key, &format!("{} {}", row.shape, row.fix));
         Ok(())
     }
 
@@ -702,7 +695,13 @@ impl TrajStore {
     /// KV put or JSON encode failure (the learn row is skipped on read
     /// errors — an undecodable row restarts fresh rather than failing the
     /// verdict that feeds it).
-    fn learn_step(&self, lint_key: &str, fix: &str, success: bool, run_id: &str) -> Result<(), String> {
+    fn learn_step(
+        &self,
+        lint_key: &str,
+        fix: &str,
+        success: bool,
+        run_id: &str,
+    ) -> Result<(), String> {
         let key = format!("learn:{lint_key}").into_bytes();
         let mut row: LearnRowDoc = self
             .kv
@@ -732,8 +731,12 @@ impl TrajStore {
             for (i, x) in row.direction.iter().take(EMBED_DIM).enumerate() {
                 dir[i] = *x;
             }
-            row.last_delta =
-                crate::evolve::ema_step(&mut dir, &fix_dir, success, &crate::evolve::EvolveConfig::default());
+            row.last_delta = crate::evolve::ema_step(
+                &mut dir,
+                &fix_dir,
+                success,
+                &crate::evolve::EvolveConfig::default(),
+            );
             row.direction = dir.to_vec();
             row.updates = row.updates.saturating_add(1);
         }
@@ -744,9 +747,10 @@ impl TrajStore {
         }
         row.last_run_id = run_id.to_string();
         row.last_seen_at = now_unix_secs();
-        let bytes =
-            serde_json::to_vec(&row).map_err(|e| format!("encode learn row: {e}"))?;
-        self.kv.put(&key, &bytes).map_err(|e| format!("put learn row: {e}"))
+        let bytes = serde_json::to_vec(&row).map_err(|e| format!("encode learn row: {e}"))?;
+        self.kv
+            .put(&key, &bytes)
+            .map_err(|e| format!("put learn row: {e}"))
     }
 
     /// Every persisted EMA learn row (the `--memory-stats` learn section +
@@ -968,7 +972,10 @@ impl TrajStore {
                 .iter()
                 .map(|(rule, (s, f))| {
                     let outcomes = crate::dispersion::from_counts(*s as usize, *f as usize, 0);
-                    ((*rule).to_string(), crate::dispersion::outcome_entropy(&outcomes))
+                    (
+                        (*rule).to_string(),
+                        crate::dispersion::outcome_entropy(&outcomes),
+                    )
                 })
                 .collect();
             ents.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -1103,7 +1110,11 @@ impl TrajStore {
 
     /// Full row key: `scorerun:{recorded_unix}:{sha-or-nosh}`.
     fn score_key(rec: &ScoreRunRow) -> Vec<u8> {
-        let sha = if rec.sha.is_empty() { "nosh" } else { rec.sha.as_str() };
+        let sha = if rec.sha.is_empty() {
+            "nosh"
+        } else {
+            rec.sha.as_str()
+        };
         format!("scorerun:{}:{}", rec.recorded_unix, sha).into_bytes()
     }
 
@@ -1111,10 +1122,16 @@ impl TrajStore {
     /// idempotence counter: `false` = unchanged, nothing written).
     fn put_row_if_changed(&self, key: &[u8], row: &impl serde::Serialize) -> Result<bool, String> {
         let bytes = serde_json::to_vec(row).map_err(|e| format!("encode row: {e}"))?;
-        if self.kv.get_bytes(key).is_some_and(|old| old.as_ref() == bytes.as_slice()) {
+        if self
+            .kv
+            .get_bytes(key)
+            .is_some_and(|old| old.as_ref() == bytes.as_slice())
+        {
             return Ok(false);
         }
-        self.kv.put(key, &bytes).map_err(|e| format!("put row: {e}"))?;
+        self.kv
+            .put(key, &bytes)
+            .map_err(|e| format!("put row: {e}"))?;
         Ok(true)
     }
 
@@ -1559,7 +1576,12 @@ const BELIEF_EPSILON: f32 = 0.32;
 /// from E0597-returns-ref; retrieved neighbors can (the plan's T4.2
 /// claim — benefit measured at G6, T4.2's honest-negative clause stands).
 #[must_use]
-pub fn shape_conditional_score(store: &TrajStore, code: &str, strategy_id: &str, shape: &str) -> f32 {
+pub fn shape_conditional_score(
+    store: &TrajStore,
+    code: &str,
+    strategy_id: &str,
+    shape: &str,
+) -> f32 {
     let neighbors = store.retrieve(shape, &format!("{code}:"), 8);
     let mut s = 0.0f32;
     let mut f = 0.0f32;
@@ -1606,7 +1628,8 @@ pub fn shape_conditional_order(
         shape_conditional_score(store, &cand.code, &cand.strategy_id, &cand.shape)
     };
     cands.sort_by(|a, b| {
-        belief(b).total_cmp(&belief(a))
+        belief(b)
+            .total_cmp(&belief(a))
             .then(a.file.cmp(&b.file))
             .then(a.line.cmp(&b.line))
             .then(a.total_len().cmp(&b.total_len()))
@@ -1658,12 +1681,20 @@ mod tests {
         // rule_y: 2 Certified + 1 unverified (Heuristic) — density 2.
         store.record("rule_y", "s1", "f1", true, true, "r").unwrap();
         store.record("rule_y", "s2", "f2", true, true, "r").unwrap();
-        store.record("rule_y", "s3", "f3", true, false, "r").unwrap();
+        store
+            .record("rule_y", "s3", "f3", true, false, "r")
+            .unwrap();
         // rule_z: 1 Certified + 3 consecutive fails → Withdrawn — density 1.
         store.record("rule_z", "w1", "f", true, true, "r").unwrap();
-        store.record("rule_z", "w2", "f", false, false, "r").unwrap();
-        store.record("rule_z", "w3", "f", false, false, "r").unwrap();
-        store.record("rule_z", "w4", "f", false, false, "r").unwrap();
+        store
+            .record("rule_z", "w2", "f", false, false, "r")
+            .unwrap();
+        store
+            .record("rule_z", "w3", "f", false, false, "r")
+            .unwrap();
+        store
+            .record("rule_z", "w4", "f", false, false, "r")
+            .unwrap();
 
         let density = store.certified_density();
         assert_eq!(density.get("rule_x"), Some(&3), "3 certified rows");
@@ -1681,7 +1712,14 @@ mod tests {
             let (store, bad) = TrajStore::open(&root).unwrap();
             assert_eq!(bad, 0);
             store
-                .record("E0502:e0502-deref-removal", "&v[0]", "", true, true, "run-a")
+                .record(
+                    "E0502:e0502-deref-removal",
+                    "&v[0]",
+                    "",
+                    true,
+                    true,
+                    "run-a",
+                )
                 .unwrap();
             store
                 .record(
@@ -1704,8 +1742,7 @@ mod tests {
             assert_eq!(hits.len(), 2);
             let top = &hits[0];
             assert_eq!(
-                top.lint_key,
-                "E0502:e0502-deref-removal",
+                top.lint_key, "E0502:e0502-deref-removal",
                 "exact-shape neighbor ranks first: {hits:?}"
             );
             assert_eq!(top.success_count, 1);
@@ -1747,8 +1784,11 @@ mod tests {
         // all} reads 0 — those are exactly the auto-unlock conditions.
         let root = tmp_root("pair-streak");
         let (store, _) = TrajStore::open(&root).unwrap();
-        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 0,
-            "no row = no suppression");
+        assert_eq!(
+            store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"),
+            0,
+            "no row = no suppression"
+        );
 
         // One fail: under the threshold — the whole-file-association retry
         // window (Issue 018's attribution-impossible revert records every
@@ -1756,29 +1796,44 @@ mod tests {
         store
             .record("use_self", "&EventLog<A>", "&Self", false, false, "run-1")
             .unwrap();
-        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 1);
+        assert_eq!(
+            store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"),
+            1
+        );
 
         // Second consecutive fail: the pair is a deterministic replay —
         // suppress.
         store
             .record("use_self", "&EventLog<A>", "&Self", false, false, "run-2")
             .unwrap();
-        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 2);
+        assert_eq!(
+            store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"),
+            2
+        );
 
         // A different fix text on the same span: the proposer's output
         // changed since the failures — retry is NOT a replay of the known
         // revert (the 6038e59 manual_let_else emitter-fix recovery path).
-        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self<A>"), 0);
+        assert_eq!(
+            store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self<A>"),
+            0
+        );
 
         // A success (verified) resets the streak — the pair heals honestly
         // once the surrounding code changes.
         store
             .record("use_self", "&EventLog<A>", "&Self", true, true, "run-3")
             .unwrap();
-        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 0);
+        assert_eq!(
+            store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"),
+            0
+        );
 
         // Different rule or shape: different row, no suppression.
-        assert_eq!(store.pair_consecutive_fails("use_self", "&OtherLog<A>", "&Self"), 0);
+        assert_eq!(
+            store.pair_consecutive_fails("use_self", "&OtherLog<A>", "&Self"),
+            0
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -1787,7 +1842,14 @@ mod tests {
         let root = tmp_root("dump");
         let (store, _) = TrajStore::open(&root).unwrap();
         store
-            .record("E0505:e0505-clone-at-move", "v", ".clone()", true, true, "run-d")
+            .record(
+                "E0505:e0505-clone-at-move",
+                "v",
+                ".clone()",
+                true,
+                true,
+                "run-d",
+            )
             .unwrap();
         let dumped = store.dump();
         assert_eq!(dumped.len(), 1);
@@ -1818,22 +1880,38 @@ mod tests {
                 )
                 .unwrap();
             let row = &store.dump()[0];
-            assert_eq!(row.component, Some(crate::component::ComponentClass::Drafter));
+            assert_eq!(
+                row.component,
+                Some(crate::component::ComponentClass::Drafter)
+            );
             assert_eq!(row.fail_count, 1);
 
             // A later unattributed SUCCESS leaves the last failure
             // attribution in place (failure metadata, not a state machine).
             store
-                .record("E0502:e0502-clone-out", "&items[0]", "items[0].clone()", true, true, "run-s")
+                .record(
+                    "E0502:e0502-clone-out",
+                    "&items[0]",
+                    "items[0].clone()",
+                    true,
+                    true,
+                    "run-s",
+                )
                 .unwrap();
             let row = &store.dump()[0];
-            assert_eq!(row.component, Some(crate::component::ComponentClass::Drafter));
+            assert_eq!(
+                row.component,
+                Some(crate::component::ComponentClass::Drafter)
+            );
         }
         // Durable across reopen (the audit reads it via --dump-trajectories).
         {
             let (store, _) = TrajStore::open(&root).unwrap();
             let row = &store.dump()[0];
-            assert_eq!(row.component, Some(crate::component::ComponentClass::Drafter));
+            assert_eq!(
+                row.component,
+                Some(crate::component::ComponentClass::Drafter)
+            );
         }
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1913,10 +1991,24 @@ mod tests {
         // ORDER follows lived outcomes, not the static preference).
         for _ in 0..5 {
             store
-                .record("E0502:e0502-deref-removal", "&v[0]", "", true, true, "run-o")
+                .record(
+                    "E0502:e0502-deref-removal",
+                    "&v[0]",
+                    "",
+                    true,
+                    true,
+                    "run-o",
+                )
                 .unwrap();
             store
-                .record("E0502:e0502-clone-out", "&v[0]", "v[0].clone()", false, false, "run-o")
+                .record(
+                    "E0502:e0502-clone-out",
+                    "&v[0]",
+                    "v[0].clone()",
+                    false,
+                    false,
+                    "run-o",
+                )
                 .unwrap();
         }
         let mk = |strat: &str, repl: &str, len_hint: usize| FixCandidate {
@@ -1948,10 +2040,24 @@ mod tests {
         let (flipped, _) = TrajStore::open(&flipped_root).unwrap();
         for _ in 0..5 {
             flipped
-                .record("E0502:e0502-deref-removal", "&v[0]", "", false, false, "run-f")
+                .record(
+                    "E0502:e0502-deref-removal",
+                    "&v[0]",
+                    "",
+                    false,
+                    false,
+                    "run-f",
+                )
                 .unwrap();
             flipped
-                .record("E0502:e0502-clone-out", "&v[0]", "v[0].clone()", true, true, "run-f")
+                .record(
+                    "E0502:e0502-clone-out",
+                    "&v[0]",
+                    "v[0].clone()",
+                    true,
+                    true,
+                    "run-f",
+                )
                 .unwrap();
         }
         let mut flipped_cands = vec![
@@ -1982,10 +2088,22 @@ mod tests {
             assert!(empty.contains("record — | verdict — | learn —"));
 
             store
-                .record("uninlined_format_args", "format!(\"{}\", x)", "format!(\"{x}\")", true, true, "run-1")
+                .record(
+                    "uninlined_format_args",
+                    "format!(\"{}\", x)",
+                    "format!(\"{x}\")",
+                    true,
+                    true,
+                    "run-1",
+                )
                 .unwrap();
             store
-                .record_applied("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", "run-1")
+                .record_applied(
+                    "match_bool",
+                    "match c { true => a, _ => b }",
+                    "if c { a } else { b }",
+                    "run-1",
+                )
                 .unwrap();
         }
         {
@@ -2065,7 +2183,14 @@ mod tests {
             let (store, _) = TrajStore::open(&root).unwrap();
             // First verdict is a SUCCESS → initializes the direction.
             store
-                .record("uninlined_format_args", "format!(\"{}\", x)", "format!(\"{x}\")", true, true, "run-1")
+                .record(
+                    "uninlined_format_args",
+                    "format!(\"{}\", x)",
+                    "format!(\"{x}\")",
+                    true,
+                    true,
+                    "run-1",
+                )
                 .unwrap();
             let learns = store.learn_rows();
             assert_eq!(learns.len(), 1, "one learn row per rule");
@@ -2081,7 +2206,14 @@ mod tests {
             // A second, different fix → the direction MOVES (Δ ≠ 0).
             let init_dir = l.direction.clone();
             store
-                .record("uninlined_format_args", "println!(\"{}\", y)", "println!(\"{y}\")", true, true, "run-2")
+                .record(
+                    "uninlined_format_args",
+                    "println!(\"{}\", y)",
+                    "println!(\"{y}\")",
+                    true,
+                    true,
+                    "run-2",
+                )
                 .unwrap();
             let l = &store.learn_rows()[0];
             assert_eq!(l.updates, 2);
@@ -2091,7 +2223,14 @@ mod tests {
 
             // A post-init FAIL moves the direction away — still an update.
             store
-                .record("uninlined_format_args", "write!(f, \"{}\", z)", "write!(f, \"{z}\")", false, false, "run-3")
+                .record(
+                    "uninlined_format_args",
+                    "write!(f, \"{}\", z)",
+                    "write!(f, \"{z}\")",
+                    false,
+                    false,
+                    "run-3",
+                )
                 .unwrap();
             let l = &store.learn_rows()[0];
             assert_eq!(l.updates, 3);
@@ -2113,7 +2252,14 @@ mod tests {
         let root = tmp_root("learn-fail-first");
         let (store, _) = TrajStore::open(&root).unwrap();
         store
-            .record("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", false, false, "run-f")
+            .record(
+                "match_bool",
+                "match c { true => a, _ => b }",
+                "if c { a } else { b }",
+                false,
+                false,
+                "run-f",
+            )
             .unwrap();
         let l = &store.learn_rows()[0];
         assert_eq!(l.fails, 1, "the verdict is still counted");
@@ -2130,7 +2276,12 @@ mod tests {
         let root = tmp_root("learn-apply-only");
         let (store, _) = TrajStore::open(&root).unwrap();
         store
-            .record_applied("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", "run-a")
+            .record_applied(
+                "match_bool",
+                "match c { true => a, _ => b }",
+                "if c { a } else { b }",
+                "run-a",
+            )
             .unwrap();
         assert!(store.learn_rows().is_empty());
         let _ = std::fs::remove_dir_all(&root);
@@ -2141,7 +2292,14 @@ mod tests {
         let root = tmp_root("learn-isolated");
         let (store, _) = TrajStore::open(&root).unwrap();
         store
-            .record("E0502:e0502-deref-removal", "&v[0]", "", true, true, "run-1")
+            .record(
+                "E0502:e0502-deref-removal",
+                "&v[0]",
+                "",
+                true,
+                true,
+                "run-1",
+            )
             .unwrap();
         assert_eq!(store.len(), 1, "learn rows are not trajectory rows");
         assert_eq!(store.dump().len(), 1);
@@ -2164,10 +2322,24 @@ mod tests {
             );
 
             store
-                .record("uninlined_format_args", "format!(\"{}\", x)", "format!(\"{x}\")", true, true, "run-1")
+                .record(
+                    "uninlined_format_args",
+                    "format!(\"{}\", x)",
+                    "format!(\"{x}\")",
+                    true,
+                    true,
+                    "run-1",
+                )
                 .unwrap();
             store
-                .record("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", true, true, "run-1")
+                .record(
+                    "match_bool",
+                    "match c { true => a, _ => b }",
+                    "if c { a } else { b }",
+                    true,
+                    true,
+                    "run-1",
+                )
                 .unwrap();
         }
         {
@@ -2177,7 +2349,10 @@ mod tests {
                 report.contains("learn (EMA): 2 evolved rule(s) | 2 update(s) consumed"),
                 "{report}"
             );
-            assert!(report.contains("last |Δ| "), "per-rule delta column: {report}");
+            assert!(
+                report.contains("last |Δ| "),
+                "per-rule delta column: {report}"
+            );
             assert!(report.contains("uninlined_format_args"));
             assert!(report.contains("match_bool"));
             assert!(
@@ -2197,13 +2372,21 @@ mod tests {
         let root = tmp_root("elo-backfill");
         {
             let (store, _) = TrajStore::open(&root).unwrap();
-            store.record("rule_a", "shape 1", "fix", true, true, "run-1").unwrap();
+            store
+                .record("rule_a", "shape 1", "fix", true, true, "run-1")
+                .unwrap();
             for _ in 0..3 {
-                store.record("rule_a", "shape 1", "fix", false, true, "run-1").unwrap();
+                store
+                    .record("rule_a", "shape 1", "fix", false, true, "run-1")
+                    .unwrap();
             }
-            store.record("rule_b", "shape 1", "fix2", true, true, "run-1").unwrap();
+            store
+                .record("rule_b", "shape 1", "fix2", true, true, "run-1")
+                .unwrap();
             // Apply-only sighting: no outcomes, stays unrated.
-            store.record_applied("rule_c", "shape 3", "fix3", "run-1").unwrap();
+            store
+                .record_applied("rule_c", "shape 3", "fix3", "run-1")
+                .unwrap();
 
             let s1 = store.recompute_elo().unwrap();
             assert_eq!(s1.rows_seen, 3);
@@ -2223,7 +2406,11 @@ mod tests {
             assert_eq!(a.span_elo, b.span_elo, "shared span carries one rating");
             // The span's record: 3 wins (rule_a's failures) vs 2 losses
             // (rule_a + rule_b successes) — a net-winning span rates UP.
-            assert!(a.span_elo > default_elo(), "3W/2L span rated up: {}", a.span_elo);
+            assert!(
+                a.span_elo > default_elo(),
+                "3W/2L span rated up: {}",
+                a.span_elo
+            );
             // Apply-only row stays at base (no matches).
             assert_eq!(c.elo, default_elo());
             assert_eq!(c.span_elo, default_elo());
@@ -2253,9 +2440,15 @@ mod tests {
         // rule's FINAL rating (the consumer contract — T3/T4 read any row).
         let root = tmp_root("elo-final");
         let (store, _) = TrajStore::open(&root).unwrap();
-        store.record("rule_r", "shape x", "f", true, true, "run-1").unwrap();
-        store.record("rule_r", "shape x", "f", true, true, "run-1").unwrap();
-        store.record("rule_r", "shape y", "f", false, true, "run-1").unwrap();
+        store
+            .record("rule_r", "shape x", "f", true, true, "run-1")
+            .unwrap();
+        store
+            .record("rule_r", "shape x", "f", true, true, "run-1")
+            .unwrap();
+        store
+            .record("rule_r", "shape y", "f", false, true, "run-1")
+            .unwrap();
         store.recompute_elo().unwrap();
         let dump = store.dump();
         let x = dump.iter().find(|r| r.shape == "shape x").unwrap();
@@ -2265,7 +2458,10 @@ mod tests {
         // x lost to the rule twice (0W/2L → down); y beat it once (1W/0L
         // → up) — a span's wins come from the rule's failures.
         assert!(x.span_elo < default_elo(), "twice-beaten span rated down");
-        assert!(y.span_elo > default_elo(), "span that beat the rule rated up");
+        assert!(
+            y.span_elo > default_elo(),
+            "span that beat the rule rated up"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -2303,7 +2499,16 @@ mod tests {
         // ratings (G4's heal-path promise).
         let root = tmp_root("elo-batch-only");
         let (store, _) = TrajStore::open(&root).unwrap();
-        store.record("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", true, true, "run-a").unwrap();
+        store
+            .record(
+                "match_bool",
+                "match c { true => a, _ => b }",
+                "if c { a } else { b }",
+                true,
+                true,
+                "run-a",
+            )
+            .unwrap();
         let row = &store.dump()[0];
         assert_eq!(row.elo, default_elo(), "record must not write ratings");
         assert_eq!(row.span_elo, default_elo());
@@ -2321,10 +2526,16 @@ mod tests {
         {
             let (store, _) = TrajStore::open(&root).unwrap();
             for _ in 0..3 {
-                store.record("rule_a", "shape 1", "fix", true, true, "run-1").unwrap();
+                store
+                    .record("rule_a", "shape 1", "fix", true, true, "run-1")
+                    .unwrap();
             }
-            store.record("rule_a", "shape 2", "fix", false, true, "run-1").unwrap();
-            store.record("rule_b", "shape 1", "fix2", true, true, "run-1").unwrap();
+            store
+                .record("rule_a", "shape 2", "fix", false, true, "run-1")
+                .unwrap();
+            store
+                .record("rule_b", "shape 1", "fix2", true, true, "run-1")
+                .unwrap();
             store.recompute_elo().unwrap();
         }
         let (store, _) = TrajStore::open(&root).unwrap();
@@ -2358,11 +2569,15 @@ mod tests {
         {
             let (store, _) = TrajStore::open(&root).unwrap();
             for _ in 0..4 {
-                store.record("rule_r", "shape x", "f", true, true, "run-1").unwrap();
+                store
+                    .record("rule_r", "shape x", "f", true, true, "run-1")
+                    .unwrap();
             }
             store.recompute_elo().unwrap();
             // Post-recompute sighting on a NEW shape: fresh row at base.
-            store.record_applied("rule_r", "shape new", "f", "run-2").unwrap();
+            store
+                .record_applied("rule_r", "shape new", "f", "run-2")
+                .unwrap();
         }
         let (store, _) = TrajStore::open(&root).unwrap();
         let dump = store.dump();
@@ -2383,7 +2598,9 @@ mod tests {
         let root = tmp_root("elo-table-unrated");
         {
             let (store, _) = TrajStore::open(&root).unwrap();
-            store.record_applied("review_only", "shape 3", "fix3", "run-1").unwrap();
+            store
+                .record_applied("review_only", "shape 3", "fix3", "run-1")
+                .unwrap();
             let table = store.elo_table();
             assert!(table.is_empty());
             assert!(!table.contains("review_only"));
@@ -2427,7 +2644,10 @@ mod tests {
         let (store, _) = TrajStore::open(&root).unwrap();
         let series = store.corpus_series().unwrap();
         assert_eq!(series.len(), 3);
-        assert_eq!((series[0].day.as_str(), series[0].domain.as_str()), ("2026-08-27", "sec"));
+        assert_eq!(
+            (series[0].day.as_str(), series[0].domain.as_str()),
+            ("2026-08-27", "sec")
+        );
         assert_eq!(
             (series[1].day.as_str(), series[1].domain.as_str()),
             ("2026-08-28", "kernel_opt")
@@ -2493,12 +2713,21 @@ mod tests {
         let (store, _) = TrajStore::open(&root).unwrap();
         // Insert out of order; score_runs must return (recorded_unix, key)
         // order. The empty-sha row pins the `nosh` key part.
-        store.record_score_run(&mk("2026-08-25T04:05:18", "7399ffc", 1_756_087_518, 0.96)).unwrap();
-        store.record_score_run(&mk("2026-08-19T04:49:29", "", 1_755_571_769, 0.84)).unwrap();
-        store.record_score_run(&mk("2026-08-28T02:09:06", "9f08442", 1_756_337_346, 0.98)).unwrap();
+        store
+            .record_score_run(&mk("2026-08-25T04:05:18", "7399ffc", 1_756_087_518, 0.96))
+            .unwrap();
+        store
+            .record_score_run(&mk("2026-08-19T04:49:29", "", 1_755_571_769, 0.84))
+            .unwrap();
+        store
+            .record_score_run(&mk("2026-08-28T02:09:06", "9f08442", 1_756_337_346, 0.98))
+            .unwrap();
         let runs = store.score_runs().unwrap();
         assert_eq!(runs.len(), 3);
-        assert_eq!(runs[0].sha, "", "empty sha stored verbatim (key part is nosh)");
+        assert_eq!(
+            runs[0].sha, "",
+            "empty sha stored verbatim (key part is nosh)"
+        );
         assert!(runs[0].recorded_unix < runs[1].recorded_unix);
         assert!(runs[1].recorded_unix < runs[2].recorded_unix);
         assert!((runs[2].heal_rate - 0.98).abs() < 1e-6);
@@ -2575,7 +2804,10 @@ mod tests {
         assert_eq!((seen, written), (1, 0));
         let series = store.corpus_series().unwrap();
         assert_eq!(series.len(), 1);
-        assert_eq!(series[0].count, 396, "source-walk stamp survived the import");
+        assert_eq!(
+            series[0].count, 396,
+            "source-walk stamp survived the import"
+        );
         assert_eq!(series[0].source_note, "source-walk");
         // An import-jsonl row (no stamp) is still idempotently refreshed.
         store
@@ -2590,7 +2822,11 @@ mod tests {
         )
         .unwrap();
         let (seen2, written2) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
-        assert_eq!((seen2, written2), (2, 0), "same-bytes re-import writes nothing");
+        assert_eq!(
+            (seen2, written2),
+            (2, 0),
+            "same-bytes re-import writes nothing"
+        );
         assert_eq!(store.corpus_series().unwrap().len(), 2);
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -2616,7 +2852,10 @@ mod tests {
         assert_eq!((seen, written), (1, 0), "the stale projection yields");
         let series = store.corpus_series().unwrap();
         assert_eq!(series.len(), 1);
-        assert_eq!(series[0].count, 31, "runtime-corpus stamp survived the import");
+        assert_eq!(
+            series[0].count, 31,
+            "runtime-corpus stamp survived the import"
+        );
         assert_eq!(series[0].source_note, "runtime-corpus");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -2624,7 +2863,10 @@ mod tests {
     #[test]
     fn parse_ts_unix_and_today_roundtrip() {
         // Date-only and full-timestamp shapes both parse.
-        assert_eq!(parse_ts_unix("2026-08-19"), parse_ts_unix("2026-08-19T00:00:00"));
+        assert_eq!(
+            parse_ts_unix("2026-08-19"),
+            parse_ts_unix("2026-08-19T00:00:00")
+        );
         assert_eq!(parse_ts_unix("2026-08-19T04:49:29"), 1_787_114_969);
         assert_eq!(parse_ts_unix("garbage"), 0);
         assert_eq!(parse_ts_unix("2026-13-99"), 0, "out-of-range fields refuse");
@@ -2639,7 +2881,10 @@ mod tests {
         assert_eq!(today.len(), 10);
         assert_eq!(today.as_bytes()[4], b'-');
         assert_eq!(today.as_bytes()[7], b'-');
-        assert_eq!(parse_ts_unix(&today), parse_ts_unix(&format!("{today}T00:00:00")));
+        assert_eq!(
+            parse_ts_unix(&today),
+            parse_ts_unix(&format!("{today}T00:00:00"))
+        );
     }
 
     #[cfg(feature = "score_bench")]
@@ -2691,7 +2936,10 @@ mod tests {
         // recorded_unix at its serde default (0) — the import path.
         let line = serde_json::to_string(&rec).unwrap();
         let from_jsonl: ScoreRunRow = serde_json::from_str(&line).unwrap();
-        assert_eq!(from_jsonl.recorded_unix, 0, "jsonl shape carries no unix stamp");
+        assert_eq!(
+            from_jsonl.recorded_unix, 0,
+            "jsonl shape carries no unix stamp"
+        );
         assert_eq!(from_jsonl.ts, rec.ts);
 
         // The ood asymmetry is TOLERANT in both directions: an ood-carrying
@@ -2719,7 +2967,10 @@ mod tests {
         let from_ood_line: ScoreRunRow = serde_json::from_str(&line).unwrap();
         let mut expected = ScoreRunRow::from(&rec);
         expected.recorded_unix = 0; // the jsonl shape carries no unix stamp
-        assert_eq!(from_ood_line, expected, "the dropped axis must not move any scored field");
+        assert_eq!(
+            from_ood_line, expected,
+            "the dropped axis must not move any scored field"
+        );
     }
 
     // ── Issue 072 T1/T3: the construction-pair family ────────────
@@ -2746,8 +2997,16 @@ mod tests {
         }
         // SOFT-JUDGE-ONLY: pair ingestion must not create trajectory rows
         // (dump sees nothing) and must not rate any outcome player.
-        assert_eq!(store.dump().len(), 0, "pair import must never create traj rows");
-        assert_eq!(store.elo_table().len(), 0, "pair import must never rate outcome players");
+        assert_eq!(
+            store.dump().len(),
+            0,
+            "pair import must never create traj rows"
+        );
+        assert_eq!(
+            store.elo_table().len(),
+            0,
+            "pair import must never rate outcome players"
+        );
     }
 
     #[test]

@@ -135,7 +135,11 @@ fn t73_memory_axis_headroom() {
             (true, _) => already_right += 1,
             (false, true) => {
                 memory_could += 1;
-                println!("    COULD FIX  {tag}: top1={:?} memory={:?}", ranked.first(), best.map(|b| b.0));
+                println!(
+                    "    COULD FIX  {tag}: top1={:?} memory={:?}",
+                    ranked.first(),
+                    best.map(|b| b.0)
+                );
             }
             (false, false) => memory_cannot += 1,
         }
@@ -143,10 +147,25 @@ fn t73_memory_axis_headroom() {
 
     let n = truth.len();
     #[allow(clippy::cast_precision_loss)]
-    let pct = |k: usize| if n == 0 { 0.0 } else { k as f32 / n as f32 * 100.0 };
-    println!("\n  shipped ranking already correct : {already_right}/{n} ({:.1}%)", pct(already_right));
-    println!("  memory COULD fix a wrong top-1  : {memory_could}/{n} ({:.1}%)  <- the headroom", pct(memory_could));
-    println!("  memory silent on a wrong top-1  : {memory_cannot}/{n} ({:.1}%)", pct(memory_cannot));
+    let pct = |k: usize| {
+        if n == 0 {
+            0.0
+        } else {
+            k as f32 / n as f32 * 100.0
+        }
+    };
+    println!(
+        "\n  shipped ranking already correct : {already_right}/{n} ({:.1}%)",
+        pct(already_right)
+    );
+    println!(
+        "  memory COULD fix a wrong top-1  : {memory_could}/{n} ({:.1}%)  <- the headroom",
+        pct(memory_could)
+    );
+    println!(
+        "  memory silent on a wrong top-1  : {memory_cannot}/{n} ({:.1}%)",
+        pct(memory_cannot)
+    );
     println!("  memory would OVERRIDE a correct top-1 with a false rule: {memory_would_break}/{n} ({:.1}%)  <- the risk", pct(memory_would_break));
 
     println!(

@@ -138,7 +138,9 @@ impl RustcErrorDiag {
     pub fn site_key(&self) -> (String, String, usize) {
         (
             self.code.clone(),
-            self.primary.as_ref().map_or_else(String::new, |p| p.0.clone()),
+            self.primary
+                .as_ref()
+                .map_or_else(String::new, |p| p.0.clone()),
             self.primary.as_ref().map_or(0, |p| p.1),
         )
     }
@@ -314,8 +316,7 @@ pub fn machine_applicable_by_code(diags: &[RustcErrorDiag]) -> Vec<(String, usiz
     codes
         .into_iter()
         .map(|code| {
-            let matching: Vec<&RustcErrorDiag> =
-                diags.iter().filter(|d| d.code == code).collect();
+            let matching: Vec<&RustcErrorDiag> = diags.iter().filter(|d| d.code == code).collect();
             let total: usize = matching.iter().map(|d| d.suggestions.len()).sum();
             let auto: usize = matching.iter().map(|d| d.machine_applicable().len()).sum();
             (code, total, auto)
@@ -347,7 +348,10 @@ mod tests {
             d.suggestions[0].applicability,
             Applicability::MachineApplicable
         );
-        assert!(!d.is_uncontested(), "E0596 is contested — cargo fix owns it");
+        assert!(
+            !d.is_uncontested(),
+            "E0596 is contested — cargo fix owns it"
+        );
     }
 
     #[test]
@@ -411,10 +415,7 @@ mod tests {
         let table = machine_applicable_by_code(&parse_error_diags(&input));
         assert_eq!(
             table,
-            vec![
-                ("E0499".to_string(), 0, 0),
-                ("E0596".to_string(), 1, 1),
-            ]
+            vec![("E0499".to_string(), 0, 0), ("E0596".to_string(), 1, 1),]
         );
     }
 
@@ -450,9 +451,15 @@ mod tests {
         assert_eq!(ls.len(), 4, "unlabeled span excluded: {ls:?}");
         assert!(ls[0].is_primary);
         assert!(!ls[1].is_primary);
-        let ann = ls.iter().find(|s| s.label.contains("type annotation")).unwrap();
+        let ann = ls
+            .iter()
+            .find(|s| s.label.contains("type annotation"))
+            .unwrap();
         assert_eq!((ann.byte_start, ann.byte_end), (16, 34));
-        let cap = ls.iter().find(|s| s.label == "value captured here").unwrap();
+        let cap = ls
+            .iter()
+            .find(|s| s.label == "value captured here")
+            .unwrap();
         assert_eq!((cap.byte_start, cap.byte_end), (61, 63));
         // A label WITHOUT byte offsets is dropped, not half-kept.
         let no_bytes = line.replace(

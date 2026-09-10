@@ -317,11 +317,14 @@ impl HealDomain for DockerDomain {
 /// (or a directive/comment) precedes the first `FROM`.
 #[must_use]
 pub fn stanza_valid(scan: &scanner::DockerfileScan, source: &str) -> bool {
-    if scan.stages.is_empty() { false } else { scan
-            .stanzas
+    if scan.stages.is_empty() {
+        false
+    } else {
+        scan.stanzas
             .iter()
             .filter(|s| s.scope == scanner::Scope::Global)
-            .all(|s| s.instruction_of(source) == "ARG") }
+            .all(|s| s.instruction_of(source) == "ARG")
+    }
 }
 
 /// The fixes this domain REFUSES to emit, and why (Proposal 006 caveat 5).
@@ -440,7 +443,11 @@ mod tests {
     fn refusals_are_named_and_reasoned() {
         let r = refuses();
         assert_eq!(r.len(), 4);
-        assert!(r.iter().any(|(id, _)| *id == "consolidate-consecutive-runs"));
-        assert!(r.iter().all(|(_, why)| why.contains("REFUSED") || why.contains("never rewritten")));
+        assert!(r
+            .iter()
+            .any(|(id, _)| *id == "consolidate-consecutive-runs"));
+        assert!(r
+            .iter()
+            .all(|(_, why)| why.contains("REFUSED") || why.contains("never rewritten")));
     }
 }

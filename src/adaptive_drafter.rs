@@ -125,7 +125,10 @@ mod tests {
     fn empty_pool_lookups_miss() {
         let drafter = AdaptiveDrafter::new();
         assert!(drafter.is_empty());
-        assert_eq!(drafter.lookup("needless_return", "fn foo() { return 1; }"), None);
+        assert_eq!(
+            drafter.lookup("needless_return", "fn foo() { return 1; }"),
+            None
+        );
     }
 
     #[test]

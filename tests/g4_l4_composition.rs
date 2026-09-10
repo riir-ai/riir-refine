@@ -39,7 +39,9 @@ impl CountingL4 {
 impl L4Fallback for CountingL4 {
     fn generate_fix(&mut self, rule_id: &str, buggy_code: &str) -> Option<String> {
         self.calls.set(self.calls.get() + 1);
-        self.seen.borrow_mut().push((rule_id.to_string(), buggy_code.to_string()));
+        self.seen
+            .borrow_mut()
+            .push((rule_id.to_string(), buggy_code.to_string()));
         self.reply.clone()
     }
 
@@ -92,7 +94,10 @@ fn corpus_hit() -> (String, String) {
 #[test]
 fn no_fallback_installed_by_default() {
     let p = pipeline();
-    assert!(!p.has_l4_fallback(), "a fresh pipeline must not carry an L4 fallback");
+    assert!(
+        !p.has_l4_fallback(),
+        "a fresh pipeline must not carry an L4 fallback"
+    );
 }
 
 #[test]
@@ -108,9 +113,18 @@ fn absent_fallback_leaves_the_modelless_result_unchanged() {
 
     match (a, b) {
         (Some(a), Some(b)) => {
-            assert_eq!(a.fixed_code, b.fixed_code, "installing a declining L4 changed the fix");
-            assert_eq!(a.source, b.source, "installing a declining L4 changed the source");
-            assert_eq!(a.parses, b.parses, "installing a declining L4 changed the parse verdict");
+            assert_eq!(
+                a.fixed_code, b.fixed_code,
+                "installing a declining L4 changed the fix"
+            );
+            assert_eq!(
+                a.source, b.source,
+                "installing a declining L4 changed the source"
+            );
+            assert_eq!(
+                a.parses, b.parses,
+                "installing a declining L4 changed the parse verdict"
+            );
         }
         (None, None) => {}
         (a, b) => panic!("presence mismatch: {:?} vs {:?}", a.is_some(), b.is_some()),
@@ -126,10 +140,16 @@ fn l4_is_not_called_when_the_modelless_path_serves_a_parsing_fix() {
 
     let probe = Probe::new(Some("fn generated() {}"));
     let mut p = pipeline().with_l4_fallback(Box::new(probe.clone()));
-    let result = p.heal(&rule, &buggy, &corpus.entries).expect("corpus entry must heal");
+    let result = p
+        .heal(&rule, &buggy, &corpus.entries)
+        .expect("corpus entry must heal");
 
     assert!(result.parses, "precondition: the modelless fix parses");
-    assert_ne!(result.source, HealSource::L4Lora, "a modelless hit must not be served by L4");
+    assert_ne!(
+        result.source,
+        HealSource::L4Lora,
+        "a modelless hit must not be served by L4"
+    );
     assert_eq!(
         probe.count(),
         0,
@@ -148,7 +168,11 @@ fn stage2_hit_never_reaches_l4() {
     // Stage 2 short-circuits before candidate collection; whether the pool is
     // populated or not, the fallback must stay untouched on this path.
     let _ = p.heal(&rule, &buggy, &corpus.entries);
-    assert_eq!(probe.count(), 0, "the Stage 2 / drafter hit path must not consult L4");
+    assert_eq!(
+        probe.count(),
+        0,
+        "the Stage 2 / drafter hit path must not consult L4"
+    );
 }
 
 // ── Invariant 2: consulted on a genuine miss ───────────────────────────────
@@ -163,10 +187,18 @@ fn l4_is_consulted_when_the_modelless_path_has_no_candidates() {
 
     let result = p.heal("totally_unknown_lint_xyz", "fn broken( {", &corpus.entries);
 
-    assert_eq!(probe.count(), 1, "a total modelless miss must consult L4 exactly once");
+    assert_eq!(
+        probe.count(),
+        1,
+        "a total modelless miss must consult L4 exactly once"
+    );
     match result {
         Some(r) => {
-            assert_eq!(r.source, HealSource::L4Lora, "an L4-served fix must be labelled L4Lora");
+            assert_eq!(
+                r.source,
+                HealSource::L4Lora,
+                "an L4-served fix must be labelled L4Lora"
+            );
             assert!(r.parses, "only parsing L4 fixes are returned");
             assert_eq!(r.fixed_code, "fn healed() -> i32 { 1 }");
         }
@@ -183,7 +215,10 @@ fn declining_l4_on_a_total_miss_returns_none() {
     let result = p.heal("totally_unknown_lint_xyz", "fn broken( {", &corpus.entries);
 
     assert_eq!(probe.count(), 1, "the fallback must still be consulted");
-    assert!(result.is_none(), "a declining L4 must leave the miss a miss, not fabricate a fix");
+    assert!(
+        result.is_none(),
+        "a declining L4 must leave the miss a miss, not fabricate a fix"
+    );
 }
 
 // ── Invariant 3: never degrades a modelless answer ─────────────────────────
@@ -219,9 +254,14 @@ fn a_parsing_modelless_fix_is_never_replaced_by_l4() {
 
     let probe = Probe::new(Some("fn totally_different() {}"));
     let mut p = pipeline().with_l4_fallback(Box::new(probe.clone()));
-    let with_l4 = p.heal(&rule, &buggy, &corpus.entries).expect("must still heal");
+    let with_l4 = p
+        .heal(&rule, &buggy, &corpus.entries)
+        .expect("must still heal");
 
-    assert_eq!(with_l4.fixed_code, baseline.fixed_code, "L4 overwrote a healthy modelless fix");
+    assert_eq!(
+        with_l4.fixed_code, baseline.fixed_code,
+        "L4 overwrote a healthy modelless fix"
+    );
     assert_eq!(probe.count(), 0);
 }
 
@@ -237,7 +277,11 @@ fn harness_is_actually_running() {
     let mut p = pipeline().with_l4_fallback(Box::new(probe.clone()));
     assert!(p.has_l4_fallback());
     let _ = p.heal("totally_unknown_lint_xyz", "fn broken( {", &corpus.entries);
-    assert_eq!(probe.count(), 1, "the L4 seam is compiled in but never reached");
+    assert_eq!(
+        probe.count(),
+        1,
+        "the L4 seam is compiled in but never reached"
+    );
 }
 
 #[test]
@@ -306,7 +350,11 @@ fn an_out_of_corpus_rule_reaches_l4() {
          (it was suppressed entirely before Issue 030)"
     );
     let r = result.expect("L4 replied with a parsing fix, so heal must serve it");
-    assert_eq!(r.source, HealSource::L4Lora, "the served fix must come from L4");
+    assert_eq!(
+        r.source,
+        HealSource::L4Lora,
+        "the served fix must come from L4"
+    );
     assert!(r.parses);
 }
 

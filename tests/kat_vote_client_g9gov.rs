@@ -28,8 +28,8 @@ use std::sync::{Arc, Mutex};
 
 use riir_clippy::kat_lease_client::HttpResponse;
 use riir_clippy::kat_vote_client::{
-    ProposalView, VoteAck, VoteChoice, VoteOutcome, VoteTransport, render_proposal,
-    sign_vote, vote_confirm_line, vote_flow, vote_message,
+    render_proposal, sign_vote, vote_confirm_line, vote_flow, vote_message, ProposalView, VoteAck,
+    VoteChoice, VoteOutcome, VoteTransport,
 };
 
 // ── the mock server (std TCP; the stake g2s shape) ───────────────────────
@@ -72,7 +72,9 @@ fn spawn_vote_mock(mode: ServeMode, proposal_body: String) -> MockServer {
     let handle = std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { return };
-            let Some(req) = read_request(&mut stream) else { continue };
+            let Some(req) = read_request(&mut stream) else {
+                continue;
+            };
             cap.lock().unwrap().push(req.clone());
             let resp = route(&mode, &proposal_body, &req);
             let _ = stream.write_all(&resp);
@@ -90,9 +92,10 @@ fn route(mode: &ServeMode, proposal_body: &str, req: &CapturedRequest) -> Vec<u8
     let path_only = req.path.split('?').next().unwrap_or("");
     match (req.method.as_str(), path_only, mode) {
         ("GET", "/gov/proposal", ServeMode::Live) => http(200, proposal_body.as_bytes()),
-        ("POST", "/gov/vote", ServeMode::Live) => {
-            http(200, br#"{"proposal_id":7,"choice":"yes","snapshot_weight":5000}"#)
-        }
+        ("POST", "/gov/vote", ServeMode::Live) => http(
+            200,
+            br#"{"proposal_id":7,"choice":"yes","snapshot_weight":5000}"#,
+        ),
         _ => http(404, b"not found"),
     }
 }
@@ -144,11 +147,7 @@ fn read_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
         }
         body = Some(String::from_utf8_lossy(&buf[header_end + 4..]).into_owned());
     }
-    Some(CapturedRequest {
-        method,
-        path,
-        body,
-    })
+    Some(CapturedRequest { method, path, body })
 }
 
 /// The HTTP transport driving the mock (the vote client's own impl over the
@@ -158,11 +157,7 @@ struct MockVoteTransport {
 }
 
 impl VoteTransport for MockVoteTransport {
-    fn get_proposal(
-        &self,
-        proposal_id: u64,
-        account_id: &str,
-    ) -> HttpResponse {
+    fn get_proposal(&self, proposal_id: u64, account_id: &str) -> HttpResponse {
         self.inner.get_proposal(proposal_id, account_id)
     }
     fn post_vote(&self, json: &str) -> HttpResponse {
@@ -222,7 +217,7 @@ fn vote_message_hex_is_the_dapps_pinned_golden() {
          0100000000000000\
          4242424242424242424242424242424242424242424242424242424242424242\
          01"
-            .replace(' ', "")
+        .replace(' ', "")
     );
 }
 

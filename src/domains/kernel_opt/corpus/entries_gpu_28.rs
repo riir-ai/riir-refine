@@ -23,7 +23,7 @@
 //! twins + the four-backend audit; B58 += remove-the-alloc-from-capture complement;
 //! B103 += clamp-to-stay-on-bounded-gemm. Batch 117 / Plan 090 / Research 141.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

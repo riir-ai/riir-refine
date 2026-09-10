@@ -26,7 +26,10 @@ use riir_clippy::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--rs") {
-        let dir = args.get(1).cloned().unwrap_or_else(|| "../riir-ai/crates/riir-gpu/src".to_string());
+        let dir = args
+            .get(1)
+            .cloned()
+            .unwrap_or_else(|| "../riir-ai/crates/riir-gpu/src".to_string());
         run_rs_mode(&dir);
     } else {
         let dir = args
@@ -49,7 +52,8 @@ fn run_wgsl_mode(dir: &str) {
             continue;
         }
         files += 1;
-        let src = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+        let src =
+            std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
         let found: Vec<WgslFinding> = scanner.scan(&src);
         if !found.is_empty() {
             firing_files += 1;
@@ -81,7 +85,9 @@ fn run_rs_mode(dir: &str) {
     let mut by_rule: BTreeMap<&'static str, usize> = BTreeMap::new();
 
     for p in &rs_files {
-        let Ok(src) = std::fs::read_to_string(p) else { continue };
+        let Ok(src) = std::fs::read_to_string(p) else {
+            continue;
+        };
         let items = extract_cube_items(&src);
         if items.is_empty() {
             continue;
@@ -118,7 +124,9 @@ fn run_rs_mode(dir: &str) {
 }
 
 fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in entries.flatten() {
         let p = e.path();
         if p.is_dir() {

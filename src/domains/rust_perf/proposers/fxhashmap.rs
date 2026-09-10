@@ -108,11 +108,15 @@ fn is_private_std_collections_prefix(u: &ItemUse) -> bool {
     if !matches!(u.vis, Visibility::Inherited) {
         return false;
     }
-    let UseTree::Path(p1) = &u.tree else { return false };
+    let UseTree::Path(p1) = &u.tree else {
+        return false;
+    };
     if p1.ident != "std" {
         return false;
     }
-    let UseTree::Path(p2) = &*p1.tree else { return false };
+    let UseTree::Path(p2) = &*p1.tree else {
+        return false;
+    };
     p2.ident == "collections"
 }
 
@@ -127,7 +131,9 @@ enum UseOutcome {
 fn use_edits(source: &str, edits: &mut Vec<SourceEdit>, file: &File) {
     for item in &file.items {
         let Item::Use(u) = item else { continue };
-        let Some(outcome) = handle_use(u) else { continue };
+        let Some(outcome) = handle_use(u) else {
+            continue;
+        };
         let (start, end) = span_range(u);
         let replacement = match outcome {
             UseOutcome::Swapped => "use rustc_hash::FxHashMap;".to_string(),
@@ -152,8 +158,12 @@ fn handle_use(u: &ItemUse) -> Option<UseOutcome> {
         return None;
     }
     // Navigate std :: collections :: <rest>.
-    let UseTree::Path(p1) = &u.tree else { return None };
-    let UseTree::Path(p2) = &*p1.tree else { return None };
+    let UseTree::Path(p1) = &u.tree else {
+        return None;
+    };
+    let UseTree::Path(p2) = &*p1.tree else {
+        return None;
+    };
     match &*p2.tree {
         // Plain leaf: swap the whole use.
         UseTree::Name(n) if n.ident == "HashMap" => Some(UseOutcome::Swapped),
@@ -283,14 +293,12 @@ mod tests {
         // refs, but the crate has no `rustc-hash` dep (no import anywhere
         // in the file) — the splice cannot add the dependency, so the
         // rewrite must not fire.
-        assert!(
-            propose_fix(
-                "fxhashmap",
-                "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
+        assert!(propose_fix(
+            "fxhashmap",
+            "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
                  -> Option<u32> {\n    map.get(&k).copied()\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
@@ -387,26 +395,22 @@ mod tests {
     #[test]
     fn no_use_unchanged() {
         // Body refs but no use item — out of scope (nothing to swap).
-        assert!(
-            propose_fix(
-                "fxhashmap",
-                "use rustc_hash::FxHashSet;\nfn f() -> std::collections::HashMap<u32, u32> {\n    \
+        assert!(propose_fix(
+            "fxhashmap",
+            "use rustc_hash::FxHashSet;\nfn f() -> std::collections::HashMap<u32, u32> {\n    \
                  std::collections::HashMap::new()\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn dead_use_unchanged() {
         // Use exists but zero body refs — swapping is noise.
-        assert!(
-            propose_fix(
-                "fxhashmap",
-                "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn f() -> u32 { 42 }"
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "fxhashmap",
+            "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn f() -> u32 { 42 }"
+        )
+        .is_none());
     }
 
     #[test]

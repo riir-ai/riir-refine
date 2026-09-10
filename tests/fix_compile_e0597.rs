@@ -29,11 +29,8 @@ use riir_clippy::domains::rustc_errors::playbooks::family;
 fn scaffold(name: &str, source: &str) -> PathBuf {
     static SEQ: AtomicUsize = AtomicUsize::new(0);
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "riir_e0597_{}_{seq}_{}",
-        std::process::id(),
-        name
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("riir_e0597_{}_{seq}_{}", std::process::id(), name));
     let _ = std::fs::remove_dir_all(&dir);
     let src = dir.join("src");
     std::fs::create_dir_all(&src).unwrap();

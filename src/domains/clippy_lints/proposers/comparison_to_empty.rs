@@ -266,15 +266,20 @@ mod tests {
     fn self_recursion_guard_str_form() {
         // Form 1 twin: `self == ""` inside `fn is_empty` is the same
         // recursion.
-        let input = "struct S;\nimpl S {\n    fn is_empty(&self) -> bool {\n        self == \"\"\n    }\n}";
+        let input =
+            "struct S;\nimpl S {\n    fn is_empty(&self) -> bool {\n        self == \"\"\n    }\n}";
         let out = propose_fix("comparison_to_empty", input);
-        assert!(out.is_none(), "self-recursion str form must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "self-recursion str form must not fire: {out:?}"
+        );
     }
 
     #[test]
     fn self_recursion_guard_trait_default_body() {
         // Trait default bodies are the same class (visit_trait_item_fn).
-        let input = "trait T {\n    fn is_empty(&self) -> bool {\n        self.len() == 0\n    }\n}";
+        let input =
+            "trait T {\n    fn is_empty(&self) -> bool {\n        self.len() == 0\n    }\n}";
         let out = propose_fix("comparison_to_empty", input);
         assert!(out.is_none(), "trait default body must not fire: {out:?}");
     }
@@ -297,7 +302,8 @@ mod tests {
     fn self_receiver_outside_is_empty_still_fires() {
         // Positive control: `self` receiver inside a differently-named fn
         // must still fire.
-        let input = "struct S;\nimpl S {\n    fn check(&self) -> bool {\n        self.len() == 0\n    }\n}";
+        let input =
+            "struct S;\nimpl S {\n    fn check(&self) -> bool {\n        self.len() == 0\n    }\n}";
         let out = propose_fix("comparison_to_empty", input).expect("matched");
         assert!(
             out.contains("self.is_empty()"),

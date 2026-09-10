@@ -26,7 +26,7 @@
 //! `place` is evaluated once by the for-loop and once by `fill` — identical.
 //! Vec/slice/array all deref to `[T]::fill`.
 
-use super::helpers::{drops_interior_comment, is_pure_expr, is_postfix_safe};
+use super::helpers::{drops_interior_comment, is_postfix_safe, is_pure_expr};
 use super::{edit, src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -211,7 +211,10 @@ mod tests {
         // express it (and `fill(<v>)` would not even compile).
         let input = "fn f(buf: &mut [f32]) { for v in &mut buf[..] { *v = *v * 2.0; } }";
         let out = propose_fix("manual_slice_fill", input);
-        assert!(out.is_none(), "binding-mentioning value must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "binding-mentioning value must not fire: {out:?}"
+        );
     }
 
     #[test]

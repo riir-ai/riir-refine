@@ -23,7 +23,7 @@
 //! measured-instance rider on the E-class pipeline rules (~1.8x for the
 //! synchronous dense copy). Batch 127 / Plan 108 / Research 149.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

@@ -68,12 +68,18 @@ fn is_signed_path(ty: &syn::Type) -> bool {
     let syn::Type::Path(tp) = ty else {
         return false;
     };
-    tp.path
-        .get_ident()
-        .is_some_and(|id| matches!(id.to_string().as_str(), "i8" | "i16" | "i32" | "i64" | "i128" | "isize"))
+    tp.path.get_ident().is_some_and(|id| {
+        matches!(
+            id.to_string().as_str(),
+            "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
+        )
+    })
 }
 
-fn collect_signed_idents(sig: &syn::Signature, body: Option<&syn::Block>) -> std::collections::HashSet<String> {
+fn collect_signed_idents(
+    sig: &syn::Signature,
+    body: Option<&syn::Block>,
+) -> std::collections::HashSet<String> {
     let mut set = std::collections::HashSet::new();
     for input in &sig.inputs {
         if let syn::FnArg::Typed(pat) = input {
@@ -102,13 +108,15 @@ fn collect_signed_idents(sig: &syn::Signature, body: Option<&syn::Block>) -> std
 
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
-        self.signed_idents.push(collect_signed_idents(&i.sig, Some(&i.block)));
+        self.signed_idents
+            .push(collect_signed_idents(&i.sig, Some(&i.block)));
         syn::visit::visit_item_fn(self, i);
         self.signed_idents.pop();
     }
 
     fn visit_impl_item_fn(&mut self, i: &'ast syn::ImplItemFn) {
-        self.signed_idents.push(collect_signed_idents(&i.sig, Some(&i.block)));
+        self.signed_idents
+            .push(collect_signed_idents(&i.sig, Some(&i.block)));
         syn::visit::visit_impl_item_fn(self, i);
         self.signed_idents.pop();
     }
@@ -196,7 +204,14 @@ impl Collector<'_> {
             }
         }
         let div_expr = Self::arm_expr(e, div_arm)?;
-        let val_expr = Self::arm_expr(e, if div_arm == DivArm::Then { DivArm::Else } else { DivArm::Then })?;
+        let val_expr = Self::arm_expr(
+            e,
+            if div_arm == DivArm::Then {
+                DivArm::Else
+            } else {
+                DivArm::Then
+            },
+        )?;
         let Expr::Binary(div) = peel_parens(div_expr) else {
             return None;
         };
@@ -219,7 +234,9 @@ impl Collector<'_> {
         } else {
             format!("({num_text})")
         };
-        Some(format!("{recv}.checked_div({divisor_text}).unwrap_or({val_text})"))
+        Some(format!(
+            "{recv}.checked_div({divisor_text}).unwrap_or({val_text})"
+        ))
     }
 
     /// The single expression of one if arm. `then_branch` is always a block;
@@ -306,7 +323,10 @@ mod tests {
     fn field_divisor_fires() {
         let input = "struct C { denom: usize }\nfn f(c: &C, total: usize) -> usize { if c.denom == 0 { 3 } else { total / c.denom } }";
         let out = propose_fix("manual_checked_ops", input).expect("matched");
-        assert!(out.contains("total.checked_div(c.denom).unwrap_or(3)"), "{out}");
+        assert!(
+            out.contains("total.checked_div(c.denom).unwrap_or(3)"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -318,7 +338,8 @@ mod tests {
 
     #[test]
     fn complex_numerator_parenthesizes() {
-        let input = "fn f(n: usize, a: usize, b: usize) -> usize { if n == 0 { 0 } else { (a + b) / n } }";
+        let input =
+            "fn f(n: usize, a: usize, b: usize) -> usize { if n == 0 { 0 } else { (a + b) / n } }";
         let out = propose_fix("manual_checked_ops", input).expect("matched");
         assert!(out.contains("(a + b).checked_div(n).unwrap_or(0)"), "{out}");
     }
@@ -327,7 +348,10 @@ mod tests {
     fn signed_param_refused() {
         let input = "fn f(n: i64, total: i64) -> i64 { if n == 0 { 0 } else { total / n } }";
         let out = propose_fix("manual_checked_ops", input);
-        assert!(out.is_none(), "provably-signed divisor must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "provably-signed divisor must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -353,14 +377,19 @@ mod tests {
 
     #[test]
     fn multi_stmt_arm_refused() {
-        let input = "fn f(n: usize, total: usize) -> usize { if n == 0 { log(); 0 } else { total / n } }";
+        let input =
+            "fn f(n: usize, total: usize) -> usize { if n == 0 { log(); 0 } else { total / n } }";
         let out = propose_fix("manual_checked_ops", input);
-        assert!(out.is_none(), "side-effecting guard arm must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "side-effecting guard arm must refuse: {out:?}"
+        );
     }
 
     #[test]
     fn interior_comment_refused() {
-        let input = "fn f(n: usize, total: usize) -> usize { if n == 0 { 0 } else { total /* c */ / n } }";
+        let input =
+            "fn f(n: usize, total: usize) -> usize { if n == 0 { 0 } else { total /* c */ / n } }";
         let out = propose_fix("manual_checked_ops", input);
         assert!(out.is_none(), "interior comment must refuse: {out:?}");
     }

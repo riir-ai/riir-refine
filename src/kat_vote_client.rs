@@ -107,7 +107,9 @@ pub fn sign_vote(
     choice: VoteChoice,
 ) -> ([u8; 64], [u8; 32]) {
     let pubkey = key.verifying_key().to_bytes();
-    let sig = key.sign(&vote_message(proposal_id, &pubkey, choice)).to_bytes();
+    let sig = key
+        .sign(&vote_message(proposal_id, &pubkey, choice))
+        .to_bytes();
     (sig, pubkey)
 }
 
@@ -189,7 +191,11 @@ pub fn render_proposal(p: &ProposalView, now_tick: u64) -> String {
     );
     if !p.advisory_hash_hex.is_empty() {
         let n = p.advisory_hash_hex.len().min(16);
-        let _ = writeln!(out, "Advisory:   0x{a}…   (the optional GLM transcript slot)", a = &p.advisory_hash_hex[..n]);
+        let _ = writeln!(
+            out,
+            "Advisory:   0x{a}…   (the optional GLM transcript slot)",
+            a = &p.advisory_hash_hex[..n]
+        );
     }
     let cast = p.yes_weight.saturating_add(p.no_weight);
     let _ = writeln!(
@@ -259,7 +265,10 @@ pub fn queue_vote_intent(root: &Path, intent: &VoteIntent) -> std::io::Result<Pa
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
     writeln!(f, "{}", serde_json::to_string(intent).unwrap_or_default())?;
     Ok(path)
 }
@@ -271,7 +280,11 @@ pub fn queue_vote_intent(root: &Path, intent: &VoteIntent) -> std::io::Result<Pa
 pub trait VoteTransport {
     /// `GET /gov/proposal?id=<id>&acct=<account>` → 200 with the
     /// [`ProposalView`] JSON (the `your_weight` field is server-computed).
-    fn get_proposal(&self, proposal_id: u64, account_id: &str) -> crate::kat_lease_client::HttpResponse;
+    fn get_proposal(
+        &self,
+        proposal_id: u64,
+        account_id: &str,
+    ) -> crate::kat_lease_client::HttpResponse;
     /// `POST /gov/vote` (JSON body) → 200 with the [`VoteAck`] JSON.
     fn post_vote(&self, json: &str) -> crate::kat_lease_client::HttpResponse;
 }
@@ -468,9 +481,12 @@ mod tests {
              0100000000000000\
              4242424242424242424242424242424242424242424242424242424242424242\
              01"
-                .replace(' ', "")
+            .replace(' ', "")
         );
-        assert_eq!(GOVOTE_SIGNING_DOMAIN, b"riir-dapps.kat.govote.v1".as_slice());
+        assert_eq!(
+            GOVOTE_SIGNING_DOMAIN,
+            b"riir-dapps.kat.govote.v1".as_slice()
+        );
         // The No choice is the 0x02 byte.
         let no = vote_message(1, &[0x42; 32], VoteChoice::No);
         assert_eq!(no[no.len() - 1], 0x02);
@@ -501,12 +517,21 @@ mod tests {
         let p = fixture_proposal();
         let r = render_proposal(&p, 1_500);
         assert!(r.contains("Evidence:   0xabab"), "{r}");
-        assert!(r.contains("0xabababababababab…"), "the evidence hash renders");
+        assert!(
+            r.contains("0xabababababababab…"),
+            "the evidence hash renders"
+        );
         assert!(r.contains("Your vote:  weight 5000"), "{r}");
         assert!(r.contains("[OPEN]"), "{r}");
-        assert!(r.contains("Tally:      5000 yes / 3000 no of 10000 eligible"), "{r}");
+        assert!(
+            r.contains("Tally:      5000 yes / 3000 no of 10000 eligible"),
+            "{r}"
+        );
         assert!(r.contains("closes in"), "{r}");
-        assert!(r.contains("never moves funds"), "the constitutional line: {r}");
+        assert!(
+            r.contains("never moves funds"),
+            "the constitutional line: {r}"
+        );
         assert!(!r.contains('$'), "no $ anywhere on a governance screen");
     }
 

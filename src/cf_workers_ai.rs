@@ -51,13 +51,13 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::ClippyVerifier;
 use crate::behavioural_equivalence::{self, Verdict};
-use crate::draft::{DomainId, LatentMatcher};
 use crate::domain::HealEntry;
+use crate::draft::{DomainId, LatentMatcher};
 use crate::l4_daemon::TRAINED_INSTRUCTION;
 use crate::pruner::RustAnalyzerPruner;
 use crate::self_evolve::HealPipeline;
+use crate::ClippyVerifier;
 
 /// The clippy seed corpus type (the [`crate::build_seed_corpus`] return).
 pub type ClippyCorpus = crate::Corpus<crate::ClippyLintDomain>;
@@ -176,7 +176,9 @@ pub fn prompt_module(prompt: &str) -> &str {
 /// eval driver; the base model habitually fences).
 #[must_use]
 pub fn extract_code_block(text: &str) -> &str {
-    let Some(start) = text.find("```") else { return text };
+    let Some(start) = text.find("```") else {
+        return text;
+    };
     // Skip the fence's own line (``` or ```rust).
     let after_fence = &text[start + 3..];
     let line_end = after_fence.find('\n').unwrap_or(after_fence.len());
@@ -228,8 +230,8 @@ pub fn load_v2edit(data_dir: &Path, chunks: &[usize], limit: usize) -> Result<Ve
     let mut out = Vec::new();
     for &c in chunks {
         let p = data_dir.join(format!("clippy_l4_v2edit_test_chunk_{c:02}.jsonl"));
-        let raw = std::fs::read_to_string(&p)
-            .map_err(|e| format!("cannot read {}: {e}", p.display()))?;
+        let raw =
+            std::fs::read_to_string(&p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
         for (i, line) in raw.lines().enumerate() {
             if line.trim().is_empty() {
                 continue;
@@ -298,7 +300,10 @@ impl MissClass {
     /// True when the shipped seam would consult a generative fallback.
     #[must_use]
     pub fn is_reachable_miss(self) -> bool {
-        matches!(self, MissClass::OffCorpus | MissClass::ServedNoParse | MissClass::Declined)
+        matches!(
+            self,
+            MissClass::OffCorpus | MissClass::ServedNoParse | MissClass::Declined
+        )
     }
 }
 
@@ -368,7 +373,9 @@ fn push_prepass_body(s: &mut String, module: &str, modelless: Option<&str>, fews
             s.push('\n');
         }
     }
-    s.push_str("\nRespond with ONLY the corrected lines that differ from the input code, no explanation.");
+    s.push_str(
+        "\nRespond with ONLY the corrected lines that differ from the input code, no explanation.",
+    );
 }
 
 // ── Issue 049: the growing-input channels (Meta^n conditioning POC) ──────
@@ -429,7 +436,12 @@ fn render_growing_channels(
             let _ = write!(
                 s,
                 "--- {} [{}: {} ok / {} failed] ---\n before:\n{}\n after:\n{}",
-                t.lint_key, t.tier, t.success, t.fail, indent4(&t.shape), indent4(&t.fix)
+                t.lint_key,
+                t.tier,
+                t.success,
+                t.fail,
+                indent4(&t.shape),
+                indent4(&t.fix)
             );
             s.push('\n');
         }
@@ -470,7 +482,8 @@ pub fn prompt_growing(
 ) -> String {
     let s = prompt_prepass(module, modelless, fewshots);
     // Splice the channels BEFORE the closing respond-line.
-    let closing = "\nRespond with ONLY the corrected lines that differ from the input code, no explanation.";
+    let closing =
+        "\nRespond with ONLY the corrected lines that differ from the input code, no explanation.";
     let base = s.strip_suffix(closing).unwrap_or(&s).to_string();
     let mut s = base;
     s.push_str(&render_growing_channels(trajectories, failure_summary));
@@ -515,7 +528,10 @@ pub fn prompt_growing_same_rule(
 }
 
 fn indent4(text: &str) -> String {
-    text.lines().map(|l| format!("    {l}")).collect::<Vec<_>>().join("\n")
+    text.lines()
+        .map(|l| format!("    {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 // ── Issue 073 T3: the Bt8 anchor-ledger arm ──────────────────────────────
@@ -642,8 +658,7 @@ pub fn ident_mentioned(text: &str, ident: &str) -> bool {
     let mut from = 0usize;
     while let Some(rel) = text[from..].find(ident) {
         let at = from + rel;
-        let before_ok =
-            at == 0 || !text[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_');
+        let before_ok = at == 0 || !text[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_');
         let after_at = at + ident.len();
         let after_ok = after_at >= text.len()
             || !text[after_at..].starts_with(|c: char| c.is_alphanumeric() || c == '_');
@@ -734,11 +749,11 @@ fn lcs_merge(orig: &[&str], resp: &[&str], depth_bound: bool) -> Option<Vec<Stri
     let mut prev_rj: Option<usize> = None;
 
     let apply_gap = |out: &mut Vec<String>,
-                         oi: &mut usize,
-                         end_anchor: usize,
-                         run: &[&str],
-                         depths: &[i64],
-                         depth_bound: bool|
+                     oi: &mut usize,
+                     end_anchor: usize,
+                     run: &[&str],
+                     depths: &[i64],
+                     depth_bound: bool|
      -> bool {
         if run.is_empty() {
             // No replacement content: the skipped original lines are
@@ -805,15 +820,16 @@ fn find_fn_span(src: &str, name: &str) -> Option<(usize, usize)> {
     while let Some(rel) = src[search..].find(&pat) {
         let at = search + rel;
         search = at + 1;
-        let left_ok = at == 0
-            || !(bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_');
+        let left_ok = at == 0 || !(bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_');
         let after = at + pat.len();
         let right_ok =
             after >= bytes.len() || !(bytes[after].is_ascii_alphanumeric() || bytes[after] == b'_');
         if !left_ok || !right_ok {
             continue;
         }
-        let Some(brace) = src[at..].find('{') else { continue };
+        let Some(brace) = src[at..].find('{') else {
+            continue;
+        };
         let brace = at + brace;
         let mut depth = 0usize;
         for (i, ch) in src[brace..].char_indices() {
@@ -841,7 +857,11 @@ fn response_fn_name(block: &str) -> Option<&str> {
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
         .count();
-    if n == 0 { None } else { Some(&rest[..n]) }
+    if n == 0 {
+        None
+    } else {
+        Some(&rest[..n])
+    }
 }
 
 /// Whole-fn substitution (riir-train `rlvr_reward::substitute` semantics):
@@ -896,7 +916,11 @@ impl MergeStrategy {
 /// response does not repeat (v2edit multi-fn modules) — a verbatim replace
 /// there loses content and fakes a findings reduction.
 #[must_use]
-pub fn apply_edit(module: &str, response: &str, verbatim_ok: bool) -> Option<(String, MergeStrategy)> {
+pub fn apply_edit(
+    module: &str,
+    response: &str,
+    verbatim_ok: bool,
+) -> Option<(String, MergeStrategy)> {
     let gen = extract_code_block(response);
     let parses = |s: &str| syn::parse_file(s).is_ok();
 
@@ -913,7 +937,10 @@ pub fn apply_edit(module: &str, response: &str, verbatim_ok: bool) -> Option<(St
     }
     let orig: Vec<&str> = module.lines().collect();
     let resp: Vec<&str> = gen.lines().collect();
-    for (bounded, strat) in [(true, MergeStrategy::LcsBounded), (false, MergeStrategy::LcsUnbounded)] {
+    for (bounded, strat) in [
+        (true, MergeStrategy::LcsBounded),
+        (false, MergeStrategy::LcsUnbounded),
+    ] {
         if let Some(lines) = lcs_merge(&orig, &resp, bounded) {
             let m = lines.join("\n");
             if parses(&m) {
@@ -977,9 +1004,11 @@ pub fn contract_idents(code: &str) -> BTreeSet<String> {
     let mut v = V::default();
     // Same two-strategy parse the pruner uses, so this sees exactly what the
     // pruner accepted.
-    if let Ok(f) = syn::parse_file(code) { v.visit_file(&f) } else if let Ok(f) = syn::parse_file(&format!("fn _wrap() {{\n{code}\n}}")) {
-                v.visit_file(&f);
-            }
+    if let Ok(f) = syn::parse_file(code) {
+        v.visit_file(&f)
+    } else if let Ok(f) = syn::parse_file(&format!("fn _wrap() {{\n{code}\n}}")) {
+        v.visit_file(&f);
+    }
     v.0
 }
 
@@ -1174,8 +1203,9 @@ impl CfClient {
     /// A human-readable message naming exactly which env var is missing —
     /// never the token value — or the unpriced-model refusal.
     pub fn from_env(model: Option<&str>) -> Result<Self, String> {
-        let token = std::env::var("CF_API_TOKEN")
-            .map_err(|_| "CF_API_TOKEN is not set — arms A/B need it (export CF_API_TOKEN=...)".to_string())?;
+        let token = std::env::var("CF_API_TOKEN").map_err(|_| {
+            "CF_API_TOKEN is not set — arms A/B need it (export CF_API_TOKEN=...)".to_string()
+        })?;
         let account = std::env::var("CF_ACCOUNT_ID").map_err(|_| {
             "CF_ACCOUNT_ID is not set — arms A/B need it (export CF_ACCOUNT_ID=...)".to_string()
         })?;
@@ -1273,7 +1303,12 @@ impl CfClient {
         let rows = v
             .pointer("/data/viewer/accounts/0/aiInferenceAdaptiveGroups")
             .and_then(|r| r.as_array())
-            .ok_or_else(|| self.scrub(format!("usage GraphQL shape unexpected: {}", clip_payload(&v.to_string()))))?;
+            .ok_or_else(|| {
+                self.scrub(format!(
+                    "usage GraphQL shape unexpected: {}",
+                    clip_payload(&v.to_string())
+                ))
+            })?;
         let mut u = CfUsageToday::default();
         for row in rows {
             if row
@@ -1283,7 +1318,10 @@ impl CfClient {
             {
                 continue;
             }
-            u.requests += row.pointer("/count").and_then(serde_json::Value::as_u64).unwrap_or(0);
+            u.requests += row
+                .pointer("/count")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
             u.input_tokens += row
                 .pointer("/sum/totalInputTokens")
                 .and_then(serde_json::Value::as_u64)
@@ -1340,8 +1378,7 @@ fn build_request_body(
             // finding, Plan 003).
             body["reasoning_effort"] = serde_json::json!("low");
         } else if model.contains("glm") {
-            body["chat_template_kwargs"] =
-                serde_json::json!({ "enable_thinking": false });
+            body["chat_template_kwargs"] = serde_json::json!({ "enable_thinking": false });
         }
     }
     body
@@ -1511,8 +1548,7 @@ impl CfClient {
     /// gates comparing the reasoning mode) — read once per call, never
     /// logged.
     fn generate_billed(&self, prompt: &str, max_tokens: usize) -> Result<CfGen, (String, bool)> {
-        let glm_thinking =
-            std::env::var("RIIR_CF_GLM_THINKING").as_deref() == Ok("1");
+        let glm_thinking = std::env::var("RIIR_CF_GLM_THINKING").as_deref() == Ok("1");
         let body = build_request_body(&self.model, prompt, max_tokens, glm_thinking);
         let resp = self
             .agent
@@ -1523,11 +1559,16 @@ impl CfClient {
         let v: serde_json::Value = resp
             .into_json()
             .map_err(|e| (self.scrub(format!("CF response was not JSON: {e}")), false))?;
-        let result = v
-            .get("result")
-            .ok_or_else(|| (self.scrub(format!("CF response had no result: {}", clip_payload(&v.to_string()))), false))?;
-        let (text, reasoning_chars) =
-            parse_chat_result(result).map_err(|e| (e, true))?;
+        let result = v.get("result").ok_or_else(|| {
+            (
+                self.scrub(format!(
+                    "CF response had no result: {}",
+                    clip_payload(&v.to_string())
+                )),
+                false,
+            )
+        })?;
+        let (text, reasoning_chars) = parse_chat_result(result).map_err(|e| (e, true))?;
         let usage = result.get("usage");
         let usage_reported = usage.is_some();
         let get = |k: &str| {
@@ -1635,14 +1676,20 @@ pub fn score_case(
     // (t51 `control_fires` — without it a non-compiling crate reads as
     // "resolved" because clippy emits no lints at all).
     let before = verifier.verify(&sample.module, &sample.lints[0]);
-    let control_fires =
-        before.ran && before.present_lints.iter().any(|l| l == &format!("clippy::{}", sample.lints[0]));
+    let control_fires = before.ran
+        && before
+            .present_lints
+            .iter()
+            .any(|l| l == &format!("clippy::{}", sample.lints[0]));
 
-    let (merged, strategy) =
-        match apply_edit(&sample.module, generation, sample.source == SampleSource::Reachable) {
-            Some((m, s)) => (Some(m), Some(s)),
-            None => (None, None),
-        };
+    let (merged, strategy) = match apply_edit(
+        &sample.module,
+        generation,
+        sample.source == SampleSource::Reachable,
+    ) {
+        Some((m, s)) => (Some(m), Some(s)),
+        None => (None, None),
+    };
 
     let mut s = CaseScore {
         id: sample.id.clone(),
@@ -1731,8 +1778,7 @@ impl RegateHarness {
         // Store path is CWD-relative by default (the arm-G convention — run
         // from the repo whose dev store you want), overridable per run so an
         // A/B can point at a scratch/planted store without CWD tricks.
-        let store_dir =
-            std::env::var("RIIR_REGATE_STORE_DIR").unwrap_or_else(|_| ".".to_string());
+        let store_dir = std::env::var("RIIR_REGATE_STORE_DIR").unwrap_or_else(|_| ".".to_string());
         let store = crate::traj_store::TrajStore::open(std::path::Path::new(&store_dir))
             .ok()
             .map(|(s, _)| s);
@@ -1753,30 +1799,29 @@ impl RegateHarness {
     /// instead lets the drafter fabricate serves for off-corpus rules off
     /// unrelated entries, which measures a pipeline nobody ships.
     pub fn classify(&mut self, lint: &str, module: &str) -> (MissClass, Option<String>) {
-        let candidates: Vec<crate::ClippyFixEntry> =
-            self.corpus.lookup(lint).cloned().collect();
+        let candidates: Vec<crate::ClippyFixEntry> = self.corpus.lookup(lint).cloned().collect();
         let in_corpus = !candidates.is_empty();
         if let Some(r) = self.pipeline.heal(lint, module, &candidates) {
-                let class = if in_corpus {
-                    if r.parses {
-                        MissClass::ServedParsing
-                    } else {
-                        MissClass::ServedNoParse
-                    }
+            let class = if in_corpus {
+                if r.parses {
+                    MissClass::ServedParsing
                 } else {
-                    // Post-Issue-030 the relevance gate declines off-corpus
-                    // input; a serve here means the gate regressed.
-                    MissClass::OffCorpus
-                };
-                (class, Some(r.fixed_code))
+                    MissClass::ServedNoParse
+                }
             } else {
-                let class = if in_corpus {
-                    MissClass::Declined
-                } else {
-                    MissClass::OffCorpus
-                };
-                (class, None)
-            }
+                // Post-Issue-030 the relevance gate declines off-corpus
+                // input; a serve here means the gate regressed.
+                MissClass::OffCorpus
+            };
+            (class, Some(r.fixed_code))
+        } else {
+            let class = if in_corpus {
+                MissClass::Declined
+            } else {
+                MissClass::OffCorpus
+            };
+            (class, None)
+        }
     }
 
     /// Top-k corpus few-shots for a module (the `--suggest` ranking, rule
@@ -1952,7 +1997,9 @@ fn fold_failure_patterns(
                 continue;
             }
         }
-        let e = by_rule.entry(row.lint_key.clone()).or_insert((0, 0, Vec::new()));
+        let e = by_rule
+            .entry(row.lint_key.clone())
+            .or_insert((0, 0, Vec::new()));
         e.0 += row.success_count;
         e.1 += row.fail_count;
         if row.fail_count > 0 {
@@ -2021,7 +2068,15 @@ pub struct ArmSummary {
 
 impl ArmSummary {
     /// Fold one case in. `reachable` flags reachable-miss-set membership.
-    pub fn add(&mut self, s: &CaseScore, reachable: bool, prompt_tokens: u64, completion_tokens: u64, price_in_per_m: f64, price_out_per_m: f64) {
+    pub fn add(
+        &mut self,
+        s: &CaseScore,
+        reachable: bool,
+        prompt_tokens: u64,
+        completion_tokens: u64,
+        price_in_per_m: f64,
+        price_out_per_m: f64,
+    ) {
         self.n += 1;
         if reachable {
             self.reachable_n += 1;
@@ -2052,8 +2107,8 @@ impl ArmSummary {
         }
         if s.keep_oracle {
             self.keep_oracle += 1;
-            let holds = s.contract_ok
-                && !matches!(s.behavioural, Some(BehavSummary::Divergent { .. }));
+            let holds =
+                s.contract_ok && !matches!(s.behavioural, Some(BehavSummary::Divergent { .. }));
             if !holds {
                 self.vetoed += 1;
             }
@@ -2091,7 +2146,11 @@ impl ArmSummary {
             self.reachable_keep_strict,
             self.reachable_n,
             self.reachable_n,
-            if beats { "BEATS decline" } else { "DOES NOT beat decline" }
+            if beats {
+                "BEATS decline"
+            } else {
+                "DOES NOT beat decline"
+            }
         )
     }
 
@@ -2178,7 +2237,10 @@ mod tests {
         // Pure core — no process-env races (parallel tests never touch it).
         let d = CfClient::DEFAULT_MODEL;
         assert_eq!(
-            CfClient::resolve_model_from(Some("@cf/qwen/qwen3.8-27b"), Some("@cf/zai-org/glm-4.7-flash")),
+            CfClient::resolve_model_from(
+                Some("@cf/qwen/qwen3.8-27b"),
+                Some("@cf/zai-org/glm-4.7-flash")
+            ),
             "@cf/qwen/qwen3.8-27b",
             "explicit arg wins over env"
         );
@@ -2187,7 +2249,11 @@ mod tests {
             "@cf/zai-org/glm-4.7-flash",
             "env wins over default"
         );
-        assert_eq!(CfClient::resolve_model_from(None, None), d, "default falls through");
+        assert_eq!(
+            CfClient::resolve_model_from(None, None),
+            d,
+            "default falls through"
+        );
         assert_eq!(
             CfClient::resolve_model_from(Some(""), Some("")),
             d,
@@ -2307,7 +2373,10 @@ mod tests {
 
     #[test]
     fn exact_match_is_fence_symmetric() {
-        assert_eq!(exact_match("```rust\nfn a() {}\n```", Some("fn a() {}")), Some(true));
+        assert_eq!(
+            exact_match("```rust\nfn a() {}\n```", Some("fn a() {}")),
+            Some(true)
+        );
         assert_eq!(exact_match("fn b() {}", Some("fn a() {}")), Some(false));
         assert_eq!(exact_match("fn a() {}", None), None);
     }
@@ -2336,7 +2405,11 @@ mod tests {
         assert!(m.contains("fn hash_label"));
         // Replacing a `match {}` block with a single expression legitimately
         // removes a brace PAIR — the invariant is net balance, not count.
-        assert_eq!(m.matches('{').count(), m.matches('}').count(), "net brace balance");
+        assert_eq!(
+            m.matches('{').count(),
+            m.matches('}').count(),
+            "net brace balance"
+        );
         assert!(syn::parse_file(&m).is_ok(), "merged result must parse");
     }
 
@@ -2353,8 +2426,12 @@ mod tests {
     fn apply_edit_refuses_verbatim_for_v2edit_sources() {
         // A complete-fn generation against a multi-fn module must NOT take
         // the verbatim path (it would drop the other fns).
-        let (m, s) = apply_edit(V2EDIT_ROW, "fn fetch(s: &str) -> usize {\n    s.split_whitespace().count()\n}", false)
-            .expect("must merge via a non-verbatim strategy");
+        let (m, s) = apply_edit(
+            V2EDIT_ROW,
+            "fn fetch(s: &str) -> usize {\n    s.split_whitespace().count()\n}",
+            false,
+        )
+        .expect("must merge via a non-verbatim strategy");
         assert_ne!(s, MergeStrategy::Verbatim);
         assert!(m.contains("fn baz"), "other fns survive: {m}");
     }
@@ -2417,7 +2494,11 @@ mod tests {
 
     #[test]
     fn prompt_growing_carries_both_channels_and_keeps_baselines_intact() {
-        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let fs = vec![FewShot {
+            rule_id: "manual_map".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
         let traj = vec![TrajectoryExemplar {
             lint_key: "uninlined_format_args".into(),
             shape: "format!(\"{}\", x)".into(),
@@ -2431,7 +2512,10 @@ mod tests {
             attempts: 6,
             kept: 3,
             success_rate: 0.5,
-            representative_failures: vec![("match b { true => x, false => y }".into(), "if b { x } else { y }".into())],
+            representative_failures: vec![(
+                "match b { true => x, false => y }".into(),
+                "if b { x } else { y }".into(),
+            )],
         }];
         let g = prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns);
         // Channel 1: prior outcomes block.
@@ -2448,9 +2532,15 @@ mod tests {
         assert!(g.ends_with("no explanation."));
         assert_eq!(g.matches("Respond with ONLY").count(), 1);
         // Deterministic.
-        assert_eq!(g, prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns));
+        assert_eq!(
+            g,
+            prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns)
+        );
         // Empty channels → byte-identical to arm B (the degradation case).
-        assert_eq!(prompt_growing("MOD", Some("CAND"), &fs, &[], &[]), prompt_prepass("MOD", Some("CAND"), &fs));
+        assert_eq!(
+            prompt_growing("MOD", Some("CAND"), &fs, &[], &[]),
+            prompt_prepass("MOD", Some("CAND"), &fs)
+        );
     }
 
     // ── Issue 067 — arm G' (same-rule channels, condition-first) ────
@@ -2479,7 +2569,11 @@ mod tests {
 
     #[test]
     fn prompt_growing_same_rule_places_channels_before_the_module() {
-        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let fs = vec![FewShot {
+            rule_id: "manual_map".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
         let (traj, patterns) = gprime_channels();
         let g = prompt_growing_same_rule("MODCODE", Some("CAND"), &fs, &traj, &patterns);
         // Condition-first: instruction header < channels < code module
@@ -2489,7 +2583,10 @@ mod tests {
             .find("Prior fix attempts on shape-similar code")
             .expect("channel 1 present");
         let module = g.find("MODCODE").expect("module present");
-        assert!(hdr < chan && chan < module, "condition-first: header < channels < module");
+        assert!(
+            hdr < chan && chan < module,
+            "condition-first: header < channels < module"
+        );
         assert!(
             module < g.find("A static modelless analyzer").unwrap(),
             "the candidate block follows the module (arm B's body intact)"
@@ -2498,12 +2595,19 @@ mod tests {
         assert!(g.contains("Historical fix-reliability by rule"));
         assert_eq!(g.matches("Respond with ONLY").count(), 1);
         // Deterministic.
-        assert_eq!(g, prompt_growing_same_rule("MODCODE", Some("CAND"), &fs, &traj, &patterns));
+        assert_eq!(
+            g,
+            prompt_growing_same_rule("MODCODE", Some("CAND"), &fs, &traj, &patterns)
+        );
     }
 
     #[test]
     fn prompt_growing_same_rule_empty_channels_is_byte_identical_to_arm_b() {
-        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let fs = vec![FewShot {
+            rule_id: "manual_map".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
         assert_eq!(
             prompt_growing_same_rule("MOD", Some("CAND"), &fs, &[], &[]),
             prompt_prepass("MOD", Some("CAND"), &fs),
@@ -2552,14 +2656,22 @@ mod tests {
             .into_iter()
             .find(|f| f.id == "katgpt-rs-bench_ptrm_width_scaling-002")
             .expect("frozen fixture present");
-        assert_eq!(issue073_module(), frozen.code, "the inlined 073 fixture drifted from the frozen score-bench set");
+        assert_eq!(
+            issue073_module(),
+            frozen.code,
+            "the inlined 073 fixture drifted from the frozen score-bench set"
+        );
     }
 
     #[test]
     fn anchor_primacy_all_builders_transport_identity_fields_verbatim() {
         let module = issue073_module();
         assert!(module.contains("greedy_path"), "fixture sanity");
-        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let fs = vec![FewShot {
+            rule_id: "manual_map".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
         let (traj, patterns) = gprime_channels();
         let candidate = "-    x.map(f).unwrap_or(false)\n+    x.is_some_and(f)";
 
@@ -2568,25 +2680,43 @@ mod tests {
         // few-shots, no candidate); the other three carry the few-shot rule
         // anchor in its dedicated header position and the candidate
         // verbatim.
-        assert!(prompt_raw(module).contains(module), "arm A: module crosses verbatim");
+        assert!(
+            prompt_raw(module).contains(module),
+            "arm A: module crosses verbatim"
+        );
         for p in [
             prompt_prepass(module, Some(candidate), &fs),
             prompt_growing(module, Some(candidate), &fs, &traj, &patterns),
             prompt_growing_same_rule(module, Some(candidate), &fs, &traj, &patterns),
         ] {
-            assert!(p.contains(module), "module crosses verbatim (the anchor block)");
-            assert!(p.contains("--- example (manual_map) before ---"), "few-shot rule anchor position");
+            assert!(
+                p.contains(module),
+                "module crosses verbatim (the anchor block)"
+            );
+            assert!(
+                p.contains("--- example (manual_map) before ---"),
+                "few-shot rule anchor position"
+            );
             // The candidate is verbatim per-LINE (the builder indents each
             // line by 4) — pin every line in its indented form.
             for line in candidate.lines() {
-                assert!(p.contains(&format!("    {line}")), "candidate line verbatim (indented): {line}");
+                assert!(
+                    p.contains(&format!("    {line}")),
+                    "candidate line verbatim (indented): {line}"
+                );
             }
         }
         let g = prompt_growing(module, Some(candidate), &fs, &traj, &patterns);
         let gp = prompt_growing_same_rule(module, Some(candidate), &fs, &traj, &patterns);
         for p in [&g, &gp] {
-            assert!(p.contains("--- ptr_arg [Certified: 3 ok / 0 failed] ---"), "channel lint-key anchor position");
-            assert!(p.contains("ptr_arg: 3/4 attempts kept (75%)"), "failure-pattern rule anchor position");
+            assert!(
+                p.contains("--- ptr_arg [Certified: 3 ok / 0 failed] ---"),
+                "channel lint-key anchor position"
+            );
+            assert!(
+                p.contains("ptr_arg: 3/4 attempts kept (75%)"),
+                "failure-pattern rule anchor position"
+            );
         }
         // Bt8 (Issue 073 T3): the anchor ledger restates the identity fields
         // VERBATIM, one per line, in its own block — the discrete channel.
@@ -2598,33 +2728,57 @@ mod tests {
         };
         let bt8 = prompt_anchor_ledger(module, Some(candidate), &fs, &anchors);
         assert!(bt8.contains("  rule: ptr_arg\n"), "rule anchor verbatim");
-        assert!(bt8.contains("  error code: E0599\n"), "error-code anchor verbatim");
-        assert!(bt8.contains("  symbols: greedy_path, marginals\n"), "symbol anchors verbatim");
-        assert!(bt8.contains("  span: bytes 120..246\n"), "span anchor verbatim");
+        assert!(
+            bt8.contains("  error code: E0599\n"),
+            "error-code anchor verbatim"
+        );
+        assert!(
+            bt8.contains("  symbols: greedy_path, marginals\n"),
+            "symbol anchors verbatim"
+        );
+        assert!(
+            bt8.contains("  span: bytes 120..246\n"),
+            "span anchor verbatim"
+        );
         // Placement: header < anchor ledger < module < candidate block.
         let hdr = bt8.find(TRAINED_INSTRUCTION).expect("instruction header");
         let ledger = bt8.find("Identity anchors").expect("ledger present");
         let mod_pos = bt8.find("greedy_path").expect("module symbol present");
-        let cand = bt8.find("A static modelless analyzer").expect("candidate block");
-        assert!(hdr < ledger && ledger < mod_pos && mod_pos < cand, "condition-first: header < ledger < module < candidate");
+        let cand = bt8
+            .find("A static modelless analyzer")
+            .expect("candidate block");
+        assert!(
+            hdr < ledger && ledger < mod_pos && mod_pos < cand,
+            "condition-first: header < ledger < module < candidate"
+        );
         // Arm B's body intact + exactly one respond-line.
         assert!(bt8.contains("--- example (manual_map) before ---"));
         assert_eq!(bt8.matches("Respond with ONLY").count(), 1);
         // Deterministic.
-        assert_eq!(bt8, prompt_anchor_ledger(module, Some(candidate), &fs, &anchors));
+        assert_eq!(
+            bt8,
+            prompt_anchor_ledger(module, Some(candidate), &fs, &anchors)
+        );
     }
 
     #[test]
     fn anchor_ledger_empty_anchors_degrade_byte_identically_to_arm_b() {
         let module = issue073_module();
-        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let fs = vec![FewShot {
+            rule_id: "manual_map".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
         assert_eq!(
             prompt_anchor_ledger(module, None, &fs, &FixAnchors::default()),
             prompt_prepass(module, None, &fs),
             "empty anchors = arm B byte-for-byte (the degradation contract)",
         );
         // Partial anchors omit their blank lines — never render empty rows.
-        let partial = FixAnchors { rule_id: Some("ptr_arg".into()), ..FixAnchors::default() };
+        let partial = FixAnchors {
+            rule_id: Some("ptr_arg".into()),
+            ..FixAnchors::default()
+        };
         let p = prompt_anchor_ledger(module, None, &fs, &partial);
         assert!(p.contains("  rule: ptr_arg\n"));
         assert!(!p.contains("error code:"), "unset fields omitted");
@@ -2652,8 +2806,14 @@ mod tests {
         };
         let orig = prompt_anchor_ledger(module, None, &[], &anchors);
         let twin_prompt = prompt_anchor_ledger(&twin, None, &[], &anchors_twin);
-        assert!(twin_prompt.contains("greedy_route"), "swapped symbol rides the discrete ledger");
-        assert!(twin_prompt.contains("  symbols: greedy_route, marginals\n"), "ledger line flips");
+        assert!(
+            twin_prompt.contains("greedy_route"),
+            "swapped symbol rides the discrete ledger"
+        );
+        assert!(
+            twin_prompt.contains("  symbols: greedy_route, marginals\n"),
+            "ledger line flips"
+        );
         assert!(!twin_prompt.contains("greedy_path"));
         // The flip is EXACTLY the entity swap — inverting it on the twin
         // prompt reproduces the original byte-for-byte (the ledger
@@ -2674,9 +2834,20 @@ mod tests {
         assert!(!ident_mentioned("x greedy_path_alt y", "alt"));
         assert!(ident_mentioned("greedy_path_alt", "greedy_path_alt"));
         assert!(!ident_mentioned("", "greedy_path"));
-        assert!(!twin.contains("greedy_path"), "rename is total on the fixture");
-        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
-        let fs_twin = vec![FewShot { rule_id: "manual_unwrap_or".into(), buggy: "b".into(), fixed: "f".into() }];
+        assert!(
+            !twin.contains("greedy_path"),
+            "rename is total on the fixture"
+        );
+        let fs = vec![FewShot {
+            rule_id: "manual_map".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
+        let fs_twin = vec![FewShot {
+            rule_id: "manual_unwrap_or".into(),
+            buggy: "b".into(),
+            fixed: "f".into(),
+        }];
 
         // Both identity axes (module symbol + rule id) flip in the prompt,
         // and the flip is EXACTLY the perturbation: inverting it on the twin
@@ -2687,7 +2858,11 @@ mod tests {
         let raw_orig = prompt_raw(module);
         let raw_twin = prompt_raw(&twin);
         assert!(raw_twin.contains("greedy_route") && !raw_twin.contains("greedy_path"));
-        assert_eq!(raw_twin.replace("greedy_route", "greedy_path"), raw_orig, "arm A: the flip is exactly the symbol swap");
+        assert_eq!(
+            raw_twin.replace("greedy_route", "greedy_path"),
+            raw_orig,
+            "arm A: the flip is exactly the symbol swap"
+        );
 
         for build in [
             |m: &str, f: &[FewShot]| prompt_prepass(m, None, f),
@@ -2696,10 +2871,18 @@ mod tests {
         ] {
             let orig = build(module, &fs);
             let twin_prompt = build(&twin, &fs_twin);
-            assert!(twin_prompt.contains("greedy_route"), "swapped symbol rides the anchor");
+            assert!(
+                twin_prompt.contains("greedy_route"),
+                "swapped symbol rides the anchor"
+            );
             assert!(!twin_prompt.contains("greedy_path"));
-            assert!(twin_prompt.contains("--- example (manual_unwrap_or) before ---"), "few-shot rule anchor flips");
-            let inverted = twin_prompt.replace("greedy_route", "greedy_path").replace("manual_unwrap_or", "manual_map");
+            assert!(
+                twin_prompt.contains("--- example (manual_unwrap_or) before ---"),
+                "few-shot rule anchor flips"
+            );
+            let inverted = twin_prompt
+                .replace("greedy_route", "greedy_path")
+                .replace("manual_unwrap_or", "manual_map");
             assert_eq!(inverted, orig, "the flip is exactly the entity swap");
         }
     }
@@ -2740,25 +2923,40 @@ mod tests {
     #[test]
     fn same_rule_context_excludes_other_rules_and_orders_certified_first() {
         let mut d = std::env::temp_dir();
-        d.push(format!("riir_gprime_ctx_{}_{}", std::process::id(), line!()));
+        d.push(format!(
+            "riir_gprime_ctx_{}_{}",
+            std::process::id(),
+            line!()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         let (store, bad) = crate::traj_store::TrajStore::open(&d).unwrap();
         assert_eq!(bad, 0);
         // Queried rule `ptr_arg`: one Heuristic (unverified) + one Certified.
         // Records interleave so a stable sort would NOT produce the
         // Certified-first order — only the explicit tier rank does.
-        store.record("ptr_arg", "shape_h", "fix_h", true, false, "r").unwrap();
-        store.record("ptr_arg", "shape_c", "fix_c", true, true, "r").unwrap();
+        store
+            .record("ptr_arg", "shape_h", "fix_h", true, false, "r")
+            .unwrap();
+        store
+            .record("ptr_arg", "shape_c", "fix_c", true, true, "r")
+            .unwrap();
         // Another rule at identical shape — arm G would carry it, G' must not.
-        store.record("needless_borrow", "shape_c", "fix_x", true, true, "r").unwrap();
+        store
+            .record("needless_borrow", "shape_c", "fix_x", true, true, "r")
+            .unwrap();
         // A prefix-collision rule — the boundary-safe `ptr_arg:` key prefix
         // must NOT admit it (a bare-prefix filter would).
-        store.record("ptr_arg_extra", "shape_c", "fix_y", true, true, "r").unwrap();
+        store
+            .record("ptr_arg_extra", "shape_c", "fix_y", true, true, "r")
+            .unwrap();
 
         let (exemplars, patterns) = same_rule_context(&store, "shape_c", "ptr_arg", 3);
         assert_eq!(exemplars.len(), 2, "only the ptr_arg family: {exemplars:?}");
         assert!(exemplars.iter().all(|e| e.lint_key == "ptr_arg"));
-        assert_eq!(exemplars[0].tier, "Certified", "Certified first: {exemplars:?}");
+        assert_eq!(
+            exemplars[0].tier, "Certified",
+            "Certified first: {exemplars:?}"
+        );
         assert_eq!(exemplars[0].shape, "shape_c");
         assert_eq!(exemplars[1].tier, "Heuristic");
         // Channel 3: the family fold only — the other rules' attempts must
@@ -2777,31 +2975,65 @@ mod tests {
     #[test]
     fn same_rule_context_folds_rustc_code_family_and_excludes_withdrawn() {
         let mut d = std::env::temp_dir();
-        d.push(format!("riir_gprime_rustc_{}_{}", std::process::id(), line!()));
+        d.push(format!(
+            "riir_gprime_rustc_{}_{}",
+            std::process::id(),
+            line!()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         let (store, bad) = crate::traj_store::TrajStore::open(&d).unwrap();
         assert_eq!(bad, 0);
         // Two strategies under one rustc code — the `{code}:` prefix admits
         // both; the fold reports them as their own pattern rows.
-        store.record("E0502:a-strategy", "&v[0]", "x", true, true, "r").unwrap();
-        store.record("E0502:b-strategy", "&w[0]", "y", false, false, "r").unwrap();
-        store.record("E0502:b-strategy", "&w[0]", "y", false, false, "r").unwrap();
+        store
+            .record("E0502:a-strategy", "&v[0]", "x", true, true, "r")
+            .unwrap();
+        store
+            .record("E0502:b-strategy", "&w[0]", "y", false, false, "r")
+            .unwrap();
+        store
+            .record("E0502:b-strategy", "&w[0]", "y", false, false, "r")
+            .unwrap();
         // A Withdrawn row (3 consecutive fails = the absorbing transition) —
         // excluded from BOTH channels.
-        store.record("E0502:dead-strategy", "&d[0]", "z", false, false, "r").unwrap();
-        store.record("E0502:dead-strategy", "&d[0]", "z", false, false, "r").unwrap();
-        store.record("E0502:dead-strategy", "&d[0]", "z", false, false, "r").unwrap();
+        store
+            .record("E0502:dead-strategy", "&d[0]", "z", false, false, "r")
+            .unwrap();
+        store
+            .record("E0502:dead-strategy", "&d[0]", "z", false, false, "r")
+            .unwrap();
+        store
+            .record("E0502:dead-strategy", "&d[0]", "z", false, false, "r")
+            .unwrap();
         // Another code entirely.
-        store.record("E0382:other", "&m[0]", "q", true, true, "r").unwrap();
+        store
+            .record("E0382:other", "&m[0]", "q", true, true, "r")
+            .unwrap();
 
         let (exemplars, patterns) = same_rule_context(&store, "&v[0]", "E0502", 3);
-        assert!(!exemplars.is_empty() && exemplars.iter().all(|e| e.lint_key.starts_with("E0502:")));
-        assert!(!exemplars.iter().any(|e| e.lint_key == "E0502:dead-strategy"), "withdrawn excluded");
+        assert!(
+            !exemplars.is_empty() && exemplars.iter().all(|e| e.lint_key.starts_with("E0502:"))
+        );
+        assert!(
+            !exemplars
+                .iter()
+                .any(|e| e.lint_key == "E0502:dead-strategy"),
+            "withdrawn excluded"
+        );
         assert!(patterns.iter().all(|p| p.rule.starts_with("E0502:")));
         assert!(!patterns.iter().any(|p| p.rule == "E0502:dead-strategy"));
-        assert!(patterns.iter().any(|p| p.rule == "E0502:a-strategy" && p.kept == 1));
-        let b = patterns.iter().find(|p| p.rule == "E0502:b-strategy").expect("b-strategy row");
-        assert_eq!((b.attempts, b.kept), (2, 0), "2 fails stays Heuristic (3 would withdraw)");
+        assert!(patterns
+            .iter()
+            .any(|p| p.rule == "E0502:a-strategy" && p.kept == 1));
+        let b = patterns
+            .iter()
+            .find(|p| p.rule == "E0502:b-strategy")
+            .expect("b-strategy row");
+        assert_eq!(
+            (b.attempts, b.kept),
+            (2, 0),
+            "2 fails stays Heuristic (3 would withdraw)"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -2809,21 +3041,20 @@ mod tests {
 
     #[test]
     fn contract_preserved_flags_a_dropped_fn_but_not_a_dropped_local() {
-        let destructive = contract_preserved(
-            "pub fn f(a: u8) {}\npub fn g() {}",
-            "pub fn f(a: u8) {}",
-        );
+        let destructive =
+            contract_preserved("pub fn f(a: u8) {}\npub fn g() {}", "pub fn f(a: u8) {}");
         assert!(!destructive);
-        let local_fix = contract_preserved(
-            "pub fn f() { let s2 = 1; let _ = s2; }",
-            "pub fn f() { }",
-        );
+        let local_fix =
+            contract_preserved("pub fn f() { let s2 = 1; let _ = s2; }", "pub fn f() { }");
         assert!(local_fix, "dropping a local let is a legitimate fix");
     }
 
     #[test]
     fn first_fn_name_finds_the_hint() {
-        assert_eq!(first_fn_name("pub struct S;\npub fn mk() -> S { S }").as_deref(), Some("mk"));
+        assert_eq!(
+            first_fn_name("pub struct S;\npub fn mk() -> S { S }").as_deref(),
+            Some("mk")
+        );
         assert!(first_fn_name("pub enum E { A }").is_none());
     }
 
@@ -2848,12 +3079,19 @@ mod tests {
     #[test]
     fn clip_payload_bounds_a_server_controlled_dump() {
         let small = "{\"error\":\"nope\"}";
-        assert_eq!(super::clip_payload(small), small, "short payloads pass through");
+        assert_eq!(
+            super::clip_payload(small),
+            small,
+            "short payloads pass through"
+        );
         let big = "x".repeat(super::MAX_PAYLOAD_IN_ERROR * 4);
         let out = super::clip_payload(&big);
         assert!(out.len() < big.len(), "must shrink");
         assert!(out.contains("clipped"), "must say so: {out}");
-        assert!(out.contains(&big.len().to_string()), "must report the true size");
+        assert!(
+            out.contains(&big.len().to_string()),
+            "must report the true size"
+        );
     }
 
     #[test]

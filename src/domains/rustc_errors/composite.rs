@@ -178,8 +178,11 @@ pub fn measure_composite(
     }
 
     // Write-mode loop; disk holds exactly the kept fixes on return.
-    let report = CompileDriver::isolated()
-        .run(std::slice::from_ref(&lib_rs), &Playbooks::production(), true);
+    let report = CompileDriver::isolated().run(
+        std::slice::from_ref(&lib_rs),
+        &Playbooks::production(),
+        true,
+    );
     out.edits = report.applied.len();
 
     // Final state: re-read what the driver left on disk, recheck.
@@ -458,7 +461,8 @@ mod tests {
 
     #[test]
     fn module_regions_zero_modules() {
-        let src = "pub fn probe() -> usize {\n    let v = Vec::new();\n    v.push(1);\n    v.len()\n}\n";
+        let src =
+            "pub fn probe() -> usize {\n    let v = Vec::new();\n    v.push(1);\n    v.len()\n}\n";
         assert!(module_regions(src).is_empty());
     }
 

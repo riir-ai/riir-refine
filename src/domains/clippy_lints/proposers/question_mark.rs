@@ -33,7 +33,10 @@ use syn::{Arm, Expr, ExprIf, ExprMatch, ExprReturn, File, Pat, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -46,7 +49,9 @@ struct Collector<'a> {
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_stmt(&mut self, s: &'ast Stmt) {
         syn::visit::visit_stmt(self, s);
-        let Stmt::Expr(Expr::If(i), _) = s else { return };
+        let Stmt::Expr(Expr::If(i), _) = s else {
+            return;
+        };
         if let Some(e) = self.try_if_shape(s, i) {
             self.edits.push(e);
         }
@@ -66,7 +71,9 @@ impl Collector<'_> {
         if i.else_branch.is_some() || !i.attrs.is_empty() {
             return None;
         }
-        let Expr::MethodCall(mc) = &*i.cond else { return None };
+        let Expr::MethodCall(mc) = &*i.cond else {
+            return None;
+        };
         if mc.method != "is_none" || !mc.args.is_empty() {
             return None;
         }
@@ -85,7 +92,10 @@ impl Collector<'_> {
         if m.arms.len() != 2 || !m.attrs.is_empty() {
             return None;
         }
-        if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
+        if m.arms
+            .iter()
+            .any(|a| !a.attrs.is_empty() || a.guard.is_some())
+        {
             return None;
         }
         for (a, b) in [(&m.arms[0], &m.arms[1]), (&m.arms[1], &m.arms[0])] {
@@ -109,11 +119,19 @@ impl Collector<'_> {
         }
         if let Expr::Reference(r) = inner {
             let text = src(self.source, &*r.expr)?;
-            let text = if is_postfix_safe(&r.expr) { text } else { format!("({text})") };
+            let text = if is_postfix_safe(&r.expr) {
+                text
+            } else {
+                format!("({text})")
+            };
             return Some(format!("{text}.as_ref()"));
         }
         let text = src(self.source, expr)?;
-        let text = if is_postfix_safe(expr) { text } else { format!("({text})") };
+        let text = if is_postfix_safe(expr) {
+            text
+        } else {
+            format!("({text})")
+        };
         Some(text)
     }
 }
@@ -126,7 +144,9 @@ fn returns_none(r: &ExprReturn) -> bool {
 /// `Some(v) => v` — tuple-struct Some with one binding whose body is that
 /// same binding.
 fn is_some_identity(arm: &Arm) -> bool {
-    let Some(binding) = single_ctor_binding(&arm.pat, "Some") else { return false };
+    let Some(binding) = single_ctor_binding(&arm.pat, "Some") else {
+        return false;
+    };
     matches!(&*arm.body, Expr::Path(p) if p.path.get_ident() == Some(&binding))
 }
 
@@ -137,7 +157,9 @@ fn is_none_return(arm: &Arm) -> bool {
 
 /// The single `Ctor(<binding>)` pattern's binding ident.
 fn single_ctor_binding(pat: &Pat, ctor: &str) -> Option<syn::Ident> {
-    let Pat::TupleStruct(ts) = pat else { return None };
+    let Pat::TupleStruct(ts) = pat else {
+        return None;
+    };
     if !ts.path.is_ident(ctor) || ts.elems.len() != 1 {
         return None;
     }
@@ -157,13 +179,17 @@ mod tests {
             "fn f(x: Option<u8>) -> Option<u8> { if x.is_none() { return None; } Some(x.unwrap() + 1) }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(out.contains("x?;"), "try operator not produced: {out}");
-        assert!(out.contains("Some(x.unwrap() + 1)"), "tail must survive: {out}");
+        assert!(
+            out.contains("Some(x.unwrap() + 1)"),
+            "tail must survive: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
     fn match_some_v_none_return_becomes_try() {
-        let input = "fn g(x: Option<u8>) -> Option<u8> { match x { Some(v) => v, None => return None, } }";
+        let input =
+            "fn g(x: Option<u8>) -> Option<u8> { match x { Some(v) => v, None => return None, } }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(out.contains("x?"), "try operator not produced: {out}");
         assert!(!out.contains("match"), "match must be gone: {out}");
@@ -172,7 +198,8 @@ mod tests {
 
     #[test]
     fn none_first_arm_order_accepted() {
-        let input = "fn g(x: Option<u8>) -> Option<u8> { match x { None => return None, Some(v) => v, } }";
+        let input =
+            "fn g(x: Option<u8>) -> Option<u8> { match x { None => return None, Some(v) => v, } }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(out.contains("x?"), "{out}");
         syn::parse_file(&out).expect("re-parses");
@@ -228,6 +255,9 @@ mod tests {
         let input =
             "fn g(x: Option<u8>) -> Option<u8> { match x { Some(v) => v + 1, None => return None, } }";
         let out = propose_fix("question_mark", input);
-        assert!(out.is_none(), "non-identity Some body must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-identity Some body must not fire: {out:?}"
+        );
     }
 }

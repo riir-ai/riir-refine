@@ -26,7 +26,9 @@ fn every_class_a_rule_agrees_with_hadolint() {
     let mut checked = 0usize;
     let mut disagreements = Vec::new();
     for rule in &corpus.entries {
-        let Some(code) = rule.incumbent.as_deref() else { continue };
+        let Some(code) = rule.incumbent.as_deref() else {
+            continue;
+        };
         if !code.starts_with("DL") {
             // BuildKit check names belong to `docker build --check` (Tier 2).
             continue;
@@ -37,7 +39,10 @@ fn every_class_a_rule_agrees_with_hadolint() {
             other => disagreements.push((rule.rule_id.clone(), code.to_string(), other)),
         }
     }
-    assert!(checked >= 6, "only {checked} DL-coded rules were checkable — the ledger thinned out");
+    assert!(
+        checked >= 6,
+        "only {checked} DL-coded rules were checkable — the ledger thinned out"
+    );
     assert!(
         disagreements.is_empty(),
         "Class-A rules disagree with the live incumbent: {disagreements:?}"
@@ -67,7 +72,9 @@ fn class_b_rules_are_in_unoccupied_territory() {
         if rule.incumbent.is_some() {
             continue;
         }
-        let Some(found) = hadolint(&rule.buggy_code) else { continue };
+        let Some(found) = hadolint(&rule.buggy_code) else {
+            continue;
+        };
         let relevant: Vec<String> = found
             .into_iter()
             .filter(|f| !IGNORE.contains(&f.code.as_str()))

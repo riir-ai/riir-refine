@@ -156,7 +156,8 @@ pub fn parses_as_fragment(code: &str) -> bool {
 ///
 /// A `String` naming the first offending line + reason.
 pub fn parse_candidates(bytes: &[u8]) -> Result<Vec<CandidateRow>, String> {
-    let text = std::str::from_utf8(bytes).map_err(|e| format!("candidates file is not UTF-8: {e}"))?;
+    let text =
+        std::str::from_utf8(bytes).map_err(|e| format!("candidates file is not UTF-8: {e}"))?;
     let mut rows = Vec::new();
     let mut seen_ids: BTreeSet<String> = BTreeSet::new();
     let mut seen_content: BTreeSet<String> = BTreeSet::new();
@@ -177,7 +178,10 @@ pub fn parse_candidates(bytes: &[u8]) -> Result<Vec<CandidateRow>, String> {
             return Err(format!("candidates line {ln}: empty rule_id"));
         }
         if !seen_ids.insert(row.rule_id.clone()) {
-            return Err(format!("candidates line {ln}: duplicate rule_id {:?}", row.rule_id));
+            return Err(format!(
+                "candidates line {ln}: duplicate rule_id {:?}",
+                row.rule_id
+            ));
         }
         if row.domain != DOMAIN_CLIPPY && row.domain != DOMAIN_PERF {
             return Err(format!(
@@ -186,7 +190,9 @@ pub fn parse_candidates(bytes: &[u8]) -> Result<Vec<CandidateRow>, String> {
             ));
         }
         if row.buggy_code.is_empty() {
-            return Err(format!("candidates line {ln}: empty buggy_code (the match key)"));
+            return Err(format!(
+                "candidates line {ln}: empty buggy_code (the match key)"
+            ));
         }
         if row.buggy_code == row.fixed_code {
             return Err(format!(
@@ -320,7 +326,13 @@ impl PromotionRegistry {
     pub fn overlay_triples(&self) -> Vec<Triple> {
         self.promoted
             .values()
-            .map(|e| (e.row.rule_id.clone(), e.row.buggy_code.clone(), e.row.fixed_code.clone()))
+            .map(|e| {
+                (
+                    e.row.rule_id.clone(),
+                    e.row.buggy_code.clone(),
+                    e.row.fixed_code.clone(),
+                )
+            })
             .collect()
     }
 
@@ -365,7 +377,10 @@ impl PromotionRegistry {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?)
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?,
+        )
     }
 }
 
@@ -444,13 +459,22 @@ impl RejectReason {
 #[must_use]
 pub fn not_worse(base: &Totals, trial: &Totals) -> Option<RejectReason> {
     if trial.n_ran == 0 {
-        return Some(RejectReason::HealRateRegression { base: base.resolved, trial: 0 });
+        return Some(RejectReason::HealRateRegression {
+            base: base.resolved,
+            trial: 0,
+        });
     }
     if trial.resolved < base.resolved {
-        return Some(RejectReason::HealRateRegression { base: base.resolved, trial: trial.resolved });
+        return Some(RejectReason::HealRateRegression {
+            base: base.resolved,
+            trial: trial.resolved,
+        });
     }
     if trial.created > base.created {
-        return Some(RejectReason::CreatedRateRegression { base: base.created, trial: trial.created });
+        return Some(RejectReason::CreatedRateRegression {
+            base: base.created,
+            trial: trial.created,
+        });
     }
     None
 }
@@ -498,7 +522,11 @@ impl GateReport {
             self.base.resolved, self.base.created, self.base.n_ran
         );
         if let Some(b) = &self.batch {
-            let _ = writeln!(out, "  batch trial: resolved={} created={}", b.resolved, b.created);
+            let _ = writeln!(
+                out,
+                "  batch trial: resolved={} created={}",
+                b.resolved, b.created
+            );
         }
         for v in &self.verdicts {
             match &v.verdict {
@@ -559,7 +587,9 @@ fn pre_filter(
     }
     let mut triable = Vec::new();
     for row in candidates {
-        let fired = fixtures.iter().any(|f| f.code.contains(row.buggy_code.as_str()));
+        let fired = fixtures
+            .iter()
+            .any(|f| f.code.contains(row.buggy_code.as_str()));
         let reject = |reason, verdicts: &mut Vec<VerdictRow>| {
             verdicts.push(VerdictRow {
                 rule_id: row.rule_id.clone(),
@@ -612,7 +642,9 @@ pub fn run_promotion_gate(
             report.verdicts.push(VerdictRow {
                 rule_id: row.rule_id.clone(),
                 verdict: Verdict::Rejected(RejectReason::HealRateRegression { base: 0, trial: 0 }),
-                fired: fixtures.iter().any(|f| f.code.contains(row.buggy_code.as_str())),
+                fired: fixtures
+                    .iter()
+                    .any(|f| f.code.contains(row.buggy_code.as_str())),
             });
         }
         return report;
@@ -626,8 +658,13 @@ pub fn run_promotion_gate(
     if not_worse(&base, &batch).is_none() {
         // Batch passes ⇒ every candidate cleared the bar.
         for row in triable {
-            let fired = fixtures.iter().any(|f| f.code.contains(row.buggy_code.as_str()));
-            if matches!(registry.promote(row.clone()), Err(PromoteError::DuplicateRuleId)) {
+            let fired = fixtures
+                .iter()
+                .any(|f| f.code.contains(row.buggy_code.as_str()));
+            if matches!(
+                registry.promote(row.clone()),
+                Err(PromoteError::DuplicateRuleId)
+            ) {
                 report.verdicts.push(VerdictRow {
                     rule_id: row.rule_id.clone(),
                     verdict: Verdict::Rejected(RejectReason::WithdrawnAbsorbing), // unreachable via parse (dedup); defensive
@@ -646,7 +683,9 @@ pub fn run_promotion_gate(
 
     // Batch failed ⇒ per-candidate attribution (base already measured).
     for row in triable {
-        let fired = fixtures.iter().any(|f| f.code.contains(row.buggy_code.as_str()));
+        let fired = fixtures
+            .iter()
+            .any(|f| f.code.contains(row.buggy_code.as_str()));
         let trial = totals(&run_bench_with(oracle, fixtures, &[row.lane()]));
         let verdict = match not_worse(&base, &trial) {
             None => {
@@ -655,7 +694,11 @@ pub fn run_promotion_gate(
             }
             Some(reason) => Verdict::Rejected(reason),
         };
-        report.verdicts.push(VerdictRow { rule_id: row.rule_id.clone(), verdict, fired });
+        report.verdicts.push(VerdictRow {
+            rule_id: row.rule_id.clone(),
+            verdict,
+            fired,
+        });
     }
     report
 }
@@ -677,7 +720,10 @@ impl SweepReport {
         use std::fmt::Write as _;
         let mut out = String::new();
         if !self.ran {
-            let _ = writeln!(out, "post-hoc sweep: no live promoted rules — nothing to verify");
+            let _ = writeln!(
+                out,
+                "post-hoc sweep: no live promoted rules — nothing to verify"
+            );
             return out;
         }
         let _ = writeln!(
@@ -709,8 +755,7 @@ pub fn run_posthoc_sweep(
         return SweepReport::default();
     }
     let base = totals(&run_bench(oracle, fixtures));
-    let lanes: Vec<(&str, &str)> =
-        registry.promoted.values().map(|e| e.row.lane()).collect();
+    let lanes: Vec<(&str, &str)> = registry.promoted.values().map(|e| e.row.lane()).collect();
     let overlay = totals(&run_bench_with(oracle, fixtures, &lanes));
     let mut report = SweepReport {
         ran: true,
@@ -724,7 +769,9 @@ pub fn run_posthoc_sweep(
     // Attribute: trial each promoted rule alone; withdraw the regressors.
     let ids: Vec<String> = registry.promoted.keys().cloned().collect();
     for id in ids {
-        let Some(entry) = registry.promoted.get(&id) else { continue };
+        let Some(entry) = registry.promoted.get(&id) else {
+            continue;
+        };
         let lane = entry.row.lane();
         let trial = totals(&run_bench_with(oracle, fixtures, &[lane]));
         if not_worse(&base, &trial).is_some() {
@@ -766,7 +813,10 @@ pub fn append_audit(path: &Path, records: &[AuditRecord]) -> std::io::Result<()>
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     for r in records {
         let mut line = serde_json::to_string(r).map_err(std::io::Error::other)?;
         line.push('\n');
@@ -799,7 +849,13 @@ pub fn compiled_in_triples(domain: &str) -> Vec<Triple> {
     fn to_triples<E: HealEntry>(entries: Vec<E>) -> Vec<Triple> {
         entries
             .into_iter()
-            .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string(), e.fixed_code().to_string()))
+            .map(|e| {
+                (
+                    e.rule_id().to_string(),
+                    e.buggy_code().to_string(),
+                    e.fixed_code().to_string(),
+                )
+            })
             .collect()
     }
     match domain {
@@ -833,7 +889,8 @@ pub fn promotion_run_overlay(
     for t in promoted {
         let domain = registry
             .promoted
-            .get(&t.0).map_or_else(|| DOMAIN_CLIPPY.to_string(), |e| e.row.domain.clone());
+            .get(&t.0)
+            .map_or_else(|| DOMAIN_CLIPPY.to_string(), |e| e.row.domain.clone());
         by_domain.entry(domain).or_default().push(t);
     }
     let mut out: Vec<(String, Vec<Triple>)> = Vec::new();
@@ -938,25 +995,67 @@ mod tests {
         assert!(reg.overlay_triples().is_empty());
 
         // same content, same id
-        assert_eq!(reg.promote(r.clone()).unwrap_err(), PromoteError::WithdrawnAbsorbing);
+        assert_eq!(
+            reg.promote(r.clone()).unwrap_err(),
+            PromoteError::WithdrawnAbsorbing
+        );
         // same content, NEW id
-        let r2 = CandidateRow { rule_id: "r2".into(), ..r.clone() };
-        assert_eq!(reg.promote(r2).unwrap_err(), PromoteError::WithdrawnAbsorbing);
+        let r2 = CandidateRow {
+            rule_id: "r2".into(),
+            ..r.clone()
+        };
+        assert_eq!(
+            reg.promote(r2).unwrap_err(),
+            PromoteError::WithdrawnAbsorbing
+        );
         // same id, NEW content
         let r3 = row("r1", "return 3;", "3");
-        assert_eq!(reg.promote(r3).unwrap_err(), PromoteError::WithdrawnAbsorbing);
+        assert_eq!(
+            reg.promote(r3).unwrap_err(),
+            PromoteError::WithdrawnAbsorbing
+        );
         // withdraw of unknown id is false
         assert!(!reg.withdraw("nope"));
     }
 
     #[test]
     fn not_worse_is_canonical_integer_comparison() {
-        let base = Totals { resolved: 10, created: 2, vocab_before: 12, n_ran: 5 };
-        let same = Totals { resolved: 10, created: 2, vocab_before: 12, n_ran: 5 };
-        let better = Totals { resolved: 11, created: 1, vocab_before: 12, n_ran: 5 };
-        let heal_worse = Totals { resolved: 9, created: 2, vocab_before: 12, n_ran: 5 };
-        let created_worse = Totals { resolved: 10, created: 3, vocab_before: 12, n_ran: 5 };
-        let no_evidence = Totals { resolved: 99, created: 0, vocab_before: 12, n_ran: 0 };
+        let base = Totals {
+            resolved: 10,
+            created: 2,
+            vocab_before: 12,
+            n_ran: 5,
+        };
+        let same = Totals {
+            resolved: 10,
+            created: 2,
+            vocab_before: 12,
+            n_ran: 5,
+        };
+        let better = Totals {
+            resolved: 11,
+            created: 1,
+            vocab_before: 12,
+            n_ran: 5,
+        };
+        let heal_worse = Totals {
+            resolved: 9,
+            created: 2,
+            vocab_before: 12,
+            n_ran: 5,
+        };
+        let created_worse = Totals {
+            resolved: 10,
+            created: 3,
+            vocab_before: 12,
+            n_ran: 5,
+        };
+        let no_evidence = Totals {
+            resolved: 99,
+            created: 0,
+            vocab_before: 12,
+            n_ran: 0,
+        };
         assert!(not_worse(&base, &same).is_none());
         assert!(not_worse(&base, &better).is_none());
         assert!(matches!(
@@ -968,7 +1067,10 @@ mod tests {
             Some(RejectReason::CreatedRateRegression { base: 2, trial: 3 })
         ));
         // fail closed: no evidence = no promotion
-        assert!(matches!(not_worse(&base, &no_evidence), Some(RejectReason::HealRateRegression { .. })));
+        assert!(matches!(
+            not_worse(&base, &no_evidence),
+            Some(RejectReason::HealRateRegression { .. })
+        ));
     }
 
     #[test]
@@ -986,7 +1088,7 @@ mod tests {
         assert_eq!(merged[1].1, "bb"); // base's version
         assert_eq!(merged[2].0, "c");
         assert_eq!(merge_triples(&base, &promoted), merged); // deterministic
-        // base untouched
+                                                             // base untouched
         assert_eq!(base.len(), 2);
     }
 
@@ -1029,7 +1131,10 @@ mod tests {
 
         let after = crate::domains::clippy_lints::ClippyLintDomain::build_corpus();
         let frozen_after = serde_json::to_vec(&after).unwrap();
-        assert_eq!(frozen_before, frozen_after, "the frozen base corpus must be byte-identical");
+        assert_eq!(
+            frozen_before, frozen_after,
+            "the frozen base corpus must be byte-identical"
+        );
     }
 
     #[test]
@@ -1081,7 +1186,11 @@ mod tests {
         let report = run_promotion_gate(&ClippyOracle::new(), &fixtures, &[a, b], &mut reg);
         assert_eq!(report.verdicts.len(), 2);
         for v in &report.verdicts {
-            assert_eq!(v.verdict, Verdict::Rejected(RejectReason::ConflictingMatchKey), "{v:?}");
+            assert_eq!(
+                v.verdict,
+                Verdict::Rejected(RejectReason::ConflictingMatchKey),
+                "{v:?}"
+            );
         }
         assert!(reg.promoted.is_empty());
         // Identical key + identical fixed is a parse-level duplicate, not a

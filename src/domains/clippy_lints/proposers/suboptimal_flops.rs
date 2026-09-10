@@ -29,7 +29,10 @@ use syn::{Expr, ExprMethodCall, File, Lit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -48,7 +51,9 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
         if m.args.len() != 1 {
             return;
         }
-        let Some(arg) = m.args.iter().next() else { return };
+        let Some(arg) = m.args.iter().next() else {
+            return;
+        };
         let Some(replacement) = rewrite_call(&name, arg) else {
             return;
         };
@@ -131,8 +136,11 @@ mod tests {
 
     #[test]
     fn log_two_and_ten_become_dedicated() {
-        let out = propose_fix("suboptimal_flops", "fn f(x: f64) -> f64 { x.log(2.0) + x.log(10.0) }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "suboptimal_flops",
+            "fn f(x: f64) -> f64 { x.log(2.0) + x.log(10.0) }",
+        )
+        .expect("pattern matched");
         assert!(out.contains("x.log2()"), "{out}");
         assert!(out.contains("x.log10()"), "{out}");
     }
@@ -165,8 +173,11 @@ mod tests {
         // semantics apply the outermost edit and drop the inner, which then
         // re-fires on the next bounded-fixpoint pass (the documented
         // needless_range_loop composition semantics).
-        let once = propose_fix("suboptimal_flops", "fn f(x: f64) -> f64 { x.powf(2.0).powf(0.5) }")
-            .expect("pattern matched");
+        let once = propose_fix(
+            "suboptimal_flops",
+            "fn f(x: f64) -> f64 { x.powf(2.0).powf(0.5) }",
+        )
+        .expect("pattern matched");
         assert_eq!(once, "fn f(x: f64) -> f64 { x.powf(2.0).sqrt() }");
         let twice = propose_fix("suboptimal_flops", &once).expect("second pass");
         assert_eq!(twice, "fn f(x: f64) -> f64 { x.powi(2).sqrt() }");
@@ -174,7 +185,10 @@ mod tests {
 
     #[test]
     fn runtime_exponent_unchanged() {
-        let out = propose_fix("suboptimal_flops", "fn f(x: f64, e: f64) -> f64 { x.powf(e) }");
+        let out = propose_fix(
+            "suboptimal_flops",
+            "fn f(x: f64, e: f64) -> f64 { x.powf(e) }",
+        );
         assert!(out.is_none(), "runtime exponent must not fire: {out:?}");
     }
 
@@ -188,7 +202,10 @@ mod tests {
     fn fraction_exponent_unchanged() {
         // `powf(1.0/3.0)` belongs to the nursery `imprecise_flops` class
         // (cbrt is MORE accurate) — deliberately out of scope here.
-        let out = propose_fix("suboptimal_flops", "fn f(x: f64) -> f64 { x.powf(1.0 / 3.0) }");
+        let out = propose_fix(
+            "suboptimal_flops",
+            "fn f(x: f64) -> f64 { x.powf(1.0 / 3.0) }",
+        );
         assert!(out.is_none(), "1/3 must not fire: {out:?}");
     }
 
@@ -200,13 +217,19 @@ mod tests {
 
     #[test]
     fn non_literal_log_base_unchanged() {
-        let out = propose_fix("suboptimal_flops", "fn f(x: f64, b: f64) -> f64 { x.log(b) }");
+        let out = propose_fix(
+            "suboptimal_flops",
+            "fn f(x: f64, b: f64) -> f64 { x.log(b) }",
+        );
         assert!(out.is_none(), "runtime base must not fire: {out:?}");
     }
 
     #[test]
     fn other_methods_unchanged() {
         let out = propose_fix("suboptimal_flops", "fn f(x: f64) -> f64 { x.exp().ln() }");
-        assert!(out.is_none(), "exp/ln are imprecise_flops territory: {out:?}");
+        assert!(
+            out.is_none(),
+            "exp/ln are imprecise_flops territory: {out:?}"
+        );
     }
 }

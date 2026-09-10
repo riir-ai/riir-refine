@@ -334,8 +334,7 @@ pub fn run_bench_with(
             score.n_excluded += 1;
             continue;
         }
-        let vocab_before: BTreeSet<String> =
-            before.lints.intersection(&vocab).cloned().collect();
+        let vocab_before: BTreeSet<String> = before.lints.intersection(&vocab).cloned().collect();
         let frozen: BTreeSet<String> = fx.expect_lints.iter().map(ToString::to_string).collect();
         let drifted = vocab_before != frozen;
         if drifted {
@@ -466,7 +465,10 @@ mod tests {
         // the sweep record.
         let code = "pub fn greet(name: &str) -> String {\n    format!(\"{}\", name)\n}\n";
         let (healed, edits, _passes) = heal_fixpoint(code);
-        assert!(edits >= 1, "at least the format-arg edit, got {edits}: {healed}");
+        assert!(
+            edits >= 1,
+            "at least the format-arg edit, got {edits}: {healed}"
+        );
         assert!(healed.contains("{name}"), "inlined: {healed}");
     }
 

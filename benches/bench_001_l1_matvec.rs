@@ -8,8 +8,8 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::ClippyFixEntry;
 use riir_clippy::drafter::{DraftSource, TernaryDrafter};
+use riir_clippy::ClippyFixEntry;
 use std::time::Instant;
 
 fn mock_entries(n: usize) -> Vec<ClippyFixEntry> {
@@ -51,8 +51,12 @@ fn main() {
     // ── G1: Determinism ──────────────────────────────────────────────────
     {
         let mut drafter = TernaryDrafter::with_weights(weights.clone());
-        let r1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
-        let r2 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        let r1 = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
+        let r2 = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
 
         let code_match = r1.code == r2.code;
         let conf_match = r1.confidence.to_bits() == r2.confidence.to_bits();
@@ -95,7 +99,10 @@ fn main() {
 
         let target_ns = 10_000; // 10µs target
         let pass = p50 < target_ns;
-        println!("  target: p50 < {target_ns} ns ({:.1} µs)", target_ns as f64 / 1000.0);
+        println!(
+            "  target: p50 < {target_ns} ns ({:.1} µs)",
+            target_ns as f64 / 1000.0
+        );
         println!("  {}", if pass { "✅ PASS" } else { "❌ FAIL" });
         assert!(pass, "G2 FAIL: p50 {p50}ns >= {target_ns}ns");
         println!();
@@ -106,7 +113,9 @@ fn main() {
         let mut fallback = TernaryDrafter::fallback();
         assert!(fallback.is_fallback());
 
-        let fix = fallback.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        let fix = fallback
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
         let pass = fix.source == DraftSource::CorpusTemplate
             && (fix.confidence - 0.5).abs() < 1e-6
             && !fix.code.is_empty();
@@ -145,10 +154,19 @@ fn main() {
         let output_stable = output_cap_before == output_cap_after;
 
         println!("G4 (alloc-free steady state, 1000 calls):");
-        println!("  input_scratch  capacity: {input_cap_before} → {input_cap_after}  {}", if input_stable { "✅" } else { "❌" });
-        println!("  output_scratch capacity: {output_cap_before} → {output_cap_after}  {}", if output_stable { "✅" } else { "❌" });
+        println!(
+            "  input_scratch  capacity: {input_cap_before} → {input_cap_after}  {}",
+            if input_stable { "✅" } else { "❌" }
+        );
+        println!(
+            "  output_scratch capacity: {output_cap_before} → {output_cap_after}  {}",
+            if output_stable { "✅" } else { "❌" }
+        );
 
-        assert!(input_stable && output_stable, "G4 FAIL: scratch buffers grew");
+        assert!(
+            input_stable && output_stable,
+            "G4 FAIL: scratch buffers grew"
+        );
         println!("  ✅ PASS\n");
     }
 

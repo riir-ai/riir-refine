@@ -33,8 +33,15 @@ fn dl3059_refused_consecutive_runs_are_never_merged() {
                RUN echo two\n\
                RUN echo three\n";
     let fixed = fix_all(src, &ScanContext::default());
-    assert_eq!(run_count(&fixed), 3, "the healer consolidated RUNs (DL3059) — REFUSED shape");
-    assert_eq!(fixed, src, "a clean multi-RUN file must come back byte-identical");
+    assert_eq!(
+        run_count(&fixed),
+        3,
+        "the healer consolidated RUNs (DL3059) — REFUSED shape"
+    );
+    assert_eq!(
+        fixed, src,
+        "a clean multi-RUN file must come back byte-identical"
+    );
 }
 
 #[test]
@@ -47,7 +54,11 @@ fn cache_mount_runs_are_never_merged_either() {
                RUN --mount=type=cache,target=/usr/local/cargo/registry cargo fetch\n\
                RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release\n";
     let fixed = fix_all(src, &ScanContext::default());
-    assert_eq!(run_count(&fixed), 2, "cache-bearing RUNs were merged — REFUSED shape");
+    assert_eq!(
+        run_count(&fixed),
+        2,
+        "cache-bearing RUNs were merged — REFUSED shape"
+    );
 }
 
 #[test]
@@ -72,7 +83,10 @@ fn labels_are_never_merged() {
                LABEL b=\"2\"\n\
                LABEL c=\"3\"\n";
     let fixed = fix_all(src, &ScanContext::default());
-    assert_eq!(fixed, src, "LABEL instructions were merged — REFUSED (pre-BuildKit lore)");
+    assert_eq!(
+        fixed, src,
+        "LABEL instructions were merged — REFUSED (pre-BuildKit lore)"
+    );
 }
 
 #[test]
@@ -101,7 +115,11 @@ fn the_sanctioned_apt_merge_fires_on_the_coupling_bug() {
                RUN apt-get update\n\
                RUN apt-get install --no-install-recommends -y curl \\\n && rm -rf /var/lib/apt/lists/*\n";
     let fixed = fix_all(src, &ScanContext::default());
-    assert_eq!(run_count(&fixed), 1, "the apt update/install coupling was not merged");
+    assert_eq!(
+        run_count(&fixed),
+        1,
+        "the apt update/install coupling was not merged"
+    );
     assert!(fixed.contains("apt-get update \\\n && apt-get install"));
 }
 
@@ -113,7 +131,11 @@ fn the_sanctioned_merge_does_not_generalize() {
                RUN apt-get update\n\
                RUN echo unrelated\n";
     let fixed = fix_all(src, &ScanContext::default());
-    assert_eq!(run_count(&fixed), 2, "the apt exception generalized to an unrelated RUN");
+    assert_eq!(
+        run_count(&fixed),
+        2,
+        "the apt exception generalized to an unrelated RUN"
+    );
 }
 
 #[test]
@@ -126,7 +148,10 @@ fn refusals_are_declared_as_data() {
         "merge-label-instructions",
         "rewrite-qemu-native-to-buildplatform-cross",
     ] {
-        assert!(names.contains(&want), "the refusal {want} disappeared from the declared list");
+        assert!(
+            names.contains(&want),
+            "the refusal {want} disappeared from the declared list"
+        );
     }
 }
 
@@ -151,19 +176,31 @@ fn syntax_directive_rule_is_scoped_to_files_that_need_it() {
     // none uses an above-builtin feature. An unconditional rule would fire
     // on all four and teach the corpus that correct files are buggy.
     let builtin_only = "FROM alpine:3.20\nRUN --mount=type=cache,target=/x echo hi\nCOPY a /a\n";
-    let ids: Vec<&str> = scan_source(builtin_only).into_iter().map(|f| f.rule_id).collect();
+    let ids: Vec<&str> = scan_source(builtin_only)
+        .into_iter()
+        .map(|f| f.rule_id)
+        .collect();
     assert!(
         !ids.contains(&"missing-syntax-directive"),
         "fired on a file that uses only builtin-frontend features"
     );
     // ...and it DOES fire once the file uses `COPY --link` (1.4).
     let needs_14 = "FROM alpine:3.20\nCOPY --link a /a\n";
-    let ids: Vec<&str> = scan_source(needs_14).into_iter().map(|f| f.rule_id).collect();
-    assert!(ids.contains(&"missing-syntax-directive"), "did not fire on a --link file");
+    let ids: Vec<&str> = scan_source(needs_14)
+        .into_iter()
+        .map(|f| f.rule_id)
+        .collect();
+    assert!(
+        ids.contains(&"missing-syntax-directive"),
+        "did not fire on a --link file"
+    );
     // ...and stays silent when the file already pins a sufficient frontend.
     let pinned = "# syntax=docker/dockerfile:1.7\nFROM alpine:3.20\nCOPY --link a /a\n";
     let ids: Vec<&str> = scan_source(pinned).into_iter().map(|f| f.rule_id).collect();
-    assert!(!ids.contains(&"missing-syntax-directive"), "fired on an already-pinned file");
+    assert!(
+        !ids.contains(&"missing-syntax-directive"),
+        "fired on an already-pinned file"
+    );
 }
 
 #[test]
@@ -175,7 +212,10 @@ fn pipefail_refuses_on_a_non_bash_base() {
         .iter()
         .find(|f| f.rule_id == "pipefail-before-piped-run")
         .expect("the finding still reports");
-    assert!(f.fix.is_none(), "emitted a bash SHELL on an alpine base — would break the build");
+    assert!(
+        f.fix.is_none(),
+        "emitted a bash SHELL on an alpine base — would break the build"
+    );
     assert_eq!(fix_all(alpine, &ScanContext::default()), alpine);
     // On a debian base it IS emitted.
     let debian = "FROM debian:bookworm-slim\nRUN curl -sSL https://x/y.tgz | tar -xz -C /opt\n";

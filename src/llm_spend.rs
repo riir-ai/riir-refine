@@ -64,7 +64,8 @@ pub const SPEND_VERSION: u32 = 1;
 
 /// Versioned deltas of the spend-ledger schema (the `kat_meter` changelog
 /// discipline — no silent format change).
-pub const SPEND_CHANGELOG: &[(u32, &str)] = &[(1, "initial: per-UTC-day USD accumulator (Issue 046)")];
+pub const SPEND_CHANGELOG: &[(u32, &str)] =
+    &[(1, "initial: per-UTC-day USD accumulator (Issue 046)")];
 
 /// The pricing-table version. Bump ONLY when a rate changes (a reprice) and
 /// record the delta in [`PRICING_CHANGELOG`] in the same change. Independent
@@ -199,7 +200,11 @@ pub fn est_input_tokens(prompt: &str) -> u64 {
 /// # Errors
 ///
 /// [`SpendError::UnknownModel`] — the model is not in [`PRICING_TABLE`].
-pub fn worst_case_usd(model_id: &str, est_in_tokens: u64, max_tokens: u64) -> Result<f64, SpendError> {
+pub fn worst_case_usd(
+    model_id: &str,
+    est_in_tokens: u64,
+    max_tokens: u64,
+) -> Result<f64, SpendError> {
     let p = price_for(model_id).ok_or_else(|| SpendError::UnknownModel(model_id.to_string()))?;
     // Pricing math is a report/bound figure, not a sync value — the u64 → f64
     // precision loss is irrelevant at token counts (< 2^32; the ArmSummary
@@ -507,13 +512,18 @@ mod tests {
         let l = price_for("@cf/meta/llama-3.3-70b-instruct-fp8-fast").expect("llama priced");
         assert!((l.input_per_m - 0.29).abs() < 1e-9);
         assert!((l.output_per_m - 2.25).abs() < 1e-9);
-        let g = price_for("@cf/zai-org/glm-4.7-flash").expect("glm-4.7 priced (Issue 043 gate model)");
+        let g =
+            price_for("@cf/zai-org/glm-4.7-flash").expect("glm-4.7 priced (Issue 043 gate model)");
         assert!((g.input_per_m - 0.06).abs() < 1e-9);
         assert!((g.output_per_m - 0.4).abs() < 1e-9);
-        let g5 = price_for("@cf/zai-org/glm-5.3-flash").expect("glm-5.3 priced (the DEFAULT_MODEL)");
+        let g5 =
+            price_for("@cf/zai-org/glm-5.3-flash").expect("glm-5.3 priced (the DEFAULT_MODEL)");
         assert!((g5.input_per_m - 0.15).abs() < 1e-9);
         assert!((g5.output_per_m - 0.5).abs() < 1e-9);
-        assert!(price_for("@cf/nope/mystery").is_none(), "unknown model must be unpriced");
+        assert!(
+            price_for("@cf/nope/mystery").is_none(),
+            "unknown model must be unpriced"
+        );
         // Version stamps are changelog-covered (the kat_meter discipline).
         assert!(SPEND_CHANGELOG.iter().any(|(v, _)| *v == SPEND_VERSION));
         assert!(PRICING_CHANGELOG.iter().any(|(v, _)| *v == PRICING_VERSION));
@@ -523,7 +533,10 @@ mod tests {
     fn parse_cap_none_default_zero_honored_invalid_falls_back() {
         assert!((parse_cap(None) - DEFAULT_LLM_DAILY_CAP_USD).abs() < 1e-12);
         assert!((parse_cap(Some("0.5")) - 0.5).abs() < 1e-12);
-        assert!(parse_cap(Some("0")).abs() < 1e-12, "0 = decline-all (test mode)");
+        assert!(
+            parse_cap(Some("0")).abs() < 1e-12,
+            "0 = decline-all (test mode)"
+        );
         assert!((parse_cap(Some("2.75")) - 2.75).abs() < 1e-12);
         assert!(
             (parse_cap(Some("banana")) - DEFAULT_LLM_DAILY_CAP_USD).abs() < 1e-12,
@@ -551,7 +564,10 @@ mod tests {
         // Thinking tokens bill on the out side: max_tokens IS the out bound.
         let a = worst_case_usd("@cf/qwen/qwen3.8-27b", 0, 512).unwrap();
         let b = worst_case_usd("@cf/qwen/qwen3.8-27b", 0, 64).unwrap();
-        assert!(a > b * 7.0, "max_tokens dominates the reserve (out rate is steep)");
+        assert!(
+            a > b * 7.0,
+            "max_tokens dominates the reserve (out rate is steep)"
+        );
     }
 
     #[test]
@@ -573,8 +589,14 @@ mod tests {
         // Actuals come in UNDER the reserve → partial release.
         l.reconcile(reserved, "@cf/qwen/qwen3.8-27b", 60, 40, true);
         let expected = (60.0 * 0.45 + 40.0 * 3.2) / 1e6;
-        assert!((l.state().spent_usd - expected).abs() < 1e-12, "actual recorded");
-        assert!(l.state().reserved_usd.abs() < 1e-12, "reserve fully released");
+        assert!(
+            (l.state().spent_usd - expected).abs() < 1e-12,
+            "actual recorded"
+        );
+        assert!(
+            l.state().reserved_usd.abs() < 1e-12,
+            "reserve fully released"
+        );
         assert!((l.state().all_time_spent_usd - expected).abs() < 1e-12);
         let _ = std::fs::remove_file(file);
     }
@@ -583,9 +605,20 @@ mod tests {
     fn reconcile_without_usage_spends_the_full_reserve() {
         let file = tmp_file("no_usage");
         let mut l = SpendLedger::open_at_with_cap(file, 1.0);
-        let reserved = l.reserve("@cf/meta/llama-3.3-70b-instruct-fp8-fast", PROMPT, 256).unwrap();
-        l.reconcile(reserved, "@cf/meta/llama-3.3-70b-instruct-fp8-fast", 0, 0, false);
-        assert!((l.state().spent_usd - reserved).abs() < 1e-12, "no usage → worst case spent");
+        let reserved = l
+            .reserve("@cf/meta/llama-3.3-70b-instruct-fp8-fast", PROMPT, 256)
+            .unwrap();
+        l.reconcile(
+            reserved,
+            "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+            0,
+            0,
+            false,
+        );
+        assert!(
+            (l.state().spent_usd - reserved).abs() < 1e-12,
+            "no usage → worst case spent"
+        );
         let _ = std::fs::remove_file(tmp_file("no_usage"));
     }
 
@@ -596,7 +629,10 @@ mod tests {
         let reserved = l.reserve("@cf/qwen/qwen3.8-27b", PROMPT, 128).unwrap();
         l.release(reserved);
         assert!(l.state().reserved_usd.abs() < 1e-12);
-        assert!(l.state().spent_usd.abs() < 1e-12, "transport failure billed nothing");
+        assert!(
+            l.state().spent_usd.abs() < 1e-12,
+            "transport failure billed nothing"
+        );
         let _ = std::fs::remove_file(tmp_file("release"));
     }
 
@@ -648,7 +684,10 @@ mod tests {
         stale.day = 0; // 1970-01-01 — provably not today
         std::fs::write(&file, serde_json::to_string(&stale).unwrap()).unwrap();
         let fresh = SpendLedger::open_at_with_cap(file.clone(), 1.0);
-        assert!(fresh.state().spent_usd.abs() < 1e-12, "fresh day resets spent");
+        assert!(
+            fresh.state().spent_usd.abs() < 1e-12,
+            "fresh day resets spent"
+        );
         assert_eq!(fresh.state().calls, 0);
         assert!(
             (fresh.state().all_time_spent_usd - all_time).abs() < 1e-12,
@@ -679,7 +718,11 @@ mod tests {
         std::fs::write(&file, "definitely not json").unwrap();
         let l = SpendLedger::open_at_with_cap(file.clone(), 1.0);
         assert!(l.state().spent_usd.abs() < 1e-12);
-        assert_eq!(l.state().version, SPEND_VERSION, "recovered with the current stamp");
+        assert_eq!(
+            l.state().version,
+            SPEND_VERSION,
+            "recovered with the current stamp"
+        );
         let _ = std::fs::remove_file(file);
     }
 
@@ -691,7 +734,9 @@ mod tests {
             let mut l = SpendLedger::open_at_with_cap(file, 1.0);
             let r1 = l.reserve("@cf/qwen/qwen3.8-27b", PROMPT, 128).unwrap();
             l.reconcile(r1, "@cf/qwen/qwen3.8-27b", 60, 40, true);
-            let r2 = l.reserve("@cf/meta/llama-3.3-70b-instruct-fp8-fast", PROMPT, 64).unwrap();
+            let r2 = l
+                .reserve("@cf/meta/llama-3.3-70b-instruct-fp8-fast", PROMPT, 64)
+                .unwrap();
             l.reconcile(r2, "@cf/meta/llama-3.3-70b-instruct-fp8-fast", 60, 10, true);
             states.push(serde_json::to_string(&l.state()).unwrap());
         }

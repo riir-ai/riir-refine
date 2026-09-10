@@ -128,9 +128,9 @@ fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<UnboundedReadFi
 }
 
 fn is_test_mod(m: &syn::ItemMod) -> bool {
-    m.attrs.iter().any(|a| {
-        a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test")
-    })
+    m.attrs
+        .iter()
+        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
 }
 
 /// The fn-wide binding facts (pass 1).
@@ -380,7 +380,14 @@ fn is_source_expr(e: &Expr) -> bool {
             // binding: `listener.accept()?`, `.ok_or(..)?`, `..unwrap()`.
             if matches!(
                 m.method.to_string().as_str(),
-                "ok_or" | "ok_or_else" | "unwrap" | "unwrap_or" | "unwrap_or_else" | "expect" | "map_err" | "flatten"
+                "ok_or"
+                    | "ok_or_else"
+                    | "unwrap"
+                    | "unwrap_or"
+                    | "unwrap_or_else"
+                    | "expect"
+                    | "map_err"
+                    | "flatten"
             ) {
                 return is_source_expr(&m.receiver);
             }
@@ -503,16 +510,16 @@ fn shape_a_fire(e: &Expr, state: &ReadState) -> Option<String> {
                 return None;
             };
             if !p.path.segments.last().is_some_and(|s| {
-                matches!(s.ident.to_string().as_str(), "read_to_end" | "read_to_string")
+                matches!(
+                    s.ident.to_string().as_str(),
+                    "read_to_end" | "read_to_string"
+                )
             }) {
                 return None;
             }
             let first = c.args.first()?;
             if let Some(id) = strip_refs_to_ident(first) {
-                return state
-                    .untrusted
-                    .contains(&id)
-                    .then_some(id);
+                return state.untrusted.contains(&id).then_some(id);
             }
             if is_source_expr(first) {
                 return source_label(first);
@@ -609,12 +616,7 @@ fn scan_expr_sinks(
     }
 }
 
-fn push_finding(
-    source: &str,
-    expr: &Expr,
-    reader: &str,
-    findings: &mut Vec<UnboundedReadFinding>,
-) {
+fn push_finding(source: &str, expr: &Expr, reader: &str, findings: &mut Vec<UnboundedReadFinding>) {
     let span = expr.span().byte_range();
     if span.end <= source.len() {
         findings.push(UnboundedReadFinding {
@@ -770,10 +772,17 @@ impl<'ast> Visit<'ast> for LoopScout<'_> {
             Expr::Binary(b) => {
                 if matches!(
                     b.op,
-                    BinOp::Lt(_) | BinOp::Gt(_) | BinOp::Le(_) | BinOp::Ge(_) | BinOp::Eq(_) | BinOp::Ne(_)
+                    BinOp::Lt(_)
+                        | BinOp::Gt(_)
+                        | BinOp::Le(_)
+                        | BinOp::Ge(_)
+                        | BinOp::Eq(_)
+                        | BinOp::Ne(_)
                 ) {
-                    let lhs_count = path_ident(&b.left).is_some_and(|id| self.count_idents.contains(&id));
-                    let rhs_count = path_ident(&b.right).is_some_and(|id| self.count_idents.contains(&id));
+                    let lhs_count =
+                        path_ident(&b.left).is_some_and(|id| self.count_idents.contains(&id));
+                    let rhs_count =
+                        path_ident(&b.right).is_some_and(|id| self.count_idents.contains(&id));
                     let lhs_zero = is_zero_literal(&b.left);
                     let rhs_zero = is_zero_literal(&b.right);
                     if (lhs_count && !rhs_zero) || (rhs_count && !lhs_zero) {
@@ -910,7 +919,10 @@ mod tests {
                 stream.take(1 << 20).read_to_end(&mut buf)?;\n\
                 Ok(buf)\n\
             }\n";
-        assert!(findings(src).is_empty(), "take() in the chain must suppress");
+        assert!(
+            findings(src).is_empty(),
+            "take() in the chain must suppress"
+        );
     }
 
     #[test]
@@ -923,7 +935,10 @@ mod tests {
                 std::io::Read::read_to_end(&mut limited, &mut buf)?;\n\
                 Ok(buf)\n\
             }\n";
-        assert!(findings(src).is_empty(), "the take-bound UFCS form must not fire");
+        assert!(
+            findings(src).is_empty(),
+            "the take-bound UFCS form must not fire"
+        );
     }
 
     #[test]
@@ -936,7 +951,10 @@ mod tests {
                 f.read_to_end(&mut buf)?;\n\
                 Ok(buf)\n\
             }\n";
-        assert!(findings(src).is_empty(), "File readers are the trusted regime");
+        assert!(
+            findings(src).is_empty(),
+            "File readers are the trusted regime"
+        );
     }
 
     #[test]
@@ -979,7 +997,10 @@ mod tests {
                 }\n\
                 Ok(buf)\n\
             }\n";
-        assert!(findings(src).is_empty(), "resize()-capped drains must not fire");
+        assert!(
+            findings(src).is_empty(),
+            "resize()-capped drains must not fire"
+        );
     }
 
     #[test]

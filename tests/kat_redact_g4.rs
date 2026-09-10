@@ -63,7 +63,11 @@ fn gate() -> RedactionGate {
 /// Assert the G4 core property over a redaction result: every finding's
 /// original byte window is absent from the payload, and the bytes outside
 /// the (de-overlapped) finding ranges are byte-identical to the input.
-fn assert_g4_byte_exact(original: &str, findings: &[riir_clippy::kat_redact::Finding], payload: &str) {
+fn assert_g4_byte_exact(
+    original: &str,
+    findings: &[riir_clippy::kat_redact::Finding],
+    payload: &str,
+) {
     // 1. No finding's original bytes survive.
     for f in findings {
         let window = &original[f.start..f.start + f.len];
@@ -91,7 +95,10 @@ fn assert_g4_byte_exact(original: &str, findings: &[riir_clippy::kat_redact::Fin
         at = *e;
     }
     expected.push_str(&original[at..]);
-    assert_eq!(payload, &expected, "redaction must be byte-exact outside ranges");
+    assert_eq!(
+        payload, &expected,
+        "redaction must be byte-exact outside ranges"
+    );
 }
 
 // ── The named adversarial classes ──────────────────────────────────────────
@@ -103,7 +110,10 @@ fn g4_aws_access_key_blocks_and_redacts_byte_exactly() {
     let d = gate().check(SpanOrigin::AuthoredFixture, None, &span);
     assert!(matches!(
         d,
-        GateDecision::Blocked { reason: BlockReason::SecretsFound, .. }
+        GateDecision::Blocked {
+            reason: BlockReason::SecretsFound,
+            ..
+        }
     ));
     let findings = scan_secrets(&span);
     assert!(findings.iter().any(|f| f.kind == FindingKind::AwsAccessKey));
@@ -117,7 +127,9 @@ fn g4_aws_secret_via_env_shape_blocks() {
     let d = gate().check(SpanOrigin::MinedCorpus, None, span);
     assert!(!d.is_syncable(), "{d:?}");
     let findings = scan_secrets(span);
-    assert!(findings.iter().any(|f| f.kind == FindingKind::EnvSecretAssign));
+    assert!(findings
+        .iter()
+        .any(|f| f.kind == FindingKind::EnvSecretAssign));
     let payload = redact(span, &findings);
     assert_g4_byte_exact(span, &findings, &payload);
 }
@@ -125,7 +137,9 @@ fn g4_aws_secret_via_env_shape_blocks() {
 #[test]
 fn g4_github_token_blocks() {
     let span = "let hook = \"ghp_16C7eBAF1q9XZKL3m0yv8u2oF4R6tYhUwz\";";
-    assert!(!gate().check(SpanOrigin::OwnRepo, Some("src/a.rs"), span).is_syncable());
+    assert!(!gate()
+        .check(SpanOrigin::OwnRepo, Some("src/a.rs"), span)
+        .is_syncable());
 }
 
 #[test]
@@ -134,20 +148,30 @@ fn g4_private_key_block_blocks_and_covers_whole_block() {
     let d = gate().check(SpanOrigin::OwnRepo, Some("src/key.rs"), span);
     assert!(!d.is_syncable());
     let findings = scan_secrets(span);
-    let k = findings.iter().find(|f| f.kind == FindingKind::PrivateKeyBlock).unwrap();
+    let k = findings
+        .iter()
+        .find(|f| f.kind == FindingKind::PrivateKeyBlock)
+        .unwrap();
     let covered = &span[k.start..k.start + k.len];
     assert!(covered.ends_with("-----END OPENSSH PRIVATE KEY-----"));
     let payload = redact(span, &findings);
     assert_g4_byte_exact(span, &findings, &payload);
-    assert!(!payload.contains("b3BlbnNzaC1rZXktdjE"), "key BODY must not survive");
+    assert!(
+        !payload.contains("b3BlbnNzaC1rZXktdjE"),
+        "key BODY must not survive"
+    );
 }
 
 #[test]
 fn g4_connection_string_password_blocks() {
     let span = "let db = \"postgres://svc_app:S3cretPass@db.prod.internal:5432/orders\";";
-    assert!(!gate().check(SpanOrigin::MinedCorpus, None, span).is_syncable());
+    assert!(!gate()
+        .check(SpanOrigin::MinedCorpus, None, span)
+        .is_syncable());
     let findings = scan_secrets(span);
-    assert!(findings.iter().any(|f| f.kind == FindingKind::ConnStringCreds));
+    assert!(findings
+        .iter()
+        .any(|f| f.kind == FindingKind::ConnStringCreds));
     let payload = redact(span, &findings);
     assert_g4_byte_exact(span, &findings, &payload);
 }
@@ -159,7 +183,13 @@ fn g4_env_file_leakage_blocks() {
     assert!(!d.is_syncable());
     // Even from an allowed origin the content blocks.
     let d2 = gate().check(SpanOrigin::OwnRepo, Some("src/config.rs"), span);
-    assert!(matches!(d2, GateDecision::Blocked { reason: BlockReason::SecretsFound, .. }));
+    assert!(matches!(
+        d2,
+        GateDecision::Blocked {
+            reason: BlockReason::SecretsFound,
+            ..
+        }
+    ));
     let findings = scan_secrets(span);
     let payload = redact(span, &findings);
     assert_g4_byte_exact(span, &findings, &payload);
@@ -171,7 +201,9 @@ fn g4_credential_shaped_rust_literal_blocks() {
     let span = "const API_KEY: &str = \"live_sk_9f8e7d6c5b4a3210fedcba9876543210\";\n";
     let d = gate().check(SpanOrigin::AuthoredFixture, None, span);
     assert!(!d.is_syncable());
-    assert!(scan_secrets(span).iter().any(|f| f.kind == FindingKind::RustSecretLiteral));
+    assert!(scan_secrets(span)
+        .iter()
+        .any(|f| f.kind == FindingKind::RustSecretLiteral));
 }
 
 #[test]
@@ -181,7 +213,9 @@ fn g4_high_entropy_blobs_block() {
     for blob in [hex, b64] {
         let span = format!("let digest = \"{blob}\";");
         assert!(
-            !gate().check(SpanOrigin::MinedCorpus, None, &span).is_syncable(),
+            !gate()
+                .check(SpanOrigin::MinedCorpus, None, &span)
+                .is_syncable(),
             "entropy blob must block: {blob}"
         );
     }
@@ -190,8 +224,12 @@ fn g4_high_entropy_blobs_block() {
 #[test]
 fn g4_bearer_and_jwt_shaped_tokens_block() {
     let span = "req.header(\"Authorization\", \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig\");";
-    assert!(!gate().check(SpanOrigin::OwnRepo, Some("src/api.rs"), span).is_syncable());
-    assert!(scan_secrets(span).iter().any(|f| f.kind == FindingKind::BearerToken));
+    assert!(!gate()
+        .check(SpanOrigin::OwnRepo, Some("src/api.rs"), span)
+        .is_syncable());
+    assert!(scan_secrets(span)
+        .iter()
+        .any(|f| f.kind == FindingKind::BearerToken));
 }
 
 // ── Mixed user-code spans ──────────────────────────────────────────────────
@@ -222,7 +260,10 @@ fn g4_user_code_span_blocked_by_origin_regardless_of_content() {
     let d = gate().check(SpanOrigin::External, None, pristine);
     assert!(matches!(
         d,
-        GateDecision::Blocked { reason: BlockReason::OriginNotAllowed(SpanOrigin::External), .. }
+        GateDecision::Blocked {
+            reason: BlockReason::OriginNotAllowed(SpanOrigin::External),
+            ..
+        }
     ));
 }
 
@@ -260,7 +301,11 @@ fn g4_no_policy_file_denies_all() {
 fn g4_shipped_policy_file_loads_at_the_current_gate_version() {
     // CARGO_MANIFEST_DIR so the test is cwd-independent.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(POLICY_FILE_NAME);
-    assert!(path.is_file(), "the shipped policy must exist at {}", path.display());
+    assert!(
+        path.is_file(),
+        "the shipped policy must exist at {}",
+        path.display()
+    );
 
     let loaded = RedactionGate::load(&path);
     assert!(
@@ -282,25 +327,44 @@ fn g4_shipped_policy_file_loads_at_the_current_gate_version() {
     // code stays denied on ORIGIN (Bench 052 — this policy line is the
     // control that protects consumer code, not the pattern set).
     assert!(
-        !loaded.gate.check(SpanOrigin::External, None, "fn f() {}").is_syncable(),
+        !loaded
+            .gate
+            .check(SpanOrigin::External, None, "fn f() {}")
+            .is_syncable(),
         "`external` must remain absent from the shipped allow_origins"
     );
 }
 
 #[test]
 fn g4_path_not_on_allowlist_blocks() {
-    let d = gate().check(SpanOrigin::OwnRepo, Some("private/keys/prod.rs"), "fn f() {}");
-    assert!(matches!(d, GateDecision::Blocked { reason: BlockReason::PathNotAllowed(_), .. }));
+    let d = gate().check(
+        SpanOrigin::OwnRepo,
+        Some("private/keys/prod.rs"),
+        "fn f() {}",
+    );
+    assert!(matches!(
+        d,
+        GateDecision::Blocked {
+            reason: BlockReason::PathNotAllowed(_),
+            ..
+        }
+    ));
 }
 
 #[test]
 fn g4_oversize_span_blocks() {
-    let policy = SyncPolicy { max_span_bytes: 32, ..shipped_policy() };
+    let policy = SyncPolicy {
+        max_span_bytes: 32,
+        ..shipped_policy()
+    };
     let gate = RedactionGate::from_policy(policy);
     let span = "fn main() { println!(\"way more than thirty-two bytes total\"); }";
     assert!(matches!(
         gate.check(SpanOrigin::OwnRepo, None, span),
-        GateDecision::Blocked { reason: BlockReason::SpanTooLarge { .. }, .. }
+        GateDecision::Blocked {
+            reason: BlockReason::SpanTooLarge { .. },
+            ..
+        }
     ));
 }
 
@@ -327,8 +391,14 @@ impl Config {
 }
 pub const GREETING: &str = "hello, world — have a nice day";
 "#;
-    assert_eq!(scan_secrets(span), Vec::new(), "clean Rust must not trip the scanner");
-    assert!(gate().check(SpanOrigin::OwnRepo, Some("src/config.rs"), span).is_syncable());
+    assert_eq!(
+        scan_secrets(span),
+        Vec::new(),
+        "clean Rust must not trip the scanner"
+    );
+    assert!(gate()
+        .check(SpanOrigin::OwnRepo, Some("src/config.rs"), span)
+        .is_syncable());
 }
 
 // ── The log ────────────────────────────────────────────────────────────────
@@ -342,7 +412,13 @@ fn g4_log_never_carries_finding_bytes() {
     let span = format!("const KEY: &str = \"{secret}\";");
     let d = gate().check(SpanOrigin::AuthoredFixture, None, &span);
     assert!(!d.is_syncable());
-    log.record(&d, SpanOrigin::AuthoredFixture, "reachable:test", "abcdef012345").unwrap();
+    log.record(
+        &d,
+        SpanOrigin::AuthoredFixture,
+        "reachable:test",
+        "abcdef012345",
+    )
+    .unwrap();
     // Also record an allow + a redacted row to pin the event vocabulary.
     log.record(
         &GateDecision::Allow,
@@ -376,7 +452,10 @@ fn g4_scan_is_bit_stable_across_runs() {
 #[test]
 fn g4_version_changelog_is_complete() {
     for v in 1..=REDACT_VERSION {
-        assert!(REDACT_CHANGELOG.iter().any(|(cv, _)| *cv == v), "version {v} has no changelog row");
+        assert!(
+            REDACT_CHANGELOG.iter().any(|(cv, _)| *cv == v),
+            "version {v} has no changelog row"
+        );
     }
 }
 
@@ -396,9 +475,21 @@ fn g4_zero_secrets_in_any_synced_payload() {
     // Every fixture payload this gate marks syncable (Allow) or redacted,
     // re-checked: none may contain any finding bytes from its original.
     let cases: Vec<(&str, SpanOrigin, Option<&str>)> = vec![
-        ("pub fn f(v: &[u8]) -> usize { v.len() }", SpanOrigin::AuthoredFixture, None),
-        ("impl Display for Foo { fn fmt(&self, f: &mut Formatter) -> fmt::Result { Ok(()) } }", SpanOrigin::OwnRepo, Some("src/foo.rs")),
-        ("let mut total: u64 = 0; for row in rows { total += row.len() as u64; }", SpanOrigin::MinedCorpus, None),
+        (
+            "pub fn f(v: &[u8]) -> usize { v.len() }",
+            SpanOrigin::AuthoredFixture,
+            None,
+        ),
+        (
+            "impl Display for Foo { fn fmt(&self, f: &mut Formatter) -> fmt::Result { Ok(()) } }",
+            SpanOrigin::OwnRepo,
+            Some("src/foo.rs"),
+        ),
+        (
+            "let mut total: u64 = 0; for row in rows { total += row.len() as u64; }",
+            SpanOrigin::MinedCorpus,
+            None,
+        ),
     ];
     for (span, origin, path) in cases {
         let d = gate().check(origin, path, span);
@@ -408,6 +499,10 @@ fn g4_zero_secrets_in_any_synced_payload() {
             GateDecision::Redacted { payload, .. } => payload,
             GateDecision::Blocked { .. } => unreachable!("checked above"),
         };
-        assert_eq!(scan_secrets(&payload), Vec::new(), "synced payload must be scan-clean");
+        assert_eq!(
+            scan_secrets(&payload),
+            Vec::new(),
+            "synced payload must be scan-clean"
+        );
     }
 }

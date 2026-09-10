@@ -14,7 +14,6 @@
 //! always runs.
 
 #![cfg(feature = "self_evolve")]
-
 #![allow(clippy::pedantic)]
 
 use riir_clippy::domains::clippy_lints::proposers;
@@ -112,15 +111,13 @@ fn proposed_fixes_are_syntactically_valid() {
     let pruner = RustAnalyzerPruner::new();
     let mut valid = 0;
     for case in HELDOUT {
-        let proposed = proposers::propose_fix(case.lint, case.buggy).unwrap_or_else(|| {
-            panic!("proposer `{}` did not fire", case.lint)
-        });
+        let proposed = proposers::propose_fix(case.lint, case.buggy)
+            .unwrap_or_else(|| panic!("proposer `{}` did not fire", case.lint));
         let v = pruner.validate(&proposed, case.lint);
         assert!(
             v.parses,
             "proposer `{}` produced syntactically invalid output: {}",
-            case.lint,
-            proposed
+            case.lint, proposed
         );
         valid += 1;
     }
@@ -135,7 +132,10 @@ fn stage1_identity_guard_declines_all_10_heldout() {
     use riir_clippy::{build_seed_corpus, ClippyTernaryDrafter};
     let corpus = build_seed_corpus();
     let mut drafter = ClippyTernaryDrafter::fallback();
-    assert!(drafter.identity_guard_enabled(), "guard should be on by default");
+    assert!(
+        drafter.identity_guard_enabled(),
+        "guard should be on by default"
+    );
 
     let mut declined = 0;
     for case in HELDOUT {
@@ -163,10 +163,8 @@ fn stage2_pipeline_serves_verified_fixes() {
         build_seed_corpus, ClippyTernaryDrafter, HealPipeline, HealSource, RustAnalyzerPruner,
     };
     let corpus = build_seed_corpus();
-    let mut pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     pipeline.seed_from_corpus(&corpus.entries);
 
     // Manually insert the verified fix for ONE case (needless_return).
@@ -198,10 +196,8 @@ fn stage2_beats_0_of_10_on_heldout() {
         build_seed_corpus, ClippyTernaryDrafter, HealPipeline, HealSource, RustAnalyzerPruner,
     };
     let corpus = build_seed_corpus();
-    let mut pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     pipeline.seed_from_corpus(&corpus.entries);
 
     // Populate Stage 2 by proposing + "verifying" (here we trust the proposer

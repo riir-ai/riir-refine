@@ -23,7 +23,10 @@ use syn::{Expr, ExprParen, File};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -82,8 +85,11 @@ mod tests {
 
     #[test]
     fn nested_parens_collapsed_one_level() {
-        let out = propose_fix("double_parens", "fn f(x: u32) -> u32 { let y = ((x + 1)); y }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "double_parens",
+            "fn f(x: u32) -> u32 { let y = ((x + 1)); y }",
+        )
+        .expect("pattern matched");
         assert_eq!(out, "fn f(x: u32) -> u32 { let y = (x + 1); y }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
@@ -94,7 +100,10 @@ mod tests {
         // per pass (shape 1).
         let input = "fn id(v: u32) -> u32 { v }\nfn g(x: u32) -> u32 { id(((x))) }";
         let out = propose_fix("double_parens", input).expect("pattern matched");
-        assert_eq!(out, "fn id(v: u32) -> u32 { v }\nfn g(x: u32) -> u32 { id((x)) }");
+        assert_eq!(
+            out,
+            "fn id(v: u32) -> u32 { v }\nfn g(x: u32) -> u32 { id((x)) }"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -105,7 +114,10 @@ mod tests {
         // (Expr::Tuple ≠ Expr::Paren).
         let input = "fn id(v: u32) -> u32 { v }\nfn g(x: u32) -> u32 { id((x)) }";
         let out = propose_fix("double_parens", input).expect("pattern matched");
-        assert_eq!(out, "fn id(v: u32) -> u32 { v }\nfn g(x: u32) -> u32 { id(x) }");
+        assert_eq!(
+            out,
+            "fn id(v: u32) -> u32 { v }\nfn g(x: u32) -> u32 { id(x) }"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -113,9 +125,13 @@ mod tests {
     fn method_call_paren_arg_stripped() {
         // The bench fixture shape: `out.push((v + 1))` after the range-loop
         // rewrite leaves exactly this — one wrap inside the call.
-        let input = "fn f(v: &[u32]) -> Vec<u32> { let mut out = Vec::new(); out.push((v[0] + 1)); out }";
+        let input =
+            "fn f(v: &[u32]) -> Vec<u32> { let mut out = Vec::new(); out.push((v[0] + 1)); out }";
         let out = propose_fix("double_parens", input).expect("pattern matched");
-        assert!(out.contains("out.push(v[0] + 1)"), "wrap not stripped: {out}");
+        assert!(
+            out.contains("out.push(v[0] + 1)"),
+            "wrap not stripped: {out}"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -129,15 +145,21 @@ mod tests {
 
     #[test]
     fn single_parens_unchanged() {
-        let out = propose_fix("double_parens", "fn f(x: u32) -> u32 { let y = (x + 1); y }");
+        let out = propose_fix(
+            "double_parens",
+            "fn f(x: u32) -> u32 { let y = (x + 1); y }",
+        );
         assert!(out.is_none(), "one paren level is not redundant: {out:?}");
     }
 
     #[test]
     fn triple_nesting_fires_and_parses() {
         // One level per pass is acceptable; the output must still parse.
-        let out = propose_fix("double_parens", "fn f(x: u32) -> u32 { let y = (((x))); y }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "double_parens",
+            "fn f(x: u32) -> u32 { let y = (((x))); y }",
+        )
+        .expect("pattern matched");
         assert!(out.contains("((x))"), "one level removed: {out}");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }

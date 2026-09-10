@@ -100,8 +100,8 @@ pub struct ServiceBalance {
 /// A human-readable string when the body is not JSON, carries an `error`,
 /// or is missing a field.
 pub fn parse_balance(body: &[u8]) -> Result<ServiceBalance, String> {
-    let v: serde_json::Value =
-        serde_json::from_slice(body).map_err(|_| "the balance response was not JSON".to_string())?;
+    let v: serde_json::Value = serde_json::from_slice(body)
+        .map_err(|_| "the balance response was not JSON".to_string())?;
     if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
         return Err(format!("the service refused the balance read — {err}"));
     }
@@ -187,7 +187,10 @@ pub struct MiningHealth {
 pub fn parse_ledger_health(body: &[u8]) -> Result<LedgerHealth, String> {
     let v: serde_json::Value =
         serde_json::from_slice(body).map_err(|_| "the health response was not JSON".to_string())?;
-    let plane = v.get("plane").and_then(serde_json::Value::as_str).unwrap_or("");
+    let plane = v
+        .get("plane")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
     if plane != "ledger" {
         return Err(format!(
             "the answer identified itself as the `{plane}` plane, not `ledger`"
@@ -234,9 +237,9 @@ pub fn parse_ledger_health(body: &[u8]) -> Result<LedgerHealth, String> {
 pub fn parse_pending_durable(v: Option<&serde_json::Value>) -> Result<u64, String> {
     match v {
         Some(serde_json::Value::Bool(b)) => Ok(u64::from(*b)),
-        Some(n) => n
-            .as_u64()
-            .ok_or_else(|| "`pending_durable` was neither a bool nor an unsigned count".to_string()),
+        Some(n) => n.as_u64().ok_or_else(|| {
+            "`pending_durable` was neither a bool nor an unsigned count".to_string()
+        }),
         None => Err("the ledger health carried no `pending_durable`".to_string()),
     }
 }
@@ -250,7 +253,10 @@ pub fn parse_pending_durable(v: Option<&serde_json::Value>) -> Result<u64, Strin
 pub fn parse_mining_health(body: &[u8]) -> Result<MiningHealth, String> {
     let v: serde_json::Value =
         serde_json::from_slice(body).map_err(|_| "the health response was not JSON".to_string())?;
-    let plane = v.get("plane").and_then(serde_json::Value::as_str).unwrap_or("");
+    let plane = v
+        .get("plane")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
     if plane != "mining" {
         return Err(format!(
             "the answer identified itself as the `{plane}` plane, not `mining`"
@@ -606,8 +612,8 @@ pub fn account_service_view(
     let ledger = ledger_body.and_then(|b| parse_ledger_health(&b));
     let mining = read(transport.get_mining_health(), "the mining plane")
         .and_then(|b| parse_mining_health(&b));
-    let balance = read(transport.get_balance(acct_hex), "the balance route")
-        .and_then(|b| parse_balance(&b));
+    let balance =
+        read(transport.get_balance(acct_hex), "the balance route").and_then(|b| parse_balance(&b));
     AccountServiceView {
         gate: evaluate_welcome(&ledger, &mining, &balance),
         balance: balance.ok(),
@@ -662,13 +668,20 @@ mod tests {
         assert_eq!(parse_pending_durable(Some(&serde_json::json!(0))), Ok(0));
         assert_eq!(parse_pending_durable(Some(&serde_json::json!(7))), Ok(7));
         assert_eq!(parse_pending_durable(Some(&serde_json::json!(true))), Ok(1));
-        assert_eq!(parse_pending_durable(Some(&serde_json::json!(false))), Ok(0));
+        assert_eq!(
+            parse_pending_durable(Some(&serde_json::json!(false))),
+            Ok(0)
+        );
 
         // …and an unreadable value stays an ERROR, never a default 0. A 0
         // reads as "settled", so defaulting would turn an unreadable plane
         // into a confident all-synced — the false `Open` the three-state gate
         // exists to prevent.
-        for bad in [serde_json::json!("1"), serde_json::json!(-1), serde_json::json!(null)] {
+        for bad in [
+            serde_json::json!("1"),
+            serde_json::json!(-1),
+            serde_json::json!(null),
+        ] {
             assert!(
                 parse_pending_durable(Some(&bad)).is_err(),
                 "{bad} must not read as a count"
@@ -712,7 +725,11 @@ mod tests {
         // Junk does not get silently truncated into a well-formed query.
         assert_eq!(service_account_hex("short"), None);
         assert_eq!(service_account_hex(&"Z".repeat(64)), None);
-        assert_eq!(service_account_hex(&"AB".repeat(32)), None, "uppercase is not the wire form");
+        assert_eq!(
+            service_account_hex(&"AB".repeat(32)),
+            None,
+            "uppercase is not the wire form"
+        );
     }
 
     /// The parses check the plane identity and refuse partial rows — an
@@ -721,7 +738,11 @@ mod tests {
     fn health_parses_check_the_plane_and_refuse_partials() {
         assert_eq!(
             parse_ledger_health(&ledger_health_json(0)).unwrap(),
-            LedgerHealth { tick: 7, epoch: 3, pending_durable: 0 }
+            LedgerHealth {
+                tick: 7,
+                epoch: 3,
+                pending_durable: 0
+            }
         );
         assert_eq!(
             parse_mining_health(&mining_health_json(12)).unwrap(),
@@ -742,8 +763,7 @@ mod tests {
         assert_eq!(b.balance_micro, 1_500_000);
         assert!(b.granted);
         assert!(parse_balance(br#"{"error":"acct must be 32 hex chars"}"#).is_err());
-        let no_granted =
-            serde_json::json!({"account_id": "ab", "balance_micro": 1}).to_string();
+        let no_granted = serde_json::json!({"account_id": "ab", "balance_micro": 1}).to_string();
         assert!(parse_balance(no_granted.as_bytes()).is_err());
     }
 
@@ -758,14 +778,20 @@ mod tests {
         // Open: all read, ledger settled, grant applied.
         assert_eq!(
             evaluate_welcome(&ok_ledger(), &ok_mining(), &ok_balance()),
-            WelcomeGate::Open { balance_micro: 2_000_000, epoch: 3, unproven: 5 }
+            WelcomeGate::Open {
+                balance_micro: 2_000_000,
+                epoch: 3,
+                unproven: 5
+            }
         );
 
         // Withheld: the ledger has writes in flight (NOT all-synced).
         let busy = parse_ledger_health(&ledger_health_json(4));
         let g = evaluate_welcome(&busy, &ok_mining(), &ok_balance());
         assert!(matches!(g, WelcomeGate::Withheld { .. }), "{g:?}");
-        assert!(welcome_gate_lines(&g).join("\n").contains("4 durable write"));
+        assert!(welcome_gate_lines(&g)
+            .join("\n")
+            .contains("4 durable write"));
 
         // Withheld: the account has no grant row yet.
         let ungranted = parse_balance(&balance_json(&"ab".repeat(16), 0, false));
@@ -804,9 +830,17 @@ mod tests {
     #[test]
     fn welcome_gate_lines_obey_the_copy_rule_in_every_state() {
         let states = [
-            WelcomeGate::Open { balance_micro: 1_500_000, epoch: 3, unproven: 0 },
-            WelcomeGate::Withheld { reason: "not synced".to_string() },
-            WelcomeGate::Unknown { reason: "offline".to_string() },
+            WelcomeGate::Open {
+                balance_micro: 1_500_000,
+                epoch: 3,
+                unproven: 0,
+            },
+            WelcomeGate::Withheld {
+                reason: "not synced".to_string(),
+            },
+            WelcomeGate::Unknown {
+                reason: "offline".to_string(),
+            },
         ];
         for s in &states {
             for line in welcome_gate_lines(s) {
@@ -835,11 +869,17 @@ mod tests {
         }
         let joined = hist.join("\n");
         assert!(joined.contains("42.000000 KAT service credit"), "{joined}");
-        assert!(joined.contains("7 KAT service credit (1234 tokens"), "{joined}");
+        assert!(
+            joined.contains("7 KAT service credit (1234 tokens"),
+            "{joined}"
+        );
         assert!(joined.contains("grant applied"), "{joined}");
         // The honesty clause: do not imply an event log exists.
         assert!(joined.contains("not an event log"), "{joined}");
-        let ungranted = ServiceBalance { granted: false, ..bal };
+        let ungranted = ServiceBalance {
+            granted: false,
+            ..bal
+        };
         assert!(service_history_lines(&ungranted, 0, 0)
             .join("\n")
             .contains("grant not applied yet"));
@@ -866,7 +906,9 @@ mod tests {
                 HttpResponse::Ok(mining_health_json(2))
             }
             fn get_balance(&self, acct_hex: &str) -> HttpResponse {
-                self.seen.borrow_mut().push(format!("/balance?acct={acct_hex}"));
+                self.seen
+                    .borrow_mut()
+                    .push(format!("/balance?acct={acct_hex}"));
                 HttpResponse::Ok(balance_json(acct_hex, 5_000_000, true))
             }
             fn get_service_info(&self) -> HttpResponse {
@@ -879,13 +921,22 @@ mod tests {
             }
         }
         let acct = "ab".repeat(16);
-        let mock = Mock { seen: RefCell::new(Vec::new()) };
+        let mock = Mock {
+            seen: RefCell::new(Vec::new()),
+        };
         let view = account_service_view(&mock, &acct);
         assert_eq!(
             view.gate,
-            WelcomeGate::Open { balance_micro: 5_000_000, epoch: 3, unproven: 2 }
+            WelcomeGate::Open {
+                balance_micro: 5_000_000,
+                epoch: 3,
+                unproven: 2
+            }
         );
-        assert_eq!(view.balance.as_ref().map(|b| b.balance_micro), Some(5_000_000));
+        assert_eq!(
+            view.balance.as_ref().map(|b| b.balance_micro),
+            Some(5_000_000)
+        );
         assert_eq!(
             view.service_line.as_deref(),
             Some("service: devnet (virtual clock)"),
@@ -995,17 +1046,32 @@ mod tests {
             }
         }
 
-        let dead = Dead { reads: Cell::new(0) };
+        let dead = Dead {
+            reads: Cell::new(0),
+        };
         let view = account_service_view(&dead, &"ab".repeat(16));
-        assert!(matches!(view.gate, WelcomeGate::Unknown { .. }), "{:?}", view.gate);
+        assert!(
+            matches!(view.gate, WelcomeGate::Unknown { .. }),
+            "{:?}",
+            view.gate
+        );
         assert!(view.balance.is_none());
-        assert!(view.service_line.is_none(), "a dead service renders no label");
-        assert_eq!(dead.reads.get(), 1, "an unreachable service must cost ONE timeout");
+        assert!(
+            view.service_line.is_none(),
+            "a dead service renders no label"
+        );
+        assert_eq!(
+            dead.reads.get(),
+            1,
+            "an unreachable service must cost ONE timeout"
+        );
 
         // A non-200 STATUS is different: the service answered, so the
         // other routes still carry information and are still read — the
         // label among them, and an unhappy `/` still renders no label.
-        let refusing = Refusing { reads: Cell::new(0) };
+        let refusing = Refusing {
+            reads: Cell::new(0),
+        };
         let view = account_service_view(&refusing, &"ab".repeat(16));
         assert!(matches!(view.gate, WelcomeGate::Unknown { .. }));
         assert!(view.service_line.is_none());

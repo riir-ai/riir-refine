@@ -84,7 +84,7 @@
 //! update RUN already deletes its lists — hadolint is entirely SILENT, so
 //! the cache-staleness axis is genuinely unoccupied, as `Research` 086 said.
 
-use super::{DockerFamily, DockerRule, DockerDomain, SyntaxVersion};
+use super::{DockerDomain, DockerFamily, DockerRule, SyntaxVersion};
 use crate::corpus::Corpus;
 
 /// Build the docker seed corpus (BLAKE3-committed via `Corpus<D>`).
@@ -428,7 +428,11 @@ mod tests {
     fn rule_ids_unique_and_kebab() {
         let mut seen = std::collections::BTreeSet::new();
         for r in entries() {
-            assert!(seen.insert(r.rule_id.clone()), "duplicate rule id {}", r.rule_id);
+            assert!(
+                seen.insert(r.rule_id.clone()),
+                "duplicate rule id {}",
+                r.rule_id
+            );
             assert!(
                 r.rule_id
                     .chars()
@@ -450,7 +454,10 @@ mod tests {
             "the corpus and the detector table have drifted apart"
         );
         for id in FIXABLE_DOCKER {
-            assert!(DOCKER_RULES.contains(id), "{id} is fixable but not a detector rule");
+            assert!(
+                DOCKER_RULES.contains(id),
+                "{id} is fixable but not a detector rule"
+            );
         }
     }
 

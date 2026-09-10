@@ -95,10 +95,8 @@ fn main() {
     println!("=== Stage 2 Tuning Demo (Issue 010 GOAT gate) ===\n");
 
     let corpus = build_seed_corpus();
-    let mut pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     pipeline.seed_from_corpus(&corpus.entries);
 
     let verifier = ClippyVerifier::new();
@@ -112,16 +110,31 @@ fn main() {
 
     println!("\n--- TuneReport ---");
     println!("total            : {}", report.total);
-    println!("stage1_hits      : {} (already in pool)", report.stage1_hits);
-    println!("stage1_verified  : {} (L1 drafter + clippy pass)", report.stage1_verified);
-    println!("stage2_proposed  : {} (proposer fired)", report.stage2_proposed);
-    println!("stage2_verified  : {} (proposer + clippy pass)", report.stage2_verified);
+    println!(
+        "stage1_hits      : {} (already in pool)",
+        report.stage1_hits
+    );
+    println!(
+        "stage1_verified  : {} (L1 drafter + clippy pass)",
+        report.stage1_verified
+    );
+    println!(
+        "stage2_proposed  : {} (proposer fired)",
+        report.stage2_proposed
+    );
+    println!(
+        "stage2_verified  : {} (proposer + clippy pass)",
+        report.stage2_verified
+    );
     println!("verified total   : {}", report.verified_count());
     println!("failed           : {}", report.failed_count());
     println!("\nStage 2 pool size: {}", pipeline.adaptive().len());
 
     let gate_pass = report.verified_count() > 0;
-    println!("\n=== GOAT G1 (beat 0/10): {} ===", if gate_pass { "PASS" } else { "FAIL" });
+    println!(
+        "\n=== GOAT G1 (beat 0/10): {} ===",
+        if gate_pass { "PASS" } else { "FAIL" }
+    );
     if !gate_pass {
         std::process::exit(2);
     }

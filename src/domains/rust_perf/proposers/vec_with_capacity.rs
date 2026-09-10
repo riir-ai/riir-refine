@@ -82,11 +82,7 @@ fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
 
 use super::ProposerOpts;
 
-pub(crate) fn collect_edits_opts(
-    source: &str,
-    file: &File,
-    opts: ProposerOpts,
-) -> Vec<SourceEdit> {
+pub(crate) fn collect_edits_opts(source: &str, file: &File, opts: ProposerOpts) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     super::for_each_fn(file, |sig, block| {
         collect_block_edits(source, sig, block, block, &mut edits, opts);
@@ -113,17 +109,17 @@ fn collect_block_edits(
     let usize_params = usize_typed_params(sig);
     for (i, stmt) in stmts.iter().enumerate() {
         let Stmt::Local(local) = stmt else { continue };
-        let Some(ident) = fresh_vec_binding(local) else { continue };
+        let Some(ident) = fresh_vec_binding(local) else {
+            continue;
+        };
         // Idents let-bound at this block level after the vec binding: none of
         // them are in scope at the init position (scope gate). Plan 097 T3:
         // extended with every ident bound in the NESTED blocks of the
         // remaining region — they are equally out of scope at the init
         // position, and a nested re-bind of a usize param name must not
         // vouch for the param's type.
-        let mut later_bound: Vec<String> = stmts[i + 1..]
-            .iter()
-            .filter_map(stmt_local_ident)
-            .collect();
+        let mut later_bound: Vec<String> =
+            stmts[i + 1..].iter().filter_map(stmt_local_ident).collect();
         collect_nested_locals(&stmts[i + 1..], &mut later_bound);
         // P2 extension (2026-08-28): the immediately-following statement is
         // a for loop whose iterable is a BARE ARRAY LITERAL (the katgpt-rs
@@ -205,10 +201,20 @@ fn find_loop_capacity(stmts: &[Stmt], ident: &syn::Ident) -> Option<Cap> {
 
 /// If `stmt` is a `for` loop whose iterable is a BARE array literal and
 /// whose body pushes to `ident`, return the loop + the literal.
-fn array_iter_push_loop<'a>(stmt: &'a Stmt, ident: &syn::Ident) -> Option<(&'a syn::ExprForLoop, &'a Expr)> {
-    let Stmt::Expr(Expr::ForLoop(fl), _) = stmt else { return None };
-    let Expr::Array(_) = &*fl.expr else { return None };
-    let mut scan = PushScan { ident, found: false };
+fn array_iter_push_loop<'a>(
+    stmt: &'a Stmt,
+    ident: &syn::Ident,
+) -> Option<(&'a syn::ExprForLoop, &'a Expr)> {
+    let Stmt::Expr(Expr::ForLoop(fl), _) = stmt else {
+        return None;
+    };
+    let Expr::Array(_) = &*fl.expr else {
+        return None;
+    };
+    let mut scan = PushScan {
+        ident,
+        found: false,
+    };
     scan.visit_block(&fl.body);
     if !scan.found {
         return None;
@@ -248,9 +254,7 @@ fn temp_binding_edits(
     }
     let arr_text = src(source, arr)?;
     let indent: String = {
-        let line_start = source[..local_range.start]
-            .rfind('\n')
-            .map_or(0, |p| p + 1);
+        let line_start = source[..local_range.start].rfind('\n').map_or(0, |p| p + 1);
         source[line_start..local_range.start]
             .chars()
             .take_while(|c| c.is_whitespace())
@@ -261,10 +265,12 @@ fn temp_binding_edits(
         &local_span[..rel_start],
         &local_span[rel_end..]
     );
-    let binding_replacement =
-        format!("let {tmp} = {arr_text};\n{indent}{new_local}");
+    let binding_replacement = format!("let {tmp} = {arr_text};\n{indent}{new_local}");
     let iterable_replacement = tmp;
-    Some((edit(local, binding_replacement), edit(&*fl.expr, iterable_replacement)))
+    Some((
+        edit(local, binding_replacement),
+        edit(&*fl.expr, iterable_replacement),
+    ))
 }
 
 /// Every identifier used or bound anywhere in the block (paths, patterns,
@@ -298,7 +304,9 @@ enum Cap {
 
 /// The binding is `let mut <ident> = Vec::new();` / `= vec![];` (no `else`).
 fn fresh_vec_binding(local: &Local) -> Option<&syn::Ident> {
-    let Pat::Ident(pi) = &local.pat else { return None };
+    let Pat::Ident(pi) = &local.pat else {
+        return None;
+    };
     if pi.by_ref.is_some() || pi.subpat.is_some() || pi.mutability.is_none() {
         return None;
     }
@@ -308,8 +316,15 @@ fn fresh_vec_binding(local: &Local) -> Option<&syn::Ident> {
     }
     match &*init.expr {
         Expr::Call(call) => {
-            let Expr::Path(p) = &*call.func else { return None };
-            let segs: Vec<String> = p.path.segments.iter().map(|s| s.ident.to_string()).collect();
+            let Expr::Path(p) = &*call.func else {
+                return None;
+            };
+            let segs: Vec<String> = p
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect();
             if segs == ["Vec", "new"] && call.args.is_empty() {
                 Some(&pi.ident)
             } else {
@@ -325,7 +340,9 @@ fn fresh_vec_binding(local: &Local) -> Option<&syn::Ident> {
 
 /// If `stmt` is a `let`, the first bound ident (for the later-bound set).
 fn stmt_local_ident(stmt: &Stmt) -> Option<String> {
-    let Stmt::Local(local) = stmt else { return None };
+    let Stmt::Local(local) = stmt else {
+        return None;
+    };
     first_pat_ident(&local.pat)
 }
 
@@ -349,7 +366,9 @@ fn usize_typed_params(sig: &Signature) -> Vec<String> {
     let mut out = Vec::new();
     for arg in &sig.inputs {
         let syn::FnArg::Typed(pt) = arg else { continue };
-        let syn::Type::Path(tp) = &*pt.ty else { continue };
+        let syn::Type::Path(tp) = &*pt.ty else {
+            continue;
+        };
         let is_usize = tp.path.segments.len() == 1 && tp.path.segments[0].ident == "usize";
         if is_usize {
             if let Some(name) = first_pat_ident(&pt.pat) {
@@ -372,8 +391,13 @@ fn stmt_binds_ident(stmt: &Stmt, ident: &syn::Ident) -> bool {
 /// If `stmt` is a `for` loop that (a) pushes to `ident` somewhere in its
 /// body and (b) has an unambiguous capacity source, return that capacity.
 fn loop_capacity(stmt: &Stmt, ident: &syn::Ident) -> Option<Cap> {
-    let Stmt::Expr(Expr::ForLoop(fl), _) = stmt else { return None };
-    let mut scan = PushScan { ident, found: false };
+    let Stmt::Expr(Expr::ForLoop(fl), _) = stmt else {
+        return None;
+    };
+    let mut scan = PushScan {
+        ident,
+        found: false,
+    };
     scan.visit_block(&fl.body);
     if !scan.found {
         return None;
@@ -468,13 +492,20 @@ fn cap_replacement(
 /// unsuffixed decimal literal infers it in that position (riir-train
 /// gepo_goat lesson — the suffixed emit was an E0308).
 fn usize_text(source: &str, node: &Expr) -> Option<String> {
-    if let Expr::Lit(ExprLit { lit: Lit::Int(li), .. }) = node {
+    if let Expr::Lit(ExprLit {
+        lit: Lit::Int(li), ..
+    }) = node
+    {
         let text = src(source, node)?;
         let suffix = li.suffix();
         if suffix.is_empty() || suffix == "usize" {
             return Some(text);
         }
-        return Some(text.strip_suffix(suffix).map(str::to_string).unwrap_or(text));
+        return Some(
+            text.strip_suffix(suffix)
+                .map(str::to_string)
+                .unwrap_or(text),
+        );
     }
     src(source, node)
 }
@@ -487,7 +518,9 @@ fn usize_text(source: &str, node: &Expr) -> Option<String> {
 /// verifier auto-reverts the edit; the scope gate is unaffected.
 fn capacity_is_usize(expr: &Expr, usize_params: &[String], opts: ProposerOpts) -> bool {
     match expr {
-        Expr::Lit(ExprLit { lit: Lit::Int(_), .. }) => true,
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(_), ..
+        }) => true,
         // `x.len()` — usize by the std `len` convention.
         Expr::MethodCall(mc) if mc.method == "len" && mc.args.is_empty() => true,
         // usize-preserving arithmetic on a usize base with a literal arg.
@@ -496,7 +529,13 @@ fn capacity_is_usize(expr: &Expr, usize_params: &[String], opts: ProposerOpts) -
                 mc.method.to_string().as_str(),
                 "saturating_sub" | "saturating_add" | "wrapping_sub" | "wrapping_add"
             ) && mc.args.len() == 1
-                && matches!(mc.args.first(), Some(Expr::Lit(ExprLit { lit: Lit::Int(_), .. })))
+                && matches!(
+                    mc.args.first(),
+                    Some(Expr::Lit(ExprLit {
+                        lit: Lit::Int(_),
+                        ..
+                    }))
+                )
                 && capacity_is_usize(&mc.receiver, usize_params, opts) =>
         {
             true
@@ -519,7 +558,10 @@ fn capacity_is_usize(expr: &Expr, usize_params: &[String], opts: ProposerOpts) -
 /// Does the expression reference a single-segment path that is let-bound
 /// later in the block (i.e. NOT in scope at the init position)?
 fn references_later_let(expr: &Expr, later_bound: &[String]) -> bool {
-    let mut scan = LaterLetScan { later_bound, found: false };
+    let mut scan = LaterLetScan {
+        later_bound,
+        found: false,
+    };
     scan.visit_expr(expr);
     scan.found
 }
@@ -615,7 +657,10 @@ mod tests {
              for i in 0..=n { v.push(i as u32); }\n    v\n}",
         )
         .expect("pattern matched");
-        assert!(squash(&out).contains(&squash("Vec::with_capacity(n + 1)")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(n + 1)")),
+            "{out}"
+        );
     }
 
     #[test]
@@ -626,7 +671,10 @@ mod tests {
              for x in &items { v.push(*x); }\n    v\n}",
         )
         .expect("pattern matched");
-        assert!(squash(&out).contains("Vec::with_capacity(items.len())"), "{out}");
+        assert!(
+            squash(&out).contains("Vec::with_capacity(items.len())"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -637,7 +685,10 @@ mod tests {
              for x in items.iter() { v.push(*x); }\n    v\n}",
         )
         .expect("pattern matched");
-        assert!(squash(&out).contains("Vec::with_capacity(items.len())"), "{out}");
+        assert!(
+            squash(&out).contains("Vec::with_capacity(items.len())"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -662,7 +713,10 @@ mod tests {
              let mut v = Vec::new();\n        for it in items.iter() { v.push(*it); }\n        v.len()\n    } else {\n        0\n    };\n    total\n}",
         )
         .expect("pattern matched");
-        assert!(squash(&out).contains(&squash("Vec::with_capacity(items.len())")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(items.len())")),
+            "{out}"
+        );
         parses(&out);
     }
 
@@ -676,7 +730,10 @@ mod tests {
              for it in items.iter() { v.push(*it); }\n    }\n    v.len()\n}",
         )
         .expect("pattern matched");
-        assert!(squash(&out).contains(&squash("Vec::with_capacity(items.len())")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(items.len())")),
+            "{out}"
+        );
         parses(&out);
     }
 
@@ -690,7 +747,10 @@ mod tests {
             "pub fn cap_s(n: usize, items: &[u32]) -> usize {\n    let mut v = Vec::new();\n    if n > 0 {\n    \
              let n = n * 2;\n        for x in 0..n { v.push(x); }\n    }\n    v.len()\n}",
         );
-        assert!(out.is_none(), "shadowed param capacity must decline: {out:?}");
+        assert!(
+            out.is_none(),
+            "shadowed param capacity must decline: {out:?}"
+        );
     }
 
     #[test]
@@ -715,7 +775,9 @@ mod tests {
         )
         .expect("pattern matched");
         assert!(
-            squash(&out).contains(&squash("Vec::with_capacity(t.path.len().saturating_sub(1))")),
+            squash(&out).contains(&squash(
+                "Vec::with_capacity(t.path.len().saturating_sub(1))"
+            )),
             "{out}"
         );
     }
@@ -770,13 +832,11 @@ mod tests {
 
     #[test]
     fn no_loop_leaves_unchanged() {
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn f() { let mut v = Vec::new(); v.push(1); }"
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn f() { let mut v = Vec::new(); v.push(1); }"
+        )
+        .is_none());
     }
 
     #[test]
@@ -804,13 +864,11 @@ mod tests {
 
     #[test]
     fn already_with_capacity_unchanged() {
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn f(n: usize) -> Vec<u32> { let mut v = Vec::with_capacity(n); v }"
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn f(n: usize) -> Vec<u32> { let mut v = Vec::with_capacity(n); v }"
+        )
+        .is_none());
     }
 
     #[test]
@@ -859,12 +917,18 @@ mod tests {
             "}"
         );
         let out = propose_fix("vec-with-capacity", src).expect("array-literal shape matched");
-        assert!(out.contains("let cap_iter = ["), "temp binding missing: {out}");
+        assert!(
+            out.contains("let cap_iter = ["),
+            "temp binding missing: {out}"
+        );
         assert!(
             out.contains("Vec::with_capacity(cap_iter.len())"),
             "capacity hint missing: {out}"
         );
-        assert!(out.contains("for tok in cap_iter {"), "iterable not rewritten: {out}");
+        assert!(
+            out.contains("for tok in cap_iter {"),
+            "iterable not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -936,7 +1000,9 @@ mod tests {
         let edits = super::collect_edits_opts(
             src,
             &file,
-            super::super::ProposerOpts { untyped_paths: true },
+            super::super::ProposerOpts {
+                untyped_paths: true,
+            },
         );
         if edits.is_empty() {
             return None;
@@ -952,7 +1018,10 @@ mod tests {
             "fn traces() -> Vec<u32> {\n    const N_TRACES: usize = 24;\n    \n             let mut v = Vec::new();\n    for i in 0..N_TRACES { v.push(i as u32); }\n    v\n}"
         )
         .expect("verify-mode fires on the const bound");
-        assert!(squash(&out).contains(&squash("Vec::with_capacity(N_TRACES)")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(N_TRACES)")),
+            "{out}"
+        );
     }
 
     #[test]
@@ -977,7 +1046,10 @@ mod tests {
             "fn diff(a: &[u32], b: &[u32]) -> Vec<u32> {\n    let min_len = \n             a.len().min(b.len());\n    let mut v = Vec::new();\n    for pos in 0..min_len { v.push(a[pos]); }\n    v\n}"
         )
         .expect("verify-mode fires on the earlier local");
-        assert!(squash(&out).contains(&squash("Vec::with_capacity(min_len)")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(min_len)")),
+            "{out}"
+        );
     }
 
     #[test]
@@ -989,7 +1061,9 @@ mod tests {
         let edits = super::collect_edits_opts(
             src,
             &file,
-            super::super::ProposerOpts { untyped_paths: true },
+            super::super::ProposerOpts {
+                untyped_paths: true,
+            },
         );
         assert!(edits.is_empty(), "scope gate must hold under verify-mode");
     }
@@ -1000,7 +1074,10 @@ mod tests {
         // FIRES (the revert handles it); under parse-only it must not.
         let src = "fn cells() -> Vec<u8> {\n    let mut v = Vec::new();\n    \n             for i in 0..BOARD_SIZE { v.push(i); }\n    v\n}";
         let out = propose_verify(src).expect("verify-mode attempts the u8 const");
-        assert!(squash(&out).contains(&squash("Vec::with_capacity(BOARD_SIZE)")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(BOARD_SIZE)")),
+            "{out}"
+        );
         // Parse-only (the default) still skips it.
         assert!(propose_fix("vec-with-capacity", src).is_none());
     }

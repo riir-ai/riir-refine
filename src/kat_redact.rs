@@ -308,7 +308,12 @@ fn scan_prefixed_tokens(span: &str, out: &mut Vec<Finding>) {
     const PREFIX_RULES: &[PrefixRule] = &[
         // AWS access key ids: AKIA/ASIA + ≥16 [0-9A-Z] (canonical 20 total;
         // longer runs also flag — fail-closed).
-        ("AKIA", FindingKind::AwsAccessKey, is_alnum_upper as fn(u8) -> bool, 16),
+        (
+            "AKIA",
+            FindingKind::AwsAccessKey,
+            is_alnum_upper as fn(u8) -> bool,
+            16,
+        ),
         ("ASIA", FindingKind::AwsAccessKey, is_alnum_upper, 16),
         ("ghp_", FindingKind::GithubToken, is_alnum, 20),
         ("gho_", FindingKind::GithubToken, is_alnum, 20),
@@ -355,12 +360,10 @@ fn scan_private_key_blocks(span: &str, out: &mut Vec<Finding>) {
         };
         // Extend to the matching END marker when present, else end of span.
         let end = match find_sub(bytes, b"-----END", header_end) {
-            Some(e) if e < begin + 65_536 => {
-                match find_sub(bytes, b"-----", e + 8) {
-                    Some(t) => t + 5,
-                    None => bytes.len(),
-                }
-            }
+            Some(e) if e < begin + 65_536 => match find_sub(bytes, b"-----", e + 8) {
+                Some(t) => t + 5,
+                None => bytes.len(),
+            },
             _ => bytes.len(),
         };
         out.push(Finding::new(FindingKind::PrivateKeyBlock, begin, end, span));
@@ -397,7 +400,12 @@ fn scan_conn_strings(span: &str, out: &mut Vec<Finding>) {
             let looks_literal =
                 userinfo.contains(':') && !userinfo.contains('$') && !userinfo.contains('{');
             if pos - scheme_start > 0 && looks_literal {
-                out.push(Finding::new(FindingKind::ConnStringCreds, scheme_start, at + 1, span));
+                out.push(Finding::new(
+                    FindingKind::ConnStringCreds,
+                    scheme_start,
+                    at + 1,
+                    span,
+                ));
             }
         }
         from = pos + 3;
@@ -415,12 +423,7 @@ fn scan_bearer(span: &str, out: &mut Vec<Finding>) {
                 end += 1;
             }
             if end - (pos + prefix.len()) >= 16 {
-                out.push(Finding::new(
-                    FindingKind::BearerToken,
-                    pos,
-                    end,
-                    span,
-                ));
+                out.push(Finding::new(FindingKind::BearerToken, pos, end, span));
             }
             from = pos + prefix.len();
         }
@@ -474,7 +477,9 @@ fn push_rust_secret_literal(value: &str, span: &str, out: &mut Vec<Finding>) -> 
     if !value.starts_with('"') {
         return false;
     }
-    let Some(close) = value[1..].find('"') else { return false };
+    let Some(close) = value[1..].find('"') else {
+        return false;
+    };
     if close < 8 {
         return false;
     }
@@ -512,14 +517,18 @@ fn scan_rust_secret_literals(span: &str, out: &mut Vec<Finding>) {
             continue;
         }
         let rest = strip_rust_prefixes(trimmed);
-        let ws = rest.find(|c: char| c.is_whitespace() || c == ':').unwrap_or(rest.len());
+        let ws = rest
+            .find(|c: char| c.is_whitespace() || c == ':')
+            .unwrap_or(rest.len());
         let name = &rest[..ws];
         if !is_bare_ident(name) || !is_secret_name(name) {
             continue;
         }
         // Optional `: TYPE` between the name and `=`.
         let after_name = &rest[ws..];
-        let Some(eq) = after_name.find('=') else { continue };
+        let Some(eq) = after_name.find('=') else {
+            continue;
+        };
         let between = &after_name[..eq];
         if !between.chars().all(|c| {
             c.is_ascii_alphanumeric() || matches!(c, ':' | '&' | '\'' | ' ' | '_' | '<' | '>')
@@ -603,8 +612,11 @@ pub fn redact(span: &str, findings: &[Finding]) -> String {
             cursor = f.start + f.len;
         }
     }
-    let mut out =
-        String::with_capacity(span.len().saturating_sub(cursor).saturating_add(chosen.len() * 24));
+    let mut out = String::with_capacity(
+        span.len()
+            .saturating_sub(cursor)
+            .saturating_add(chosen.len() * 24),
+    );
     let mut at = 0;
     for f in chosen {
         out.push_str(&span[at..f.start]);
@@ -663,14 +675,30 @@ fn is_bare_ident(s: &str) -> bool {
 
 /// Segment-exact word list for the identifier policy (on `_`-split parts).
 const SECRET_NAME_SEGMENTS: &[&str] = &[
-    "password", "passwd", "pwd", "secret", "secrets", "token", "tokens", "credential",
-    "credentials", "auth",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "secrets",
+    "token",
+    "tokens",
+    "credential",
+    "credentials",
+    "auth",
 ];
 
 /// Substring word list — specific multi-word names.
 const SECRET_NAME_SUBSTRINGS: &[&str] = &[
-    "api_key", "apikey", "access_key", "private_key", "client_secret", "signing_key",
-    "session_key", "secret_key", "auth_token", "bearer",
+    "api_key",
+    "apikey",
+    "access_key",
+    "private_key",
+    "client_secret",
+    "signing_key",
+    "session_key",
+    "secret_key",
+    "auth_token",
+    "bearer",
 ];
 
 /// The identifier-policy word list. Segment-exact matches (on `_`-split
@@ -679,7 +707,9 @@ const SECRET_NAME_SUBSTRINGS: &[&str] = &[
 /// `auth` only).
 fn is_secret_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.split('_').any(|seg| SECRET_NAME_SEGMENTS.contains(&seg))
+    lower
+        .split('_')
+        .any(|seg| SECRET_NAME_SEGMENTS.contains(&seg))
         || SECRET_NAME_SUBSTRINGS.iter().any(|s| lower.contains(s))
 }
 
@@ -841,10 +871,16 @@ pub enum GateDecision {
     /// Eligible + zero findings — sync as-is.
     Allow,
     /// Denied — stripped from the sync batch; log it.
-    Blocked { reason: BlockReason, findings: Vec<Finding> },
+    Blocked {
+        reason: BlockReason,
+        findings: Vec<Finding>,
+    },
     /// Eligible, findings present, policy allows redacted payloads: the
     /// returned payload has every finding replaced by its placeholder.
-    Redacted { payload: String, findings: Vec<Finding> },
+    Redacted {
+        payload: String,
+        findings: Vec<Finding>,
+    },
 }
 
 impl GateDecision {
@@ -880,9 +916,10 @@ impl LoadedPolicy {
     /// `.heal/` log belongs. Falls back to the cwd when no policy loaded.
     #[must_use]
     pub fn root(&self) -> PathBuf {
-        self.path
-            .as_ref()
-            .and_then(|p| p.parent()).map_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")), Path::to_path_buf)
+        self.path.as_ref().and_then(|p| p.parent()).map_or_else(
+            || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            Path::to_path_buf,
+        )
     }
 }
 
@@ -931,7 +968,11 @@ impl RedactionGate {
                 policy.version
             ));
         }
-        LoadedPolicy { gate: Self { policy }, path: Some(path.to_path_buf()), warning: None }
+        LoadedPolicy {
+            gate: Self { policy },
+            path: Some(path.to_path_buf()),
+            warning: None,
+        }
     }
 
     /// `--policy`/env override when given, else walk up from the cwd looking
@@ -946,7 +987,11 @@ impl RedactionGate {
             return Self::load(&PathBuf::from(p));
         }
         let Ok(cwd) = std::env::current_dir() else {
-            return LoadedPolicy { gate: Self::deny_all(), path: None, warning: None };
+            return LoadedPolicy {
+                gate: Self::deny_all(),
+                path: None,
+                warning: None,
+            };
         };
         let mut dir: Option<&Path> = Some(cwd.as_path());
         while let Some(d) = dir {
@@ -956,7 +1001,11 @@ impl RedactionGate {
             }
             dir = d.parent();
         }
-        LoadedPolicy { gate: Self::deny_all(), path: None, warning: None }
+        LoadedPolicy {
+            gate: Self::deny_all(),
+            path: None,
+            warning: None,
+        }
     }
 
     /// The policy in force (inspector).
@@ -974,7 +1023,12 @@ impl RedactionGate {
                 findings: Vec::new(),
             };
         }
-        if !self.policy.allow_origins.iter().any(|a| a == origin.as_str()) {
+        if !self
+            .policy
+            .allow_origins
+            .iter()
+            .any(|a| a == origin.as_str())
+        {
             return GateDecision::Blocked {
                 reason: BlockReason::OriginNotAllowed(origin),
                 findings: Vec::new(),
@@ -1007,7 +1061,10 @@ impl RedactionGate {
             let payload = redact(span, &findings);
             GateDecision::Redacted { payload, findings }
         } else {
-            GateDecision::Blocked { reason: BlockReason::SecretsFound, findings }
+            GateDecision::Blocked {
+                reason: BlockReason::SecretsFound,
+                findings,
+            }
         }
     }
 }
@@ -1065,7 +1122,8 @@ impl RedactionLog {
     ) -> io::Result<()> {
         use std::io::Write as _;
         let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
         let (event, reason) = match decision {
             GateDecision::Allow => ("allow", None),
             GateDecision::Blocked { reason, .. } => ("blocked", Some(reason.to_string())),
@@ -1096,7 +1154,10 @@ impl RedactionLog {
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&self.path)?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
         writeln!(f, "{row}")
     }
 }
@@ -1113,16 +1174,24 @@ mod tests {
     fn aws_access_key_flagged() {
         let span = "let client = connect(\"AKIAIOSFODNN7EXAMPLE\");";
         let f = scan_secrets(span);
-        assert!(f.iter().any(|x| x.kind == FindingKind::AwsAccessKey), "{f:?}");
+        assert!(
+            f.iter().any(|x| x.kind == FindingKind::AwsAccessKey),
+            "{f:?}"
+        );
         // The finding range covers exactly the key bytes.
-        let k = f.iter().find(|x| x.kind == FindingKind::AwsAccessKey).unwrap();
+        let k = f
+            .iter()
+            .find(|x| x.kind == FindingKind::AwsAccessKey)
+            .unwrap();
         assert_eq!(&span[k.start..k.start + k.len], "AKIAIOSFODNN7EXAMPLE");
     }
 
     #[test]
     fn longer_aws_shaped_run_still_flags_fail_closed() {
         let span = "AKIAIOSFODNN7EXAMPLEXYZ";
-        assert!(scan_secrets(span).iter().any(|f| f.kind == FindingKind::AwsAccessKey));
+        assert!(scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::AwsAccessKey));
     }
 
     #[test]
@@ -1130,7 +1199,10 @@ mod tests {
         let span = "gh ghp_16C7eBAF1q9XZKL3m0yv8u2oF4R6tYhUw glpat-AbCdEf12345678901234 \
                     xoxb-123456789012-abcdef sk-proj-abcdefghijklmnopqrstuvwxyz12";
         let f = scan_secrets(span);
-        assert!(f.iter().any(|x| x.kind == FindingKind::GithubToken), "{f:?}");
+        assert!(
+            f.iter().any(|x| x.kind == FindingKind::GithubToken),
+            "{f:?}"
+        );
         assert!(f.iter().any(|x| x.kind == FindingKind::GitlabToken));
         assert!(f.iter().any(|x| x.kind == FindingKind::SlackToken));
         assert!(f.iter().any(|x| x.kind == FindingKind::OpenAiStyleKey));
@@ -1142,9 +1214,7 @@ mod tests {
         let span = "let sk = sk_short; let gh = ghp_tiny; pass AKIA_SHORT;";
         assert!(!scan_secrets(span).iter().any(|f| matches!(
             f.kind,
-            FindingKind::AwsAccessKey
-                | FindingKind::GithubToken
-                | FindingKind::OpenAiStyleKey
+            FindingKind::AwsAccessKey | FindingKind::GithubToken | FindingKind::OpenAiStyleKey
         )));
     }
 
@@ -1153,7 +1223,10 @@ mod tests {
         let span = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA7somefakedata\n\
                     -----END RSA PRIVATE KEY-----\n";
         let f = scan_secrets(span);
-        let k = f.iter().find(|x| x.kind == FindingKind::PrivateKeyBlock).unwrap();
+        let k = f
+            .iter()
+            .find(|x| x.kind == FindingKind::PrivateKeyBlock)
+            .unwrap();
         let covered = &span[k.start..k.start + k.len];
         assert!(covered.starts_with("-----BEGIN"));
         assert!(covered.contains("-----END RSA PRIVATE KEY-----"));
@@ -1162,34 +1235,49 @@ mod tests {
     #[test]
     fn public_cert_headers_do_not_flag() {
         let span = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
-        assert!(!scan_secrets(span).iter().any(|f| f.kind == FindingKind::PrivateKeyBlock));
+        assert!(!scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::PrivateKeyBlock));
     }
 
     #[test]
     fn conn_string_with_password_flags() {
         let span = "let url = \"postgres://admin:hunter2sturdy@db.internal:5432/prod\";";
         let f = scan_secrets(span);
-        let k = f.iter().find(|x| x.kind == FindingKind::ConnStringCreds).unwrap();
-        assert_eq!(&span[k.start..k.start + k.len], "postgres://admin:hunter2sturdy@");
+        let k = f
+            .iter()
+            .find(|x| x.kind == FindingKind::ConnStringCreds)
+            .unwrap();
+        assert_eq!(
+            &span[k.start..k.start + k.len],
+            "postgres://admin:hunter2sturdy@"
+        );
     }
 
     #[test]
     fn templated_conn_string_does_not_flag() {
         let span = "let url = format!(\"postgres://user:${{DB_PASS}}@host/db\");";
-        assert!(!scan_secrets(span).iter().any(|f| f.kind == FindingKind::ConnStringCreds));
+        assert!(!scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::ConnStringCreds));
     }
 
     #[test]
     fn bearer_token_flags() {
         let span = "Authorization: Bearer abcdef1234567890abcdef";
-        assert!(scan_secrets(span).iter().any(|f| f.kind == FindingKind::BearerToken));
+        assert!(scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::BearerToken));
     }
 
     #[test]
     fn env_assignment_flags_value_not_name() {
         let span = "export DATABASE_PASSWORD=hunter2sturdy\nOTHER=plain";
         let f = scan_secrets(span);
-        let k = f.iter().find(|x| x.kind == FindingKind::EnvSecretAssign).unwrap();
+        let k = f
+            .iter()
+            .find(|x| x.kind == FindingKind::EnvSecretAssign)
+            .unwrap();
         assert_eq!(&span[k.start..k.start + k.len], "hunter2sturdy");
     }
 
@@ -1203,35 +1291,48 @@ mod tests {
     #[test]
     fn non_secret_env_names_do_not_flag() {
         let span = "DATABASE_URL_HOST=localhost\nMAX_CONNECTIONS=32\nAUTHOR=bob";
-        assert!(!scan_secrets(span).iter().any(|f| f.kind == FindingKind::EnvSecretAssign));
+        assert!(!scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::EnvSecretAssign));
     }
 
     #[test]
     fn rust_secret_literal_flags() {
         let span = "const API_KEY: &str = \"super-secret-value-42\";";
         let f = scan_secrets(span);
-        let k = f.iter().find(|x| x.kind == FindingKind::RustSecretLiteral).unwrap();
+        let k = f
+            .iter()
+            .find(|x| x.kind == FindingKind::RustSecretLiteral)
+            .unwrap();
         assert_eq!(&span[k.start..k.start + k.len], "\"super-secret-value-42\"");
     }
 
     #[test]
     fn rust_secret_let_mut_flags() {
         let span = "let mut password = \"tr0ub4dor&3xyz\";";
-        assert!(scan_secrets(span).iter().any(|f| f.kind == FindingKind::RustSecretLiteral));
+        assert!(scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::RustSecretLiteral));
     }
 
     #[test]
     fn rust_typed_binding_without_literal_does_not_flag() {
         let span = "fn connect(api_key: &str) {}\nstruct C { password: String }";
-        assert!(!scan_secrets(span).iter().any(|f| f.kind == FindingKind::RustSecretLiteral));
+        assert!(!scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::RustSecretLiteral));
     }
 
     #[test]
     fn high_entropy_hex_and_b64_flag() {
         let hexish = "9f2c7a4e1b8d3f6a0c5e2b9d7f4a1c8e3b6d9f2c7a4e1b8d3f6";
         let b64ish = "qP7mZ2xQvN4kR9tLwY3jH6sD1fG5aX0bE8cU2iO4pT7nM9rK";
-        assert!(scan_secrets(hexish).iter().any(|f| f.kind == FindingKind::HighEntropyHex));
-        assert!(scan_secrets(b64ish).iter().any(|f| f.kind == FindingKind::HighEntropyB64));
+        assert!(scan_secrets(hexish)
+            .iter()
+            .any(|f| f.kind == FindingKind::HighEntropyHex));
+        assert!(scan_secrets(b64ish)
+            .iter()
+            .any(|f| f.kind == FindingKind::HighEntropyB64));
     }
 
     #[test]
@@ -1269,7 +1370,10 @@ mod tests {
         let secret = "wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY2";
         let span = format!("AWS_SECRET_ACCESS_KEY={secret}\n");
         let findings = scan_secrets(&span);
-        assert!(findings.len() >= 2, "expected env + entropy overlap, got {findings:?}");
+        assert!(
+            findings.len() >= 2,
+            "expected env + entropy overlap, got {findings:?}"
+        );
         let out = redact(&span, &findings);
         assert!(!out.contains(secret), "{out}");
         assert_eq!(out.matches("[REDACTED").count(), 1);
@@ -1278,7 +1382,10 @@ mod tests {
     #[test]
     fn changelog_covers_every_version() {
         for v in 1..=REDACT_VERSION {
-            assert!(REDACT_CHANGELOG.iter().any(|(cv, _)| *cv == v), "version {v} missing");
+            assert!(
+                REDACT_CHANGELOG.iter().any(|(cv, _)| *cv == v),
+                "version {v} missing"
+            );
         }
     }
 
@@ -1320,7 +1427,9 @@ mod tests {
             .check(SpanOrigin::External, None, "fn f() {}")
             .is_syncable());
         // Path not on the allowlist.
-        assert!(!gate.check(SpanOrigin::OwnRepo, Some("secrets/prod.rs"), "fn f() {}").is_syncable());
+        assert!(!gate
+            .check(SpanOrigin::OwnRepo, Some("secrets/prod.rs"), "fn f() {}")
+            .is_syncable());
         // Secrets block even allowed origins.
         let d = gate.check(
             SpanOrigin::OwnRepo,
@@ -1349,9 +1458,18 @@ mod tests {
         // format backstops cannot mask a regression here.
         let secret = "correcthorsebatterystaple";
         let spellings = [
-            ("same line", format!("const DATABASE_PASSWORD: &str = \"{secret}\";")),
-            ("wrapped after =", format!("const DATABASE_PASSWORD: &str =\n    \"{secret}\";")),
-            ("let, wrapped", format!("let api_secret =\n    \"{secret}\";")),
+            (
+                "same line",
+                format!("const DATABASE_PASSWORD: &str = \"{secret}\";"),
+            ),
+            (
+                "wrapped after =",
+                format!("const DATABASE_PASSWORD: &str =\n    \"{secret}\";"),
+            ),
+            (
+                "let, wrapped",
+                format!("let api_secret =\n    \"{secret}\";"),
+            ),
             (
                 "static with lifetime, wrapped",
                 format!("static SERVICE_ACCOUNT_TOKEN: &'static str =\n    \"{secret}\";"),
@@ -1377,7 +1495,11 @@ mod tests {
             // off-by-one here would leak the first or last secret byte
             // through redaction.
             let f = &findings[0];
-            assert_eq!(&span[f.start..f.start + f.len], format!("\"{secret}\""), "{name}: range");
+            assert_eq!(
+                &span[f.start..f.start + f.len],
+                format!("\"{secret}\""),
+                "{name}: range"
+            );
             assert!(
                 !gate.check(SpanOrigin::OwnRepo, None, span).is_syncable(),
                 "{name}: must not sync"
@@ -1421,10 +1543,17 @@ mod tests {
             allow_redacted: false,
         };
         let gate = RedactionGate::from_policy(policy);
-        let d = gate.check(SpanOrigin::OwnRepo, None, "fn main() { /* much bigger than 16 */ }");
+        let d = gate.check(
+            SpanOrigin::OwnRepo,
+            None,
+            "fn main() { /* much bigger than 16 */ }",
+        );
         assert!(matches!(
             d,
-            GateDecision::Blocked { reason: BlockReason::SpanTooLarge { .. }, .. }
+            GateDecision::Blocked {
+                reason: BlockReason::SpanTooLarge { .. },
+                ..
+            }
         ));
     }
 
@@ -1482,9 +1611,13 @@ mod tests {
             allow_redacted: false,
         });
         let d = gate.check(SpanOrigin::OwnRepo, None, &span);
-        log.record(&d, SpanOrigin::OwnRepo, "span-1", "abc123def456").unwrap();
+        log.record(&d, SpanOrigin::OwnRepo, "span-1", "abc123def456")
+            .unwrap();
         let text = std::fs::read_to_string(log.path()).unwrap();
-        assert!(!text.contains(secret), "log leaked the finding bytes: {text}");
+        assert!(
+            !text.contains(secret),
+            "log leaked the finding bytes: {text}"
+        );
         assert!(text.contains("aws-access-key"));
         assert!(text.contains("blocked"));
         std::fs::remove_dir_all(&dir).ok();

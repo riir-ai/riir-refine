@@ -71,7 +71,7 @@
 //! - `r#raw` ident params (not modeled)
 
 use super::helpers::is_postfix_safe;
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Pat};
 
@@ -211,14 +211,11 @@ fn key_holds_borrow(source: &str, e: &Expr, binding: &str, deref: bool) -> bool 
             .any(|x| key_holds_borrow(source, x, binding, deref)),
         Expr::Paren(p) => key_holds_borrow(source, &p.expr, binding, deref),
         Expr::Group(g) => key_holds_borrow(source, &g.expr, binding, deref),
-        Expr::Reference(r) => src(source, &*r.expr)
-            .is_some_and(|t| contains_word(&t, binding)),
+        Expr::Reference(r) => src(source, &*r.expr).is_some_and(|t| contains_word(&t, binding)),
         // `(a.0, a)` — the whole binding as an element: the key copies the
         // reference VALUE into K (probe: oracle-silent, same class). Deref
         // bindings own their binding — the bare ident is the MA key form.
-        Expr::Path(p) => {
-            !deref && p.path.get_ident().is_some_and(|id| id == binding)
-        }
+        Expr::Path(p) => !deref && p.path.get_ident().is_some_and(|id| id == binding),
         _ => false,
     }
 }
@@ -267,7 +264,9 @@ impl Collector<'_> {
         if !closure.attrs.is_empty() || closure.inputs.len() != 2 {
             return None;
         }
-        if closure.asyncness.is_some() || closure.constness.is_some() || closure.movability.is_some()
+        if closure.asyncness.is_some()
+            || closure.constness.is_some()
+            || closure.movability.is_some()
         {
             return None; // dropping the modifier changes the closure type
         }
@@ -472,7 +471,10 @@ mod tests {
     fn multilevel_field_key_refused() {
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.n.c.cmp(&b.n.c)); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "multilevel field key must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "multilevel field key must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -481,7 +483,10 @@ mod tests {
         // risk at the field read, refused with the family.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.n.m().cmp(&b.n.m())); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "field method-call key must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "field method-call key must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -515,7 +520,8 @@ mod tests {
     fn borrow_tuple_key_copy_twin_not_fired() {
         // Probe: the Copy twin is oracle-silent too — the ref element is the
         // trigger, not the non-Copy payload.
-        let input = "fn f(v: &mut Vec<(u8, u8)>) { v.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1))); }";
+        let input =
+            "fn f(v: &mut Vec<(u8, u8)>) { v.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1))); }";
         let out = propose_fix("unnecessary_sort_by", input);
         assert!(out.is_none(), "copy-twin borrow key must not fire: {out:?}");
     }
@@ -538,7 +544,10 @@ mod tests {
         let input =
             "fn f(v: &mut Vec<(u8, Vec<u8>)>) { v.sort_by(|a, b| (a.0, a).cmp(&(b.0, b))); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "whole-binding element must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "whole-binding element must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -569,7 +578,10 @@ mod tests {
         // the family (the E0507 move risk exists at every field read).
         let input = "fn f(v: &mut Vec<(u8, u8, u8)>) { v.sort_by(|a, b| (a.0, a.1 + &a.2).cmp(&(b.0, b.1 + &b.2))); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "field binary-operand key must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "field binary-operand key must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -577,7 +589,10 @@ mod tests {
         // `a.k.max(MAX)` reads the field `a.k` — refused with the family.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.k.max(MAX).cmp(&b.k.max(MAX))); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "field-reading method key must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "field-reading method key must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -585,7 +600,10 @@ mod tests {
         // `a.k.wrapping_add(a.j)` — field reads, refused.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.k.wrapping_add(a.j).cmp(&b.k.wrapping_add(b.j))); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "field method-arg key must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "field method-arg key must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -595,7 +613,10 @@ mod tests {
         let input =
             "fn f(v: &mut Vec<K>, w: &Vec<K>) { v.sort_by(|a, b| a.k.max(w.len() as i32).cmp(&b.k.max(w.len() as i32))); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "external-ident field key must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "external-ident field key must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -681,7 +702,10 @@ mod tests {
         // — E0599, cannot compile. The bare/bare exclusion keeps us off it.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.cmp(&b)); }";
         let out = propose_fix("unnecessary_sort_by", input);
-        assert!(out.is_none(), "plain ref-arg bare form must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "plain ref-arg bare form must not fire: {out:?}"
+        );
     }
 
     #[test]

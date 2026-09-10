@@ -231,8 +231,10 @@ impl PremiseProbe {
         observed_codes.sort();
         observed_codes.dedup();
 
-        let for_code: Vec<&RustcErrorDiag> =
-            diags.iter().filter(|d| d.code == case.expect_code).collect();
+        let for_code: Vec<&RustcErrorDiag> = diags
+            .iter()
+            .filter(|d| d.code == case.expect_code)
+            .collect();
         let suggestion_spans: usize = for_code.iter().map(|d| d.suggestions.len()).sum();
         let machine_applicable: usize = for_code.iter().map(|d| d.machine_applicable().len()).sum();
         let replacements: Vec<String> = for_code

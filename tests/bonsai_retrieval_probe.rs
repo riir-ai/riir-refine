@@ -79,8 +79,7 @@ fn probe_cost() {
     let path = riir_rag::bonsai_embedder::default_gguf_path();
 
     let t0 = Instant::now();
-    let embedder =
-        BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool).expect("bonsai load");
+    let embedder = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool).expect("bonsai load");
     let load_s = t0.elapsed().as_secs_f64();
 
     let short = "fn f(x: u32) -> u32 { x * 1 }";
@@ -158,15 +157,20 @@ fn dense_rerank_precision() {
 
     let spans = riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
     println!("\n=== T3.5 option 3 — 768-D dense rerank vs the matched modelless floor ===");
-    println!("  scope: clippy only, whole-span scale on BOTH arms, {n_rules} rules, {} spans",
-             spans.len());
+    println!(
+        "  scope: clippy only, whole-span scale on BOTH arms, {n_rules} rules, {} spans",
+        spans.len()
+    );
 
     let path = riir_rag::bonsai_embedder::default_gguf_path();
     let t0 = Instant::now();
-    let embedder =
-        BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool).expect("bonsai load");
-    println!("  model loaded in {:.1} s; embedding {} patterns + {} spans (cached once)...",
-             t0.elapsed().as_secs_f64(), n_rules, spans.len());
+    let embedder = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool).expect("bonsai load");
+    println!(
+        "  model loaded in {:.1} s; embedding {} patterns + {} spans (cached once)...",
+        t0.elapsed().as_secs_f64(),
+        n_rules,
+        spans.len()
+    );
 
     // Cache every dense vector ONCE — the weight sweep then costs nothing.
     let t0 = Instant::now();
@@ -174,14 +178,22 @@ fn dense_rerank_precision() {
         .iter()
         .map(|(id, text)| (id.as_str(), embedder.embed_dense(text)))
         .collect();
-    println!("  {} pattern embeds in {:.1} min", rule_dense.len(), t0.elapsed().as_secs_f64() / 60.0);
+    println!(
+        "  {} pattern embeds in {:.1} min",
+        rule_dense.len(),
+        t0.elapsed().as_secs_f64() / 60.0
+    );
 
     let t0 = Instant::now();
     let span_dense: Vec<Vec<f32>> = spans
         .iter()
         .map(|(_, code)| embedder.embed_dense(code))
         .collect();
-    println!("  {} span embeds in {:.1} min", span_dense.len(), t0.elapsed().as_secs_f64() / 60.0);
+    println!(
+        "  {} span embeds in {:.1} min",
+        span_dense.len(),
+        t0.elapsed().as_secs_f64() / 60.0
+    );
 
     // Modelless whole-span scores for every rule, per span (top_k = all).
     let modelless: Vec<Vec<(String, f32)>> = spans
@@ -218,13 +230,20 @@ fn dense_rerank_precision() {
     };
 
     let floor = top1_at(0.0);
-    println!("\n  matched modelless floor (dense_w = 0): clippy@1 {:.1}%", floor * 100.0);
+    println!(
+        "\n  matched modelless floor (dense_w = 0): clippy@1 {:.1}%",
+        floor * 100.0
+    );
     println!("{:>10}  {:>10}  {:>10}", "dense_w", "clippy@1", "vs floor");
     let mut best = floor;
     for &w in DENSE_WEIGHTS {
         let acc = top1_at(w);
         best = best.max(acc);
-        println!("{w:>10.1}  {:>9.1}%  {:>+9.1}pp", acc * 100.0, (acc - floor) * 100.0);
+        println!(
+            "{w:>10.1}  {:>9.1}%  {:>+9.1}pp",
+            acc * 100.0,
+            (acc - floor) * 100.0
+        );
     }
     println!(
         "\n  best clippy@1 across the dense sweep: {:.1}% (floor {:.1}%, T3.5 G1 bar 80%)",

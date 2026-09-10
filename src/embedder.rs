@@ -132,7 +132,10 @@ mod tests {
         ] {
             let dir = embed(lint, code);
             for &v in &dir {
-                assert!((-1.0..=1.0).contains(&v), "component {v} out of [-1,1] for {lint}/{code}");
+                assert!(
+                    (-1.0..=1.0).contains(&v),
+                    "component {v} out of [-1,1] for {lint}/{code}"
+                );
                 assert!(!v.is_nan(), "NaN component for {lint}/{code}");
             }
         }

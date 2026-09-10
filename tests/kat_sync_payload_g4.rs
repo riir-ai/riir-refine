@@ -28,9 +28,7 @@
 use riir_clippy::kat_redact::{
     scan_secrets, BlockReason, RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION,
 };
-use riir_clippy::kat_sync_payload::{
-    parse_rows, verify_payload, RowOutcome, SyncPayloadBuilder,
-};
+use riir_clippy::kat_sync_payload::{parse_rows, verify_payload, RowOutcome, SyncPayloadBuilder};
 use riir_clippy::traj_store::TrajRowDoc;
 
 /// The shipped-policy shape (mirrors `riir-clippy/.heal-sync-policy`).
@@ -50,7 +48,10 @@ fn shipped_policy() -> SyncPolicy {
 }
 
 fn redacting_policy() -> SyncPolicy {
-    SyncPolicy { allow_redacted: true, ..shipped_policy() }
+    SyncPolicy {
+        allow_redacted: true,
+        ..shipped_policy()
+    }
 }
 
 /// The golden signing seed (`[42; 32]`) — the mirror of the lib's
@@ -101,7 +102,11 @@ fn g4_planted_aws_key_in_shape_blocks_the_row() {
         }
         RowOutcome::Included { .. } => panic!("must block"),
     }
-    assert!(!p.ndjson.contains(secret), "payload leaked the key:\n{}", p.ndjson);
+    assert!(
+        !p.ndjson.contains(secret),
+        "payload leaked the key:\n{}",
+        p.ndjson
+    );
     assert!(verify_payload(&p.ndjson).is_ok());
 }
 
@@ -117,7 +122,11 @@ fn g4_planted_github_token_in_fix_blocks_the_row() {
     let signer = golden_signer();
     let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 2);
     assert_eq!(p.rows_included, 0);
-    assert!(!p.ndjson.contains(secret), "payload leaked the token:\n{}", p.ndjson);
+    assert!(
+        !p.ndjson.contains(secret),
+        "payload leaked the token:\n{}",
+        p.ndjson
+    );
 }
 
 #[test]
@@ -136,7 +145,11 @@ fn g4_secret_in_lint_key_blocks_the_row() {
 fn g4_secret_in_last_run_id_blocks_the_row() {
     let gate = RedactionGate::from_policy(shipped_policy());
     let secret = "glpat-AbCdEf0123456789AbCdEf0123456789";
-    let mut r = row("map_unwrap_or", "let v = x.map(f).unwrap_or(0);", "let v = x.map_or(0, f);");
+    let mut r = row(
+        "map_unwrap_or",
+        "let v = x.map(f).unwrap_or(0);",
+        "let v = x.map_or(0, f);",
+    );
     r.last_run_id = format!("run-{secret}-1");
     let signer = golden_signer();
     let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&[r], 4);
@@ -152,7 +165,11 @@ fn g4_mixed_batch_clean_survive_blocked_absent() {
     // 16-char AKIA body (the rule's minimum) — format-valid fake.
     let secret = "AKIAEXAMPLEKEY012345";
     let rows = vec![
-        row("collapse_if", "if a { if b { f(); } }", "if a && b { f(); }"),
+        row(
+            "collapse_if",
+            "if a { if b { f(); } }",
+            "if a && b { f(); }",
+        ),
         row(
             "identity_op",
             &format!("let n = count * 1; // {secret}"),
@@ -169,11 +186,19 @@ fn g4_mixed_batch_clean_survive_blocked_absent() {
     // (JSON-escaped form of the shape text is what ships — the clean shapes
     // contain no escapable chars beyond the braces serde leaves alone).
     assert!(!p.ndjson.contains(secret));
-    assert!(p.ndjson.contains("if a && b { f(); }"), "clean fix must survive");
-    assert!(p.ndjson.contains("fn g() { return 1; }"), "clean shape must survive");
+    assert!(
+        p.ndjson.contains("if a && b { f(); }"),
+        "clean fix must survive"
+    );
+    assert!(
+        p.ndjson.contains("fn g() { return 1; }"),
+        "clean shape must survive"
+    );
     let parsed = parse_rows(&p.ndjson).unwrap();
     assert_eq!(parsed.len(), 2);
-    assert!(parsed.iter().any(|r| r.shape.contains("if a { if b { f(); } }") && r.fix.contains("if a && b { f(); }")));
+    assert!(parsed.iter().any(
+        |r| r.shape.contains("if a { if b { f(); } }") && r.fix.contains("if a && b { f(); }")
+    ));
     // None of the surviving rows carries the planted shape text.
     assert!(parsed.iter().all(|r| !r.shape.contains("count * 1")));
 
@@ -221,7 +246,10 @@ fn g4_allow_redacted_placeholders_and_fingerprints() {
     assert_eq!(f.fingerprint.len(), 12);
     assert!(f.fingerprint.chars().all(|c| c.is_ascii_hexdigit()));
     // The outcome flags the redaction.
-    assert!(matches!(&p.outcomes[0], RowOutcome::Included { redacted: true, .. }));
+    assert!(matches!(
+        &p.outcomes[0],
+        RowOutcome::Included { redacted: true, .. }
+    ));
     assert!(!p.ndjson.contains(secret));
     assert!(verify_payload(&p.ndjson).is_ok());
 }
@@ -230,7 +258,10 @@ fn g4_allow_redacted_placeholders_and_fingerprints() {
 
 #[test]
 fn g4_no_policy_denies_every_row() {
-    let rows = vec![row("a", "let x = 1;", "let x = 1;"), row("b", "let y = 2;", "let y = 2;")];
+    let rows = vec![
+        row("a", "let x = 1;", "let x = 1;"),
+        row("b", "let y = 2;", "let y = 2;"),
+    ];
     let signer = golden_signer();
     let p = SyncPayloadBuilder::new(&RedactionGate::deny_all(), SpanOrigin::OwnRepo, &signer)
         .build_at(&rows, 30);
@@ -314,9 +345,17 @@ fn g4_builds_are_deterministic() {
 fn g4_zero_secrets_in_row_lines_of_synced_payloads() {
     let gate = RedactionGate::from_policy(shipped_policy());
     let rows = vec![
-        row("uninlined_format_args", "fn f() { println!(\"{}\", x); }", "fn f() { println!(\"{x}\"); }"),
+        row(
+            "uninlined_format_args",
+            "fn f() { println!(\"{}\", x); }",
+            "fn f() { println!(\"{x}\"); }",
+        ),
         row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
-        row("static_str", "fn s() -> &'static str { \"ok\" }", "fn s() -> &'static str { \"ok\" }"),
+        row(
+            "static_str",
+            "fn s() -> &'static str { \"ok\" }",
+            "fn s() -> &'static str { \"ok\" }",
+        ),
     ];
     let signer = golden_signer();
     let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 60);

@@ -258,7 +258,8 @@ impl FixVerifier {
             if error_lines.is_empty() {
                 break; // clean everywhere — everything still applied survives
             }
-            let step = attribute_and_revert(&touched, &canon, &error_lines, &mut state, &mut report);
+            let step =
+                attribute_and_revert(&touched, &canon, &error_lines, &mut state, &mut report);
             match step {
                 RevertStep::Progress => {}
                 RevertStep::RestoreAll(reason) => {
@@ -432,7 +433,12 @@ fn revert_whole_file(current: &mut String, applied: &mut [bool], f: &FileEditSet
 /// Returns `false` when the span cannot be validated (the caller degrades
 /// to whole-file). Multi-line replacements are matched by their first
 /// line, then the full replacement length is validated.
-fn revert_single_edit(current: &mut String, applied: &mut [bool], f: &FileEditSet, i: usize) -> bool {
+fn revert_single_edit(
+    current: &mut String,
+    applied: &mut [bool],
+    f: &FileEditSet,
+    i: usize,
+) -> bool {
     let e = &f.edits[i];
     let Some(span_start) = find_replacement_on_line(current, e.final_line, &e.replacement) else {
         return false;
@@ -806,7 +812,8 @@ mod tests {
         let none = "[dependencies]\nserde = \"1\"\n";
         assert_eq!(manifest_nondefault_feature_count(none), 0);
         // Multi-line default list (quoted members).
-        let multiline = "[features]\ndefault = [\n    \"a\",\n    \"b\",\n]\na = []\nb = []\nc = []\n";
+        let multiline =
+            "[features]\ndefault = [\n    \"a\",\n    \"b\",\n]\na = []\nb = []\nc = []\n";
         assert_eq!(manifest_nondefault_feature_count(multiline), 1);
     }
 
@@ -1012,7 +1019,8 @@ mod tests {
             "only the good vec edit survives: {report:?}"
         );
         assert_eq!(report.kept_files, 1);
-        let reverted_rules: Vec<&str> = report.reverted.iter().map(|r| r.rule_id.as_str()).collect();
+        let reverted_rules: Vec<&str> =
+            report.reverted.iter().map(|r| r.rule_id.as_str()).collect();
         assert_eq!(reverted_rules.len(), 2, "{report:?}");
         assert!(reverted_rules.contains(&"vec-with-capacity"));
         assert!(reverted_rules.contains(&"redundant_closure"));
@@ -1046,11 +1054,7 @@ mod tests {
         // adopts the parent workspace, and refuses.
         let nested = tmp.join("cloudflare").join("tick");
         std::fs::create_dir_all(nested.join("src")).unwrap();
-        std::fs::write(
-            tmp.join("Cargo.toml"),
-            "[workspace]\nmembers = []\n",
-        )
-        .unwrap();
+        std::fs::write(tmp.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
         std::fs::write(
             nested.join("Cargo.toml"),
             "[package]\nname = \"tick\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",

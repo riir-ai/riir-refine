@@ -110,7 +110,10 @@ mod tests {
         // The iterable is the ONLY thing rewritten — the loop body's byte
         // text is untouched (whether it still compiles as `&[u8; N]` is the
         // --verify compile gate's call, not the proposer's).
-        assert!(out.contains("chunk.try_into().unwrap()"), "body must stay: {out}");
+        assert!(
+            out.contains("chunk.try_into().unwrap()"),
+            "body must stay: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -123,7 +126,8 @@ mod tests {
 
     #[test]
     fn mut_twin_fires() {
-        let input = "fn f(data: &mut [u8]) { for chunk in data.chunks_exact_mut(2) { chunk[0] = 0; } }";
+        let input =
+            "fn f(data: &mut [u8]) { for chunk in data.chunks_exact_mut(2) { chunk[0] = 0; } }";
         let out = propose_fix("chunks_exact_to_as_chunks", input).expect("matched");
         assert!(out.contains("data.as_chunks_mut::<2>().0"), "{out}");
     }

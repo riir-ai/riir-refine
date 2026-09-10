@@ -201,9 +201,9 @@ impl RustAnalyzerPruner {
             // If clippy didn't run (cargo missing, I/O error), note it.
             if !clippy_result.ran {
                 if let Some(err) = clippy_result.error {
-                    result.diagnostics.push(format!(
-                        "clippy_verify did not run: {err}"
-                    ));
+                    result
+                        .diagnostics
+                        .push(format!("clippy_verify did not run: {err}"));
                 }
             } else if !clippy_result.lint_resolved {
                 // Lint still present — add the present lints as diagnostics.

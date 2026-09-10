@@ -121,15 +121,29 @@ fn count(hay: &str, needle: &str) -> usize {
 
 /// Iterator/adapter-chain markers — the `IteratorChain` predicate's table.
 const ITER_MARKERS: [&str; 8] = [
-    ".iter()", ".into_iter()", ".iter_mut()", ".map(", ".filter(", ".collect(", ".sort_by",
+    ".iter()",
+    ".into_iter()",
+    ".iter_mut()",
+    ".map(",
+    ".filter(",
+    ".collect(",
+    ".sort_by",
     ".chars()",
 ];
 
 /// Does the text invoke one of the known macros?
 fn has_macro(code: &str) -> bool {
     const MACROS: [&str; 10] = [
-        "format!", "println!", "print!", "eprintln!", "write!", "writeln!", "vec!",
-        "assert!", "assert_eq!", "panic!",
+        "format!",
+        "println!",
+        "print!",
+        "eprintln!",
+        "write!",
+        "writeln!",
+        "vec!",
+        "assert!",
+        "assert_eq!",
+        "panic!",
     ];
     MACROS.iter().any(|m| code.contains(m))
 }
@@ -197,8 +211,8 @@ pub fn classify_shape(code: &str) -> ShapeClass {
     if (code.contains("for ") && code.contains(" in ")) || code.contains("while ") {
         return ShapeClass::Loop;
     }
-    let items = count(code, "fn ") + count(code, "struct ") + count(code, "enum ")
-        + count(code, "const ");
+    let items =
+        count(code, "fn ") + count(code, "struct ") + count(code, "enum ") + count(code, "const ");
     if items >= 2 {
         return ShapeClass::MultiItem;
     }
@@ -281,11 +295,11 @@ pub fn classify_rustc_shape(code: &str) -> &'static str {
     }
     // An index expression `[<ident-or-int>]` — distinguished from the slice
     // form above, which already returned.
-    if code
-        .split('[')
-        .skip(1)
-        .any(|s| s.split(']').next().is_some_and(|i| !i.is_empty() && i.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')))
-    {
+    if code.split('[').skip(1).any(|s| {
+        s.split(']').next().is_some_and(|i| {
+            !i.is_empty() && i.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+    }) {
         return "index-expr";
     }
     if code.contains("&mut ") {
@@ -486,7 +500,12 @@ impl Binding {
     pub fn clippy(rule: impl Into<String>, text: impl Into<String>, source: &'static str) -> Self {
         let text = text.into();
         let shape = classify_shape(&text).label();
-        Self { rule: rule.into(), shape, text, source }
+        Self {
+            rule: rule.into(),
+            shape,
+            text,
+            source,
+        }
     }
 
     /// Classify `text` with the borrowck [`classify_rustc_shape`].
@@ -494,7 +513,12 @@ impl Binding {
     pub fn rustc(rule: impl Into<String>, text: impl Into<String>, source: &'static str) -> Self {
         let text = text.into();
         let shape = classify_rustc_shape(&text);
-        Self { rule: rule.into(), shape, text, source }
+        Self {
+            rule: rule.into(),
+            shape,
+            text,
+            source,
+        }
     }
 }
 
@@ -861,9 +885,7 @@ pub fn run_withheld_pair(
             .filter(|b| !(b.rule == rule && b.shape == shape))
             .collect();
         assert!(
-            !ood_items
-                .iter()
-                .any(|b| b.rule == rule && b.shape == shape),
+            !ood_items.iter().any(|b| b.rule == rule && b.shape == shape),
             "withholding leak: ({rule}, {shape}) still in the OOD index"
         );
         assert!(
@@ -925,13 +947,22 @@ pub fn run_withheld_pair(
 
 /// The `--nocapture` table.
 pub fn print_report(r: &WithheldReport) {
-    println!("\n== Issue 062 withheld-(role, filler) OOD — arm: {} ==", r.mode_label);
+    println!(
+        "\n== Issue 062 withheld-(role, filler) OOD — arm: {} ==",
+        r.mode_label
+    );
     println!(
         "  population {} bindings | {} roles | {} fillers | {} cells | {} ELIGIBLE cells | n={} queries",
         r.population, r.n_rules, r.n_shapes, r.n_cells, r.eligible_cells, r.n()
     );
-    println!("  role/filler-collinear roles (1 shape only): {}", r.collinear_rules.len());
-    println!("\n  {:<34} {:>8} {:>8} {:>8}", "arm", "top-1", "top-3", "top-5");
+    println!(
+        "  role/filler-collinear roles (1 shape only): {}",
+        r.collinear_rules.len()
+    );
+    println!(
+        "\n  {:<34} {:>8} {:>8} {:>8}",
+        "arm", "top-1", "top-3", "top-5"
+    );
     for (name, f) in [
         ("ID  (pair present)", 0usize),
         ("OOD (pair withheld)", 1),
@@ -942,7 +973,13 @@ pub fn print_report(r: &WithheldReport) {
             1 => r.ood_topk(k),
             _ => r.norole_topk(k),
         };
-        println!("  {:<34} {:>7.1}% {:>7.1}% {:>7.1}%", name, g(1), g(3), g(5));
+        println!(
+            "  {:<34} {:>7.1}% {:>7.1}% {:>7.1}%",
+            name,
+            g(1),
+            g(3),
+            g(5)
+        );
     }
     println!(
         "  {:<34} {:>7.1}% {:>7.1}% {:>7.1}%",
@@ -955,9 +992,7 @@ pub fn print_report(r: &WithheldReport) {
     let (os, ob) = r.null_ood();
     println!("\n  atomic null (sig / bag)  ID: {ns:.1}% / {nb:.1}%   OOD: {os:.1}% / {ob:.1}%");
     let (better, same, worse) = r.paired_moves();
-    println!(
-        "  paired rank moves ID->OOD: better {better} | same {same} | worse {worse}"
-    );
+    println!("  paired rank moves ID->OOD: better {better} | same {same} | worse {worse}");
     println!(
         "  PAIRED DROP top-1 {:+.1}pp | top-3 {:+.1}pp | top-5 {:+.1}pp",
         r.drop_pp(1),
@@ -965,14 +1000,20 @@ pub fn print_report(r: &WithheldReport) {
         r.drop_pp(5)
     );
     println!("\n  -- OOD top-1 by role's distinct-filler count --");
-    println!("  {:<16} {:>5} {:>8} {:>8}", "role fillers", "n", "ID", "OOD");
+    println!(
+        "  {:<16} {:>5} {:>8} {:>8}",
+        "role fillers", "n", "ID", "OOD"
+    );
     for (k, n, id1, ood1) in r.by_role_fillers() {
         println!("  {k:<16} {n:>5} {id1:>7.1}% {ood1:>7.1}%");
     }
     println!("\n  -- per-(role, filler) cells --");
     let mut by_cell: BTreeMap<(String, &'static str), Vec<&ArmRow>> = BTreeMap::new();
     for row in &r.rows {
-        by_cell.entry((row.rule.clone(), row.shape)).or_default().push(row);
+        by_cell
+            .entry((row.rule.clone(), row.shape))
+            .or_default()
+            .push(row);
     }
     for ((rule, shape), rws) in &by_cell {
         let n = rws.len();
@@ -980,7 +1021,12 @@ pub fn print_report(r: &WithheldReport) {
         let ood1 = recall(rws.iter().map(|r| r.ood_rank), 1, n);
         println!(
             "  {:<34} {:<12} n={:<3} ID {:>5.1}%  OOD {:>5.1}%  Δ {:+.1}pp",
-            rule, shape, n, id1, ood1, id1 - ood1
+            rule,
+            shape,
+            n,
+            id1,
+            ood1,
+            id1 - ood1
         );
     }
 }
@@ -988,7 +1034,10 @@ pub fn print_report(r: &WithheldReport) {
 /// Per-row rank dump — the paired raw data behind every aggregate, and the
 /// only way to localize a run-to-run flip to a specific query.
 pub fn print_rows(r: &WithheldReport) {
-    println!("\n  -- per-row ranks ({}): rank None = not in the pool --", r.mode_label);
+    println!(
+        "\n  -- per-row ranks ({}): rank None = not in the pool --",
+        r.mode_label
+    );
     println!(
         "  {:<30} {:<12} {:<10} {:>6} {:>6} {:>10}",
         "role", "filler", "source", "ID", "OOD", "id_score"
@@ -1025,12 +1074,24 @@ mod tests {
         // Fixed inputs → fixed classes. This is the classifier's spec.
         let cases: [(&str, ShapeClass); 8] = [
             ("fn f() -> String { format!(\"x\") }", ShapeClass::Macro),
-            ("fn f(v: &[u8]) -> usize { v.iter().count() }", ShapeClass::IteratorChain),
+            (
+                "fn f(v: &[u8]) -> usize { v.iter().count() }",
+                ShapeClass::IteratorChain,
+            ),
             ("fn f() -> u8 { run(|x| x + 1) }", ShapeClass::Closure),
-            ("fn head<'a>(t: &'a String) -> &'a str { t.as_str() }", ShapeClass::Generic),
+            (
+                "fn head<'a>(t: &'a String) -> &'a str { t.as_str() }",
+                ShapeClass::Generic,
+            ),
             ("impl A { fn f(&self) -> u8 { 1 } }", ShapeClass::ImplBlock),
-            ("fn f(v: &[u8]) { for i in 0..v.len() { let _ = i; } }", ShapeClass::Loop),
-            ("struct A { x: u8 }\nfn f(a: A) -> u8 { a.x }", ShapeClass::MultiItem),
+            (
+                "fn f(v: &[u8]) { for i in 0..v.len() { let _ = i; } }",
+                ShapeClass::Loop,
+            ),
+            (
+                "struct A { x: u8 }\nfn f(a: A) -> u8 { a.x }",
+                ShapeClass::MultiItem,
+            ),
             ("fn f() -> u8 { return 1; }", ShapeClass::PlainFn),
         ];
         for (code, want) in cases {
@@ -1050,7 +1111,11 @@ mod tests {
             ("let r = &mut v;", "mut-borrow"),
         ];
         for (code, want) in cases {
-            assert_eq!(classify_rustc_shape(code), want, "classify_rustc_shape({code:?})");
+            assert_eq!(
+                classify_rustc_shape(code),
+                want,
+                "classify_rustc_shape({code:?})"
+            );
         }
     }
 

@@ -43,7 +43,7 @@
 //! refused.
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprMacro, File, Local, Pat, Stmt};
 
@@ -263,8 +263,8 @@ fn pattern_bindings(pat: &Pat) -> Vec<String> {
                 // (the visitor descends into P separately). `_` parses as
                 // Pat::Wild and never reaches here; `_x` binds and starts
                 // with `_`.
-                let binds = name.starts_with('_')
-                    || name.chars().next().is_some_and(char::is_lowercase);
+                let binds =
+                    name.starts_with('_') || name.chars().next().is_some_and(char::is_lowercase);
                 if binds {
                     self.out.push(name);
                 }
@@ -284,15 +284,15 @@ fn diverging_body_text(source: &str, body: &Expr) -> Option<String> {
         Expr::Return(_) | Expr::Break(_) | Expr::Continue(_) => true,
         Expr::Macro(ExprMacro { mac, .. }) => {
             matches!(
-                mac.path.segments.last().map(|s| s.ident.to_string()).as_deref(),
+                mac.path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .as_deref(),
                 Some("panic" | "unreachable" | "todo" | "unimplemented")
             )
         }
-        Expr::Block(b) => b
-            .block
-            .stmts
-            .last()
-            .is_some_and(visibly_diverges_stmt),
+        Expr::Block(b) => b.block.stmts.last().is_some_and(visibly_diverges_stmt),
         _ => false,
     };
     if !diverges {
@@ -310,13 +310,13 @@ fn diverging_body_text(source: &str, body: &Expr) -> Option<String> {
 
 fn visibly_diverges_stmt(stmt: &Stmt) -> bool {
     match stmt {
-        Stmt::Expr(e, _) => matches!(
-            e,
-            Expr::Return(_) | Expr::Break(_) | Expr::Continue(_)
-        ) || matches!(e, Expr::Macro(ExprMacro { mac, .. }) if matches!(
-            mac.path.segments.last().map(|s| s.ident.to_string()).as_deref(),
-            Some("panic" | "unreachable" | "todo" | "unimplemented")
-        )),
+        Stmt::Expr(e, _) => {
+            matches!(e, Expr::Return(_) | Expr::Break(_) | Expr::Continue(_))
+                || matches!(e, Expr::Macro(ExprMacro { mac, .. }) if matches!(
+                    mac.path.segments.last().map(|s| s.ident.to_string()).as_deref(),
+                    Some("panic" | "unreachable" | "todo" | "unimplemented")
+                ))
+        }
         _ => false,
     }
 }
@@ -332,10 +332,7 @@ mod tests {
             "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, None => return 0 }; v + 1 }",
         )
         .expect("pattern matched");
-        assert!(
-            out.contains("let Some(v) = x else { return 0 };"),
-            "{out}"
-        );
+        assert!(out.contains("let Some(v) = x else { return 0 };"), "{out}");
         assert!(!out.contains("match"), "{out}");
         assert!(out.contains("v + 1 }"), "{out}");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
@@ -521,7 +518,10 @@ mod tests {
             "manual_let_else",
             "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, // absent\n None => return 0 }; v }",
         );
-        assert!(out.is_none(), "comment-displacing rewrite must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment-displacing rewrite must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -530,6 +530,9 @@ mod tests {
             "manual_let_else",
             "fn f(x: Option<u32>) -> u32 { let mut v = match x { Some(v) => v, None => return 0 }; v += 1; v }",
         );
-        assert!(out.is_none(), "mut target must not fire (mut would be lost): {out:?}");
+        assert!(
+            out.is_none(),
+            "mut target must not fire (mut would be lost): {out:?}"
+        );
     }
 }

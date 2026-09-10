@@ -203,8 +203,7 @@ pub fn bradley_terry_elo(
     }
     let base: f64 = katgpt_core::rating::STANDARD_BASE;
     let scale: f64 = katgpt_core::rating::STANDARD_SCALE;
-    let mut strength: BTreeMap<String, f64> =
-        players.iter().map(|p| (p.clone(), 1.0)).collect();
+    let mut strength: BTreeMap<String, f64> = players.iter().map(|p| (p.clone(), 1.0)).collect();
     // Fixed-point iteration (the multiplicative form is the stable one).
     for _ in 0..iters {
         let mut next = strength.clone();
@@ -243,7 +242,10 @@ mod tests {
         use crate::elo::PairObservation;
 
         fn obs(w: &str, l: &str) -> PairObservation {
-            PairObservation { winner: w.into(), loser: l.into() }
+            PairObservation {
+                winner: w.into(),
+                loser: l.into(),
+            }
         }
 
         #[test]
@@ -475,8 +477,16 @@ mod tests {
             let (na, nb) = arena_reference::update(ra, rb, won);
             ra = na;
             rb = nb;
-            assert!((f64::from(t.rating("a")) - ra).abs() < 0.01, "a: {} vs {ra}", t.rating("a"));
-            assert!((f64::from(t.rating("b")) - rb).abs() < 0.01, "b: {} vs {rb}", t.rating("b"));
+            assert!(
+                (f64::from(t.rating("a")) - ra).abs() < 0.01,
+                "a: {} vs {ra}",
+                t.rating("a")
+            );
+            assert!(
+                (f64::from(t.rating("b")) - rb).abs() < 0.01,
+                "b: {} vs {rb}",
+                t.rating("b")
+            );
         }
     }
 

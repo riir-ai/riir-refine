@@ -19,7 +19,7 @@
 //! at entry time; every quote below is verified at the `ffd85d42` pin.
 //! Batch 125 / Plan 106 / Research 148.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

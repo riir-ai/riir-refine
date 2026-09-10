@@ -59,20 +59,20 @@
 use std::collections::HashSet;
 
 use riir_clippy::domain::{HealDomain, HealEntry};
-#[cfg(feature = "kernel_heal")]
-use riir_clippy::domains::kernel_opt::KernelOptDomain;
+use riir_clippy::domains::clippy_lints::ClippyLintDomain;
 #[cfg(feature = "kernel_heal")]
 use riir_clippy::domains::kernel_opt::corpus::build_kernel_seed_corpus;
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
+#[cfg(feature = "kernel_heal")]
+use riir_clippy::domains::kernel_opt::KernelOptDomain;
 use riir_clippy::domains::rust_perf::RustPerfDomain;
 use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
 use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
-use riir_clippy::draft::retrieval_eval::{canonical_rank, run_eval_with};
 #[cfg(feature = "kernel_heal")]
 use riir_clippy::draft::retrieval_eval::mutate_shape;
+use riir_clippy::draft::retrieval_eval::{canonical_rank, run_eval_with};
 use riir_clippy::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
 use riir_clippy::modelability::{
-    ModelabilityConfig, ModelabilityReport, rank_correlation, scaffold_value,
+    rank_correlation, scaffold_value, ModelabilityConfig, ModelabilityReport,
 };
 use riir_rag::{Embedder, ModellessEmbedder};
 
@@ -434,11 +434,17 @@ fn tokenizer_axis_cannot_move_the_population() {
         for (i, d) in domains.iter().enumerate() {
             let m = &report.per_domain[eval_domain_index(d.domain)];
             let top1 = f64::from(m.recall(1).unwrap_or_else(|| {
-                panic!("{} domain produced no eval metrics — feature set wrong", d.name)
+                panic!(
+                    "{} domain produced no eval metrics — feature set wrong",
+                    d.name
+                )
             }));
             println!(
                 "{:<12} {:<12} {:>9.3} {:>8.1}%",
-                d.name, tname, oracle[i].1, top1 * 100.0
+                d.name,
+                tname,
+                oracle[i].1,
+                top1 * 100.0
             );
             pts.push((oracle[i].1, top1));
         }

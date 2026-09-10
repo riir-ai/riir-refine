@@ -111,16 +111,15 @@ fn ident_segments(ident: &syn::Ident) -> Vec<String> {
 }
 
 fn is_secret_named(ident: &syn::Ident) -> bool {
-    ident_segments(ident).iter().any(|s| SECRET_WORDS.contains(&s.as_str()))
+    ident_segments(ident)
+        .iter()
+        .any(|s| SECRET_WORDS.contains(&s.as_str()))
 }
 
 /// Both operands must be plain path idents (no fields/methods/index).
 fn plain_ident(e: &Expr) -> Option<&syn::Ident> {
     if let Expr::Path(p) = e {
-        if p.qself.is_none()
-            && p.path.segments.len() == 1
-            && p.path.get_ident().is_some()
-        {
+        if p.qself.is_none() && p.path.segments.len() == 1 && p.path.get_ident().is_some() {
             return p.path.get_ident();
         }
     }
@@ -166,11 +165,10 @@ impl Walker<'_> {
             fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
                 // #[cfg(test)] mod tests { ... } — assert-heavy, skip.
                 let is_test = m.attrs.iter().any(|a| {
-                    a.path().is_ident("cfg")
-                        && {
-                            let ts: TokenStream = a.meta.to_token_stream();
-                            ts.to_string().contains("test")
-                        }
+                    a.path().is_ident("cfg") && {
+                        let ts: TokenStream = a.meta.to_token_stream();
+                        ts.to_string().contains("test")
+                    }
                 });
                 if is_test {
                     return;
@@ -209,7 +207,6 @@ mod tests {
 
     const IMPORT: &str = "use subtle::ConstantTimeEq;\n";
 
-
     fn edits(src: &str) -> Vec<super::SourceEdit> {
         let file = syn::parse_file(src).expect("fixture parses");
         collect_edits(src, &file)
@@ -227,7 +224,10 @@ mod tests {
         );
         let edits = edits(&src);
         assert_eq!(edits.len(), 1, "one rewrite expected");
-        assert_eq!(squash(&edits[0].replacement), "provided.ct_eq(expected).into()");
+        assert_eq!(
+            squash(&edits[0].replacement),
+            "provided.ct_eq(expected).into()"
+        );
         // The fixed form parses.
         let spliced = format!(
             "{}\npub fn check_token(provided: &[u8], expected: &[u8]) -> bool {{\n    \
@@ -250,9 +250,7 @@ mod tests {
     fn non_secret_names_are_silent() {
         // The vocabulary gate: a generic a == b (or a lookup-key pair with
         // no secret segment) never fires.
-        let src = format!(
-            "{IMPORT}\npub fn same(a: &[u8], b: &[u8]) -> bool {{\n    a == b\n}}\n"
-        );
+        let src = format!("{IMPORT}\npub fn same(a: &[u8], b: &[u8]) -> bool {{\n    a == b\n}}\n");
         assert!(edits(&src).is_empty());
     }
 

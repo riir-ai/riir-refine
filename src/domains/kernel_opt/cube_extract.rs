@@ -193,9 +193,10 @@ fn try_match_cube_item(
     }
     // Launch-family variant: any paren argument group after `cube`
     // (`launch_unchecked` in the real tree; `launch` is the same shape).
-    let launch = attr_tokens.iter().skip(1).any(|t| {
-        matches!(t, TokenTree::Group(g) if g.delimiter() == Delimiter::Parenthesis)
-    });
+    let launch = attr_tokens
+        .iter()
+        .skip(1)
+        .any(|t| matches!(t, TokenTree::Group(g) if g.delimiter() == Delimiter::Parenthesis));
 
     // Skip further outer attrs between the cube attr and the fn
     // (real shape: `#[cube(launch_unchecked)] #[cfg(test)] fn …`).
@@ -239,7 +240,10 @@ fn try_match_cube_item(
     let end = max_end(&tokens[i..=body_idx]);
     let start_byte = line_col_to_byte(source, line_starts, start.line, start.column);
     let end_byte = line_col_to_byte_exclusive(source, line_starts, end.line, end.column);
-    let text = source.get(start_byte..end_byte).unwrap_or_default().to_string();
+    let text = source
+        .get(start_byte..end_byte)
+        .unwrap_or_default()
+        .to_string();
 
     Some((
         CubeItem {
@@ -316,7 +320,9 @@ mod tests {
         assert_eq!(names(&items), ["gelu"]);
         assert!(items[0].launch);
         assert!(items[0].text.starts_with("#[cube(launch_unchecked)]"));
-        assert!(items[0].text.contains("#[cfg(all(feature = \"cubecl_runtime\", test))]"));
+        assert!(items[0]
+            .text
+            .contains("#[cfg(all(feature = \"cubecl_runtime\", test))]"));
         assert!(items[0].text.ends_with('}'));
     }
 
@@ -324,7 +330,8 @@ mod tests {
     /// the item starts at the cube attr, not at the cfg.
     #[test]
     fn preceding_attrs_are_not_part_of_the_item() {
-        let src = "#[cfg(feature = \"cubecl_runtime\")]\n#[allow(clippy::x)]\n#[cube]\nfn k() {\n}\n";
+        let src =
+            "#[cfg(feature = \"cubecl_runtime\")]\n#[allow(clippy::x)]\n#[cube]\nfn k() {\n}\n";
         let items = extract_cube_items(src);
         assert_eq!(names(&items), ["k"]);
         assert_eq!(items[0].start_line, 3);
@@ -352,7 +359,8 @@ fn good(x: f32) -> f32 {
     /// Comment mentions (35 in the real tree) are dropped by the lexer.
     #[test]
     fn comment_mentions_are_ignored() {
-        let src = "//! docs mention `#[cube]` here\n// #[cube] fn fake() {}\n#[cube]\nfn real() {\n}\n";
+        let src =
+            "//! docs mention `#[cube]` here\n// #[cube] fn fake() {}\n#[cube]\nfn real() {\n}\n";
         let items = extract_cube_items(src);
         assert_eq!(names(&items), ["real"]);
     }
@@ -398,13 +406,11 @@ fn good(x: f32) -> f32 {
     /// skew the byte slicing — columns are chars, offsets are bytes.
     #[test]
     fn multi_byte_chars_do_not_skew_offsets() {
-        let src = "const NOTE: &str = \"日本語テキスト\";\n#[cube]\nfn k(x: f32) -> f32 {\n    x\n}\n";
+        let src =
+            "const NOTE: &str = \"日本語テキスト\";\n#[cube]\nfn k(x: f32) -> f32 {\n    x\n}\n";
         let items = extract_cube_items(src);
         assert_eq!(names(&items), ["k"]);
         assert_eq!(items[0].start_line, 2);
-        assert_eq!(
-            items[0].text,
-            "#[cube]\nfn k(x: f32) -> f32 {\n    x\n}"
-        );
+        assert_eq!(items[0].text, "#[cube]\nfn k(x: f32) -> f32 {\n    x\n}");
     }
 }

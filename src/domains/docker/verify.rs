@@ -105,7 +105,11 @@ fn parse_json(stdout: &str) -> Vec<HadolintFinding> {
 
 fn field<'a>(chunk: &'a str, key: &str) -> Option<&'a str> {
     let rest = &chunk[chunk.find(key)? + key.len()..];
-    if key.ends_with('"') { rest.split('"').next() } else { Some(rest) }
+    if key.ends_with('"') {
+        rest.split('"').next()
+    } else {
+        Some(rest)
+    }
 }
 
 /// The verdict of one Class-A agreement check.
@@ -219,7 +223,13 @@ mod tests {
         let json = r#"[{"code":"DL3006","column":1,"file":"-","level":"warning","line":1,"message":"x"},{"code":"DL3019","column":1,"file":"-","level":"info","line":2,"message":"y"}]"#;
         let got = parse_json(json);
         assert_eq!(got.len(), 2);
-        assert_eq!(got[0], HadolintFinding { code: "DL3006".into(), line: 1 });
+        assert_eq!(
+            got[0],
+            HadolintFinding {
+                code: "DL3006".into(),
+                line: 1
+            }
+        );
         assert_eq!(got[1].code, "DL3019");
         assert_eq!(got[1].line, 2);
     }

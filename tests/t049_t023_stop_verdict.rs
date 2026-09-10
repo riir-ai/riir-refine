@@ -19,7 +19,9 @@
 //!
 //! The T0.3 stop rule fires on layer 1 regardless of layer 2's outcome.
 
-use riir_clippy::draft::{decompose_headroom_with_spans, print_headroom_decomposition, OwnedEvalSpan, DomainId};
+use riir_clippy::draft::{
+    decompose_headroom_with_spans, print_headroom_decomposition, DomainId, OwnedEvalSpan,
+};
 
 const DATASET: &str = ".benchmarks/data/049_t01/spans.jsonl";
 /// The plan's T0.3 bar, in percentage points of the real finding-bearing
@@ -47,9 +49,11 @@ fn t023_stop_verdict_over_the_real_repo_dataset() {
     let labeled: Vec<OwnedEvalSpan> = rows
         .iter()
         .filter_map(|r| {
-            r.label
-                .as_ref()
-                .map(|l| OwnedEvalSpan { label: l.clone(), domain: DomainId::Clippy, code: r.code.clone() })
+            r.label.as_ref().map(|l| OwnedEvalSpan {
+                label: l.clone(),
+                domain: DomainId::Clippy,
+                code: r.code.clone(),
+            })
         })
         .collect();
 

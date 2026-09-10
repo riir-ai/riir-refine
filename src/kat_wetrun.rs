@@ -295,9 +295,7 @@ pub fn parse_supply(asked_epoch: u64, body: &[u8]) -> Result<SupplyCounters, Str
         v.get(new)
             .or_else(|| v.get(legacy))
             .and_then(serde_json::Value::as_i64)
-            .ok_or_else(|| {
-                format!("the telemetry row carried no `{new}` (nor legacy `{legacy}`)")
-            })
+            .ok_or_else(|| format!("the telemetry row carried no `{new}` (nor legacy `{legacy}`)"))
     };
     Ok(SupplyCounters {
         epoch,
@@ -336,7 +334,11 @@ pub fn assert_supply_unchanged(
     );
     note("mint_micro", before.mint_micro, after.mint_micro);
     note("burn_micro", before.burn_micro, after.burn_micro);
-    note("pool_paid_micro", before.pool_paid_micro, after.pool_paid_micro);
+    note(
+        "pool_paid_micro",
+        before.pool_paid_micro,
+        after.pool_paid_micro,
+    );
     note(
         "pool_available_micro",
         before.pool_available_micro,
@@ -1449,16 +1451,14 @@ mod tests {
         assert_eq!(absent.mint_micro, 0);
         assert_eq!(absent.epoch, 9);
         assert!(assert_supply_unchanged(absent, SupplyCounters::absent(9)).is_ok());
-        assert!(
-            assert_supply_unchanged(
-                absent,
-                SupplyCounters {
-                    mint_micro: 1,
-                    ..absent
-                }
-            )
-            .is_err()
-        );
+        assert!(assert_supply_unchanged(
+            absent,
+            SupplyCounters {
+                mint_micro: 1,
+                ..absent
+            }
+        )
+        .is_err());
         // And a snapshot from a DIFFERENT epoch cannot masquerade as
         // unchanged — the epoch rides in the bytes.
         assert!(assert_supply_unchanged(absent, SupplyCounters::absent(10)).is_err());
@@ -1543,10 +1543,15 @@ mod tests {
         // service is on.
         let err = parse_supply(
             4,
-            serde_json::json!({"epoch": 4, "burn_micro": 0}).to_string().as_bytes(),
+            serde_json::json!({"epoch": 4, "burn_micro": 0})
+                .to_string()
+                .as_bytes(),
         )
         .expect_err("partial row");
-        assert!(err.contains("mint_micro") && err.contains("mint_kat"), "{err}");
+        assert!(
+            err.contains("mint_micro") && err.contains("mint_kat"),
+            "{err}"
+        );
     }
 
     // ── the riir-dapps Issue 010 path ────────────────────────────────

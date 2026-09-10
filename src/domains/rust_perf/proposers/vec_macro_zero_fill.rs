@@ -34,7 +34,10 @@ use syn::{Block, Expr, ExprLit, File, Lit, Local, Pat, Stmt};
 use super::{delete_stmt_edit, edit, span_range, src, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut scan = BlockScan { source, edits: Vec::new() };
+    let mut scan = BlockScan {
+        source,
+        edits: Vec::new(),
+    };
     scan.visit_file(file);
     scan.edits
 }
@@ -56,7 +59,9 @@ impl BlockScan<'_> {
         let stmts = &block.stmts;
         for (i, stmt) in stmts.iter().enumerate() {
             let Stmt::Local(local) = stmt else { continue };
-            let Some(var) = fresh_vec_binding(local) else { continue };
+            let Some(var) = fresh_vec_binding(local) else {
+                continue;
+            };
 
             for later in stmts.iter().skip(i + 1) {
                 if stmt_binds_ident(later, &var) {
@@ -65,7 +70,9 @@ impl BlockScan<'_> {
                 if !self.stmt_mentions(later, &var) {
                     continue;
                 }
-                let Stmt::Expr(Expr::MethodCall(rz), _) = later else { break };
+                let Stmt::Expr(Expr::MethodCall(rz), _) = later else {
+                    break;
+                };
                 if rz.method != "resize" || rz.args.len() != 2 {
                     break;
                 }
@@ -73,9 +80,15 @@ impl BlockScan<'_> {
                 if !p.path.is_ident(&var) {
                     break;
                 }
-                let (Some(len), Some(fill)) = (rz.args.first(), rz.args.last()) else { break };
-                let Some(fill_txt) = zero_literal_text(self.source, fill) else { break };
-                let Some(len_txt) = src(self.source, len) else { break };
+                let (Some(len), Some(fill)) = (rz.args.first(), rz.args.last()) else {
+                    break;
+                };
+                let Some(fill_txt) = zero_literal_text(self.source, fill) else {
+                    break;
+                };
+                let Some(len_txt) = src(self.source, len) else {
+                    break;
+                };
 
                 let replacement = format!("vec![{fill_txt}; {len_txt}]");
                 let Some(init) = &local.init else { break };
@@ -116,8 +129,15 @@ fn fresh_vec_binding(local: &Local) -> Option<String> {
     }
     match &*init.expr {
         Expr::Call(call) => {
-            let Expr::Path(p) = &*call.func else { return None };
-            let segs: Vec<String> = p.path.segments.iter().map(|s| s.ident.to_string()).collect();
+            let Expr::Path(p) = &*call.func else {
+                return None;
+            };
+            let segs: Vec<String> = p
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect();
             if segs == ["Vec", "new"] && call.args.is_empty() {
                 Some(pi.ident.to_string())
             } else {
@@ -134,7 +154,9 @@ fn fresh_vec_binding(local: &Local) -> Option<String> {
 /// The original text of a zero int/float literal (suffix preserved —
 /// `0u8` → `vec![0u8; n]`), or `None` for any other expression.
 fn zero_literal_text(source: &str, expr: &Expr) -> Option<String> {
-    let Expr::Lit(ExprLit { lit, .. }) = expr else { return None };
+    let Expr::Lit(ExprLit { lit, .. }) = expr else {
+        return None;
+    };
     match lit {
         Lit::Int(li) if digits_all_zero(li.base10_digits()) => src(source, expr),
         Lit::Float(lf) if float_digits_all_zero(lf.base10_digits()) => src(source, expr),

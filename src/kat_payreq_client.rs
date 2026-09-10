@@ -162,8 +162,8 @@ pub struct ClaimResponse {
 /// A human-readable string when the body is not JSON, carries the
 /// service's `error`, or is missing a field.
 pub fn parse_claim_response(body: &[u8]) -> Result<ClaimResponse, String> {
-    let v: serde_json::Value = serde_json::from_slice(body)
-        .map_err(|_| "the claim response was not JSON".to_string())?;
+    let v: serde_json::Value =
+        serde_json::from_slice(body).map_err(|_| "the claim response was not JSON".to_string())?;
     if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
         return Err(format!("the service refused the claim — {err}"));
     }
@@ -280,8 +280,8 @@ pub struct FaucetRequest {
 /// account, daily cap used, an open request already exists) are the
 /// operator's actual answer and must not be reworded into a timeout.
 pub fn parse_faucet_request(body: &[u8]) -> Result<FaucetRequest, String> {
-    let v: serde_json::Value = serde_json::from_slice(body)
-        .map_err(|_| "the faucet response was not JSON".to_string())?;
+    let v: serde_json::Value =
+        serde_json::from_slice(body).map_err(|_| "the faucet response was not JSON".to_string())?;
     if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
         return Err(format!("the service refused the faucet request — {err}"));
     }
@@ -340,7 +340,11 @@ pub fn parse_kat_amount(s: &str) -> Option<i64> {
     if frac.len() > 6 {
         return None;
     }
-    let whole: i64 = if whole.is_empty() { 0 } else { whole.parse().ok()? };
+    let whole: i64 = if whole.is_empty() {
+        0
+    } else {
+        whole.parse().ok()?
+    };
     let mut micro = whole.checked_mul(1_000_000)?;
     let mut scale = 100_000_i64;
     for c in frac.bytes() {
@@ -410,8 +414,11 @@ pub struct HttpPayreqTransport {
 fn refusal_body_or_status(status: u16, body: Vec<u8>) -> HttpResponse {
     match serde_json::from_slice::<serde_json::Value>(&body)
         .ok()
-        .and_then(|v| v.get("error").and_then(serde_json::Value::as_str).map(str::to_string))
-    {
+        .and_then(|v| {
+            v.get("error")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        }) {
         Some(_) => HttpResponse::Ok(body),
         None => HttpResponse::Status(status),
     }
@@ -584,8 +591,7 @@ impl InvoiceView {
     /// dapps row's `[0u8; 32]` initial state).
     #[must_use]
     pub fn qr_commitment_is_unset(&self) -> bool {
-        self.qr_commitment_hex.is_empty()
-            || self.qr_commitment_hex.bytes().all(|b| b == b'0')
+        self.qr_commitment_hex.is_empty() || self.qr_commitment_hex.bytes().all(|b| b == b'0')
     }
 }
 
@@ -597,8 +603,8 @@ impl InvoiceView {
 /// or is missing a field the display needs (a partially-read invoice is
 /// never rendered as a whole one).
 pub fn parse_invoice(body: &[u8]) -> Result<InvoiceView, String> {
-    let v: serde_json::Value =
-        serde_json::from_slice(body).map_err(|_| "the invoice response was not JSON".to_string())?;
+    let v: serde_json::Value = serde_json::from_slice(body)
+        .map_err(|_| "the invoice response was not JSON".to_string())?;
     if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
         return Err(format!("the service refused the invoice read — {err}"));
     }
@@ -690,12 +696,16 @@ pub fn recheck_invoice_qr(inv: &InvoiceView, request_url: &str) -> QrRecheck {
         },
         (false, Some(d)) => {
             let recomputed_hex = hex_encode(&d);
-            if recomputed_hex == inv.qr_commitment_hex { QrRecheck::Match {
+            if recomputed_hex == inv.qr_commitment_hex {
+                QrRecheck::Match {
                     digest_hex: recomputed_hex,
-                } } else { QrRecheck::Mismatch {
+                }
+            } else {
+                QrRecheck::Mismatch {
                     stored_hex: inv.qr_commitment_hex.clone(),
                     recomputed_hex,
-                } }
+                }
+            }
         }
     }
 }
@@ -736,8 +746,7 @@ pub fn invoice_display_lines(inv: &InvoiceView, recheck: &QrRecheck) -> Vec<Stri
                 .to_string(),
             format!("  stored:     {stored_hex}"),
             format!("  re-encoded: {recomputed_hex}"),
-            "  nothing from this invoice is displayed — report it before acting on it"
-                .to_string(),
+            "  nothing from this invoice is displayed — report it before acting on it".to_string(),
         ],
         QrRecheck::Match { digest_hex } => {
             let mut lines = invoice_body_lines(inv);
@@ -847,12 +856,17 @@ pub fn pay_request_flow(
     });
     let body = match transport.post_create(&req.to_string()) {
         HttpResponse::Ok(b) => b,
-        HttpResponse::Status(c) => return Err(format!("pay: service refused the create (HTTP {c})")),
+        HttpResponse::Status(c) => {
+            return Err(format!("pay: service refused the create (HTTP {c})"))
+        }
         HttpResponse::Error(e) => return Err(format!("pay: service unreachable: {e}")),
-        HttpResponse::NotModified => return Err("pay: service answered 304 for a create".to_string()),
+        HttpResponse::NotModified => {
+            return Err("pay: service answered 304 for a create".to_string())
+        }
     };
-    let parsed: serde_json::Value = serde_json::from_slice(&body)
-        .map_err(|_| "pay: service answered, but the create response was not understood".to_string())?;
+    let parsed: serde_json::Value = serde_json::from_slice(&body).map_err(|_| {
+        "pay: service answered, but the create response was not understood".to_string()
+    })?;
     if let Some(err) = parsed.get("error").and_then(serde_json::Value::as_str) {
         return Err(format!("pay: refused — {err}"));
     }
@@ -971,7 +985,9 @@ pub fn faucet_request_flow(
         // used / one already open) — reading only the status code would
         // turn every one of those into an opaque "HTTP 400".
         HttpResponse::Status(c) => {
-            return Err(format!("faucet: the service refused the request (HTTP {c})"))
+            return Err(format!(
+                "faucet: the service refused the request (HTTP {c})"
+            ))
         }
         HttpResponse::Error(e) => return Err(format!("faucet: service unreachable: {e}")),
         HttpResponse::NotModified => {
@@ -1093,7 +1109,11 @@ mod tests {
         let key = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
         let body = claim_request_body(&key);
         let v: serde_json::Value = serde_json::from_str(&body).expect("json");
-        assert_eq!(v.as_object().expect("object").len(), 2, "pubkey + signature only");
+        assert_eq!(
+            v.as_object().expect("object").len(),
+            2,
+            "pubkey + signature only"
+        );
         assert!(v.get("pubkey_hex").is_some());
         assert!(v.get("signature_hex").is_some());
         assert!(v.get("amount").is_none());
@@ -1155,7 +1175,10 @@ mod tests {
         let key = ed25519_dalek::SigningKey::from_bytes(&[4u8; 32]);
 
         // Not granted: exactly one claim POST, granted flips.
-        let mock = ClaimMock { granted: RefCell::new(false), claims: RefCell::new(0) };
+        let mock = ClaimMock {
+            granted: RefCell::new(false),
+            claims: RefCell::new(0),
+        };
         let out = ensure_grant_flow(&mock, &key, &"ab".repeat(16)).expect("claimed");
         let claim = out.expect("a claim happened");
         assert!(!claim.already);
@@ -1165,10 +1188,12 @@ mod tests {
         // Granted: read-first, ZERO posts.
         let out = ensure_grant_flow(&mock, &key, &"ab".repeat(16)).expect("read ok");
         assert!(out.is_none(), "no second claim");
-        assert_eq!(*mock.claims.borrow(), 1, "read-first: the replay never hit the wire");
+        assert_eq!(
+            *mock.claims.borrow(),
+            1,
+            "read-first: the replay never hit the wire"
+        );
     }
-
-
 
     /// The layout the golden is a digest OF — asserted separately so a
     /// re-pin cannot quietly change the shape, and so the four payreq
@@ -1188,8 +1213,9 @@ mod tests {
         // A faucet signature must not be replayable as a create (and the
         // reverse), including at the amount-0 "any amount" create.
         assert_ne!(create_message(&pk, 0, FAUCET_LABEL.as_bytes()), msg);
-        assert!(!create_message(&pk, 0, FAUCET_LABEL.as_bytes())
-            .starts_with(b"kat:payreq:faucet:v1:"));
+        assert!(
+            !create_message(&pk, 0, FAUCET_LABEL.as_bytes()).starts_with(b"kat:payreq:faucet:v1:")
+        );
     }
 
     /// The wire body carries the pubkey + signature and NOTHING else.
@@ -1282,13 +1308,11 @@ mod tests {
         let acct = account_for_pubkey(&[7u8; 32]);
         let expect_hex: String = {
             let d = blake3::hash(&[7u8; 32]);
-            d.as_bytes()[..16]
-                .iter()
-                .fold(String::new(), |mut acc, b| {
-                    use std::fmt::Write as _;
-                    let _ = write!(acc, "{b:02x}");
-                    acc
-                })
+            d.as_bytes()[..16].iter().fold(String::new(), |mut acc, b| {
+                use std::fmt::Write as _;
+                let _ = write!(acc, "{b:02x}");
+                acc
+            })
         };
         assert_eq!(hex_encode(&acct), expect_hex);
     }
@@ -1367,7 +1391,10 @@ mod tests {
         assert_eq!(inv.amount_paid_micro, 1_500_000);
         assert_eq!(inv.settled_tick, 42);
         assert_eq!(inv.token, "kat");
-        assert!(inv.qr_commitment_is_unset(), "all-zero is the unset sentinel");
+        assert!(
+            inv.qr_commitment_is_unset(),
+            "all-zero is the unset sentinel"
+        );
 
         // Absent slot is equally unset.
         let no_slot = serde_json::json!({
@@ -1376,7 +1403,9 @@ mod tests {
             "amount_paid": 1, "settled": 2,
         })
         .to_string();
-        assert!(parse_invoice(no_slot.as_bytes()).unwrap().qr_commitment_is_unset());
+        assert!(parse_invoice(no_slot.as_bytes())
+            .unwrap()
+            .qr_commitment_is_unset());
 
         // Missing money field → error, not a zero.
         let partial = serde_json::json!({
@@ -1401,9 +1430,8 @@ mod tests {
             crate::kat_lease_client::DEFAULT_SERVICE_URL,
             "71b5cbf13626d2554aba7d9b06e63474",
         );
-        let good = hex_encode(
-            &crate::kat_lease_client::qr_commitment(&url).expect("the link encodes"),
-        );
+        let good =
+            hex_encode(&crate::kat_lease_client::qr_commitment(&url).expect("the link encodes"));
 
         // (a) Unset sentinel → Unavailable. This is the state EVERY invoice
         //     the service has written is in today (dapps leaves
@@ -1419,7 +1447,9 @@ mod tests {
         let ok = parse_invoice(&invoice_json(&good)).unwrap();
         assert_eq!(
             recheck_invoice_qr(&ok, &url),
-            QrRecheck::Match { digest_hex: good.clone() }
+            QrRecheck::Match {
+                digest_hex: good.clone()
+            }
         );
 
         // (c) Any other value → Mismatch. Including a well-formed digest of
@@ -1478,14 +1508,18 @@ mod tests {
         // differently — an unverified display must never read as verified.
         let matched = invoice_display_lines(
             &inv,
-            &QrRecheck::Match { digest_hex: "ef".repeat(32) },
+            &QrRecheck::Match {
+                digest_hex: "ef".repeat(32),
+            },
         )
         .join("\n");
         assert!(matched.contains("1.500000 KAT"), "{matched}");
         assert!(matched.contains("bit-exact"), "{matched}");
         let unavailable = invoice_display_lines(
             &inv,
-            &QrRecheck::Unavailable { reason: "no digest".to_string() },
+            &QrRecheck::Unavailable {
+                reason: "no digest".to_string(),
+            },
         )
         .join("\n");
         assert!(unavailable.contains("1.500000 KAT"), "{unavailable}");
@@ -1503,8 +1537,12 @@ mod tests {
     fn invoice_display_obeys_the_copy_rule_in_every_recheck_state() {
         let inv = parse_invoice(&invoice_json(&"0".repeat(64))).unwrap();
         let states = [
-            QrRecheck::Match { digest_hex: "ab".repeat(32) },
-            QrRecheck::Unavailable { reason: "unset".to_string() },
+            QrRecheck::Match {
+                digest_hex: "ab".repeat(32),
+            },
+            QrRecheck::Unavailable {
+                reason: "unset".to_string(),
+            },
             QrRecheck::Mismatch {
                 stored_hex: "ab".repeat(32),
                 recomputed_hex: "cd".repeat(32),
@@ -1620,7 +1658,10 @@ mod tests {
         assert_eq!(outcome.id_hex, "71b5cbf13626d2554aba7d9b06e63474");
         assert_eq!(outcome.amount_micro, 1_500_000);
         let Some(SettleOutcome::Invoice(inv)) = outcome.settled.as_ref() else {
-            panic!("the poll must have read the invoice row: {:?}", outcome.settled);
+            panic!(
+                "the poll must have read the invoice row: {:?}",
+                outcome.settled
+            );
         };
         // The exact compact line stays pinned (T1.3's golden copy).
         assert_eq!(
@@ -1628,8 +1669,13 @@ mod tests {
             "paid: 1.500000 KAT from cdcdcdcd… — invoice 71b5cbf13626d2554aba7d9b06e63474"
         );
         assert_eq!(inv.amount_paid_micro, 1_500_000);
-        assert!(inv.qr_commitment_is_unset(), "the mock serves the unset sentinel");
-        assert!(outcome.url.ends_with("/payreq/71b5cbf13626d2554aba7d9b06e63474"));
+        assert!(
+            inv.qr_commitment_is_unset(),
+            "the mock serves the unset sentinel"
+        );
+        assert!(outcome
+            .url
+            .ends_with("/payreq/71b5cbf13626d2554aba7d9b06e63474"));
     }
 
     /// A faucet-only mock: every pay-request method is `unimplemented!()`,
@@ -1763,7 +1809,10 @@ mod tests {
         );
         // An opaque failure must NOT be dressed up as an answer.
         for opaque in [b"<html>502</html>".to_vec(), b"{}".to_vec(), Vec::new()] {
-            assert_eq!(refusal_body_or_status(502, opaque), HttpResponse::Status(502));
+            assert_eq!(
+                refusal_body_or_status(502, opaque),
+                HttpResponse::Status(502)
+            );
         }
     }
 
@@ -1782,7 +1831,9 @@ mod tests {
             // What `refusal_or_status` now hands the flow for a 400.
             let mock = faucet_mock(refusal_body_or_status(
                 400,
-                serde_json::json!({"error": reason}).to_string().into_bytes(),
+                serde_json::json!({"error": reason})
+                    .to_string()
+                    .into_bytes(),
             ));
             let err = faucet_request_flow(&mock, "https://kat.example.com", &key)
                 .expect_err("a refusal is an error");
@@ -1904,6 +1955,9 @@ mod tests {
             Duration::from_millis(1),
         )
         .expect("flow completes");
-        assert!(outcome.settled.is_none(), "the budget ended before any settle");
+        assert!(
+            outcome.settled.is_none(),
+            "the budget ended before any settle"
+        );
     }
 }

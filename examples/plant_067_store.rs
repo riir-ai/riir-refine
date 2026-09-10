@@ -120,7 +120,11 @@ fn main() {
                 .expect("record plant row");
         }
     }
-    println!("planted {} lints x 3 Certified rows into {}", PLANTS.len(), root.display());
+    println!(
+        "planted {} lints x 3 Certified rows into {}",
+        PLANTS.len(),
+        root.display()
+    );
     // Self-check: the T1 condition must hold per planted lint.
     let density = store.certified_density();
     for (lint, _) in PLANTS {

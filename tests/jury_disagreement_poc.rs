@@ -109,7 +109,11 @@ fn jury_disagreement_poc_harness() {
 fn disagreement_signals_reduce_on_a_fixed_pool() {
     use riir_clippy::draft::corpus_index::ScoredRule;
 
-    let sr = |id: &str, score: f32| ScoredRule { rule_id: id.to_string(), score, instantiates: false };
+    let sr = |id: &str, score: f32| ScoredRule {
+        rule_id: id.to_string(),
+        score,
+        instantiates: false,
+    };
     // A consensus pool: one rule floods it with its own line-chunks.
     let pool = vec![
         sr("needless_return", 9.0),
@@ -173,14 +177,12 @@ fn fix_outcome_classifies_the_three_verdicts() {
 /// loosened bar (unit-level).
 #[test]
 fn g2_returns_none_when_nothing_qualifies() {
-    let sweep = vec![
-        riir_clippy::draft::jury_disagreement::Contingency {
-            threshold: 2.0,
-            total: 10,
-            flagged: 9,
-            unstable_total: 5,
-            unstable_flagged: 5,
-        },
-    ];
+    let sweep = vec![riir_clippy::draft::jury_disagreement::Contingency {
+        threshold: 2.0,
+        total: 10,
+        flagged: 9,
+        unstable_total: 5,
+        unstable_flagged: 5,
+    }];
     assert!(best_g2_threshold(&sweep).is_none());
 }

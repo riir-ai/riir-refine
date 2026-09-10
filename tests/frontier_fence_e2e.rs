@@ -19,9 +19,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use riir_clippy::frontier_pairs::{
-    construction_pairs, fence_sample, fence_verdicts, PairVerdict,
-};
+use riir_clippy::frontier_pairs::{construction_pairs, fence_sample, fence_verdicts, PairVerdict};
 
 /// Compile one source with plain rustc (the `behavioural_equivalence`
 /// house pattern — no cargo, no dep graph, no shared target dir) and
@@ -31,7 +29,15 @@ fn compile_has_code(source: &str, workdir: &Path, expect_code: &str) -> Result<b
     let src = workdir.join("probe_case.rs");
     std::fs::write(&src, source).map_err(|e| format!("write {}: {e}", src.display()))?;
     let out = Command::new("rustc")
-        .args(["--edition", "2021", "--crate-type", "lib", "--emit", "metadata", "--out-dir"])
+        .args([
+            "--edition",
+            "2021",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "--out-dir",
+        ])
         .arg(workdir)
         .arg(&src)
         .output()
@@ -68,7 +74,10 @@ fn fence_sample_agrees_with_real_rustc_at_95pct() -> Result<(), Box<dyn std::err
         let bad_premise = compile_has_code(&broken, &workdir, p.code)?;
         verdicts.push((
             Box::leak(p.case_name.clone().into_boxed_str()),
-            PairVerdict { good_resolves: good_clean, bad_premise_holds: bad_premise },
+            PairVerdict {
+                good_resolves: good_clean,
+                bad_premise_holds: bad_premise,
+            },
         ));
     }
     let report = fence_verdicts(&verdicts);

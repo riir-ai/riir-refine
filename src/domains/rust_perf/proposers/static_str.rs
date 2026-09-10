@@ -93,7 +93,9 @@ fn fn_edits(source: &str, sig: &syn::Signature, block: &syn::Block, edits: &mut 
         return;
     }
     // Return type must be `String` (or `std::string::String`).
-    let ReturnType::Type(_, ty) = &sig.output else { return };
+    let ReturnType::Type(_, ty) = &sig.output else {
+        return;
+    };
     if !is_string_ty(ty) {
         return;
     }
@@ -102,22 +104,25 @@ fn fn_edits(source: &str, sig: &syn::Signature, block: &syn::Block, edits: &mut 
     if block.stmts.len() != 1 {
         return;
     }
-    let Stmt::Expr(expr, None) = &block.stmts[0] else { return };
-    let Some(lit) = const_str_lit(expr) else { return };
+    let Stmt::Expr(expr, None) = &block.stmts[0] else {
+        return;
+    };
+    let Some(lit) = const_str_lit(expr) else {
+        return;
+    };
 
     // Tail edit: the literal's OWN source text replaces the whole
     // `.to_string()`-wrapping expression span.
-    let Some(tail_text) = src(source, &lit) else { return };
+    let Some(tail_text) = src(source, &lit) else {
+        return;
+    };
 
     // const emission: additive, and it closes the `missing_const_for_fn`
     // pedantic lint clippy fires on the non-const rewrite (probe-verified
     // 2026-08-19: `pub const fn f() -> &'static str { "lit" }` is clean).
     // Skipped when the grammar gets interesting (async/unsafe qualifiers)
     // or the fn is already const.
-    if sig.constness.is_none()
-        && sig.asyncness.is_none()
-        && sig.unsafety.is_none()
-    {
+    if sig.constness.is_none() && sig.asyncness.is_none() && sig.unsafety.is_none() {
         let fn_start = sig.fn_token.span().byte_range().start;
         edits.push(SourceEdit {
             start: fn_start,
@@ -160,7 +165,9 @@ fn const_str_lit(expr: &Expr) -> Option<syn::LitStr> {
             }
         }
         Expr::Call(call) => {
-            let Expr::Path(p) = &*call.func else { return None };
+            let Expr::Path(p) = &*call.func else {
+                return None;
+            };
             if p.path.segments.len() != 2
                 || p.path.segments[0].ident != "String"
                 || p.path.segments[1].ident != "from"
@@ -188,30 +195,48 @@ mod tests {
 
     #[test]
     fn to_string_form_rewrites() {
-        let out = propose_fix("static-str", "fn label() -> String { \"ready\".to_string() }")
-            .expect("pattern matched");
-        assert!(squash(&out).contains(&squash("const fn label() -> &'static str { \"ready\" }")), "{out}");
+        let out = propose_fix(
+            "static-str",
+            "fn label() -> String { \"ready\".to_string() }",
+        )
+        .expect("pattern matched");
+        assert!(
+            squash(&out).contains(&squash("const fn label() -> &'static str { \"ready\" }")),
+            "{out}"
+        );
     }
 
     #[test]
     fn to_owned_form_rewrites() {
-        let out = propose_fix("static-str", "fn name() -> String { \"katgpt\".to_owned() }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "static-str",
+            "fn name() -> String { \"katgpt\".to_owned() }",
+        )
+        .expect("pattern matched");
         assert!(squash(&out).contains(&squash("&'static str")), "{out}");
         assert!(out.contains("\"katgpt\""), "{out}");
     }
 
     #[test]
     fn string_from_form_rewrites() {
-        let out = propose_fix("static-str", "fn tier() -> String { String::from(\"gold\") }")
-            .expect("pattern matched");
-        assert!(squash(&out).contains(&squash("&'static str { \"gold\" }")), "{out}");
+        let out = propose_fix(
+            "static-str",
+            "fn tier() -> String { String::from(\"gold\") }",
+        )
+        .expect("pattern matched");
+        assert!(
+            squash(&out).contains(&squash("&'static str { \"gold\" }")),
+            "{out}"
+        );
     }
 
     #[test]
     fn fully_qualified_return_type_rewrites() {
-        let out = propose_fix("static-str", "fn f() -> std::string::String { \"x\".to_string() }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "static-str",
+            "fn f() -> std::string::String { \"x\".to_string() }",
+        )
+        .expect("pattern matched");
         assert!(squash(&out).contains(&squash("&'static str")), "{out}");
     }
 
@@ -222,7 +247,10 @@ mod tests {
             "struct S;\nimpl S {\n    fn status(&self) -> String { \"ok\".to_string() }\n}",
         )
         .expect("pattern matched");
-        assert!(squash(&out).contains(&squash("const fn status(&self) -> &'static str")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("const fn status(&self) -> &'static str")),
+            "{out}"
+        );
     }
 
     #[test]
@@ -258,7 +286,10 @@ mod tests {
         assert!(out.contains("fn label()"), "{out}");
         assert!(out.contains("-> &'static str"), "{out}");
         assert!(out.contains("\"ready\""), "{out}");
-        assert!(squash(&out).contains(&squash("-> &'static str { \"ready\" }")), "{out}");
+        assert!(
+            squash(&out).contains(&squash("-> &'static str { \"ready\" }")),
+            "{out}"
+        );
     }
 
     #[test]
@@ -266,27 +297,30 @@ mod tests {
         // The return-type ripple: a caller binding the result as owned
         // `String` breaks when the signature becomes `&'static str` — a
         // span-local edit cannot adapt the caller. Refuse.
-        assert!(
-            propose_fix(
-                "static-str",
-                "fn label() -> String { \"ready\".to_string() }\nfn user() -> String { label() }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "static-str",
+            "fn label() -> String { \"ready\".to_string() }\nfn user() -> String { label() }",
+        )
+        .is_none());
     }
 
     #[test]
     fn non_literal_expr_unchanged() {
         // Runtime-built strings stay.
-        assert!(propose_fix("static-str", "fn f(x: u32) -> String { format!(\"n={x}\") }").is_none());
+        assert!(propose_fix(
+            "static-str",
+            "fn f(x: u32) -> String { format!(\"n={x}\") }"
+        )
+        .is_none());
     }
 
     #[test]
     fn multi_stmt_body_unchanged() {
-        assert!(
-            propose_fix("static-str", "fn f() -> String { let s = \"a\".to_string(); s + \"b\" }")
-                .is_none()
-        );
+        assert!(propose_fix(
+            "static-str",
+            "fn f() -> String { let s = \"a\".to_string(); s + \"b\" }"
+        )
+        .is_none());
     }
 
     #[test]

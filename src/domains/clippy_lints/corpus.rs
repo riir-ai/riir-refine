@@ -458,7 +458,10 @@ mod tests {
             .collect();
         // Should cover at least style, complexity, perf
         assert!(groups.contains(&"style"), "must cover style group");
-        assert!(groups.contains(&"complexity"), "must cover complexity group");
+        assert!(
+            groups.contains(&"complexity"),
+            "must cover complexity group"
+        );
         assert!(groups.contains(&"perf"), "must cover perf group");
     }
 
@@ -474,9 +477,7 @@ mod tests {
             assert!(
                 result.parses,
                 "fixed_code for lint '{}' must parse as valid Rust. Diagnostics: {:?}. Code: {}",
-                entry.lint_name,
-                result.diagnostics,
-                entry.fixed_code
+                entry.lint_name, result.diagnostics, entry.fixed_code
             );
         }
     }

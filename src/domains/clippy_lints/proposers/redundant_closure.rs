@@ -44,7 +44,10 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 fn collect_callee_kinds(file: &File) -> (HashSet<String>, HashSet<String>) {
     let mut annotated = HashSet::new();
     let mut ref_fns = HashSet::new();
-    let mut v = CalleeScanner { annotated: &mut annotated, ref_fns: &mut ref_fns };
+    let mut v = CalleeScanner {
+        annotated: &mut annotated,
+        ref_fns: &mut ref_fns,
+    };
     v.visit_file(file);
     (annotated, ref_fns)
 }
@@ -180,8 +183,14 @@ mod tests {
     fn simplifies_redundant_closure_in_call() {
         let input = "fn sq(x: u32) -> u32 { x * x }\nfn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(|n| sq(n)).collect() }";
         let out = propose_fix("redundant_closure", input).expect("matched");
-        assert!(out.contains(".map(sq)"), "closure not replaced by bare path: {out}");
-        assert!(out.contains("fn sq(x: u32) -> u32 { x * x }"), "unrelated fn must be byte-identical: {out}");
+        assert!(
+            out.contains(".map(sq)"),
+            "closure not replaced by bare path: {out}"
+        );
+        assert!(
+            out.contains("fn sq(x: u32) -> u32 { x * x }"),
+            "unrelated fn must be byte-identical: {out}"
+        );
     }
 
     #[test]
@@ -207,7 +216,8 @@ mod tests {
 
     #[test]
     fn qualified_path_callee_preserved() {
-        let input = "fn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(|n| u32::from(n)).collect() }";
+        let input =
+            "fn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(|n| u32::from(n)).collect() }";
         let out = propose_fix("redundant_closure", input).expect("matched");
         assert!(out.contains("map(u32::from)"), "{out}");
     }
@@ -228,7 +238,10 @@ mod tests {
         // call site, so the bare path re-derives the same type — safe.
         let input = "fn run(xs: Vec<u32>) -> Vec<u32> {\n    let double = |v| v * 2;\n    xs.iter().map(|n| double(n)).collect()\n}";
         let out = propose_fix("redundant_closure", input).expect("matched");
-        assert!(out.contains("map(double)"), "unannotated callee lost: {out}");
+        assert!(
+            out.contains("map(double)"),
+            "unannotated callee lost: {out}"
+        );
     }
 
     #[test]

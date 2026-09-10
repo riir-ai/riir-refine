@@ -33,7 +33,7 @@
 use std::path::PathBuf;
 
 use riir_clippy::dispersion::{
-    entropy_map, frontier_order, from_counts, outcome_entropy, PoolEntry, Regime,
+    entropy_map, from_counts, frontier_order, outcome_entropy, PoolEntry, Regime,
 };
 use riir_clippy::elo::{default_elo, PairObservation};
 use riir_clippy::frontier_pairs::construction_pairs;
@@ -108,7 +108,10 @@ fn poc_axis_a_unseen_candidate_fraction_drops() {
     // first — elo_table() reads the PERSISTED ratings the replay writes.)
     plant_sparse_outcomes(&store);
     let recompute = store.recompute_elo().unwrap();
-    assert!(recompute.matches > 0, "planted outcomes must replay as matches");
+    assert!(
+        recompute.matches > 0,
+        "planted outcomes must replay as matches"
+    );
     let outcome_table = store.elo_table();
     let outcome_covered = universe
         .iter()
@@ -210,7 +213,10 @@ fn poc_axis_b_frontier_front_loads_informative_pools() {
     let never_regime = regimes.iter().find(|v| v.id == "h-never").map(|v| v.regime);
     assert_eq!(never_regime, Some(Regime::Regenerate));
     let never_pos = fids.iter().position(|f| *f == "h-never").unwrap();
-    assert!(never_pos < fids.len() - 1, "regenerate band precedes saturated");
+    assert!(
+        never_pos < fids.len() - 1,
+        "regenerate band precedes saturated"
+    );
 }
 
 /// (b2) the dispersion telemetry on the planted store: a saturated
@@ -240,8 +246,10 @@ fn poc_axis_b2_dispersion_telemetry_flags_vacuous_worlds() {
             outcome_entropy(o)
         })
         .collect();
-    let map: std::collections::BTreeMap<String, f64> =
-        by_rule.iter().map(|(id, o)| ((*id).to_string(), outcome_entropy(o))).collect();
+    let map: std::collections::BTreeMap<String, f64> = by_rule
+        .iter()
+        .map(|(id, o)| ((*id).to_string(), outcome_entropy(o)))
+        .collect();
     let _ = map;
     // The planted world is NOT vacuous: scope-hoist is 3-1, swap-second is
     // 0-2 — real dispersion exists for selection to consume.
@@ -274,5 +282,8 @@ fn poc_axis_c_pair_namespace_is_isolated_from_outcome_surfaces() {
     let s = store.recompute_elo().unwrap();
     assert_eq!(s.matches, 0);
     assert_eq!(s.rows_written, 0);
-    let _ = PairObservation { winner: String::new(), loser: String::new() };
+    let _ = PairObservation {
+        winner: String::new(),
+        loser: String::new(),
+    };
 }

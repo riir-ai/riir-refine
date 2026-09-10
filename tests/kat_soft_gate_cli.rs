@@ -110,7 +110,11 @@ fn heal(dir: &Path, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, 
 /// login needs no service).
 fn login(dir: &Path) {
     let (code, text) = heal(dir, &[], &["login"]);
-    assert_eq!(code, Some(0), "hermetic login must succeed. output:\n{text}");
+    assert_eq!(
+        code,
+        Some(0),
+        "hermetic login must succeed. output:\n{text}"
+    );
 }
 
 /// Seed an ack with the given server balance — the gate's input.
@@ -128,7 +132,8 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
     };
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
-    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
+        .expect("seed ack");
 }
 
 /// Seed a v3 ack carrying the server's sticky-grace truth (issue 080) —
@@ -146,7 +151,8 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
     };
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
-    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
+        .expect("seed ack");
 }
 
 /// Seed a literal pre-v3 (v2) ack FILE — no new fields — the shape every
@@ -188,11 +194,26 @@ fn depleted_never_contributed_refuses_at_run_start() {
 
     let (code, text) = heal(&dir, &[], &[]);
     assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
-    assert!(text.contains("REFUSED"), "the refusal must be loud. output:\n{text}");
-    assert!(text.contains("cargo heal --mine"), "must name the contribute path. output:\n{text}");
-    assert!(text.contains("cargo heal sync"), "must name the sync step. output:\n{text}");
-    assert!(text.contains("top up"), "must name the top-up path. output:\n{text}");
-    assert!(text.contains("RIIR_HEAL_KAT_GATE"), "must name the kill switch. output:\n{text}");
+    assert!(
+        text.contains("REFUSED"),
+        "the refusal must be loud. output:\n{text}"
+    );
+    assert!(
+        text.contains("cargo heal --mine"),
+        "must name the contribute path. output:\n{text}"
+    );
+    assert!(
+        text.contains("cargo heal sync"),
+        "must name the sync step. output:\n{text}"
+    );
+    assert!(
+        text.contains("top up"),
+        "must name the top-up path. output:\n{text}"
+    );
+    assert!(
+        text.contains("RIIR_HEAL_KAT_GATE"),
+        "must name the kill switch. output:\n{text}"
+    );
     // Issue 079: no env and no TTY (Command::output pipes stdin) → the
     // offer must NOT fire — the plain 075 refusal shape.
     assert!(
@@ -239,13 +260,23 @@ fn prompt_yes_offers_contribute_now_then_still_refuses_offline() {
     seed_ack(&dir, 0);
 
     let (code, text) = heal(&dir, &[("RIIR_HEAL_KAT_PROMPT_YES", "1")], &["--fix"]);
-    assert_eq!(code, Some(1), "offline the offer cannot lift the gate. output:\n{text}");
-    assert!(text.contains("contributing now"), "the offer must run. output:\n{text}");
+    assert_eq!(
+        code,
+        Some(1),
+        "offline the offer cannot lift the gate. output:\n{text}"
+    );
+    assert!(
+        text.contains("contributing now"),
+        "the offer must run. output:\n{text}"
+    );
     assert!(
         text.contains("no trajectory store"),
         "the empty-outbox honest line. output:\n{text}"
     );
-    assert!(text.contains("REFUSED"), "still refused offline. output:\n{text}");
+    assert!(
+        text.contains("REFUSED"),
+        "still refused offline. output:\n{text}"
+    );
     assert!(
         text.contains("did not lift the gate"),
         "the fallthrough must say why. output:\n{text}"
@@ -428,7 +459,8 @@ fn issue_080_never_synced_stays_warn_only_even_with_a_leftover_marker() {
     assert_eq!(ack.contributed, None);
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
-    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+    ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
+        .expect("seed ack");
     seed_marker(&dir); // the leftover file — still zero effect, still warn-only
 
     let (code, text) = heal(&dir, &[], &[]);

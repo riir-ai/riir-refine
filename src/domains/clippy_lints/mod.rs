@@ -113,7 +113,12 @@ impl crate::corpus::Corpus<ClippyLintDomain> {
     }
 
     /// Look up fix entries by lint name (back-compat for the generic `lookup`).
-    pub fn lookup<'a>(&'a self, lint_name: &'a str) -> impl Iterator<Item = &'a ClippyFixEntry> + 'a {
-        self.entries.iter().filter(move |e| e.lint_name == lint_name)
+    pub fn lookup<'a>(
+        &'a self,
+        lint_name: &'a str,
+    ) -> impl Iterator<Item = &'a ClippyFixEntry> + 'a {
+        self.entries
+            .iter()
+            .filter(move |e| e.lint_name == lint_name)
     }
 }

@@ -51,8 +51,8 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprClosure, ItemFn, Pat, PatType, Stmt};
 
-use crate::domains::rustc_errors::diag::RustcErrorDiag;
 use super::{anchor, binding_name, cand, CompileProposer, FixCandidate, Playbooks};
+use crate::domains::rustc_errors::diag::RustcErrorDiag;
 
 // ── shared syn helpers (closure + let extraction) ────────────────────
 
@@ -179,7 +179,12 @@ impl CompileProposer for AnonLifetime {
         "E0597"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -234,7 +239,12 @@ impl CompileProposer for MoveCapture {
         "E0597"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -275,15 +285,20 @@ impl CompileProposer for MoveCloneCapture {
         "E0597"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
         let Some(cap) = anchor(diag, |l| l == "value captured here") else {
             return Vec::new();
         };
-        let Some(name) = anchor(diag, |l| l.starts_with("binding `"))
-            .and_then(|ls| binding_name(&ls.label))
+        let Some(name) =
+            anchor(diag, |l| l.starts_with("binding `")).and_then(|ls| binding_name(&ls.label))
         else {
             return Vec::new();
         };
@@ -329,7 +344,12 @@ impl CompileProposer for DropTheBox {
         "E0597"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -344,18 +364,16 @@ impl CompileProposer for DropTheBox {
             if !source.get(ty.clone()).is_some_and(|t| t.contains("Box<")) {
                 continue;
             }
-            let Some(init) = li.init.as_ref() else { continue };
+            let Some(init) = li.init.as_ref() else {
+                continue;
+            };
             if !init.is_box_new {
                 continue;
             }
             let Some(pat_text) = source.get(li.pat.clone()) else {
                 continue;
             };
-            let Some(inner) = init
-                .box_arg
-                .as_ref()
-                .and_then(|r| source.get(r.clone()))
-            else {
+            let Some(inner) = init.box_arg.as_ref().and_then(|r| source.get(r.clone())) else {
                 continue;
             };
             let repl = format!("let {pat_text} = {inner};");
@@ -378,9 +396,7 @@ impl CompileProposer for DropTheBox {
 fn is_box_new(func: &Expr) -> bool {
     let Expr::Path(p) = func else { return false };
     let n = p.path.segments.len();
-    let is = |i: usize, name: &str| {
-        p.path.segments.get(i).is_some_and(|s| s.ident == name)
-    };
+    let is = |i: usize, name: &str| p.path.segments.get(i).is_some_and(|s| s.ident == name);
     n >= 2 && is(n - 1, "new") && is(n - 2, "Box")
 }
 
@@ -403,7 +419,12 @@ impl CompileProposer for SharedOwnership {
         "E0597"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -430,7 +451,9 @@ impl CompileProposer for SharedOwnership {
             }
             break;
         }
-        let Some(kind) = shared else { return Vec::new() };
+        let Some(kind) = shared else {
+            return Vec::new();
+        };
         let Some(range) = closure_range(source, cap.byte_start) else {
             return Vec::new();
         };
@@ -504,11 +527,17 @@ impl CompileProposer for ScopeHoist {
         "E0597"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
-        let Some(dropped) = anchor(diag, |l| l.contains("dropped here while still borrowed")) else {
+        let Some(dropped) = anchor(diag, |l| l.contains("dropped here while still borrowed"))
+        else {
             return Vec::new();
         };
         let Some(bind) = anchor(diag, |l| l.starts_with("binding `")) else {
@@ -635,12 +664,12 @@ mod tests {
 
     /// Build an E0597 diag for `source` with anchors located by finding the
     /// anchor texts — the same spans rustc emits for these shapes (probed).
-    fn e0597_diag(
-        source: &str,
-        primary: &str,
-        labels: &[(&str, &str)],
-    ) -> RustcErrorDiag {
-        let at = |needle: &str| source.find(needle).unwrap_or_else(|| panic!("fixture lacks {needle}"));
+    fn e0597_diag(source: &str, primary: &str, labels: &[(&str, &str)]) -> RustcErrorDiag {
+        let at = |needle: &str| {
+            source
+                .find(needle)
+                .unwrap_or_else(|| panic!("fixture lacks {needle}"))
+        };
         let mut labeled_spans = vec![LabeledSpan {
             file: "src/lib.rs".to_string(),
             line_start: 1,
@@ -826,7 +855,10 @@ mod tests {
         let out = propose_all(&DropTheBox, CAPTURE_SRC, &diag);
         assert_eq!(out.len(), 1);
         let start = CAPTURE_SRC.find("let f:").unwrap();
-        let end = CAPTURE_SRC[start..].find(';').map(|i| start + i + 1).unwrap();
+        let end = CAPTURE_SRC[start..]
+            .find(';')
+            .map(|i| start + i + 1)
+            .unwrap();
         assert_eq!(out[0].byte_span, (start, end));
         assert_eq!(out[0].replacement, "let f = || name.len();");
     }
@@ -1079,7 +1111,10 @@ mod tests {
             ],
         );
         let mut cands = family().propose(&diag, Path::new("/x/src/lib.rs"), INCIDENT_SRC);
-        assert!(cands.len() >= 2, "the incident shape has a ladder: {cands:?}");
+        assert!(
+            cands.len() >= 2,
+            "the incident shape has a ladder: {cands:?}"
+        );
         cands.sort_by(|a, b| {
             a.file
                 .cmp(&b.file)

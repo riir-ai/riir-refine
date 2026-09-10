@@ -18,8 +18,8 @@
 
 use riir_clippy::cf_workers_ai::CfClient;
 use riir_clippy::llm_spend::{
-    CapReached, SpendError, SpendLedger, SpendState, PRICING_VERSION, SPEND_VERSION,
-    today_epoch_days,
+    today_epoch_days, CapReached, SpendError, SpendLedger, SpendState, PRICING_VERSION,
+    SPEND_VERSION,
 };
 
 const QWEN: &str = "@cf/qwen/qwen3.8-27b";
@@ -51,22 +51,34 @@ fn g1_planted_99_cents_declines_then_a_fresh_day_passes() {
 
     // Today, $0.99 spent: the worst case of 8192 max out-tokens at qwen's
     // $3.20/M is ≈ $0.0262 — over the $0.01 that remains.
-    std::fs::write(&file, serde_json::to_string(&planted(0.99, today_epoch_days())).unwrap())
-        .unwrap();
+    std::fs::write(
+        &file,
+        serde_json::to_string(&planted(0.99, today_epoch_days())).unwrap(),
+    )
+    .unwrap();
     let mut l = SpendLedger::open_at_with_cap(file.clone(), 1.0);
     let err = l.reserve(QWEN, "fn f() {}", 8192).unwrap_err();
-    let SpendError::CapReached(CapReached { spent, wanted, cap, .. }) = &err else {
+    let SpendError::CapReached(CapReached {
+        spent, wanted, cap, ..
+    }) = &err
+    else {
         panic!("expected CapReached, got {err:?}");
     };
     assert!((*spent - 0.99).abs() < 1e-9, "planted spend carried");
-    assert!(*wanted > 0.01, "worst case crosses the remainder (got {wanted:.5})");
+    assert!(
+        *wanted > 0.01,
+        "worst case crosses the remainder (got {wanted:.5})"
+    );
     assert!((*cap - 1.0).abs() < 1e-9);
     assert_eq!(l.state().declines, 1, "the decline is counted");
 
     // A stale (pre-today) day rolls: spent resets, and the SAME call passes.
     std::fs::write(&file, serde_json::to_string(&planted(0.99, 0)).unwrap()).unwrap();
     let mut fresh = SpendLedger::open_at_with_cap(file.clone(), 1.0);
-    assert!(fresh.state().spent_usd.abs() < 1e-12, "rollover reset the accumulator");
+    assert!(
+        fresh.state().spent_usd.abs() < 1e-12,
+        "rollover reset the accumulator"
+    );
     let reserved = fresh
         .reserve(QWEN, "fn f() {}", 8192)
         .expect("fresh UTC day passes the same call");
@@ -100,7 +112,11 @@ fn reserve_reconcile_save_reopen_is_lossless() {
     l.reconcile(reserved, QWEN, 210, 96, true);
     l.save().unwrap();
     let reopened = SpendLedger::open_at_with_cap(file.clone(), 1.0);
-    assert_eq!(reopened.state(), l.state(), "state survives the file round-trip");
+    assert_eq!(
+        reopened.state(),
+        l.state(),
+        "state survives the file round-trip"
+    );
     assert!((reopened.state().spent_usd - (210.0 * 0.45 + 96.0 * 3.2) / 1e6).abs() < 1e-12);
     let _ = std::fs::remove_file(file);
 }

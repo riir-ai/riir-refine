@@ -30,7 +30,7 @@
 
 use super::helpers::is_postfix_safe;
 use super::uninlined_format_args::all_expr_args;
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use proc_macro2::TokenStream;
 use syn::visit::Visit;
 use syn::{Expr, ExprMacro, ExprMatch, File, Lit, Macro, Pat, StmtMacro};

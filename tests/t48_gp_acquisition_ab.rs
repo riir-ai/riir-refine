@@ -27,7 +27,7 @@
 
 #![allow(clippy::cast_precision_loss)] // count/display fixtures
 
-use riir_clippy::gp_acquisition::{DIM, GpAcquisition};
+use riir_clippy::gp_acquisition::{GpAcquisition, DIM};
 
 /// Relative σ² range below which the surface is called FLAT (the T5 bar:
 /// (max−min)/mean under this = the ordering carries no signal beyond noise).
@@ -97,14 +97,32 @@ fn labeled_pairs() -> Vec<(&'static str, &'static str)> {
         // set keeps the flatness probe runnable on the default build.
         // Shapes mirror the corpus lint family (distinct real anti-patterns).
         vec![
-            ("needless_return", "pub fn f(x: u64) -> u64 { return x * 2; }"),
-            ("match_bool", "pub fn g(flag: bool) -> u8 { match flag { true => 1, false => 0 } }"),
+            (
+                "needless_return",
+                "pub fn f(x: u64) -> u64 { return x * 2; }",
+            ),
+            (
+                "match_bool",
+                "pub fn g(flag: bool) -> u8 { match flag { true => 1, false => 0 } }",
+            ),
             ("identity_op", "pub fn h(m: u64) -> u64 { m * 1 }"),
-            ("collapsible_if", "pub fn i(a: bool, b: bool) { if a { if b { g(); } } }"),
-            ("map_unwrap_or", "pub fn j(v: Option<u8>) -> u8 { v.map(|x| x + 1).unwrap_or(0) }"),
+            (
+                "collapsible_if",
+                "pub fn i(a: bool, b: bool) { if a { if b { g(); } } }",
+            ),
+            (
+                "map_unwrap_or",
+                "pub fn j(v: Option<u8>) -> u8 { v.map(|x| x + 1).unwrap_or(0) }",
+            ),
             ("double_parens", "pub fn k(n: u32) -> u32 { ((n + 4)) }"),
-            ("useless_format", "pub fn l() -> String { format!(\"done\") }"),
-            ("iter_next_loop", "pub fn m(mut it: std::vec::IntoIter<u8>) { for x in it.next() {} }"),
+            (
+                "useless_format",
+                "pub fn l() -> String { format!(\"done\") }",
+            ),
+            (
+                "iter_next_loop",
+                "pub fn m(mut it: std::vec::IntoIter<u8>) { for x in it.next() {} }",
+            ),
         ]
     }
 }
@@ -120,7 +138,8 @@ fn embed_pair(rule: &str, span: &str) -> [f32; DIM] {
 fn loo_sigmas(pairs: &[(&'static str, &'static str)]) -> Vec<f32> {
     let mut out = Vec::with_capacity(pairs.len());
     for i in 0..pairs.len() {
-        let mut gp = GpAcquisition::with_capacity(riir_clippy::gp_acquisition::DEFAULT_LAMBDA, pairs.len());
+        let mut gp =
+            GpAcquisition::with_capacity(riir_clippy::gp_acquisition::DEFAULT_LAMBDA, pairs.len());
         for (j, (rule, span)) in pairs.iter().enumerate() {
             if j != i {
                 gp.observe(&embed_pair(rule, span));
@@ -147,7 +166,10 @@ fn g_flat_sigma_surface_spread() {
     // The verdict input (not itself a pass/fail — the recorded verdict test
     // consumes it).
     let flat = rel_range < FLAT_SPREAD;
-    println!("t48 G-flat: surface {} (bar {FLAT_SPREAD})", if flat { "FLAT" } else { "informative" });
+    println!(
+        "t48 G-flat: surface {} (bar {FLAT_SPREAD})",
+        if flat { "FLAT" } else { "informative" }
+    );
     // Sanity: all finite, non-negative.
     for s in &sigmas {
         assert!(s.is_finite() && *s >= 0.0, "σ² must be finite ≥ 0, got {s}");
@@ -166,7 +188,7 @@ mod ordering_ab {
     use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
     use riir_clippy::draft::latent_matcher::LatentMatcher;
     use riir_clippy::embedder::embed;
-    use riir_clippy::gp_acquisition::{DIM, GpAcquisition};
+    use riir_clippy::gp_acquisition::{GpAcquisition, DIM};
 
     /// Pool probe depth per span (matches the harness's 12-deep pools).
     const POOL_K: usize = 12;
@@ -200,16 +222,26 @@ mod ordering_ab {
         pairs.extend(PERF_SPANS.iter().copied());
 
         // Precompute pair embeddings (rule, span) for the LOO GP training.
-        let embeddings: Vec<[f32; DIM]> = pairs
-            .iter()
-            .map(|(rule, span)| embed(rule, span))
-            .collect();
+        let embeddings: Vec<[f32; DIM]> =
+            pairs.iter().map(|(rule, span)| embed(rule, span)).collect();
 
         let mut out = AbOut {
             scored: 0,
-            retrieval: ArmOut { hits1: 0, hits3: 0, mrr: 0.0 },
-            gp: ArmOut { hits1: 0, hits3: 0, mrr: 0.0 },
-            random: ArmOut { hits1: 0, hits3: 0, mrr: 0.0 },
+            retrieval: ArmOut {
+                hits1: 0,
+                hits3: 0,
+                mrr: 0.0,
+            },
+            gp: ArmOut {
+                hits1: 0,
+                hits3: 0,
+                mrr: 0.0,
+            },
+            random: ArmOut {
+                hits1: 0,
+                hits3: 0,
+                mrr: 0.0,
+            },
             b: 0,
             c: 0,
             z: 0.0,
@@ -270,7 +302,10 @@ mod ordering_ab {
                 let j = rng.below(k + 1);
                 rnd_order.swap(k, j);
             }
-            let rnd_rank = rnd_order.iter().position(|&idx| pool[idx] == *label).unwrap();
+            let rnd_rank = rnd_order
+                .iter()
+                .position(|&idx| pool[idx] == *label)
+                .unwrap();
 
             for (arm, rank) in [
                 (&mut out.retrieval, ret_rank),
@@ -328,7 +363,11 @@ mod ordering_ab {
     #[test]
     fn gp_pool_ordering_vs_retrieval_vs_random() {
         let ab = run_ordering_ab();
-        assert!(ab.scored >= 40, "expected a real pool population, got {}", ab.scored);
+        assert!(
+            ab.scored >= 40,
+            "expected a real pool population, got {}",
+            ab.scored
+        );
         let n = f64::from(ab.scored);
         println!("t48 ordering A/B over {} pools:", ab.scored);
         println!(
@@ -349,7 +388,10 @@ mod ordering_ab {
             ab.random.hits3 as f64 / n,
             ab.random.mrr / n
         );
-        println!("t48 McNemar gp-vs-retrieval: b={} c={} z={:.3}", ab.b, ab.c, ab.z);
+        println!(
+            "t48 McNemar gp-vs-retrieval: b={} c={} z={:.3}",
+            ab.b, ab.c, ab.z
+        );
 
         // ── The verdict derivation (recorded + asserted) ──────────────
         let derived = derive_verdict(&ab);
@@ -374,8 +416,14 @@ mod ordering_ab {
         for run in 1..5 {
             let again = run_ordering_ab();
             assert_eq!(first.scored, again.scored, "run {run}: scored drifted");
-            assert_eq!(first.retrieval.hits1, again.retrieval.hits1, "run {run}: ret @1");
-            assert_eq!(first.retrieval.hits3, again.retrieval.hits3, "run {run}: ret @3");
+            assert_eq!(
+                first.retrieval.hits1, again.retrieval.hits1,
+                "run {run}: ret @1"
+            );
+            assert_eq!(
+                first.retrieval.hits3, again.retrieval.hits3,
+                "run {run}: ret @3"
+            );
             assert_eq!(first.gp.hits1, again.gp.hits1, "run {run}: gp @1");
             assert_eq!(first.gp.hits3, again.gp.hits3, "run {run}: gp @3");
             assert_eq!(first.random.hits1, again.random.hits1, "run {run}: rnd @1");

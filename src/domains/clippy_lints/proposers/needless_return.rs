@@ -30,7 +30,9 @@ use syn::{Expr, File, Stmt};
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     for_each_fn(file, |_sig, block| {
-        let Some(last) = block.stmts.last() else { return };
+        let Some(last) = block.stmts.last() else {
+            return;
+        };
         if let Stmt::Expr(Expr::Return(ret), _semi) = last {
             // Attribute guard: the edit span covers the statement's
             // attributes, so any rewrite would silently drop them. cfg is
@@ -66,13 +68,16 @@ mod tests {
             .expect("pattern matched");
         assert!(!out.contains("return"), "return not stripped: {out}");
         assert!(out.contains("x + 1"), "expr lost: {out}");
-        assert!(out.contains("fn bar(x: i32) -> i32 { x + 1 }"), "tail expr not in place: {out}");
+        assert!(
+            out.contains("fn bar(x: i32) -> i32 { x + 1 }"),
+            "tail expr not in place: {out}"
+        );
     }
 
     #[test]
     fn strips_trailing_return_no_semi() {
-        let out =
-            propose_fix("needless_return", "fn foo() -> u8 { return 42 }").expect("pattern matched");
+        let out = propose_fix("needless_return", "fn foo() -> u8 { return 42 }")
+            .expect("pattern matched");
         assert!(!out.contains("return"), "return not stripped: {out}");
         assert_eq!(out, "fn foo() -> u8 { 42 }");
     }
@@ -129,7 +134,10 @@ mod tests {
         // tail AND dropped the attribute, creating `unreachable_code` on native.
         let input = "fn f(e: Option<u8>) -> u8 {\n    #[cfg(not(target_arch = \"wasm32\"))]\n    return e.unwrap_or(0);\n    #[cfg(target_arch = \"wasm32\")]\n    return 0;\n}";
         let out = propose_fix("needless_return", input);
-        assert!(out.is_none(), "cfg-switched return must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "cfg-switched return must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -138,7 +146,10 @@ mod tests {
         // on other arches the stmt vanishes and an earlier stmt trails.
         let input = "fn f() -> u8 {\n    let x = 1;\n    #[cfg(unix)]\n    return 7;\n}";
         let out = propose_fix("needless_return", input);
-        assert!(out.is_none(), "cfg'd trailing return must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "cfg'd trailing return must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -150,6 +161,9 @@ mod tests {
         let input = "fn f() -> u8 {\n    #[cfg(unix)]\n    let _ = 1;\n    return 42;\n}";
         let out = propose_fix("needless_return", input).expect("pattern matched");
         assert!(out.contains("42"), "{out}");
-        assert!(out.contains("#[cfg(unix)]"), "unrelated cfg stmt must survive: {out}");
+        assert!(
+            out.contains("#[cfg(unix)]"),
+            "unrelated cfg stmt must survive: {out}"
+        );
     }
 }

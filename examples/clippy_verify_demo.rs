@@ -38,7 +38,10 @@ fn main() {
         // Case 1: buggy code (has needless_return) → should NOT resolve.
         let buggy = "fn foo() -> i32 { return 42; }";
         let r_buggy = verifier.verify(buggy, "needless_return");
-        println!("  buggy code:  ran={}, lint_resolved={} (expected false)", r_buggy.ran, r_buggy.lint_resolved);
+        println!(
+            "  buggy code:  ran={}, lint_resolved={} (expected false)",
+            r_buggy.ran, r_buggy.lint_resolved
+        );
         if !r_buggy.ran {
             eprintln!("  ❌ cargo clippy did not run: {:?}", r_buggy.error);
             std::process::exit(1);
@@ -48,12 +51,21 @@ fn main() {
         // Case 2: fixed code (no return) → should resolve.
         let fixed = "fn foo() -> i32 { 42 }";
         let r_fixed = verifier.verify(fixed, "needless_return");
-        println!("  fixed code:  ran={}, lint_resolved={} (expected true)", r_fixed.ran, r_fixed.lint_resolved);
+        println!(
+            "  fixed code:  ran={}, lint_resolved={} (expected true)",
+            r_fixed.ran, r_fixed.lint_resolved
+        );
         let fixed_pass = r_fixed.lint_resolved;
 
         let pass = buggy_pass && fixed_pass;
-        println!("  buggy detected:   {}", if buggy_pass { "✅" } else { "❌" });
-        println!("  fixed resolved:   {}", if fixed_pass { "✅" } else { "❌" });
+        println!(
+            "  buggy detected:   {}",
+            if buggy_pass { "✅" } else { "❌" }
+        );
+        println!(
+            "  fixed resolved:   {}",
+            if fixed_pass { "✅" } else { "❌" }
+        );
         println!("  {}", if pass { "✅ PASS" } else { "❌ FAIL" });
         assert!(pass, "G1 FAIL");
     }
@@ -75,7 +87,10 @@ fn main() {
         let warm = t1.elapsed();
 
         println!("  cold run: {:.3} s", cold.as_secs_f64());
-        println!("  warm run: {:.3} s (cargo cache reuse)", warm.as_secs_f64());
+        println!(
+            "  warm run: {:.3} s (cargo cache reuse)",
+            warm.as_secs_f64()
+        );
         println!("  note: NOT a hot-path gate. The L2 syntax check (6.8µs) is the");
         println!("        fast path. This is thorough verification, called rarely.");
     }
@@ -95,10 +110,17 @@ fn main() {
         let slow_valid = pruner.validate_with_clippy("fn ok() {}", "needless_return");
         let composition_ok = slow_valid.parses;
 
-        println!("  fast path (validate):     parses valid={}, invalid={} → {}",
-            valid.parses, invalid.parses, if fast_path_ok { "✅" } else { "❌" });
-        println!("  slow path (validate_with_clippy): parses={} → {}",
-            slow_valid.parses, if composition_ok { "✅" } else { "❌" });
+        println!(
+            "  fast path (validate):     parses valid={}, invalid={} → {}",
+            valid.parses,
+            invalid.parses,
+            if fast_path_ok { "✅" } else { "❌" }
+        );
+        println!(
+            "  slow path (validate_with_clippy): parses={} → {}",
+            slow_valid.parses,
+            if composition_ok { "✅" } else { "❌" }
+        );
 
         let pass = fast_path_ok && composition_ok;
         println!("  {}", if pass { "✅ PASS" } else { "❌ FAIL" });
@@ -110,7 +132,9 @@ fn main() {
         println!("\nG4 (alloc-free — N/A for I/O bound):");
         println!("  This module spawns a process + does temp-dir I/O.");
         println!("  Allocation tracking is not meaningful here (unlike L1/L2 hot paths).");
-        println!("  The hot-path alloc gates are G4 for Issue 001 (L1 matvec) + Issue 002 (L2 syn).");
+        println!(
+            "  The hot-path alloc gates are G4 for Issue 001 (L1 matvec) + Issue 002 (L2 syn)."
+        );
         println!("  ✅ PASS (documented N/A)");
     }
 

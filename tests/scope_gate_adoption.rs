@@ -13,7 +13,7 @@
 #![cfg(feature = "contrastive_scope")]
 
 use riir_clippy::scope_model::{ScopeModel, THETA};
-use riir_clippy::{HealPipeline, RustAnalyzerPruner, TernaryDrafter, build_seed_corpus};
+use riir_clippy::{build_seed_corpus, HealPipeline, RustAnalyzerPruner, TernaryDrafter};
 
 fn pipeline() -> HealPipeline {
     HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())

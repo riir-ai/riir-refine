@@ -99,7 +99,9 @@ pub fn evaluate(input: SoftGateInput) -> SoftGateVerdict {
     if balance > 0 {
         return SoftGateVerdict::Allow;
     }
-    SoftGateVerdict::Refuse { balance_micro: balance }
+    SoftGateVerdict::Refuse {
+        balance_micro: balance,
+    }
 }
 
 #[cfg(test)]
@@ -145,8 +147,14 @@ mod tests {
             evaluate(input(true, true, None, false)),
             SoftGateVerdict::WarnOnly(WarnOnlyReason::NeverSynced)
         );
-        assert_eq!(evaluate(input(true, true, Some(0), true)), SoftGateVerdict::Allow);
-        assert_eq!(evaluate(input(true, true, Some(1), false)), SoftGateVerdict::Allow);
+        assert_eq!(
+            evaluate(input(true, true, Some(0), true)),
+            SoftGateVerdict::Allow
+        );
+        assert_eq!(
+            evaluate(input(true, true, Some(1), false)),
+            SoftGateVerdict::Allow
+        );
     }
 
     #[test]

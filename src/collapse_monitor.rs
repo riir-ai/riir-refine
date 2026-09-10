@@ -145,7 +145,8 @@ pub struct CollapseMetrics {
 /// Deterministic: no RNG, no wall-clock, insertion-order iteration. Pinned
 /// by the committed double-run gate (`collapse_monitor_is_deterministic`).
 #[must_use]
-#[allow(clippy::too_many_lines)] // mirrors heal()'s own Steps 1-5 one-for-one; splitting it would separate the loop from the thing measured
+#[allow(clippy::too_many_lines)]
+// mirrors heal()'s own Steps 1-5 one-for-one; splitting it would separate the loop from the thing measured
 #[allow(clippy::cast_precision_loss)] // counts ≤ 8241 rows / 48 spans — exact in f32 by orders of magnitude
 pub fn measure<E: HealEntry>(
     memory: &LatentFixMemory,
@@ -200,7 +201,9 @@ pub fn measure<E: HealEntry>(
                     continue; // heal's exact-code dedup
                 }
                 mem_k += 1;
-                *pooled_rule_counts.entry(traj.lint_name.as_str()).or_insert(0) += 1;
+                *pooled_rule_counts
+                    .entry(traj.lint_name.as_str())
+                    .or_insert(0) += 1;
                 if traj.lint_name == *rule {
                     same_rule += 1;
                 }
@@ -218,7 +221,10 @@ pub fn measure<E: HealEntry>(
         // Per-span top-k rule entropy (over ALL retrieved, pre-dedup — the
         // retrieval pool is what the retriever surfaces).
         if !retrieved.is_empty() {
-            let counts: Vec<usize> = retrieved_rule_counts(memory, &retrieved).values().copied().collect();
+            let counts: Vec<usize> = retrieved_rule_counts(memory, &retrieved)
+                .values()
+                .copied()
+                .collect();
             per_span_h_sum += normalized_entropy(&counts);
             per_span_h_n += 1;
         }
@@ -269,7 +275,11 @@ pub fn measure<E: HealEntry>(
 /// reports `NaN` on fresh stores would break the audit script's greps).
 #[allow(clippy::cast_precision_loss)] // small counts; exact in f32
 fn ratio(a: usize, b: usize) -> f32 {
-    if b == 0 { 0.0 } else { a as f32 / b as f32 }
+    if b == 0 {
+        0.0
+    } else {
+        a as f32 / b as f32
+    }
 }
 
 /// Rule-id histogram of one span's retrieved top-k (shared by the per-span
@@ -377,11 +387,7 @@ pub fn memory_from_store_rows(rows: &[crate::traj_store::TrajRowDoc]) -> LatentF
     for row in rows {
         // `FixTrajectory::new` computes the lint hash + a fresh direction;
         // the stored direction wins (bit-faithful to the store).
-        let mut t = FixTrajectory::new(
-            row.lint_key.clone(),
-            row.shape.clone(),
-            row.fix.clone(),
-        );
+        let mut t = FixTrajectory::new(row.lint_key.clone(), row.shape.clone(), row.fix.clone());
         for (i, x) in row.direction.iter().take(t.direction.len()).enumerate() {
             t.direction[i] = *x;
         }
@@ -439,7 +445,11 @@ mod tests {
                     .iter()
                     .find(|e| e.lint_name == *rule)
                     .map_or_else(|| format!("/* fixed:{rule} */"), |e| e.fixed_code.clone());
-                mem.insert(FixTrajectory::new((*rule).to_string(), buggy.to_string(), fixed));
+                mem.insert(FixTrajectory::new(
+                    (*rule).to_string(),
+                    buggy.to_string(),
+                    fixed,
+                ));
             }
             mem
         }
@@ -510,7 +520,10 @@ mod tests {
         /// a crowding-out).
         #[must_use]
         fn exact_corpus_spans(corpus: &[ClippyFixEntry]) -> Vec<(&str, &str)> {
-            corpus.iter().map(|e| (e.lint_name.as_str(), e.buggy_code.as_str())).collect()
+            corpus
+                .iter()
+                .map(|e| (e.lint_name.as_str(), e.buggy_code.as_str()))
+                .collect()
         }
 
         /// Production-store measurement (env-gated — the stores live on the
@@ -601,9 +614,14 @@ mod tests {
 
             // Per-repo store copies.
             if let Some(root) = store_root {
-                for repo in
-                    ["riir-ai", "riir-chain", "riir-clippy", "riir-dapps", "riir-game-sdk", "riir-mmorpg-examples"]
-                {
+                for repo in [
+                    "riir-ai",
+                    "riir-chain",
+                    "riir-clippy",
+                    "riir-dapps",
+                    "riir-game-sdk",
+                    "riir-mmorpg-examples",
+                ] {
                     let dir = std::path::Path::new(&root).join(repo).join(".heal");
                     if !dir.join("trajectories.kv").exists() {
                         continue;

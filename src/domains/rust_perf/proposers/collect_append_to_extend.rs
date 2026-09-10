@@ -36,7 +36,10 @@ use syn::{Block, Expr, File, Local, Pat, Stmt};
 use super::{delete_stmt_edit, edit, span_range, src, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut scan = BlockScan { source, edits: Vec::new() };
+    let mut scan = BlockScan {
+        source,
+        edits: Vec::new(),
+    };
     scan.visit_file(file);
     scan.edits
 }
@@ -61,7 +64,9 @@ impl BlockScan<'_> {
         let stmts = &block.stmts;
         for (i, stmt) in stmts.iter().enumerate() {
             let Stmt::Local(local) = stmt else { continue };
-            let Some(var) = staged_binding(local) else { continue };
+            let Some(var) = staged_binding(local) else {
+                continue;
+            };
 
             // First later stmt mentioning VAR must be `RECV.append(&mut VAR);`.
             let mut append: Option<(&Stmt, &Expr)> = None;
@@ -75,7 +80,9 @@ impl BlockScan<'_> {
                 append = match_append(later, &var);
                 break;
             }
-            let Some((append_stmt, recv_expr)) = append else { continue };
+            let Some((append_stmt, recv_expr)) = append else {
+                continue;
+            };
 
             // Single-use staging: exactly the let + the append arg in the file.
             if count_ident_words(self.source, &var) != 2 {
@@ -84,9 +91,15 @@ impl BlockScan<'_> {
 
             let Stmt::Local(local) = stmt else { continue };
             let Some(init) = &local.init else { continue };
-            let Expr::MethodCall(collect) = &*init.expr else { continue };
-            let Some(recv_txt) = src(self.source, recv_expr) else { continue };
-            let Some(iter_txt) = src(self.source, &*collect.receiver) else { continue };
+            let Expr::MethodCall(collect) = &*init.expr else {
+                continue;
+            };
+            let Some(recv_txt) = src(self.source, recv_expr) else {
+                continue;
+            };
+            let Some(iter_txt) = src(self.source, &*collect.receiver) else {
+                continue;
+            };
 
             let extend = format!("{recv_txt}.extend({iter_txt});");
             self.edits.push(delete_stmt_edit(self.source, stmt));
@@ -108,13 +121,19 @@ impl BlockScan<'_> {
 
 /// Is `later` exactly `RECV.append(&mut VAR);` (receiver: any expr)?
 fn match_append<'a>(later: &'a Stmt, var: &str) -> Option<(&'a Stmt, &'a Expr)> {
-    let Stmt::Expr(Expr::MethodCall(app), _) = later else { return None };
+    let Stmt::Expr(Expr::MethodCall(app), _) = later else {
+        return None;
+    };
     if app.method != "append" || app.args.len() != 1 {
         return None;
     }
-    let Expr::Reference(eref) = app.args.first()? else { return None };
+    let Expr::Reference(eref) = app.args.first()? else {
+        return None;
+    };
     eref.mutability?;
-    let Expr::Path(p) = &*eref.expr else { return None };
+    let Expr::Path(p) = &*eref.expr else {
+        return None;
+    };
     if !p.path.is_ident(var) {
         return None;
     }
@@ -139,7 +158,9 @@ fn staged_binding(local: &Local) -> Option<String> {
     if init.diverge.is_some() {
         return None;
     }
-    let Expr::MethodCall(call) = &*init.expr else { return None };
+    let Expr::MethodCall(call) = &*init.expr else {
+        return None;
+    };
     if call.method != "collect" || !call.args.is_empty() {
         return None;
     }

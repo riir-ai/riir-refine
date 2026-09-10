@@ -215,9 +215,7 @@ pub fn run_switch_cost_eval() -> Option<SwitchCostReport> {
         // The switching rule is the second-position domain's rule; the lead
         // is the first-position's.
         let (switch_domain, switch_rule, switch_solo_code) = match span.first {
-            DomainId::Clippy => {
-                (DomainId::Perf, span.perf_rule, perf_fixture(span.perf_rule))
-            }
+            DomainId::Clippy => (DomainId::Perf, span.perf_rule, perf_fixture(span.perf_rule)),
             _ => (
                 DomainId::Clippy,
                 span.clippy_lint,
@@ -290,11 +288,22 @@ pub fn print_switch_cost_report(report: &SwitchCostReport) {
              switch co   @1/3/5: {:>5.1}/{:>5.1}/{:>5.1}%\n  \
              switch Δ pp       : {:+>5.1}/{:+>5.1}/{:+>5.1}  (solo − co)\n  \
              lead   co   @1/3/5: {:>5.1}/{:>5.1}/{:>5.1}%  (control; solo {:>5.1}/{:>5.1}/{:>5.1})",
-            dm.switch_solo.pct(1), dm.switch_solo.pct(3), dm.switch_solo.pct(5), dm.switch_solo.n,
-            dm.switch_co.pct(1), dm.switch_co.pct(3), dm.switch_co.pct(5),
-            g[0], g[1], g[2],
-            dm.lead_co.pct(1), dm.lead_co.pct(3), dm.lead_co.pct(5),
-            dm.lead_solo.pct(1), dm.lead_solo.pct(3), dm.lead_solo.pct(5),
+            dm.switch_solo.pct(1),
+            dm.switch_solo.pct(3),
+            dm.switch_solo.pct(5),
+            dm.switch_solo.n,
+            dm.switch_co.pct(1),
+            dm.switch_co.pct(3),
+            dm.switch_co.pct(5),
+            g[0],
+            g[1],
+            g[2],
+            dm.lead_co.pct(1),
+            dm.lead_co.pct(3),
+            dm.lead_co.pct(5),
+            dm.lead_solo.pct(1),
+            dm.lead_solo.pct(3),
+            dm.lead_solo.pct(5),
         );
     }
     if report.drops.is_empty() {
@@ -351,11 +360,7 @@ mod tests {
         use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         use crate::domains::rust_perf::proposers as perf;
 
-        let structural: Vec<&str> = FIXABLE_LINTS
-            .iter()
-            .chain(VERIFY_LINTS)
-            .copied()
-            .collect();
+        let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for s in cross_domain_spans() {
             assert!(
                 propose_fix(s.clippy_lint, &s.code).is_some(),
@@ -417,11 +422,7 @@ mod tests {
         // ambiguity); a true-positive fire by the lint's own shape is not a
         // leak, so the named (fixture, lint) pair is allowlisted.
         const TRUE_POSITIVE_FIRES: &[(&str, &str)] = &[("powi-vs-powf", "suboptimal_flops")];
-        let structural: Vec<&str> = FIXABLE_LINTS
-            .iter()
-            .chain(VERIFY_LINTS)
-            .copied()
-            .collect();
+        let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for &(rule, code) in PERF_SPANS {
             for &l in &structural {
                 if TRUE_POSITIVE_FIRES.contains(&(rule, l)) {

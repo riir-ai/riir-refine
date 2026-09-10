@@ -234,11 +234,12 @@ pub fn delete_stmt_edit(source: &str, node: &impl Spanned) -> SourceEdit {
         end += 1;
     }
     let after = &source[end..];
-    let line_rest_empty =
-        after.is_empty() || after.starts_with('\n') || after.starts_with("\r\n");
+    let line_rest_empty = after.is_empty() || after.starts_with('\n') || after.starts_with("\r\n");
     if line_rest_empty {
         let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
-        let prefix_ws = source[line_start..start].chars().all(|c| c == ' ' || c == '\t');
+        let prefix_ws = source[line_start..start]
+            .chars()
+            .all(|c| c == ' ' || c == '\t');
         if prefix_ws && line_start > 0 {
             start = line_start;
             // Eat the preceding newline (and its \r under CRLF) so the whole
@@ -251,7 +252,11 @@ pub fn delete_stmt_edit(source: &str, node: &impl Spanned) -> SourceEdit {
             }
         }
     }
-    SourceEdit { start, end, replacement: String::new() }
+    SourceEdit {
+        start,
+        end,
+        replacement: String::new(),
+    }
 }
 
 /// Visit every fn-like item in the file (free fns, impl methods, fns in
@@ -300,7 +305,10 @@ fn for_each_item<'a>(items: &'a [Item], f: &mut impl FnMut(&'a Signature, &'a sy
 /// puts real code there. Walks every block-bearing statement recursively.
 /// `let x = { … }` initializer blocks and closure bodies are a documented
 /// under-approximation (no observed production instances).
-fn nested_fns_in_block<'a>(block: &'a syn::Block, f: &mut impl FnMut(&'a Signature, &'a syn::Block)) {
+fn nested_fns_in_block<'a>(
+    block: &'a syn::Block,
+    f: &mut impl FnMut(&'a Signature, &'a syn::Block),
+) {
     for stmt in &block.stmts {
         match stmt {
             Stmt::Item(Item::Fn(nested)) => {
@@ -384,8 +392,12 @@ mod tests {
         // to the node's own text. Pin it with a direct check.
         let source = "fn f() -> u32 { let x = (1 + 2) * 3; x }";
         let file = syn::parse_file(source).unwrap();
-        let Item::Fn(f) = &file.items[0] else { panic!() };
-        let syn::Stmt::Local(l) = &f.block.stmts[0] else { panic!() };
+        let Item::Fn(f) = &file.items[0] else {
+            panic!()
+        };
+        let syn::Stmt::Local(l) = &f.block.stmts[0] else {
+            panic!()
+        };
         let init = l.init.as_ref().unwrap();
         assert_eq!(src(source, &init.expr).as_deref(), Some("(1 + 2) * 3"));
     }
@@ -396,9 +408,15 @@ mod tests {
         // string (spans index the exact string the file was parsed from).
         let source = "fn f(x: &'a u8) { }";
         let file = syn::parse_file(source).unwrap();
-        let Item::Fn(f) = &file.items[0] else { panic!() };
-        let syn::FnArg::Typed(pat) = &f.sig.inputs[0] else { panic!() };
-        let syn::Type::Reference(r) = &*pat.ty else { panic!() };
+        let Item::Fn(f) = &file.items[0] else {
+            panic!()
+        };
+        let syn::FnArg::Typed(pat) = &f.sig.inputs[0] else {
+            panic!()
+        };
+        let syn::Type::Reference(r) = &*pat.ty else {
+            panic!()
+        };
         let lt = r.lifetime.as_ref().expect("lifetime present");
         let e = swallow_following_space(source, edit(lt, String::new()));
         assert_eq!(&source[e.start..e.end], "'a ");
@@ -408,7 +426,9 @@ mod tests {
     fn delete_stmt_edit_removes_own_line() {
         let source = "fn f() {\n    a();\n    b();\n}\n";
         let file = syn::parse_file(source).unwrap();
-        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let Item::Fn(f) = &file.items[0] else {
+            panic!()
+        };
         // a(); is the first stmt of the body.
         let e = delete_stmt_edit(source, &f.block.stmts[0]);
         let out = apply_edits(source, vec![e]);
@@ -421,7 +441,9 @@ mod tests {
         // cleanly (disjoint ranges) and leave no blank lines behind.
         let source = "fn f() {\n    a();\n    b();\n    c();\n}\n";
         let file = syn::parse_file(source).unwrap();
-        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let Item::Fn(f) = &file.items[0] else {
+            panic!()
+        };
         let e1 = delete_stmt_edit(source, &f.block.stmts[0]);
         let e2 = delete_stmt_edit(source, &f.block.stmts[1]);
         let out = apply_edits(source, vec![e1, e2]);
@@ -432,7 +454,9 @@ mod tests {
     fn delete_stmt_edit_mid_line_keeps_siblings() {
         let source = "fn f() { a(); b(); }";
         let file = syn::parse_file(source).unwrap();
-        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let Item::Fn(f) = &file.items[0] else {
+            panic!()
+        };
         let e = delete_stmt_edit(source, &f.block.stmts[0]);
         let out = apply_edits(source, vec![e]);
         assert_eq!(out, "fn f() { b(); }");
@@ -445,7 +469,9 @@ mod tests {
         // remaining indentation), byte-identical.
         let source = "fn f(x: u32) {\n    let s = x; // note\n    x\n}\n";
         let file = syn::parse_file(source).unwrap();
-        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let Item::Fn(f) = &file.items[0] else {
+            panic!()
+        };
         let e = delete_stmt_edit(source, &f.block.stmts[0]);
         let out = apply_edits(source, vec![e]);
         assert!(out.contains("    // note\n    x"), "{out}");
@@ -459,9 +485,17 @@ mod tests {
         let (out, splices) = apply_edits_traced(
             src,
             vec![
-                SourceEdit { start: 5, end: 9, replacement: "XX".to_string() },
+                SourceEdit {
+                    start: 5,
+                    end: 9,
+                    replacement: "XX".to_string(),
+                },
                 // overlaps "bbbb" — must be dropped from the splice record
-                SourceEdit { start: 6, end: 8, replacement: "Y".to_string() },
+                SourceEdit {
+                    start: 6,
+                    end: 8,
+                    replacement: "Y".to_string(),
+                },
             ],
         );
         assert_eq!(out, "aaaa XX cccc");
@@ -474,8 +508,16 @@ mod tests {
     fn map_through_splices_tracks_insertions_and_deletions() {
         // One insertion (grows +3) + one deletion (shrinks −4), sorted asc.
         let splices = vec![
-            SourceEdit { start: 2, end: 2, replacement: "xyz".to_string() },  // insert
-            SourceEdit { start: 10, end: 14, replacement: String::new() },   // delete
+            SourceEdit {
+                start: 2,
+                end: 2,
+                replacement: "xyz".to_string(),
+            }, // insert
+            SourceEdit {
+                start: 10,
+                end: 14,
+                replacement: String::new(),
+            }, // delete
         ];
         // Before everything: unmoved.
         assert_eq!(map_through_splices(0, &splices), 0);
@@ -495,8 +537,16 @@ mod tests {
         // BEFORE an insertion. A walking position compared against unshifted
         // starts would break at the insertion and drop its shift.
         let splices = vec![
-            SourceEdit { start: 0, end: 10, replacement: String::new() },       // delete 10
-            SourceEdit { start: 12, end: 12, replacement: "ZZZZ".to_string() }, // insert 4
+            SourceEdit {
+                start: 0,
+                end: 10,
+                replacement: String::new(),
+            }, // delete 10
+            SourceEdit {
+                start: 12,
+                end: 12,
+                replacement: "ZZZZ".to_string(),
+            }, // insert 4
         ];
         // p=20 (past both): −10 +4 → 14.
         assert_eq!(map_through_splices(20, &splices), 14);
@@ -516,7 +566,11 @@ mod tests {
         let ret_a = pass1_src.find("return 7;").expect("ret a");
         let (pass2_src, s1) = apply_edits_traced(
             pass1_src,
-            vec![SourceEdit { start: ret_a, end: ret_a + "return 7;".len(), replacement: "7".to_string() }],
+            vec![SourceEdit {
+                start: ret_a,
+                end: ret_a + "return 7;".len(),
+                replacement: "7".to_string(),
+            }],
         );
         let ret_b_in_pass1 = pass1_src.find("return 8;").expect("ret b");
         let fn_b_in_pass2 = pass2_src.find("fn b").expect("fn b");

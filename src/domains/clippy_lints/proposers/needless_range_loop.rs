@@ -107,8 +107,8 @@
 
 use super::uninlined_format_args::{all_expr_args, post_template_expr_args, ExprMacroArg};
 use super::{apply_edits, edit, for_each_fn, src, SourceEdit};
-use std::collections::BTreeSet;
 use proc_macro2::TokenTree;
+use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprForLoop, ExprLit, ExprMacro, ExprRange, File, Lit, Signature};
@@ -185,7 +185,11 @@ enum IterForm {
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     for_each_fn(file, |sig, block| {
-        let mut v = Collector { source, sig, edits: &mut edits };
+        let mut v = Collector {
+            source,
+            sig,
+            edits: &mut edits,
+        };
         v.visit_block(block);
     });
     edits
@@ -284,10 +288,7 @@ impl Collector<'_, '_> {
         // foreign edits re-fire on the next fixpoint pass.
         let span = fl.span().byte_range();
         let loop_text = self.source.get(span.start..span.end)?;
-        let mut subs = vec![
-            edit(&fl.pat, fresh.clone()),
-            edit(&fl.expr, iter_text),
-        ];
+        let mut subs = vec![edit(&fl.pat, fresh.clone()), edit(&fl.expr, iter_text)];
         for (start, end) in usage.exact {
             // Universal deref splice (Plan 097 T1): `*__elem` is
             // desugar-identical to `v[i]` in every rvalue context (the bare
@@ -299,7 +300,11 @@ impl Collector<'_, '_> {
             } else {
                 format!("*{fresh}")
             };
-            subs.push(SourceEdit { start, end, replacement });
+            subs.push(SourceEdit {
+                start,
+                end,
+                replacement,
+            });
         }
         let replacement = apply_edits(
             loop_text,
@@ -311,7 +316,11 @@ impl Collector<'_, '_> {
                 })
                 .collect(),
         );
-        Some(vec![SourceEdit { start: span.start, end: span.end, replacement }])
+        Some(vec![SourceEdit {
+            start: span.start,
+            end: span.end,
+            replacement,
+        }])
     }
 
     /// How may the rewrite iterate this single-ident collection param?
@@ -322,8 +331,12 @@ impl Collector<'_, '_> {
     fn param_iter_form(&self, path: &syn::ExprPath) -> Option<IterForm> {
         let ident = path.path.get_ident()?;
         for arg in &self.sig.inputs {
-            let syn::FnArg::Typed(pat) = arg else { continue };
-            let syn::Pat::Ident(pi) = &*pat.pat else { continue };
+            let syn::FnArg::Typed(pat) = arg else {
+                continue;
+            };
+            let syn::Pat::Ident(pi) = &*pat.pat else {
+                continue;
+            };
             if pi.ident != *ident {
                 continue;
             }
@@ -810,7 +823,10 @@ fn body_family_names(body: &syn::Block) -> BodyNames {
             }
         }
     }
-    let mut p = P { taken: BTreeSet::new(), templates: Vec::new() };
+    let mut p = P {
+        taken: BTreeSet::new(),
+        templates: Vec::new(),
+    };
     p.visit_block(body);
     (p.taken, p.templates)
 }
@@ -875,14 +891,16 @@ mod tests {
 
     #[test]
     fn converts_range_loop_owned_param_ref_iter() {
-        let input = "fn sum(v: Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
+        let input =
+            "fn sum(v: Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("for __elem in &v { s += *__elem; }"), "{out}");
     }
 
     #[test]
     fn slice_param_bare_iter() {
-        let input = "fn sum(v: &[i32]) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
+        let input =
+            "fn sum(v: &[i32]) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("for __elem in v {"), "{out}");
         assert!(out.contains("s += *__elem;"), "{out}");
@@ -947,7 +965,8 @@ mod tests {
     /// `&v[i]` — address-of through the slot (`&T` → `&&T` under rewrite).
     #[test]
     fn leaves_loop_with_slot_ref() {
-        let input = "fn go(v: Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += *(&v[i]); } s }";
+        let input =
+            "fn go(v: Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += *(&v[i]); } s }";
         let out = propose_fix("needless_range_loop", input);
         assert!(out.is_none(), "slot-ref loop touched: {out:?}");
     }
@@ -958,7 +977,10 @@ mod tests {
     fn leaves_loop_over_local_collection() {
         let input = "fn go() -> i32 { let v = vec![1, 2, 3]; let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input);
-        assert!(out.is_none(), "unresolvable local collection must skip: {out:?}");
+        assert!(
+            out.is_none(),
+            "unresolvable local collection must skip: {out:?}"
+        );
     }
 
     /// `minimum` contains but is not `i` — the old token heuristic treated
@@ -1031,7 +1053,10 @@ mod tests {
         let input = "pub fn go(v: &[i32]) { for __elem in v { for i in 0..v.len() { println!(\"{__elem}: {}\", v[i]); } } }";
         let healed = fixpoint_over(&["needless_range_loop"], input);
         assert!(healed.contains("for __elem2 in v"), "{healed}");
-        assert!(healed.contains("println!(\"{__elem}: {}\", *__elem2)"), "{healed}");
+        assert!(
+            healed.contains("println!(\"{__elem}: {}\", *__elem2)"),
+            "{healed}"
+        );
         syn::parse_file(&healed).expect("re-parses");
     }
 
@@ -1102,7 +1127,10 @@ mod tests {
         let input =
             "fn go(v: &mut Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i] + v.len() as u32; } s }";
         let out = propose_fix("needless_range_loop", input);
-        assert!(out.is_none(), "&mut param + non-slot use must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "&mut param + non-slot use must refuse: {out:?}"
+        );
     }
 
     /// C1b: an `&mut` param heals today (bare iter yields `&mut T` elements)
@@ -1121,7 +1149,8 @@ mod tests {
     /// stays bounded to the broken shapes).
     #[test]
     fn owned_mut_param_plain_read_keeps_shared_header() {
-        let input = "fn go(mut v: Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
+        let input =
+            "fn go(mut v: Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("for __elem in &v {"), "{out}");
         assert!(!out.contains("&mut v"), "{out}");
@@ -1143,9 +1172,13 @@ mod tests {
     /// the body refuses: the `&mut v` iter is exclusive for the whole loop.
     #[test]
     fn mutator_receiver_with_other_collection_use_refuses() {
-        let input = "fn go(mut v: Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(v.len() as u32); } }";
+        let input =
+            "fn go(mut v: Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(v.len() as u32); } }";
         let out = propose_fix("needless_range_loop", input);
-        assert!(out.is_none(), "mut header + non-slot use must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "mut header + non-slot use must refuse: {out:?}"
+        );
     }
 
     // ── Plan 100 T2: template-less family-macro descent ──
@@ -1233,12 +1266,15 @@ mod tests {
         let edits = super::collect_edits(input, &file);
         assert_eq!(edits.len(), 1, "must be exactly one edit: {edits:?}");
         let e = &edits[0];
-        assert_eq!(&input[e.start..e.end],
+        assert_eq!(
+            &input[e.start..e.end],
             "for i in 0..hits.len() {\n        total += hits[i];\n    }",
-            "the one edit must span the whole loop");
-        assert_eq!(e.replacement,
-            "for __elem in hits {\n        total += *__elem;\n    }",
-            "replacement carries header + slot rewrites together");
+            "the one edit must span the whole loop"
+        );
+        assert_eq!(
+            e.replacement, "for __elem in hits {\n        total += *__elem;\n    }",
+            "replacement carries header + slot rewrites together"
+        );
     }
 
     /// Reproduces the frozen bench fixture `composite-range_loop_plus_identity_op`
@@ -1248,10 +1284,22 @@ mod tests {
     #[test]
     fn composes_with_identity_op_without_dangling_index() {
         let input = "pub fn total_damage(hits: &[u32]) -> u32 {\n    let mut total = 0;\n    for i in 0..hits.len() {\n        total += hits[i] * 1;\n    }\n    total\n}\n";
-        let healed = fixpoint_over(&["identity_op", "double_parens", "needless_range_loop"], input);
-        assert!(healed.contains("for __elem in hits"), "header rewritten: {healed}");
-        assert!(!healed.contains("hits["), "dangling index survived: {healed}");
-        assert!(!healed.contains("* 1"), "identity_op must land too: {healed}");
+        let healed = fixpoint_over(
+            &["identity_op", "double_parens", "needless_range_loop"],
+            input,
+        );
+        assert!(
+            healed.contains("for __elem in hits"),
+            "header rewritten: {healed}"
+        );
+        assert!(
+            !healed.contains("hits["),
+            "dangling index survived: {healed}"
+        );
+        assert!(
+            !healed.contains("* 1"),
+            "identity_op must land too: {healed}"
+        );
     }
 
     /// Reproduces the frozen bench fixture
@@ -1260,9 +1308,18 @@ mod tests {
     #[test]
     fn composes_with_double_parens_without_dangling_index() {
         let input = "pub fn offsets(values: &[u32]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for i in 0..values.len() {\n        out.push(((values[i] + 1)));\n    }\n    out\n}\n";
-        let healed = fixpoint_over(&["identity_op", "double_parens", "needless_range_loop"], input);
-        assert!(healed.contains("for __elem in values"), "header rewritten: {healed}");
-        assert!(!healed.contains("values["), "dangling index survived: {healed}");
+        let healed = fixpoint_over(
+            &["identity_op", "double_parens", "needless_range_loop"],
+            input,
+        );
+        assert!(
+            healed.contains("for __elem in values"),
+            "header rewritten: {healed}"
+        );
+        assert!(
+            !healed.contains("values["),
+            "dangling index survived: {healed}"
+        );
     }
 
     /// Reproduces the frozen bench fixture
@@ -1275,8 +1332,14 @@ mod tests {
     fn converts_loop_with_format_macro_args() {
         let input = "pub fn describe_all(names: &[String]) -> Vec<String> {\n    let mut out = Vec::new();\n    for i in 0..names.len() {\n        out.push(format!(\"{}\", names[i]));\n    }\n    out\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
-        assert!(out.contains("for __elem in names"), "header rewritten: {out}");
-        assert!(out.contains("format!(\"{}\", *__elem)"), "macro slot substituted: {out}");
+        assert!(
+            out.contains("for __elem in names"),
+            "header rewritten: {out}"
+        );
+        assert!(
+            out.contains("format!(\"{}\", *__elem)"),
+            "macro slot substituted: {out}"
+        );
         assert!(!out.contains("names["), "dangling index survived: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -1286,7 +1349,10 @@ mod tests {
         // Statement-position macro (StmtMacro) with the slot inside.
         let input = "pub fn dump(v: &[u32]) {\n    for i in 0..v.len() {\n        println!(\"{}\", v[i]);\n    }\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
-        assert!(out.contains("println!(\"{}\", *__elem)"), "slot substituted: {out}");
+        assert!(
+            out.contains("println!(\"{}\", *__elem)"),
+            "slot substituted: {out}"
+        );
         assert!(!out.contains("v["), "{out}");
     }
 
@@ -1311,7 +1377,7 @@ mod tests {
     #[test]
     fn opaque_macro_mentioning_ident_refuses() {
         // Non-format-family macro whose tokens mention `i` — opaque stays
-    // refused, it just gets SEEN now (the conservative token walk).
+        // refused, it just gets SEEN now (the conservative token walk).
         let input = "macro_rules! eat { ($e:expr) => { let _ = $e; } }\npub fn f(v: &[u32]) {\n    for i in 0..v.len() {\n        eat!(i);\n        let _ = v[i];\n    }\n}\n";
         let out = propose_fix("needless_range_loop", input);
         assert!(out.is_none(), "opaque macro mention must refuse: {out:?}");
@@ -1323,7 +1389,8 @@ mod tests {
         // family) — the old binary guard refused on any prefix mention; the
         // enumeration ignores it and the rewrite heals.
         let input = "pub fn show(names: &[String]) -> String {\n    let mut out = String::new();\n    for i in 0..names.len() {\n        out.push_str(&format!(\"{}\", { let __elem_x = names[i]; __elem_x }));\n    }\n    out\n}\n";
-        let out = propose_fix("needless_range_loop", input).expect("nonfamily mention must not block");
+        let out =
+            propose_fix("needless_range_loop", input).expect("nonfamily mention must not block");
         assert!(out.contains("let __elem_x = *__elem; __elem_x"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }

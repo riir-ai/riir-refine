@@ -18,8 +18,8 @@
 //! min-delta on the generated corpus; a null result keeps the seam + this
 //! constructor shipped but unused by default (the `t48` verdict records it).
 
-use crate::embedder::{EMBED_DIM, embed_into};
-use crate::gp_acquisition::{DIM, GpAcquisition};
+use crate::embedder::{embed_into, EMBED_DIM};
+use crate::gp_acquisition::{GpAcquisition, DIM};
 
 use super::driver::OrderingFn;
 use super::playbooks::FixCandidate;
@@ -39,7 +39,8 @@ use super::playbooks::FixCandidate;
 /// growing variant).
 #[must_use]
 pub fn gp_ordering(observed: &[(String, String)]) -> OrderingFn {
-    let mut gp = GpAcquisition::with_capacity(crate::gp_acquisition::DEFAULT_LAMBDA, observed.len());
+    let mut gp =
+        GpAcquisition::with_capacity(crate::gp_acquisition::DEFAULT_LAMBDA, observed.len());
     let mut buf = [0.0f32; EMBED_DIM];
     for (code, shape) in observed {
         embed_into(code, shape, &mut buf);
@@ -63,7 +64,8 @@ pub fn gp_ordering(observed: &[(String, String)]) -> OrderingFn {
 /// within-run acquisition loop without needing driver callbacks.
 #[must_use]
 pub fn gp_ordering_growing(observed: &[(String, String)]) -> OrderingFn {
-    let mut gp = GpAcquisition::with_capacity(crate::gp_acquisition::DEFAULT_LAMBDA, observed.len());
+    let mut gp =
+        GpAcquisition::with_capacity(crate::gp_acquisition::DEFAULT_LAMBDA, observed.len());
     let mut buf = [0.0f32; EMBED_DIM];
     for (code, shape) in observed {
         embed_into(code, shape, &mut buf);
@@ -111,7 +113,10 @@ fn incumbent_key(c: &FixCandidate) -> (String, usize, String, usize, String) {
     )
 }
 
-const _: () = assert!(DIM == EMBED_DIM, "gp_acquisition + embedder dims must agree");
+const _: () = assert!(
+    DIM == EMBED_DIM,
+    "gp_acquisition + embedder dims must agree"
+);
 
 #[cfg(test)]
 mod tests {

@@ -40,10 +40,7 @@ use super::diag::{LabeledSpan, RustcErrorDiag};
 /// A labeled span in the same file as the diagnostic's primary span —
 /// the shared anchor lookup every playbook family keys on (the oracle's
 /// own location knowledge, never guessed).
-pub(crate) fn anchor(
-    diag: &RustcErrorDiag,
-    pred: impl Fn(&str) -> bool,
-) -> Option<&LabeledSpan> {
+pub(crate) fn anchor(diag: &RustcErrorDiag, pred: impl Fn(&str) -> bool) -> Option<&LabeledSpan> {
     let (pf, _) = diag.primary.as_ref()?;
     diag.labeled_spans
         .iter()
@@ -56,11 +53,7 @@ pub(crate) fn binding_name(label: &str) -> Option<&str> {
     let start = label.find('`')? + 1;
     let end = start + label[start..].find('`')?;
     let name = &label[start..end];
-    if name.is_empty()
-        || !name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return None;
     }
     Some(name)

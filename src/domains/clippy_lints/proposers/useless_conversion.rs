@@ -14,7 +14,10 @@ use syn::{Expr, File, Local};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }

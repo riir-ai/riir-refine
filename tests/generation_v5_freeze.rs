@@ -42,10 +42,8 @@ use riir_clippy::score_bench::generations;
 fn freeze_and_verify_generation_v5() {
     let atom_list = generations::v5_atoms();
     assert!(!atom_list.is_empty(), "atom factory produced nothing");
-    let persist_ids: std::collections::BTreeSet<&str> = generations::PERSIST_ATOMS_V5
-        .iter()
-        .map(|p| p.id)
-        .collect();
+    let persist_ids: std::collections::BTreeSet<&str> =
+        generations::PERSIST_ATOMS_V5.iter().map(|p| p.id).collect();
 
     // ── G1 + G2: parse gate + the marker-discrimination fence ───────────
     let corpus = riir_clippy::build_perf_seed_corpus();
@@ -74,7 +72,10 @@ fn freeze_and_verify_generation_v5() {
             continue; // persist atoms have no fixed_code by definition
         }
         let Some(fixed) = fixed_by_rule.get(rule.as_str()) else {
-            println!("⚠ atom {}: rule {rule} missing from the corpus — excluding", atom.id);
+            println!(
+                "⚠ atom {}: rule {rule} missing from the corpus — excluding",
+                atom.id
+            );
             bad_atoms.push(atom.id.clone());
             continue;
         };
@@ -113,7 +114,11 @@ fn freeze_and_verify_generation_v5() {
     }
     println!(
         "\nstratification gate (every persist atom resolves 0 through the production heal): {}",
-        if strat_violations.is_empty() { "PASS" } else { "FAIL" }
+        if strat_violations.is_empty() {
+            "PASS"
+        } else {
+            "FAIL"
+        }
     );
     for v in &strat_violations {
         println!("  VIOLATION: {v}");
@@ -134,12 +139,11 @@ fn freeze_and_verify_generation_v5() {
         if excluded.contains(s.id.as_str()) {
             continue;
         }
-        let constituent_ids: Vec<&str> = s
-            .id
-            .strip_prefix("gen5-k")
-            .and_then(|rest| rest.split_once('-'))
-            .map(|(_, ids)| ids.split('+').collect())
-            .unwrap_or_default();
+        let constituent_ids: Vec<&str> =
+            s.id.strip_prefix("gen5-k")
+                .and_then(|rest| rest.split_once('-'))
+                .map(|(_, ids)| ids.split('+').collect())
+                .unwrap_or_default();
         if constituent_ids.iter().any(|id| !verified_ids.contains(*id)) {
             fresh_exclusions.push(s.id.clone());
             continue;
@@ -154,7 +158,10 @@ fn freeze_and_verify_generation_v5() {
         let mut member_ok = true;
         for i in 0..s.k {
             let Some(region) = generations::v5_module_region(&s.code, i) else {
-                println!("⚠ spec {}: region gen_{i} not extractable — excluding", s.id);
+                println!(
+                    "⚠ spec {}: region gen_{i} not extractable — excluding",
+                    s.id
+                );
                 member_ok = false;
                 break;
             };
@@ -213,7 +220,9 @@ fn freeze_and_verify_generation_v5() {
         std::collections::BTreeMap::new();
     for a in &atom_list {
         if verified_ids.contains(&a.id) {
-            *per_territory.entry(generations::v5_territory(&a.id)).or_default() += 1;
+            *per_territory
+                .entry(generations::v5_territory(&a.id))
+                .or_default() += 1;
         }
     }
     for (terr, n) in &per_territory {

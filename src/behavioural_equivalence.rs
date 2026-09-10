@@ -82,7 +82,9 @@ impl Verdict {
 /// beyond the seeded LCG.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Dom {
-    Int { rust: &'static str },
+    Int {
+        rust: &'static str,
+    },
     Bool,
     Char,
     /// `&str` / `String` — owned as `String`, borrowed per side.
@@ -90,7 +92,9 @@ enum Dom {
     /// `Vec<u8>` / `&Vec<u8>` / `&[u8]` — owned as `Vec<u8>`, borrowed per side.
     Bytes,
     /// `Option<Int>`; carries the inner rust type name.
-    OptInt { rust: &'static str },
+    OptInt {
+        rust: &'static str,
+    },
 }
 
 /// How one side of the pair receives an owned value. `ptr_arg`'s whole fix is a

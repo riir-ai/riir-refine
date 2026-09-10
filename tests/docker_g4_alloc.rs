@@ -15,7 +15,9 @@
 
 #![cfg(feature = "docker")]
 
-use riir_clippy::domains::docker::rules::{scan_into, scan_source_with, DockerScratch, ScanContext};
+use riir_clippy::domains::docker::rules::{
+    scan_into, scan_source_with, DockerScratch, ScanContext,
+};
 
 const FILES: &[&str] = &[
     "FROM debian:bookworm-slim\nRUN apt-get install -y curl\n",
@@ -46,7 +48,10 @@ fn g4_scratch_capacity_reaches_a_steady_state() {
         warm,
         "scan buffers grew after warm-up — the scan path is not reaching a steady state"
     );
-    assert!(warm.0 > 0, "the stanza buffer never filled — the test is not exercising the path");
+    assert!(
+        warm.0 > 0,
+        "the stanza buffer never filled — the test is not exercising the path"
+    );
 }
 
 #[test]
@@ -67,7 +72,10 @@ fn g4_clean_file_produces_no_findings_to_allocate() {
                  ENTRYPOINT [\"/x\"]\n";
     let mut scratch = DockerScratch::default();
     let findings = scan_into(clean, &ScanContext::default(), &mut scratch);
-    assert!(findings.is_empty(), "clean file produced findings: {findings:?}");
+    assert!(
+        findings.is_empty(),
+        "clean file produced findings: {findings:?}"
+    );
 }
 
 #[test]

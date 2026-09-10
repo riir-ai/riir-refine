@@ -151,7 +151,8 @@ mod tests {
         let input = "fn f(x: Option<u8>) -> Result<u8, E> {\n    x.ok_or_else(|| E::Refused {\n        reason: \"epoch overflow at the payout leg\",\n    })\n}";
         let out = propose_fix("unnecessary_lazy_evaluations", input).expect("matched");
         assert!(
-            out.contains("x.ok_or(E::Refused {") && out.contains("\"epoch overflow at the payout leg\","),
+            out.contains("x.ok_or(E::Refused {")
+                && out.contains("\"epoch overflow at the payout leg\","),
             "multi-line struct body not preserved: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
@@ -182,8 +183,7 @@ mod tests {
         assert!(out.is_none(), "impure struct field must not fire: {out:?}");
 
         // An arbitrary call is not a constructor — stays lazy.
-        let input =
-            "fn g() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| g()) }";
+        let input = "fn g() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| g()) }";
         let out = propose_fix("unnecessary_lazy_evaluations", input);
         assert!(out.is_none(), "arbitrary call must not fire: {out:?}");
     }

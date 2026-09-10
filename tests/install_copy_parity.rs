@@ -46,7 +46,9 @@ fn repo_root() -> PathBuf {
 }
 
 fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in entries.flatten() {
         let p = e.path();
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -142,7 +144,9 @@ fn every_install_url_is_the_canonical_one() {
     let mut offenders = Vec::new();
     let mut seen = 0usize;
     for f in &files {
-        let Ok(text) = std::fs::read_to_string(f) else { continue };
+        let Ok(text) = std::fs::read_to_string(f) else {
+            continue;
+        };
         for (n, line) in text.lines().enumerate() {
             for url in installer_urls(line) {
                 seen += 1;
@@ -186,7 +190,9 @@ fn the_copy_never_points_at_the_private_repos_releases() {
     markdown_files(&repo_root(), &mut files);
     let mut offenders = Vec::new();
     for f in &files {
-        let Ok(text) = std::fs::read_to_string(f) else { continue };
+        let Ok(text) = std::fs::read_to_string(f) else {
+            continue;
+        };
         for (n, line) in text.lines().enumerate() {
             // A release-asset URL on the PRIVATE repo. The proposal is
             // allowed to DISCUSS why that does not work, so a line must
@@ -212,5 +218,8 @@ fn the_copy_never_points_at_the_private_repos_releases() {
     );
     // And the canonical base must actually name that public repo, so this
     // test cannot pass by the copy pointing somewhere else entirely.
-    assert!(CANONICAL_BASE.contains("gist-rs/cargo-heal"), "{CANONICAL_BASE}");
+    assert!(
+        CANONICAL_BASE.contains("gist-rs/cargo-heal"),
+        "{CANONICAL_BASE}"
+    );
 }

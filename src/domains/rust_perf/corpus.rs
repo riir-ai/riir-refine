@@ -4349,8 +4349,8 @@ for &k in &input.keys {
 std::hint::black_box(acc);
 }
 "#
-    .to_string(),
-}
+        .to_string(),
+    }
 }
 
 /// Bench spec for `vec-with-capacity`: Vec::new() growth vs Vec::with_capacity.
@@ -6435,7 +6435,7 @@ pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::sum_quot_u32(&input.data32, std::hint::black_box(input.d32)));
     std::hint::black_box(fixed::sum_quot_u64(&input.data64, std::hint::black_box(input.d64)));
 }"#
-            .replace("__FASTDIV_IMPLS__", DIVISION_INVARIANT_FIXED_SRC),
+        .replace("__FASTDIV_IMPLS__", DIVISION_INVARIANT_FIXED_SRC),
     }
 }
 
@@ -6971,7 +6971,7 @@ pub fn run_fixed(input: &Input) {
     }
     std::hint::black_box(acc);
 }"#
-            .to_string(),
+        .to_string(),
     }
 }
 
@@ -7121,7 +7121,7 @@ pub fn run_fixed(input: &Input) {
     std::hint::black_box(cs);
     debug_assert_eq!(cs, expected(input.n_threads));
 }"#
-            .to_string(),
+        .to_string(),
     }
 }
 
@@ -7244,7 +7244,7 @@ pub fn run_fixed(input: &Input) {
     std::hint::black_box(count);
     debug_assert_eq!(count, input.total);
 }"#
-            .to_string(),
+        .to_string(),
     }
 }
 
@@ -8976,10 +8976,18 @@ mod tests {
             .collect();
 
         for addr in 0..((n - 8) as usize) {
-            assert_eq!(assemble_u64(&data, addr), load_u64(&data, addr), "u64 @ {addr}");
+            assert_eq!(
+                assemble_u64(&data, addr),
+                load_u64(&data, addr),
+                "u64 @ {addr}"
+            );
         }
         for addr in 0..((n - 4) as usize) {
-            assert_eq!(assemble_u32(&data, addr), load_u32(&data, addr), "u32 @ {addr}");
+            assert_eq!(
+                assemble_u32(&data, addr),
+                load_u32(&data, addr),
+                "u32 @ {addr}"
+            );
         }
     }
 
@@ -8993,11 +9001,29 @@ mod tests {
             } else if v < (1 << 14) {
                 ((v & 127) | ((v & (127 << 7)) << 1) | (128 << 8), 2)
             } else if v < (1 << 21) {
-                ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | (128 << 16), 3)
+                (
+                    (v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | (128 << 16),
+                    3,
+                )
             } else if v < (1 << 28) {
-                ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | (128 << 24), 4)
+                (
+                    (v & 127)
+                        | ((v & (127 << 7)) << 1)
+                        | ((v & (127 << 14)) << 2)
+                        | ((v & (127 << 21)) << 3)
+                        | (128 << 24),
+                    4,
+                )
             } else {
-                ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | ((v & (127 << 28)) << 4) | (128u64 << 32), 5)
+                (
+                    (v & 127)
+                        | ((v & (127 << 7)) << 1)
+                        | ((v & (127 << 14)) << 2)
+                        | ((v & (127 << 21)) << 3)
+                        | ((v & (127 << 28)) << 4)
+                        | (128u64 << 32),
+                    5,
+                )
             };
             let buf = res.to_le_bytes();
             out.extend_from_slice(&buf[..len]);
@@ -9024,11 +9050,38 @@ mod tests {
             } else if v < (1 << 14) {
                 ((v & 127) | 0x80 | ((v & (127 << 7)) << 1), 2)
             } else if v < (1 << 21) {
-                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1) | 0x80 << 8 | ((v & (127 << 14)) << 2), 3)
+                (
+                    (v & 127)
+                        | 0x80
+                        | ((v & (127 << 7)) << 1)
+                        | 0x80 << 8
+                        | ((v & (127 << 14)) << 2),
+                    3,
+                )
             } else if v < (1 << 28) {
-                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1) | 0x80 << 8 | ((v & (127 << 14)) << 2) | 0x80 << 16 | ((v & (127 << 21)) << 3), 4)
+                (
+                    (v & 127)
+                        | 0x80
+                        | ((v & (127 << 7)) << 1)
+                        | 0x80 << 8
+                        | ((v & (127 << 14)) << 2)
+                        | 0x80 << 16
+                        | ((v & (127 << 21)) << 3),
+                    4,
+                )
             } else {
-                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1) | 0x80 << 8 | ((v & (127 << 14)) << 2) | 0x80 << 16 | ((v & (127 << 21)) << 3) | 0x80 << 24 | ((v & (127 << 28)) << 4), 5)
+                (
+                    (v & 127)
+                        | 0x80
+                        | ((v & (127 << 7)) << 1)
+                        | 0x80 << 8
+                        | ((v & (127 << 14)) << 2)
+                        | 0x80 << 16
+                        | ((v & (127 << 21)) << 3)
+                        | 0x80 << 24
+                        | ((v & (127 << 28)) << 4),
+                    5,
+                )
             };
             let buf = res.to_le_bytes();
             out.extend_from_slice(&buf[..len]);
@@ -9099,8 +9152,10 @@ mod tests {
             rule.fixed_code.contains(needle),
             "fixture fixed_code must carry the proven 3+-band ladder fragment"
         );
-        assert!(rule.buggy_code.contains("val /= 128"),
-            "fixture buggy_code must be the per-byte div-chain loop");
+        assert!(
+            rule.buggy_code.contains("val /= 128"),
+            "fixture buggy_code must be the per-byte div-chain loop"
+        );
         #[cfg(feature = "rust_perf_bench")]
         {
             let spec = rule.bench_spec.as_ref().expect("bench spec");
@@ -9121,22 +9176,42 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)] // exhaustive gate: the u32/u64 twins + shared edge data belong together
     fn division_magic_matches_hardware_div_exhaustive_low_d() {
-        struct FastDivU32 { magic: u32, shift: u32, add: bool }
+        struct FastDivU32 {
+            magic: u32,
+            shift: u32,
+            add: bool,
+        }
         #[allow(clippy::cast_possible_truncation)] // libdivide magic: the high-word extraction + magic wrap ARE the algorithm
         impl FastDivU32 {
             fn new(d: u32) -> Self {
                 let l = d.ilog2();
-                if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
+                if d.is_power_of_two() {
+                    return Self {
+                        magic: 0,
+                        shift: l,
+                        add: false,
+                    };
+                }
                 let k = 1u64 << l;
                 let base = (k << 32) / u64::from(d);
                 let rem = (k << 32) % u64::from(d);
                 if u64::from(d) - rem < k {
-                    Self { magic: base as u32 + 1, shift: l, add: false }
+                    Self {
+                        magic: base as u32 + 1,
+                        shift: l,
+                        add: false,
+                    }
                 } else {
                     let mut m = base * 2;
                     let rem2 = rem * 2;
-                    if rem2 >= u64::from(d) { m += 1; }
-                    Self { magic: (m + 1) as u32, shift: l, add: true }
+                    if rem2 >= u64::from(d) {
+                        m += 1;
+                    }
+                    Self {
+                        magic: (m + 1) as u32,
+                        shift: l,
+                        add: true,
+                    }
                 }
             }
             // manual_midpoint (clippy 1.98): the widened (hi + x) >> 1 fold IS the
@@ -9145,44 +9220,81 @@ mod tests {
             // a corpus fixture edit for zero semantic change).
             #[allow(clippy::manual_midpoint)]
             fn div(&self, x: u32) -> u32 {
-                if self.magic == 0 { return x >> self.shift; }
+                if self.magic == 0 {
+                    return x >> self.shift;
+                }
                 let hi = ((u64::from(self.magic) * u64::from(x)) >> 32) as u32;
-                if self.add { ((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32 } else { hi >> self.shift }
+                if self.add {
+                    ((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32
+                } else {
+                    hi >> self.shift
+                }
             }
         }
-        struct FastDivU64 { magic: u64, shift: u32, add: bool }
+        struct FastDivU64 {
+            magic: u64,
+            shift: u32,
+            add: bool,
+        }
         #[allow(clippy::cast_possible_truncation)] // libdivide magic: the high-word extraction + magic wrap ARE the algorithm
         impl FastDivU64 {
             fn new(d: u64) -> Self {
                 let l = d.ilog2();
-                if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
+                if d.is_power_of_two() {
+                    return Self {
+                        magic: 0,
+                        shift: l,
+                        add: false,
+                    };
+                }
                 let k = 1u128 << l;
                 let base = (k << 64) / u128::from(d);
                 let rem = (k << 64) % u128::from(d);
                 if u128::from(d) - rem < k {
-                    Self { magic: base as u64 + 1, shift: l, add: false }
+                    Self {
+                        magic: base as u64 + 1,
+                        shift: l,
+                        add: false,
+                    }
                 } else {
                     let mut m = base * 2;
                     let rem2 = rem * 2;
-                    if rem2 >= u128::from(d) { m += 1; }
-                    Self { magic: (m + 1) as u64, shift: l, add: true }
+                    if rem2 >= u128::from(d) {
+                        m += 1;
+                    }
+                    Self {
+                        magic: (m + 1) as u64,
+                        shift: l,
+                        add: true,
+                    }
                 }
             }
             #[allow(clippy::manual_midpoint)] // same algorithm-mirror reason as the u32 twin
             fn div(&self, x: u64) -> u64 {
-                if self.magic == 0 { return x >> self.shift; }
+                if self.magic == 0 {
+                    return x >> self.shift;
+                }
                 let hi = ((u128::from(self.magic) * u128::from(x)) >> 64) as u64;
-                if self.add { ((u128::from(hi) + u128::from(x)) >> 1 >> self.shift) as u64 } else { hi >> self.shift }
+                if self.add {
+                    ((u128::from(hi) + u128::from(x)) >> 1 >> self.shift) as u64
+                } else {
+                    hi >> self.shift
+                }
             }
         }
 
         struct Lcg(u64);
         impl Lcg {
             fn next_u64(&mut self) -> u64 {
-                self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                self.0 = self
+                    .0
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
                 self.0
             }
-            fn next_u32(&mut self) -> u32 { (self.next_u64() >> 33) as u32 }
+            fn next_u32(&mut self) -> u32 {
+                (self.next_u64() >> 33) as u32
+            }
         }
         let mut rng = Lcg(0x2545_F491_4F6C_DD1D);
 
@@ -9192,17 +9304,29 @@ mod tests {
             let probe = |x: u32| {
                 assert_eq!(fd.div(x), x / d, "u32 mismatch at d={d} x={x}");
             };
-            probe(0); probe(1); probe(d - 1); probe(d); probe(d + 1);
-            probe(d.saturating_mul(2).saturating_sub(1)); probe(u32::MAX);
-            for _ in 0..8 { probe(rng.next_u32()); }
+            probe(0);
+            probe(1);
+            probe(d - 1);
+            probe(d);
+            probe(d + 1);
+            probe(d.saturating_mul(2).saturating_sub(1));
+            probe(u32::MAX);
+            for _ in 0..8 {
+                probe(rng.next_u32());
+            }
         }
         for d in 1u64..=257 {
             let fd = FastDivU64::new(d);
             let probe = |x: u64| {
                 assert_eq!(fd.div(x), x / d, "u64 mismatch at d={d} x={x}");
             };
-            probe(0); probe(1); probe(d - 1); probe(d); probe(d + 1);
-            probe(d.saturating_mul(2).saturating_sub(1)); probe(u64::MAX);
+            probe(0);
+            probe(1);
+            probe(d - 1);
+            probe(d);
+            probe(d + 1);
+            probe(d.saturating_mul(2).saturating_sub(1));
+            probe(u64::MAX);
             for _ in 0..8 {
                 probe(rng.next_u64());
             }
@@ -9210,24 +9334,68 @@ mod tests {
         // Selected large/edge divisors: powers of two, primes near 2^31,
         // 2^32, 2^63, 2^64, and values that exercise the ADD branch + the
         // sentinel boundary (magic wrapping near 0).
-        let edge32: &[u32] = &[65_535, 65_536, 65_537, 1_000_003, 2_147_483_647, 2_147_483_648, 3_000_000_001, 4_294_967_291, 4_294_967_295, 3, 5, 7, 9, 11];
+        let edge32: &[u32] = &[
+            65_535,
+            65_536,
+            65_537,
+            1_000_003,
+            2_147_483_647,
+            2_147_483_648,
+            3_000_000_001,
+            4_294_967_291,
+            4_294_967_295,
+            3,
+            5,
+            7,
+            9,
+            11,
+        ];
         for &d in edge32 {
             let fd = FastDivU32::new(d);
             let probe = |x: u32| {
                 assert_eq!(fd.div(x), x / d, "u32 edge mismatch at d={d} x={x}");
             };
-            probe(0); probe(1); probe(d - 1); probe(d); probe(d.saturating_add(1));
-            probe(u32::MAX - 1); probe(u32::MAX);
-            for _ in 0..16 { probe(rng.next_u32()); }
+            probe(0);
+            probe(1);
+            probe(d - 1);
+            probe(d);
+            probe(d.saturating_add(1));
+            probe(u32::MAX - 1);
+            probe(u32::MAX);
+            for _ in 0..16 {
+                probe(rng.next_u32());
+            }
         }
-        let edge64: &[u64] = &[3, 5, 7, 9, 11, 65_537, 1_000_003, 4_294_967_291, 4_294_967_296, 4_294_967_311, 9_223_372_036_854_775_783, 9_223_372_036_854_775_808, 9_223_372_036_854_775_809, 18_446_744_073_709_551_557, u64::MAX - 1, u64::MAX];
+        let edge64: &[u64] = &[
+            3,
+            5,
+            7,
+            9,
+            11,
+            65_537,
+            1_000_003,
+            4_294_967_291,
+            4_294_967_296,
+            4_294_967_311,
+            9_223_372_036_854_775_783,
+            9_223_372_036_854_775_808,
+            9_223_372_036_854_775_809,
+            18_446_744_073_709_551_557,
+            u64::MAX - 1,
+            u64::MAX,
+        ];
         for &d in edge64 {
             let fd = FastDivU64::new(d);
             let probe = |x: u64| {
                 assert_eq!(fd.div(x), x / d, "u64 edge mismatch at d={d} x={x}");
             };
-            probe(0); probe(1); probe(d - 1); probe(d); probe(d.saturating_add(1));
-            probe(u64::MAX - 1); probe(u64::MAX);
+            probe(0);
+            probe(1);
+            probe(d - 1);
+            probe(d);
+            probe(d.saturating_add(1));
+            probe(u64::MAX - 1);
+            probe(u64::MAX);
             for _ in 0..16 {
                 probe(rng.next_u64());
             }
@@ -9244,7 +9412,10 @@ mod tests {
                 "((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32",
                 "((u128::from(hi) + u128::from(x)) >> 1 >> self.shift) as u64",
             ] {
-                assert!(spec.harness.contains(needle), "harness drifted from the equivalence-test mirror: missing `{needle}`");
+                assert!(
+                    spec.harness.contains(needle),
+                    "harness drifted from the equivalence-test mirror: missing `{needle}`"
+                );
             }
         }
     }
@@ -9289,18 +9460,21 @@ mod tests {
         let via_seed = build_perf_seed_corpus().entries;
         assert_eq!(via_trait.len(), via_seed.len());
         // Both go through the same sort, so the order is identical.
-        assert_eq!(via_trait.first().map(|e| e.rule_id.as_str()), via_seed.first().map(|e| e.rule_id.as_str()));
-        assert_eq!(via_trait.last().map(|e| e.rule_id.as_str()), via_seed.last().map(|e| e.rule_id.as_str()));
+        assert_eq!(
+            via_trait.first().map(|e| e.rule_id.as_str()),
+            via_seed.first().map(|e| e.rule_id.as_str())
+        );
+        assert_eq!(
+            via_trait.last().map(|e| e.rule_id.as_str()),
+            via_seed.last().map(|e| e.rule_id.as_str())
+        );
     }
 
     #[test]
     #[cfg(not(feature = "rust_perf_verify"))]
     fn validate_parses_valid_code() {
         use crate::domain::HealDomain;
-        let verdict = RustPerfDomain::validate(
-            "o1-lookup",
-            "fn foo() -> i32 { 42 }",
-        );
+        let verdict = RustPerfDomain::validate("o1-lookup", "fn foo() -> i32 { 42 }");
         assert!(verdict.parses);
     }
 
@@ -9447,7 +9621,9 @@ mod tests {
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -9476,7 +9652,9 @@ mod tests {
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -9530,9 +9708,20 @@ mod tests {
         let fixed: Vec<Page> = docs.iter().filter(|d| d.published).map(&render).collect();
         let fixed_calls = RENDER_CALLS.with(Cell::get);
 
-        assert_eq!(buggy, fixed, "both orders must collect the identical page Vec");
-        assert_eq!(buggy_calls, docs.len() as u64, "the buggy order renders EVERY doc");
-        assert_eq!(fixed_calls, buggy.len() as u64, "the fixed order renders only keepers");
+        assert_eq!(
+            buggy, fixed,
+            "both orders must collect the identical page Vec"
+        );
+        assert_eq!(
+            buggy_calls,
+            docs.len() as u64,
+            "the buggy order renders EVERY doc"
+        );
+        assert_eq!(
+            fixed_calls,
+            buggy.len() as u64,
+            "the fixed order renders only keepers"
+        );
         assert!(
             fixed_calls < buggy_calls,
             "the discarded-work axis must be strictly visible"
@@ -9568,7 +9757,10 @@ mod tests {
             let mut tags: Vec<u32> = item.tags.to_vec();
             tags.sort_unstable();
             tags.dedup();
-            Canonical { primary: tags[0], tags }
+            Canonical {
+                primary: tags[0],
+                tags,
+            }
         };
         let raw_primary = |item: &Item| -> u32 {
             let mut m = u32::MAX;
@@ -9599,7 +9791,10 @@ mod tests {
         assert_eq!(invariance_calls, items.len() as u64);
 
         CANON_CALLS.with(|c| c.set(0));
-        let buggy_hot = items.iter().filter(|i| canonicalize(i).primary == 128).count();
+        let buggy_hot = items
+            .iter()
+            .filter(|i| canonicalize(i).primary == 128)
+            .count();
         let buggy_calls = CANON_CALLS.with(Cell::get);
 
         CANON_CALLS.with(|c| c.set(0));
@@ -9607,13 +9802,19 @@ mod tests {
         let fixed_calls = CANON_CALLS.with(Cell::get);
 
         assert_eq!(buggy_hot, fixed_hot, "the decision must be identical");
-        assert!(buggy_hot > 0, "the hot count must be non-zero (non-vacuous)");
+        assert!(
+            buggy_hot > 0,
+            "the hot count must be non-zero (non-vacuous)"
+        );
         assert_eq!(
             buggy_calls,
             items.len() as u64,
             "the buggy predicate canonicalizes EVERY item"
         );
-        assert_eq!(fixed_calls, 0, "the fixed predicate never needs the canonical form");
+        assert_eq!(
+            fixed_calls, 0,
+            "the fixed predicate never needs the canonical form"
+        );
     }
 
     /// Batch 99 — the new rule is present.
@@ -9660,10 +9861,16 @@ mod tests {
             "indirect",
             "call site",
         ] {
-            assert!(text.contains(needle), "concept {needle:?} missing from the rule text");
+            assert!(
+                text.contains(needle),
+                "concept {needle:?} missing from the rule text"
+            );
         }
         assert!(
-            e.context_notes.as_deref().unwrap_or("").contains("ParetoDominant"),
+            e.context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("ParetoDominant"),
             "the measured verdict must be recorded in context_notes"
         );
     }
@@ -9708,14 +9915,11 @@ mod tests {
             .find(|e| e.rule_id == "dispatch-handler-pair-hoist")
             .expect("rule present");
         let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
-        for needle in [
-            "hoist",
-            "table",
-            "unpredictable",
-            "register",
-            "dispatch",
-        ] {
-            assert!(text.contains(needle), "concept {needle:?} missing from the rule text");
+        for needle in ["hoist", "table", "unpredictable", "register", "dispatch"] {
+            assert!(
+                text.contains(needle),
+                "concept {needle:?} missing from the rule text"
+            );
         }
         let notes = e.context_notes.as_deref().unwrap_or("");
         assert!(
@@ -9797,7 +10001,9 @@ mod tests {
             .find(|e| e.rule_id == "dead-result-timing-loop-folded-under-lto")
             .expect("rule present");
         assert!(
-            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
             "dead-result-timing-loop-folded-under-lto buggy/fixed must both parse"
         );
     }
@@ -9816,7 +10022,10 @@ mod tests {
             .expect("rule present");
         let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
         for needle in ["black_box", "sink", "xorshift", "assert"] {
-            assert!(text.to_lowercase().contains(needle), "concept {needle:?} missing from the rule text");
+            assert!(
+                text.to_lowercase().contains(needle),
+                "concept {needle:?} missing from the rule text"
+            );
         }
         let notes = e.context_notes.as_deref().unwrap_or("");
         for needle in [
@@ -9827,11 +10036,17 @@ mod tests {
             "budget bar",
             "debug-stat-full-scan-out-of-hot-path",
         ] {
-            assert!(notes.contains(needle), "contract {needle:?} missing from context_notes");
+            assert!(
+                notes.contains(needle),
+                "contract {needle:?} missing from context_notes"
+            );
         }
         // No fabricated bench: the measurement-honesty rule carries NO bench_spec.
         #[cfg(feature = "rust_perf_bench")]
-        assert!(e.bench_spec.is_none(), "a measurement-honesty rule must not carry a fabricated Pareto bench");
+        assert!(
+            e.bench_spec.is_none(),
+            "a measurement-honesty rule must not carry a fabricated Pareto bench"
+        );
     }
 
     /// Batch 109 G1 — the rule's own fix pattern, run as code: the fixed
@@ -9865,7 +10080,10 @@ mod tests {
         for i in 0..4096u64 {
             xor_sink ^= work(i);
         }
-        assert_eq!(xor_sink, 0, "XOR of a GF(2)-linear work over 0..2^k must cancel — the trap the rule names");
+        assert_eq!(
+            xor_sink, 0,
+            "XOR of a GF(2)-linear work over 0..2^k must cancel — the trap the rule names"
+        );
 
         // Anti-shape 2 (balanced-bit addition collapse): over a
         // power-of-two batch, every balanced output bit is 1 in exactly
@@ -9899,7 +10117,6 @@ mod tests {
         assert_ne!(chained(0), chained(0xDEAD_BEEF), "the chained harness must stay seed-dependent — this is the fold-proof shape the rule prescribes");
     }
 
-
     /// Batch 112 — the rule is present in the corpus.
     #[test]
     fn batch112_rules_present() {
@@ -9918,7 +10135,9 @@ mod tests {
             .find(|e| e.rule_id == "hot-byval-move-over-memcpy-threshold")
             .expect("rule present");
         assert!(
-            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
             "hot-byval-move-over-memcpy-threshold buggy/fixed must both parse"
         );
     }
@@ -9936,7 +10155,10 @@ mod tests {
             .expect("rule present");
         let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
         for needle in ["memcpy", "threshold", "cold", "by reference", "in place"] {
-            assert!(text.to_lowercase().contains(needle), "concept {needle:?} missing from the rule text");
+            assert!(
+                text.to_lowercase().contains(needle),
+                "concept {needle:?} missing from the rule text"
+            );
         }
         let notes = e.context_notes.as_deref().unwrap_or("");
         for needle in [
@@ -9954,12 +10176,18 @@ mod tests {
             "callq memcpy",
             "box-large-enum-variant",
         ] {
-            assert!(notes.contains(needle), "contract {needle:?} missing from context_notes");
+            assert!(
+                notes.contains(needle),
+                "contract {needle:?} missing from context_notes"
+            );
         }
         // The rule IS benchable — the annotation's Mixed verdict comes from
         // the recorded run, not from an absent spec.
         #[cfg(feature = "rust_perf_bench")]
-        assert!(e.bench_spec.is_some(), "the memcpy-threshold rule must carry its measured bench");
+        assert!(
+            e.bench_spec.is_some(),
+            "the memcpy-threshold rule must carry its measured bench"
+        );
     }
 
     /// Batch 112 G1 (the fairness contract): the buggy composed fold (17
@@ -9976,12 +10204,13 @@ mod tests {
         // The folded field ops — IDENTICAL per-field math in both arms, the
         // exact order the bench harness folds in.
         fn fold_hot(hot: &[u64; 13]) -> u64 {
-            hot.iter()
-                .enumerate()
-                .fold(0u64, |a, (i, &v)| a.wrapping_add(v.rotate_left(7) ^ (i as u64)))
+            hot.iter().enumerate().fold(0u64, |a, (i, &v)| {
+                a.wrapping_add(v.rotate_left(7) ^ (i as u64))
+            })
         }
         fn fold_cold(cold: &[u64; 4]) -> u64 {
-            cold.iter().fold(0u64, |a, &v| a.wrapping_add(v.wrapping_mul(3)))
+            cold.iter()
+                .fold(0u64, |a, &v| a.wrapping_add(v.wrapping_mul(3)))
         }
 
         // Buggy arm: cold lives INSIDE the moved record (the RecBig/RecSmall
@@ -10012,7 +10241,10 @@ mod tests {
             *v = next();
         }
 
-        let mut state = RecBig { hot: seed_hot, cold: seed_cold };
+        let mut state = RecBig {
+            hot: seed_hot,
+            cold: seed_cold,
+        };
         let mut acc_buggy = 0u64;
         for i in 0..1_000 {
             // score moves the WHOLE 136 B record by value (buggy_code's shape)
@@ -10035,8 +10267,14 @@ mod tests {
 
         assert_eq!(acc_buggy, acc_fixed, "the two arms must fold identically");
         let final_cold = cold;
-        let rejoined = RecBig { hot: state.hot, cold: final_cold };
-        assert_eq!(rejoined.cold, final_cold, "cold tail state must agree across the arms");
+        let rejoined = RecBig {
+            hot: state.hot,
+            cold: final_cold,
+        };
+        assert_eq!(
+            rejoined.cold, final_cold,
+            "cold tail state must agree across the arms"
+        );
 
         // The threshold content: the bench shapes straddle x86-64's 128 B.
         assert_eq!(std::mem::size_of::<RecBig>(), 136);
@@ -10108,12 +10346,18 @@ mod tests {
         }
         let split_calls = CALLS.with(|c| *c.borrow());
 
-        assert_eq!(sm.acc, ss.acc, "both shapes must land the identical final state");
+        assert_eq!(
+            sm.acc, ss.acc,
+            "both shapes must land the identical final state"
+        );
         assert_eq!(
             merged_calls, split_calls,
             "both shapes must dispatch the IDENTICAL handler sequence"
         );
-        assert!(merged_calls.0 > 0 && merged_calls.1 > 0, "non-vacuous: both handlers ran");
+        assert!(
+            merged_calls.0 > 0 && merged_calls.1 > 0,
+            "non-vacuous: both handlers ran"
+        );
     }
 
     /// Batch 86 G1 (exactness gate, integer ops — the ported-numeric
@@ -10127,8 +10371,8 @@ mod tests {
         let names: Vec<Box<str>> = vec![
             "a".into(),
             "example-node-7".into(),
-            "".into(),                          // empty-NAME edge (offsets must advance)
-            "x".repeat(300).into_boxed_str(),   // multi-byte u16 length
+            "".into(),                        // empty-NAME edge (offsets must advance)
+            "x".repeat(300).into_boxed_str(), // multi-byte u16 length
         ];
         let payloads: Vec<Vec<u8>> = vec![
             vec![],
@@ -10252,7 +10496,8 @@ mod tests {
         // Issue 014 T2.3/T2.4 — NotBenchable metric-mismatch class.
         assert!(without_spec.contains(&"tokio-guard-across-await"));
         assert!(without_spec.contains(&"bounded-channel-backpressure"));
-        assert!(without_spec.contains(&"dead-result-timing-loop-folded-under-lto")); // Batch 109 — a gate whose baseline folds to zero has nothing to ratio
+        assert!(without_spec.contains(&"dead-result-timing-loop-folded-under-lto"));
+        // Batch 109 — a gate whose baseline folds to zero has nothing to ratio
     }
 
     /// Bench 013 found 4 rules with non-dominant verdicts in the default
@@ -10379,7 +10624,10 @@ mod tests {
         // (A real old snapshot simply omits the key; serde(default) → None.)
         let old_json = json.replace("\"context_notes\":", "\"__removed_context_notes\":");
         let old_back: Vec<PerfRule> = serde_json::from_str(&old_json).unwrap();
-        let old_annotated = old_back.iter().filter(|e| e.context_notes.is_some()).count();
+        let old_annotated = old_back
+            .iter()
+            .filter(|e| e.context_notes.is_some())
+            .count();
         assert_eq!(old_annotated, 0, "missing field should default to None");
     }
 
@@ -10406,7 +10654,11 @@ mod tests {
         let corpus = build_perf_seed_corpus();
 
         // Filter to the 67 annotated rules.
-        let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
+        let annotated: Vec<&PerfRule> = corpus
+            .entries
+            .iter()
+            .filter(|e| e.context_notes.is_some())
+            .collect();
         assert_eq!(annotated.len(), 67, "expected 67 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
@@ -10418,10 +10670,21 @@ mod tests {
                 rule.rule_id
             );
             assert!(
-                rule.context_notes.as_ref().unwrap().contains("ParetoDominated")
-                    || rule.context_notes.as_ref().unwrap().contains("ParetoDominant")
+                rule.context_notes
+                    .as_ref()
+                    .unwrap()
+                    .contains("ParetoDominated")
+                    || rule
+                        .context_notes
+                        .as_ref()
+                        .unwrap()
+                        .contains("ParetoDominant")
                     || rule.context_notes.as_ref().unwrap().contains("Mixed")
-                    || rule.context_notes.as_ref().unwrap().contains("NotBenchable"),
+                    || rule
+                        .context_notes
+                        .as_ref()
+                        .unwrap()
+                        .contains("NotBenchable"),
                 "annotation should mention ParetoDominated, ParetoDominant \
                  (the Batch 65 measured-winner caveat class), Mixed, or the \
                  NotBenchable metric-mismatch class for {}",
@@ -10430,10 +10693,18 @@ mod tests {
         }
 
         // The unannotated rules must return None from the trait too.
-        let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
+        let unannotated: Vec<&PerfRule> = corpus
+            .entries
+            .iter()
+            .filter(|e| e.context_notes.is_none())
+            .collect();
         assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules");
         for rule in &unannotated {
-            assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
+            assert!(
+                HealEntry::context_notes(*rule).is_none(),
+                "{} should have no context_notes",
+                rule.rule_id
+            );
         }
     }
 
@@ -10569,7 +10840,10 @@ mod tests {
             .find(|e| e.rule_id == "channel-send-batching-unpark")
             .expect("channel-send-batching-unpark in corpus");
         let note = rule.context_notes.as_ref().unwrap();
-        assert!(note.contains("mem::replace"), "annotation must warn take-vs-replace");
+        assert!(
+            note.contains("mem::replace"),
+            "annotation must warn take-vs-replace"
+        );
     }
 
     /// G1 for `sort-key-cache-precompute-out-of-lock` (Batch 73, Research
@@ -10736,7 +11010,9 @@ mod tests {
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -10774,7 +11050,11 @@ mod tests {
             let mean = len as f64 / total.max(1) as f64;
             (len, total, mean.to_bits())
         }
-        fn maintained_stat(items: &[usize], link_count: usize, batch: &[usize]) -> (usize, usize, u64) {
+        fn maintained_stat(
+            items: &[usize],
+            link_count: usize,
+            batch: &[usize],
+        ) -> (usize, usize, u64) {
             let total = link_count + batch.iter().sum::<usize>();
             let len = items.len() + batch.len();
             let mean = len as f64 / total.max(1) as f64;
@@ -10791,10 +11071,16 @@ mod tests {
         for (items, batch) in [
             (vec![], vec![]),
             (vec![0usize; 5], vec![3usize; 2]),
-            ((0..200).map(|_| next()).collect::<Vec<_>>(), (0..50).map(|_| next()).collect::<Vec<_>>()),
+            (
+                (0..200).map(|_| next()).collect::<Vec<_>>(),
+                (0..50).map(|_| next()).collect::<Vec<_>>(),
+            ),
         ] {
             let link_count = items.iter().sum::<usize>();
-            assert_eq!(scan_stat(&items, &batch), maintained_stat(&items, link_count, &batch));
+            assert_eq!(
+                scan_stat(&items, &batch),
+                maintained_stat(&items, link_count, &batch)
+            );
         }
     }
 
@@ -10813,9 +11099,10 @@ mod tests {
         let mut groups: Vec<Vec<(String, String)>> = Vec::new();
         for key in &keys {
             let hash = (key.len() % 4) as u64; // adversarial: identical for all
-            let idx = if let Some(i) = index.get(&hash).and_then(|c| {
-                c.iter().find(|&&i| groups[i] == *key).copied()
-            }) {
+            let idx = if let Some(i) = index
+                .get(&hash)
+                .and_then(|c| c.iter().find(|&&i| groups[i] == *key).copied())
+            {
                 i
             } else {
                 let i = groups.len();
@@ -10826,7 +11113,11 @@ mod tests {
             std::hint::black_box(idx);
         }
         // 8 colliding distinct keys → 8 distinct groups, zero merges
-        assert_eq!(groups.len(), 8, "candidate list must keep colliding keys distinct");
+        assert_eq!(
+            groups.len(),
+            8,
+            "candidate list must keep colliding keys distinct"
+        );
         let mut sorted = groups.clone();
         sorted.sort();
         sorted.dedup();
@@ -10840,8 +11131,7 @@ mod tests {
     #[test]
     fn batch75_prefix_keys_do_not_match() {
         fn key_matches(key: &[(String, String)], row_labels: &[(String, String)]) -> bool {
-            key.len() == row_labels.len()
-                && key.iter().zip(row_labels).all(|(a, b)| a == b)
+            key.len() == row_labels.len() && key.iter().zip(row_labels).all(|(a, b)| a == b)
         }
         let short: Vec<(String, String)> = vec![("host".into(), "a".into())];
         let long: Vec<(String, String)> =
@@ -10867,14 +11157,19 @@ mod tests {
     #[test]
     fn batch78_pseudocode_parses() {
         let corpus = build_perf_seed_corpus();
-        for id in ["narrow-counter-overflow-promotion", "cache-line-block-partitioned-lock"] {
+        for id in [
+            "narrow-counter-overflow-promotion",
+            "cache-line-block-partitioned-lock",
+        ] {
             let e = corpus
                 .entries
                 .iter()
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -10898,7 +11193,9 @@ mod tests {
             .find(|e| e.rule_id == "bitplane-transpose-repeated-predicate-scan")
             .unwrap_or_else(|| panic!("bitplane rule missing from corpus"));
         assert!(
-            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
             "bitplane buggy/fixed must both parse"
         );
     }
@@ -10948,7 +11245,9 @@ mod tests {
         for _ in 0..8 {
             let mut v = Vec::with_capacity(513); // non-multiple-of-64 tail
             for _ in 0..513 {
-                rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                rng = rng
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
                 v.push(((rng >> 33) % 256) as u32);
             }
             cols.push(v);
@@ -10980,7 +11279,11 @@ mod tests {
             if b == 32 {
                 for c in [0u32, 1, 0x7FFF_FFFF, u32::MAX - 1, u32::MAX] {
                     let scalar = col.iter().filter(|&&v| v > c).count() as u64;
-                    assert_eq!(gt_popcount(&planes, words, b, c), scalar, "wide threshold {c}");
+                    assert_eq!(
+                        gt_popcount(&planes, words, b, c),
+                        scalar,
+                        "wide threshold {c}"
+                    );
                 }
             }
         }
@@ -11023,8 +11326,8 @@ mod tests {
                     wide.insert(i, w);
                 }
             }
-            let total = counts.iter().map(|&x| u64::from(x)).sum::<u64>()
-                + wide.values().sum::<u64>();
+            let total =
+                counts.iter().map(|&x| u64::from(x)).sum::<u64>() + wide.values().sum::<u64>();
             let per_slot: Vec<u64> = (0..n)
                 .map(|i| match wide.get(&i) {
                     Some(&w) => w,
@@ -11066,7 +11369,11 @@ mod tests {
             .collect();
         let (bt, bp) = buggy_run(128, &ups);
         let (ft, fp) = fixed_run(128, &ups);
-        assert_eq!((bt, bp), (ft, fp), "LCG overflow-regime stream must match exactly");
+        assert_eq!(
+            (bt, bp),
+            (ft, fp),
+            "LCG overflow-regime stream must match exactly"
+        );
 
         // (d) u32::MAX boundary: 0 + u32::MAX does NOT overflow (stays
         // narrow); the SECOND u32::MAX promotes.
@@ -11086,7 +11393,9 @@ mod tests {
         use std::sync::Mutex;
 
         #[repr(align(128))]
-        struct Block { lock: Mutex<[u64; 8]> }
+        struct Block {
+            lock: Mutex<[u64; 8]>,
+        }
         const N: usize = 64; // 8 blocks x 8 points
         const UPS: usize = 500;
         let stream: Vec<usize> = {
@@ -11108,7 +11417,9 @@ mod tests {
         let global_total: u64 = g.lock().unwrap().iter().sum();
 
         let blocks: Vec<Block> = (0..N / 8)
-            .map(|_| Block { lock: Mutex::new([0u64; 8]) })
+            .map(|_| Block {
+                lock: Mutex::new([0u64; 8]),
+            })
             .collect();
         for &i in &stream {
             blocks[i / 8].lock.lock().unwrap()[i % 8] += 1;
@@ -11151,7 +11462,9 @@ mod tests {
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -11172,18 +11485,34 @@ mod tests {
                 .unwrap_or_else(|| panic!("{id} missing"))
         };
         let resume = find("resume-revalidates-provenance-before-reuse");
-        let resume_text = format!("{}\n{}\n{}", resume.name, resume.buggy_code, resume.fixed_code);
+        let resume_text = format!(
+            "{}\n{}\n{}",
+            resume.name, resume.buggy_code, resume.fixed_code
+        );
         for needle in ["manifest", "identity", "tool", "digest", "reuse"] {
-            assert!(resume_text.contains(needle), "resume concept {needle:?} missing");
+            assert!(
+                resume_text.contains(needle),
+                "resume concept {needle:?} missing"
+            );
         }
         assert!(
-            resume.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            resume
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("NotBenchable"),
             "resume rule must carry the NotBenchable annotation"
         );
         let publish = find("write-verify-readback-before-publish");
-        let publish_text = format!("{}\n{}\n{}", publish.name, publish.buggy_code, publish.fixed_code);
+        let publish_text = format!(
+            "{}\n{}\n{}",
+            publish.name, publish.buggy_code, publish.fixed_code
+        );
         for needle in ["incomplete", "rename", "hash", "reader", "refuse"] {
-            assert!(publish_text.contains(needle), "publish concept {needle:?} missing");
+            assert!(
+                publish_text.contains(needle),
+                "publish concept {needle:?} missing"
+            );
         }
         let ab = find("ab-isolate-one-component-by-baseline-byte-copy");
         let ab_text = format!("{}\n{}\n{}", ab.name, ab.buggy_code, ab.fixed_code);
@@ -11203,7 +11532,11 @@ mod tests {
             "the source's own memory caveat must be pinned verbatim"
         );
         assert!(
-            resume.context_notes.as_deref().unwrap_or("").contains("Resume provenance mismatch"),
+            resume
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("Resume provenance mismatch"),
             "the resume refuse phrase must be pinned"
         );
         assert!(
@@ -11245,7 +11578,9 @@ mod tests {
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -11265,12 +11600,22 @@ mod tests {
                 .unwrap_or_else(|| panic!("{id} missing"))
         };
         let format = find("model-aware-format-over-hand-assembled-tokens");
-        let format_text = format!("{}\n{}\n{}", format.name, format.buggy_code, format.fixed_code);
+        let format_text = format!(
+            "{}\n{}\n{}",
+            format.name, format.buggy_code, format.fixed_code
+        );
         for needle in ["template", "multimodal", "rollback", "drift"] {
-            assert!(format_text.contains(needle), "format concept {needle:?} missing");
+            assert!(
+                format_text.contains(needle),
+                "format concept {needle:?} missing"
+            );
         }
         assert!(
-            format.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            format
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("NotBenchable"),
             "format rule must carry the NotBenchable annotation"
         );
         let provision = find("implemented-surface-requires-provisioning-target");
@@ -11279,12 +11624,18 @@ mod tests {
             provision.name, provision.buggy_code, provision.fixed_code
         );
         for needle in ["provision", "target", "MissingArtifact"] {
-            assert!(provision_text.contains(needle), "provision concept {needle:?} missing");
+            assert!(
+                provision_text.contains(needle),
+                "provision concept {needle:?} missing"
+            );
         }
         let diag = find("diagnostics-not-just-exit-code");
         let diag_text = format!("{}\n{}\n{}", diag.name, diag.buggy_code, diag.fixed_code);
         for needle in ["stderr", "exit", "transcript"] {
-            assert!(diag_text.contains(needle), "diag concept {needle:?} missing");
+            assert!(
+                diag_text.contains(needle),
+                "diag concept {needle:?} missing"
+            );
         }
         // The pinned source phrases (quote re-verification at the pin).
         assert!(
@@ -11331,7 +11682,9 @@ mod tests {
                 .find(|e| e.rule_id == id)
                 .unwrap_or_else(|| panic!("{id} missing from corpus"));
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "{id} buggy/fixed must both parse"
             );
         }
@@ -11349,12 +11702,19 @@ mod tests {
                 .unwrap_or_else(|| panic!("{id} missing"))
         };
         let vec_id = find("full-vector-bit-identity-over-argmax");
-        let vec_text = format!("{}\n{}\n{}", vec_id.name, vec_id.buggy_code, vec_id.fixed_code);
+        let vec_text = format!(
+            "{}\n{}\n{}",
+            vec_id.name, vec_id.buggy_code, vec_id.fixed_code
+        );
         for needle in ["argmax", "bit", "manifest", "drift", "invalid"] {
             assert!(vec_text.contains(needle), "vec concept {needle:?} missing");
         }
         assert!(
-            vec_id.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            vec_id
+                .context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("NotBenchable"),
             "vec rule must carry the NotBenchable annotation"
         );
         let tri = find("renderer-error-is-not-capacity-overflow");
@@ -11390,15 +11750,23 @@ mod tests {
             .find(|e| e.rule_id == "matched-control-disentangles-policy-from-model")
             .expect("matched-control rule missing from corpus");
         assert!(
-            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
             "matched-control buggy/fixed must both parse"
         );
         let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
         for needle in ["control", "gate", "endpoint", "proxy", "baseline"] {
-            assert!(text.contains(needle), "matched-control concept {needle:?} missing");
+            assert!(
+                text.contains(needle),
+                "matched-control concept {needle:?} missing"
+            );
         }
         assert!(
-            e.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            e.context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("NotBenchable"),
             "matched-control rule must carry the NotBenchable annotation"
         );
         // The pinned source phrases (quote re-verification at the paper).
@@ -11423,15 +11791,29 @@ mod tests {
             .find(|e| e.rule_id == "control-reproduces-on-baseline-trims-overclaim")
             .expect("control-reproduces rule missing from corpus");
         assert!(
-            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
             "control-reproduces buggy/fixed must both parse"
         );
         let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
-        for needle in ["baseline", "oracle", "tolerance", "compute shape", "scratch"] {
-            assert!(text.contains(needle), "control-reproduces concept {needle:?} missing");
+        for needle in [
+            "baseline",
+            "oracle",
+            "tolerance",
+            "compute shape",
+            "scratch",
+        ] {
+            assert!(
+                text.contains(needle),
+                "control-reproduces concept {needle:?} missing"
+            );
         }
         assert!(
-            e.context_notes.as_deref().unwrap_or("").contains("NotBenchable"),
+            e.context_notes
+                .as_deref()
+                .unwrap_or("")
+                .contains("NotBenchable"),
             "control-reproduces rule must carry the NotBenchable annotation"
         );
         // The pinned source phrases (quote re-verification at the pin).
@@ -11476,12 +11858,17 @@ mod tests {
                 .unwrap_or_else(|| panic!("batch-129 rule '{rid}' missing from corpus"));
             assert_eq!(e.category, "io", "batch-129 rule '{rid}' must be io");
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "batch-129 '{rid}' buggy/fixed must both parse"
             );
             let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
             for needle in needles {
-                assert!(text.contains(needle), "batch-129 {rid} concept {needle:?} missing");
+                assert!(
+                    text.contains(needle),
+                    "batch-129 {rid} concept {needle:?} missing"
+                );
             }
             let notes = e.context_notes.as_deref().unwrap_or("");
             assert!(
@@ -11489,7 +11876,10 @@ mod tests {
                 "batch-129 '{rid}' must carry the NotBenchable annotation"
             );
             for needle in notes_needles {
-                assert!(notes.contains(needle), "batch-129 {rid} quote {needle:?} missing");
+                assert!(
+                    notes.contains(needle),
+                    "batch-129 {rid} quote {needle:?} missing"
+                );
             }
         }
     }
@@ -11526,12 +11916,17 @@ mod tests {
                 .unwrap_or_else(|| panic!("batch-135 rule '{rid}' missing from corpus"));
             assert_eq!(e.category, category, "batch-135 rule '{rid}' category");
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "batch-135 '{rid}' buggy/fixed must both parse"
             );
             let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
             for needle in needles {
-                assert!(text.contains(needle), "batch-135 {rid} concept {needle:?} missing");
+                assert!(
+                    text.contains(needle),
+                    "batch-135 {rid} concept {needle:?} missing"
+                );
             }
         }
     }
@@ -11560,26 +11955,31 @@ mod tests {
         const ITERS: usize = 3;
 
         // (a) atomic conversion: identical values through both forms.
-        let input: Vec<u32> = (0..257u32).map(|x| x.wrapping_mul(2_654_435_761) | 1).collect();
+        let input: Vec<u32> = (0..257u32)
+            .map(|x| x.wrapping_mul(2_654_435_761) | 1)
+            .collect();
         let buggy: u64 = {
-            let atomic: Vec<AtomicU32> =
-                input.iter().map(|&v| AtomicU32::new(v)).collect();
-            atomic.iter().map(|a| u64::from(a.load(Ordering::Relaxed))).sum()
+            let atomic: Vec<AtomicU32> = input.iter().map(|&v| AtomicU32::new(v)).collect();
+            atomic
+                .iter()
+                .map(|a| u64::from(a.load(Ordering::Relaxed)))
+                .sum()
         };
         let fixed: u64 = {
-            let atomic: Vec<AtomicU32> = input
-                .clone()
-                .into_iter()
-                .map(AtomicU32::new)
-                .collect();
-            atomic.iter().map(|a| u64::from(a.load(Ordering::Relaxed))).sum()
+            let atomic: Vec<AtomicU32> = input.clone().into_iter().map(AtomicU32::new).collect();
+            atomic
+                .iter()
+                .map(|a| u64::from(a.load(Ordering::Relaxed)))
+                .sum()
         };
-        assert_eq!(buggy, fixed, "(a) atomic conversion must be value-identical");
+        assert_eq!(
+            buggy, fixed,
+            "(a) atomic conversion must be value-identical"
+        );
 
         // (b) lifetime retargeting: identical sums, stable across calls.
-        let rows: &'static [Vec<u32>] = Box::leak(
-            vec![vec![1, 2, 3], vec![4], vec![], vec![5, 6, 7, 8, 9]].into_boxed_slice(),
-        );
+        let rows: &'static [Vec<u32>] =
+            Box::leak(vec![vec![1, 2, 3], vec![4], vec![], vec![5, 6, 7, 8, 9]].into_boxed_slice());
         let picked: Vec<&[u32]> = rows.iter().map(|r| &r[..]).collect();
         let buggy_total: u64 = picked.iter().map(|s| s.len() as u64).sum();
         let mut buf: Vec<&'static [u32]> = Vec::new();
@@ -11592,8 +11992,15 @@ mod tests {
             total
         };
         let fixed_total = run(&mut buf);
-        assert_eq!(fixed_total, run(&mut buf), "(b) retarget reuse must be call-stable");
-        assert_eq!(buggy_total, fixed_total, "(b) lifetime retarget must be value-identical");
+        assert_eq!(
+            fixed_total,
+            run(&mut buf),
+            "(b) retarget reuse must be call-stable"
+        );
+        assert_eq!(
+            buggy_total, fixed_total,
+            "(b) lifetime retarget must be value-identical"
+        );
 
         // (c) partitioned mutation: identical checksums (prime cell count so
         // the chunks are ragged; strided-vs-contiguous ownership must not
@@ -11710,7 +12117,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("batch-136 rule '{rid}' missing from corpus"));
             assert_eq!(e.category, category, "batch-136 rule '{rid}' category");
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "batch-136 '{rid}' buggy/fixed must both parse"
             );
             assert!(
@@ -11719,7 +12128,10 @@ mod tests {
             );
             let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
             for needle in needles {
-                assert!(text.contains(needle), "batch-136 {rid} concept {needle:?} missing");
+                assert!(
+                    text.contains(needle),
+                    "batch-136 {rid} concept {needle:?} missing"
+                );
             }
         }
     }
@@ -11749,8 +12161,16 @@ mod tests {
                 queue.push(n / 2); // discovered work — legal: we own the drain
             }
         }
-        assert_eq!(visited.len(), 5, "seeds 1,2,3 + discovered 1-from-3 and 1-from-2");
-        assert_eq!(*visited.last().unwrap(), 1, "the frontier must reach the leaf");
+        assert_eq!(
+            visited.len(),
+            5,
+            "seeds 1,2,3 + discovered 1-from-3 and 1-from-2"
+        );
+        assert_eq!(
+            *visited.last().unwrap(),
+            1,
+            "the frontier must reach the leaf"
+        );
     }
 
     /// Batch 139 (2026-09-09, Plan 119 / Research 154 — the ds4-metal PR #5
@@ -11782,16 +12202,27 @@ mod tests {
             .unwrap_or_else(|| panic!("batch-139 rule '{rid}' missing from corpus"));
         assert_eq!(e.category, category, "batch-139 rule '{rid}' category");
         assert!(
-            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
             "batch-139 '{rid}' buggy/fixed must both parse"
         );
         assert!(
             e.context_notes.is_some(),
             "batch-139 '{rid}' must carry its NotBenchable rationale in context_notes"
         );
-        let text = format!("{}\n{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code, e.context_notes.clone().unwrap_or_default());
+        let text = format!(
+            "{}\n{}\n{}\n{}",
+            e.name,
+            e.buggy_code,
+            e.fixed_code,
+            e.context_notes.clone().unwrap_or_default()
+        );
         for needle in needles {
-            assert!(text.contains(needle), "batch-139 {rid} concept {needle:?} missing");
+            assert!(
+                text.contains(needle),
+                "batch-139 {rid} concept {needle:?} missing"
+            );
         }
 
         // G1: the admission predicate's fail-closed direction, as a plain
@@ -11803,16 +12234,14 @@ mod tests {
             }
         };
         assert!(!admission(None, 0, 0), "unqueryable RAM must NOT prefault");
-        assert!(!admission(
-            Some(64 << 30),
-            MODEL,
-            SIDECAR
-        ), "64 < 41.7 + 29.8 + 16 must stay demand-paged (the source's own cell)");
-        assert!(admission(
-            Some(128 << 30),
-            MODEL,
-            SIDECAR
-        ), "128 GiB machines prefault again");
+        assert!(
+            !admission(Some(64 << 30), MODEL, SIDECAR),
+            "64 < 41.7 + 29.8 + 16 must stay demand-paged (the source's own cell)"
+        );
+        assert!(
+            admission(Some(128 << 30), MODEL, SIDECAR),
+            "128 GiB machines prefault again"
+        );
     }
 
     /// Batch 141 (2026-09-09, Plan 121 — the antirez/ds4 Part-B distill,
@@ -11847,7 +12276,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("batch-141 rule '{rid}' missing from corpus"));
             assert_eq!(e.category, category, "batch-141 rule '{rid}' category");
             assert!(
-                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
                 "batch-141 '{rid}' buggy/fixed must both parse"
             );
             assert!(
@@ -11856,7 +12287,10 @@ mod tests {
             );
             let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
             for needle in needles {
-                assert!(text.contains(needle), "batch-141 {rid} concept {needle:?} missing");
+                assert!(
+                    text.contains(needle),
+                    "batch-141 {rid} concept {needle:?} missing"
+                );
             }
         }
     }
@@ -11896,12 +12330,12 @@ mod tests {
             Filler,
         }
         let toks = [
-            Tok::Sys, // 0: protected prefix
+            Tok::Sys,      // 0: protected prefix
             Tok::UserTurn, // 1: turn A
-            Tok::Filler, // 2
+            Tok::Filler,   // 2
             Tok::UserTurn, // 3: turn B (the latest complete turn)
-            Tok::Filler, // 4
-            Tok::Filler, // 5
+            Tok::Filler,   // 4
+            Tok::Filler,   // 5
         ];
         let bottom = toks.len();
         let sys_len = 1usize;
@@ -11912,13 +12346,19 @@ mod tests {
             .rev()
             .find(|&i| toks[i] == Tok::UserTurn)
             .unwrap_or(target);
-        assert_eq!(walked, 3, "the latest COMPLETE user turn inside the window wins");
+        assert_eq!(
+            walked, 3,
+            "the latest COMPLETE user turn inside the window wins"
+        );
         // window too small: no turn inside -> the arithmetic target stands
         let tight = (bottom - 1..bottom)
             .rev()
             .find(|&i| toks[i] == Tok::UserTurn)
             .unwrap_or(target);
-        assert_eq!(tight, target, "no complete unit fits -> bounded fragment fallback");
+        assert_eq!(
+            tight, target,
+            "no complete unit fits -> bounded fragment fallback"
+        );
         // span snap: a boundary strictly inside a span moves to its START
         let snap = |pos: usize, spans: &[(usize, usize)]| {
             spans
@@ -11941,7 +12381,7 @@ mod tests {
         }
         let mut h = Holder::default();
         let mut out: Vec<u8> = Vec::new();
-        let mut feed = |h: &mut Holder, out: &mut Vec<u8>, b: u8| {
+        let feed = |h: &mut Holder, out: &mut Vec<u8>, b: u8| {
             if h.held_len < MARKER.len() && b == MARKER[h.held_len] {
                 h.held[h.held_len] = b;
                 h.held_len += 1;
@@ -11969,7 +12409,11 @@ mod tests {
         assert_eq!(h.held_len, 4, "prefix bytes are held, not emitted");
         feed(&mut h, &mut out, b'x'); // mismatch at position 4
         assert_eq!(h.held_len, 0, "mismatch clears the holdback");
-        assert_eq!(&out[..4], &MARKER[..4], "held bytes replay verbatim, in order");
+        assert_eq!(
+            &out[..4],
+            &MARKER[..4],
+            "held bytes replay verbatim, in order"
+        );
         assert_eq!(out[4], b'x', "the mismatching byte streams too");
         // full match: recognized exactly at the marker's last byte
         out.clear();
@@ -12098,7 +12542,6 @@ pub fn run_fixed(input: &Input) {
         .to_string(),
     }
 }
-
 
 /// Bench spec for `serialize-once-byte-buffer-store` (Batch 86, Research
 /// 100 — the Cloudflare Big Pineapple distill): structured per-record

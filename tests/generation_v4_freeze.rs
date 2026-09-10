@@ -34,8 +34,7 @@ fn freeze_and_verify_generation_v4_labels() {
     let specs = gens::specs_v4();
     assert!(!specs.is_empty(), "gen4 ladder empty");
 
-    let work_root =
-        std::env::temp_dir().join(format!("riir_gen4_freeze_{}", std::process::id()));
+    let work_root = std::env::temp_dir().join(format!("riir_gen4_freeze_{}", std::process::id()));
     let _ = std::fs::create_dir_all(&work_root);
 
     let mut labeled: Vec<(String, usize, BTreeSet<String>)> = Vec::new();
@@ -43,7 +42,7 @@ fn freeze_and_verify_generation_v4_labels() {
     let mut drift: Vec<String> = Vec::new();
     // Per-k label-table counters (reported; no decay assertion — Plan 093).
     let mut per_k: BTreeMap<usize, (usize, usize)> = BTreeMap::new(); // k -> (ok, total)
-    // Family + territory coverage over verified specs.
+                                                                      // Family + territory coverage over verified specs.
     let mut family_specs: BTreeMap<String, usize> = BTreeMap::new();
     let mut terr_by_k: BTreeMap<usize, BTreeSet<&'static str>> = BTreeMap::new();
 
@@ -65,14 +64,14 @@ fn freeze_and_verify_generation_v4_labels() {
             fresh_exclusions.push(spec.id.clone());
             eprintln!(
                 "  EXCLUDED (interference): {} — want {want:?}, got {:?} (count {})",
-                spec.id, observed_set, observed.len()
+                spec.id,
+                observed_set,
+                observed.len()
             );
             continue;
         }
         // Drift gate: a landed entry must match the fresh oracle exactly.
-        if let Some((_, frozen)) =
-            gens::FROZEN_LABELS_V4.iter().find(|(id, _)| *id == spec.id)
-        {
+        if let Some((_, frozen)) = gens::FROZEN_LABELS_V4.iter().find(|(id, _)| *id == spec.id) {
             let frozen_set: BTreeSet<&str> = frozen.iter().copied().collect();
             let fresh: BTreeSet<&str> = want.iter().map(String::as_str).collect();
             if frozen_set != fresh {
@@ -92,14 +91,9 @@ fn freeze_and_verify_generation_v4_labels() {
                 riir_clippy::domains::rustc_errors::corpus_gen::Territory::Uncontested => {
                     "uncontested"
                 }
-                riir_clippy::domains::rustc_errors::corpus_gen::Territory::Contested => {
-                    "contested"
-                }
+                riir_clippy::domains::rustc_errors::corpus_gen::Territory::Contested => "contested",
             };
-            terr_by_k
-                .entry(spec.k)
-                .or_default()
-                .insert(terr_name);
+            terr_by_k.entry(spec.k).or_default().insert(terr_name);
         }
         eprintln!("  ok: {}", spec.id);
     }
@@ -116,10 +110,16 @@ fn freeze_and_verify_generation_v4_labels() {
     //    moved and the record is stale ("re-run the freeze e2e" class).
     let ids: BTreeSet<&str> = specs.iter().map(|s| s.id.as_str()).collect();
     for id in gens::EXCLUDED_IDS_V4 {
-        assert!(ids.contains(id), "landed exclusion {id} is not a current spec id — corpus moved, re-freeze");
+        assert!(
+            ids.contains(id),
+            "landed exclusion {id} is not a current spec id — corpus moved, re-freeze"
+        );
     }
     for (id, _) in gens::FROZEN_LABELS_V4 {
-        assert!(ids.contains(id), "landed label {id} is not a current spec id — corpus moved, re-freeze");
+        assert!(
+            ids.contains(id),
+            "landed label {id} is not a current spec id — corpus moved, re-freeze"
+        );
     }
     // 3. Family coverage: every expected code appears in ≥1 VERIFIED k≥2
     //    composite (the rustc analog of v3's persist-in-every-rung gate).
@@ -146,10 +146,18 @@ fn freeze_and_verify_generation_v4_labels() {
     }
 
     // ── The report (per-k labels; solve behavior is the BENCH's job) ────
-    println!("\ngen-4 label fence: {}/{} specs verified", labeled.len(), specs.len());
+    println!(
+        "\ngen-4 label fence: {}/{} specs verified",
+        labeled.len(),
+        specs.len()
+    );
     let mut excluded_total = gens::EXCLUDED_IDS_V4.len();
     excluded_total += fresh_exclusions.len();
-    println!("exclusions: {excluded_total} (landed {} + fresh {})", gens::EXCLUDED_IDS_V4.len(), fresh_exclusions.len());
+    println!(
+        "exclusions: {excluded_total} (landed {} + fresh {})",
+        gens::EXCLUDED_IDS_V4.len(),
+        fresh_exclusions.len()
+    );
     for (k, (ok, total)) in &per_k {
         println!("  k={k}: {ok}/{total} labeled");
     }
@@ -194,7 +202,11 @@ fn generation_v4_table_properties() {
         "k=1 rung must be every atom"
     );
     for s in &specs {
-        assert!(s.k >= 1 && s.k <= 4, "gen4 spec {} has k out of range", s.id);
+        assert!(
+            s.k >= 1 && s.k <= 4,
+            "gen4 spec {} has k out of range",
+            s.id
+        );
         assert!(
             s.code.matches("mod gen_").count() == s.k,
             "gen4 spec {} wraps the wrong member count",

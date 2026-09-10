@@ -247,13 +247,15 @@ impl TernaryDrafter {
 
             // Candidate selection: FNV-1a fold over output scores → index.
             // Same deterministic reduction as quest_grammar's plasma_draft.
-            let output_hash = output
-                .iter()
-                .enumerate()
-                .fold(0xcbf2_9ce4_8422_2325_u64, |h, (i, &v)| {
-                    let bits = v.to_bits();
-                    h ^ (u64::from(bits).wrapping_add((i as u64).wrapping_mul(0x0100_0000_01b3)))
-                });
+            let output_hash =
+                output
+                    .iter()
+                    .enumerate()
+                    .fold(0xcbf2_9ce4_8422_2325_u64, |h, (i, &v)| {
+                        let bits = v.to_bits();
+                        h ^ (u64::from(bits)
+                            .wrapping_add((i as u64).wrapping_mul(0x0100_0000_01b3)))
+                    });
             #[allow(clippy::cast_possible_truncation)] // intentional: index via modulo
             let idx = (output_hash % candidates.len() as u64) as usize;
 
@@ -303,7 +305,10 @@ pub(crate) fn shares_identifier(buggy: &str, fix: &str) -> bool {
         // fire. Permit the emission (the pruner is the next safety net).
         return true;
     }
-    identifier_set(fix).intersection(&buggy_idents).next().is_some()
+    identifier_set(fix)
+        .intersection(&buggy_idents)
+        .next()
+        .is_some()
 }
 
 /// Collect the set of non-keyword Rust identifiers in `s`.
@@ -331,15 +336,59 @@ fn identifier_set(s: &str) -> std::collections::HashSet<&str> {
 fn is_rust_keyword(s: &str) -> bool {
     matches!(
         s,
-        "fn" | "let" | "mut" | "return" | "if" | "else" | "match"
-        | "for" | "while" | "loop" | "in" | "ref" | "move" | "struct"
-        | "enum" | "impl" | "trait" | "pub" | "self" | "Self"
-        | "crate" | "use" | "mod" | "as" | "where" | "type"
-        | "const" | "static" | "unsafe" | "true" | "false" | "i8"
-        | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64"
-        | "usize" | "isize" | "f32" | "f64" | "bool" | "char"
-        | "str" | "String" | "Vec" | "Option" | "Some" | "None"
-        | "Result" | "Ok" | "Err"
+        "fn" | "let"
+            | "mut"
+            | "return"
+            | "if"
+            | "else"
+            | "match"
+            | "for"
+            | "while"
+            | "loop"
+            | "in"
+            | "ref"
+            | "move"
+            | "struct"
+            | "enum"
+            | "impl"
+            | "trait"
+            | "pub"
+            | "self"
+            | "Self"
+            | "crate"
+            | "use"
+            | "mod"
+            | "as"
+            | "where"
+            | "type"
+            | "const"
+            | "static"
+            | "unsafe"
+            | "true"
+            | "false"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "usize"
+            | "isize"
+            | "f32"
+            | "f64"
+            | "bool"
+            | "char"
+            | "str"
+            | "String"
+            | "Vec"
+            | "Option"
+            | "Some"
+            | "None"
+            | "Result"
+            | "Ok"
+            | "Err"
     )
 }
 
@@ -393,10 +442,8 @@ mod tests {
     fn mock_weights() -> katgpt_core::TernaryWeights {
         // 4 rows × 8 cols — small enough to reason about, large enough to exercise matvec.
         let weights: &[f32] = &[
-            1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0,
-            -1.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0,
-            0.0, 0.0, 1.0, -1.0, 1.0, -1.0, 1.0, 0.0,
-            1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
+            1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0, -1.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0,
+            0.0, 0.0, 1.0, -1.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
         ];
         katgpt_core::TernaryWeights::quantize_from_f32(weights, 4, 8)
     }
@@ -423,8 +470,12 @@ mod tests {
         let entries = mock_entries();
         let mut drafter = TernaryDrafter::with_weights(mock_weights());
 
-        let fix1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
-        let fix2 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        let fix1 = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
+        let fix2 = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
 
         assert_eq!(fix1.code, fix2.code);
         // G1 determinism: bit-identical confidence (not approximate — the matvec
@@ -442,8 +493,12 @@ mod tests {
         let entries = mock_entries();
         let mut drafter = TernaryDrafter::with_weights(mock_weights());
 
-        let _fix1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
-        let _fix2 = drafter.draft_fix("redundant_closure", "|x| f(x)", &entries).unwrap();
+        let _fix1 = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
+        let _fix2 = drafter
+            .draft_fix("redundant_closure", "|x| f(x)", &entries)
+            .unwrap();
         // Both should produce valid fixes — the point is no panic + valid source.
     }
 
@@ -457,8 +512,14 @@ mod tests {
         for lint in &["needless_return", "redundant_closure", "unused_var"] {
             for code in &["return 42;", "let x = 1;", "|x| f(x)"] {
                 let fix = drafter.draft_fix(lint, code, &entries).unwrap();
-                assert!(fix.confidence > 0.0, "confidence must be > 0 for {lint}/{code}");
-                assert!(fix.confidence < 1.0, "confidence must be < 1 for {lint}/{code}");
+                assert!(
+                    fix.confidence > 0.0,
+                    "confidence must be > 0 for {lint}/{code}"
+                );
+                assert!(
+                    fix.confidence < 1.0,
+                    "confidence must be < 1 for {lint}/{code}"
+                );
                 assert!(!fix.confidence.is_nan());
             }
         }
@@ -479,7 +540,9 @@ mod tests {
 
         // Draft still works with new dims
         let entries = mock_entries();
-        let fix = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        let fix = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
         assert_eq!(fix.source, DraftSource::TernaryMatvec);
     }
 
@@ -517,8 +580,13 @@ mod tests {
         // drafter must propagate `None` for these entries.
         let entries = mock_entries();
         let mut drafter = TernaryDrafter::with_weights(mock_weights());
-        let fix = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
-        assert!(fix.context_notes.is_none(), "clippy entries should have no context_notes");
+        let fix = drafter
+            .draft_fix("needless_return", "return 42;", &entries)
+            .unwrap();
+        assert!(
+            fix.context_notes.is_none(),
+            "clippy entries should have no context_notes"
+        );
     }
 
     #[test]
@@ -532,10 +600,23 @@ mod tests {
             notes: Some("ParetoDominated 0.20-0.40x (Bench 013)".to_string()),
         }];
         let mut drafter = TernaryDrafter::with_weights(mock_weights());
-        let fix = drafter.draft_fix("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
+        let fix = drafter
+            .draft_fix(
+                "precompute-table",
+                "let pop = v.iter().filter(|x| **x).count();",
+                &entries,
+            )
+            .unwrap();
         assert_eq!(fix.source, DraftSource::TernaryMatvec);
-        assert!(fix.context_notes.is_some(), "L1 must propagate context_notes");
-        assert!(fix.context_notes.as_ref().unwrap().contains("ParetoDominated"));
+        assert!(
+            fix.context_notes.is_some(),
+            "L1 must propagate context_notes"
+        );
+        assert!(fix
+            .context_notes
+            .as_ref()
+            .unwrap()
+            .contains("ParetoDominated"));
     }
 
     #[test]
@@ -549,10 +630,23 @@ mod tests {
             notes: Some("ParetoDominated 0.55-0.79x single-threaded (Bench 013)".to_string()),
         }];
         let mut drafter = TernaryDrafter::fallback();
-        let fix = drafter.draft_fix("papaya-lockfree", "let m = std::sync::RwLock::new(HashMap::new());", &entries).unwrap();
+        let fix = drafter
+            .draft_fix(
+                "papaya-lockfree",
+                "let m = std::sync::RwLock::new(HashMap::new());",
+                &entries,
+            )
+            .unwrap();
         assert_eq!(fix.source, DraftSource::CorpusTemplate);
-        assert!(fix.context_notes.is_some(), "L0 must propagate context_notes");
-        assert!(fix.context_notes.as_ref().unwrap().contains("single-threaded"));
+        assert!(
+            fix.context_notes.is_some(),
+            "L0 must propagate context_notes"
+        );
+        assert!(fix
+            .context_notes
+            .as_ref()
+            .unwrap()
+            .contains("single-threaded"));
     }
 
     #[test]
@@ -566,7 +660,16 @@ mod tests {
             notes: None,
         }];
         let mut drafter = TernaryDrafter::with_weights(mock_weights());
-        let fix = drafter.draft_fix("o1-lookup", "let v: Vec<u32> = (0..n).map(|i| arr[i]).collect();", &entries).unwrap();
-        assert!(fix.context_notes.is_none(), "None notes should propagate as None");
+        let fix = drafter
+            .draft_fix(
+                "o1-lookup",
+                "let v: Vec<u32> = (0..n).map(|i| arr[i]).collect();",
+                &entries,
+            )
+            .unwrap();
+        assert!(
+            fix.context_notes.is_none(),
+            "None notes should propagate as None"
+        );
     }
 }

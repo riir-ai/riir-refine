@@ -22,7 +22,10 @@ use syn::{Expr, ExprIf, File, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -77,7 +80,11 @@ impl Collector<'_> {
             self.source.get(open_end..inner_start),
             self.source.get(inner_end..close_start),
         ) {
-            if lead.contains("//") || lead.contains("/*") || trail.contains("//") || trail.contains("/*") {
+            if lead.contains("//")
+                || lead.contains("/*")
+                || trail.contains("//")
+                || trail.contains("/*")
+            {
                 return None;
             }
         } else {
@@ -93,7 +100,11 @@ impl Collector<'_> {
     /// than the joining `&&`.
     fn cond_text(&self, cond: &Expr) -> Option<String> {
         let text = src(self.source, cond)?;
-        Some(if needs_logic_parens(cond) { format!("({text})") } else { text })
+        Some(if needs_logic_parens(cond) {
+            format!("({text})")
+        } else {
+            text
+        })
     }
 }
 
@@ -105,7 +116,10 @@ mod tests {
     fn collapses_nested_if() {
         let input = "fn f(a: bool, b: bool) { if a { if b { work(); } } }";
         let out = propose_fix("collapsible_if", input).expect("matched");
-        assert!(out.contains("if a && b { work(); }"), "not collapsed: {out}");
+        assert!(
+            out.contains("if a && b { work(); }"),
+            "not collapsed: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -113,7 +127,10 @@ mod tests {
     fn comparison_condition_gets_parens() {
         let input = "fn f(a: u32, b: bool) { if a == 1 { if b {} } }";
         let out = propose_fix("collapsible_if", input).expect("matched");
-        assert!(out.contains("if (a == 1) && b {"), "comparison must be parenthesized: {out}");
+        assert!(
+            out.contains("if (a == 1) && b {"),
+            "comparison must be parenthesized: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -152,7 +169,8 @@ mod tests {
     fn trailing_comment_after_inner_if_blocks() {
         // Issue 027: a comment after the inner if (before the outer close
         // brace) would be dropped by the splice — same guard.
-        let input = "fn f(a: bool, b: bool) { if a { if b { work(); }\n            // why\n        } }";
+        let input =
+            "fn f(a: bool, b: bool) { if a { if b { work(); }\n            // why\n        } }";
         let out = propose_fix("collapsible_if", input);
         assert!(out.is_none(), "trailing comment must block: {out:?}");
     }

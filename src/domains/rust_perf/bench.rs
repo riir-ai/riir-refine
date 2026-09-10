@@ -214,8 +214,14 @@ fn classify_speedup(speedup: f64) -> SizeOutcome {
 /// Aggregate per-size outcomes into an overall verdict.
 fn aggregate_outcomes(results: &[SizeResult]) -> BenchOverall {
     let total = results.len();
-    let faster = results.iter().filter(|r| r.outcome == SizeOutcome::Faster).count();
-    let slower = results.iter().filter(|r| r.outcome == SizeOutcome::Slower).count();
+    let faster = results
+        .iter()
+        .filter(|r| r.outcome == SizeOutcome::Faster)
+        .count();
+    let slower = results
+        .iter()
+        .filter(|r| r.outcome == SizeOutcome::Slower)
+        .count();
     if total == 0 {
         return BenchOverall::Mixed;
     }
@@ -313,9 +319,18 @@ impl PerfBenchValidator {
 
         match self.run_bench(rule_id, spec) {
             Ok(results) => {
-                let faster_count = results.iter().filter(|r| r.outcome == SizeOutcome::Faster).count();
-                let slower_count = results.iter().filter(|r| r.outcome == SizeOutcome::Slower).count();
-                let tie_count = results.iter().filter(|r| r.outcome == SizeOutcome::Tie).count();
+                let faster_count = results
+                    .iter()
+                    .filter(|r| r.outcome == SizeOutcome::Faster)
+                    .count();
+                let slower_count = results
+                    .iter()
+                    .filter(|r| r.outcome == SizeOutcome::Slower)
+                    .count();
+                let tie_count = results
+                    .iter()
+                    .filter(|r| r.outcome == SizeOutcome::Tie)
+                    .count();
                 let overall = aggregate_outcomes(&results);
                 BenchVerdict::Pareto(ParetoVerdict {
                     rule_id: rule_id.to_string(),
@@ -421,8 +436,7 @@ impl PerfBenchValidator {
         let dir = self.work_root.join(&hex[..16]);
 
         let src_dir = dir.join("src");
-        std::fs::create_dir_all(&src_dir)
-            .map_err(|e| format!("create_dir_all failed: {e}"))?;
+        std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
 
         let cargo_toml = "[package]\n\
             name = \"perf_bench\"\n\
@@ -653,7 +667,11 @@ static GLOBAL_COUNTING_ALLOCATOR: CountingAlloc = CountingAlloc;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // Truncate long error output.
-            let snippet = if stderr.len() > 2000 { &stderr[stderr.len() - 2000..] } else { &stderr };
+            let snippet = if stderr.len() > 2000 {
+                &stderr[stderr.len() - 2000..]
+            } else {
+                &stderr
+            };
             return Err(format!("cargo run failed: {snippet}"));
         }
 
@@ -740,8 +758,28 @@ mod tests {
     #[test]
     fn aggregate_all_faster_is_dominant() {
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
-            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult {
+                size: 10,
+                buggy_ns: 100,
+                fixed_ns: 50,
+                speedup: 2.0,
+                outcome: SizeOutcome::Faster,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
+            SizeResult {
+                size: 100,
+                buggy_ns: 200,
+                fixed_ns: 80,
+                speedup: 2.5,
+                outcome: SizeOutcome::Faster,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominant);
     }
@@ -750,10 +788,50 @@ mod tests {
     fn aggregate_majority_faster_is_dominant() {
         // 3 faster, 1 slower out of 4 → faster*2 (6) > total (4) → dominant.
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
-            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
-            SizeResult { size: 1000, buggy_ns: 300, fixed_ns: 100, speedup: 3.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
-            SizeResult { size: 10000, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult {
+                size: 10,
+                buggy_ns: 100,
+                fixed_ns: 50,
+                speedup: 2.0,
+                outcome: SizeOutcome::Faster,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
+            SizeResult {
+                size: 100,
+                buggy_ns: 200,
+                fixed_ns: 80,
+                speedup: 2.5,
+                outcome: SizeOutcome::Faster,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
+            SizeResult {
+                size: 1000,
+                buggy_ns: 300,
+                fixed_ns: 100,
+                speedup: 3.0,
+                outcome: SizeOutcome::Faster,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
+            SizeResult {
+                size: 10000,
+                buggy_ns: 100,
+                fixed_ns: 200,
+                speedup: 0.5,
+                outcome: SizeOutcome::Slower,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominant);
     }
@@ -762,8 +840,28 @@ mod tests {
     fn aggregate_half_and_half_is_mixed() {
         // 2 faster, 2 slower → neither dominant.
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
-            SizeResult { size: 100, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult {
+                size: 10,
+                buggy_ns: 100,
+                fixed_ns: 50,
+                speedup: 2.0,
+                outcome: SizeOutcome::Faster,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
+            SizeResult {
+                size: 100,
+                buggy_ns: 100,
+                fixed_ns: 200,
+                speedup: 0.5,
+                outcome: SizeOutcome::Slower,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::Mixed);
     }
@@ -771,8 +869,28 @@ mod tests {
     #[test]
     fn aggregate_all_slower_is_dominated() {
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 50, fixed_ns: 100, speedup: 0.5, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
-            SizeResult { size: 100, buggy_ns: 80, fixed_ns: 200, speedup: 0.4, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult {
+                size: 10,
+                buggy_ns: 50,
+                fixed_ns: 100,
+                speedup: 0.5,
+                outcome: SizeOutcome::Slower,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
+            SizeResult {
+                size: 100,
+                buggy_ns: 80,
+                fixed_ns: 200,
+                speedup: 0.4,
+                outcome: SizeOutcome::Slower,
+                buggy_allocs: 0,
+                buggy_alloc_bytes: 0,
+                fixed_allocs: 0,
+                fixed_alloc_bytes: 0,
+            },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominated);
     }

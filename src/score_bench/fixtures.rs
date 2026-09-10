@@ -923,9 +923,18 @@ mod tests {
     #[test]
     fn provenance_split_is_reported() {
         let all = fixtures();
-        let real = all.iter().filter(|f| f.provenance.starts_with("katgpt-rs@")).count();
-        let authored = all.iter().filter(|f| f.provenance.starts_with("authored-")).count();
+        let real = all
+            .iter()
+            .filter(|f| f.provenance.starts_with("katgpt-rs@"))
+            .count();
+        let authored = all
+            .iter()
+            .filter(|f| f.provenance.starts_with("authored-"))
+            .count();
         assert!(real >= 5, "v1 needs >=5 real-code fixtures (have {real})");
-        assert!(authored >= 20, "composite set expected >=20 (have {authored})");
+        assert!(
+            authored >= 20,
+            "composite set expected >=20 (have {authored})"
+        );
     }
 }

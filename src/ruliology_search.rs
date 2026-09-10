@@ -464,8 +464,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstNodeCollector {
             syn::Member::Named(ident) => ident.to_string(),
             syn::Member::Unnamed(idx) => idx.index.to_string(),
         };
-        self.nodes
-            .push(format!("FieldValue:{member_str}"));
+        self.nodes.push(format!("FieldValue:{member_str}"));
         syn::visit::visit_field_value(self, i);
     }
 }
@@ -503,9 +502,8 @@ pub fn pareto_front(payoffs: &[bool], complexities: &[usize]) -> Vec<usize> {
     let mut front = Vec::with_capacity(n);
     for i in 0..n {
         // Dominated iff some j has payoff ≥ AND strictly lower complexity.
-        let dominated = (0..n).any(|j| {
-            j != i && payoffs[j] >= payoffs[i] && complexities[j] < complexities[i]
-        });
+        let dominated =
+            (0..n).any(|j| j != i && payoffs[j] >= payoffs[i] && complexities[j] < complexities[i]);
         if !dominated {
             front.push(i);
         }
@@ -516,8 +514,8 @@ pub fn pareto_front(payoffs: &[bool], complexities: &[usize]) -> Vec<usize> {
 #[cfg(all(test, feature = "clippy_lints"))]
 mod tests {
     use super::*;
-    use crate::domains::clippy_lints::ClippyFixEntry;
     use crate::domains::clippy_lints::corpus::build_seed_corpus;
+    use crate::domains::clippy_lints::ClippyFixEntry;
     use crate::elo::default_elo;
 
     fn mock_entry(lint: &str, buggy: &str, fixed: &str) -> ClippyFixEntry {
@@ -585,8 +583,14 @@ mod tests {
         // - 3 dominates 1 (same payoff=false, lower complexity)
         // Front: {2, 3} (1 dominated by 3, 0 dominated by 2)
         let front = pareto_front(&[true, false, true, false], &[20, 5, 10, 3]);
-        assert!(front.contains(&2), "candidate 2 (true, 10) must be on front");
-        assert!(front.contains(&3), "candidate 3 (false, 3) must be on front");
+        assert!(
+            front.contains(&2),
+            "candidate 2 (true, 10) must be on front"
+        );
+        assert!(
+            front.contains(&3),
+            "candidate 3 (false, 3) must be on front"
+        );
         assert!(
             !front.contains(&0),
             "candidate 0 (true, 20) must be dominated by 2"
@@ -1049,11 +1053,7 @@ mod tests {
                 buggy,
                 "fn foo() -> i32 { match () { () => 42 } }",
             ),
-            mock_entry(
-                "needless_return",
-                buggy,
-                "fn foo() -> i32 { { 42 } }",
-            ),
+            mock_entry("needless_return", buggy, "fn foo() -> i32 { { 42 } }"),
         ];
         let scored = search.search(buggy, &candidates);
 

@@ -215,7 +215,12 @@ pub fn parse_usd_to_base(s: &str) -> Option<u64> {
 /// the three load-bearing params (label/message are display-only; the host
 /// may append them per the spec).
 #[must_use]
-pub fn stake_transfer_url(payee_b58: &str, amount_base: u64, mint_b58: &str, reference_b58: &str) -> String {
+pub fn stake_transfer_url(
+    payee_b58: &str,
+    amount_base: u64,
+    mint_b58: &str,
+    reference_b58: &str,
+) -> String {
     format!(
         "solana:{payee_b58}?amount={}&spl-token={mint_b58}&reference={reference_b58}",
         format_amount_base(amount_base)
@@ -238,8 +243,9 @@ pub fn stake_transfer_url(payee_b58: &str, amount_base: u64, mint_b58: &str, ref
 /// [`crate::kat_account`] login generation's own posture).
 #[must_use]
 pub fn fresh_reference() -> [u8; 32] {
-    let key = ssh_key::PrivateKey::random(&mut ssh_key::rand_core::OsRng, ssh_key::Algorithm::Ed25519)
-        .expect("OsRng Ed25519 generation");
+    let key =
+        ssh_key::PrivateKey::random(&mut ssh_key::rand_core::OsRng, ssh_key::Algorithm::Ed25519)
+            .expect("OsRng Ed25519 generation");
     *key.public_key()
         .key_data()
         .ed25519()
@@ -352,7 +358,10 @@ pub fn queue_stake_intent(root: &Path, intent: &StakeIntent) -> std::io::Result<
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
     writeln!(f, "{}", serde_json::to_string(intent).unwrap_or_default())?;
     Ok(path)
 }
@@ -364,11 +373,17 @@ pub fn queue_stake_intent(root: &Path, intent: &StakeIntent) -> std::io::Result<
 /// The underlying `io::Error`.
 pub fn queue_unstake_intent(root: &Path, intent: &UnstakeIntent) -> std::io::Result<PathBuf> {
     use std::io::Write as _;
-    let path = root.join(".heal").join("stake").join("unstake_pending.jsonl");
+    let path = root
+        .join(".heal")
+        .join("stake")
+        .join("unstake_pending.jsonl");
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
     writeln!(f, "{}", serde_json::to_string(intent).unwrap_or_default())?;
     Ok(path)
 }
@@ -431,7 +446,9 @@ impl PoolView {
         if self.authority_decay_bp == 0 {
             return 0;
         }
-        let span = self.authority_share_bp.saturating_sub(self.authority_floor_bp);
+        let span = self
+            .authority_share_bp
+            .saturating_sub(self.authority_floor_bp);
         u64::from(span.div_ceil(self.authority_decay_bp))
     }
 }
@@ -597,7 +614,9 @@ pub fn caveat15_violation(text: &str) -> Option<String> {
 /// A human-readable description of the first missing disclosure.
 pub fn caveat15_missing_disclosure(stake: &str, info: &str) -> Result<(), String> {
     if !stake.contains("7-day lockup") {
-        return Err(format!("stake copy must disclose the 7-day lockup clock: {stake}"));
+        return Err(format!(
+            "stake copy must disclose the 7-day lockup clock: {stake}"
+        ));
     }
     if !stake.contains("no APY promise") {
         return Err("stake copy must carry the no-promised-rate line".into());
@@ -775,7 +794,12 @@ pub fn stake_request_flow(
     let cfg = StakeConfig::resolve()?;
     let reference = fresh_reference();
     let reference_b58 = b58_encode(&reference);
-    let url = stake_transfer_url(&cfg.payee_b58, amount_base, &cfg.usdc_mint_b58, &reference_b58);
+    let url = stake_transfer_url(
+        &cfg.payee_b58,
+        amount_base,
+        &cfg.usdc_mint_b58,
+        &reference_b58,
+    );
     let intent = StakeIntent {
         stake_version: STAKE_VERSION,
         account_id: account_id.to_string(),
@@ -813,7 +837,9 @@ pub fn unstake_flow(
     if let Some(b) = body {
         if let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&b) {
             if let Some(err) = parsed.get("error").and_then(serde_json::Value::as_str) {
-                let remaining = parsed.get("remaining_ticks").and_then(serde_json::Value::as_u64);
+                let remaining = parsed
+                    .get("remaining_ticks")
+                    .and_then(serde_json::Value::as_u64);
                 return Ok(match (err, remaining) {
                     ("LockupNotExpired", Some(r)) => format!(
                         "unstake: refused — lockup not expired ({r} ticks ≈ {} remain)",
@@ -892,7 +918,9 @@ mod tests {
     fn b58_round_trips_pseudo_random_pubkeys() {
         let mut seed = 0xDEAD_BEEF_CAFE_F00Fu64;
         let mut next = || {
-            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
             seed
         };
         for _ in 0..64 {
@@ -1007,16 +1035,27 @@ mod tests {
     #[test]
     fn info_render_matches_the_mock_shape() {
         let text = render_info(&fixture_info(), 100_000);
-        assert!(text.contains("Staked:          100.00 USDC (refundable)"), "{text}");
+        assert!(
+            text.contains("Staked:          100.00 USDC (refundable)"),
+            "{text}"
+        );
         // Per-tranche FIFO unlock rows (the mission's requirement).
-        assert!(text.contains("Unlock:          in 3d 05h   (tranche #0"), "{text}");
+        assert!(
+            text.contains("Unlock:          in 3d 05h   (tranche #0"),
+            "{text}"
+        );
         assert!(text.contains("tranche #1"), "{text}");
         // The amendment-(b) wording (NOT the superseded clock-reset line).
-        assert!(text.contains("each deposit owns its own 7-day clock"), "{text}");
+        assert!(
+            text.contains("each deposit owns its own 7-day clock"),
+            "{text}"
+        );
         assert!(!text.contains("top-ups restart"), "{text}");
         // The accrual line — service credit, no $ (caveat #15).
         assert!(
-            text.contains("Incentives:      +2431.000000 KAT accrued — service credit, rate floats with burn"),
+            text.contains(
+                "Incentives:      +2431.000000 KAT accrued — service credit, rate floats with burn"
+            ),
             "{text}"
         );
         // The epoch pool rows.
@@ -1024,7 +1063,10 @@ mod tests {
             text.contains("Epoch pool:      mining 90% · staking 10% (usdc 70% / kat-reward 30% of the slice)"),
             "{text}"
         );
-        assert!(text.contains("authority share 20%→5% over 60 epochs"), "{text}");
+        assert!(
+            text.contains("authority share 20%→5% over 60 epochs"),
+            "{text}"
+        );
         // The restake flag row.
         assert!(text.contains("Reward restake:  OFF"), "{text}");
     }
@@ -1036,7 +1078,10 @@ mod tests {
             line.contains("stake 100.00 USDC → 7-day lockup → earn KAT from the burn pool"),
             "{line}"
         );
-        assert!(line.contains("(custody wallet, refundable after unlock; no APY promise)"), "{line}");
+        assert!(
+            line.contains("(custody wallet, refundable after unlock; no APY promise)"),
+            "{line}"
+        );
     }
 
     #[test]
@@ -1073,7 +1118,10 @@ mod tests {
         // liveness-sentinel discipline, applied to copy).
         let violating = "Incentives:      +5.000000 KAT accrued ($0.42 at today's rate)";
         let v = caveat15_violation(violating);
-        assert!(v.is_some(), "the canary render must fire the gate: {violating}");
+        assert!(
+            v.is_some(),
+            "the canary render must fire the gate: {violating}"
+        );
         // And the violation NAMES the offending line.
         assert!(v.unwrap().contains("$0.42"));
     }
@@ -1085,7 +1133,10 @@ mod tests {
         let violating = "earn a guaranteed 12% APY on every tranche";
         assert!(caveat15_violation(violating).is_some(), "{violating}");
         // The honest form stays clean.
-        assert_eq!(caveat15_violation("earn KAT from the burn pool (no APY promise)"), None);
+        assert_eq!(
+            caveat15_violation("earn KAT from the burn pool (no APY promise)"),
+            None
+        );
     }
 
     #[test]

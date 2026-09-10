@@ -179,9 +179,10 @@ mod tests {
 
     #[test]
     fn punctuation_runs_become_distinct_tokens() {
-        assert_eq!(tok("fn f() -> () {}"), vec![
-            "fn", "f", "op:()", "op:->", "op:()", "op:{}"
-        ]);
+        assert_eq!(
+            tok("fn f() -> () {}"),
+            vec!["fn", "f", "op:()", "op:->", "op:()", "op:{}"]
+        );
     }
 
     #[test]
@@ -218,7 +219,10 @@ mod tests {
             .map(|t| t.strip_prefix(OP_PREFIX).unwrap_or(t).chars().count())
             .sum();
         let non_ws = text.chars().filter(|c| !c.is_whitespace()).count();
-        assert_eq!(covered, non_ws, "tokens must cover every non-whitespace char");
+        assert_eq!(
+            covered, non_ws,
+            "tokens must cover every non-whitespace char"
+        );
     }
 
     #[test]

@@ -76,9 +76,16 @@ fn g_clean_postfix_findings_all_adjudicated_real() {
         "declared-max-array-taxed-per-thread-under-runtime-bound",
         "declared-max-array-taxed-per-thread-under-runtime-bound",
     ];
-    assert_eq!(post.len(), expected.len(), "unadjudicated finding: {post:?}");
+    assert_eq!(
+        post.len(),
+        expected.len(),
+        "unadjudicated finding: {post:?}"
+    );
     for rule in expected {
-        assert!(post.contains(&rule), "missing adjudicated {rule} in {post:?}");
+        assert!(
+            post.contains(&rule),
+            "missing adjudicated {rule} in {post:?}"
+        );
     }
 }
 

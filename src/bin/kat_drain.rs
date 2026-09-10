@@ -240,7 +240,10 @@ struct BacklogCensus {
 /// written in the same order — a census that could disagree with the queue it
 /// explains would be worse than no census at all.
 fn census(rows: &[TrajRowDoc]) -> BacklogCensus {
-    let mut c = BacklogCensus { total: rows.len(), ..BacklogCensus::default() };
+    let mut c = BacklogCensus {
+        total: rows.len(),
+        ..BacklogCensus::default()
+    };
     for r in rows {
         match () {
             () if r.fail_count == 0 => c.clean += 1,
@@ -457,7 +460,10 @@ fn run_preflight(args: &Args) -> ! {
             "unarmed (CF_API_TOKEN / CF_ACCOUNT_ID unset)".to_string()
         }
     );
-    println!("  billing basis    : {} (prices usd_avoided)", llm.model_id());
+    println!(
+        "  billing basis    : {} (prices usd_avoided)",
+        llm.model_id()
+    );
     if let Some(cf) = llm.cf() {
         println!("  cf spend         : {}", cf.spend_summary());
     }
@@ -530,12 +536,8 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let corpus_rules: std::collections::HashSet<&str> = harness
-        .corpus
-        .entries
-        .iter()
-        .map(|e| e.rule_id())
-        .collect();
+    let corpus_rules: std::collections::HashSet<&str> =
+        harness.corpus.entries.iter().map(|e| e.rule_id()).collect();
     // The census is taken BEFORE build_backlog consumes the rows: an empty
     // queue has three distinct causes and the operator needs to know which.
     let census = census(&rows);
@@ -591,7 +593,12 @@ fn main() {
             source: SampleSource::Reachable,
         };
         let prompt_prepass = cf_workers_ai::prompt_prepass(&shape, modelless.as_deref(), &fs);
-        prepared.push(Prepared { item, sample, miss, prompt_prepass });
+        prepared.push(Prepared {
+            item,
+            sample,
+            miss,
+            prompt_prepass,
+        });
     }
 
     // ── Redaction gate: EVERY span, before any dispatch (own-repo origin —
@@ -602,7 +609,9 @@ fn main() {
     let mut kept: Vec<Prepared> = Vec::with_capacity(prepared.len());
     let mut blocked = 0usize;
     for mut p in prepared {
-        let decision = loaded.gate.check(SpanOrigin::OwnRepo, None, &p.sample.module);
+        let decision = loaded
+            .gate
+            .check(SpanOrigin::OwnRepo, None, &p.sample.module);
         let fp = blake3::hash(p.sample.module.as_bytes()).to_hex();
         let fp12 = &fp.to_string()[..12];
         if let Err(e) = log.record(&decision, SpanOrigin::OwnRepo, &p.sample.id, fp12) {
@@ -633,7 +642,10 @@ fn main() {
             }
         }
     }
-    eprintln!("[drain] redaction gate: {} allowed, {blocked} blocked", kept.len());
+    eprintln!(
+        "[drain] redaction gate: {} allowed, {blocked} blocked",
+        kept.len()
+    );
     if kept.is_empty() {
         if prepared_count == 0 {
             // The healthy state: the backlog (or the modelless pre-pass)
@@ -654,7 +666,10 @@ fn main() {
     // ── Dry run: the printed queue IS the deliverable (no network, CI-able).
     if args.dry_run {
         println!("═ kat_drain DRY — queue + priorities (no LLM calls) ═");
-        println!("{:<34} {:<13} {:>5} {:>5} {:>8}  {:<10} prompt-b3-12", "id", "miss", "fail", "succ", "prio", "off-corpus");
+        println!(
+            "{:<34} {:<13} {:>5} {:>5} {:>8}  {:<10} prompt-b3-12",
+            "id", "miss", "fail", "succ", "prio", "off-corpus"
+        );
         for p in &kept {
             let h = blake3::hash(p.prompt_prepass.as_bytes()).to_hex();
             println!(
@@ -797,7 +812,10 @@ fn main() {
                         if attempts < args.retry_cap {
                             continue; // bounded transport retry, same budget
                         }
-                        eprintln!("[drain] decline {} after {attempts} attempt(s): {e}", p.sample.id);
+                        eprintln!(
+                            "[drain] decline {} after {attempts} attempt(s): {e}",
+                            p.sample.id
+                        );
                         declines += 1;
                         break None;
                     }
@@ -834,20 +852,41 @@ fn main() {
         // the span withdraws itself out of the queue — the self-limiting
         // property). Nothing is written to any repo file, ever.
         let outcome_ok = if score.keep_strict {
-            if let Some((merged, _)) = cf_workers_ai::apply_edit(&p.sample.module, &gen.text, true) {
-                    let _ = store.record(&p.item.lint, &p.item.shape, &merged, true, true, &run_id);
-                    true
-                } else {
-                    // Unreachable in practice (keep_strict implies a merge) —
-                    // record the failure rather than fabricating a keep.
-                    let _ = store.record(&p.item.lint, &p.item.shape, &gen.text, false, false, &run_id);
-                    false
-                }
+            if let Some((merged, _)) = cf_workers_ai::apply_edit(&p.sample.module, &gen.text, true)
+            {
+                let _ = store.record(&p.item.lint, &p.item.shape, &merged, true, true, &run_id);
+                true
+            } else {
+                // Unreachable in practice (keep_strict implies a merge) —
+                // record the failure rather than fabricating a keep.
+                let _ = store.record(
+                    &p.item.lint,
+                    &p.item.shape,
+                    &gen.text,
+                    false,
+                    false,
+                    &run_id,
+                );
+                false
+            }
         } else {
-            let _ = store.record(&p.item.lint, &p.item.shape, &gen.text, false, false, &run_id);
+            let _ = store.record(
+                &p.item.lint,
+                &p.item.shape,
+                &gen.text,
+                false,
+                false,
+                &run_id,
+            );
             false
         };
-        record_case(&mut out, p, if outcome_ok { "kept" } else { "rejected" }, &gen.text, &score);
+        record_case(
+            &mut out,
+            p,
+            if outcome_ok { "kept" } else { "rejected" },
+            &gen.text,
+            &score,
+        );
         println!(
             "  {:<34} keep_s={} f {}→{} attempts={attempts} {:.0}ms {}+{}tok",
             p.sample.id,
@@ -864,7 +903,14 @@ fn main() {
         );
     }
 
-    println!("\n═ drain summary (window {}) ═", if stopped_early { "STOPPED EARLY (cap)" } else { "complete" });
+    println!(
+        "\n═ drain summary (window {}) ═",
+        if stopped_early {
+            "STOPPED EARLY (cap)"
+        } else {
+            "complete"
+        }
+    );
     println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
     println!("{}", summary.markdown_row("DRAIN"));
     println!("  queued {} · llm-scored {llm_scored} · declined {declines} (overflow {overflow_declines})", kept.len());
@@ -950,13 +996,13 @@ fn append_ledger(
     drain: &DrainStats,
     llm: &LlmRouter,
 ) {
-    let path = std::env::var("RIIR_LLM_COST_LEDGER")
-        .map_or_else(
-            |_| args.repo_root.join(".benchmarks/llm_cost_ledger.jsonl"),
-            PathBuf::from,
-        );
+    let path = std::env::var("RIIR_LLM_COST_LEDGER").map_or_else(
+        |_| args.repo_root.join(".benchmarks/llm_cost_ledger.jsonl"),
+        PathBuf::from,
+    );
     let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let (price_in, price_out) = riir_clippy::llm_spend::price_for(model)
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
     let gstats = &llm.stats;
@@ -968,22 +1014,15 @@ fn append_ledger(
     );
     // Issue 051: the free tier's absorption rides `providers.groq` — the
     // dashboard's card reads it; legacy rows without the key are unaffected.
-    let mut providers = riir_clippy::groq::router::providers_json(
-        gstats,
-        avoided,
-        llm.groq_model(),
-    );
+    let mut providers =
+        riir_clippy::groq::router::providers_json(gstats, avoided, llm.groq_model());
     if let Some(reason) = llm.disable_reason() {
         providers["groq"]["disabled_reason"] = serde_json::json!(reason);
     }
     let groq_note = if gstats.ok > 0 {
         format!(
             "groq-first absorbed {}/{} call(s) +{}+{} tok (est ${:.5} CF avoided)",
-            gstats.ok,
-            gstats.calls,
-            gstats.prompt_tokens,
-            gstats.completion_tokens,
-            avoided
+            gstats.ok, gstats.calls, gstats.prompt_tokens, gstats.completion_tokens, avoided
         )
     } else if gstats.calls > 0 {
         "groq armed but served nothing this window".to_string()
@@ -1043,10 +1082,17 @@ fn append_ledger(
         "kat": serde_json::Value::Null,
         "note": format!("kat null until Phase 1 rail; Plan 031 A3 trainer-window drain (never-wrong: keeps are Certified trajectories, rejects never land); {groq_note}"),
     });
-    let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    let mut f = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("[drain] cost ledger write skipped ({}: {e})", path.display());
+            eprintln!(
+                "[drain] cost ledger write skipped ({}: {e})",
+                path.display()
+            );
             return;
         }
     };
@@ -1148,7 +1194,11 @@ mod tests {
         ];
         let c = census(&rows);
         let q = build_backlog(rows, |_| true, usize::MAX);
-        assert_eq!(c.eligible, q.len(), "census eligible must equal the unlimited queue length");
+        assert_eq!(
+            c.eligible,
+            q.len(),
+            "census eligible must equal the unlimited queue length"
+        );
     }
 
     /// A store whose only failures are Withdrawn is a STALL — it must not
@@ -1164,7 +1214,10 @@ mod tests {
         let msg = empty_queue_reason(c, 25, 0, 0);
         assert!(msg.contains("STALL"), "{msg}");
         assert!(msg.contains("withheld"), "{msg}");
-        assert!(!msg.contains("healthy"), "a withheld backlog must never read healthy: {msg}");
+        assert!(
+            !msg.contains("healthy"),
+            "a withheld backlog must never read healthy: {msg}"
+        );
     }
 
     #[test]
@@ -1204,10 +1257,16 @@ mod tests {
         assert_eq!(c.eligible, 2);
         // 2 queued, all 2 absorbed by the modelless pre-pass.
         let msg = empty_queue_reason(c, 25, 2, 2);
-        assert!(!msg.contains("BUG"), "the best outcome must not read as a defect: {msg}");
+        assert!(
+            !msg.contains("BUG"),
+            "the best outcome must not read as a defect: {msg}"
+        );
         assert!(msg.contains("modelless seam"), "{msg}");
         assert!(msg.contains("zero LLM cost"), "{msg}");
-        assert!(!msg.contains("healthy: all"), "the backlog was REAL, not clean: {msg}");
+        assert!(
+            !msg.contains("healthy: all"),
+            "the backlog was REAL, not clean: {msg}"
+        );
     }
 
     /// `--limit 0` withholds a real backlog by operator choice — also not a
@@ -1226,7 +1285,10 @@ mod tests {
     fn a_genuine_census_disagreement_still_reports_bug() {
         let rows = vec![row("eligible_a", "fn d() {}", 2, 0, HEURISTIC)];
         let msg = empty_queue_reason(census(&rows), 25, 0, 0);
-        assert!(msg.contains("BUG"), "a real disagreement must not be explained away: {msg}");
+        assert!(
+            msg.contains("BUG"),
+            "a real disagreement must not be explained away: {msg}"
+        );
     }
 
     #[test]

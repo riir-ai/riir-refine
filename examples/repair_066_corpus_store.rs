@@ -43,7 +43,9 @@ fn main() {
             .output()
             .expect("git show");
         assert!(out.status.success(), "git show {rev} failed");
-        let counted = String::from_utf8_lossy(&out.stdout).matches("    rule(").count() as u32;
+        let counted = String::from_utf8_lossy(&out.stdout)
+            .matches("    rule(")
+            .count() as u32;
         assert_eq!(
             counted, *expected,
             "git truth for {day} (rev {rev}) is {counted}, table says {expected} — fix the table"
@@ -52,7 +54,9 @@ fn main() {
         store
             .upsert_corpus_count(day, "docker", *expected, true, "repair-066")
             .unwrap_or_else(|e| panic!("upsert {day}: {e}"));
-        println!("repaired {day}: docker = {expected} (verified against {rev}, provenance repair-066)");
+        println!(
+            "repaired {day}: docker = {expected} (verified against {rev}, provenance repair-066)"
+        );
     }
     println!("done — re-run `cargo heal --corpus-stats --json` to confirm the series");
 }

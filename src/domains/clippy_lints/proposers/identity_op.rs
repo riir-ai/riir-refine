@@ -24,7 +24,10 @@ use syn::{BinOp, Expr, ExprBinary, File};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -37,7 +40,9 @@ struct Collector<'a> {
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_binary(&mut self, b: &'ast ExprBinary) {
         syn::visit::visit_expr_binary(self, b);
-        let Some(kept) = identity_operand(b) else { return };
+        let Some(kept) = identity_operand(b) else {
+            return;
+        };
         if let Some(text) = src(self.source, kept) {
             self.edits.push(edit(b, text));
         }
@@ -61,7 +66,11 @@ fn identity_operand(b: &ExprBinary) -> Option<&Expr> {
         BinOp::Sub(_) => {
             // `x - 0.0` IS a float identity (−0.0 − 0.0 = −0.0); rhs only —
             // `0 - x` is negation, not identity.
-            if is_zero(&b.right, false) { Some(&b.left) } else { None }
+            if is_zero(&b.right, false) {
+                Some(&b.left)
+            } else {
+                None
+            }
         }
         BinOp::Mul(_) => {
             if is_one(&b.right) {
@@ -74,7 +83,11 @@ fn identity_operand(b: &ExprBinary) -> Option<&Expr> {
         }
         BinOp::Div(_) => {
             // rhs only — `1 / x` is not identity (and can trap at x == 0).
-            if is_one(&b.right) { Some(&b.left) } else { None }
+            if is_one(&b.right) {
+                Some(&b.left)
+            } else {
+                None
+            }
         }
         _ => None,
     }
@@ -113,8 +126,7 @@ mod tests {
 
     #[test]
     fn add_suffixed_zero() {
-        let out =
-            propose_fix("identity_op", "fn f(n: i32) -> i32 { n + 0i32 }").expect("matched");
+        let out = propose_fix("identity_op", "fn f(n: i32) -> i32 { n + 0i32 }").expect("matched");
         assert_eq!(out, "fn f(n: i32) -> i32 { n }");
     }
 

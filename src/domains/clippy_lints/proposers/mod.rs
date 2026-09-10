@@ -143,9 +143,9 @@ pub mod double_parens;
 pub mod filter_next;
 pub mod helpers;
 pub mod identity_op;
+pub mod items_after_statements;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
-pub mod items_after_statements;
 pub mod manual_checked_ops;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
@@ -154,9 +154,9 @@ pub mod manual_slice_fill;
 pub mod manual_unwrap_or;
 pub mod map_unwrap_or;
 pub mod match_bool;
-pub mod needless_borrow;
-pub mod needless_bool_assign;
 pub mod needless_bool;
+pub mod needless_bool_assign;
+pub mod needless_borrow;
 pub mod needless_lifetimes;
 pub mod needless_match;
 pub mod needless_range_loop;
@@ -169,14 +169,14 @@ pub mod redundant_pattern_matching;
 pub mod redundant_static_lifetimes;
 pub mod semicolon_if_nothing_returned;
 pub mod single_char_pattern;
-pub mod single_match_else;
 pub mod single_match;
+pub mod single_match_else;
 pub mod suboptimal_flops;
+pub mod uninlined_format_args;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_mut_passed;
 pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
-pub mod uninlined_format_args;
 pub mod unused_unit;
 pub mod use_self;
 pub mod useless_conversion;
@@ -413,7 +413,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "unnecessary_unwrap" => unnecessary_unwrap::collect_edits(source, file),
         "needless_range_loop" => needless_range_loop::collect_edits(source, file),
         // ── Issue 016 expansion (30) ──
-        "semicolon_if_nothing_returned" => semicolon_if_nothing_returned::collect_edits(source, file),
+        "semicolon_if_nothing_returned" => {
+            semicolon_if_nothing_returned::collect_edits(source, file)
+        }
         "collapsible_if" => collapsible_if::collect_edits(source, file),
         "collapsible_else_if" => collapsible_else_if::collect_edits(source, file),
         "single_match" => single_match::collect_edits(source, file),

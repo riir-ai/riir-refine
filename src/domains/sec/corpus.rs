@@ -307,7 +307,8 @@ mod tests {
         assert_eq!(ids.len(), n, "rule ids must be unique");
         for id in ids {
             assert!(
-                id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                id.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                 "rule id {id} must be kebab-case (digits allowed — the \
                  rust_perf convention, e.g. usize-index-to-u32)"
             );

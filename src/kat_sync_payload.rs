@@ -171,15 +171,7 @@ impl PayloadHeader {
     pub fn signing_message(&self) -> Option<Vec<u8>> {
         let commitment = decode_hex32(&self.batch_commitment)?;
         let mut m = Vec::with_capacity(
-            SYNC_SIGNING_DOMAIN.len()
-                + 4
-                + 4
-                + 8
-                + 4
-                + 4
-                + 4
-                + self.origin.len()
-                + 32,
+            SYNC_SIGNING_DOMAIN.len() + 4 + 4 + 8 + 4 + 4 + 4 + self.origin.len() + 32,
         );
         m.extend_from_slice(SYNC_SIGNING_DOMAIN);
         m.extend_from_slice(&self.payload_version.to_le_bytes());
@@ -297,7 +289,11 @@ pub enum RowOutcome {
     Included { shape_id: String, redacted: bool },
     /// Row excluded; the FIRST blocking field's reason + that decision's
     /// findings (`shape_id` identifies the row in the local log).
-    Blocked { shape_id: String, reason: BlockReason, findings: Vec<Finding> },
+    Blocked {
+        shape_id: String,
+        reason: BlockReason,
+        findings: Vec<Finding>,
+    },
 }
 
 fn now_unix() -> u64 {
@@ -354,7 +350,11 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
         origin: SpanOrigin,
         signer: &'k ed25519_dalek::SigningKey,
     ) -> Self {
-        Self { gate, origin, signer }
+        Self {
+            gate,
+            origin,
+            signer,
+        }
     }
 
     /// Build with the current time stamp. See [`Self::build_at`] for the
@@ -387,7 +387,11 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
                     included.push(pr);
                 }
                 Err((reason, findings)) => {
-                    outcomes.push(RowOutcome::Blocked { shape_id, reason, findings });
+                    outcomes.push(RowOutcome::Blocked {
+                        shape_id,
+                        reason,
+                        findings,
+                    });
                 }
             }
         }
@@ -439,7 +443,6 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
             outcomes,
         }
     }
-
 }
 
 /// The one gated-row projection (free fn so the pending-record estimator can
@@ -451,52 +454,64 @@ pub(crate) fn gate_row(
     origin: SpanOrigin,
     row: &TrajRowDoc,
 ) -> Result<PayloadRow, (BlockReason, Vec<Finding>)> {
-        let inputs = [
-            (GATED_FIELDS[0], row.shape.as_str()),
-            (GATED_FIELDS[1], row.fix.as_str()),
-            (GATED_FIELDS[2], row.lint_key.as_str()),
-            (GATED_FIELDS[3], row.last_run_id.as_str()),
-        ];
-        let mut texts: [String; GATED_FIELDS.len()] = [
-            String::new(), String::new(), String::new(), String::new(),
-        ];
-        let mut findings: Vec<FindingMeta> = Vec::new();
-        for (i, (field, text)) in inputs.iter().enumerate() {
-            match gate.check(origin, None, text) {
-                GateDecision::Allow => texts[i] = (*text).to_string(),
-                GateDecision::Redacted { payload, findings: fs } => {
-                    for f in fs {
-                        findings.push(FindingMeta {
-                            field: (*field).to_string(),
-                            kind: f.kind.tag().to_string(),
-                            fingerprint: f.fingerprint.clone(),
-                        });
-                    }
-                    texts[i] = payload;
+    let inputs = [
+        (GATED_FIELDS[0], row.shape.as_str()),
+        (GATED_FIELDS[1], row.fix.as_str()),
+        (GATED_FIELDS[2], row.lint_key.as_str()),
+        (GATED_FIELDS[3], row.last_run_id.as_str()),
+    ];
+    let mut texts: [String; GATED_FIELDS.len()] =
+        [String::new(), String::new(), String::new(), String::new()];
+    let mut findings: Vec<FindingMeta> = Vec::new();
+    for (i, (field, text)) in inputs.iter().enumerate() {
+        match gate.check(origin, None, text) {
+            GateDecision::Allow => texts[i] = (*text).to_string(),
+            GateDecision::Redacted {
+                payload,
+                findings: fs,
+            } => {
+                for f in fs {
+                    findings.push(FindingMeta {
+                        field: (*field).to_string(),
+                        kind: f.kind.tag().to_string(),
+                        fingerprint: f.fingerprint.clone(),
+                    });
                 }
-                GateDecision::Blocked { reason, findings: fs } => {
-                    return Err((reason, fs));
-                }
+                texts[i] = payload;
+            }
+            GateDecision::Blocked {
+                reason,
+                findings: fs,
+            } => {
+                return Err((reason, fs));
             }
         }
-        let [shape, fix, lint_key, last_run_id] = texts;
-        let decision = if findings.is_empty() { "allow" } else { "redacted" };
-        Ok(PayloadRow {
-            shape_id: shape_hash(&row.shape),
-            lint_key,
-            shape,
-            fix,
-            direction: row.direction.clone(),
-            success_count: row.success_count,
-            fail_count: row.fail_count,
-            consecutive_fails: row.consecutive_fails,
-            tier: row.tier,
-            last_run_id,
-            last_seen_at: row.last_seen_at,
-            elo: row.elo,
-            span_elo: row.span_elo,
-            gate: RowGateMeta { decision: decision.to_string(), findings },
-        })
+    }
+    let [shape, fix, lint_key, last_run_id] = texts;
+    let decision = if findings.is_empty() {
+        "allow"
+    } else {
+        "redacted"
+    };
+    Ok(PayloadRow {
+        shape_id: shape_hash(&row.shape),
+        lint_key,
+        shape,
+        fix,
+        direction: row.direction.clone(),
+        success_count: row.success_count,
+        fail_count: row.fail_count,
+        consecutive_fails: row.consecutive_fails,
+        tier: row.tier,
+        last_run_id,
+        last_seen_at: row.last_seen_at,
+        elo: row.elo,
+        span_elo: row.span_elo,
+        gate: RowGateMeta {
+            decision: decision.to_string(),
+            findings,
+        },
+    })
 }
 
 // ── Verification + parsing (the consumer side) ─────────────────────────
@@ -514,7 +529,9 @@ pub(crate) fn gate_row(
 /// header's pubkey, or the recomputed commitment disagrees with the header's
 /// (tampered rows / truncated batch).
 pub fn verify_payload(ndjson: &str) -> Result<PayloadHeader, String> {
-    let (head, rest) = ndjson.split_once('\n').ok_or("payload has no header line")?;
+    let (head, rest) = ndjson
+        .split_once('\n')
+        .ok_or("payload has no header line")?;
     let header: PayloadHeader =
         serde_json::from_str(head).map_err(|e| format!("unparseable header: {e}"))?;
     if header.payload_version != PAYLOAD_VERSION {
@@ -528,14 +545,16 @@ pub fn verify_payload(ndjson: &str) -> Result<PayloadHeader, String> {
     // consults the (attested) values.
     let pubkey = decode_hex32(&header.account_pubkey_hex)
         .ok_or("account_pubkey_hex must be 64 hex chars")?;
-    let sig =
-        decode_hex64(&header.signature_hex).ok_or("signature_hex must be 128 hex chars")?;
+    let sig = decode_hex64(&header.signature_hex).ok_or("signature_hex must be 128 hex chars")?;
     let msg = header
         .signing_message()
         .ok_or("batch_commitment must be 64 hex chars")?;
     let vk = ed25519_dalek::VerifyingKey::from_bytes(&pubkey)
         .map_err(|_| "account_pubkey_hex is not a valid Ed25519 verifying key")?;
-    if vk.verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig)).is_err() {
+    if vk
+        .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
+        .is_err()
+    {
         return Err("payload signature does not verify against account_pubkey_hex".into());
     }
     let computed = blake3_hex(rest.as_bytes());
@@ -627,7 +646,11 @@ mod tests {
         let signer = golden_signer();
         let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let rows = vec![
-            row("uninlined_format_args", "fn f() { println!(\"{}\", x); }", "fn f() { println!(\"{x}\"); }"),
+            row(
+                "uninlined_format_args",
+                "fn f() { println!(\"{}\", x); }",
+                "fn f() { println!(\"{x}\"); }",
+            ),
             row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
         ];
         let p = b.build_at(&rows, 1_234_567);
@@ -666,7 +689,10 @@ mod tests {
         let gate = RedactionGate::from_policy(allow_policy());
         let signer = golden_signer();
         let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
-        let rows = vec![row("a", "let x = 1;", "let x = 1;"), row("b", "let y = 2;", "let y = 2;")];
+        let rows = vec![
+            row("a", "let x = 1;", "let x = 1;"),
+            row("b", "let y = 2;", "let y = 2;"),
+        ];
         let p1 = b.build_at(&rows, 99);
         let p2 = b.build_at(&rows, 99);
         assert_eq!(p1.ndjson, p2.ndjson);
@@ -781,11 +807,18 @@ mod tests {
         let signer = golden_signer();
         let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let rows = vec![
-            row("uninlined_format_args", "fn f() { println!(\"{}\", x); }", "fn f() { println!(\"{x}\"); }"),
+            row(
+                "uninlined_format_args",
+                "fn f() { println!(\"{}\", x); }",
+                "fn f() { println!(\"{x}\"); }",
+            ),
             row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
         ];
         let p = b.build_at(&rows, 1_234_567);
-        assert_eq!(p.commitment, "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d");
+        assert_eq!(
+            p.commitment,
+            "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d"
+        );
         let expected = concat!(
             // payload_version 2 (signed — Issue 008). redact_version tracks
             // REDACT_VERSION (3 since the Bench 053 declaration-scope bump).
@@ -844,8 +877,7 @@ mod tests {
 
         // A DIFFERENT key's signature over the same message.
         let other = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
-        let mut header: PayloadHeader =
-            serde_json::from_str(&lines[0]).unwrap();
+        let mut header: PayloadHeader = serde_json::from_str(&lines[0]).unwrap();
         let msg = header.signing_message().unwrap();
         header.signature_hex = hex_encode(&other.sign(&msg).to_bytes());
         let wrong_key = format!(

@@ -22,7 +22,10 @@ use syn::{Expr, ExprAssign, ExprIf, File, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -39,7 +42,9 @@ impl Collector<'_> {
         if !i.attrs.is_empty() {
             return; // attrs would be dropped by the splice
         }
-        let Some((_, else_e)) = &i.else_branch else { return };
+        let Some((_, else_e)) = &i.else_branch else {
+            return;
+        };
         let Expr::Block(eb) = &**else_e else { return };
         if !eb.attrs.is_empty() {
             return;
@@ -50,8 +55,12 @@ impl Collector<'_> {
         let Some((else_assign, else_value)) = single_bool_assign(&eb.block.stmts) else {
             return;
         };
-        let Some(then_lhs) = src(self.source, &*then_assign.left) else { return };
-        let Some(else_lhs) = src(self.source, &*else_assign.left) else { return };
+        let Some(then_lhs) = src(self.source, &*then_assign.left) else {
+            return;
+        };
+        let Some(else_lhs) = src(self.source, &*else_assign.left) else {
+            return;
+        };
         // Same LHS, differing literals — otherwise this is not the lint.
         if then_lhs != else_lhs || then_value == else_value {
             return;
@@ -62,7 +71,9 @@ impl Collector<'_> {
         if contains_let(&i.cond) {
             return;
         }
-        let Some(cond) = src(self.source, &i.cond) else { return };
+        let Some(cond) = src(self.source, &i.cond) else {
+            return;
+        };
         let rhs = match then_value {
             true => cond,
             false if needs_logic_parens(&i.cond) => format!("!({cond})"),
@@ -71,8 +82,7 @@ impl Collector<'_> {
         // The STATEMENT span (not the ExprIf span) so a trailing `;` in the
         // `Stmt::Expr(_, Some(_))` form is swallowed with the if — the
         // replacement carries its own.
-        self.edits
-            .push(edit(stmt, format!("{then_lhs} = {rhs};")));
+        self.edits.push(edit(stmt, format!("{then_lhs} = {rhs};")));
     }
 }
 

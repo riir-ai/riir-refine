@@ -129,10 +129,9 @@ impl FixtureResult {
 }
 
 fn measure(path: &str) -> FixtureResult {
-    let text = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("read fixture {path}: {e}"));
-    let file: CaseFile = serde_json::from_str(&text)
-        .unwrap_or_else(|e| panic!("parse fixture {path}: {e}"));
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read fixture {path}: {e}"));
+    let file: CaseFile =
+        serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse fixture {path}: {e}"));
 
     let corpus = build_seed_corpus();
     assert!(corpus.verify(), "corpus BLAKE3 commitment must verify");
@@ -268,7 +267,11 @@ fn measure_out_of_corpus() -> FixtureResult {
                 "     [{lint}] source={:?} echoes_input={} served={:?}",
                 r.source,
                 echoes_input,
-                if first.len() > 58 { &first[..58] } else { first }
+                if first.len() > 58 {
+                    &first[..58]
+                } else {
+                    first
+                }
             );
         }
         out.total += 1;
@@ -320,7 +323,10 @@ fn main() {
                 Outcome::MissNonParsing => "MISS#2 !parses",
                 Outcome::MissNoCandidate => "MISS#1 none",
             };
-            println!("   {lint:<28} {o:<16} {}", if *exact { "yes" } else { "no" });
+            println!(
+                "   {lint:<28} {o:<16} {}",
+                if *exact { "yes" } else { "no" }
+            );
         }
         println!(
             "   served={} miss#1={} miss#2={} → MISS RATE {}/{} = {:.1}%   (EM {}/{} = {:.1}%, context)",

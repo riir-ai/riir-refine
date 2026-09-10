@@ -26,6 +26,8 @@
 //!   an anti-pattern retrieve its rule worse when another domain's
 //!   anti-pattern shares the span? (Research 484's switch-cost analog.)
 
+#[cfg(feature = "clippy_verify")]
+pub mod clippy_oracle;
 pub mod corpus_index;
 pub mod domain_router;
 pub mod eval_fixtures_clippy;
@@ -33,12 +35,10 @@ pub mod eval_fixtures_composite;
 pub mod eval_fixtures_cross_domain;
 pub mod eval_fixtures_perf;
 pub mod headroom_probe;
-pub mod latent_matcher;
-#[cfg(feature = "clippy_verify")]
-pub mod clippy_oracle;
 pub mod instantiation_rerank;
 #[cfg(feature = "clippy_verify")]
 pub mod jury_disagreement;
+pub mod latent_matcher;
 // Issue 077 T2+T3: the margin law's shared substrate — pure math + the
 // matcher access pattern, no oracle. Gated latent_retrieval (the matcher).
 pub mod margin_weight;
@@ -54,35 +54,38 @@ pub mod tpr_t4a_withheld;
 pub mod tpr_t6a_counterfactual;
 pub mod withheld_pair_ood;
 
+#[cfg(feature = "clippy_verify")]
+pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{
     DomainId, DomainRouter, RoutingEmbedding, SpectralOrder, SpectralVocab, SPECTRAL_DIM,
     SPECTRAL_K, SPECTRAL_VOCAB_N,
 };
-pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
-#[cfg(feature = "clippy_verify")]
-pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use headroom_probe::{
     decompose_headroom, decompose_headroom_with_spans, print_headroom_decomposition,
     print_headroom_report, run_headroom_probe, run_headroom_probe_with,
     run_headroom_probe_with_spans, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss,
-    HeadroomReport, HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS, HEADROOM_STOP_BAR_PP,
+    HeadroomReport, HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS,
+    HEADROOM_STOP_BAR_PP,
 };
 pub use instantiation_rerank::{
-    CollapseVerdict, RerankMode, RERANK_POOL, detect_collapse, detect_collapse_rule_ids,
-    rule_family,
+    detect_collapse, detect_collapse_rule_ids, rule_family, CollapseVerdict, RerankMode,
+    RERANK_POOL,
 };
+pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
 pub use margin_weight::{
-    SpanMargin, concentration_fraction, contested_margin, margin_weight, span_margin,
-    span_min_margin,
+    concentration_fraction, contested_margin, margin_weight, span_margin, span_min_margin,
+    SpanMargin,
 };
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
 pub use retrieval_eval::{
-    run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, OwnedEvalSpan, EvalReport,
-    DomainMetrics as EvalDomainMetrics,
+    run_eval, run_eval_with, run_retrieval_sweep, run_router_eval,
+    DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
 };
 pub use span_source::{collect_source_files, collect_source_files_sorted};
-pub use switch_cost::{cross_domain_spans, run_switch_cost_eval, print_switch_cost_report, SwitchCostReport};
+pub use switch_cost::{
+    cross_domain_spans, print_switch_cost_report, run_switch_cost_eval, SwitchCostReport,
+};
 pub use withheld_pair_ood::{
     atomic_keys, classify_rustc_shape, classify_shape, normalized_tokens, run_withheld_pair,
     ArmRow, AtomicNull, Binding, ShapeClass, WithheldReport,

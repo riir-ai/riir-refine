@@ -52,11 +52,11 @@ fn every_generated_family_produces_its_declared_code() {
     }
     let cases: Vec<_> = picked
         .iter()
-        .map(|c| {
-            riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(c)
-        })
+        .map(|c| riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(c))
         .collect();
-    let report = harness.measure_cases(&NullFixer, &cases).expect("harness ran");
+    let report = harness
+        .measure_cases(&NullFixer, &cases)
+        .expect("harness ran");
     harness.cleanup();
 
     let bad: Vec<&str> = report
@@ -96,7 +96,9 @@ fn full_corpus_declared_codes_hold() {
     for g in &corpus {
         cases.push(HarnessCase::generated(g));
     }
-    let report = harness.measure_cases(&NullFixer, &cases).expect("harness ran");
+    let report = harness
+        .measure_cases(&NullFixer, &cases)
+        .expect("harness ran");
     harness.cleanup();
     assert!(
         report.invalid_mutants.is_empty(),

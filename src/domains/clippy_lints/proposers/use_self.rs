@@ -35,7 +35,7 @@
 
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{File, ImplItem, Item, Path, PathArguments, Pat, Type, TypePath};
+use syn::{File, ImplItem, Item, Pat, Path, PathArguments, Type, TypePath};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -61,7 +61,9 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 }
 
 fn collect_impl(source: &str, imp: &syn::ItemImpl, edits: &mut Vec<SourceEdit>) {
-    let Type::Path(tp) = &*imp.self_ty else { return };
+    let Type::Path(tp) = &*imp.self_ty else {
+        return;
+    };
     if tp.qself.is_some() || tp.path.segments.len() != 1 || tp.path.leading_colon.is_some() {
         return;
     }
@@ -169,7 +171,8 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
     }
 
     fn visit_expr_path(&mut self, ep: &'ast syn::ExprPath) {
-        let bare = ep.path.segments.len() == 1 && matches!(ep.path.segments[0].arguments, PathArguments::None);
+        let bare = ep.path.segments.len() == 1
+            && matches!(ep.path.segments[0].arguments, PathArguments::None);
         self.try_path(&ep.path, if bare { Ctx::ExprBare } else { Ctx::Qualified });
         syn::visit::visit_expr_path(self, ep);
     }
@@ -282,7 +285,10 @@ mod tests {
             "struct V { n: u32 }\nimpl V { fn new() -> V { V { n: 1 } } }",
         )
         .expect("pattern matched");
-        assert_eq!(out, "struct V { n: u32 }\nimpl V { fn new() -> Self { Self { n: 1 } } }");
+        assert_eq!(
+            out,
+            "struct V { n: u32 }\nimpl V { fn new() -> Self { Self { n: 1 } } }"
+        );
     }
 
     #[test]
@@ -368,7 +374,10 @@ mod tests {
             "struct S;\nimpl S { fn f() -> S { fn h() -> S { S } h() } }",
         )
         .expect("pattern matched");
-        assert!(out.contains("fn h() -> S { S }"), "nested fn rewritten: {out}");
+        assert!(
+            out.contains("fn h() -> S { S }"),
+            "nested fn rewritten: {out}"
+        );
         assert!(out.contains("fn f() -> Self"), "{out}");
     }
 

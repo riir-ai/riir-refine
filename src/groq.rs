@@ -249,8 +249,7 @@ impl GroqClient {
                     GroqError::Transport(self.scrub(format!("transport: {other}")))
                 }
             })?;
-        let remaining_requests =
-            parse_quota_header(resp.header("x-ratelimit-remaining-requests"));
+        let remaining_requests = parse_quota_header(resp.header("x-ratelimit-remaining-requests"));
         let remaining_tokens = parse_quota_header(resp.header("x-ratelimit-remaining-tokens"));
         let v: serde_json::Value = resp
             .into_json()
@@ -327,9 +326,7 @@ fn parse_groq_result(
     let finish = v
         .pointer("/choices/0/finish_reason")
         .and_then(serde_json::Value::as_str);
-    if finish == Some("length")
-        && content.is_none_or(|c| c.trim().is_empty())
-    {
+    if finish == Some("length") && content.is_none_or(|c| c.trim().is_empty()) {
         return Err(ParseFail::Overflow(format!(
             "{REASONING_OVERFLOW}: content null/empty with finish_reason=length — \
              raise max_tokens or disable thinking"
@@ -538,9 +535,10 @@ pub mod router {
             // (CfClient::resolve_model_id), so `RIIR_CF_MODEL` reprices a
             // groq-only window too. `price_for` is a pure table lookup — it
             // needs no credentials.
-            let cf_model = cf
-                .as_ref()
-                .map_or_else(|| CfClient::resolve_model_id(cf_model), |c| c.model_id().to_string());
+            let cf_model = cf.as_ref().map_or_else(
+                || CfClient::resolve_model_id(cf_model),
+                |c| c.model_id().to_string(),
+            );
             Ok(Self {
                 cf,
                 cf_model,
@@ -770,8 +768,14 @@ mod tests {
             body.get("model").and_then(serde_json::Value::as_str),
             Some(DEFAULT_GROQ_MODEL)
         );
-        assert_eq!(body.get("temperature").and_then(serde_json::Value::as_f64), Some(0.0));
-        assert_eq!(body.get("max_tokens").and_then(serde_json::Value::as_u64), Some(512));
+        assert_eq!(
+            body.get("temperature").and_then(serde_json::Value::as_f64),
+            Some(0.0)
+        );
+        assert_eq!(
+            body.get("max_tokens").and_then(serde_json::Value::as_u64),
+            Some(512)
+        );
     }
 
     #[test]
@@ -835,19 +839,13 @@ mod tests {
     fn empty_content_with_length_finish_is_overflow_too() {
         let mut v = chat_response(serde_json::json!("   "));
         v["choices"][0]["finish_reason"] = serde_json::json!("length");
-        assert!(matches!(
-            parse_groq_result(&v),
-            Err(ParseFail::Overflow(_))
-        ));
+        assert!(matches!(parse_groq_result(&v), Err(ParseFail::Overflow(_))));
     }
 
     #[test]
     fn missing_content_is_shape_not_overflow() {
         let v = serde_json::json!({ "choices": [] });
-        assert!(matches!(
-            parse_groq_result(&v),
-            Err(ParseFail::Shape(_))
-        ));
+        assert!(matches!(parse_groq_result(&v), Err(ParseFail::Shape(_))));
     }
 
     // ── quota headers ─────────────────────────────────────────────────────
@@ -966,17 +964,32 @@ mod tests {
             };
             let v = providers_json(&stats, 0.001, Some("qwen/qwen3.8-27b"));
             let g = v.get("groq").expect("groq block");
-            assert_eq!(g.get("enabled").and_then(serde_json::Value::as_bool), Some(true));
+            assert_eq!(
+                g.get("enabled").and_then(serde_json::Value::as_bool),
+                Some(true)
+            );
             assert_eq!(g.get("calls").and_then(serde_json::Value::as_u64), Some(3));
             assert_eq!(g.get("ok").and_then(serde_json::Value::as_u64), Some(2));
-            assert_eq!(g.get("prompt_tokens").and_then(serde_json::Value::as_u64), Some(100));
-            assert_eq!(g.get("usd_est").and_then(serde_json::Value::as_f64), Some(0.0));
+            assert_eq!(
+                g.get("prompt_tokens").and_then(serde_json::Value::as_u64),
+                Some(100)
+            );
+            assert_eq!(
+                g.get("usd_est").and_then(serde_json::Value::as_f64),
+                Some(0.0)
+            );
             assert_eq!(
                 g.get("usd_avoided_est").and_then(serde_json::Value::as_f64),
                 Some(0.001)
             );
-            assert_eq!(g.get("rate_limited").and_then(serde_json::Value::as_u64), Some(1));
-            assert_eq!(g.get("fallbacks_to_cf").and_then(serde_json::Value::as_u64), Some(1));
+            assert_eq!(
+                g.get("rate_limited").and_then(serde_json::Value::as_u64),
+                Some(1)
+            );
+            assert_eq!(
+                g.get("fallbacks_to_cf").and_then(serde_json::Value::as_u64),
+                Some(1)
+            );
             assert!(g.get("disabled_reason").is_some());
         }
 
@@ -984,7 +997,10 @@ mod tests {
         fn providers_block_is_enabled_false_when_never_called() {
             let v = providers_json(&GroqStats::default(), 0.0, None);
             let g = v.get("groq").expect("groq block");
-            assert_eq!(g.get("enabled").and_then(serde_json::Value::as_bool), Some(false));
+            assert_eq!(
+                g.get("enabled").and_then(serde_json::Value::as_bool),
+                Some(false)
+            );
             assert_eq!(g.get("calls").and_then(serde_json::Value::as_u64), Some(0));
         }
     }
@@ -1033,7 +1049,10 @@ mod tests {
             model: DEFAULT_GROQ_MODEL.to_string(),
         };
         let leaked = c.scrub("upstream rejected Bearer gsk_secret at /v1/chat".to_string());
-        assert!(!leaked.contains("gsk_secret"), "token must not survive: {leaked}");
+        assert!(
+            !leaked.contains("gsk_secret"),
+            "token must not survive: {leaked}"
+        );
         assert!(leaked.contains(TOKEN_REDACTED));
         // The common case is untouched (and allocation-free in spirit — the
         // no-match arm returns the same String).

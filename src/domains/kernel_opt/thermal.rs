@@ -120,12 +120,7 @@ impl KernelThermalRouter {
     /// These parameters are accepted but ignored in the scaffold — they'll
     /// drive the escalation logic when the 4090 path lands.
     #[must_use]
-    pub fn route(
-        &self,
-        _cache_hit: bool,
-        _stage2_hit: bool,
-        _lora_confidence: f32,
-    ) -> ThermalTier {
+    pub fn route(&self, _cache_hit: bool, _stage2_hit: bool, _lora_confidence: f32) -> ThermalTier {
         // Scaffold: always Plasma. Real escalation logic deferred.
         ThermalTier::Plasma
     }

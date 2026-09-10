@@ -124,7 +124,9 @@ impl Stanza {
     /// Whether the keyword is written in canonical upper case.
     #[must_use]
     pub fn is_upper(&self, source: &str) -> bool {
-        self.keyword(source).bytes().all(|b| !b.is_ascii_lowercase())
+        self.keyword(source)
+            .bytes()
+            .all(|b| !b.is_ascii_lowercase())
     }
 
     /// The stanza's exact source text (keyword included).
@@ -198,17 +200,19 @@ impl DockerfileScan {
     /// different rule's territory.
     #[must_use]
     pub fn runtime_stage(&self, source: &str) -> Option<usize> {
-        if let 0 | 1 = self.stages.len() { None } else {
-                let consumed = self.consumed_stage_names(source);
-                self.stages
-                    .iter()
-                    .rev()
-                    .find(|st| {
-                        !st.alias.as_deref().is_some_and(|a| consumed.contains(a))
-                            && !consumed.contains(&st.index.to_string())
-                    })
-                    .map(|st| st.index)
-            }
+        if let 0 | 1 = self.stages.len() {
+            None
+        } else {
+            let consumed = self.consumed_stage_names(source);
+            self.stages
+                .iter()
+                .rev()
+                .find(|st| {
+                    !st.alias.as_deref().is_some_and(|a| consumed.contains(a))
+                        && !consumed.contains(&st.index.to_string())
+                })
+                .map(|st| st.index)
+        }
     }
 
     /// Stage names/indices referenced by `--from=` or by a later `FROM`.
@@ -303,7 +307,11 @@ pub fn heredoc_tag(line: &str) -> Option<(String, bool)> {
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
             .collect(),
     };
-    if tag.is_empty() { None } else { Some((tag, strip_tabs)) }
+    if tag.is_empty() {
+        None
+    } else {
+        Some((tag, strip_tabs))
+    }
 }
 
 /// Scan a Dockerfile into stanzas, directives and stages.
@@ -328,7 +336,6 @@ pub fn scan_into(source: &str, out: &mut DockerfileScan) {
 }
 
 fn scan_inner(source: &str, out: &mut DockerfileScan) {
-
     // Line table: (byte start, text without the line terminator).
     let mut lines: Vec<(usize, &str)> = Vec::new();
     let mut off = 0usize;
@@ -469,9 +476,11 @@ fn stanza_extent(lines: &[(usize, &str)], first: usize, escape: char) -> (usize,
 
         let continues = trimmed_end.ends_with(escape);
         if continues && i + 1 < lines.len() {
-                i += 1;
-                last = i;
-            } else { break }
+            i += 1;
+            last = i;
+        } else {
+            break;
+        }
     }
 
     // Consume heredoc bodies, in opening order.
@@ -479,7 +488,11 @@ fn stanza_extent(lines: &[(usize, &str)], first: usize, escape: char) -> (usize,
         let mut j = last + 1;
         while j < lines.len() {
             let text = lines[j].1;
-            let candidate = if strip_tabs { text.trim_start_matches('\t') } else { text };
+            let candidate = if strip_tabs {
+                text.trim_start_matches('\t')
+            } else {
+                text
+            };
             last = j;
             if candidate.trim_end() == tag {
                 break;

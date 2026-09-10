@@ -99,21 +99,11 @@ pub fn detect(source: &str, file: &File) -> Vec<SecretCreateFinding> {
 
 fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<SecretCreateFinding>) {
     match item {
-        Item::Fn(f) => scan_fn(
-            source,
-            f.sig.ident.to_string().as_str(),
-            &f.block,
-            findings,
-        ),
+        Item::Fn(f) => scan_fn(source, f.sig.ident.to_string().as_str(), &f.block, findings),
         Item::Impl(imp) => {
             for ii in &imp.items {
                 if let syn::ImplItem::Fn(m) = ii {
-                    scan_fn(
-                        source,
-                        m.sig.ident.to_string().as_str(),
-                        &m.block,
-                        findings,
-                    );
+                    scan_fn(source, m.sig.ident.to_string().as_str(), &m.block, findings);
                 }
             }
         }
@@ -132,9 +122,9 @@ fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<SecretCreateFin
 }
 
 fn is_test_mod(m: &syn::ItemMod) -> bool {
-    m.attrs.iter().any(|a| {
-        a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test")
-    })
+    m.attrs
+        .iter()
+        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
 }
 
 /// Word-boundary vocabulary hit over one identifier (split on `_`,
@@ -142,9 +132,7 @@ fn is_test_mod(m: &syn::ItemMod) -> bool {
 /// A trailing-`s` stem ("secrets" → "secret") counts — secret FILES are
 /// conventionally plural (`secrets.json`) while the vocabulary is singular.
 fn is_credential_name(name: &str) -> bool {
-    name.to_ascii_lowercase()
-        .split('_')
-        .any(vocab_hit)
+    name.to_ascii_lowercase().split('_').any(vocab_hit)
 }
 
 /// One vocabulary segment (with the plural-stem allowance).
@@ -382,8 +370,7 @@ impl FnWalker<'_> {
             .collect();
         let last = segs.last().map_or("", String::as_str);
         let is_file_create = last == "create" && segs.iter().any(|s| s == "File");
-        let is_fs_write =
-            last == "write" && segs.len() >= 2 && segs[segs.len() - 2] == "fs";
+        let is_fs_write = last == "write" && segs.len() >= 2 && segs[segs.len() - 2] == "fs";
         if !is_file_create && !is_fs_write {
             return;
         }
@@ -470,7 +457,8 @@ mod tests {
     /// `kat_account::write_private` shape) is silent.
     #[test]
     fn batch131_set_permissions_after_create_is_silent() {
-        let src = "fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {\n    \
+        let src =
+            "fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {\n    \
              std::fs::write(path, text).map_err(|e| format!(\"writing: {e}\"))?;\n    \
              #[cfg(unix)]\n    \
              {\n        \
@@ -520,7 +508,10 @@ mod tests {
              use std::os::unix::fs::PermissionsExt;\n        \
              std::fs::set_permissions(a, std::fs::Permissions::from_mode(0o600))?;\n    }\n    \
              std::io::Result::Ok(())\n}\n";
-        assert!(findings(src).is_empty(), "whole-fn suppression is conservative");
+        assert!(
+            findings(src).is_empty(),
+            "whole-fn suppression is conservative"
+        );
     }
 
     /// `#[cfg(test)]` mods are skipped (fixture secrets live there).

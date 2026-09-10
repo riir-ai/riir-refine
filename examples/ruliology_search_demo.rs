@@ -15,8 +15,9 @@
 
 #[cfg(feature = "ruliology_search")]
 use riir_clippy::{
-    RuliologySearch, build_seed_corpus,
+    build_seed_corpus,
     ruliology_search::{ast_delta_size, pareto_front},
+    RuliologySearch,
 };
 
 #[cfg(feature = "ruliology_search")]
@@ -38,8 +39,12 @@ fn main() {
         let payoffs = vec![true, false, true, false];
         let complexities = vec![10usize, 5, 5, 3];
         let front = pareto_front(&payoffs, &complexities);
-        let g1a = front.contains(&2) && front.contains(&3) && !front.contains(&0) && !front.contains(&1);
-        println!("  pareto_front filters dominated: front={front:?} → {}", if g1a { "✅" } else { "❌" });
+        let g1a =
+            front.contains(&2) && front.contains(&3) && !front.contains(&0) && !front.contains(&1);
+        println!(
+            "  pareto_front filters dominated: front={front:?} → {}",
+            if g1a { "✅" } else { "❌" }
+        );
 
         // G1b: ast_delta_size gives simpler fixes lower complexity.
         let buggy = "fn foo() -> i32 { return 42; }";
@@ -95,7 +100,11 @@ fn main() {
         let result = search.search(buggy, &candidates);
         let elapsed = t0.elapsed();
 
-        println!("  search over {} candidates: {:.2?}", candidates.len(), elapsed);
+        println!(
+            "  search over {} candidates: {:.2?}",
+            candidates.len(),
+            elapsed
+        );
         println!("  returned {} scored candidates", result.len());
 
         // Not a hot-path gate. Document the time; assert it's reasonable (< 10ms).
@@ -121,10 +130,7 @@ fn main() {
             let candidates: Vec<_> = corpus.lookup(&entry.lint_name).cloned().collect();
             let best = search.best_fix(&entry.buggy_code, &candidates);
             if best.is_none() {
-                println!(
-                    "  ❌ best_fix returned None for lint '{}'",
-                    entry.lint_name
-                );
+                println!("  ❌ best_fix returned None for lint '{}'", entry.lint_name);
                 all_pass = false;
             }
         }

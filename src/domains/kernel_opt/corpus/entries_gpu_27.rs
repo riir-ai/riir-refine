@@ -19,7 +19,7 @@
 //! dispatcher-eligibility-predicate-lags-kernel-capability += the inverse-direction
 //! instances. Batch 116 / Plan 089 / Research 140.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

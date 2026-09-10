@@ -51,7 +51,14 @@ fn cargo_available() -> bool {
         .is_ok()
 }
 
-fn run(name: &str, broken: &str, max_iters: usize) -> (PathBuf, riir_clippy::domains::rustc_errors::driver::FixCompileReport) {
+fn run(
+    name: &str,
+    broken: &str,
+    max_iters: usize,
+) -> (
+    PathBuf,
+    riir_clippy::domains::rustc_errors::driver::FixCompileReport,
+) {
     let dir = scaffold(name, broken);
     let driver = CompileDriver::isolated().with_max_iters(max_iters);
     let report = driver.run(
@@ -102,7 +109,11 @@ fn e0502_owned_element_ladders_to_clone_out() {
     let (dir, report) = run("e0502_owned", broken, 6);
     assert!(report.ran, "{:?}", report.error);
     assert!(report.clean, "fixed to clean: {report:?}");
-    let strategies: Vec<&str> = report.applied.iter().map(|a| a.strategy_id.as_str()).collect();
+    let strategies: Vec<&str> = report
+        .applied
+        .iter()
+        .map(|a| a.strategy_id.as_str())
+        .collect();
     assert!(
         strategies.contains(&"e0502-clone-out"),
         "clone-out is the keeper: {report:?}"
@@ -178,11 +189,17 @@ fn cascade_two_e0502_errors_fixed_across_iterations() {
         2,
         "one fix per error, across iterations: {report:?}"
     );
-    assert!(report.iterations >= 2, "the cascade consumed ≥2 iterations: {report:?}");
+    assert!(
+        report.iterations >= 2,
+        "the cascade consumed ≥2 iterations: {report:?}"
+    );
     let on_disk = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();
     assert!(on_disk.contains("let f = v[0];"));
     assert!(on_disk.contains("let s = v[0];"));
-    assert!(!on_disk.contains("&v["), "no residual borrows of the elements");
+    assert!(
+        !on_disk.contains("&v["),
+        "no residual borrows of the elements"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -205,7 +222,10 @@ fn already_compiling_seeds_are_untouched() {
         assert!(report.clean, "seed {i} compiles");
         assert_eq!(report.n_checks, 1, "seed {i}: one check only");
         assert_eq!(report.iterations, 0, "seed {i}: no iterations");
-        assert!(report.applied.is_empty() && report.reverted.is_empty(), "seed {i}: no edits");
+        assert!(
+            report.applied.is_empty() && report.reverted.is_empty(),
+            "seed {i}: no edits"
+        );
         let on_disk = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();
         assert_eq!(&on_disk, seed, "seed {i} byte-identical on disk");
         let _ = std::fs::remove_dir_all(&dir);

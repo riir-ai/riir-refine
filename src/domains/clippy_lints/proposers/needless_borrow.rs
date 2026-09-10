@@ -14,7 +14,10 @@ use syn::{Expr, File};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -47,8 +50,14 @@ mod tests {
     fn strips_borrow_on_path_arg() {
         let input = "fn show(s: &str) -> usize { s.len() }\nfn go(s: &str) -> usize { show(&s) }";
         let out = propose_fix("needless_borrow", input).expect("matched");
-        assert!(out.contains("show(s)"), "borrow not stripped at call site: {out}");
-        assert!(out.contains("fn show(s: &str)"), "signature borrow must stay: {out}");
+        assert!(
+            out.contains("show(s)"),
+            "borrow not stripped at call site: {out}"
+        );
+        assert!(
+            out.contains("fn show(s: &str)"),
+            "signature borrow must stay: {out}"
+        );
     }
 
     #[test]
@@ -71,6 +80,9 @@ mod tests {
         // proposer's scope); method-call receiver positions stay.
         let input = "fn go(s: String) { s.replace(&s, \"x\"); }";
         let out = propose_fix("needless_borrow", input);
-        assert!(out.is_none(), "method-call arg path is out of scope: {out:?}");
+        assert!(
+            out.is_none(),
+            "method-call arg path is out of scope: {out:?}"
+        );
     }
 }

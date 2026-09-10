@@ -32,9 +32,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use riir_clippy::kat_lease_client::HttpResponse;
-use riir_clippy::kat_stake_client::{
-    self, StakeInfo, StakeOutcome, StakeTransport, TrancheView,
-};
+use riir_clippy::kat_stake_client::{self, StakeInfo, StakeOutcome, StakeTransport, TrancheView};
 
 // ── the mock server (std TCP; the g10 shape) ───────────────────────────────
 
@@ -122,7 +120,10 @@ fn http(status: u16, body: &[u8]) -> Vec<u8> {
         200 => "OK",
         _ => "",
     };
-    let head = format!("HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+    let head = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
     let mut out = head.into_bytes();
     out.extend_from_slice(body);
     out
@@ -256,7 +257,10 @@ fn transport_at(base: &str) -> riir_clippy::kat_stake_client::HttpStakeTransport
 
 #[test]
 fn stake_request_posts_the_composed_shape_and_uses_the_service_url() {
-    let server = spawn_stake_mock(ServeMode::Live, serde_json::to_string(&info_fixture()).unwrap());
+    let server = spawn_stake_mock(
+        ServeMode::Live,
+        serde_json::to_string(&info_fixture()).unwrap(),
+    );
     let transport = MockStakeTransport { server };
     let root = temp_dir("stake-req");
     let out = kat_stake_client::stake_request_flow(&transport, "acct42", 100_000_000, &root, 1)
@@ -303,7 +307,11 @@ fn stake_not_live_composes_locally_and_queues_the_intent() {
             assert!(url.contains(&env_payee), "{url}");
             assert!(url.contains("amount=250.000000"), "{url}");
             assert!(url.contains("reference="), "{url}");
-            assert!(queued_at.exists(), "intent queued at {}", queued_at.display());
+            assert!(
+                queued_at.exists(),
+                "intent queued at {}",
+                queued_at.display()
+            );
             assert_eq!(
                 kat_stake_client::queued_stake_count(&root),
                 Some(1),
@@ -345,29 +353,41 @@ fn info_fetch_gets_the_account_query_and_the_flow_renders_the_mock_shape() {
     let parsed: StakeInfo = serde_json::from_slice(&body).expect("the service JSON decodes");
     let text = kat_stake_client::render_info(&parsed, 100_000);
     // The mock's rows (per-tranche unlock, the pool split, the restake flag).
-    assert!(text.contains("Staked:          100.00 USDC (refundable)"), "{text}");
+    assert!(
+        text.contains("Staked:          100.00 USDC (refundable)"),
+        "{text}"
+    );
     assert!(text.contains("in 3d 00h   (tranche #0"), "{text}");
     assert!(text.contains("in 4d 00h   (tranche #1"), "{text}");
-    assert!(text.contains("+2431.500000 KAT accrued — service credit"), "{text}");
+    assert!(
+        text.contains("+2431.500000 KAT accrued — service credit"),
+        "{text}"
+    );
     assert!(text.contains("mining 90% · staking 10%"), "{text}");
     assert!(text.contains("Reward restake:  ON"), "{text}");
     // The wire shape: the account rides the query string.
     let caps = transport.server.captured();
     assert!(
-        caps.iter().any(|c| c.method == "GET" && c.path == "/stake/info?acct=9f3a"),
+        caps.iter()
+            .any(|c| c.method == "GET" && c.path == "/stake/info?acct=9f3a"),
         "the account query shape: {caps:?}"
     );
 }
 
 #[test]
 fn unstake_posts_the_drain_request_and_renders_the_disclosure() {
-    let server = spawn_stake_mock(ServeMode::Live, serde_json::to_string(&info_fixture()).unwrap());
+    let server = spawn_stake_mock(
+        ServeMode::Live,
+        serde_json::to_string(&info_fixture()).unwrap(),
+    );
     let transport = MockStakeTransport { server };
     let root = temp_dir("unstake");
-    let out = kat_stake_client::unstake_flow(&transport, "acct42", &root, 1)
-        .expect("live unstake");
+    let out = kat_stake_client::unstake_flow(&transport, "acct42", &root, 1).expect("live unstake");
     // The service-queued arm: the amount + the full disclosure.
-    assert!(out.contains("unstake: queued by the service (100.00 USDC)"), "{out}");
+    assert!(
+        out.contains("unstake: queued by the service (100.00 USDC)"),
+        "{out}"
+    );
     assert!(out.contains("48h escrow"), "{out}");
     assert!(out.contains("vent in equal daily slices"), "{out}");
     // The wire shape.
@@ -396,10 +416,20 @@ fn unstake_not_live_queues_and_still_discloses() {
     // All four disclosures present on the not-live path too.
     assert!(out.contains("48h escrow"), "{out}");
     assert!(out.contains("vent in equal daily slices"), "{out}");
-    assert!(out.contains("Refund returns to the funding wallet"), "{out}");
-    assert!(out.contains("Incentive accrual stopped at request"), "{out}");
+    assert!(
+        out.contains("Refund returns to the funding wallet"),
+        "{out}"
+    );
+    assert!(
+        out.contains("Incentive accrual stopped at request"),
+        "{out}"
+    );
     // The queue file exists (the unstake intent, distinct from stake intents).
-    assert!(root.join(".heal").join("stake").join("unstake_pending.jsonl").exists());
+    assert!(root
+        .join(".heal")
+        .join("stake")
+        .join("unstake_pending.jsonl")
+        .exists());
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -416,9 +446,14 @@ fn unstake_refusal_shape_renders_remaining_time() {
     let handle = std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { return };
-            let Some(req) = read_request(&mut stream) else { continue };
+            let Some(req) = read_request(&mut stream) else {
+                continue;
+            };
             let resp = if req.method == "POST" && req.path == "/stake/unstake" {
-                http(200, br#"{"error":"LockupNotExpired","remaining_ticks":172800}"#)
+                http(
+                    200,
+                    br#"{"error":"LockupNotExpired","remaining_ticks":172800}"#,
+                )
             } else {
                 http(404, b"not found")
             };
@@ -442,11 +477,11 @@ fn unstake_refusal_shape_renders_remaining_time() {
 fn copy_gate_no_dollar_beside_a_kat_accrual_in_any_flow_render() {
     let info = info_fixture();
     let renders: HashMap<String, String> = HashMap::from([
-        ("stake_line".into(), kat_stake_client::stake_line(100_000_000)),
         (
-            "info".into(),
-            kat_stake_client::render_info(&info, 100_000),
+            "stake_line".into(),
+            kat_stake_client::stake_line(100_000_000),
         ),
+        ("info".into(), kat_stake_client::render_info(&info, 100_000)),
         ("unstake".into(), kat_stake_client::unstake_disclosure()),
     ]);
     // ONE shared predicate with the module gate (the two hand-copied loops

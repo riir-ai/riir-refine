@@ -18,9 +18,9 @@
 
 #![cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 
-use riir_clippy::draft::tpr_fit::{ProbeStatus, StateSpace, print_space_report, run};
+use riir_clippy::draft::tpr_fit::{print_space_report, run, ProbeStatus, StateSpace};
 use riir_clippy::draft::withheld_pair_ood::{
-    Binding, clippy_population, kernel_opt_population, rustc_errors_population,
+    clippy_population, kernel_opt_population, rustc_errors_population, Binding,
 };
 
 /// The Plan 049 T0.1 committed real-repo dataset — the only source of genuine
@@ -215,10 +215,7 @@ fn t063_tpr_structure_admissibility() {
             "{tag}: probe/admissibility disagreement"
         );
         if r.bow.is_some() {
-            assert!(
-                r.any_admissible(),
-                "{tag}: probes ran with no admissible d"
-            );
+            assert!(r.any_admissible(), "{tag}: probes ran with no admissible d");
         }
 
         // The upstream per-state control is a provable identity here (one

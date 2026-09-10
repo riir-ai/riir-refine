@@ -18,7 +18,10 @@ use syn::{Expr, ExprMatch, File, Pat};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -42,7 +45,10 @@ impl Collector<'_> {
         if m.arms.len() != 2 || !m.attrs.is_empty() {
             return None;
         }
-        if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
+        if m.arms
+            .iter()
+            .any(|a| !a.attrs.is_empty() || a.guard.is_some())
+        {
             return None; // guards/arm-attrs would be lost by the splice
         }
         if !matches!(m.arms[1].pat, Pat::Wild(_)) || !is_unit_expr(&m.arms[1].body) {
@@ -76,7 +82,10 @@ mod tests {
     fn converts_to_if_let() {
         let input = "fn g(x: Option<u8>) { match x { Some(v) => drop(v), _ => () } }";
         let out = propose_fix("single_match", input).expect("matched");
-        assert!(out.contains("if let Some(v) = x { drop(v) }"), "not converted: {out}");
+        assert!(
+            out.contains("if let Some(v) = x { drop(v) }"),
+            "not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -92,7 +101,10 @@ mod tests {
     fn non_unit_wildcard_is_single_match_else() {
         let input = "fn g(x: Option<u8>) { match x { Some(v) => drop(v), _ => fallback() } }";
         let out = propose_fix("single_match", input);
-        assert!(out.is_none(), "non-unit wildcard arm must not fire here: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-unit wildcard arm must not fire here: {out:?}"
+        );
     }
 
     #[test]

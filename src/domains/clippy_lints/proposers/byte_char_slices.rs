@@ -148,7 +148,10 @@ mod tests {
         // the array in receiver position needs parens.
         let input = "fn f() -> u8 { [b'-', b'.'].into_iter().next().unwrap() }";
         let out = propose_fix("byte_char_slices", input).expect("matched");
-        assert!(out.contains("(*b\"-.\").into_iter()") || out.contains("(*b\"- .\").into_iter()"), "{out}");
+        assert!(
+            out.contains("(*b\"-.\").into_iter()") || out.contains("(*b\"- .\").into_iter()"),
+            "{out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

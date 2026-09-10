@@ -102,7 +102,11 @@ fn rate(c: &Cand) -> f32 {
 fn pick(mode: Arm, cands: &[Cand], scratch: &mut Vec<f32>) -> usize {
     // Entropic pool paths (production: pools of size ≤ 1 degrade loudly to
     // the per-candidate belief score — mirrored here).
-    if matches!(mode, Arm::EntSigmoid | Arm::EntSigmoidRate | Arm::EntMaxNorm) && cands.len() > 1 {
+    if matches!(
+        mode,
+        Arm::EntSigmoid | Arm::EntSigmoidRate | Arm::EntMaxNorm
+    ) && cands.len() > 1
+    {
         scratch.clear();
         for c in cands {
             scratch.push(if matches!(mode, Arm::EntSigmoidRate) {
@@ -175,7 +179,12 @@ fn run_trial(mode: Arm, rng: &mut Lcg, evo_noise: f32) -> (bool, u32) {
             let n = rng.below(4) as u32;
             let s = (0..n).filter(|_| rng.f32() < p).count() as u32;
             let evo = (p + (rng.f32() - 0.5) * evo_noise).clamp(0.0, 1.0);
-            Cand { p, s, f: n - s, evo }
+            Cand {
+                p,
+                s,
+                f: n - s,
+                evo,
+            }
         })
         .collect();
 
@@ -255,8 +264,18 @@ fn t26_max_metric_ab() {
 #[test]
 fn t26_budget_protects_against_lucky_one_of_one() {
     let cands = vec![
-        Cand { p: 0.0, s: 1, f: 0, evo: 0.5 },
-        Cand { p: 1.0, s: 18, f: 2, evo: 0.5 },
+        Cand {
+            p: 0.0,
+            s: 1,
+            f: 0,
+            evo: 0.5,
+        },
+        Cand {
+            p: 1.0,
+            s: 18,
+            f: 2,
+            evo: 0.5,
+        },
     ];
     let mut scratch = Vec::new();
     assert_eq!(
@@ -275,7 +294,12 @@ fn t26_budget_protects_against_lucky_one_of_one() {
 /// candidate and must not panic.
 #[test]
 fn t26_single_candidate_pool_degrades() {
-    let cands = vec![Cand { p: 0.4, s: 0, f: 2, evo: 0.55 }];
+    let cands = vec![Cand {
+        p: 0.4,
+        s: 0,
+        f: 2,
+        evo: 0.55,
+    }];
     let mut scratch = Vec::new();
     assert_eq!(pick(Arm::EntSigmoid, &cands, &mut scratch), 0);
     assert_eq!(pick(Arm::EntMaxNorm, &cands, &mut scratch), 0);

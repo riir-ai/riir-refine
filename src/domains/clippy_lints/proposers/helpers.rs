@@ -103,8 +103,7 @@ pub(crate) fn is_pure_expr(e: &Expr) -> bool {
                 .segments
                 .last()
                 .map_or_else(String::new, |s| s.ident.to_string());
-            matches!(ctor.as_str(), "Some" | "Ok" | "Err")
-                && c.args.iter().all(is_pure_expr)
+            matches!(ctor.as_str(), "Some" | "Ok" | "Err") && c.args.iter().all(is_pure_expr)
         }
         // Indexing can panic (real clippy does NOT flag `|| a[0]`),
         // method calls / macros / arrays can do anything — stay impure.
@@ -116,7 +115,10 @@ pub(crate) fn is_pure_expr(e: &Expr) -> bool {
 /// base-10 integer literal, `None` otherwise. The suffix is returned
 /// WITHOUT the `_` separator (e.g. `0u32` → `("0", "u32")`).
 pub(crate) fn int_lit(e: &Expr) -> Option<(String, String)> {
-    let Expr::Lit(ExprLit { lit: Lit::Int(i), .. }) = e else {
+    let Expr::Lit(ExprLit {
+        lit: Lit::Int(i), ..
+    }) = e
+    else {
         return None;
     };
     let digits = i.base10_digits().to_string();
@@ -126,7 +128,10 @@ pub(crate) fn int_lit(e: &Expr) -> Option<(String, String)> {
 
 /// Boolean literal accessor for `true`/`false` expressions.
 pub(crate) fn bool_lit(e: &Expr) -> Option<bool> {
-    let Expr::Lit(ExprLit { lit: Lit::Bool(b), .. }) = e else {
+    let Expr::Lit(ExprLit {
+        lit: Lit::Bool(b), ..
+    }) = e
+    else {
         return None;
     };
     Some(b.value)

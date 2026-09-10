@@ -22,7 +22,8 @@ use std::process::Command;
 const RULE: &str = "match_bool";
 const RESTORE: &str = "match c { true => a, _ => b }";
 const FIX: &str = "if c { a } else { b }";
-const ORIGINAL: &str = "pub fn f(c: bool, a: u32, b: u32) -> u32 {\n    match c { true => a, _ => b }\n}\n";
+const ORIGINAL: &str =
+    "pub fn f(c: bool, a: u32, b: u32) -> u32 {\n    match c { true => a, _ => b }\n}\n";
 
 fn scratch_root(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!(

@@ -26,7 +26,10 @@ use syn::{Arm, Expr, ExprIf, ExprLet, ExprMatch, ExprWhile, File, Lit, Pat};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -91,7 +94,11 @@ impl Collector<'_> {
     /// than `.` (method-receiver position).
     fn scrutinee_text(&self, e: &Expr) -> Option<String> {
         let text = src(self.source, e)?;
-        Some(if is_postfix_safe(e) { text } else { format!("({text})") })
+        Some(if is_postfix_safe(e) {
+            text
+        } else {
+            format!("({text})")
+        })
     }
 }
 
@@ -174,7 +181,10 @@ mod tests {
     fn while_let_some_wildcard_becomes_is_some() {
         let input = "fn f(mut it: std::vec::IntoIter<u8>) { while let Some(_) = it.next() {} }";
         let out = propose_fix("redundant_pattern_matching", input).expect("matched");
-        assert!(out.contains("while it.next().is_some() {}"), "not converted: {out}");
+        assert!(
+            out.contains("while it.next().is_some() {}"),
+            "not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -238,7 +248,8 @@ mod tests {
 
     #[test]
     fn match_ok_err_becomes_is_ok() {
-        let input = "fn f(r: Result<u8, u8>) -> bool { match r { Ok(_) => true, Err(_) => false } }";
+        let input =
+            "fn f(r: Result<u8, u8>) -> bool { match r { Ok(_) => true, Err(_) => false } }";
         let out = propose_fix("redundant_pattern_matching", input).expect("matched");
         assert!(out.contains("r.is_ok()"), "{out}");
         syn::parse_file(&out).expect("re-parses");

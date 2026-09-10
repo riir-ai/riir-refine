@@ -295,7 +295,11 @@ fn seeds_section() {
         Err(e) => println!("  ERROR: {e}"),
         Ok(bad) => match bad.is_empty() {
             true => println!("  PASS — {}/{} seed tests green", cases.len(), cases.len()),
-            false => println!("  FAIL — {} seed(s) with failing ground truth:\n    {}", bad.len(), bad.join("\n    ")),
+            false => println!(
+                "  FAIL — {} seed(s) with failing ground truth:\n    {}",
+                bad.len(),
+                bad.join("\n    ")
+            ),
         },
     }
     harness.cleanup();
@@ -317,13 +321,8 @@ fn template_covered<'a>(
     let mut cases = Vec::new();
     let mut n = 0;
     for c in committed {
-        if matches!(
-            c.expect_code,
-            "E0597" | "E0499" | "E0502" | "E0505"
-        ) {
-            if let Ok(h) =
-                riir_clippy::domains::rustc_errors::floor::HarnessCase::committed(c)
-            {
+        if matches!(c.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
+            if let Ok(h) = riir_clippy::domains::rustc_errors::floor::HarnessCase::committed(c) {
                 cases.push(h);
                 n += 1;
             }
@@ -331,9 +330,7 @@ fn template_covered<'a>(
     }
     for g in generated {
         if matches!(g.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
-            cases.push(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(
-                g,
-            ));
+            cases.push(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(g));
             n += 1;
         }
     }
@@ -366,17 +363,33 @@ fn ordering_ab_section() {
     // ── Learning pass (static ordering): populate the store ──
     let learning = DriverFixer::new();
     let mut learned = 0usize;
-    let (_, reports) = harness.measure_driver(&learning, &cases).expect("learning pass");
+    let (_, reports) = harness
+        .measure_driver(&learning, &cases)
+        .expect("learning pass");
     for (name, rep) in &reports {
         for a in &rep.applied {
             store
-                .record(&traj_key(&a.code, &a.strategy_id), &a.shape, &a.fix, true, true, "floor-learning")
+                .record(
+                    &traj_key(&a.code, &a.strategy_id),
+                    &a.shape,
+                    &a.fix,
+                    true,
+                    true,
+                    "floor-learning",
+                )
                 .expect("record applied");
             learned += 1;
         }
         for r in &rep.reverted {
             store
-                .record(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, false, false, "floor-learning")
+                .record(
+                    &traj_key(&r.code, &r.strategy_id),
+                    &r.shape,
+                    &r.fix,
+                    false,
+                    false,
+                    "floor-learning",
+                )
                 .expect("record reverted");
             learned += 1;
         }
@@ -402,7 +415,8 @@ fn ordering_ab_section() {
                 }
             };
             cands.sort_by(|a, b| {
-                score(b).total_cmp(&score(a))
+                score(b)
+                    .total_cmp(&score(a))
                     .then(a.total_len().cmp(&b.total_len()))
                     .then(a.strategy_id.cmp(&b.strategy_id))
             });

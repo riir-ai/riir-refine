@@ -93,11 +93,20 @@ fn t355_oracle_agreement_report() {
 
     let n = truth.len();
     let compiling: Vec<&Truth> = truth.iter().filter(|t| t.compiles).collect();
-    let agree = compiling.iter().filter(|t| t.real.contains(t.our_label)).count();
+    let agree = compiling
+        .iter()
+        .filter(|t| t.real.contains(t.our_label))
+        .count();
     let multi = compiling.iter().filter(|t| t.real.len() > 1).count();
     let empty = compiling.iter().filter(|t| t.real.is_empty()).count();
     #[allow(clippy::cast_precision_loss)]
-    let pct = |k: usize, d: usize| if d == 0 { 0.0 } else { k as f32 / d as f32 * 100.0 };
+    let pct = |k: usize, d: usize| {
+        if d == 0 {
+            0.0
+        } else {
+            k as f32 / d as f32 * 100.0
+        }
+    };
 
     println!("  fixtures                     : {n}");
     println!(
@@ -270,7 +279,13 @@ fn t355_composite_multi_lint_g1() {
     let compiling: Vec<&Truth> = truth.iter().filter(|t| t.compiles).collect();
     let multi: Vec<&&Truth> = compiling.iter().filter(|t| t.real.len() > 1).collect();
     #[allow(clippy::cast_precision_loss)]
-    let pc = |k: usize, d: usize| if d == 0 { 0.0 } else { k as f32 / d as f32 * 100.0 };
+    let pc = |k: usize, d: usize| {
+        if d == 0 {
+            0.0
+        } else {
+            k as f32 / d as f32 * 100.0
+        }
+    };
     println!(
         "  authored {} | compile {} ({:.0}%) | MULTI-lint {} ({:.0}%)",
         truth.len(),
@@ -357,7 +372,11 @@ fn t355_composite_multi_lint_g1() {
                 .is_some_and(|(_, rules)| rules.iter().any(|r| t.real.contains(&r.rule_id)))
         })
         .count();
-    println!("  pool recall @{RERANK_POOL}: {:.1}% ({in_pool}/{})", pct(in_pool), scorable.len());
+    println!(
+        "  pool recall @{RERANK_POOL}: {:.1}% ({in_pool}/{})",
+        pct(in_pool),
+        scorable.len()
+    );
     println!(
         "  degeneracy check: all-mode top-1 {} pool recall -> {}",
         if all == in_pool { "==" } else { "!=" },
@@ -404,7 +423,10 @@ fn t355_rerank_latency_g2() {
         println!("  {:<12} {us:>8.1} us/span", format!("{mode:?}"));
     }
     let overhead = timings[1].1 - timings[0].1;
-    println!("  overhead: {overhead:+.1} us/span ({:+.1}%)", overhead / timings[0].1 * 100.0);
+    println!(
+        "  overhead: {overhead:+.1} us/span ({:+.1}%)",
+        overhead / timings[0].1 * 100.0
+    );
 }
 
 // ── Issue 034 T1 — selection headroom on the uncontaminated surface ─────────
@@ -443,7 +465,11 @@ struct CompositeHeadroom {
 impl CompositeHeadroom {
     #[allow(clippy::cast_precision_loss)] // ≤28 spans; display arithmetic
     fn pct(&self, k: usize) -> f32 {
-        if self.scored == 0 { 0.0 } else { k as f32 / self.scored as f32 * 100.0 }
+        if self.scored == 0 {
+            0.0
+        } else {
+            k as f32 / self.scored as f32 * 100.0
+        }
     }
     fn ceiling(&self) -> usize {
         *self.pool.last().expect("depths non-empty")
@@ -534,7 +560,11 @@ fn measure_composite_headroom_with(
 
 fn print_composite_headroom(tag: &str, h: &CompositeHeadroom) {
     let depths = riir_clippy::draft::HEADROOM_DEPTHS;
-    print!("\n  [{tag}] scored {} | recall@1 {:.1}%", h.scored, h.pct(h.chosen));
+    print!(
+        "\n  [{tag}] scored {} | recall@1 {:.1}%",
+        h.scored,
+        h.pct(h.chosen)
+    );
     for (i, &k) in depths.iter().enumerate() {
         print!("   pool@{k} {:.1}%", h.pct(h.pool[i]));
     }
@@ -547,14 +577,22 @@ fn print_composite_headroom(tag: &str, h: &CompositeHeadroom) {
     );
     for (want, chosen, rank) in &h.misses {
         match rank {
-            Some(r) => println!("    SELECTION  want={want} chosen={chosen} best_accepted_rank={r}"),
-            None => println!("    RETRIEVAL  want={want} chosen={chosen} (nothing accepted in pool)"),
+            Some(r) => {
+                println!("    SELECTION  want={want} chosen={chosen} best_accepted_rank={r}")
+            }
+            None => {
+                println!("    RETRIEVAL  want={want} chosen={chosen} (nothing accepted in pool)")
+            }
         }
     }
     let bar = riir_clippy::draft::HEADROOM_STOP_BAR_PP;
     println!(
         "  [{tag}] T1.2 stop bar {bar:.1}pp -> {}",
-        if h.headroom_pp() < bar { "STOP on this criterion" } else { "PROCEED on this criterion" }
+        if h.headroom_pp() < bar {
+            "STOP on this criterion"
+        } else {
+            "PROCEED on this criterion"
+        }
     );
     if h.chosen == h.scored {
         println!(
@@ -566,7 +604,10 @@ fn print_composite_headroom(tag: &str, h: &CompositeHeadroom) {
 
 /// The multi-lint spans real clippy confirms, with their true corpus lints.
 fn composite_scorable(truth: &[Truth]) -> Vec<&Truth> {
-    truth.iter().filter(|t| t.compiles && t.real.len() > 1).collect()
+    truth
+        .iter()
+        .filter(|t| t.compiles && t.real.len() > 1)
+        .collect()
 }
 
 fn structural_invariants(h: &CompositeHeadroom) {
@@ -595,7 +636,11 @@ fn t1_dflash2_composite_headroom() {
     println!("\n=== Issue 034 T1 — headroom, real-clippy composite, ANY-TRUE ===");
     let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
     let scorable = composite_scorable(&truth);
-    println!("  authored {} | scorable multi-lint {}", truth.len(), scorable.len());
+    println!(
+        "  authored {} | scorable multi-lint {}",
+        truth.len(),
+        scorable.len()
+    );
     if scorable.len() < 5 {
         println!("  INSUFFICIENT: fewer than 5 multi-lint spans — no verdict.");
         return;
@@ -625,11 +670,10 @@ fn t1_dflash2_composite_headroom_fixable() {
     let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
     let scorable = composite_scorable(&truth);
 
-    let fixable: BTreeSet<&str> =
-        riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS
-            .iter()
-            .copied()
-            .collect();
+    let fixable: BTreeSet<&str> = riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS
+        .iter()
+        .copied()
+        .collect();
 
     // Only spans with at least one FIXABLE true lint are scorable: a span
     // whose every true lint is unfixable has no correct answer to select.
@@ -642,7 +686,11 @@ fn t1_dflash2_composite_headroom_fixable() {
                 .filter(|l| fixable.contains(l.as_str()))
                 .cloned()
                 .collect();
-            if accepted.is_empty() { None } else { Some((*t, accepted)) }
+            if accepted.is_empty() {
+                None
+            } else {
+                Some((*t, accepted))
+            }
         })
         .collect();
     println!(

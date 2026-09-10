@@ -35,9 +35,9 @@
 use std::collections::BTreeSet;
 
 use riir_clippy::domain::{HealDomain, HealEntry};
+use riir_clippy::domains::clippy_lints::ClippyFixEntry;
 use riir_clippy::domains::clippy_lints::ClippyLintDomain;
 use riir_clippy::drafter::TernaryDrafter;
-use riir_clippy::domains::clippy_lints::ClippyFixEntry;
 use riir_clippy::pruner::RustAnalyzerPruner;
 
 /// K perturbed drafts for one (rule, code), emulating the QMC sweep by
@@ -72,14 +72,12 @@ fn t94_preflight() {
     // The L1 matvec path (not the L0 template fallback) — that is the path
     // T9.4 proposes to perturb.
     let weights: &[f32] = &[
-        1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0,
-        -1.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0,
-        0.0, 0.0, 1.0, -1.0, 1.0, -1.0, 1.0, 0.0,
-        1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
+        1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0, -1.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 0.0,
+        0.0, 1.0, -1.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
     ];
-    let mut drafter = TernaryDrafter::with_weights(
-        katgpt_core::TernaryWeights::quantize_from_f32(weights, 4, 8),
-    );
+    let mut drafter = TernaryDrafter::with_weights(katgpt_core::TernaryWeights::quantize_from_f32(
+        weights, 4, 8,
+    ));
     let pruner = RustAnalyzerPruner::new();
     const K: usize = 8;
 
@@ -131,9 +129,17 @@ fn t94_preflight() {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    let pct = |k: usize, d: usize| if d == 0 { 0.0 } else { k as f32 / d as f32 * 100.0 };
-    println!("  probed {} fixtures x K={K} perturbations = {total_attempts} attempts",
-             probe.len());
+    let pct = |k: usize, d: usize| {
+        if d == 0 {
+            0.0
+        } else {
+            k as f32 / d as f32 * 100.0
+        }
+    };
+    println!(
+        "  probed {} fixtures x K={K} perturbations = {total_attempts} attempts",
+        probe.len()
+    );
     println!(
         "  IDENTITY GUARD declined  : {total_declined}/{total_attempts} ({:.1}%)  \
          <- collapses the ensemble",

@@ -36,7 +36,7 @@
 //! index sort, and writes results into a caller-provided slice. The only
 //! allocation is the `Vec<FixTrajectory>` growth on insert (amortized).
 
-use crate::embedder::{Direction, EMBED_DIM, embed_into};
+use crate::embedder::{embed_into, Direction, EMBED_DIM};
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 
@@ -224,7 +224,11 @@ impl LatentQuery {
         let lint_name_hash = hasher.finalize().as_bytes()[..8]
             .try_into()
             .map_or(0, u64::from_le_bytes);
-        Self { lint_name, lint_name_hash, direction }
+        Self {
+            lint_name,
+            lint_name_hash,
+            direction,
+        }
     }
 }
 
@@ -262,7 +266,11 @@ impl Default for RetrievalWeights {
         // relevance — at 0.2, a different-lint Certified entry (≤ 0.4 + 0.2)
         // can never outrank a same-lint Heuristic one (≥ 0.6 + 0.1), and the
         // Certified-over-Heuristic gap is 0.1 (0.5 prior difference × 0.2).
-        Self { latent: 0.4, bm25: 0.6, trust: 0.2 }
+        Self {
+            latent: 0.4,
+            bm25: 0.6,
+            trust: 0.2,
+        }
     }
 }
 
@@ -304,14 +312,20 @@ impl LatentFixMemory {
     /// Construct an empty memory with the given retrieval weights.
     #[must_use]
     pub fn new(weights: RetrievalWeights) -> Self {
-        Self { trajectories: Vec::new(), weights }
+        Self {
+            trajectories: Vec::new(),
+            weights,
+        }
     }
 
     /// Pre-allocate capacity for `n` trajectories (avoids realloc during
     /// steady-state inserts).
     #[must_use]
     pub fn with_capacity(n: usize) -> Self {
-        Self { trajectories: Vec::with_capacity(n), weights: RetrievalWeights::default() }
+        Self {
+            trajectories: Vec::with_capacity(n),
+            weights: RetrievalWeights::default(),
+        }
     }
 
     /// Construct from an already-deduplicated batch — O(n), no per-insert
@@ -325,7 +339,10 @@ impl LatentFixMemory {
     /// prefix of a deduplicated batch inherits it.
     #[must_use]
     pub fn from_trajectories(trajectories: Vec<FixTrajectory>) -> Self {
-        Self { trajectories, weights: RetrievalWeights::default() }
+        Self {
+            trajectories,
+            weights: RetrievalWeights::default(),
+        }
     }
 
     /// Number of stored trajectories.
@@ -484,7 +501,11 @@ impl LatentFixMemory {
             let latent_score = katgpt_core::sigmoid(dot);
 
             // BM25 axis: exact lint_name match via pre-computed hash (O(1)).
-            let bm25_score = if traj.lint_name_hash == query.lint_name_hash { 1.0 } else { 0.0 };
+            let bm25_score = if traj.lint_name_hash == query.lint_name_hash {
+                1.0
+            } else {
+                0.0
+            };
 
             // Trust axis (Issue 021): bounded per-entry prior from the
             // evidential tier. Additive + sigmoid-family bounded — never a
@@ -498,7 +519,12 @@ impl LatentFixMemory {
             // Inline top-K insertion: if `out` has < K entries, push.
             // Otherwise, if this score beats the minimum in `out`, replace it.
             if out.len() < k {
-                out.push(ScoredTrajectory { idx, score: combined, latent_score, bm25_score });
+                out.push(ScoredTrajectory {
+                    idx,
+                    score: combined,
+                    latent_score,
+                    bm25_score,
+                });
                 // Keep `out` sorted descending by score (insertion sort — cheap for small K).
                 let j = out.len() - 1;
                 while j > 0 && out[j - 1].score < out[j].score {
@@ -506,7 +532,12 @@ impl LatentFixMemory {
                 }
             } else if combined > out[k - 1].score {
                 // Replace the last (lowest) entry + bubble up.
-                out[k - 1] = ScoredTrajectory { idx, score: combined, latent_score, bm25_score };
+                out[k - 1] = ScoredTrajectory {
+                    idx,
+                    score: combined,
+                    latent_score,
+                    bm25_score,
+                };
                 let mut j = k - 1;
                 while j > 0 && out[j - 1].score < out[j].score {
                     out.swap(j - 1, j);
@@ -751,7 +782,11 @@ impl LatentFixMemory {
 #[must_use]
 pub fn loop_state_line(has_rows: bool, successes: u32, certified: u32) -> String {
     let e1 = if has_rows { "OK" } else { "—" };
-    let e2 = if successes > 0 || certified > 0 { "OK" } else { "—" };
+    let e2 = if successes > 0 || certified > 0 {
+        "OK"
+    } else {
+        "—"
+    };
     let e3 = if certified > 0 { "OK" } else { "—" };
     // Hints only for gates that are still open (post-037-T2: a "—"
     // verdict means no verified heal has run yet, not missing wiring).
@@ -829,7 +864,6 @@ mod tests {
         LatentQuery::new(lint.to_string(), buggy)
     }
 
-
     // ── T7.4: BLAKE3 commitment over the learned state ────────────────────
 
     #[test]
@@ -856,7 +890,10 @@ mod tests {
         // Edit the payload without touching the commitment — exactly what a
         // corrupted write or a hand-edit looks like.
         let tampered = json.replace("needless_return", "single_match");
-        assert_ne!(tampered, json, "the test edit must actually change the file");
+        assert_ne!(
+            tampered, json,
+            "the test edit must actually change the file"
+        );
 
         let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
         assert_eq!(
@@ -876,26 +913,48 @@ mod tests {
         let mut m = LatentFixMemory::default();
         let fresh = m.stats_report(path, CommitmentStatus::Verified);
         assert!(fresh.contains("buckets: 0"), "fresh: {fresh}");
-        assert!(fresh.contains("record — | verdict — | learn —"), "fresh: {fresh}");
+        assert!(
+            fresh.contains("record — | verdict — | learn —"),
+            "fresh: {fresh}"
+        );
 
         m.insert(make_traj("needless_return", "return 42;", "42"));
-        m.insert(make_traj("match_bool", "match b { true => x }", "if b { x }"));
+        m.insert(make_traj(
+            "match_bool",
+            "match b { true => x }",
+            "if b { x }",
+        ));
         let recorded = m.stats_report(path, CommitmentStatus::Verified);
-        assert!(recorded.contains("buckets: 2 (distinct rules: 2)"), "recorded: {recorded}");
+        assert!(
+            recorded.contains("buckets: 2 (distinct rules: 2)"),
+            "recorded: {recorded}"
+        );
         assert!(recorded.contains("tiers: Certified 0 | Heuristic 2 | Withdrawn 0"));
-        assert!(recorded.contains("record OK | verdict — | learn —"), "recorded: {recorded}");
+        assert!(
+            recorded.contains("record OK | verdict — | learn —"),
+            "recorded: {recorded}"
+        );
         // Open gates carry their hint (post-T2 wording: a "—" verdict means
         // no verified heal has run, not missing wiring).
-        assert!(recorded.contains("verdict needs a positive outcome"), "recorded: {recorded}");
+        assert!(
+            recorded.contains("verdict needs a positive outcome"),
+            "recorded: {recorded}"
+        );
 
         m.record_certified("needless_return", "return 42;", "42");
         let evolved = m.stats_report(path, CommitmentStatus::Verified);
         assert!(evolved.contains("tiers: Certified 1 | Heuristic 1 | Withdrawn 0"));
         assert!(evolved.contains("outcomes: success 1 | fail 0"));
-        assert!(evolved.contains("record OK | verdict OK | learn OK"), "evolved: {evolved}");
+        assert!(
+            evolved.contains("record OK | verdict OK | learn OK"),
+            "evolved: {evolved}"
+        );
         // Post-T2: a closed loop prints NO hint — the stale "verdict needs…"
         // suffix must not survive once every gate is OK.
-        assert!(!evolved.contains("needs a"), "closed loop must carry no hints: {evolved}");
+        assert!(
+            !evolved.contains("needs a"),
+            "closed loop must carry no hints: {evolved}"
+        );
 
         // The commitment status surfaces — a MISMATCH must be loud.
         let tampered = m.stats_report(path, CommitmentStatus::Mismatch);
@@ -924,42 +983,85 @@ mod tests {
         loaded.load_json(legacy).expect("legacy load");
         assert_eq!(loaded.len(), 1);
         let t = loaded.iter().next().expect("one bucket");
-        assert_eq!(t.component, None, "pre-047 trajectory must decode unattributed");
+        assert_eq!(
+            t.component, None,
+            "pre-047 trajectory must decode unattributed"
+        );
     }
 
     #[test]
     fn tag_component_sets_only_the_matching_bucket() {
         let mut m = LatentFixMemory::new(RetrievalWeights::default());
         m.insert(make_traj("needless_return", "return x;", "x"));
-        m.insert(make_traj("match_bool", "match b { true => x }", "if b { x }"));
+        m.insert(make_traj(
+            "match_bool",
+            "match b { true => x }",
+            "if b { x }",
+        ));
 
         m.record_outcome("needless_return", "x", false, false);
-        m.tag_component("needless_return", "x", crate::component::ComponentClass::Drafter);
+        m.tag_component(
+            "needless_return",
+            "x",
+            crate::component::ComponentClass::Drafter,
+        );
 
-        let traj = m.iter().find(|t| t.lint_name == "needless_return").expect("bucket");
-        assert_eq!(traj.component, Some(crate::component::ComponentClass::Drafter));
+        let traj = m
+            .iter()
+            .find(|t| t.lint_name == "needless_return")
+            .expect("bucket");
+        assert_eq!(
+            traj.component,
+            Some(crate::component::ComponentClass::Drafter)
+        );
         assert_eq!(traj.fail_count, 1);
-        let other = m.iter().find(|t| t.lint_name == "match_bool").expect("other");
-        assert_eq!(other.component, None, "unrelated bucket must stay unattributed");
+        let other = m
+            .iter()
+            .find(|t| t.lint_name == "match_bool")
+            .expect("other");
+        assert_eq!(
+            other.component, None,
+            "unrelated bucket must stay unattributed"
+        );
 
         // A later success leaves the last failure attribution in place —
         // the tag is failure metadata for the audit, not a state machine.
         m.record_outcome("needless_return", "x", true, true);
-        let traj = m.iter().find(|t| t.lint_name == "needless_return").expect("bucket");
-        assert_eq!(traj.component, Some(crate::component::ComponentClass::Drafter));
+        let traj = m
+            .iter()
+            .find(|t| t.lint_name == "needless_return")
+            .expect("bucket");
+        assert_eq!(
+            traj.component,
+            Some(crate::component::ComponentClass::Drafter)
+        );
     }
 
     #[test]
     fn tagged_trajectory_round_trips_through_the_envelope() {
         let mut m = LatentFixMemory::new(RetrievalWeights::default());
-        m.insert(make_traj("collapsible_else_if", "else { if c { } }", "else if c { }"));
+        m.insert(make_traj(
+            "collapsible_else_if",
+            "else { if c { } }",
+            "else if c { }",
+        ));
         m.record_outcome("collapsible_else_if", "else if c { }", false, false);
-        m.tag_component("collapsible_else_if", "else if c { }", crate::component::ComponentClass::Gate);
+        m.tag_component(
+            "collapsible_else_if",
+            "else if c { }",
+            crate::component::ComponentClass::Gate,
+        );
         let json = m.to_json().expect("serialize");
-        assert!(json.contains("\"component\":\"C\""), "tag serialized: {json}");
+        assert!(
+            json.contains("\"component\":\"C\""),
+            "tag serialized: {json}"
+        );
 
         let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
-        assert_eq!(loaded.load_json_verified(&json).expect("load"), CommitmentStatus::Verified);
+        assert_eq!(
+            loaded.load_json_verified(&json).expect("load"),
+            CommitmentStatus::Verified
+        );
         let t = loaded.iter().next().expect("one bucket");
         assert_eq!(t.component, Some(crate::component::ComponentClass::Gate));
     }
@@ -1009,7 +1111,10 @@ mod tests {
         let results = mem.retrieve(&q, 2);
         assert_eq!(results.len(), 2);
         let top = mem.get(results[0].idx).unwrap();
-        assert_eq!(top.lint_name, "needless_return", "BM25 axis must rank same-lint first");
+        assert_eq!(
+            top.lint_name, "needless_return",
+            "BM25 axis must rank same-lint first"
+        );
         assert_eq!(results[0].bm25_score, 1.0);
     }
 
@@ -1059,7 +1164,11 @@ mod tests {
         // Subsequent calls must not grow capacity.
         for _ in 0..10 {
             mem.retrieve_into(&q, 5, &mut scratch, &mut out);
-            assert_eq!(out.capacity(), cap_after_first, "capacity grew — not alloc-free");
+            assert_eq!(
+                out.capacity(),
+                cap_after_first,
+                "capacity grew — not alloc-free"
+            );
         }
     }
 
@@ -1067,7 +1176,11 @@ mod tests {
     fn top_k_respects_k_param() {
         let mut mem = LatentFixMemory::default();
         for i in 0..20 {
-            mem.insert(make_traj("needless_return", &format!("return {i};"), &format!("{i}")));
+            mem.insert(make_traj(
+                "needless_return",
+                &format!("return {i};"),
+                &format!("{i}"),
+            ));
         }
         let q = make_query("needless_return", "return 0;");
         let results = mem.retrieve(&q, 5);
@@ -1080,7 +1193,11 @@ mod tests {
     fn json_round_trip_is_lossless() {
         let mut mem = LatentFixMemory::default();
         mem.insert(make_traj("needless_return", "return 42;", "42"));
-        mem.insert(make_traj("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }"));
+        mem.insert(make_traj(
+            "collapsible_if",
+            "if a { if b { x(); } }",
+            "if a && b { x(); }",
+        ));
         mem.record_outcome("needless_return", "42", true, false);
         mem.record_outcome("needless_return", "42", false, false);
 
@@ -1098,13 +1215,17 @@ mod tests {
             assert_eq!(a.fail_count, b.fail_count);
             assert_eq!(a.consecutive_fails, b.consecutive_fails);
             assert_eq!(a.tier, b.tier, "evidential tier must round-trip");
-            assert_eq!(a.direction, b.direction, "direction must round-trip bit-identically");
+            assert_eq!(
+                a.direction, b.direction,
+                "direction must round-trip bit-identically"
+            );
         }
     }
 
     #[test]
     fn file_save_load_missing_and_merge() {
-        let dir = std::env::temp_dir().join(format!("riir-clippy-mem-{}-save-load", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("riir-clippy-mem-{}-save-load", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("memory.json");
         let _ = std::fs::remove_file(&path);
@@ -1128,14 +1249,19 @@ mod tests {
         mem2.record_outcome("needless_return", "1", true, false);
         mem2.load(&path).expect("re-load");
         assert_eq!(mem2.len(), 1);
-        assert_eq!(mem2.get(0).unwrap().success_count, 2, "live stats win over persisted");
+        assert_eq!(
+            mem2.get(0).unwrap().success_count,
+            2,
+            "live stats win over persisted"
+        );
 
         let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn corrupt_file_is_invalid_data() {
-        let dir = std::env::temp_dir().join(format!("riir-clippy-mem-{}-corrupt", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("riir-clippy-mem-{}-corrupt", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("memory.json");
         std::fs::write(&path, "{ not json").expect("write corrupt file");
@@ -1143,7 +1269,10 @@ mod tests {
         let mut mem = LatentFixMemory::default();
         let err = mem.load(&path).expect_err("corrupt file must error");
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
-        assert!(mem.is_empty(), "failed load must leave the memory untouched");
+        assert!(
+            mem.is_empty(),
+            "failed load must leave the memory untouched"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1167,11 +1296,19 @@ mod tests {
         assert_eq!(Heuristic.advance(false, true, 3), Withdrawn);
         assert_eq!(Heuristic.advance(false, false, 3), Withdrawn);
         assert_eq!(Certified.advance(false, true, 3), Withdrawn);
-        assert_eq!(Heuristic.advance(false, false, 2), Heuristic, "2 fails is under the bar");
+        assert_eq!(
+            Heuristic.advance(false, false, 2),
+            Heuristic,
+            "2 fails is under the bar"
+        );
 
         // Success resets the consecutive-fail streak — modelled by the caller
         // passing the reset streak (0) — and only verified success re-certifies.
-        assert_eq!(Withdrawn.advance(true, true, 0), Certified, "re-certification is the only exit");
+        assert_eq!(
+            Withdrawn.advance(true, true, 0),
+            Certified,
+            "re-certification is the only exit"
+        );
     }
 
     #[test]
@@ -1180,7 +1317,11 @@ mod tests {
         // record_outcome addresses — (lint, fixed); the buggy half is
         // insert-dedup metadata, not outcome identity.
         let mut mem = LatentFixMemory::new(RetrievalWeights::default());
-        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 0, "no bucket");
+        assert_eq!(
+            mem.pair_consecutive_fails("use_self", "&Self"),
+            0,
+            "no bucket"
+        );
 
         mem.insert(FixTrajectory::new(
             "use_self".to_string(),
@@ -1190,7 +1331,11 @@ mod tests {
         mem.record_outcome("use_self", "&Self", false, false);
         assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 1);
         mem.record_outcome("use_self", "&Self", false, false);
-        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 2, "suppress threshold");
+        assert_eq!(
+            mem.pair_consecutive_fails("use_self", "&Self"),
+            2,
+            "suppress threshold"
+        );
 
         // A success resets the streak.
         mem.record_outcome("use_self", "&Self", true, false);
@@ -1218,7 +1363,11 @@ mod tests {
                     if success && verified {
                         assert_eq!(next, EvidenceTier::Certified);
                     } else {
-                        assert_eq!(next, EvidenceTier::Withdrawn, "absorbing under ({success}, {verified}, {streak})");
+                        assert_eq!(
+                            next,
+                            EvidenceTier::Withdrawn,
+                            "absorbing under ({success}, {verified}, {streak})"
+                        );
                     }
                 }
             }
@@ -1237,9 +1386,16 @@ mod tests {
             mem.record_outcome("needless_return", "42", true, false);
         }
         let traj = mem.get(0).unwrap();
-        assert_eq!(traj.tier, EvidenceTier::Withdrawn, "unverified successes must not un-withdraw");
+        assert_eq!(
+            traj.tier,
+            EvidenceTier::Withdrawn,
+            "unverified successes must not un-withdraw"
+        );
         assert_eq!(traj.success_count, 100, "stats still record honestly");
-        assert_eq!(traj.consecutive_fails, 0, "streak reset is honest bookkeeping");
+        assert_eq!(
+            traj.consecutive_fails, 0,
+            "streak reset is honest bookkeeping"
+        );
 
         // One re-certification exits.
         mem.record_outcome("needless_return", "42", true, true);
@@ -1271,7 +1427,10 @@ mod tests {
         let after = mem.retrieve(&q, 1);
         assert_eq!(after.len(), 1);
         let delta = after[0].score - before[0].score;
-        assert!((delta - 0.1).abs() < 1e-5, "certification must add exactly the trust gap (0.1), got {delta}");
+        assert!(
+            (delta - 0.1).abs() < 1e-5,
+            "certification must add exactly the trust gap (0.1), got {delta}"
+        );
 
         // And the cross-entry ordering proof lives in the small-edge test
         // below: a Certified entry beats a strictly-more-similar Heuristic
@@ -1297,8 +1456,8 @@ mod tests {
         let cert_latent = base[0].latent_score;
 
         let weights = RetrievalWeights::default();
-        let trust_gap = weights.trust * (EvidenceTier::Certified.trust_prior()
-            - EvidenceTier::Heuristic.trust_prior());
+        let trust_gap = weights.trust
+            * (EvidenceTier::Certified.trust_prior() - EvidenceTier::Heuristic.trust_prior());
         let latent_edge_max = trust_gap / weights.latent; // 0.25 at defaults
 
         let mut heuristic_fixed = None;
@@ -1326,8 +1485,10 @@ mod tests {
             EvidenceTier::Certified,
             "trust gap must dominate a small similarity edge"
         );
-        assert!(results[0].latent_score < results[1].latent_score,
-            "sanity: the runner-up really was more similar");
+        assert!(
+            results[0].latent_score < results[1].latent_score,
+            "sanity: the runner-up really was more similar"
+        );
     }
 
     #[test]
@@ -1343,7 +1504,10 @@ mod tests {
 
         // Only match is Withdrawn → no suggestions at all.
         let q = make_query("needless_return", "return 43;");
-        assert!(mem.retrieve(&q, 5).is_empty(), "Withdrawn must never be suggested");
+        assert!(
+            mem.retrieve(&q, 5).is_empty(),
+            "Withdrawn must never be suggested"
+        );
 
         // Mixed memory: only the non-withdrawn entry surfaces.
         mem.insert(make_traj("needless_return", "return 44;", "44"));
@@ -1394,7 +1558,11 @@ mod tests {
         let mut mem = LatentFixMemory::default();
         mem.load_json(old_json).expect("old-format file must load");
         let traj = mem.get(0).unwrap();
-        assert_eq!(traj.tier, EvidenceTier::Heuristic, "old history decodes as Heuristic");
+        assert_eq!(
+            traj.tier,
+            EvidenceTier::Heuristic,
+            "old history decodes as Heuristic"
+        );
         assert_eq!(traj.consecutive_fails, 0);
         assert_eq!(traj.success_count, 3, "stats survive");
     }

@@ -33,8 +33,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::dispersion::{frontier_order, from_counts, OutcomeClass, PoolEntry};
 use super::driver::{FixCompileReport, MissRecord};
+use crate::dispersion::{from_counts, frontier_order, OutcomeClass, PoolEntry};
 use crate::recorder::EvolveRecorder;
 
 /// Trajectory bucket key: `"{code}:{strategy_id}"` (the plan's
@@ -67,11 +67,16 @@ pub fn record_run(rec: &mut EvolveRecorder, report: &FixCompileReport) {
             super::driver::RevertReason::NoProgress => {
                 crate::component::FailureSignal::reverted(crate::component::RevertKind::CompileGate)
             }
-            super::driver::RevertReason::Io => {
-                crate::component::FailureSignal::reverted(crate::component::RevertKind::Infrastructure)
-            }
+            super::driver::RevertReason::Io => crate::component::FailureSignal::reverted(
+                crate::component::RevertKind::Infrastructure,
+            ),
         };
-        rec.record_failure_signal(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, &signal);
+        rec.record_failure_signal(
+            &traj_key(&r.code, &r.strategy_id),
+            &r.shape,
+            &r.fix,
+            &signal,
+        );
     }
 }
 
@@ -176,7 +181,11 @@ pub fn parse_miss_code(file_name: &str) -> Option<&str> {
     }
     let idx = stem.rfind('-')?;
     let code = &stem[..idx];
-    if code.is_empty() { None } else { Some(code) }
+    if code.is_empty() {
+        None
+    } else {
+        Some(code)
+    }
 }
 
 /// Aggregate per-code outcome counts from trajectory rows
@@ -263,7 +272,11 @@ pub fn frontier_queue_report(
         rows.push(QueueRow {
             rank: rank + 1,
             code: verdict.id.clone(),
-            misses: entry.outcomes.iter().filter(|o| **o == OutcomeClass::Missed).count(),
+            misses: entry
+                .outcomes
+                .iter()
+                .filter(|o| **o == OutcomeClass::Missed)
+                .count(),
             kept,
             reverted,
             entropy: verdict.entropy,
@@ -450,10 +463,7 @@ pub fn conversion_report(
     }
 
     let era_of = |code: &str, strategy: &str| -> LedgerEra {
-        if wired
-            .iter()
-            .any(|&(c, s)| c == code && s == strategy)
-        {
+        if wired.iter().any(|&(c, s)| c == code && s == strategy) {
             LedgerEra::Baseline
         } else if frontier
             .iter()
@@ -496,7 +506,9 @@ pub fn conversion_report(
             }
         }
     }
-    report.rows.sort_by(|a, b| a.code.cmp(&b.code).then(a.strategy.cmp(&b.strategy)));
+    report
+        .rows
+        .sort_by(|a, b| a.code.cmp(&b.code).then(a.strategy.cmp(&b.strategy)));
     report
 }
 
@@ -527,19 +539,24 @@ mod tests {
 
     #[test]
     fn dump_writes_entries_and_readme_once() {
-        let root = std::env::temp_dir().join(format!(
-            "riir_p19_miss_{}_{}",
-            std::process::id(),
-            line!()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("riir_p19_miss_{}_{}", std::process::id(), line!()));
         let _ = std::fs::remove_dir_all(&root);
         let m = miss("E0502");
         let (written, warns) = dump_misses(&root, std::slice::from_ref(&m));
         assert!(warns.is_empty(), "{warns:?}");
         assert_eq!(written.len(), 1);
-        assert!(written[0].file_name().unwrap().to_str().unwrap().starts_with("E0502-"));
+        assert!(written[0]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("E0502-"));
         let body = std::fs::read_to_string(&written[0]).unwrap();
-        assert!(body.contains("error[E0502]...rendered"), "rendered verbatim");
+        assert!(
+            body.contains("error[E0502]...rendered"),
+            "rendered verbatim"
+        );
         assert!(body.contains("/x/src/lib.rs:7"));
         assert!(
             body.contains("**component:** E (corpus/proposer)"),
@@ -725,8 +742,7 @@ mod tests {
             ("E0001".to_string(), "known".to_string()),
             ("E0009".to_string(), "orphan".to_string()),
         ];
-        let report =
-            conversion_report(&inventory, &[("E0001", "known")], &[], &[]);
+        let report = conversion_report(&inventory, &[("E0001", "known")], &[], &[]);
         assert_eq!(
             report.unrecorded,
             vec![("E0009".to_string(), "orphan".to_string())]
@@ -776,11 +792,8 @@ mod tests {
 
     #[test]
     fn frontier_report_orders_informative_first_and_renders_columns() {
-        let root = std::env::temp_dir().join(format!(
-            "riir_p92_miss_{}_{}",
-            std::process::id(),
-            line!()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("riir_p92_miss_{}_{}", std::process::id(), line!()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = misses_dir(&root);
         std::fs::create_dir_all(&dir).unwrap();
@@ -802,20 +815,22 @@ mod tests {
         // Highest entropy first, then the lower-entropy informative pool,
         // regenerate (zero-entropy-all-fail) last.
         let e0502 = report.find("| 1 | E0502").expect("mixed history first");
-        let e0777 = report.find("| 2 | E0777").expect("low-entropy informative second");
+        let e0777 = report
+            .find("| 2 | E0777")
+            .expect("low-entropy informative second");
         let e0999 = report.find("| 3 | E0999").expect("regenerate last");
         assert!(e0502 < e0777 && e0777 < e0999);
         assert!(report.contains("informative") && report.contains("regenerate"));
-        assert!(report.contains("50%"), "conversion column renders: {report}");
+        assert!(
+            report.contains("50%"),
+            "conversion column renders: {report}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn frontier_report_empty_queue_is_honest() {
-        let root = std::env::temp_dir().join(format!(
-            "riir_p92_miss_empty_{}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("riir_p92_miss_empty_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let report = frontier_queue_report(&misses_dir(&root), &BTreeMap::new());
         assert!(report.contains("(empty"), "{report}");

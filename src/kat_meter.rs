@@ -61,14 +61,12 @@ pub const METER_VERSION: u32 = 1;
 /// Versioned deltas of the counting definition (G9b — "never a silent
 /// reprice"). Every version that changes the count for any input carries an
 /// entry describing what moved and why.
-pub const METER_CHANGELOG: &[(u32, &str)] = &[
-    (
-        1,
-        "initial definition: a word token is a maximal run of bytes that are not ASCII \
+pub const METER_CHANGELOG: &[(u32, &str)] = &[(
+    1,
+    "initial definition: a word token is a maximal run of bytes that are not ASCII \
          whitespace (space, \\t, \\n, \\r, \\f). Line-ending-insensitive by construction: \
          \\r is whitespace, so CRLF and LF checkouts of the same repo bill identically.",
-    ),
-];
+)];
 
 /// Count word tokens in raw span bytes (the KAT bill).
 ///
@@ -266,10 +264,9 @@ pub const CHARGE_VERSION: u32 = 1;
 
 /// Versioned deltas of the charge model (the reprice audit trail). Every
 /// version that changes the KAT owed for some token count carries an entry.
-pub const CHARGE_CHANGELOG: &[(u32, &str)] = &[
-    (
-        1,
-        "initial charge model (T0.6 decision, 2026-08-26): per-unit burn — 1 KAT per \
+pub const CHARGE_CHANGELOG: &[(u32, &str)] = &[(
+    1,
+    "initial charge model (T0.6 decision, 2026-08-26): per-unit burn — 1 KAT per \
          MILLION code word tokens (CHARGE_KAT_PER_MILLION_TOKENS = 1_000_000; the \
          deployed economics — the 100 KAT free grant funds ~100M tokens, the \
          proposal's ~$300 Claude-equivalent intent; charged_kat counts MICRO-KAT). \
@@ -278,8 +275,7 @@ pub const CHARGE_CHANGELOG: &[(u32, &str)] = &[
          auditable accounting (charge = tokens x rate, one integer multiply), no \
          tier-boundary or lease-expiry semantics. Revisitable before T1.3 (the Stripe \
          SKU shape), where the caveat's substitution argument actually bites.",
-    ),
-];
+)];
 
 /// KAT charged per 1,000,000 code word tokens — the per-unit burn rate.
 /// v1: `1_000_000` = 1 KAT per MILLION tokens (the deployed economics —
@@ -461,10 +457,7 @@ impl KatCharge {
             .saturating_sub(self.state.meter_watermark_tokens);
         let kat = kat_for_tokens(delta);
         self.state.charged_kat = self.state.charged_kat.saturating_add(kat);
-        self.state.meter_watermark_tokens = self
-            .state
-            .meter_watermark_tokens
-            .saturating_add(delta);
+        self.state.meter_watermark_tokens = self.state.meter_watermark_tokens.saturating_add(delta);
         self.session_kat = self.session_kat.saturating_add(kat);
         kat
     }
@@ -573,9 +566,7 @@ mod tests {
     fn version_stamp_is_changelog_covered() {
         // G9b: the current version must carry an explicit changelog entry.
         assert!(
-            METER_CHANGELOG
-                .iter()
-                .any(|(v, _)| *v == METER_VERSION),
+            METER_CHANGELOG.iter().any(|(v, _)| *v == METER_VERSION),
             "METER_VERSION {METER_VERSION} has no METER_CHANGELOG entry"
         );
         assert_eq!(METER_VERSION, 1);
@@ -583,11 +574,8 @@ mod tests {
 
     #[test]
     fn meter_open_counts_a_session() {
-        let dir = std::env::temp_dir().join(format!(
-            "kat_meter_unit_{}_{}",
-            std::process::id(),
-            line!()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("kat_meter_unit_{}_{}", std::process::id(), line!()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut m = KatMeter::open(&dir);
         assert_eq!(m.state().sessions, 1);
@@ -638,7 +626,11 @@ mod tests {
         )
         .unwrap();
         let m = KatMeter::open(&dir);
-        assert_eq!(m.state().cumulative_tokens, 0, "future version must not leak counts");
+        assert_eq!(
+            m.state().cumulative_tokens,
+            0,
+            "future version must not leak counts"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -690,9 +682,7 @@ mod tests {
     #[test]
     fn charge_rate_is_changelog_covered() {
         assert!(
-            CHARGE_CHANGELOG
-                .iter()
-                .any(|(v, _)| *v == CHARGE_VERSION),
+            CHARGE_CHANGELOG.iter().any(|(v, _)| *v == CHARGE_VERSION),
             "CHARGE_VERSION {CHARGE_VERSION} has no CHARGE_CHANGELOG entry"
         );
         assert_eq!(CHARGE_VERSION, 1);
@@ -734,11 +724,19 @@ mod tests {
         let mut c = KatCharge::open(&dir, &meter_with(0));
 
         assert_eq!(c.settle(&meter_with(100)), 100, "first settle charges all");
-        assert_eq!(c.settle(&meter_with(100)), 0, "same cumulative → no re-charge");
+        assert_eq!(
+            c.settle(&meter_with(100)),
+            0,
+            "same cumulative → no re-charge"
+        );
         assert_eq!(c.settle(&meter_with(150)), 50, "only the delta");
         assert_eq!(c.state().charged_kat, 150);
         assert_eq!(c.state().meter_watermark_tokens, 150);
-        assert_eq!(c.session_kat(), 150, "session sums all settles (100 + 0 + 50)");
+        assert_eq!(
+            c.session_kat(),
+            150,
+            "session sums all settles (100 + 0 + 50)"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -757,7 +755,11 @@ mod tests {
         assert_eq!(c.settle(&meter_with(100)), 0);
         assert_eq!(c.state().charged_kat, 500, "no refund on regression");
         assert_eq!(c.state().meter_watermark_tokens, 500, "watermark holds");
-        assert_eq!(c.settle(&meter_with(600)), 100, "charges again once re-passed");
+        assert_eq!(
+            c.settle(&meter_with(600)),
+            100,
+            "charges again once re-passed"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -810,7 +812,11 @@ mod tests {
         assert_eq!(c.state().charge_version, CHARGE_VERSION, "restamped");
         assert_eq!(c.state().charged_kat, 12_345, "frozen history survives");
         assert_eq!(c.state().meter_watermark_tokens, 500);
-        assert_eq!(c.settle(&meter_with(600)), 100, "new tokens at the new rate");
+        assert_eq!(
+            c.settle(&meter_with(600)),
+            100,
+            "new tokens at the new rate"
+        );
         assert_eq!(c.state().charged_kat, 12_445);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -827,9 +833,17 @@ mod tests {
 
         // Recovery against the PRE-session meter reading (the bin's open order).
         let mut c = KatCharge::open(&dir, &meter_with(200));
-        assert_eq!(c.state().charged_kat, 200, "history re-derived from the meter");
+        assert_eq!(
+            c.state().charged_kat,
+            200,
+            "history re-derived from the meter"
+        );
         assert_eq!(c.state().meter_watermark_tokens, 200);
-        assert_eq!(c.settle(&meter_with(250)), 50, "no double-charge of history");
+        assert_eq!(
+            c.settle(&meter_with(250)),
+            50,
+            "no double-charge of history"
+        );
         assert_eq!(c.state().charged_kat, 250);
 
         // Missing file takes the same recovery path.

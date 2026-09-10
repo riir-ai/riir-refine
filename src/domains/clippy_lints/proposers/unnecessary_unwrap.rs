@@ -17,7 +17,10 @@ use syn::{Expr, ExprIf, File, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -93,9 +96,13 @@ mod tests {
 
     #[test]
     fn converts_if_unwrap_else_to_unwrap_or() {
-        let input = "fn get(r: Option<u32>) -> u32 {\n    if r.is_some() { r.unwrap() } else { 7 }\n}";
+        let input =
+            "fn get(r: Option<u32>) -> u32 {\n    if r.is_some() { r.unwrap() } else { 7 }\n}";
         let out = propose_fix("unnecessary_unwrap", input).expect("matched");
-        assert!(out.contains("r.unwrap_or(7)"), "unwrap_or not produced: {out}");
+        assert!(
+            out.contains("r.unwrap_or(7)"),
+            "unwrap_or not produced: {out}"
+        );
     }
 
     #[test]
@@ -117,12 +124,16 @@ mod tests {
     fn mismatched_receivers_unchanged() {
         let input = "fn get(a: Option<u32>, b: Option<u32>) -> u32 { if a.is_some() { b.unwrap() } else { 7 } }";
         let out = propose_fix("unnecessary_unwrap", input);
-        assert!(out.is_none(), "mismatched receivers must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "mismatched receivers must not be touched: {out:?}"
+        );
     }
 
     #[test]
     fn deref_receiver_gets_parens() {
-        let input = "fn get(r: &Option<u32>) -> u32 { if (*r).is_some() { (*r).unwrap() } else { 7 } }";
+        let input =
+            "fn get(r: &Option<u32>) -> u32 { if (*r).is_some() { (*r).unwrap() } else { 7 } }";
         let out = propose_fix("unnecessary_unwrap", input).expect("matched");
         assert!(out.contains("(*r).unwrap_or(7)"), "{out}");
     }

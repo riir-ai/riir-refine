@@ -51,7 +51,6 @@
 
 use std::path::{Path, PathBuf};
 
-
 // ── §1 the wire mirror ─────────────────────────────────────────────────────
 
 /// The manifest format version — MUST equal dapps' `MANIFEST_VERSION`. A
@@ -74,9 +73,15 @@ pub enum LeaseError {
     /// G10c: the body does not hash to its own commitment.
     ManifestTamper,
     ImmutableEpoch(u64),
-    EpochWentBackwards { current: u64, tried: u64 },
+    EpochWentBackwards {
+        current: u64,
+        tried: u64,
+    },
     SegmentHashMismatch,
-    SegmentLengthMismatch { expected: u32, actual: u32 },
+    SegmentLengthMismatch {
+        expected: u32,
+        actual: u32,
+    },
     ForeignSegment([u8; 32]),
     MissingSegment([u8; 32]),
     /// Swap-or-nothing: commit refused before verification.
@@ -84,7 +89,10 @@ pub enum LeaseError {
     NoEpochPublished,
     BadVersion(u32),
     /// The server's epoch needs a newer client (compat matrix).
-    Incompatible { min_client: u32, client: u32 },
+    Incompatible {
+        min_client: u32,
+        client: u32,
+    },
 }
 
 impl std::fmt::Display for LeaseError {
@@ -97,7 +105,10 @@ impl std::fmt::Display for LeaseError {
                 "manifest tamper: body does not hash to its own commitment"
             ),
             Self::ImmutableEpoch(e) => {
-                write!(f, "epoch {e} is already published — manifests are immutable")
+                write!(
+                    f,
+                    "epoch {e} is already published — manifests are immutable"
+                )
             }
             Self::EpochWentBackwards { current, tried } => {
                 write!(f, "epoch went backwards: current {current}, tried {tried}")
@@ -106,9 +117,14 @@ impl std::fmt::Display for LeaseError {
                 write!(f, "segment hash mismatch: id does not name these bytes")
             }
             Self::SegmentLengthMismatch { expected, actual } => {
-                write!(f, "segment length mismatch: manifest says {expected}, got {actual}")
+                write!(
+                    f,
+                    "segment length mismatch: manifest says {expected}, got {actual}"
+                )
             }
-            Self::ForeignSegment(id) => write!(f, "segment {} is not in the staged manifest", hex32(id)),
+            Self::ForeignSegment(id) => {
+                write!(f, "segment {} is not in the staged manifest", hex32(id))
+            }
             Self::MissingSegment(id) => {
                 write!(f, "manifest segment {} missing from the stage", hex32(id))
             }
@@ -196,7 +212,8 @@ impl LeaseManifest {
     /// constructor for a trustworthy manifest).
     #[must_use]
     pub fn build(epoch: u64, min_client_version: u32, segments: Vec<LeaseSegmentDesc>) -> Self {
-        let body = Self::canonical_body(LEASE_MANIFEST_VERSION, epoch, min_client_version, &segments);
+        let body =
+            Self::canonical_body(LEASE_MANIFEST_VERSION, epoch, min_client_version, &segments);
         let commitment = Self::commitment_over(&body);
         Self {
             version: LEASE_MANIFEST_VERSION,
@@ -260,8 +277,11 @@ impl LeaseManifest {
             let base = 20 + 36 * i;
             let mut id = [0u8; 32];
             id.copy_from_slice(&bytes[base..base + 32]);
-            let len =
-                u32::from_le_bytes(bytes[base + 32..base + 36].try_into().expect("4 byte slice"));
+            let len = u32::from_le_bytes(
+                bytes[base + 32..base + 36]
+                    .try_into()
+                    .expect("4 byte slice"),
+            );
             segments.push(LeaseSegmentDesc { id, len });
         }
         let mut commitment = [0u8; 32];
@@ -527,8 +547,8 @@ pub struct CorpusPack {
 /// A `String` message when the bytes are not valid pack JSON, the version
 /// is unknown, or the domain is empty.
 pub fn parse_pack(bytes: &[u8]) -> Result<CorpusPack, String> {
-    let pack: CorpusPack = serde_json::from_slice(bytes)
-        .map_err(|e| format!("corpus pack is not valid JSON: {e}"))?;
+    let pack: CorpusPack =
+        serde_json::from_slice(bytes).map_err(|e| format!("corpus pack is not valid JSON: {e}"))?;
     if pack.pack_version != CORPUS_PACK_VERSION {
         return Err(format!(
             "corpus pack carries version {} (this client defines {CORPUS_PACK_VERSION})",
@@ -558,10 +578,7 @@ pub type DomainTriples = Vec<(String, Vec<(String, String, String)>)>;
 /// Returns `None` when the epoch is unusable (missing/corrupt segment or
 /// pack) — the caller then stays on the compiled-in corpus.
 #[must_use]
-pub fn overlay_from_epoch(
-    store: &LeaseStore,
-    epoch: Option<u64>,
-) -> Option<(u64, DomainTriples)> {
+pub fn overlay_from_epoch(store: &LeaseStore, epoch: Option<u64>) -> Option<(u64, DomainTriples)> {
     let manifest = match epoch {
         Some(e) => store.manifest_at(e)?,
         None => store.current()?,
@@ -574,7 +591,10 @@ pub fn overlay_from_epoch(
         if pack.entries.is_empty() {
             continue; // no statement for the domain
         }
-        by_domain.entry(pack.domain).or_default().extend(pack.entries);
+        by_domain
+            .entry(pack.domain)
+            .or_default()
+            .extend(pack.entries);
     }
     let overlay = by_domain
         .into_iter()
@@ -774,8 +794,12 @@ impl LeaseStore {
             write_file_atomic(&final_path, bytes, false)
                 .map_err(|e| LeaseError::Store(e.to_string()))?;
         }
-        write_file_atomic(&self.man_path(le.manifest.epoch), &le.manifest.to_bytes(), false)
-            .map_err(|e| LeaseError::Store(e.to_string()))
+        write_file_atomic(
+            &self.man_path(le.manifest.epoch),
+            &le.manifest.to_bytes(),
+            false,
+        )
+        .map_err(|e| LeaseError::Store(e.to_string()))
     }
 
     /// Install step 2 — **THE pointer swap** (one rename; atomic on every
@@ -785,8 +809,8 @@ impl LeaseStore {
     ///
     /// [`LeaseError::Store`] on filesystem failure.
     pub fn publish_pointer(&self, manifest: &LeaseManifest) -> Result<(), LeaseError> {
-        let text =
-            serde_json::to_string(&LeasePointer::of(manifest)).map_err(|e| LeaseError::Store(e.to_string()))?;
+        let text = serde_json::to_string(&LeasePointer::of(manifest))
+            .map_err(|e| LeaseError::Store(e.to_string()))?;
         write_file_atomic(&self.ptr_path(), text.as_bytes(), true)
             .map_err(|e| LeaseError::Store(e.to_string()))
     }
@@ -862,14 +886,12 @@ pub const LEASE_CHARGE_VERSION: u32 = 1;
 pub const LEASE_FEE_KAT: u64 = 1_000;
 
 /// Versioned deltas of the lease-charge model (the reprice audit trail).
-pub const LEASE_CHARGE_CHANGELOG: &[(u32, &str)] = &[
-    (
-        1,
-        "initial lease charge (T1.6, Plan 040): flat 1,000 KAT per applied epoch \
+pub const LEASE_CHARGE_CHANGELOG: &[(u32, &str)] = &[(
+    1,
+    "initial lease charge (T1.6, Plan 040): flat 1,000 KAT per applied epoch \
          (the proposal §Account mock figure); idempotent per epoch; a 304 never \
          charges (the charge only composes on the accepted-epoch path).",
-    ),
-];
+)];
 
 /// The persisted lease-charge projection.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -953,7 +975,10 @@ impl LeaseCharge {
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(&self.path, serde_json::to_string_pretty(&self.state).unwrap_or_default())
+        std::fs::write(
+            &self.path,
+            serde_json::to_string_pretty(&self.state).unwrap_or_default(),
+        )
     }
 
     /// The visible charge line (KAT only — no `$`, caveats #12/#15).
@@ -1109,7 +1134,10 @@ pub fn is_host_level_error(e: &ureq::Error) -> bool {
 #[cfg(feature = "kat_transport")]
 #[must_use]
 pub fn is_host_level_kind(kind: ureq::ErrorKind) -> bool {
-    matches!(kind, ureq::ErrorKind::Dns | ureq::ErrorKind::ConnectionFailed)
+    matches!(
+        kind,
+        ureq::ErrorKind::Dns | ureq::ErrorKind::ConnectionFailed
+    )
 }
 
 /// The base URL the next request should use: the failover memo when one is
@@ -1153,7 +1181,10 @@ fn failover_flip(tried: &str) -> Option<String> {
 /// The payment-page URL for an account (the QR payload).
 #[must_use]
 pub fn payment_url(service_base: &str, account_id: &str) -> String {
-    format!("{}/pay?acct={account_id}", service_base.trim_end_matches('/'))
+    format!(
+        "{}/pay?acct={account_id}",
+        service_base.trim_end_matches('/')
+    )
 }
 
 /// The claim-request schema version.
@@ -1194,7 +1225,10 @@ pub fn queue_claim(root: &Path, req: &ClaimRequest) -> std::io::Result<PathBuf> 
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
     writeln!(f, "{}", serde_json::to_string(req).unwrap_or_default())?;
     Ok(path)
 }
@@ -1461,9 +1495,7 @@ fn update_phase_inner(
         Err(LeaseError::BadVersion(v)) => {
             return UpdateStatus::Failed(format!("lease manifest carries version {v}"))
         }
-        Err(e) => {
-            return UpdateStatus::Failed(format!("{e} — falling back to the local corpus"))
-        }
+        Err(e) => return UpdateStatus::Failed(format!("{e} — falling back to the local corpus")),
     };
     if !compat_ok(&manifest, LEASE_CLIENT_VERSION) {
         return UpdateStatus::Skipped(format!(
@@ -1552,7 +1584,9 @@ fn update_phase_inner(
 /// The default-on flip is a one-line change when the service plane lands.
 #[must_use]
 pub fn service_url_from_env() -> Option<String> {
-    std::env::var("RIIR_HEAL_KAT_SERVICE_URL").ok().filter(|u| !u.is_empty())
+    std::env::var("RIIR_HEAL_KAT_SERVICE_URL")
+        .ok()
+        .filter(|u| !u.is_empty())
 }
 
 /// The explicit-command URL resolution (env, else the production default).
@@ -1868,18 +1902,15 @@ mod tests {
         assert_eq!(a.commitment, b.commitment);
         assert_ne!(
             a.commitment,
-            LeaseManifest::build(1, 3, vec![LeaseSegmentDesc::of(b"beta")])
-                .commitment
+            LeaseManifest::build(1, 3, vec![LeaseSegmentDesc::of(b"beta")]).commitment
         );
         assert_ne!(
             a.commitment,
-            LeaseManifest::build(2, 3, vec![LeaseSegmentDesc::of(b"alpha")])
-                .commitment
+            LeaseManifest::build(2, 3, vec![LeaseSegmentDesc::of(b"alpha")]).commitment
         );
         assert_ne!(
             a.commitment,
-            LeaseManifest::build(1, 4, vec![LeaseSegmentDesc::of(b"alpha")])
-                .commitment
+            LeaseManifest::build(1, 4, vec![LeaseSegmentDesc::of(b"alpha")]).commitment
         );
     }
 
@@ -1927,7 +1958,10 @@ mod tests {
         // Commit before complete is refused (swap-or-nothing) — commit
         // consumes, so a fresh identical stage proves the refusal.
         let incomplete = LeaseStage::begin(m.clone()).unwrap();
-        assert!(matches!(incomplete.commit(), Err(LeaseError::MissingSegment(_))));
+        assert!(matches!(
+            incomplete.commit(),
+            Err(LeaseError::MissingSegment(_))
+        ));
         // Good stage → complete → commit.
         stage.stage_segment(&good.id, b"payload").unwrap();
         assert!(stage.is_complete());
@@ -2234,8 +2268,7 @@ mod tests {
     /// The canonical golden subject: a real payreq capability URL on the
     /// production service base (the T0.3 golden request id).
     #[cfg(feature = "kat_transport")]
-    const QR_GOLDEN_URL: &str =
-        "https://ai.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
+    const QR_GOLDEN_URL: &str = "https://ai.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
 
     /// Axis 2 (MEASURED): the **resolved** `qrcode` version in `Cargo.lock`
     /// is the one [`QRCODE_PINNED_VERSION`] declares, and the `Cargo.toml`
@@ -2256,8 +2289,9 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 
         // (a) the resolved version, out of Cargo.lock.
-        let lock = std::fs::read_to_string(root.join("Cargo.lock"))
-            .expect("Cargo.lock must be present and readable — the pin has nothing to read without it");
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect(
+            "Cargo.lock must be present and readable — the pin has nothing to read without it",
+        );
         let mut lines = lock.lines();
         let mut resolved: Option<String> = None;
         while let Some(line) = lines.next() {
@@ -2346,11 +2380,9 @@ mod tests {
         // Independent preimage recompute (built here, not via the fn).
         {
             use qrcode::{Color, QrCode};
-            let code = QrCode::with_error_correction_level(
-                QR_GOLDEN_URL,
-                QR_RENDER_PARAMS.ec_level,
-            )
-            .expect("encodes");
+            let code =
+                QrCode::with_error_correction_level(QR_GOLDEN_URL, QR_RENDER_PARAMS.ec_level)
+                    .expect("encodes");
             let mut pre: Vec<u8> = Vec::new();
             pre.extend_from_slice(b"riir-kat-qr-v1:");
             pre.push(u8::try_from(QRCODE_PINNED_VERSION.len()).unwrap());
@@ -2466,7 +2498,10 @@ mod tests {
             .map(|c| c.render::<Dense1x2>().quiet_zone(true).build())
             .expect("encodes");
         assert_eq!(render_qr_ascii(QR_GOLDEN_URL), before);
-        assert_eq!(hex32(blake3::hash(before.as_bytes()).as_bytes()), QR_ASCII_GOLDEN);
+        assert_eq!(
+            hex32(blake3::hash(before.as_bytes()).as_bytes()),
+            QR_ASCII_GOLDEN
+        );
     }
 
     /// Re-derived 2026-09-09 against [`QR_GOLDEN_URL`] (the CURRENT

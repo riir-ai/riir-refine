@@ -112,7 +112,14 @@ fn rate(c: &Cand) -> f32 {
 fn pick(arm: Arm, cands: &[Cand], rho: f32) -> (usize, f32, f32) {
     let mut best = (0usize, f32::NEG_INFINITY, 0.0f32, 0.0f32);
     for (i, c) in cands.iter().enumerate() {
-        let (p1, p2) = (c.evo, if arm == Arm::LinearBlend { rate(c) } else { belief(c) });
+        let (p1, p2) = (
+            c.evo,
+            if arm == Arm::LinearBlend {
+                rate(c)
+            } else {
+                belief(c)
+            },
+        );
         let score = match arm {
             Arm::LinearBlend | Arm::BetaPosterior => W_EVO * p1 + W_RATE * p2,
             Arm::FixedRho(r) => (1.0 - r) * p1 + r * p2,
@@ -150,7 +157,12 @@ fn run_trial(
             let n = rng.below(4) as u32; // thin evidence: 0..=3 pre-observations
             let s = (0..n).filter(|_| rng.f32() < p).count() as u32;
             let evo = (p + (rng.f32() - 0.5) * evo_noise).clamp(0.0, 1.0);
-            Cand { p, s, f: n - s, evo }
+            Cand {
+                p,
+                s,
+                f: n - s,
+                evo,
+            }
         })
         .collect();
 
@@ -243,7 +255,12 @@ fn t33_selection_regret_ab() {
     println!("\n=== Issue 033 T4 — selection regret ===");
     for &max_attempts in &[1u32, 3, 5] {
         print!("  max_attempts={max_attempts:<3}");
-        for arm in [Arm::BetaPosterior, Arm::FixedRho(0.0), Arm::FixedRho(1.0), Arm::Tether] {
+        for arm in [
+            Arm::BetaPosterior,
+            Arm::FixedRho(0.0),
+            Arm::FixedRho(1.0),
+            Arm::Tether,
+        ] {
             let mut rng = Lcg::new(0xC0FFEE ^ u64::from(max_attempts));
             let mut fit = TetherFit::new();
             let mut regret = 0.0f64;
@@ -255,7 +272,12 @@ fn t33_selection_regret_ab() {
                         let n = 1 + rng.below(max_attempts as usize) as u32;
                         let s = (0..n).filter(|_| rng.f32() < p).count() as u32;
                         let evo = (p + (rng.f32() - 0.5) * 0.6).clamp(0.0, 1.0);
-                        Cand { p, s, f: n - s, evo }
+                        Cand {
+                            p,
+                            s,
+                            f: n - s,
+                            evo,
+                        }
                     })
                     .collect();
                 let best_p = cands.iter().map(|c| c.p).fold(f32::MIN, f32::max);
@@ -286,7 +308,8 @@ fn t33_in_sample_never_worse_on_recorded_streams() {
         for arm in [Arm::BetaPosterior, Arm::Tether] {
             let (_, _, stream) = run_cell(arm, 0x5EED_0001, evo_noise);
             let rho = fit_rho(&stream, DEFAULT_RHO);
-            let (fit_sse, p1_sse, p2_sse) = (sse(rho, &stream), sse(0.0, &stream), sse(1.0, &stream));
+            let (fit_sse, p1_sse, p2_sse) =
+                (sse(rho, &stream), sse(0.0, &stream), sse(1.0, &stream));
             let pinned = sse(W_RATE, &stream);
             println!(
                 "  noise {evo_noise} arm {:<14} n={} rho*={rho:.4}  SSE fit {fit_sse:.1} \
@@ -370,8 +393,16 @@ fn t33_cells_are_deterministic() {
     for &evo_noise in &[0.6f32, 0.2] {
         let a = run_cell(Arm::Tether, 0x5EED_0001, evo_noise);
         let b = run_cell(Arm::Tether, 0x5EED_0001, evo_noise);
-        assert_eq!(a.0.to_bits(), b.0.to_bits(), "discovery must be reproducible");
-        assert_eq!(a.1.to_bits(), b.1.to_bits(), "final rho must be reproducible");
+        assert_eq!(
+            a.0.to_bits(),
+            b.0.to_bits(),
+            "discovery must be reproducible"
+        );
+        assert_eq!(
+            a.1.to_bits(),
+            b.1.to_bits(),
+            "final rho must be reproducible"
+        );
     }
 }
 
@@ -389,7 +420,12 @@ fn t33_cold_start_matches_production_picks() {
                 let n = rng.below(4) as u32;
                 let s = (0..n).filter(|_| rng.f32() < p).count() as u32;
                 let evo = (p + (rng.f32() - 0.5) * 0.6).clamp(0.0, 1.0);
-                Cand { p, s, f: n - s, evo }
+                Cand {
+                    p,
+                    s,
+                    f: n - s,
+                    evo,
+                }
             })
             .collect();
         assert_eq!(
@@ -442,14 +478,24 @@ fn t33_paired_discovery_mcnemar() {
                 for d in &mut draws {
                     *d = rng.f32() < p;
                 }
-                pool.push(Cand { p, s, f: n - s, evo });
+                pool.push(Cand {
+                    p,
+                    s,
+                    f: n - s,
+                    evo,
+                });
                 outcomes.push(draws);
             }
 
             let replay = |arm: Arm, rho: f32, fit: Option<&mut TetherFit>| -> bool {
                 let mut cands: Vec<Cand> = pool
                     .iter()
-                    .map(|c| Cand { p: c.p, s: c.s, f: c.f, evo: c.evo })
+                    .map(|c| Cand {
+                        p: c.p,
+                        s: c.s,
+                        f: c.f,
+                        evo: c.evo,
+                    })
                     .collect();
                 let mut used = vec![0usize; cands.len()];
                 let mut fit = fit;

@@ -151,7 +151,13 @@ pub const RERANK_POOL: usize = 12;
 /// "no proposer" and "no match" indistinguishable, which is the correct
 /// conservative reading: absence of evidence is not evidence.
 #[allow(unused_variables)] // `file`/`code` are unused when no domain feature is on
-fn instantiates(domain: DomainId, rule_id: &str, code: &str, file: &syn::File, mode: RerankMode) -> bool {
+fn instantiates(
+    domain: DomainId,
+    rule_id: &str,
+    code: &str,
+    file: &syn::File,
+    mode: RerankMode,
+) -> bool {
     match domain {
         #[cfg(feature = "clippy_lints")]
         DomainId::Clippy => {
@@ -169,7 +175,9 @@ fn instantiates(domain: DomainId, rule_id: &str, code: &str, file: &syn::File, m
         #[cfg(feature = "sec")]
         DomainId::Sec => {
             use crate::domains::sec::proposers::collect_edits;
-            if mode == RerankMode::Structural && !crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule_id) {
+            if mode == RerankMode::Structural
+                && !crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule_id)
+            {
                 return false;
             }
             !collect_edits(rule_id, code, file).is_empty()
@@ -357,7 +365,10 @@ pub fn detect_collapse<'a>(
     oracle_label: Option<&str>,
 ) -> CollapseVerdict<'a> {
     let k = top_k.min(pool.len());
-    collapse_over(pool[..k].iter().map(|r| rule_family(&r.rule_id)), oracle_label)
+    collapse_over(
+        pool[..k].iter().map(|r| rule_family(&r.rule_id)),
+        oracle_label,
+    )
 }
 
 /// [`detect_collapse`] over bare rule ids — the eval path's entry point,
@@ -378,7 +389,11 @@ mod tests {
     use super::*;
 
     fn sr(id: &str, score: f32, instantiates: bool) -> ScoredRule {
-        ScoredRule { rule_id: id.to_string(), score, instantiates }
+        ScoredRule {
+            rule_id: id.to_string(),
+            score,
+            instantiates,
+        }
     }
 
     #[test]
@@ -443,7 +458,10 @@ mod tests {
             &mut clean,
             RerankMode::Structural,
         );
-        assert!(!clean[0].instantiates, "the fixed form must NOT instantiate");
+        assert!(
+            !clean[0].instantiates,
+            "the fixed form must NOT instantiate"
+        );
     }
 
     #[cfg(feature = "clippy_lints")]
@@ -454,15 +472,28 @@ mod tests {
         // even on a span where its visitor would happily fire.
         let code = "pub fn g(s: &str) -> usize { helper(&s) }";
         let mut structural = vec![sr("needless_borrow", 1.0, false)];
-        mark_instantiation(DomainId::Clippy, code, &mut structural, RerankMode::Structural);
+        mark_instantiation(
+            DomainId::Clippy,
+            code,
+            &mut structural,
+            RerankMode::Structural,
+        );
         assert!(!structural[0].instantiates);
     }
 
     #[test]
     fn an_unparseable_span_yields_no_evidence() {
         let mut v = vec![sr("needless_return", 1.0, false)];
-        mark_instantiation(DomainId::Clippy, "fn broken( {{{", &mut v, RerankMode::Structural);
-        assert!(!v[0].instantiates, "a parse failure must not fabricate evidence");
+        mark_instantiation(
+            DomainId::Clippy,
+            "fn broken( {{{",
+            &mut v,
+            RerankMode::Structural,
+        );
+        assert!(
+            !v[0].instantiates,
+            "a parse failure must not fabricate evidence"
+        );
     }
 
     // ── Issue 070 T3: rerank-pool collapse detector ──────────────────────
@@ -518,7 +549,10 @@ mod tests {
     /// onto the ORACLE's own family is not crowding — the right answer won.
     #[test]
     fn a_single_family_pool_holding_the_oracle_is_diverse() {
-        let pool = vec![sr("needless_return", 3.0, true), sr("needless_bool", 2.0, false)];
+        let pool = vec![
+            sr("needless_return", 3.0, true),
+            sr("needless_bool", 2.0, false),
+        ];
         assert_eq!(
             detect_collapse(&pool, 2, Some("needless_lifetimes")),
             CollapseVerdict::Diverse
@@ -534,7 +568,10 @@ mod tests {
             detect_collapse(&[], 4, Some("needless_return")),
             CollapseVerdict::Diverse
         );
-        assert_eq!(detect_collapse_rule_ids(&[], 4, None), CollapseVerdict::Diverse);
+        assert_eq!(
+            detect_collapse_rule_ids(&[], 4, None),
+            CollapseVerdict::Diverse
+        );
         let single = vec![sr("collect-append-to-extend", 1.0, false)];
         assert_eq!(
             detect_collapse(&single, 0, Some("needless_return")),

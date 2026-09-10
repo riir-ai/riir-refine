@@ -264,7 +264,12 @@ fn main() {
                 });
             }
         }
-        eprintln!("[t01] chunked {}: {} files, {} spans", prov.name, files.len(), spans.len());
+        eprintln!(
+            "[t01] chunked {}: {} files, {} spans",
+            prov.name,
+            files.len(),
+            spans.len()
+        );
 
         // ── in-context clippy scan ────────────────────────────────────────
         let (events, error_files, exit_ok) = clippy_scan(&root, toolchain.as_deref());
@@ -279,7 +284,10 @@ fn main() {
             error_files.len()
         );
         if events.is_empty() {
-            eprintln!("[t01] WARN: no lint events for {} — clippy failure or a clean repo", prov.name);
+            eprintln!(
+                "[t01] WARN: no lint events for {} — clippy failure or a clean repo",
+                prov.name
+            );
         }
 
         // ── attribute events to spans ─────────────────────────────────────
@@ -287,7 +295,10 @@ fn main() {
         // primary line falls inside its inclusive range.
         let mut by_file: BTreeMap<String, Vec<(usize, String)>> = BTreeMap::new();
         for e in events {
-            by_file.entry(norm_path(&e.file)).or_default().push((e.line, e.code));
+            by_file
+                .entry(norm_path(&e.file))
+                .or_default()
+                .push((e.line, e.code));
         }
         let mut dedup: BTreeSet<String> = BTreeSet::new();
         for s in &spans {
@@ -322,8 +333,11 @@ fn main() {
                 }
             }
             bare.sort();
-            let fired_in_vocab: Vec<String> =
-                bare.iter().filter(|l| vocabulary.contains(*l)).cloned().collect();
+            let fired_in_vocab: Vec<String> = bare
+                .iter()
+                .filter(|l| vocabulary.contains(*l))
+                .cloned()
+                .collect();
             let fixable_fired: Vec<String> = fired_in_vocab
                 .iter()
                 .filter(|l| fixable.contains(*l))
@@ -364,7 +378,9 @@ fn main() {
     let in_vocab_labeled = labeled_count(&rows);
     let in_vocab_multi = rows
         .iter()
-        .filter(|r| r.label.is_some() && r.lints.iter().filter(|l| vocabulary.contains(*l)).count() > 1)
+        .filter(|r| {
+            r.label.is_some() && r.lints.iter().filter(|l| vocabulary.contains(*l)).count() > 1
+        })
         .count();
 
     // The deliverable bar: a dataset of ≥300 real spans carrying real
@@ -463,9 +479,15 @@ fn main() {
     println!(
         "  rows {rows_with_findings} finding-bearing (in-vocab labeled {in_vocab_labeled}, multi {in_vocab_multi})"
     );
-    println!("  events {events_total} (matched {events_matched_to_spans}) across {files_walked} files");
+    println!(
+        "  events {events_total} (matched {events_matched_to_spans}) across {files_walked} files"
+    );
     println!("  blake3 {}", manifest.dataset_blake3);
-    println!("  out {} + {}", spans_path.display(), manifest_path.display());
+    println!(
+        "  out {} + {}",
+        spans_path.display(),
+        manifest_path.display()
+    );
     println!("  top labels:");
     let mut hist: Vec<_> = manifest.label_histogram.iter().collect();
     hist.sort_by_key(|(_, n)| **n);
@@ -516,8 +538,13 @@ fn clippy_scan(root: &Path, toolchain: Option<&str>) -> (Vec<LintEvent>, BTreeSe
         if v.get("reason").and_then(serde_json::Value::as_str) != Some("compiler-message") {
             continue;
         }
-        let Some(message) = v.get("message") else { continue };
-        let level = message.get("level").and_then(serde_json::Value::as_str).unwrap_or("");
+        let Some(message) = v.get("message") else {
+            continue;
+        };
+        let level = message
+            .get("level")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
         let (file, line) = primary_span_file_line(message);
         match level {
             "error" => {
@@ -537,7 +564,11 @@ fn clippy_scan(root: &Path, toolchain: Option<&str>) -> (Vec<LintEvent>, BTreeSe
                     continue;
                 }
                 if let (Some(f), Some(l)) = (file, line) {
-                    events.push(LintEvent { file: f.to_string(), line: l, code: code.to_string() });
+                    events.push(LintEvent {
+                        file: f.to_string(),
+                        line: l,
+                        code: code.to_string(),
+                    });
                 }
             }
             _ => {}
@@ -559,7 +590,9 @@ fn primary_span_file_line(message: &serde_json::Value) -> (Option<&str>, Option<
     match primary {
         Some(s) => (
             s.get("file_name").and_then(serde_json::Value::as_str),
-            s.get("line_start").and_then(serde_json::Value::as_u64).map(|l| l as usize),
+            s.get("line_start")
+                .and_then(serde_json::Value::as_u64)
+                .map(|l| l as usize),
         ),
         None => (None, None),
     }

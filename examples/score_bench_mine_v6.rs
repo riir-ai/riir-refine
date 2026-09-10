@@ -79,7 +79,7 @@ use riir_clippy::score_bench::{vocabulary, wrap};
 use riir_clippy::score_bench::BenchFixture;
 
 #[cfg(feature = "margin_mining")]
-use riir_clippy::draft::{LatentMatcher, margin_weight, span_min_margin};
+use riir_clippy::draft::{margin_weight, span_min_margin, LatentMatcher};
 
 const CARVE_MAX_BYTES: usize = 8000;
 const CHUNK: usize = 15;
@@ -201,7 +201,9 @@ fn main() {
         eprintln!(
             "# {repo_name}: {} file(s) from {} (order count); mining at {}",
             files.len(),
-            cfg.tree.as_ref().map_or_else(|| format!("sweep {}", cfg.sweep), |t| format!("tree {t}")),
+            cfg.tree
+                .as_ref()
+                .map_or_else(|| format!("sweep {}", cfg.sweep), |t| format!("tree {t}")),
             cfg.sha
         );
         for path in &files {
@@ -214,7 +216,9 @@ fn main() {
         eprintln!(
             "# {repo_name}: {} file(s) from {} (order count); mining at {}",
             files.len(),
-            cfg.tree.as_ref().map_or_else(|| format!("sweep {}", cfg.sweep), |t| format!("tree {t}")),
+            cfg.tree
+                .as_ref()
+                .map_or_else(|| format!("sweep {}", cfg.sweep), |t| format!("tree {t}")),
             cfg.sha
         );
         for path in &files {
@@ -242,7 +246,9 @@ fn run_mine(
     let mut emitted = 0usize;
     let mut controls: Vec<(usize, &BTreeSet<String>, &String)> = Vec::new();
     for (i, labeled) in labels.iter().enumerate() {
-        let Some((lints, code)) = labeled else { continue };
+        let Some((lints, code)) = labeled else {
+            continue;
+        };
         let k = lints.len();
         *census.entry(k).or_insert(0) += 1;
         for l in lints {
@@ -257,7 +263,10 @@ fn run_mine(
     }
     eprintln!("\n# carve census (distinct-vocab-lint count → carves): {census:?}");
     eprintln!("# lint-class frequency: {class_count:?}");
-    eprintln!("# emitted {emitted} multi carve(s) (min-lints {})", cfg.min_lints);
+    eprintln!(
+        "# emitted {emitted} multi carve(s) (min-lints {})",
+        cfg.min_lints
+    );
     eprintln!("# single control candidates (k=1, first 15):");
     for (n, (i, lints, code)) in controls.iter().take(15).enumerate() {
         emit(repo_name, &cfg.sha, &candidates[*i], lints, code, n);
@@ -303,8 +312,22 @@ fn run_ab(
     );
 
     // ── Measure both on the real score bench (generation-1 instrument) ──
-    let control = measure_arm(cfg, oracle, vocab, repo_name, "control(count-desc)", control_cands);
-    let arm = measure_arm(cfg, oracle, vocab, repo_name, "arm(margin e^−2M)", arm_cands);
+    let control = measure_arm(
+        cfg,
+        oracle,
+        vocab,
+        repo_name,
+        "control(count-desc)",
+        control_cands,
+    );
+    let arm = measure_arm(
+        cfg,
+        oracle,
+        vocab,
+        repo_name,
+        "arm(margin e^−2M)",
+        arm_cands,
+    );
 
     // ── The pre-registered verdict ──────────────────────────────────────
     println!("\n── margin-mining A/B (issue 077 T3) ──");
@@ -356,7 +379,9 @@ fn measure_arm(
     // Code = the tier the oracle adjudicated (not a T1/T2 guess).
     let mut mined: Vec<BenchFixture> = Vec::new();
     for (cand, labeled) in candidates.iter().zip(&labels) {
-        let Some((lints, code)) = labeled else { continue };
+        let Some((lints, code)) = labeled else {
+            continue;
+        };
         if lints.is_empty() {
             continue;
         }
@@ -368,7 +393,8 @@ fn measure_arm(
             ),
             code: Box::leak(code.clone().into_boxed_str()),
             expect_lints: Box::leak(
-                lints.iter()
+                lints
+                    .iter()
                     .map(|l| &*Box::leak(l.clone().into_boxed_str()))
                     .collect::<Vec<&str>>()
                     .into_boxed_slice(),
@@ -382,7 +408,11 @@ fn measure_arm(
         candidates.len()
     );
     let score = riir_clippy::score_bench::run_bench_with(oracle, &mined, &[]);
-    let healable = score.outcomes.iter().filter(|o| !o.vocab_before.is_empty()).count();
+    let healable = score
+        .outcomes
+        .iter()
+        .filter(|o| !o.vocab_before.is_empty())
+        .count();
     ArmScore {
         heal_rate: score.heal_rate,
         created_total: score.created_total,
@@ -428,7 +458,11 @@ fn margin_selected_candidates(cfg: &Cfg, matcher: &mut LatentMatcher) -> Vec<Can
             // The tier the oracle would settle is unknown pre-compile; the
             // margin reads the minimal carve form (T1, falling back to T2
             // when the size cap dropped T1).
-            let text = if c.t1.is_empty() { c.t2.as_str() } else { c.t1.as_str() };
+            let text = if c.t1.is_empty() {
+                c.t2.as_str()
+            } else {
+                c.t1.as_str()
+            };
             mass += margin_weight(span_min_margin(matcher, text));
         }
         masses.push((mass, path.clone()));
@@ -455,7 +489,11 @@ fn margin_selected_candidates(cfg: &Cfg, matcher: &mut LatentMatcher) -> Vec<Can
 fn carve_file(cfg: &Cfg, path: &str) -> Option<Vec<Cand>> {
     let src = git_show(&cfg.repo, &cfg.sha, path)?;
     let file = syn::parse_file(&src).ok()?;
-    let stem = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".rs");
+    let stem = path
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .trim_end_matches(".rs");
     let mut header = String::new(); // use + type + const items
     let mut macros = String::new();
     let mut impls = String::new();
@@ -465,8 +503,12 @@ fn carve_file(cfg: &Cfg, path: &str) -> Option<Vec<Cand>> {
         let Some(text) = src.get(range) else { continue };
         let text = format!("{text}\n");
         match item {
-            syn::Item::Use(_) | syn::Item::Struct(_) | syn::Item::Enum(_)
-            | syn::Item::Union(_) | syn::Item::Type(_) | syn::Item::Const(_)
+            syn::Item::Use(_)
+            | syn::Item::Struct(_)
+            | syn::Item::Enum(_)
+            | syn::Item::Union(_)
+            | syn::Item::Type(_)
+            | syn::Item::Const(_)
             | syn::Item::Static(_) => header.push_str(&text),
             syn::Item::Macro(_) => macros.push_str(&text),
             syn::Item::Impl(_) => impls.push_str(&text),
@@ -482,7 +524,9 @@ fn carve_file(cfg: &Cfg, path: &str) -> Option<Vec<Cand>> {
     let mut cands = Vec::with_capacity(fns.len());
     let mut idx = 0usize;
     for f in &fns {
-        cands.push(build_cand(stem, path, &mut idx, "fn", f, &header, &macros, &impls, &fns));
+        cands.push(build_cand(
+            stem, path, &mut idx, "fn", f, &header, &macros, &impls, &fns,
+        ));
     }
     // Impl blocks as whole candidates (methods are where src lints live).
     for item in &file.items {
@@ -493,7 +537,9 @@ fn carve_file(cfg: &Cfg, path: &str) -> Option<Vec<Cand>> {
         if text.len() > CARVE_MAX_BYTES {
             continue;
         }
-        cands.push(build_cand(stem, path, &mut idx, "impl", &text, &header, &macros, &impls, &fns));
+        cands.push(build_cand(
+            stem, path, &mut idx, "impl", &text, &header, &macros, &impls, &fns,
+        ));
     }
     Some(cands)
 }
@@ -548,7 +594,9 @@ fn compile_and_label(
             t3_slot += 1;
         }
     }
-    let compiled: Vec<usize> = (0..candidates.len()).filter(|&i| final_code[i].is_some()).collect();
+    let compiled: Vec<usize> = (0..candidates.len())
+        .filter(|&i| final_code[i].is_some())
+        .collect();
     eprintln!(
         "# {} / {} carve(s) compile (T2 rescues {}, T3 rescues {})",
         compiled.len(),
@@ -607,7 +655,12 @@ fn build_cand(
     });
     let t1 = format!("{header}{cand_code}");
     let t2 = format!("{t1}{macros}{impls}");
-    let others: String = fns.iter().filter(|f| *f != cand_code).take(6).cloned().collect();
+    let others: String = fns
+        .iter()
+        .filter(|f| *f != cand_code)
+        .take(6)
+        .cloned()
+        .collect();
     let t3_full = format!("{t2}{others}");
     let t3 = if t3_full.len() <= CARVE_MAX_BYTES * 2 {
         Some(t3_full)
@@ -617,7 +670,11 @@ fn build_cand(
     Cand {
         id,
         path: path.to_string(),
-        t1: if t1.len() <= CARVE_MAX_BYTES * 2 { t1 } else { String::new() },
+        t1: if t1.len() <= CARVE_MAX_BYTES * 2 {
+            t1
+        } else {
+            String::new()
+        },
         t2,
         t3,
     }
@@ -716,14 +773,7 @@ fn git_show(repo: &str, sha: &str, path: &str) -> Option<String> {
 /// Emit one `RawFixture` entry (paste into generations.rs). `code` is the
 /// oracle-adjudicated tier text — never a T1/T2 guess.
 #[allow(clippy::too_many_arguments)]
-fn emit(
-    repo: &str,
-    sha: &str,
-    cand: &Cand,
-    lints: &BTreeSet<String>,
-    code: &str,
-    idx: usize,
-) {
+fn emit(repo: &str, sha: &str, cand: &Cand, lints: &BTreeSet<String>, code: &str, idx: usize) {
     let lints: Vec<String> = lints.iter().map(|s| format!("{s:?}")).collect();
     let file = &cand.path;
     let id = format!("{}-{idx:03}", cand.id);

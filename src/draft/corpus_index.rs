@@ -19,8 +19,7 @@
 use std::collections::HashMap;
 
 use riir_rag::{
-    Embedder, LatentQuery, ModellessEmbedder, NeuronDbRetriever, NeuronDbRetrieverConfig,
-    RawChunk,
+    Embedder, LatentQuery, ModellessEmbedder, NeuronDbRetriever, NeuronDbRetrieverConfig, RawChunk,
 };
 
 /// A rule retrieved for a code span, with its relevance score.
@@ -286,10 +285,8 @@ impl RuleIndex {
             IndexTokenizer::CodeDefault => NeuronDbRetriever::new(substrate_cfg),
             IndexTokenizer::OpAware => NeuronDbRetriever::new(substrate_cfg)
                 .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
-            IndexTokenizer::OpAwareBigram => {
-                NeuronDbRetriever::new(substrate_cfg)
-                    .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer))
-            }
+            IndexTokenizer::OpAwareBigram => NeuronDbRetriever::new(substrate_cfg)
+                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer)),
         };
         #[cfg(feature = "bonsai_retrieval")]
         {
@@ -365,7 +362,12 @@ impl RuleIndex {
         // retrieve call (the gate's G2 latency overrun).
         let mut retrieved = self.retriever.retrieve_for_scoring(&query);
         scratch.retrieved.append(&mut retrieved);
-        self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)
+        self.rank_into(
+            &scratch.retrieved,
+            top_k,
+            &mut scratch.best,
+            &mut scratch.ranked,
+        )
     }
 
     /// Multi-scale suggest: query the whole text AND each significant line,
@@ -414,7 +416,12 @@ impl RuleIndex {
             let mut line_vec = self.retriever.retrieve_for_scoring(&query);
             scratch.retrieved.append(&mut line_vec);
         }
-        self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)
+        self.rank_into(
+            &scratch.retrieved,
+            top_k,
+            &mut scratch.best,
+            &mut scratch.ranked,
+        )
     }
 
     /// Merge retrieved chunks → per-rule best score → descending rank,
@@ -467,7 +474,11 @@ impl RuleIndex {
         // drain() moves the owned rule-id Strings straight into the output —
         // no per-rule re-allocation for keys.
         for (rule_id, score) in best.drain() {
-            ranked.push(ScoredRule { rule_id, score, instantiates: false });
+            ranked.push(ScoredRule {
+                rule_id,
+                score,
+                instantiates: false,
+            });
         }
         // The rule_id tie-break is LOAD-BEARING, not cosmetic: `best` is a
         // HashMap, so `.drain()` order varies per process (RandomState), and

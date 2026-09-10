@@ -84,7 +84,10 @@ pub fn span_margin(matcher: &mut LatentMatcher, code: &str) -> SpanMargin {
             }
         }
     }
-    SpanMargin { min, contested_domains: contested }
+    SpanMargin {
+        min,
+        contested_domains: contested,
+    }
 }
 
 /// The most-contested margin of one span: the MINIMUM pre-rerank pool margin
@@ -127,7 +130,11 @@ mod tests {
     use super::*;
 
     fn rule(id: &str, score: f32) -> ScoredRule {
-        ScoredRule { rule_id: id.to_string(), score, instantiates: false }
+        ScoredRule {
+            rule_id: id.to_string(),
+            score,
+            instantiates: false,
+        }
     }
 
     /// G1a — margins are non-negative under the canonical sort: the pool
@@ -143,7 +150,11 @@ mod tests {
         // and 0.75 - 0.5 is exact binary subtraction; float_cmp is precise
         // here BY CONSTRUCTION, not by tolerance).
         #![allow(clippy::float_cmp)]
-        let canon = vec![rule("a-rule", 0.75), rule("b-rule", 0.5), rule("c-rule", 0.25)];
+        let canon = vec![
+            rule("a-rule", 0.75),
+            rule("b-rule", 0.5),
+            rule("c-rule", 0.25),
+        ];
         assert_eq!(contested_margin(&canon), 0.25);
         let tied = vec![rule("a-rule", 0.5), rule("b-rule", 0.5)];
         assert_eq!(contested_margin(&tied), 0.0, "exact tie → zero margin");
@@ -153,7 +164,10 @@ mod tests {
         // clamped) — the law still applies (weight > 1), but the sort
         // contract is what makes non-negativity a caller invariant.
         let swapped = vec![rule("b-rule", 0.4), rule("a-rule", 0.9)];
-        assert!(contested_margin(&swapped) < 0.0, "unsorted input is visible");
+        assert!(
+            contested_margin(&swapped) < 0.0,
+            "unsorted input is visible"
+        );
     }
 
     /// G1b — fewer than two candidates is uncontested (`INFINITY`), and the
@@ -233,7 +247,7 @@ mod tests {
     /// the frozen v1 fixtures, every pre-rerank pool margin the matcher
     /// produces is ≥ 0 (the `rank_into` canon at work end-to-end), and at
     /// least one span is genuinely contested (margin < INFINITY) so the
-        /// spectrum example has something to measure.
+    /// spectrum example has something to measure.
     #[cfg(feature = "score_bench")]
     #[test]
     fn real_pool_margins_are_non_negative_and_sometimes_contested() {
@@ -246,7 +260,10 @@ mod tests {
                 saw_contested = true;
             }
         }
-        assert!(saw_contested, "expected ≥1 contested span in the frozen set");
+        assert!(
+            saw_contested,
+            "expected ≥1 contested span in the frozen set"
+        );
     }
 
     /// `concentration_fraction` clamps and never divides by zero.
@@ -257,7 +274,11 @@ mod tests {
         #![allow(clippy::float_cmp)]
         assert_eq!(concentration_fraction(&[], 1), 0.0);
         assert_eq!(concentration_fraction(&[0.0, 0.0], 1), 0.0);
-        assert_eq!(concentration_fraction(&[1.0, 0.5], 99), 1.0, "k clamped to len");
+        assert_eq!(
+            concentration_fraction(&[1.0, 0.5], 99),
+            1.0,
+            "k clamped to len"
+        );
         assert_eq!(concentration_fraction(&[1.0, 0.5], 0), 0.0);
     }
 }

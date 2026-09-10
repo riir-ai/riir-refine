@@ -369,8 +369,7 @@ mod tests {
     /// (no ancestor workspace) both return `None`.
     #[test]
     fn workspace_belief_cause_names_the_excluded_nested_crate() {
-        let tmp =
-            std::env::temp_dir().join(format!("co_ws_belief_{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("co_ws_belief_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
 
         // Positive: nested crate WITHOUT [workspace] under a parent WITH one.
@@ -423,17 +422,20 @@ mod tests {
 
         let sig = "current package believes it's in a workspace when it's not";
         let enriched = enrich_cargo_run_error("cargo check", &nested, sig);
-        assert!(enriched.contains("cargo check failed to run in"), "{enriched}");
-        assert!(enriched.contains(sig), "keeps the original line: {enriched}");
+        assert!(
+            enriched.contains("cargo check failed to run in"),
+            "{enriched}"
+        );
+        assert!(
+            enriched.contains(sig),
+            "keeps the original line: {enriched}"
+        );
         assert!(enriched.contains("[workspace] table"), "adds the remedy");
 
         let other = "no such subcommand: `chek`";
         assert_eq!(
             enrich_cargo_run_error("cargo check", &nested, other),
-            format!(
-                "cargo check failed to run in {}: {other}",
-                nested.display()
-            ),
+            format!("cargo check failed to run in {}: {other}", nested.display()),
             "unrelated errors unchanged"
         );
         let _ = std::fs::remove_dir_all(&tmp);

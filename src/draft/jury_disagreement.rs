@@ -141,7 +141,9 @@ pub fn disagreement_signals(pool: &[ScoredRule], ranked: &[ScoredRule]) -> Disag
         pool_spread: distinct.len(),
         instantiating: ranked.iter().filter(|r| r.instantiates).count(),
         rerank_margin,
-        top1_rule: ranked.first().map_or_else(String::new, |r| r.rule_id.clone()),
+        top1_rule: ranked
+            .first()
+            .map_or_else(String::new, |r| r.rule_id.clone()),
     }
 }
 
@@ -154,12 +156,7 @@ pub fn disagreement_signals(pool: &[ScoredRule], ranked: &[ScoredRule]) -> Disag
 /// without it, perf spans report `NoFix` (conservative — absence of a
 /// proposer is not evidence of anything).
 #[must_use]
-pub fn fix_outcome(
-    oracle: &ClippyOracle,
-    domain: DomainId,
-    code: &str,
-    top1: &str,
-) -> FixOutcome {
+pub fn fix_outcome(oracle: &ClippyOracle, domain: DomainId, code: &str, top1: &str) -> FixOutcome {
     let Ok(file) = syn::parse_file(code) else {
         // The eval fixtures all parse; an unparseable span has no fix path.
         return FixOutcome::NoFix;
@@ -250,7 +247,8 @@ fn average_ranks(v: &[f64]) -> Vec<f64> {
     let mut i = 0;
     while i < idx.len() {
         let mut j = i;
-        while j + 1 < idx.len() && v[idx[j + 1]].total_cmp(&v[idx[i]]) == std::cmp::Ordering::Equal {
+        while j + 1 < idx.len() && v[idx[j + 1]].total_cmp(&v[idx[i]]) == std::cmp::Ordering::Equal
+        {
             j += 1;
         }
         let avg = (i + j) as f64 / 2.0 + 1.0;
@@ -315,8 +313,18 @@ impl Contingency {
     }
 }
 
-fn contingency_at(rows: &[&JuryRow], flagged: impl Fn(&JuryRow) -> bool, threshold: f64) -> Contingency {
-    let mut c = Contingency { threshold, total: 0, flagged: 0, unstable_total: 0, unstable_flagged: 0 };
+fn contingency_at(
+    rows: &[&JuryRow],
+    flagged: impl Fn(&JuryRow) -> bool,
+    threshold: f64,
+) -> Contingency {
+    let mut c = Contingency {
+        threshold,
+        total: 0,
+        flagged: 0,
+        unstable_total: 0,
+        unstable_flagged: 0,
+    };
     for r in rows {
         c.total += 1;
         let f = flagged(r);
@@ -404,18 +412,29 @@ fn finalize_report(rows: Vec<JuryRow>) -> JuryPocReport {
     let verdicts: Vec<&JuryRow> = rows.iter().filter(|r| r.outcome.is_verdict()).collect();
     let mut rhos = Vec::new();
     if unstable_rows > 0 && unstable_rows < verdict_rows {
-        let ys: Vec<f64> = verdicts.iter().map(|r| f64::from(u8::from(r.outcome.is_unstable()))).collect();
-        let spreads: Vec<f64> = verdicts.iter().map(|r| r.signals.pool_spread as f64).collect();
-        let margins: Vec<f64> = verdicts.iter().map(|r| f64::from(r.signals.rerank_margin)).collect();
+        let ys: Vec<f64> = verdicts
+            .iter()
+            .map(|r| f64::from(u8::from(r.outcome.is_unstable())))
+            .collect();
+        let spreads: Vec<f64> = verdicts
+            .iter()
+            .map(|r| r.signals.pool_spread as f64)
+            .collect();
+        let margins: Vec<f64> = verdicts
+            .iter()
+            .map(|r| f64::from(r.signals.rerank_margin))
+            .collect();
         rhos.push(("pool_spread", spearman_rho(&spreads, &ys)));
         rhos.push(("rerank_margin", spearman_rho(&margins, &ys)));
     }
 
-    let max_spread = verdicts.iter().map(|r| r.signals.pool_spread).max().unwrap_or(0);
+    let max_spread = verdicts
+        .iter()
+        .map(|r| r.signals.pool_spread)
+        .max()
+        .unwrap_or(0);
     let spread_sweep: Vec<Contingency> = (2..=max_spread)
-        .map(|t| {
-            contingency_at(&verdicts, |r| r.signals.pool_spread >= t, t as f64)
-        })
+        .map(|t| contingency_at(&verdicts, |r| r.signals.pool_spread >= t, t as f64))
         .collect();
 
     let mut margins: Vec<f64> = verdicts
@@ -552,7 +571,10 @@ mod tests {
         let xs: Vec<f64> = (0..20).map(f64::from).collect();
         let ys: Vec<f64> = (0..20).map(|i| f64::from(u8::from(i >= 12))).collect();
         let rho = spearman_rho(&xs, &ys);
-        assert!(rho > 0.7, "a perfect step function must rank-correlate: {rho}");
+        assert!(
+            rho > 0.7,
+            "a perfect step function must rank-correlate: {rho}"
+        );
     }
 
     #[test]
@@ -589,7 +611,7 @@ mod tests {
             sweep.push(Contingency {
                 threshold: f64::from(t),
                 total: 10,
-                flagged: 8,          // 80% flagged — fails the ≤40% side
+                flagged: 8, // 80% flagged — fails the ≤40% side
                 unstable_total: 5,
                 unstable_flagged: 5,
             });

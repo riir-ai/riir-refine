@@ -55,18 +55,16 @@ fn skip_notice() {
     );
 }
 
-fn pipeline_with_daemon(
-    bin: &str,
-    gguf: &str,
-    lora: &str,
-) -> Result<HealPipeline, std::io::Error> {
+fn pipeline_with_daemon(bin: &str, gguf: &str, lora: &str) -> Result<HealPipeline, std::io::Error> {
     // 96 matches the G1 gate's decode budget, so a fix produced here is the
     // same shape the gate scores. Changing it would make the two incomparable.
     let t = Instant::now();
     let daemon = DaemonL4::spawn(bin, gguf, lora, 96)?;
     eprintln!("[t44] daemon ready in {:.1}s", t.elapsed().as_secs_f32());
-    Ok(HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())
-        .with_l4_fallback(Box::new(daemon)))
+    Ok(
+        HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())
+            .with_l4_fallback(Box::new(daemon)),
+    )
 }
 
 /// Invariant 2 + 3 against the real model: a genuine modelless miss must reach
@@ -93,14 +91,20 @@ fn real_adapter_serves_a_modelless_miss() {
 
     match &result {
         Some(r) => {
-            eprintln!("[t44] served by {:?} in {secs:.1}s:\n{}", r.source, r.fixed_code);
+            eprintln!(
+                "[t44] served by {:?} in {secs:.1}s:\n{}",
+                r.source, r.fixed_code
+            );
             assert_eq!(
                 r.source,
                 HealSource::L4Lora,
                 "a modelless miss can only be served by L4 — any other source \
                  means the miss was not a miss and this test proves nothing"
             );
-            assert!(r.parses, "invariant 3: only a parsing L4 fix may be returned");
+            assert!(
+                r.parses,
+                "invariant 3: only a parsing L4 fix may be returned"
+            );
         }
         None => {
             // Not a failure. A declined or non-parsing answer is the CONTRACT
@@ -126,7 +130,11 @@ fn modelless_hit_never_pays_for_the_daemon() {
         return;
     };
     let corpus = build_seed_corpus();
-    let entry = corpus.entries.first().expect("seed corpus is non-empty").clone();
+    let entry = corpus
+        .entries
+        .first()
+        .expect("seed corpus is non-empty")
+        .clone();
     let mut pipeline = match pipeline_with_daemon(&bin, &gguf, &lora) {
         Ok(p) => p,
         Err(e) => panic!("daemon failed to start: {e}"),
@@ -138,7 +146,11 @@ fn modelless_hit_never_pays_for_the_daemon() {
     eprintln!("[t44] modelless hit resolved in {secs:.3}s");
 
     let r = result.expect("a corpus entry must heal modellessly");
-    assert_ne!(r.source, HealSource::L4Lora, "a corpus hit must not be served by L4");
+    assert_ne!(
+        r.source,
+        HealSource::L4Lora,
+        "a corpus hit must not be served by L4"
+    );
     assert!(
         secs < 5.0,
         "modelless hit took {secs:.1}s — the daemon is warm, so seconds means L4 \

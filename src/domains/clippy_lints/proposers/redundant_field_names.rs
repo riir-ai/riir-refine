@@ -64,8 +64,14 @@ mod tests {
     fn makes_redundant_fields_shorthand() {
         let input = "struct Cfg { name: String, port: u16 }\nfn mk(name: String, port: u16) -> Cfg {\n    Cfg { name: name, port: port }\n}";
         let out = propose_fix("redundant_field_names", input).expect("matched");
-        assert!(out.contains("Cfg { name, port }"), "shorthand not produced: {out}");
-        assert!(out.contains("struct Cfg { name: String, port: u16 }"), "struct def must be untouched: {out}");
+        assert!(
+            out.contains("Cfg { name, port }"),
+            "shorthand not produced: {out}"
+        );
+        assert!(
+            out.contains("struct Cfg { name: String, port: u16 }"),
+            "struct def must be untouched: {out}"
+        );
     }
 
     #[test]
@@ -80,7 +86,10 @@ mod tests {
         // Attributes would be lost by the splice — skip conservatively.
         let input = "struct C { x: u32 }\nfn mk(x: u32) -> C { C { #[cfg(x)] x: x } }";
         let out = propose_fix("redundant_field_names", input);
-        assert!(out.is_none(), "attributed field must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "attributed field must not be touched: {out:?}"
+        );
     }
 
     #[test]

@@ -57,10 +57,20 @@ fn manual_strip_silent_break_is_caught() {
         "pub fn f(s: &str) -> Option<&str> { s.get(2..) }",
     );
     match &got {
-        Verdict::Divergent { input, original, candidate } => {
-            assert!(input.contains("xyz"), "expected the xyz counterexample, got {input}");
+        Verdict::Divergent {
+            input,
+            original,
+            candidate,
+        } => {
+            assert!(
+                input.contains("xyz"),
+                "expected the xyz counterexample, got {input}"
+            );
             assert_eq!(original, "None");
-            assert!(candidate.contains('z'), "candidate should yield Some(\"z\"), got {candidate}");
+            assert!(
+                candidate.contains('z'),
+                "candidate should yield Some(\"z\"), got {candidate}"
+            );
         }
         other => panic!("expected Divergent, got {other:?}"),
     }
@@ -101,7 +111,10 @@ fn ptr_arg_correct_fix_is_equivalent_across_the_signature_change() {
         "pub fn f(v: &Vec<u8>) -> usize { v.len() }",
         "pub fn f(v: &[u8]) -> usize { v.len() }",
     );
-    assert!(got.is_equivalent(), "signature-change fix misjudged: {got:?}");
+    assert!(
+        got.is_equivalent(),
+        "signature-change fix misjudged: {got:?}"
+    );
 }
 
 #[test]
@@ -129,7 +142,10 @@ fn the_correct_fixes_for_both_breaks_are_equivalent() {
         "pub fn f(s: &str) -> Option<&str> { if s.starts_with(\"ab\") { Some(&s[2..]) } else { None } }",
         "pub fn f(s: &str) -> Option<&str> { s.strip_prefix(\"ab\") }",
     );
-    assert!(b.is_equivalent(), "strip_prefix fix should be equivalent: {b:?}");
+    assert!(
+        b.is_equivalent(),
+        "strip_prefix fix should be equivalent: {b:?}"
+    );
 }
 
 // ── Unsupported must not read as a pass ────────────────────────────────────
@@ -144,7 +160,10 @@ fn unsupported_is_not_equivalent() {
         8,
         &work("box_collection"),
     );
-    assert!(!got.is_equivalent(), "Unsupported must never read as a pass");
+    assert!(
+        !got.is_equivalent(),
+        "Unsupported must never read as a pass"
+    );
     assert!(!got.is_divergent());
     assert!(matches!(got, Verdict::Unsupported { .. }), "got {got:?}");
 }

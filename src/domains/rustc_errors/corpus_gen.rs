@@ -243,14 +243,34 @@ fn e0597_vec_string_index(out: &mut Vec<GeneratedCase>) {
     const TABLE: [(&str, usize, usize); 10] = [
         ("vec![String::from(\"aa\"), String::from(\"bbb\")]", 1, 3),
         ("vec![String::from(\"aa\"), String::from(\"bbb\")]", 0, 2),
-        ("vec![String::from(\"x\"), String::from(\"yy\"), String::from(\"zzz\")]", 2, 3),
-        ("vec![String::from(\"x\"), String::from(\"yy\"), String::from(\"zzz\")]", 1, 2),
+        (
+            "vec![String::from(\"x\"), String::from(\"yy\"), String::from(\"zzz\")]",
+            2,
+            3,
+        ),
+        (
+            "vec![String::from(\"x\"), String::from(\"yy\"), String::from(\"zzz\")]",
+            1,
+            2,
+        ),
         ("vec![String::from(\"\")]", 0, 0),
         ("vec![String::from(\"four\"), String::from(\"five\")]", 1, 4),
         ("vec![String::from(\"six\"), String::from(\"seven\")]", 0, 3),
-        ("vec![String::from(\"eight8\"), String::from(\"nine9\")]", 1, 5),
-        ("vec![String::from(\"ten10\"), String::from(\"eleven11\")]", 1, 8),
-        ("vec![String::from(\"twelve12\"), String::from(\"th\")]", 0, 8),
+        (
+            "vec![String::from(\"eight8\"), String::from(\"nine9\")]",
+            1,
+            5,
+        ),
+        (
+            "vec![String::from(\"ten10\"), String::from(\"eleven11\")]",
+            1,
+            8,
+        ),
+        (
+            "vec![String::from(\"twelve12\"), String::from(\"th\")]",
+            0,
+            8,
+        ),
     ];
     for (i, (elems, idx, ilen)) in TABLE.iter().enumerate() {
         let gt = gt_module(&format!("assert_eq!(super::probe(), {ilen});"));
@@ -316,22 +336,99 @@ fn e0502_copy_index(out: &mut Vec<GeneratedCase>) {
         ("u8", "4u8, 7", "9u8", 0, "4u8", "vec![4u8, 7, 9u8]"),
         ("u8", "1u8, 2, 3", "4u8", 2, "3u8", "vec![1u8, 2, 3, 4u8]"),
         ("u8", "1u8, 2, 3", "4u8", 0, "1u8", "vec![1u8, 2, 3, 4u8]"),
-        ("i32", "10i32, 20, 30", "40i32", 1, "20i32", "vec![10i32, 20, 30, 40i32]"),
-        ("i32", "10i32, 20, 30", "40i32", 2, "30i32", "vec![10i32, 20, 30, 40i32]"),
+        (
+            "i32",
+            "10i32, 20, 30",
+            "40i32",
+            1,
+            "20i32",
+            "vec![10i32, 20, 30, 40i32]",
+        ),
+        (
+            "i32",
+            "10i32, 20, 30",
+            "40i32",
+            2,
+            "30i32",
+            "vec![10i32, 20, 30, 40i32]",
+        ),
         ("i32", "5i32, 6", "7i32", 0, "5i32", "vec![5i32, 6, 7i32]"),
         ("i32", "5i32, 6", "7i32", 1, "6i32", "vec![5i32, 6, 7i32]"),
         ("u16", "1u16, 2", "3u16", 1, "2u16", "vec![1u16, 2, 3u16]"),
         ("u16", "1u16, 2", "3u16", 0, "1u16", "vec![1u16, 2, 3u16]"),
-        ("u16", "8u16, 9, 10", "11u16", 2, "10u16", "vec![8u16, 9, 10, 11u16]"),
-        ("u16", "8u16, 9, 10", "11u16", 0, "8u16", "vec![8u16, 9, 10, 11u16]"),
-        ("i64", "100i64, 200", "300i64", 1, "200i64", "vec![100i64, 200, 300i64]"),
-        ("i64", "100i64, 200", "300i64", 0, "100i64", "vec![100i64, 200, 300i64]"),
-        ("i64", "7i64, 8, 9", "10i64", 2, "9i64", "vec![7i64, 8, 9, 10i64]"),
-        ("u32", "5u32, 6, 7", "8u32", 1, "6u32", "vec![5u32, 6, 7, 8u32]"),
-        ("u32", "5u32, 6, 7", "8u32", 0, "5u32", "vec![5u32, 6, 7, 8u32]"),
-        ("u32", "5u32, 6, 7", "8u32", 2, "7u32", "vec![5u32, 6, 7, 8u32]"),
+        (
+            "u16",
+            "8u16, 9, 10",
+            "11u16",
+            2,
+            "10u16",
+            "vec![8u16, 9, 10, 11u16]",
+        ),
+        (
+            "u16",
+            "8u16, 9, 10",
+            "11u16",
+            0,
+            "8u16",
+            "vec![8u16, 9, 10, 11u16]",
+        ),
+        (
+            "i64",
+            "100i64, 200",
+            "300i64",
+            1,
+            "200i64",
+            "vec![100i64, 200, 300i64]",
+        ),
+        (
+            "i64",
+            "100i64, 200",
+            "300i64",
+            0,
+            "100i64",
+            "vec![100i64, 200, 300i64]",
+        ),
+        (
+            "i64",
+            "7i64, 8, 9",
+            "10i64",
+            2,
+            "9i64",
+            "vec![7i64, 8, 9, 10i64]",
+        ),
+        (
+            "u32",
+            "5u32, 6, 7",
+            "8u32",
+            1,
+            "6u32",
+            "vec![5u32, 6, 7, 8u32]",
+        ),
+        (
+            "u32",
+            "5u32, 6, 7",
+            "8u32",
+            0,
+            "5u32",
+            "vec![5u32, 6, 7, 8u32]",
+        ),
+        (
+            "u32",
+            "5u32, 6, 7",
+            "8u32",
+            2,
+            "7u32",
+            "vec![5u32, 6, 7, 8u32]",
+        ),
         ("u8", "0u8, 1", "2u8", 1, "1u8", "vec![0u8, 1, 2u8]"),
-        ("i32", "1i32, 2, 3", "4i32", 1, "2i32", "vec![1i32, 2, 3, 4i32]"),
+        (
+            "i32",
+            "1i32, 2, 3",
+            "4i32",
+            1,
+            "2i32",
+            "vec![1i32, 2, 3, 4i32]",
+        ),
     ];
     for (i, (ty, init, push, idx, expected, final_vec)) in TABLE.iter().enumerate() {
         let gt = gt_module(&format!(
@@ -364,13 +461,29 @@ fn e0502_string_len(out: &mut Vec<GeneratedCase>) {
     // wrong, which check-time integrity cannot see).
     const TABLE: [(&str, usize, &str); 15] = [
         ("vec![String::from(\"abc\")]", 3, "\"new\""),
-        ("vec![String::from(\"hello\"), String::from(\"x\")]", 5, "\"new\""),
+        (
+            "vec![String::from(\"hello\"), String::from(\"x\")]",
+            5,
+            "\"new\"",
+        ),
         ("vec![String::from(\"\")]", 0, "\"z\""),
-        ("vec![String::from(\"abcd\"), String::from(\"ef\")]", 4, "\"w3\""),
+        (
+            "vec![String::from(\"abcd\"), String::from(\"ef\")]",
+            4,
+            "\"w3\"",
+        ),
         ("vec![String::from(\"seven7\")]", 6, "\"new\""),
-        ("vec![String::from(\"one\"), String::from(\"two\")]", 3, "\"pushed\""),
+        (
+            "vec![String::from(\"one\"), String::from(\"two\")]",
+            3,
+            "\"pushed\"",
+        ),
         ("vec![String::from(\"12345\")]", 5, "\"9\""),
-        ("vec![String::from(\"a\"), String::from(\"bb\"), String::from(\"ccc\")]", 1, "\"new\""),
+        (
+            "vec![String::from(\"a\"), String::from(\"bb\"), String::from(\"ccc\")]",
+            1,
+            "\"new\"",
+        ),
         ("vec![String::from(\"eleven=11\")]", 9, "\"x\""),
         ("vec![String::from(\"twelve12\")]", 8, "\"yy\""),
         ("vec![String::from(\"thirteen13\")]", 10, "\"n\""),
@@ -719,22 +832,14 @@ mod tests {
     #[test]
     fn corpus_is_stratified_per_family() {
         let corpus = generate_corpus();
-        let mut counts: std::collections::BTreeMap<&str, usize> =
-            std::collections::BTreeMap::new();
+        let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
         for c in &corpus {
             *counts.entry(c.expect_code).or_default() += 1;
         }
         // Every family the plan probes is carried at N>=10 so per-code
         // rates cannot hinge on one or two seeds.
         for code in [
-            "E0597",
-            "E0499",
-            "E0502",
-            "E0505",
-            "E0596",
-            "E0382",
-            "E0507",
-            "E0373",
+            "E0597", "E0499", "E0502", "E0505", "E0596", "E0382", "E0507", "E0373",
         ] {
             assert!(
                 counts.get(code).copied().unwrap_or(0) >= 10,

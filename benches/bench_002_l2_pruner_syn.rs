@@ -87,7 +87,9 @@ fn main() {
         let pass = all_valid_pass && all_invalid_pass;
         println!(
             "  valid all correct:   {}\n  invalid all correct: {}\n  {}",
-            all_valid_pass, all_invalid_pass, if pass { "✅ PASS" } else { "❌ FAIL" }
+            all_valid_pass,
+            all_invalid_pass,
+            if pass { "✅ PASS" } else { "❌ FAIL" }
         );
         assert!(pass, "G1 FAIL");
         println!();
@@ -122,7 +124,10 @@ fn main() {
 
         let target_ns = 100_000; // 100µs target
         let pass = p50 < target_ns;
-        println!("  target: p50 < {target_ns} ns ({:.0} µs)", target_ns as f64 / 1000.0);
+        println!(
+            "  target: p50 < {target_ns} ns ({:.0} µs)",
+            target_ns as f64 / 1000.0
+        );
         println!("  {}", if pass { "✅ PASS" } else { "❌ FAIL" });
         assert!(pass, "G2 FAIL: p50 {p50}ns >= {target_ns}ns");
         println!();
@@ -142,7 +147,14 @@ fn main() {
         println!("G3 (no-regression — real parse check, not stub):");
         println!("  valid parses:   {} (must be true)", valid.parses);
         println!("  invalid parses: {} (must be false)", invalid.parses);
-        println!("  stub regressed: {}", if stub_regressed { "YES — re-stubbed!" } else { "no" });
+        println!(
+            "  stub regressed: {}",
+            if stub_regressed {
+                "YES — re-stubbed!"
+            } else {
+                "no"
+            }
+        );
         let pass = real_check && !stub_regressed;
         println!("  {}", if pass { "✅ PASS" } else { "❌ FAIL" });
         assert!(pass, "G3 FAIL: parse check regressed to stub");
@@ -179,8 +191,14 @@ fn main() {
         let failure_bounded = max_failure <= 2; // at most a couple of error messages
 
         println!("G4 (alloc-bounded, {n_iters} iterations):");
-        println!("  success diagnostics: all empty = {} (max len = {max_success})", all_success_empty);
-        println!("  failure diagnostics: bounded = {} (max len = {max_failure})", failure_bounded);
+        println!(
+            "  success diagnostics: all empty = {} (max len = {max_success})",
+            all_success_empty
+        );
+        println!(
+            "  failure diagnostics: bounded = {} (max len = {max_failure})",
+            failure_bounded
+        );
 
         let pass = all_success_empty && failure_bounded;
         println!("  {}", if pass { "✅ PASS" } else { "❌ FAIL" });

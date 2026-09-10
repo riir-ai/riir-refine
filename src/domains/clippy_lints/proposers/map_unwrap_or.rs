@@ -43,9 +43,11 @@
 use super::helpers::{byte_range, is_postfix_safe};
 use super::uninlined_format_args::post_template_expr_args;
 use super::{edit, src, SourceEdit};
-use syn::visit::Visit;
-use syn::{Expr, ExprMethodCall, ExprMacro, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type};
 use proc_macro2::TokenStream;
+use syn::visit::Visit;
+use syn::{
+    Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type,
+};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -125,9 +127,13 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, m);
         let slice_pinned = self.pinned.contains(&two(byte_range(m)));
-        if let Some(replacement) =
-            try_map_or(self.source, m, self.innermost_params(), Some(&self.fn_rets), slice_pinned)
-        {
+        if let Some(replacement) = try_map_or(
+            self.source,
+            m,
+            self.innermost_params(),
+            Some(&self.fn_rets),
+            slice_pinned,
+        ) {
             self.edits.push(edit(m, replacement));
         }
     }
@@ -177,7 +183,13 @@ impl Collector<'_> {
             let Ok(expr) = syn::parse2::<Expr>(stream) else {
                 continue; // named args / non-expression tokens — skip
             };
-            scan_expr_for_matches(self.source, &mut self.edits, &expr, params.as_ref(), Some(&self.fn_rets));
+            scan_expr_for_matches(
+                self.source,
+                &mut self.edits,
+                &expr,
+                params.as_ref(),
+                Some(&self.fn_rets),
+            );
         }
     }
 
@@ -216,12 +228,18 @@ fn scan_expr_for_matches(
     impl<'ast> Visit<'ast> for Sub<'ast> {
         fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
             syn::visit::visit_expr_method_call(self, m);
-            if let Some(replacement) = try_map_or(self.source, m, self.params, self.fn_rets, false) {
+            if let Some(replacement) = try_map_or(self.source, m, self.params, self.fn_rets, false)
+            {
                 self.edits.push(edit(m, replacement));
             }
         }
     }
-    let mut sub = Sub { source, edits, params, fn_rets };
+    let mut sub = Sub {
+        source,
+        edits,
+        params,
+        fn_rets,
+    };
     sub.visit_expr(expr);
 }
 
@@ -232,7 +250,9 @@ fn fn_param_kinds(sig: &syn::Signature) -> std::collections::HashMap<String, Rec
     let mut out = std::collections::HashMap::new();
     for arg in &sig.inputs {
         let syn::FnArg::Typed(pt) = arg else { continue };
-        let syn::Pat::Ident(id) = &*pt.pat else { continue };
+        let syn::Pat::Ident(id) = &*pt.pat else {
+            continue;
+        };
         let kind = param_type_kind(&pt.ty);
         if let Some(kind) = kind {
             out.insert(id.ident.to_string(), kind);
@@ -249,7 +269,13 @@ fn param_type_kind(ty: &syn::Type) -> Option<ReceiverKind> {
     let syn::Type::Path(tp) = ty else { return None };
     // Last path segment: `Option` / `Result` bare or `std::option::Option`.
     // Generic args are ignored — `Option<T>` is OptionLike for every T.
-    match tp.path.segments.last().map(|s| s.ident.to_string()).as_deref() {
+    match tp
+        .path
+        .segments
+        .last()
+        .map(|s| s.ident.to_string())
+        .as_deref()
+    {
         Some("Option") => Some(ReceiverKind::OptionLike),
         Some("Result") => Some(ReceiverKind::ResultLike),
         _ => None,
@@ -274,7 +300,10 @@ fn ty_is_slice_ref(ty: &Type) -> bool {
 }
 
 fn is_unwrap_or_call(m: &ExprMethodCall) -> bool {
-    matches!(m.method.to_string().as_str(), "unwrap_or" | "unwrap_or_else")
+    matches!(
+        m.method.to_string().as_str(),
+        "unwrap_or" | "unwrap_or_else"
+    )
 }
 
 /// `byte_range` as a hashable pair (Range<usize> is not Hash).
@@ -291,135 +320,135 @@ fn try_map_or(
     fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
     slice_pinned: bool,
 ) -> Option<String> {
-        let else_form = if m.method == "unwrap_or" {
-            false
-        } else if m.method == "unwrap_or_else" {
-            true
-        } else {
+    let else_form = if m.method == "unwrap_or" {
+        false
+    } else if m.method == "unwrap_or_else" {
+        true
+    } else {
+        return None;
+    };
+    if !m.attrs.is_empty() || m.turbofish.is_some() {
+        return None;
+    }
+    if m.args.len() != 1 {
+        return None;
+    }
+    let Expr::MethodCall(map) = &*m.receiver else {
+        return None; // receiver isn't a method call
+    };
+    if !map.attrs.is_empty() || map.turbofish.is_some() || map.method != "map" {
+        return None;
+    }
+    if map.args.len() != 1 {
+        return None;
+    }
+    let recv = src(source, &*map.receiver)?;
+    let default = src(source, &m.args[0])?;
+    let mapper = src(source, &map.args[0])?;
+    // Array-literal defaults (`&[...]`, incl. `&[]`) must stay on the
+    // `map(f).unwrap_or(&[...])` form: `map_or`'s U unification needs the
+    // CALL SITE to force the type for the unsize coercion `&[T; N] ->
+    // &[T]`. In inference-transparent positions (plain `let`, generic
+    // args) rustc fixes U from the array literal and the closure's slice
+    // return E0308s — probe-verified 2026-08-18: `map_or(&[], |m|
+    // m.as_slice())` AND `map_or(&[1.0], ...)` both fail in `let`
+    // position while both compile context-forced; the original always
+    // compiles.
+    //
+    // P2 extension (2026-08-28): the call site CAN be read when the
+    // position itself carries the forcing type — a fn return tail whose
+    // signature declares `&[T]`, or a let initializer whose pattern
+    // annotation is `&[T]` (`slice_pinned`, collected by the pre-pass
+    // on the Collector). In those positions the rewrite compiles
+    // (probe A2/A4) and real clippy `-W clippy::map_unwrap_or` fires on
+    // the original shape (probe A1/A3), so the silence was pure guard
+    // over-conservatism. Everything else stays skipped — including the
+    // plain-let control, where clippy 1.97's own MachineApplicable
+    // suggestion emits the E0308 form (we stay SAFER than clippy).
+    if is_array_lit_default(&m.args[0], else_form) && !slice_pinned {
+        return None;
+    }
+    // Trait-object-cast mappers (the P9 class, probe-verified 2026-08-25
+    // on riir-ai ruliology/player.rs:463 — E0308 "expected `&fn(..) ->
+    // f64`, found `&dyn Fn(..) -> f64`"): a mapper whose TAIL casts to a
+    // trait-object reference (`|f| f as &dyn Fn(..)`) makes U a trait
+    // object, and the default reaches it only through an UNSIZE coercion
+    // (`&fn(..) -> &dyn Fn(..)`). `unwrap_or` performs that coercion —
+    // `map(..)` has already fixed the Option's parameter, so the default's
+    // expected type is known before it is checked. `map_or`'s U is a free
+    // inference variable fed by BOTH args; a coercion cannot fire through
+    // it, so the ascribed `&fn(..)` default wins U and the closure's
+    // `&dyn Fn(..)` return is a hard E0308. The parse-only tail check is
+    // precise (a dyn cast NOT in tail position doesn't type the closure's
+    // return); the one safe default — an identical `as &dyn ..` cast — is
+    // unprovable short of text equality, so skip the shape entirely
+    // (joins the we-stay-silent class beside the array-literal guard
+    // above; sibling of the 2bf2a44 E0308 probe).
+    if let Expr::Closure(c) = &map.args[0] {
+        if tail_casts_to_trait_object(&c.body) {
             return None;
-        };
-        if !m.attrs.is_empty() || m.turbofish.is_some() {
-            return None;
         }
-        if m.args.len() != 1 {
-            return None;
-        }
-        let Expr::MethodCall(map) = &*m.receiver else {
-            return None; // receiver isn't a method call
-        };
-        if !map.attrs.is_empty() || map.turbofish.is_some() || map.method != "map" {
-            return None;
-        }
-        if map.args.len() != 1 {
-            return None;
-        }
-        let recv = src(source, &*map.receiver)?;
-        let default = src(source, &m.args[0])?;
-        let mapper = src(source, &map.args[0])?;
-        // Array-literal defaults (`&[...]`, incl. `&[]`) must stay on the
-        // `map(f).unwrap_or(&[...])` form: `map_or`'s U unification needs the
-        // CALL SITE to force the type for the unsize coercion `&[T; N] ->
-        // &[T]`. In inference-transparent positions (plain `let`, generic
-        // args) rustc fixes U from the array literal and the closure's slice
-        // return E0308s — probe-verified 2026-08-18: `map_or(&[], |m|
-        // m.as_slice())` AND `map_or(&[1.0], ...)` both fail in `let`
-        // position while both compile context-forced; the original always
-        // compiles.
-        //
-        // P2 extension (2026-08-28): the call site CAN be read when the
-        // position itself carries the forcing type — a fn return tail whose
-        // signature declares `&[T]`, or a let initializer whose pattern
-        // annotation is `&[T]` (`slice_pinned`, collected by the pre-pass
-        // on the Collector). In those positions the rewrite compiles
-        // (probe A2/A4) and real clippy `-W clippy::map_unwrap_or` fires on
-        // the original shape (probe A1/A3), so the silence was pure guard
-        // over-conservatism. Everything else stays skipped — including the
-        // plain-let control, where clippy 1.97's own MachineApplicable
-        // suggestion emits the E0308 form (we stay SAFER than clippy).
-        if is_array_lit_default(&m.args[0], else_form) && !slice_pinned {
-            return None;
-        }
-        // Trait-object-cast mappers (the P9 class, probe-verified 2026-08-25
-        // on riir-ai ruliology/player.rs:463 — E0308 "expected `&fn(..) ->
-        // f64`, found `&dyn Fn(..) -> f64`"): a mapper whose TAIL casts to a
-        // trait-object reference (`|f| f as &dyn Fn(..)`) makes U a trait
-        // object, and the default reaches it only through an UNSIZE coercion
-        // (`&fn(..) -> &dyn Fn(..)`). `unwrap_or` performs that coercion —
-        // `map(..)` has already fixed the Option's parameter, so the default's
-        // expected type is known before it is checked. `map_or`'s U is a free
-        // inference variable fed by BOTH args; a coercion cannot fire through
-        // it, so the ascribed `&fn(..)` default wins U and the closure's
-        // `&dyn Fn(..)` return is a hard E0308. The parse-only tail check is
-        // precise (a dyn cast NOT in tail position doesn't type the closure's
-        // return); the one safe default — an identical `as &dyn ..` cast — is
-        // unprovable short of text equality, so skip the shape entirely
-        // (joins the we-stay-silent class beside the array-literal guard
-        // above; sibling of the 2bf2a44 E0308 probe).
-        if let Expr::Closure(c) = &map.args[0] {
-            if tail_casts_to_trait_object(&c.body) {
-                return None;
-            }
-        }
-        let recv = if is_postfix_safe(&map.receiver) {
-            recv
-        } else {
-            format!("({recv})")
-        };
-        if else_form {
-            // `x.map(f).unwrap_or_else(g)` → `x.map_or_else(g, f)` — real
-            // clippy's own suggestion for the else arm; default closure
-            // FIRST, mapper SECOND. No bool-literal special cases (the
-            // default is always a closure here).
-            return Some(format!("{recv}.map_or_else({default}, {mapper})"));
-        }
-        let bool_default = bool_literal(&m.args[0]);
-        let mapper_is_bool = closure_body_is_bool(&map.args[0]);
-        if let Some(default) = bool_default {
-            if mapper_is_bool {
-                // Terminal forms fire only on PROVABLY-typed receivers:
-                // `is_some_and`/`is_none_or` are Option-only, `is_ok_and` is
-                // Result-only — the wrong pick is a COMPILE error (E0599, the
-                // bench_440 env::var catch, 2026-08-18). Unknown receivers
-                // fall back to the always-compiling `map_or` (one step short
-                // of real clippy's terminal suggestion — the documented
-                // SAFER-than-clippy divergence, same class as the type-blind
-                // lint demotions).
-                match classify_receiver(&recv, params, fn_rets) {
-                    ReceiverKind::OptionLike => {
-                        if default {
-                            // clippy chain: `map_or(true, f)` → `is_none_or`
-                            // (probe-verified lint-clean on 1.93).
-                            return Some(format!("{recv}.is_none_or({mapper})"));
-                        }
-                        // Real clippy 1.93's own suggestion for this shape:
-                        // the `map_or` output would be re-flagged by
-                        // `unnecessary_map_or` (a default-group lint).
-                        return Some(format!("{recv}.is_some_and({mapper})"));
+    }
+    let recv = if is_postfix_safe(&map.receiver) {
+        recv
+    } else {
+        format!("({recv})")
+    };
+    if else_form {
+        // `x.map(f).unwrap_or_else(g)` → `x.map_or_else(g, f)` — real
+        // clippy's own suggestion for the else arm; default closure
+        // FIRST, mapper SECOND. No bool-literal special cases (the
+        // default is always a closure here).
+        return Some(format!("{recv}.map_or_else({default}, {mapper})"));
+    }
+    let bool_default = bool_literal(&m.args[0]);
+    let mapper_is_bool = closure_body_is_bool(&map.args[0]);
+    if let Some(default) = bool_default {
+        if mapper_is_bool {
+            // Terminal forms fire only on PROVABLY-typed receivers:
+            // `is_some_and`/`is_none_or` are Option-only, `is_ok_and` is
+            // Result-only — the wrong pick is a COMPILE error (E0599, the
+            // bench_440 env::var catch, 2026-08-18). Unknown receivers
+            // fall back to the always-compiling `map_or` (one step short
+            // of real clippy's terminal suggestion — the documented
+            // SAFER-than-clippy divergence, same class as the type-blind
+            // lint demotions).
+            match classify_receiver(&recv, params, fn_rets) {
+                ReceiverKind::OptionLike => {
+                    if default {
+                        // clippy chain: `map_or(true, f)` → `is_none_or`
+                        // (probe-verified lint-clean on 1.93).
+                        return Some(format!("{recv}.is_none_or({mapper})"));
                     }
-                    ReceiverKind::ResultLike => {
-                        if default {
-                            // Real clippy is SILENT on Result + true default
-                            // (probe 2026-08-18: no `is_err_or` suggestion —
-                            // not stable); `map_or(true, f)` IS the terminal
-                            // state for this receiver kind.
-                            return Some(format!("{recv}.map_or(true, {mapper})"));
-                        }
-                        // Real clippy suggests `is_ok_and` directly for
-                        // `Result.map(f).unwrap_or(false)` (probe-verified:
-                        // skips the map_or intermediate entirely).
-                        return Some(format!("{recv}.is_ok_and({mapper})"));
+                    // Real clippy 1.93's own suggestion for this shape:
+                    // the `map_or` output would be re-flagged by
+                    // `unnecessary_map_or` (a default-group lint).
+                    return Some(format!("{recv}.is_some_and({mapper})"));
+                }
+                ReceiverKind::ResultLike => {
+                    if default {
+                        // Real clippy is SILENT on Result + true default
+                        // (probe 2026-08-18: no `is_err_or` suggestion —
+                        // not stable); `map_or(true, f)` IS the terminal
+                        // state for this receiver kind.
+                        return Some(format!("{recv}.map_or(true, {mapper})"));
                     }
-                    ReceiverKind::Unknown => {
-                        // Cannot prove Option vs Result — emit the form that
-                        // compiles on BOTH. May leave an `unnecessary_map_or`
-                        // warning for Option receivers, but never breaks the
-                        // build (compile-safety over terminal completeness).
-                        return Some(format!("{recv}.map_or({default}, {mapper})"));
-                    }
+                    // Real clippy suggests `is_ok_and` directly for
+                    // `Result.map(f).unwrap_or(false)` (probe-verified:
+                    // skips the map_or intermediate entirely).
+                    return Some(format!("{recv}.is_ok_and({mapper})"));
+                }
+                ReceiverKind::Unknown => {
+                    // Cannot prove Option vs Result — emit the form that
+                    // compiles on BOTH. May leave an `unnecessary_map_or`
+                    // warning for Option receivers, but never breaks the
+                    // build (compile-safety over terminal completeness).
+                    return Some(format!("{recv}.map_or({default}, {mapper})"));
                 }
             }
         }
-        Some(format!("{recv}.map_or({default}, {mapper})"))
+    }
+    Some(format!("{recv}.map_or({default}, {mapper})"))
 }
 
 /// Parse-only receiver classification for the bool-literal terminal forms.
@@ -628,8 +657,18 @@ fn is_bool_method(name: &syn::Ident) -> bool {
     n.starts_with("is_")
         || matches!(
             n.as_str(),
-            "contains" | "contains_key" | "starts_with" | "ends_with" | "any" | "all" | "eq"
-                | "ne" | "lt" | "le" | "gt" | "ge"
+            "contains"
+                | "contains_key"
+                | "starts_with"
+                | "ends_with"
+                | "any"
+                | "all"
+                | "eq"
+                | "ne"
+                | "lt"
+                | "le"
+                | "gt"
+                | "ge"
         )
 }
 
@@ -704,7 +743,10 @@ mod tests {
         let input =
             "fn f(m: Vec<Vec<f32>>) -> usize { m.first().map(|s| s.as_slice()).unwrap_or(&[1.0]).len() }";
         let out = propose_fix("map_unwrap_or", input);
-        assert!(out.is_none(), "non-empty `&[1.0]` default must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-empty `&[1.0]` default must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -712,7 +754,10 @@ mod tests {
         let input =
             "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or_else(|| &[]).len() }";
         let out = propose_fix("map_unwrap_or", input);
-        assert!(out.is_none(), "`|| &[]` default-closure body must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "`|| &[]` default-closure body must not fire: {out:?}"
+        );
     }
 
     // P2 extension (2026-08-28): array-literal defaults FIRE when the
@@ -823,7 +868,10 @@ mod tests {
         // mapper = `|f| f as &dyn Fn(..)`.
         let input = "fn f(p: Option<Box<dyn Fn(u8) -> u8>>, g: fn(u8) -> u8) -> u8 { p.as_ref().map(|f| f as &dyn Fn(u8) -> u8).unwrap_or(&(g as fn(u8) -> u8))(0) }";
         let out = propose_fix("map_unwrap_or", input);
-        assert!(out.is_none(), "trait-object-cast mapper must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "trait-object-cast mapper must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -837,7 +885,10 @@ mod tests {
     fn or_else_trait_object_cast_mapper_skipped() {
         let input = "fn f(p: Option<Box<dyn Fn(u8) -> u8>>, g: fn(u8) -> u8) -> u8 { p.as_ref().map(|f| f as &dyn Fn(u8) -> u8).unwrap_or_else(|| &(g as fn(u8) -> u8))(0) }";
         let out = propose_fix("map_unwrap_or", input);
-        assert!(out.is_none(), "`map_or_else` shares U's inference — must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "`map_or_else` shares U's inference — must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -857,10 +908,11 @@ mod tests {
     fn non_tail_dyn_cast_still_fires() {
         // Precision pin: a dyn cast NOT in tail position doesn't type the
         // closure's return — the rewrite is safe there.
-        let input = "fn f(x: Option<u8>) -> i32 { x.map(|f| { let _ = f as &dyn Fn(); 1 }).unwrap_or(0) }";
+        let input =
+            "fn f(x: Option<u8>) -> i32 { x.map(|f| { let _ = f as &dyn Fn(); 1 }).unwrap_or(0) }";
         let out = propose_fix("map_unwrap_or", input).expect("matched");
         assert!(
-            out.contains("map_or(0,") ,
+            out.contains("map_or(0,"),
             "non-tail dyn cast must still fuse: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
@@ -1099,7 +1151,8 @@ mod tests {
 
     #[test]
     fn bool_method_closure_false_default_becomes_is_some_and() {
-        let input = "fn f(x: Option<String>) -> bool { x.map(|s| s.contains('a')).unwrap_or(false) }";
+        let input =
+            "fn f(x: Option<String>) -> bool { x.map(|s| s.contains('a')).unwrap_or(false) }";
         let out = propose_fix("map_unwrap_or", input).expect("matched");
         assert!(
             out.contains("x.is_some_and(|s| s.contains('a'))"),
@@ -1137,8 +1190,7 @@ mod tests {
     // load-bearing fact (default first).
     #[test]
     fn fuses_map_unwrap_or_else_default_first() {
-        let input =
-            "fn f(x: Option<u8>) -> u8 { x.map(|v| v + 1).unwrap_or_else(|| 0) }";
+        let input = "fn f(x: Option<u8>) -> u8 { x.map(|v| v + 1).unwrap_or_else(|| 0) }";
         let out = propose_fix("map_unwrap_or", input).expect("matched");
         assert!(
             out.contains("x.map_or_else(|| 0, |v| v + 1)"),

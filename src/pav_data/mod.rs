@@ -664,7 +664,10 @@ mod tests {
         // Zero successes ⇒ every k-subset is failure-only ⇒ exactly 0.
         assert!((bok_unbiased(0, 8, 4)).abs() < 1e-9);
         // Fewer than k failures ⇒ every k-subset holds a success ⇒ exactly 1.
-        assert!((bok_unbiased(6, 8, 4) - 1.0).abs() < 1e-9, "2 failures < k=4");
+        assert!(
+            (bok_unbiased(6, 8, 4) - 1.0).abs() < 1e-9,
+            "2 failures < k=4"
+        );
         assert!((bok_unbiased(8, 8, 4) - 1.0).abs() < 1e-9);
         // k == 1 is exactly q_hat — one draw cannot beat itself.
         for (sc, n) in [(1_u32, 4_u32), (3, 8), (5, 16), (0, 5)] {
@@ -743,7 +746,10 @@ mod tests {
             worst_plugin > 10.0 * worst_unbiased,
             "plug-in bias {worst_plugin:.4} should dwarf unbiased {worst_unbiased:.4}"
         );
-        assert!(worst_plugin > 0.10, "expected a >10pp worst-case plug-in bias");
+        assert!(
+            worst_plugin > 0.10,
+            "expected a >10pp worst-case plug-in bias"
+        );
 
         // Bench 054's table (printed under --nocapture; the asserts above are
         // the standing gate, this is the record).
@@ -886,7 +892,8 @@ mod tests {
             // bit-identity intent (clippy::float_cmp): seed-stability means
             // bit-identical sampling — compare bits, not tolerances.
             assert_eq!(
-                a.q_hat.to_bits(), b.q_hat.to_bits(),
+                a.q_hat.to_bits(),
+                b.q_hat.to_bits(),
                 "sampling schedule must be seed-stable"
             );
             assert_eq!(a.kept, b.kept);

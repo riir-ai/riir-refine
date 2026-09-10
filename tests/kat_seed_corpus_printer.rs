@@ -20,7 +20,7 @@
 
 #![cfg(feature = "kat_service")]
 
-use riir_clippy::{HealEntry, build_seed_corpus};
+use riir_clippy::{build_seed_corpus, HealEntry};
 
 #[test]
 fn print_seed_corpus() {

@@ -51,8 +51,8 @@
 // ── Domain-agnostic core (always compiled) ─────────────────────────────────
 pub mod adaptive_drafter;
 pub mod corpus;
-pub mod domain;
 pub mod dispersion;
+pub mod domain;
 pub mod drafter;
 pub mod edit_emitter;
 pub mod elo;
@@ -398,12 +398,12 @@ pub type ClippyTernaryDrafter = drafter::TernaryDrafter;
 /// Back-compat: `ClippyAdaptiveDrafter` = `AdaptiveDrafter` (Plan 001 rename).
 pub type ClippyAdaptiveDrafter = adaptive_drafter::AdaptiveDrafter;
 
-/// Back-compat: re-export drafter types at the old paths.
-pub use drafter::{DraftSource, DraftedFix, TernaryDrafter};
 pub use adaptive_drafter::AdaptiveDrafter;
 pub use corpus::Corpus;
 pub use domain::{HealDomain, HealEntry};
-pub use embedder::{Direction, EMBED_DIM, embed, embed_into};
+/// Back-compat: re-export drafter types at the old paths.
+pub use drafter::{DraftSource, DraftedFix, TernaryDrafter};
+pub use embedder::{embed, embed_into, Direction, EMBED_DIM};
 pub use pruner::RustAnalyzerPruner;
 
 // ── Clippy domain re-exports (behind `clippy_lints` feature, default-on) ──
@@ -420,7 +420,7 @@ pub use domains::clippy_lints::corpus::build_seed_corpus;
 
 /// Back-compat: `ClippyVerifier` (behind `clippy_verify`).
 #[cfg(feature = "clippy_verify")]
-pub use domains::clippy_lints::verify::{ClippyVerifyResult, ClippyVerifier};
+pub use domains::clippy_lints::verify::{ClippyVerifier, ClippyVerifyResult};
 
 // ── rust_perf domain re-exports (behind `rust_perf` feature, default-on) ──
 #[cfg(feature = "rust_perf")]
@@ -432,13 +432,13 @@ pub use domains::rust_perf::corpus::build_perf_seed_corpus;
 
 /// `rust_perf` verifier (behind `rust_perf_verify`).
 #[cfg(feature = "rust_perf_verify")]
-pub use domains::rust_perf::verify::{PerfVerifyResult, PerfVerifier};
+pub use domains::rust_perf::verify::{PerfVerifier, PerfVerifyResult};
 
 /// `rust_perf` bench validator (behind `rust_perf_bench`).
 #[cfg(feature = "rust_perf_bench")]
 pub use domains::rust_perf::bench::{
-    BenchOverall, BenchSpec, BenchVerdict, NotBenchable, ParetoVerdict,
-    PerfBenchValidator, SizeOutcome, SizeResult,
+    BenchOverall, BenchSpec, BenchVerdict, NotBenchable, ParetoVerdict, PerfBenchValidator,
+    SizeOutcome, SizeResult,
 };
 
 // ── kernel_opt domain re-exports (behind `kernel_heal` feature, opt-in) ────
@@ -456,14 +456,14 @@ pub use domains::kernel_opt::corpus::{build_corpus_categorized, KERNEL_CATEGORIE
 /// `kernel_opt` expert router (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::router::{
-    KernelExpertRouter, KERNEL_EXPERT_NAMES, NUM_KERNEL_EXPERTS, ACTIVITY_DIM,
-    build_activity, AXIS_M, AXIS_N, AXIS_K, AXIS_DTYPE, AXIS_HW,
-    AXIS_IS_ATTENTION, AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM,
+    build_activity, KernelExpertRouter, ACTIVITY_DIM, AXIS_DTYPE, AXIS_HW, AXIS_IS_ATTENTION,
+    AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM, AXIS_K, AXIS_M, AXIS_N, KERNEL_EXPERT_NAMES,
+    NUM_KERNEL_EXPERTS,
 };
 
 // ── sec domain re-exports (behind `sec` feature, opt-in) ──────────────────
 #[cfg(feature = "sec")]
-pub use domains::sec::{SecDomain, SecFamily, SecRule, SecVerdict, UnsafeCounts, count_unsafe};
+pub use domains::sec::{count_unsafe, SecDomain, SecFamily, SecRule, SecVerdict, UnsafeCounts};
 
 /// Back-compat: `build_sec_seed_corpus` (behind `sec`).
 #[cfg(feature = "sec")]
@@ -497,7 +497,7 @@ pub use domains::kernel_opt::thermal::{KernelThermalRouter, ThermalTier};
 
 /// `kernel_opt` verifier (behind `kernel_verify`).
 #[cfg(feature = "kernel_verify")]
-pub use domains::kernel_opt::verify::{KernelVerifyResult, KernelVerifier};
+pub use domains::kernel_opt::verify::{KernelVerifier, KernelVerifyResult};
 
 #[cfg(feature = "ruliology_search")]
 pub use ruliology_search::{RuliologySearch, ScoredCandidate};
@@ -508,12 +508,14 @@ pub use memory::{
 };
 pub use recorder::EvolveRecorder;
 pub use selection_entropic::{solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2};
-pub use selection_tether::{fit_rho, sse, TetherFit, TetherStats, DEFAULT_EMA_DECAY, DEFAULT_RHO, DEFAULT_WINDOW};
+pub use selection_tether::{
+    fit_rho, sse, TetherFit, TetherStats, DEFAULT_EMA_DECAY, DEFAULT_RHO, DEFAULT_WINDOW,
+};
 pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneReport};
 
 // Bench 669 consumer adoption (Plan 016).
 #[cfg(feature = "contrastive_scope")]
-pub use scope_model::{ScopeModel, OUT_OF_SCOPE_DOCS, KAPPA, THETA};
+pub use scope_model::{ScopeModel, KAPPA, OUT_OF_SCOPE_DOCS, THETA};
 
 // Proposal 005 Phase 0 T0.5/T0.6 (Plans 023 + 024): the KAT meter + charge surface.
 #[cfg(feature = "kat_service")]
@@ -541,6 +543,6 @@ pub use kat_redact::{
 // Plan 005: latent retrieval surface (`--suggest` MVP).
 #[cfg(feature = "latent_retrieval")]
 pub use draft::{
-    DomainId, DomainRouter, LatentMatcher, RuleIndex, RuleInfo, ScoredRule,
-    SpanSuggestion, SuggestScratch,
+    DomainId, DomainRouter, LatentMatcher, RuleIndex, RuleInfo, ScoredRule, SpanSuggestion,
+    SuggestScratch,
 };

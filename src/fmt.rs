@@ -61,7 +61,11 @@ impl FmtSummary {
         if self.total() == 0 {
             return String::new();
         }
-        let verb = if self.dry { "would-format" } else { "formatted" };
+        let verb = if self.dry {
+            "would-format"
+        } else {
+            "formatted"
+        };
         let mut parts = vec![format!("{} {}", self.formatted, verb)];
         if self.skip_drift > 0 {
             parts.push(format!("{} skip pre-existing drift", self.skip_drift));
@@ -154,8 +158,7 @@ pub fn edition_for(file: &Path) -> String {
                 l.strip_prefix("edition").and_then(|rest| {
                     let v = rest.trim_start().strip_prefix('=').unwrap_or(rest).trim();
                     let v = v.trim_matches('"');
-                    (!v.is_empty() && v.chars().all(|c| c.is_ascii_digit()))
-                        .then(|| v.to_string())
+                    (!v.is_empty() && v.chars().all(|c| c.is_ascii_digit())).then(|| v.to_string())
                 })
             })
         })
@@ -186,11 +189,8 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let n = SEQ.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "riir_clippy_fmt_{}_{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("riir_clippy_fmt_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join(name);
         std::fs::write(&p, content).unwrap();
@@ -209,7 +209,10 @@ mod tests {
     fn crlf_short_circuits_before_rustfmt() {
         // CRLF is detected on the text alone — no rustfmt needed.
         let p = temp_file("crlf.rs", "fn main() {\r\n    println!(\"x\");\r\n}\r\n");
-        assert_eq!(decide("fn main() {\r\n}\r\n", &p, "2024"), FmtDecision::SkipCrlf);
+        assert_eq!(
+            decide("fn main() {\r\n}\r\n", &p, "2024"),
+            FmtDecision::SkipCrlf
+        );
         cleanup(&p);
     }
 
@@ -255,7 +258,8 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let n = SEQ.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("riir_clippy_fmt_ed_{}_{}", std::process::id(), n));
+        let dir =
+            std::env::temp_dir().join(format!("riir_clippy_fmt_ed_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("Cargo.toml"),
@@ -266,11 +270,8 @@ mod tests {
         std::fs::write(&f, "fn a() {}\n").unwrap();
         assert_eq!(edition_for(&f), "2021");
         // No manifest above the unique temp root → default 2024.
-        let lone_dir = std::env::temp_dir().join(format!(
-            "riir_clippy_fmt_lone_{}_{}",
-            std::process::id(),
-            n
-        ));
+        let lone_dir =
+            std::env::temp_dir().join(format!("riir_clippy_fmt_lone_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&lone_dir).unwrap();
         let lone = lone_dir.join("lone.rs");
         std::fs::write(&lone, "fn a() {}\n").unwrap();

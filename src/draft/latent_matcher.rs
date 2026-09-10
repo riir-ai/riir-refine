@@ -127,10 +127,11 @@ impl LatentMatcher {
     /// Returns an error `String` if no domain is feature-enabled, or if any
     /// enabled domain's [`RuleIndex::build_with`] fails.
     #[allow(clippy::too_many_lines)]
-    pub fn from_enabled_domains_with_overlay(
-        overlay: &DomainOverlay,
-    ) -> Result<Self, String> {
-        Self::build_with_config(super::corpus_index::RetrievalConfig::default(), Some(overlay))
+    pub fn from_enabled_domains_with_overlay(overlay: &DomainOverlay) -> Result<Self, String> {
+        Self::build_with_config(
+            super::corpus_index::RetrievalConfig::default(),
+            Some(overlay),
+        )
     }
 
     /// [`from_enabled_domains`](Self::from_enabled_domains) with an explicit
@@ -426,7 +427,11 @@ impl LatentMatcher {
     /// Retrieve `top_k` rules from EVERY enabled domain's index (fan-out),
     /// reusing the shared G4 scratch across domains. Field-direct index
     /// access keeps the borrow checker happy alongside the scratch borrow.
-    fn suggest_all_domains(&mut self, code: &str, top_k: usize) -> Vec<(DomainId, Vec<ScoredRule>)> {
+    fn suggest_all_domains(
+        &mut self,
+        code: &str,
+        top_k: usize,
+    ) -> Vec<(DomainId, Vec<ScoredRule>)> {
         // One parse per span, shared across every domain's instantiation
         // probe (Issue 063): the parse-fail contract — no parse, no marking,
         // every flag stays `false` — is preserved by skipping the marking
@@ -455,7 +460,9 @@ impl LatentMatcher {
                 // can only promote a rule that was retrieved, and the residual
                 // T3.5.2 misses sat at rank 2-3 (T3.5.4).
                 let pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
-                let mut rules = index.suggest_deep_into(code, pool, &mut self.scratch).to_vec();
+                let mut rules = index
+                    .suggest_deep_into(code, pool, &mut self.scratch)
+                    .to_vec();
                 if let Some(file) = &parsed {
                     super::instantiation_rerank::mark_instantiation_with_file(
                         domain,
@@ -496,7 +503,11 @@ impl LatentMatcher {
             DomainId::Dist => self.dist.as_ref(),
         }?;
         let pool = index
-            .suggest_deep_into(code, super::instantiation_rerank::RERANK_POOL, &mut self.scratch)
+            .suggest_deep_into(
+                code,
+                super::instantiation_rerank::RERANK_POOL,
+                &mut self.scratch,
+            )
             .to_vec();
         let mut ranked = pool.clone();
         super::instantiation_rerank::mark_instantiation(
@@ -569,20 +580,15 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         // COVERED domain — the overlay replaces clippy's seed entirely
         // (the leased rule is retrievable, a seed rule is NOT), while the
         // uncovered perf domain keeps its compiled-in seed.
-        let overlay = vec![
-            (
-                DomainId::Clippy,
-                vec![
-                    (
-                        "lease-fixture-rule".to_string(),
-                        "fn f() -> u8 { return 7; }".to_string(),
-                        "fn f() -> u8 { 7 }".to_string(),
-                    ),
-                ],
-            ),
-        ];
-        let mut m =
-            LatentMatcher::from_enabled_domains_with_overlay(&overlay).expect("build");
+        let overlay = vec![(
+            DomainId::Clippy,
+            vec![(
+                "lease-fixture-rule".to_string(),
+                "fn f() -> u8 { return 7; }".to_string(),
+                "fn f() -> u8 { 7 }".to_string(),
+            )],
+        )];
+        let mut m = LatentMatcher::from_enabled_domains_with_overlay(&overlay).expect("build");
         let (_, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
         let clippy = by_domain
             .iter()
@@ -595,12 +601,17 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             "the overlay REPLACES the seed — exactly the leased rule is retrievable"
         );
         assert_eq!(
-            m.rule_book("lease-fixture-rule").expect("in book").fixed_code,
+            m.rule_book("lease-fixture-rule")
+                .expect("in book")
+                .fixed_code,
             "fn f() -> u8 { 7 }"
         );
         // The uncovered domain keeps its seed.
         let perf = by_domain.iter().find(|(d, _)| *d == DomainId::Perf);
-        assert!(perf.is_some_and(|(_, rules)| !rules.is_empty()), "perf seed stands");
+        assert!(
+            perf.is_some_and(|(_, rules)| !rules.is_empty()),
+            "perf seed stands"
+        );
     }
 
     #[test]
@@ -608,8 +619,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         // An EMPTY entries list is "no statement" — the seed stands (the
         // pack contract: empty ≠ remove-everything).
         let overlay = vec![(DomainId::Clippy, vec![])];
-        let mut m =
-            LatentMatcher::from_enabled_domains_with_overlay(&overlay).expect("build");
+        let mut m = LatentMatcher::from_enabled_domains_with_overlay(&overlay).expect("build");
         let (_, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
         let clippy = by_domain
             .iter()
@@ -645,9 +655,17 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         // { return 42; }`). Precision@1 over curated fixtures is the Phase 3
         // G1 gate's job (Bench 018); this test pins routing + retrievability.
         assert!(
-            clippy.1.iter().take(3).any(|r| r.rule_id == "needless_return"),
+            clippy
+                .1
+                .iter()
+                .take(3)
+                .any(|r| r.rule_id == "needless_return"),
             "needless_return not in top-3: {:?}",
-            clippy.1.iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+            clippy
+                .1
+                .iter()
+                .map(|r| r.rule_id.clone())
+                .collect::<Vec<_>>()
         );
         let _ = routed;
     }
@@ -656,12 +674,20 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     fn file_suggestion_covers_all_chunks_with_lines() {
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
         let sugg = m.suggest_file(SAMPLE, "sample.rs", 3);
-        assert!(sugg.len() >= 2, "expected ≥2 chunks (2 fns), got {}", sugg.len());
+        assert!(
+            sugg.len() >= 2,
+            "expected ≥2 chunks (2 fns), got {}",
+            sugg.len()
+        );
         for s in &sugg {
             assert_eq!(s.path, "sample.rs");
             assert!(s.start_line >= 1 && s.end_line >= s.start_line);
             assert!(!s.by_domain.is_empty());
-            assert!(!s.all_rules().is_empty(), "chunk {} suggested no rules", s.start_line);
+            assert!(
+                !s.all_rules().is_empty(),
+                "chunk {} suggested no rules",
+                s.start_line
+            );
         }
         // Fan-out: the needless_return-shaped chunk must surface that rule
         // via the CLIPPY domain list (in top-3 — recall; precision@1 over a
@@ -670,8 +696,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .iter()
             .find(|s| {
                 s.by_domain.iter().any(|(d, rules)| {
-                    *d == DomainId::Clippy
-                        && rules.iter().any(|r| r.rule_id == "needless_return")
+                    *d == DomainId::Clippy && rules.iter().any(|r| r.rule_id == "needless_return")
                 })
             })
             .expect("some chunk must surface needless_return via the clippy list");

@@ -131,10 +131,7 @@ impl DomainRouter {
     ///
     /// Panics if any domain has an empty pattern list.
     #[must_use]
-    pub fn with_embedding(
-        domains: &[(DomainId, Vec<String>)],
-        mode: RoutingEmbedding,
-    ) -> Self {
+    pub fn with_embedding(domains: &[(DomainId, Vec<String>)], mode: RoutingEmbedding) -> Self {
         let mut ids = Vec::with_capacity(domains.len());
         for (id, patterns) in domains {
             assert!(
@@ -255,10 +252,7 @@ impl DomainRouter {
                 self.route_activity(&activity)
             }
             RoutingEmbedding::SpectralDft { with_struct, .. } => {
-                let vocab = self
-                    .vocab
-                    .as_ref()
-                    .expect("spectral mode implies a vocab");
+                let vocab = self.vocab.as_ref().expect("spectral mode implies a vocab");
                 let spec = vocab.dft_embed(code);
                 let struc = if with_struct {
                     Some(structural4(code))
@@ -268,10 +262,7 @@ impl DomainRouter {
                 self.argmax_spectral(&spec, struc.as_ref())
             }
             RoutingEmbedding::TfCosine { .. } => {
-                let vocab = self
-                    .vocab
-                    .as_ref()
-                    .expect("tf mode implies a vocab");
+                let vocab = self.vocab.as_ref().expect("tf mode implies a vocab");
                 let vec = vocab.tf_embed(code);
                 self.argmax_tf(&vec)
             }
@@ -463,9 +454,7 @@ impl SpectralVocab {
             .iter()
             .map(|(&tok, per)| {
                 let score = match order {
-                    SpectralOrder::GlobalFreq => {
-                        per.iter().map(|c| *c as f32).sum::<f32>()
-                    }
+                    SpectralOrder::GlobalFreq => per.iter().map(|c| *c as f32).sum::<f32>(),
                     SpectralOrder::Discriminative => {
                         let mut lo = f32::INFINITY;
                         let mut hi = f32::NEG_INFINITY;
@@ -482,9 +471,7 @@ impl SpectralVocab {
                 (score, tok)
             })
             .collect();
-        ranked.sort_by(|a, b| {
-            b.0.total_cmp(&a.0).then_with(|| a.1.cmp(b.1))
-        });
+        ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(b.1)));
         ranked.truncate(SPECTRAL_VOCAB_N);
 
         let tokens: Vec<Box<str>> = ranked.into_iter().map(|(_, t)| t.into()).collect();
@@ -501,14 +488,16 @@ impl SpectralVocab {
         for (ki, table) in tables.iter_mut().enumerate() {
             let kf = (ki + 1) as f32;
             for (n, slot) in table.iter_mut().enumerate() {
-                let theta = 2.0
-                    * std::f32::consts::PI
-                    * (kf * n as f32 / SPECTRAL_VOCAB_N as f32);
+                let theta = 2.0 * std::f32::consts::PI * (kf * n as f32 / SPECTRAL_VOCAB_N as f32);
                 *slot = (theta.cos(), theta.sin());
             }
         }
 
-        Self { tokens, lookup, tables }
+        Self {
+            tokens,
+            lookup,
+            tables,
+        }
     }
 
     /// The vocab in axis order (deterministic; tests pin it).
@@ -680,7 +669,10 @@ mod tests {
     fn routes_pattern_shaped_snippets_to_their_domain() {
         let router = DomainRouter::new(&fixture_domains());
         // needless-return shape → clippy
-        assert_eq!(router.route("fn f() -> u8 { return 7; }"), Some(DomainId::Clippy));
+        assert_eq!(
+            router.route("fn f() -> u8 { return 7; }"),
+            Some(DomainId::Clippy)
+        );
         // naive matvec strided-read shape → kernel
         assert_eq!(
             router.route(
@@ -751,9 +743,17 @@ mod tests {
     #[test]
     fn spectral_router_routes_pattern_shapes() {
         for mode in [
-            RoutingEmbedding::SpectralDft { order: SpectralOrder::GlobalFreq, with_struct: false },
-            RoutingEmbedding::SpectralDft { order: SpectralOrder::Discriminative, with_struct: true },
-            RoutingEmbedding::TfCosine { order: SpectralOrder::Discriminative },
+            RoutingEmbedding::SpectralDft {
+                order: SpectralOrder::GlobalFreq,
+                with_struct: false,
+            },
+            RoutingEmbedding::SpectralDft {
+                order: SpectralOrder::Discriminative,
+                with_struct: true,
+            },
+            RoutingEmbedding::TfCosine {
+                order: SpectralOrder::Discriminative,
+            },
         ] {
             let router = DomainRouter::with_embedding(&fixture_domains(), mode);
             assert_eq!(
@@ -775,7 +775,10 @@ mod tests {
     fn spectral_router_is_deterministic() {
         let router = DomainRouter::with_embedding(
             &fixture_domains(),
-            RoutingEmbedding::SpectralDft { order: SpectralOrder::Discriminative, with_struct: true },
+            RoutingEmbedding::SpectralDft {
+                order: SpectralOrder::Discriminative,
+                with_struct: true,
+            },
         );
         for _ in 0..3 {
             assert_eq!(
@@ -807,15 +810,22 @@ mod tests {
             (
                 DomainId::Perf,
                 (0..40)
-                    .map(|i| format!("let mut out{i} = Vec::new(); for x in xs {{ out{i}.push(f(x)); }}"))
+                    .map(|i| {
+                        format!("let mut out{i} = Vec::new(); for x in xs {{ out{i}.push(f(x)); }}")
+                    })
                     .collect::<Vec<_>>(),
             ),
         ];
         let span = "pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n    for u in users {\n        if u.id == id {\n            return Some(u);\n        }\n    }\n    None\n}";
         for mode in [
             RoutingEmbedding::Baseline,
-            RoutingEmbedding::SpectralDft { order: SpectralOrder::Discriminative, with_struct: true },
-            RoutingEmbedding::TfCosine { order: SpectralOrder::Discriminative },
+            RoutingEmbedding::SpectralDft {
+                order: SpectralOrder::Discriminative,
+                with_struct: true,
+            },
+            RoutingEmbedding::TfCosine {
+                order: SpectralOrder::Discriminative,
+            },
         ] {
             let router = DomainRouter::with_embedding(&domains, mode);
             // Warm up (first route pays lazy page faults etc.).

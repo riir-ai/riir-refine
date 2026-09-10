@@ -77,7 +77,10 @@ fn collect_fn_edits(source: &str, sig: &Signature, edits: &mut Vec<SourceEdit>) 
     // target appears ONLY in strippable `&`-annotation positions (see
     // [`elision_walk`] for the full violation list). Output refs don't
     // count toward the slot total — elision assigns them the single input.
-    let mut slots = RefSlots { total: 0, target: 0 };
+    let mut slots = RefSlots {
+        total: 0,
+        target: 0,
+    };
     let mut violating = false;
     for arg in &sig.inputs {
         if let syn::FnArg::Typed(pat) = arg {
@@ -85,7 +88,10 @@ fn collect_fn_edits(source: &str, sig: &Signature, edits: &mut Vec<SourceEdit>) 
         }
     }
     if let syn::ReturnType::Type(_, ty) = &sig.output {
-        let mut out_slots = RefSlots { total: 0, target: 0 };
+        let mut out_slots = RefSlots {
+            total: 0,
+            target: 0,
+        };
         violating |= elision_walk(ty, target, &mut out_slots);
     }
     if violating || slots.total != 1 || slots.target != 1 {
@@ -154,7 +160,11 @@ fn elision_walk(ty: &Type, target: &str, c: &mut RefSlots) -> bool {
         Type::Group(g) => elision_walk(&g.elem, target, c),
         Type::Slice(s) => elision_walk(&s.elem, target, c),
         Type::Array(a) => elision_walk(&a.elem, target, c),
-        Type::Path(p) => p.path.segments.iter().any(|seg| path_args_violate(&seg.arguments, target, c)),
+        Type::Path(p) => p
+            .path
+            .segments
+            .iter()
+            .any(|seg| path_args_violate(&seg.arguments, target, c)),
         Type::TraitObject(t) => bounds_violate(&t.bounds, target, c),
         Type::ImplTrait(t) => bounds_violate(&t.bounds, target, c),
         // Bare-fn types (`fn(&'a u8)`), macro types, verbatim — elision
@@ -187,9 +197,11 @@ fn bounds_violate(
 ) -> bool {
     bounds.iter().any(|b| match b {
         syn::TypeParamBound::Lifetime(lt) => lt.ident == target,
-        syn::TypeParamBound::Trait(tb) => {
-            tb.path.segments.iter().any(|seg| path_args_violate(&seg.arguments, target, c))
-        }
+        syn::TypeParamBound::Trait(tb) => tb
+            .path
+            .segments
+            .iter()
+            .any(|seg| path_args_violate(&seg.arguments, target, c)),
         _ => true, // Verbatim — opaque; conservatively skip
     })
 }
@@ -198,7 +210,9 @@ fn bounds_violate(
 /// over-match (`'a` prefix of `'abc`) — over-matching only skips a rewrite.
 fn tokens_mention<T: quote::ToTokens>(node: &T, target: &str) -> bool {
     let text = node.to_token_stream().to_string();
-    text.contains(&format!("'{target} ")) || text.contains(&format!("'{target},")) || text.contains(&format!("'{target}>"))
+    text.contains(&format!("'{target} "))
+        || text.contains(&format!("'{target},"))
+        || text.contains(&format!("'{target}>"))
 }
 
 fn strip_lifetime_in_type(source: &str, ty: &Type, target: &str, edits: &mut Vec<SourceEdit>) {
@@ -241,8 +255,14 @@ mod tests {
     fn elides_single_lifetime() {
         let input = "fn head<'a>(v: &'a Vec<u8>) -> &'a u8 { &v[0] }";
         let out = propose_fix("needless_lifetimes", input).expect("matched");
-        assert_eq!(out, "fn head(v: &Vec<u8>) -> &u8 { &v[0] }", "span-preserving elision: {out}");
-        assert!(!out.contains('\''), "any lifetime quote should be gone: {out}");
+        assert_eq!(
+            out, "fn head(v: &Vec<u8>) -> &u8 { &v[0] }",
+            "span-preserving elision: {out}"
+        );
+        assert!(
+            !out.contains('\''),
+            "any lifetime quote should be gone: {out}"
+        );
     }
 
     #[test]
@@ -259,7 +279,10 @@ mod tests {
         let input = "fn get<'a, T>(v: &'a Vec<T>) -> Option<&'a T> { v.first() }";
         let out = propose_fix("needless_lifetimes", input).expect("matched");
         assert!(out.contains("fn get<T>("), "{out}");
-        assert!(out.contains("-> Option<&T>"), "output lifetime not stripped: {out}");
+        assert!(
+            out.contains("-> Option<&T>"),
+            "output lifetime not stripped: {out}"
+        );
         assert!(!out.contains('\''), "{out}");
     }
 
@@ -268,7 +291,10 @@ mod tests {
         // `where T: 'a` references the lifetime — not elidable by splice.
         let input = "fn get<'a, T>(v: &'a Vec<T>) -> Option<&'a T> where T: Clone { v.first() }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "where-clause fn must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "where-clause fn must not be touched: {out:?}"
+        );
     }
 
     #[test]
@@ -292,7 +318,10 @@ mod tests {
     fn two_input_slots_unchanged() {
         let input = "fn pick<'a>(x: &'a [u8], y: &'a [u8]) -> &'a u8 { x[0] }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "ambiguous-elision fn must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "ambiguous-elision fn must not be touched: {out:?}"
+        );
     }
 
     #[test]
@@ -300,7 +329,10 @@ mod tests {
         // `&'a &'a u8` = two input slots — elision output would be ambiguous.
         let input = "fn deref<'a>(r: &'a &'a u8) -> &'a u8 { *r }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "nested-ref input must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "nested-ref input must not be touched: {out:?}"
+        );
     }
 
     /// Elided `&` inputs are input lifetimes too: one explicit `'a` slot +
@@ -310,7 +342,10 @@ mod tests {
     fn elided_extra_inputs_unchanged() {
         let input = "fn analyze<'a>(b: &'a Block, p: &Path, i: &Ident) -> Index<'a> { f(b, p, i) }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "elided-extra-input fn must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "elided-extra-input fn must not be touched: {out:?}"
+        );
     }
 
     #[test]
@@ -319,7 +354,10 @@ mod tests {
         // dropping `<'a>` would dangle it even with a single input slot.
         let input = "fn idx<'a>(v: &'a Vec<u8>) -> Index<'a> { Index::new(v) }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "generic-lifetime output must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "generic-lifetime output must not be touched: {out:?}"
+        );
     }
 
     #[test]
@@ -327,7 +365,10 @@ mod tests {
         // `dyn Tr + 'a` — the bound outlives via the param; not elidable.
         let input = "fn borrow<'a>(v: &'a Vec<u8>) -> Box<dyn Tr + 'a> { Box::new(v[0]) }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "trait-object bound must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "trait-object bound must not be touched: {out:?}"
+        );
     }
 
     #[test]
@@ -336,7 +377,10 @@ mod tests {
         // (this repo's own `lookup<'a>(&'a self, ..)` — also a receiver case).
         let input = "fn iter<'a>(v: &'a Vec<u8>) -> impl Iterator<Item = &'a u8> + 'a { v.iter() }";
         let out = propose_fix("needless_lifetimes", input);
-        assert!(out.is_none(), "impl-trait bound must not be touched: {out:?}");
+        assert!(
+            out.is_none(),
+            "impl-trait bound must not be touched: {out:?}"
+        );
     }
 
     #[test]

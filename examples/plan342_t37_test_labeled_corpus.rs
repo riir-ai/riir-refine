@@ -63,7 +63,7 @@
 //! riir-train's concern; producing verified edit outcomes is this repo's.
 
 use riir_clippy::domains::clippy_lints::proposers;
-use riir_clippy::edit_emitter::{SourceEdit, apply_edits};
+use riir_clippy::edit_emitter::{apply_edits, SourceEdit};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

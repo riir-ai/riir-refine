@@ -35,12 +35,12 @@
 //!   signature would need. The scaffold always returns Plasma (modelless-first
 //!   mandate); Warm/Cold/Freeze require 4090 CUDA + LoRA (deferred).
 
-use riir_clippy::{
-    build_activity, build_kernel_seed_corpus, KernelExpertRouter, KernelOptDomain,
-    KernelRule, KernelThermalRouter, TernaryDrafter,
-};
 use riir_clippy::domain::HealDomain;
 use riir_clippy::domains::kernel_opt::KernelCategory;
+use riir_clippy::{
+    build_activity, build_kernel_seed_corpus, KernelExpertRouter, KernelOptDomain, KernelRule,
+    KernelThermalRouter, TernaryDrafter,
+};
 
 /// A representative kernel signature for the demo.
 struct Signature {
@@ -60,7 +60,8 @@ fn main() {
 
     // ── L0: Build the corpus ─────────────────────────────────────────────
     let corpus = build_kernel_seed_corpus();
-    println!("📦 L0 Corpus: {} rules (BLAKE3 verified: {})",
+    println!(
+        "📦 L0 Corpus: {} rules (BLAKE3 verified: {})",
         corpus.entries.len(),
         if corpus.verify() { "✅" } else { "❌" }
     );
@@ -74,7 +75,8 @@ fn main() {
     // ── Router + Thermal ──────────────────────────────────────────────────
     let router = KernelExpertRouter::new();
     let thermal = KernelThermalRouter::new();
-    println!("🔀 Router: {} experts, {}-dim activity vector",
+    println!(
+        "🔀 Router: {} experts, {}-dim activity vector",
         riir_clippy::NUM_KERNEL_EXPERTS,
         riir_clippy::ACTIVITY_DIM,
     );
@@ -162,8 +164,8 @@ fn main() {
         // Route → expert → category
         let expert = router.route(&activity);
         let expert_name = router.route_named(&activity);
-        let category = KernelExpertRouter::category_for_expert(expert)
-            .unwrap_or(KernelCategory::MemoryAccess);
+        let category =
+            KernelExpertRouter::category_for_expert(expert).unwrap_or(KernelCategory::MemoryAccess);
         let rule_ids = KernelExpertRouter::rules_for_expert(expert);
 
         // Narrow candidates: only rules in the routed category
@@ -177,9 +179,17 @@ fn main() {
         let tier = thermal.route(true, true, 0.9);
 
         println!("🔑 Signature: {}", sig.label);
-        println!("   Routed to: expert {} ({}) — category: {}",
-            expert, expert_name, category.as_str());
-        println!("   Candidates: {}/{} rules (narrowed by router)", candidates.len(), corpus.entries.len());
+        println!(
+            "   Routed to: expert {} ({}) — category: {}",
+            expert,
+            expert_name,
+            category.as_str()
+        );
+        println!(
+            "   Candidates: {}/{} rules (narrowed by router)",
+            candidates.len(),
+            corpus.entries.len()
+        );
         println!("   Thermal:    {:?}", tier);
 
         if candidates.is_empty() {
@@ -215,7 +225,10 @@ fn main() {
                 let status = if is_valid { "✅ VALID" } else { "❌ INVALID" };
                 total_validated += if is_valid { 1 } else { 0 };
 
-                println!("   Drafted:   {} [{:?}] conf={:.4}", rule_id, f.source, f.confidence);
+                println!(
+                    "   Drafted:   {} [{:?}] conf={:.4}",
+                    rule_id, f.source, f.confidence
+                );
                 println!("   Validate:  {}", status);
 
                 // Show a brief diff preview
@@ -235,19 +248,28 @@ fn main() {
     println!("─── Summary ────────────────────────────────────────────────────");
     println!("  Signatures routed: {}", total_routed);
     println!("  Fixes drafted:     {} (L1 ternary matvec)", total_drafted);
-    println!("  Fixes validated:   {} (L2 domain validator)", total_validated);
+    println!(
+        "  Fixes validated:   {} (L2 domain validator)",
+        total_validated
+    );
     println!();
 
     // ── Flat vs routed comparison ────────────────────────────────────────
     println!("─── Flat vs Routed Candidate Count ─────────────────────────────");
-    println!("  Flat corpus:     {} rules searched per heal", corpus.entries.len());
-    let avg_category_size: f64 = categories
-        .iter()
-        .map(|(_, r)| r.len())
-        .sum::<usize>() as f64 / categories.len() as f64;
-    println!("  Routed (avg):    {:.1} rules searched per heal (category avg)", avg_category_size);
-    println!("  Reduction:       {:.1}×",
-        corpus.entries.len() as f64 / avg_category_size);
+    println!(
+        "  Flat corpus:     {} rules searched per heal",
+        corpus.entries.len()
+    );
+    let avg_category_size: f64 =
+        categories.iter().map(|(_, r)| r.len()).sum::<usize>() as f64 / categories.len() as f64;
+    println!(
+        "  Routed (avg):    {:.1} rules searched per heal (category avg)",
+        avg_category_size
+    );
+    println!(
+        "  Reduction:       {:.1}×",
+        corpus.entries.len() as f64 / avg_category_size
+    );
     println!();
 
     // ── Fallback mode (L0 corpus template, no weights) ───────────────────

@@ -55,11 +55,23 @@ fn p11_l2_rejection_rate_on_real_proposer_output() {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    let pct = |k: usize, d: usize| if d == 0 { 0.0 } else { k as f32 / d as f32 * 100.0 };
+    let pct = |k: usize, d: usize| {
+        if d == 0 {
+            0.0
+        } else {
+            k as f32 / d as f32 * 100.0
+        }
+    };
     let rejected = produced - accepted;
     println!("  proposer outputs fed to L2 : {produced}");
-    println!("  L2 ACCEPTED                : {accepted} ({:.1}%)", pct(accepted, produced));
-    println!("  L2 REJECTED                : {rejected} ({:.1}%)  <- Phase 11's target set", pct(rejected, produced));
+    println!(
+        "  L2 ACCEPTED                : {accepted} ({:.1}%)",
+        pct(accepted, produced)
+    );
+    println!(
+        "  L2 REJECTED                : {rejected} ({:.1}%)  <- Phase 11's target set",
+        pct(rejected, produced)
+    );
     println!(
         "\n  VERDICT: {}",
         if rejected == 0 {
@@ -100,10 +112,22 @@ fn p12_fix_attempts_are_multi_step() {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    let pct = |k: usize, d: usize| if d == 0 { 0.0 } else { k as f32 / d as f32 * 100.0 };
+    let pct = |k: usize, d: usize| {
+        if d == 0 {
+            0.0
+        } else {
+            k as f32 / d as f32 * 100.0
+        }
+    };
     println!("  fixable rules producing a fix : {probed}");
-    println!("  ONE-STEP attempts             : {single} ({:.1}%)", pct(single, probed));
-    println!("  MULTI-STEP attempts           : {multi} ({:.1}%)  <- classifiable trajectories", pct(multi, probed));
+    println!(
+        "  ONE-STEP attempts             : {single} ({:.1}%)",
+        pct(single, probed)
+    );
+    println!(
+        "  MULTI-STEP attempts           : {multi} ({:.1}%)  <- classifiable trajectories",
+        pct(multi, probed)
+    );
     println!(
         "\n  VERDICT: {}",
         if multi == 0 {

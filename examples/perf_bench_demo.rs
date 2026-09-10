@@ -28,13 +28,11 @@
 #![allow(clippy::pedantic)]
 
 #[cfg(feature = "rust_perf_bench")]
-use riir_clippy::{
-    domains::rust_perf::RustPerfDomain,
-    domain::HealDomain,
-    PerfBenchValidator, SizeOutcome,
-};
-#[cfg(feature = "rust_perf_bench")]
 use riir_clippy::domains::rust_perf::bench::ALLOC_AXIS_EXEMPT;
+#[cfg(feature = "rust_perf_bench")]
+use riir_clippy::{
+    domain::HealDomain, domains::rust_perf::RustPerfDomain, PerfBenchValidator, SizeOutcome,
+};
 
 /// How many times each benchable rule's binary runs for the alloc-determinism
 /// proof (Issue 014 T1.4: "identical across 3 repeat runs").
@@ -64,12 +62,20 @@ fn main() {
     let filter = std::env::var("PERF_BENCH_FILTER").ok();
     let selected: Vec<&_> = match filter.as_deref() {
         Some(f) if !f.is_empty() => {
-            let parts: Vec<&str> = f.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+            let parts: Vec<&str> = f
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
             let sel: Vec<_> = corpus
                 .iter()
                 .filter(|e| parts.iter().any(|p| e.rule_id.contains(p)))
                 .collect();
-            println!("FILTER {f:?}: {}/{} rules selected\n", sel.len(), corpus.len());
+            println!(
+                "FILTER {f:?}: {}/{} rules selected\n",
+                sel.len(),
+                corpus.len()
+            );
             sel
         }
         _ => corpus.iter().collect(),
@@ -119,9 +125,18 @@ fn main() {
             println!("  \u{26a0} ALLOC AXIS EXEMPT (platform: contended-mutex slow path allocates — see ALLOC_AXIS_EXEMPT)");
         }
 
-        let faster_count = results.iter().filter(|r| r.outcome == SizeOutcome::Faster).count();
-        let slower_count = results.iter().filter(|r| r.outcome == SizeOutcome::Slower).count();
-        let tie_count = results.iter().filter(|r| r.outcome == SizeOutcome::Tie).count();
+        let faster_count = results
+            .iter()
+            .filter(|r| r.outcome == SizeOutcome::Faster)
+            .count();
+        let slower_count = results
+            .iter()
+            .filter(|r| r.outcome == SizeOutcome::Slower)
+            .count();
+        let tie_count = results
+            .iter()
+            .filter(|r| r.outcome == SizeOutcome::Tie)
+            .count();
         let total = results.len();
         // Majority rule (mirrors the validator's aggregate_outcomes).
         let overall = if total == 0 {
@@ -212,17 +227,33 @@ fn main() {
     println!("G1 (correctness — benchable rules produce real measurements):");
     let g1_pass = failed == 0 && pareto_dominant + mixed + dominated > 0;
     println!("  failed={failed}, benchable_rules={total_benchable}");
-    println!("  {}", if g1_pass { "\u{2713} PASS" } else { "\u{274c} FAIL" });
+    println!(
+        "  {}",
+        if g1_pass {
+            "\u{2713} PASS"
+        } else {
+            "\u{274c} FAIL"
+        }
+    );
 
     // ── G-det: alloc axis determinism (Issue 014 T1.4) ────────────────────
     println!("\nG-det (alloc determinism — Issue 014 T1.4, exact integers across runs):");
     let gdet_pass = nondeterministic.is_empty() && total_benchable > 0;
     if gdet_pass {
-        println!("  all {total_benchable} benchable rules stable across {DETERMINISM_REPEATS} runs");
+        println!(
+            "  all {total_benchable} benchable rules stable across {DETERMINISM_REPEATS} runs"
+        );
     } else {
         println!("  UNSTABLE rules: {nondeterministic:?}");
     }
-    println!("  {}", if gdet_pass { "\u{2713} PASS" } else { "\u{274c} FAIL" });
+    println!(
+        "  {}",
+        if gdet_pass {
+            "\u{2713} PASS"
+        } else {
+            "\u{274c} FAIL"
+        }
+    );
 
     // ── G5: Pareto verdict — the promotion bar ───────────────────────────
     println!("\nG5 (Pareto verdict — the promotion bar):");
@@ -234,14 +265,19 @@ fn main() {
     //
     // `pareto_dominant * 2 > total_benchable` is the majority test.
     let g5_pass = total_benchable > 0 && pareto_dominant * 2 > total_benchable;
-    println!(
-        "  pareto_dominant={pareto_dominant} (must be > half of {total_benchable} benchable)"
-    );
+    println!("  pareto_dominant={pareto_dominant} (must be > half of {total_benchable} benchable)");
     if dominated > 0 {
         println!("  NOTE: {dominated} dominated rule(s) — honest findings:");
         println!("    (compiler optimizations, regime-dependent benefits, etc.)");
     }
-    println!("  {}", if g5_pass { "\u{2713} PASS" } else { "\u{274c} FAIL" });
+    println!(
+        "  {}",
+        if g5_pass {
+            "\u{2713} PASS"
+        } else {
+            "\u{274c} FAIL"
+        }
+    );
 
     // ── Machine-readable rows (paste target for the bench doc) ────────────
     println!("\nREPORT_ROWS (rule|overall|f/s/t|allocs@max b/f|bytes@max b/f|det):");

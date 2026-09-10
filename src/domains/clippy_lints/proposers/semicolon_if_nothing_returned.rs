@@ -38,7 +38,12 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 
 /// Walk a block's statements. `tail_discarded` = this block's tail
 /// expression value is syntactically unused.
-fn walk_block_stmts(source: &str, block: &syn::Block, tail_discarded: bool, edits: &mut Vec<SourceEdit>) {
+fn walk_block_stmts(
+    source: &str,
+    block: &syn::Block,
+    tail_discarded: bool,
+    edits: &mut Vec<SourceEdit>,
+) {
     let last = block.stmts.len().saturating_sub(1);
     for (i, stmt) in block.stmts.iter().enumerate() {
         match stmt {
@@ -163,7 +168,10 @@ mod tests {
         let input = "fn helper() {}\nfn main() {\n    helper()\n}";
         let out = propose_fix("semicolon_if_nothing_returned", input).expect("matched");
         assert!(out.contains("helper();"), "semicolon not added: {out}");
-        assert!(out.contains("fn helper() {}"), "other fn must be untouched: {out}");
+        assert!(
+            out.contains("fn helper() {}"),
+            "other fn must be untouched: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -193,7 +201,8 @@ mod tests {
 
     #[test]
     fn valued_fn_block_arms_untouched() {
-        let input = "fn f(x: bool) -> u32 {\n    if x {\n        1\n    } else {\n        2\n    }\n}";
+        let input =
+            "fn f(x: bool) -> u32 {\n    if x {\n        1\n    } else {\n        2\n    }\n}";
         let out = propose_fix("semicolon_if_nothing_returned", input);
         assert!(out.is_none(), "valued if-arms must not fire: {out:?}");
     }
@@ -223,7 +232,8 @@ mod tests {
 
     #[test]
     fn semicoloned_unsafe_inner_fires() {
-        let input = "fn helper() {}\nfn f() {\n    unsafe {\n        helper()\n    };\n    let _y = 1;\n}";
+        let input =
+            "fn helper() {}\nfn f() {\n    unsafe {\n        helper()\n    };\n    let _y = 1;\n}";
         let out = propose_fix("semicolon_if_nothing_returned", input).expect("matched");
         assert!(out.contains("helper();"), "{out}");
         syn::parse_file(&out).expect("re-parses");
@@ -248,7 +258,10 @@ mod tests {
     fn already_semicoloned_untouched() {
         let input = "fn main() {\n    helper();\n}";
         let out = propose_fix("semicolon_if_nothing_returned", input);
-        assert!(out.is_none(), "already-terminated tail must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "already-terminated tail must not fire: {out:?}"
+        );
     }
 
     #[test]

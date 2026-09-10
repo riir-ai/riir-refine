@@ -144,8 +144,16 @@ fn b64_encode(s: &str) -> String {
             | c.get(2).map_or(0, |x| u32::from(*x));
         out.push(A[(n >> 18) as usize & 63] as char);
         out.push(A[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { A[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            A[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            A[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -433,7 +441,9 @@ fn t32_hex_layer_is_deterministic_in_v2() {
         // Sanity: the BARE key must be detectable, else the sweep measures
         // malformed fixtures rather than the hex layer.
         assert!(
-            scan_secrets(&format!("k=\"{key}\"")).iter().any(|f| f.kind == FindingKind::AwsAccessKey),
+            scan_secrets(&format!("k=\"{key}\""))
+                .iter()
+                .any(|f| f.kind == FindingKind::AwsAccessKey),
             "generated key {key} is not AWS-shaped"
         );
 
@@ -444,7 +454,10 @@ fn t32_hex_layer_is_deterministic_in_v2() {
         if e >= 3.0 {
             would_catch_v1 += 1;
         }
-        if scan_secrets(&hex).iter().any(|f| f.kind == FindingKind::HighEntropyHex) {
+        if scan_secrets(&hex)
+            .iter()
+            .any(|f| f.kind == FindingKind::HighEntropyHex)
+        {
             caught += 1;
         }
     }
@@ -496,7 +509,9 @@ fn t32_chunk_boundary_defeats_per_span_scanning() {
     }
     // Reassembled by any consumer of the sync batch, the secret is intact.
     assert!(
-        scan_secrets(&format!("{head}{tail}")).iter().any(|f| f.kind == FindingKind::AwsAccessKey),
+        scan_secrets(&format!("{head}{tail}"))
+            .iter()
+            .any(|f| f.kind == FindingKind::AwsAccessKey),
         "the reassembled value IS the credential the chunks hid"
     );
 }
@@ -542,11 +557,17 @@ fn t32_shipped_policy_denies_every_confidential_span() {
     let gate = RedactionGate::from_policy(shipped_policy());
     for (name, span) in confidential_secretless_corpus() {
         let d = gate.check(SpanOrigin::External, Some("consumer/src/lib.rs"), span);
-        assert!(!d.is_syncable(), "{name} must be denied under the shipped policy: {d:?}");
+        assert!(
+            !d.is_syncable(),
+            "{name} must be denied under the shipped policy: {d:?}"
+        );
         assert!(
             matches!(
                 d,
-                GateDecision::Blocked { reason: BlockReason::OriginNotAllowed(_), .. }
+                GateDecision::Blocked {
+                    reason: BlockReason::OriginNotAllowed(_),
+                    ..
+                }
             ),
             "{name}: and denied on ORIGIN specifically: {d:?}"
         );

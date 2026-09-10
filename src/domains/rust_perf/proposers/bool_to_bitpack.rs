@@ -39,33 +39,43 @@ fn fn_edits(source: &str, sig: &syn::Signature, block: &syn::Block, edits: &mut 
     if super::count_ident_occurrences(source, &sig.ident.to_string()) > 1 {
         return;
     }
-    let Some((param, param_ty)) = bool_slice_param(sig) else { return };
+    let Some((param, param_ty)) = bool_slice_param(sig) else {
+        return;
+    };
 
     // Body must be exactly the tail chain `<param>.iter().filter(1 arg).count()`.
     if block.stmts.len() != 1 {
         return;
     }
-    let Stmt::Expr(expr, None) = &block.stmts[0] else { return };
-    let Expr::MethodCall(count_mc) = expr else { return };
+    let Stmt::Expr(expr, None) = &block.stmts[0] else {
+        return;
+    };
+    let Expr::MethodCall(count_mc) = expr else {
+        return;
+    };
     if count_mc.method != "count" || !count_mc.args.is_empty() {
         return;
     }
-    let Expr::MethodCall(filter_mc) = &*count_mc.receiver else { return };
+    let Expr::MethodCall(filter_mc) = &*count_mc.receiver else {
+        return;
+    };
     if filter_mc.method != "filter" || filter_mc.args.len() != 1 {
         return;
     }
-    let Expr::MethodCall(iter_mc) = &*filter_mc.receiver else { return };
+    let Expr::MethodCall(iter_mc) = &*filter_mc.receiver else {
+        return;
+    };
     if iter_mc.method != "iter" || !iter_mc.args.is_empty() {
         return;
     }
-    let Expr::Path(recv) = &*iter_mc.receiver else { return };
+    let Expr::Path(recv) = &*iter_mc.receiver else {
+        return;
+    };
     if !recv.path.is_ident(&param) {
         return;
     }
 
-    let tail_replacement = format!(
-        "{param}.iter().map(|w| w.count_ones() as usize).sum()"
-    );
+    let tail_replacement = format!("{param}.iter().map(|w| w.count_ones() as usize).sum()");
     edits.push(edit(&param_ty, "&[u64]".to_string()));
     edits.push(edit(expr, tail_replacement));
 }
@@ -87,12 +97,18 @@ fn bool_slice_param(sig: &syn::Signature) -> Option<(syn::Ident, Type)> {
 }
 
 fn is_ref_slice_bool(ty: &Type) -> bool {
-    let Type::Reference(tr) = ty else { return false };
+    let Type::Reference(tr) = ty else {
+        return false;
+    };
     if tr.mutability.is_some() {
         return false;
     }
-    let Type::Slice(ts) = &*tr.elem else { return false };
-    let Type::Path(tp) = &*ts.elem else { return false };
+    let Type::Slice(ts) = &*tr.elem else {
+        return false;
+    };
+    let Type::Path(tp) = &*ts.elem else {
+        return false;
+    };
     tp.qself.is_none() && tp.path.is_ident("bool")
 }
 
@@ -114,7 +130,9 @@ mod tests {
         .expect("pattern matched");
         assert!(out.contains("flags: &[u64]"), "{out}");
         assert!(
-            squash(&out).contains(&squash("flags.iter().map(|w| w.count_ones() as usize).sum()")),
+            squash(&out).contains(&squash(
+                "flags.iter().map(|w| w.count_ones() as usize).sum()"
+            )),
             "{out}"
         );
     }
@@ -166,49 +184,41 @@ mod tests {
     #[test]
     fn vec_param_unchanged() {
         // `&Vec<bool>` is a different type — out of scope.
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &Vec<bool>) -> usize {\n    \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &Vec<bool>) -> usize {\n    \
                  flags.iter().filter(|&&b| b).count()\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn mut_slice_unchanged() {
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &mut [bool]) -> usize {\n    \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &mut [bool]) -> usize {\n    \
                  flags.iter().filter(|&&b| b).count()\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn extra_body_stmts_unchanged() {
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &[bool]) -> usize {\n    let n = \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &[bool]) -> usize {\n    let n = \
                  flags.iter().filter(|&&b| b).count();\n    n + 1\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn different_method_chain_unchanged() {
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &[bool]) -> usize {\n    \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &[bool]) -> usize {\n    \
                  flags.iter().position(|&&b| b).unwrap_or(0)\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 }

@@ -79,7 +79,10 @@ mod tests {
     /// e.txt. Unique per test (parallel tests must not delete each other's
     /// tree mid-walk).
     fn temp_tree(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("riir_span_source_test_{tag}_{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "riir_span_source_test_{tag}_{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("sub")).expect("mkdir sub");
         std::fs::create_dir_all(root.join("target")).expect("mkdir target");
@@ -105,10 +108,22 @@ mod tests {
         let mut out = Vec::new();
         collect_source_files(&root, ".rs", &mut out);
         let names = base_names(&out);
-        assert!(names.contains(&"a.rs".to_string()), "top-level .rs must be found");
-        assert!(names.contains(&"b.rs".to_string()), "nested .rs must be found");
-        assert!(!names.contains(&"c.rs".to_string()), "target/ must be pruned");
-        assert!(!names.contains(&"d.rs".to_string()), "hidden dirs must be pruned");
+        assert!(
+            names.contains(&"a.rs".to_string()),
+            "top-level .rs must be found"
+        );
+        assert!(
+            names.contains(&"b.rs".to_string()),
+            "nested .rs must be found"
+        );
+        assert!(
+            !names.contains(&"c.rs".to_string()),
+            "target/ must be pruned"
+        );
+        assert!(
+            !names.contains(&"d.rs".to_string()),
+            "hidden dirs must be pruned"
+        );
         std::fs::remove_dir_all(&root).ok();
     }
 

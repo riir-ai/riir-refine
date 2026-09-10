@@ -73,10 +73,7 @@ impl MockServer {
 
 /// One captured body per test (the content-addressed segment bytes live in
 /// the closure's environment via the manifest).
-fn spawn_lease_mock(
-    mode: LeaseMode,
-    segments: HashMap<[u8; 32], Vec<u8>>,
-) -> MockServer {
+fn spawn_lease_mock(mode: LeaseMode, segments: HashMap<[u8; 32], Vec<u8>>) -> MockServer {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let captured: Arc<Mutex<Vec<CapturedRequest>>> = Arc::new(Mutex::new(Vec::new()));
@@ -107,7 +104,11 @@ fn spawn_lease_mock(
     }
 }
 
-fn route(mode: &LeaseMode, segments: &HashMap<[u8; 32], Vec<u8>>, req: &CapturedRequest) -> Vec<u8> {
+fn route(
+    mode: &LeaseMode,
+    segments: &HashMap<[u8; 32], Vec<u8>>,
+    req: &CapturedRequest,
+) -> Vec<u8> {
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/lease") => {
             let manifest = match mode {
@@ -152,7 +153,10 @@ fn http(status: u16, body: &[u8], etag: Option<&str>) -> Vec<u8> {
         304 => "Not Modified",
         _ => "",
     };
-    let mut head = format!("HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\n", body.len());
+    let mut head = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\n",
+        body.len()
+    );
     if let Some(e) = etag {
         head.push_str(&format!("ETag: {e}\r\n"));
     }
@@ -275,7 +279,13 @@ fn g10a_304_fast_path_no_body_no_charge() {
     let t = HttpLeaseTransport::new(&server.base(), 5);
     let out = run_update_phase(&t, &store, &mut charge, false, None);
     assert!(
-        matches!(out.status, UpdateStatus::Applied { epoch: 9, charge_kat: riir_clippy::kat_lease_client::LEASE_FEE_KAT }),
+        matches!(
+            out.status,
+            UpdateStatus::Applied {
+                epoch: 9,
+                charge_kat: riir_clippy::kat_lease_client::LEASE_FEE_KAT
+            }
+        ),
         "first fetch applies + charges: {:?}",
         out.status
     );
@@ -312,7 +322,11 @@ fn g10a_stalled_server_returns_within_the_budget() {
     let start = Instant::now();
     let out = run_update_phase(&t, &store, &mut charge, false, None);
     let elapsed = start.elapsed();
-    assert!(matches!(out.status, UpdateStatus::Failed(_)), "{:?}", out.status);
+    assert!(
+        matches!(out.status, UpdateStatus::Failed(_)),
+        "{:?}",
+        out.status
+    );
     assert!(
         elapsed < Duration::from_secs(4),
         "healing starts within the timeout budget (took {elapsed:?})"
@@ -325,7 +339,13 @@ fn g10a_stalled_server_returns_within_the_budget() {
 
 #[test]
 fn g10b_happy_path_fetches_verifies_and_swaps_atomically() {
-    let (manifest, segs) = manifest_for(12, &[pack_segment("clippy", &["r1"]), pack_segment("perf", &["p1", "p2"])]);
+    let (manifest, segs) = manifest_for(
+        12,
+        &[
+            pack_segment("clippy", &["r1"]),
+            pack_segment("perf", &["p1", "p2"]),
+        ],
+    );
     let server = spawn_lease_mock(LeaseMode::Serve { manifest }, segs);
     let dir = temp_dir("happy");
     let store = LeaseStore::at_dir(dir.join("store"));
@@ -333,7 +353,10 @@ fn g10b_happy_path_fetches_verifies_and_swaps_atomically() {
     let t = HttpLeaseTransport::new(&server.base(), 5);
 
     let out = run_update_phase(&t, &store, &mut charge, false, None);
-    assert!(matches!(out.status, UpdateStatus::Applied { epoch: 12, .. }));
+    assert!(matches!(
+        out.status,
+        UpdateStatus::Applied { epoch: 12, .. }
+    ));
     assert_eq!(store.current_epoch(), Some(12));
     // The pointer is complete + every segment on disk.
     let m = store.current().unwrap();
@@ -366,12 +389,16 @@ fn g10b_interrupt_before_swap_leaves_the_old_epoch_intact() {
     let e1_pack = pack_segment("clippy", &["e1rule"]);
     store
         .install_atomic(
-            &LeaseStage::begin(LeaseManifest::build(1, 1, vec![LeaseSegmentDesc::of(&e1_pack)]))
-                .and_then(|mut s| {
-                    s.stage_segment(&LeaseSegmentDesc::of(&e1_pack).id, &e1_pack)?;
-                    s.commit()
-                })
-                .unwrap(),
+            &LeaseStage::begin(LeaseManifest::build(
+                1,
+                1,
+                vec![LeaseSegmentDesc::of(&e1_pack)],
+            ))
+            .and_then(|mut s| {
+                s.stage_segment(&LeaseSegmentDesc::of(&e1_pack).id, &e1_pack)?;
+                s.commit()
+            })
+            .unwrap(),
         )
         .unwrap();
     assert_eq!(store.current_epoch(), Some(1));
@@ -385,10 +412,10 @@ fn g10b_interrupt_before_swap_leaves_the_old_epoch_intact() {
         .unwrap();
     let leased = stage.commit().unwrap();
     store.install_segments(&leased).unwrap(); // ← the interrupt point
-    // The next run sees E1 — the segments are inert without the pointer.
+                                              // The next run sees E1 — the segments are inert without the pointer.
     assert_eq!(store.current_epoch(), Some(1));
-    let overlay_epoch = riir_clippy::kat_lease_client::overlay_from_epoch(&store, None)
-        .map(|(e, _)| e);
+    let overlay_epoch =
+        riir_clippy::kat_lease_client::overlay_from_epoch(&store, None).map(|(e, _)| e);
     assert_eq!(overlay_epoch, Some(1));
     // Completing the swap (the retry) lands E2 atomically.
     store.publish_pointer(&m2).unwrap();
@@ -407,12 +434,16 @@ fn g10c_tampered_manifest_is_rejected_with_fallback_to_local() {
     let prior = pack_segment("clippy", &["prior-rule"]);
     store
         .install_atomic(
-            &LeaseStage::begin(LeaseManifest::build(1, 1, vec![LeaseSegmentDesc::of(&prior)]))
-                .and_then(|mut s| {
-                    s.stage_segment(&LeaseSegmentDesc::of(&prior).id, &prior)?;
-                    s.commit()
-                })
-                .unwrap(),
+            &LeaseStage::begin(LeaseManifest::build(
+                1,
+                1,
+                vec![LeaseSegmentDesc::of(&prior)],
+            ))
+            .and_then(|mut s| {
+                s.stage_segment(&LeaseSegmentDesc::of(&prior).id, &prior)?;
+                s.commit()
+            })
+            .unwrap(),
         )
         .unwrap();
     let mut charge = LeaseCharge::open(&store);
@@ -434,15 +465,17 @@ fn g10c_tampered_manifest_is_rejected_with_fallback_to_local() {
 fn spans(items: &[(&str, u64, &[&str])]) -> Vec<riir_clippy::kat_lease_client::PassSpans> {
     items
         .iter()
-        .map(|(text, tokens, rules)| riir_clippy::kat_lease_client::PassSpans {
-            key: riir_clippy::kat_lease_client::span_key(text),
-            tokens: *tokens,
-            rules: {
-                let mut v: Vec<String> = rules.iter().map(|r| r.to_string()).collect();
-                v.sort();
-                v
+        .map(
+            |(text, tokens, rules)| riir_clippy::kat_lease_client::PassSpans {
+                key: riir_clippy::kat_lease_client::span_key(text),
+                tokens: *tokens,
+                rules: {
+                    let mut v: Vec<String> = rules.iter().map(|r| r.to_string()).collect();
+                    v.sort();
+                    v
+                },
             },
-        })
+        )
         .collect()
 }
 
@@ -450,9 +483,11 @@ fn spans(items: &[(&str, u64, &[&str])]) -> Vec<riir_clippy::kat_lease_client::P
 fn g10d_no_changed_candidate_sets_bills_approximately_zero() {
     // The straddle fixture: E+1 landed but changed NO span's top-k set.
     let mut pass1: HashMap<[u8; 32], Vec<String>> = HashMap::new();
-    for (text, _t, rules) in &[("fn a() {}", 50u64, &["needless_return"][..]),
+    for (text, _t, rules) in &[
+        ("fn a() {}", 50u64, &["needless_return"][..]),
         ("fn b() {}", 60, &["vec-with-capacity"]),
-        ("fn c() {}", 70, &["manual_map"])] {
+        ("fn c() {}", 70, &["manual_map"]),
+    ] {
         let mut v: Vec<String> = rules.iter().map(|r| r.to_string()).collect();
         v.sort();
         pass1.insert(riir_clippy::kat_lease_client::span_key(text), v);
@@ -491,10 +526,17 @@ fn g10d_n_changed_spans_rebill_exactly_their_tokens_deterministically() {
     ]);
     let plan = riir_clippy::kat_lease_client::plan_reheat(&pass1, &pass2);
     assert_eq!(plan.changed.len(), 3, "changed + edited + fresh");
-    assert_eq!(plan.reheat_tokens, 20 + 30 + 40, "exactly those spans' tokens");
+    assert_eq!(
+        plan.reheat_tokens,
+        20 + 30 + 40,
+        "exactly those spans' tokens"
+    );
     assert_eq!(plan.unchanged, 1);
     // G9 determinism: identical replays → identical plan.
-    assert_eq!(plan, riir_clippy::kat_lease_client::plan_reheat(&pass1, &pass2));
+    assert_eq!(
+        plan,
+        riir_clippy::kat_lease_client::plan_reheat(&pass1, &pass2)
+    );
 }
 
 // ── G10e: itemization ──────────────────────────────────────────────────────
@@ -540,7 +582,10 @@ fn sync_posts_the_ndjson_payload_and_the_wire_shape_is_captured() {
         .iter()
         .find(|r| r.method == "POST" && r.path == "/sync")
         .expect("the POST /sync arrived");
-    assert!(post.body_prefix.as_deref().is_some_and(|b| b.contains("payload_version")));
+    assert!(post
+        .body_prefix
+        .as_deref()
+        .is_some_and(|b| b.contains("payload_version")));
 }
 
 #[test]
@@ -558,7 +603,10 @@ fn claim_posts_the_composed_request() {
         .iter()
         .find(|r| r.path == "/claim")
         .expect("the POST /claim arrived");
-    assert!(post.body_prefix.as_deref().is_some_and(|b| b.contains("solana")));
+    assert!(post
+        .body_prefix
+        .as_deref()
+        .is_some_and(|b| b.contains("solana")));
 }
 
 #[test]
@@ -574,8 +622,14 @@ fn g3_offline_failure_is_silent_and_local_stands() {
     let t = HttpLeaseTransport::new("http://127.0.0.1:9", 1);
     let out = run_update_phase(&t, &store, &mut charge, false, None);
     assert!(matches!(out.status, UpdateStatus::Failed(_)));
-    assert!(out.silent(), "the run-start phase prints NOTHING on failure");
-    assert!(store.current().is_none(), "no epoch installed → compiled-in");
+    assert!(
+        out.silent(),
+        "the run-start phase prints NOTHING on failure"
+    );
+    assert!(
+        store.current().is_none(),
+        "no epoch installed → compiled-in"
+    );
     assert_eq!(charge.charged_kat(), 0);
 }
 
@@ -610,7 +664,11 @@ fn compat_gap_stays_local() {
     let mut charge = LeaseCharge::open(&store);
     let t = HttpLeaseTransport::new(&server.base(), 5);
     let out = run_update_phase(&t, &store, &mut charge, false, None);
-    assert!(matches!(out.status, UpdateStatus::Skipped(_)), "{:?}", out.status);
+    assert!(
+        matches!(out.status, UpdateStatus::Skipped(_)),
+        "{:?}",
+        out.status
+    );
     assert!(store.current().is_none());
     assert_eq!(charge.charged_kat(), 0);
 }

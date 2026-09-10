@@ -23,8 +23,8 @@
 
 #[cfg(all(feature = "self_evolve", feature = "clippy_verify"))]
 use riir_clippy::{
-    ClippyFixEntry, ClippyTernaryDrafter, ClippyVerifier, HealPipeline, RustAnalyzerPruner,
-    build_seed_corpus,
+    build_seed_corpus, ClippyFixEntry, ClippyTernaryDrafter, ClippyVerifier, HealPipeline,
+    RustAnalyzerPruner,
 };
 
 #[cfg(all(feature = "self_evolve", feature = "clippy_verify"))]
@@ -86,10 +86,7 @@ fn main() {
                 .iter()
                 .filter(|l| l.starts_with("clippy::"))
                 .collect();
-            eprintln!(
-                "    ⚠️ fixed_code still triggers: {:?}",
-                other_lints
-            );
+            eprintln!("    ⚠️ fixed_code still triggers: {:?}", other_lints);
         }
         if !buggy_triggers {
             eprintln!(
@@ -111,7 +108,11 @@ fn main() {
 
     println!(
         "\n  G6: {} ({}/{} entries verified)\n",
-        if g6_pass { "✅ ALL PASS" } else { "❌ SOME FAILED" },
+        if g6_pass {
+            "✅ ALL PASS"
+        } else {
+            "❌ SOME FAILED"
+        },
         verified_lints.len(),
         corpus.entries.len()
     );
@@ -171,10 +172,8 @@ fn main() {
 
     // ── Phase 1: Baseline (memory seeded, no feedback) ────────────────────
     println!("Phase 1: baseline (seeded memory, no feedback) — verifying with cargo clippy...");
-    let mut baseline_pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut baseline_pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     baseline_pipeline.seed_from_corpus(&all_corpus);
 
     let mut baseline_resolved = 0usize;
@@ -195,7 +194,11 @@ fn main() {
         println!(
             "  {:30} → {}{} (source: {:?})",
             lint_name,
-            if resolved { "✅ resolved" } else { "❌ not resolved" },
+            if resolved {
+                "✅ resolved"
+            } else {
+                "❌ not resolved"
+            },
             note_marker,
             source
         );
@@ -211,10 +214,8 @@ fn main() {
 
     // ── Phase 2: Evolution loop with real clippy feedback ─────────────────
     println!("Phase 2: evolution loop (real cargo clippy feedback)...");
-    let mut evolved_pipeline = HealPipeline::new(
-        ClippyTernaryDrafter::fallback(),
-        RustAnalyzerPruner::new(),
-    );
+    let mut evolved_pipeline =
+        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     evolved_pipeline.seed_from_corpus(&all_corpus);
 
     // Run 3 rounds of feedback: heal → verify → report outcome.
@@ -276,7 +277,11 @@ fn main() {
         println!(
             "  {:30} → {}{} (source: {:?})",
             lint_name,
-            if resolved { "✅ resolved" } else { "❌ not resolved" },
+            if resolved {
+                "✅ resolved"
+            } else {
+                "❌ not resolved"
+            },
             note_marker,
             source
         );
@@ -312,11 +317,19 @@ fn main() {
 
     // ── Summary ───────────────────────────────────────────────────────────
     println!("═══ Summary ═══");
-    println!("  G6 (corpus truthfulness): {}", if g6_pass { "✅ PASS" } else { "❌ FAIL" });
-    println!("  G7 (real-world evolution): {}", if g7_pass { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "  G6 (corpus truthfulness): {}",
+        if g6_pass { "✅ PASS" } else { "❌ FAIL" }
+    );
+    println!(
+        "  G7 (real-world evolution): {}",
+        if g7_pass { "✅ PASS" } else { "❌ FAIL" }
+    );
     println!();
     if g6_pass && g7_pass {
-        println!("✅ All gates PASS. The self-evolution loop generalizes to real cargo clippy feedback.");
+        println!(
+            "✅ All gates PASS. The self-evolution loop generalizes to real cargo clippy feedback."
+        );
         println!("   The controlled G5 fixture result (oracle feedback) is confirmed by G7 (ground-truth feedback).");
     } else {
         println!("❌ Some gates FAILED. See details above.");

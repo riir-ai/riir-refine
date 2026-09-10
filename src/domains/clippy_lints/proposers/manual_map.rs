@@ -24,7 +24,10 @@ use syn::{Expr, ExprMatch, File, Pat};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -52,10 +55,8 @@ impl Collector<'_> {
             return None; // arm attrs would be lost by the splice
         }
         // Find which arm is the Some + which is the None.
-        let (some_idx, none_idx) = match (
-            is_some_pat(&m.arms[0].pat),
-            is_none_pat(&m.arms[1].pat),
-        ) {
+        let (some_idx, none_idx) = match (is_some_pat(&m.arms[0].pat), is_none_pat(&m.arms[1].pat))
+        {
             (true, true) => (0usize, 1usize),
             _ => match (is_none_pat(&m.arms[0].pat), is_some_pat(&m.arms[1].pat)) {
                 (true, true) => (1usize, 0usize),
@@ -69,7 +70,10 @@ impl Collector<'_> {
         // The Some-arm body moves into a NEW closure: any control flow that
         // depended on the enclosing fn (`?`, `return`, `break`, `continue`,
         // `await`, `yield`) breaks there — refuse (real clippy does too).
-        if m.arms.iter().any(|a| body_has_closure_unsafe_control_flow(&a.body)) {
+        if m.arms
+            .iter()
+            .any(|a| body_has_closure_unsafe_control_flow(&a.body))
+        {
             return None;
         }
         // some arm body must be `Some(<expr>)`.
@@ -165,7 +169,10 @@ mod tests {
     fn converts_match_to_map() {
         let input = "fn to_text(x: Option<u8>) -> Option<String> {\n    match x {\n        Some(v) => Some(v.to_string()),\n        None => None,\n    }\n}";
         let out = propose_fix("manual_map", input).expect("matched");
-        assert!(out.contains("x.map(|v| v.to_string())"), "map not produced: {out}");
+        assert!(
+            out.contains("x.map(|v| v.to_string())"),
+            "map not produced: {out}"
+        );
     }
 
     #[test]
@@ -173,7 +180,10 @@ mod tests {
         // A deref scrutinee must NOT become `*r.map(..)` (deref of the map).
         let input = "fn f(r: &Option<u8>) -> Option<u8> { match *r { Some(v) => Some(v + 1), None => None, } }";
         let out = propose_fix("manual_map", input).expect("matched");
-        assert!(out.contains("(*r).map(|v| v + 1)"), "deref scrutinee must be parenthesized: {out}");
+        assert!(
+            out.contains("(*r).map(|v| v + 1)"),
+            "deref scrutinee must be parenthesized: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -181,7 +191,10 @@ mod tests {
     fn method_scrutinee_no_parens() {
         let input = "fn f(x: Option<u8>) -> Option<u8> { match x.clone() { Some(v) => Some(v), None => None, } }";
         let out = propose_fix("manual_map", input).expect("matched");
-        assert!(out.contains("x.clone().map(|v| v)"), "postfix-safe scrutinee needs no parens: {out}");
+        assert!(
+            out.contains("x.clone().map(|v| v)"),
+            "postfix-safe scrutinee needs no parens: {out}"
+        );
     }
 
     #[test]

@@ -170,7 +170,8 @@ fn macro_family(path: &Path) -> Option<TemplatePos> {
     use TemplatePos::{First, Second, Third};
     let name = path.segments.last()?.ident.to_string();
     Some(match name.as_str() {
-        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" | "bail" | "anyhow" | "info" | "warn" | "error" | "debug" | "trace" => First,
+        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args"
+        | "bail" | "anyhow" | "info" | "warn" | "error" | "debug" | "trace" => First,
         "assert" | "debug_assert" | "write" | "writeln" | "ensure" => Second,
         "assert_eq" | "assert_ne" | "debug_assert_eq" | "debug_assert_ne" => Third,
         _ => return None,
@@ -302,7 +303,11 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
         });
     }
     for (start, end) in redundant_named {
-        edits.push(SourceEdit { start, end, replacement: String::new() });
+        edits.push(SourceEdit {
+            start,
+            end,
+            replacement: String::new(),
+        });
     }
     Some(edits)
 }
@@ -332,7 +337,11 @@ fn split_args(toks: &[TokenTree]) -> Option<Vec<MacroArg>> {
         if start == i {
             // A comma with nothing before it in this slot: acceptable ONLY
             // as the final trailing comma; anywhere else it is malformed.
-            return if i == toks.len() - 1 { Some(args) } else { None };
+            return if i == toks.len() - 1 {
+                Some(args)
+            } else {
+                None
+            };
         }
         args.push(MacroArg {
             toks: toks[start..i].to_vec(),
@@ -630,11 +639,7 @@ fn rewrite_named_content(
 /// chars; `{:>w$}` matches `w`, not `aw`), so `{a2}` never maps a rename
 /// keyed `a`. Positional digit refs are unreachable here —
 /// `has_dynamic_spec_ref` aborted them first.
-fn rewrite_spec_refs(
-    spec: &str,
-    renames: &[RenameArg],
-    referenced: &mut Vec<usize>,
-) -> String {
+fn rewrite_spec_refs(spec: &str, renames: &[RenameArg], referenced: &mut Vec<usize>) -> String {
     if renames.is_empty() {
         return spec.to_string();
     }
@@ -801,7 +806,10 @@ mod tests {
             "fn f(a: u8, b: f32) -> String { format!(\"{:?} {:.1}\", a, b) }",
         )
         .expect("pattern matched");
-        assert_eq!(out, "fn f(a: u8, b: f32) -> String { format!(\"{a:?} {b:.1}\") }");
+        assert_eq!(
+            out,
+            "fn f(a: u8, b: f32) -> String { format!(\"{a:?} {b:.1}\") }"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -1031,7 +1039,10 @@ mod tests {
             "uninlined_format_args",
             "fn f(s: &S) { println!(\"{val:?}\", val = s.0); }",
         );
-        assert!(out.is_none(), "field-access value must stay silent: {out:?}");
+        assert!(
+            out.is_none(),
+            "field-access value must stay silent: {out:?}"
+        );
     }
 
     #[test]
@@ -1354,7 +1365,10 @@ mod tests {
             "uninlined_format_args",
             "fn f(v: u8) { info!(target: \"my_target\", \"msg {}\", v); }",
         );
-        assert!(out.is_none(), "tracing named-target form must abort: {out:?}");
+        assert!(
+            out.is_none(),
+            "tracing named-target form must abort: {out:?}"
+        );
     }
 
     #[test]
@@ -1373,7 +1387,10 @@ mod tests {
             "uninlined_format_args",
             "fn f(code: i32) { debug!(code, \"plain message\", ); }",
         );
-        assert!(silent.is_none(), "ident-first non-format shape must abort: {silent:?}");
+        assert!(
+            silent.is_none(),
+            "ident-first non-format shape must abort: {silent:?}"
+        );
     }
 
     #[test]
@@ -1418,10 +1435,7 @@ mod tests {
     #[test]
     fn assert_without_message_untouched() {
         // Probe P25 control: no template at position 1 — nothing to do.
-        let out = propose_fix(
-            "uninlined_format_args",
-            "fn f(x: u8) { assert!(x > 0); }",
-        );
+        let out = propose_fix("uninlined_format_args", "fn f(x: u8) { assert!(x > 0); }");
         assert!(out.is_none(), "no-template assert must not fire: {out:?}");
     }
 
@@ -1441,7 +1455,10 @@ mod tests {
             "uninlined_format_args",
             "fn f(x: u8) -> String { format!(\"{x}\") }",
         );
-        assert!(out.is_none(), "named placeholder is not our pattern: {out:?}");
+        assert!(
+            out.is_none(),
+            "named placeholder is not our pattern: {out:?}"
+        );
     }
 
     #[test]
@@ -1451,7 +1468,10 @@ mod tests {
             "uninlined_format_args",
             "fn f(x: u8) -> String { format!(\"{x:?}\") }",
         );
-        assert!(out.is_none(), "fully-named placeholder must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "fully-named placeholder must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -1475,7 +1495,10 @@ mod tests {
             "fn f(e: E) { assert_eq!(format!(\"{}\", e), \"E(0)\"); }",
         )
         .expect("pattern matched");
-        assert_eq!(out, "fn f(e: E) { assert_eq!(format!(\"{e}\"), \"E(0)\"); }");
+        assert_eq!(
+            out,
+            "fn f(e: E) { assert_eq!(format!(\"{e}\"), \"E(0)\"); }"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -1505,7 +1528,10 @@ mod tests {
             "fn f(a: &str, e: E) { assert_eq!(a, format!(\"{}\", e)); }",
         )
         .expect("pattern matched");
-        assert_eq!(out, "fn f(a: &str, e: E) { assert_eq!(a, format!(\"{e}\")); }");
+        assert_eq!(
+            out,
+            "fn f(a: &str, e: E) { assert_eq!(a, format!(\"{e}\")); }"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -1520,6 +1546,9 @@ mod tests {
             "uninlined_format_args",
             "fn f(k: &str, p: f64) { println!(\"entry {}\", format!(\"{}={:.4}\", k, p)); }",
         );
-        assert!(out.is_none(), "print-family post-template descent must stay silent: {out:?}");
+        assert!(
+            out.is_none(),
+            "print-family post-template descent must stay silent: {out:?}"
+        );
     }
 }

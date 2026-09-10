@@ -11,7 +11,10 @@ use syn::{File, ItemConst, ItemStatic, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -41,8 +44,10 @@ impl Collector<'_> {
         if lt.ident != "static" {
             return;
         }
-        self.edits
-            .push(swallow_following_space(self.source, edit(lt, String::new())));
+        self.edits.push(swallow_following_space(
+            self.source,
+            edit(lt, String::new()),
+        ));
     }
 }
 
@@ -63,9 +68,11 @@ mod tests {
 
     #[test]
     fn const_slice_lifetime_stripped() {
-        let out =
-            propose_fix("redundant_static_lifetimes", "const C: &'static [u8] = b\"x\";")
-                .expect("pattern matched");
+        let out = propose_fix(
+            "redundant_static_lifetimes",
+            "const C: &'static [u8] = b\"x\";",
+        )
+        .expect("pattern matched");
         assert_eq!(out, "const C: &[u8] = b\"x\";");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }

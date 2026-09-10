@@ -116,9 +116,9 @@ fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<FrameAllocFindi
 }
 
 fn is_test_mod(m: &syn::ItemMod) -> bool {
-    m.attrs.iter().any(|a| {
-        a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test")
-    })
+    m.attrs
+        .iter()
+        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
 }
 
 /// The per-fn tracking state.
@@ -160,7 +160,12 @@ fn scan_fn(source: &str, block: &syn::Block, findings: &mut Vec<FrameAllocFindin
 
 /// Walk statements IN ORDER: bindings track, validations suppress, allocs
 /// fire — the same-name-later ordering is what makes the gates honest.
-fn scan_stmts(source: &str, stmts: &[Stmt], state: &mut FnState, findings: &mut Vec<FrameAllocFinding>) {
+fn scan_stmts(
+    source: &str,
+    stmts: &[Stmt],
+    state: &mut FnState,
+    findings: &mut Vec<FrameAllocFinding>,
+) {
     for stmt in stmts {
         match stmt {
             Stmt::Local(l) => {
@@ -234,16 +239,12 @@ fn path_ident(e: &Expr) -> Option<String> {
 fn is_parse_site(e: &Expr) -> bool {
     match e {
         Expr::Call(c) => match c.func.as_ref() {
-            Expr::Path(p) => p
-                .path
-                .segments
-                .last()
-                .is_some_and(|s| {
-                    matches!(
-                        s.ident.to_string().as_str(),
-                        "from_be_bytes" | "from_le_bytes" | "from_ne_bytes"
-                    )
-                }),
+            Expr::Path(p) => p.path.segments.last().is_some_and(|s| {
+                matches!(
+                    s.ident.to_string().as_str(),
+                    "from_be_bytes" | "from_le_bytes" | "from_ne_bytes"
+                )
+            }),
             _ => false,
         },
         Expr::MethodCall(m) => m.method == "parse",
@@ -296,11 +297,22 @@ fn harvest_chain(expr: &Expr, state: &FnState) -> Option<Vec<String>> {
             None
         }
         Expr::Binary(b) => {
-            if matches!(b.op, BinOp::Add(_) | BinOp::Mul(_) | BinOp::Shl(_) | BinOp::Sub(_) | BinOp::Div(_) | BinOp::Shr(_))
-            {
+            if matches!(
+                b.op,
+                BinOp::Add(_)
+                    | BinOp::Mul(_)
+                    | BinOp::Shl(_)
+                    | BinOp::Sub(_)
+                    | BinOp::Div(_)
+                    | BinOp::Shr(_)
+            ) {
                 let mut parents = harvest_chain(&b.left, state).unwrap_or_default();
                 parents.extend(harvest_chain(&b.right, state).unwrap_or_default());
-                if parents.is_empty() { None } else { Some(parents) }
+                if parents.is_empty() {
+                    None
+                } else {
+                    Some(parents)
+                }
             } else {
                 None
             }
@@ -318,7 +330,12 @@ fn check_validation(expr: &Expr, state: &mut FnState) {
             if let Expr::Binary(b) = e {
                 if matches!(
                     b.op,
-                    BinOp::Lt(_) | BinOp::Gt(_) | BinOp::Le(_) | BinOp::Ge(_) | BinOp::Eq(_) | BinOp::Ne(_)
+                    BinOp::Lt(_)
+                        | BinOp::Gt(_)
+                        | BinOp::Le(_)
+                        | BinOp::Ge(_)
+                        | BinOp::Eq(_)
+                        | BinOp::Ne(_)
                 ) {
                     let mut found = Vec::new();
                     collect_tracked(&b.left, &self.0.tracked, &mut found);
@@ -356,7 +373,11 @@ fn check_validation(expr: &Expr, state: &mut FnState) {
     v.visit_expr(expr);
 }
 
-fn collect_tracked(e: &Expr, tracked: &std::collections::HashMap<String, Vec<String>>, out: &mut Vec<String>) {
+fn collect_tracked(
+    e: &Expr,
+    tracked: &std::collections::HashMap<String, Vec<String>>,
+    out: &mut Vec<String>,
+) {
     struct W<'a> {
         tracked: &'a std::collections::HashMap<String, Vec<String>>,
         out: &'a mut Vec<String>,
@@ -385,7 +406,12 @@ fn collect_tracked(e: &Expr, tracked: &std::collections::HashMap<String, Vec<Str
 /// In-order expr walk: validations first (a comparison anywhere in this
 /// expr suppresses everything below it), then the alloc check, then
 /// recursion.
-fn scan_expr(source: &str, expr: &Expr, state: &mut FnState, findings: &mut Vec<FrameAllocFinding>) {
+fn scan_expr(
+    source: &str,
+    expr: &Expr,
+    state: &mut FnState,
+    findings: &mut Vec<FrameAllocFinding>,
+) {
     check_validation(expr, state);
     if let Expr::Macro(mac) = expr {
         if mac

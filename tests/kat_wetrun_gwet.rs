@@ -354,9 +354,16 @@ fn the_refund_lands_exactly_once_and_is_faucet_funded() {
     assert_eq!(report.verdict, Verdict::Ready);
 
     // Two faucet legs (step 2 top-up + step 5 refund), each settling once.
-    assert_eq!(*mock.settled.borrow(), 2, "one settle per leg, never a retry-doubled credit");
     assert_eq!(
-        mock.writes().iter().filter(|c| c.contains("payreq/faucet")).count(),
+        *mock.settled.borrow(),
+        2,
+        "one settle per leg, never a retry-doubled credit"
+    );
+    assert_eq!(
+        mock.writes()
+            .iter()
+            .filter(|c| c.contains("payreq/faucet"))
+            .count(),
         2,
         "exactly two faucet requests were opened"
     );
@@ -426,7 +433,13 @@ fn the_supply_gate_can_actually_fail() {
         }
     }
 
-    let report = kat_wetrun::run(&Minting(&mock), &mut legs, Network::Devnet, RunMode::Full, ACCT);
+    let report = kat_wetrun::run(
+        &Minting(&mock),
+        &mut legs,
+        Network::Devnet,
+        RunMode::Full,
+        ACCT,
+    );
     match &report.verdict {
         Verdict::NotReady(why) => {
             assert!(why.contains("G-WET FAILED"), "{why}");
@@ -487,7 +500,11 @@ fn an_issue_010_treasury_skip_fails_loudly_and_never_retries() {
         vec!["POST /payreq/faucet", "POST /admin/crank/daily"],
         "no retry, and the run stopped before the sync + refund legs"
     );
-    assert_eq!(*mock.settled.borrow(), 0, "nothing settled, and nothing pretended to");
+    assert_eq!(
+        *mock.settled.borrow(),
+        0,
+        "nothing settled, and nothing pretended to"
+    );
     // The local legs never ran: a failed money leg must not be followed by
     // a metered spend.
     assert_eq!(legs.cycles_run, 0);
@@ -517,7 +534,11 @@ fn a_crank_the_operator_cannot_authorize_fails_with_the_row_left_open() {
     // A 401 must NOT be mistaken for the Issue-010 skip: different cause,
     // different fix.
     assert!(!d.contains("Issue 010"), "{d}");
-    assert_eq!(mock.writes().len(), 2, "one open + one crank attempt, then stop");
+    assert_eq!(
+        mock.writes().len(),
+        2,
+        "one open + one crank attempt, then stop"
+    );
 }
 
 // ── T4.2: mainnet refusal + the dry-run proof ───────────────────────────
@@ -533,7 +554,10 @@ fn a_full_run_on_mainnet_is_refused_and_touches_nothing() {
         match &report.verdict {
             Verdict::Refused(why) => {
                 assert!(why.contains("REFUSED"), "{why}");
-                assert!(why.contains("--dry-run"), "the refusal names the way out: {why}");
+                assert!(
+                    why.contains("--dry-run"),
+                    "the refusal names the way out: {why}"
+                );
             }
             other => panic!("{net:?} must be refused for a full run, got {other:?}"),
         }
@@ -551,7 +575,11 @@ fn a_full_run_on_mainnet_is_refused_and_touches_nothing() {
     let mock = MockService::new(CrankScript::SettlesFromTreasury);
     let mut legs = ScriptedLegs::healthy();
     let report = run(&mock, &mut legs, Network::Mainnet, RunMode::Full);
-    assert!(report.verdict_line().contains("NO override"), "{}", report.verdict_line());
+    assert!(
+        report.verdict_line().contains("NO override"),
+        "{}",
+        report.verdict_line()
+    );
 }
 
 /// **Dry-run touches nothing — measured, not asserted.** Steps 1+6 only,
@@ -570,10 +598,19 @@ fn a_dry_run_issues_only_reads_on_every_network() {
         let mut legs = ScriptedLegs::healthy();
         let report = run(&mock, &mut legs, net, RunMode::DryRun);
 
-        assert_eq!(report.verdict, Verdict::Ready, "{net:?}: {:#?}", report.steps);
+        assert_eq!(
+            report.verdict,
+            Verdict::Ready,
+            "{net:?}: {:#?}",
+            report.steps
+        );
         assert_eq!(report.steps.len(), 2, "{net:?}: §7 steps 1+6 only");
         for s in &report.steps {
-            assert!(s.step.in_dry_run(), "{net:?}: {} is a money leg", s.step.label());
+            assert!(
+                s.step.in_dry_run(),
+                "{net:?}: {} is a money leg",
+                s.step.label()
+            );
             assert!(s.ok);
         }
         // THE proof: every recorded call is a GET, and none of them is a
@@ -603,9 +640,18 @@ fn a_dry_run_issues_only_reads_on_every_network() {
         // The scripted ledger is bit-identical to its start state.
         assert_eq!(*mock.settled.borrow(), 0, "{net:?}");
         assert_eq!(*mock.user_micro.borrow(), 0, "{net:?}");
-        assert_eq!(mock.supply.borrow().to_bytes(), SupplyCounters {
-            epoch: EPOCH, mint_micro: 0, burn_micro: 0, pool_paid_micro: 0, pool_available_micro: 0
-        }.to_bytes(), "{net:?}");
+        assert_eq!(
+            mock.supply.borrow().to_bytes(),
+            SupplyCounters {
+                epoch: EPOCH,
+                mint_micro: 0,
+                burn_micro: 0,
+                pool_paid_micro: 0,
+                pool_available_micro: 0
+            }
+            .to_bytes(),
+            "{net:?}"
+        );
     }
 }
 
@@ -632,7 +678,11 @@ fn an_unsettled_preflight_stops_the_run_before_any_money_moves() {
 fn a_payload_below_the_redact_floor_is_refused_rather_than_pushed() {
     let mock = MockService::new(CrankScript::SettlesFromTreasury);
     let mut legs = ScriptedLegs::healthy();
-    legs.payload = Ok(("{\"row\":1}\n".to_string(), 1, kat_wetrun::MIN_REDACT_VERSION - 1));
+    legs.payload = Ok((
+        "{\"row\":1}\n".to_string(),
+        1,
+        kat_wetrun::MIN_REDACT_VERSION - 1,
+    ));
     let report = run(&mock, &mut legs, Network::Devnet, RunMode::Full);
     assert!(matches!(report.verdict, Verdict::NotReady(_)));
     let d = report
@@ -662,7 +712,10 @@ fn a_sync_that_cannot_confirm_the_record_is_not_a_pass() {
         mock.sync_recorded = recorded;
         let mut legs = ScriptedLegs::healthy();
         let report = run(&mock, &mut legs, Network::Devnet, RunMode::Full);
-        assert!(matches!(report.verdict, Verdict::NotReady(_)), "{recorded:?}");
+        assert!(
+            matches!(report.verdict, Verdict::NotReady(_)),
+            "{recorded:?}"
+        );
         let d = report
             .steps
             .iter()

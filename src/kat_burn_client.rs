@@ -308,8 +308,7 @@ impl KatBurnAck {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("ack dir: {e}"))?;
         }
-        let text =
-            serde_json::to_string_pretty(self).map_err(|e| format!("ack serialize: {e}"))?;
+        let text = serde_json::to_string_pretty(self).map_err(|e| format!("ack serialize: {e}"))?;
         std::fs::write(path, text).map_err(|e| format!("ack write: {e}"))
     }
 }
@@ -363,9 +362,13 @@ pub trait BurnTransport {
 /// without a socket (the payreq `refusal_body_or_status` precedent).
 #[cfg(feature = "kat_transport")]
 fn burn_refusal_or_status(status: u16, body: Vec<u8>) -> HttpResponse {
-    match serde_json::from_slice::<serde_json::Value>(&body).ok().and_then(
-        |v| v.get("error").and_then(serde_json::Value::as_str).map(str::to_string),
-    ) {
+    match serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| {
+            v.get("error")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        }) {
         Some(_) => HttpResponse::Ok(body),
         None => HttpResponse::Status(status),
     }
@@ -625,8 +628,7 @@ mod tests {
             stored = total;
         }
         assert_eq!(
-            debited,
-            3_000_000,
+            debited, 3_000_000,
             "a 3_000_000 micro book debits exactly 3_000_000 micro"
         );
     }
@@ -707,9 +709,17 @@ mod tests {
         let pub_i = body.find("\"account_pubkey_hex\"").expect("pubkey field");
         let sig_i = body.find("\"signature_hex\"").expect("signature field");
         let burn_i = body.find("\"burn_kat_total\"").expect("burn field");
-        let meter_i = body.find("\"meter_watermark_tokens\"").expect("meter field");
-        assert!(pub_i < sig_i && sig_i < burn_i && burn_i < meter_i, "order: {body}");
-        assert!(body.starts_with("{\"account_pubkey_hex\":\""), "no leading space: {body}");
+        let meter_i = body
+            .find("\"meter_watermark_tokens\"")
+            .expect("meter field");
+        assert!(
+            pub_i < sig_i && sig_i < burn_i && burn_i < meter_i,
+            "order: {body}"
+        );
+        assert!(
+            body.starts_with("{\"account_pubkey_hex\":\""),
+            "no leading space: {body}"
+        );
 
         // The body is the TRANSPORT: its signature verifies over the
         // documented message for the body's own pubkey.
@@ -886,7 +896,10 @@ mod tests {
         assert!(warning.contains("re-watermarking at zero"), "{warning}");
 
         // Version mismatch → fresh at zero + the honest warning.
-        let future = KatBurnAck { version: 99, ..record };
+        let future = KatBurnAck {
+            version: 99,
+            ..record
+        };
         future.save(&path).expect("save future");
         let (ack, warning) = KatBurnAck::load_at(&path);
         assert_eq!(ack, KatBurnAck::empty());
@@ -956,8 +969,13 @@ mod transport_tests {
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { return };
-                let Some((path, body)) = read_request(&mut stream) else { continue };
-                cap.lock().unwrap().push(Captured { path, body: body.clone() });
+                let Some((path, body)) = read_request(&mut stream) else {
+                    continue;
+                };
+                cap.lock().unwrap().push(Captured {
+                    path,
+                    body: body.clone(),
+                });
                 let total = serde_json::from_str::<serde_json::Value>(&body)
                     .ok()
                     .and_then(|v| v.get("burn_kat_total").and_then(serde_json::Value::as_u64))
@@ -988,8 +1006,13 @@ mod transport_tests {
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { return };
-                let Some((path, req_body)) = read_request(&mut stream) else { continue };
-                cap.lock().unwrap().push(Captured { path, body: req_body });
+                let Some((path, req_body)) = read_request(&mut stream) else {
+                    continue;
+                };
+                cap.lock().unwrap().push(Captured {
+                    path,
+                    body: req_body,
+                });
                 let resp = format!(
                     "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),
@@ -1024,7 +1047,10 @@ mod transport_tests {
             .unwrap_or_default()
             .to_string();
         let content_length: usize = lines
-            .find_map(|l| l.strip_prefix("Content-Length:").and_then(|v| v.trim().parse().ok()))
+            .find_map(|l| {
+                l.strip_prefix("Content-Length:")
+                    .and_then(|v| v.trim().parse().ok())
+            })
             .unwrap_or(0);
         while buf.len() < header_end + 4 + content_length {
             let n = stream.read(&mut tmp).ok()?;
@@ -1086,8 +1112,13 @@ mod transport_tests {
             let body = format!(
                 r#"{{"accepted":true,"burn_kat_total":{stored},"increment_kat":0,"balance_micro":1}}"#
             );
-            let ack = report_burn(&Scripted(HttpResponse::Ok(body.into_bytes())), &key, 500, 1_000)
-                .unwrap_or_else(|e| panic!("{name} must be accepted: {e}"));
+            let ack = report_burn(
+                &Scripted(HttpResponse::Ok(body.into_bytes())),
+                &key,
+                500,
+                1_000,
+            )
+            .unwrap_or_else(|e| panic!("{name} must be accepted: {e}"));
             assert_eq!(ack.burn_kat_total, stored, "{name}");
         }
 
@@ -1102,8 +1133,13 @@ mod transport_tests {
         assert!(err.contains("refusing to rewind"), "{err}");
 
         // Malformed / refusing / unreachable — all failures.
-        assert!(report_burn(&Scripted(HttpResponse::Ok(b"garbage".to_vec())), &key, 500, 1_000)
-            .is_err());
+        assert!(report_burn(
+            &Scripted(HttpResponse::Ok(b"garbage".to_vec())),
+            &key,
+            500,
+            1_000
+        )
+        .is_err());
         let status = report_burn(&Scripted(HttpResponse::Status(401)), &key, 500, 1_000)
             .expect_err("401 is a failure");
         assert!(status.contains("HTTP 401"), "{status}");
@@ -1124,7 +1160,10 @@ mod transport_tests {
         let mock = spawn_status_mock(401, "Unauthorized", r#"{"error":"forged signature"}"#);
         let transport = HttpBurnTransport::new(&mock.base(), 5);
         let err = report_burn(&transport, &test_key(), 10, 10).expect_err("401 must fail");
-        assert!(err.contains("forged signature"), "the service's words must survive: {err}");
+        assert!(
+            err.contains("forged signature"),
+            "the service's words must survive: {err}"
+        );
         assert_eq!(mock.captured().len(), 1);
         assert_eq!(mock.captured()[0].path, "/burn");
 
@@ -1163,7 +1202,8 @@ mod transport_tests {
             "the report carries the FULL cumulative total, WHOLE KAT (converted, never the raw micro book)"
         );
         assert_eq!(
-            v.get("meter_watermark_tokens").and_then(serde_json::Value::as_u64),
+            v.get("meter_watermark_tokens")
+                .and_then(serde_json::Value::as_u64),
             Some(4_000)
         );
 

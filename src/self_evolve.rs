@@ -32,7 +32,7 @@
 use crate::adaptive_drafter::AdaptiveDrafter;
 use crate::domain::HealEntry;
 use crate::drafter::TernaryDrafter;
-use crate::embedder::{Direction, EMBED_DIM, embed_into};
+use crate::embedder::{embed_into, Direction, EMBED_DIM};
 use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory, LatentQuery};
 use crate::pruner::RustAnalyzerPruner;
@@ -397,10 +397,7 @@ impl HealPipeline {
     /// evolution score are the common real-pool shape). Default pipeline
     /// (not installed) is bit-identical — pinned by test.
     #[must_use]
-    pub fn with_gp_tiebreak(
-        mut self,
-        observed: impl IntoIterator<Item = Direction>,
-    ) -> Self {
+    pub fn with_gp_tiebreak(mut self, observed: impl IntoIterator<Item = Direction>) -> Self {
         let mut gp = crate::gp_acquisition::GpAcquisition::new();
         for dir in observed {
             gp.observe(&dir);
@@ -829,7 +826,12 @@ impl HealPipeline {
 
         // Step 1: retrieve past trajectories for this rule + code context.
         let query = LatentQuery::new(rule_id.to_string(), buggy_code);
-        self.memory.retrieve_into(&query, 5, &mut self.retrieve_scratch, &mut self.retrieve_out);
+        self.memory.retrieve_into(
+            &query,
+            5,
+            &mut self.retrieve_scratch,
+            &mut self.retrieve_out,
+        );
 
         // Step 2: draft a fix using the existing L1 drafter.
         let drafted = self.drafter.draft_fix(rule_id, buggy_code, corpus);
@@ -972,7 +974,8 @@ impl HealPipeline {
         self.memory.insert(traj);
 
         // 3. Update the trajectory's success/fail stats + evidential tier.
-        self.memory.record_outcome(rule_id, fixed_code, success, verified);
+        self.memory
+            .record_outcome(rule_id, fixed_code, success, verified);
 
         // 4. EMA direction update (the actual "evolution").
         self.evolution.record_outcome(rule_id, &fix_dir, success);
@@ -1059,13 +1062,15 @@ impl HealPipeline {
             // + Stage 2 proposer takes over. (The drafter returns None for
             // empty candidates, so stage1_ok is always false here.)
             let empty: [ClippyFixEntry; 0] = [];
-            let stage1_ok = if let Some(draft) = self.drafter.draft_fix(rule_id, buggy_code, &empty) {
+            let stage1_ok = if let Some(draft) = self.drafter.draft_fix(rule_id, buggy_code, &empty)
+            {
                 let v = verifier.verify(&draft.code, rule_id);
                 if v.ran && v.lint_resolved {
                     // Issue 021: a verifier-passed fix is a certification —
                     // record a Certified trajectory in memory (the tier's
                     // admission rule IS the verified-pool admission).
-                    self.memory.record_certified(rule_id, buggy_code, &draft.code);
+                    self.memory
+                        .record_certified(rule_id, buggy_code, &draft.code);
                     self.adaptive.insert(rule_id, buggy_code, draft.code);
                     report.stage1_verified += 1;
                     true
@@ -1167,7 +1172,10 @@ mod tests {
         let mut p = make_pipeline();
         let empty: [ClippyFixEntry; 0] = [];
         let result = p.heal("needless_return", "return 42;", &empty);
-        assert!(result.is_none(), "empty corpus + empty memory → no candidates");
+        assert!(
+            result.is_none(),
+            "empty corpus + empty memory → no candidates"
+        );
     }
 
     #[test]
@@ -1178,12 +1186,19 @@ mod tests {
         let result = p.heal("needless_return", "return 42;", &corpus);
         assert!(result.is_some(), "corpus-only must produce a candidate");
         let r = result.unwrap();
-        assert_eq!(r.source, HealSource::Drafter, "no memory → must come from drafter");
+        assert_eq!(
+            r.source,
+            HealSource::Drafter,
+            "no memory → must come from drafter"
+        );
         // T9.3: an unseen candidate now scores 0.6·0.5 + 0.4·beta(0,0) =
         // 0.32, not 0.5. The Beta lower bound reports "no evidence" as a
         // conservative 0.05 rather than a neutral 0.5 — that is the point of
         // the change, so this pins the new value deliberately.
-        assert_eq!(r.evolution_score, 0.320_000_02, "unseen lint → no-evidence score");
+        assert_eq!(
+            r.evolution_score, 0.320_000_02,
+            "unseen lint → no-evidence score"
+        );
     }
 
     #[test]
@@ -1209,7 +1224,13 @@ mod tests {
         assert_eq!(r1.evolution_score, 0.320_000_02); // T9.3 no-evidence score
 
         // Report a success with the correct fix.
-        p.report_outcome("needless_return", "return 42;", "fn foo() -> i32 { 42 }", true, false);
+        p.report_outcome(
+            "needless_return",
+            "return 42;",
+            "fn foo() -> i32 { 42 }",
+            true,
+            false,
+        );
 
         // After a success: the evolved direction should favor the correct fix.
         let r2 = p.heal("needless_return", "return 42;", &corpus).unwrap();
@@ -1251,7 +1272,11 @@ mod tests {
         for _ in 0..50 {
             let _ = p.heal("needless_return", "return 42;", &corpus);
         }
-        assert_eq!(p.retrieve_out.capacity(), cap_retrieve_out, "retrieve_out grew");
+        assert_eq!(
+            p.retrieve_out.capacity(),
+            cap_retrieve_out,
+            "retrieve_out grew"
+        );
     }
 
     #[test]
@@ -1307,10 +1332,26 @@ mod tests {
             notes: Some("ParetoDominated 0.20-0.40x (Bench 013)".to_string()),
         }];
         let mut p = make_pipeline();
-        let result = p.heal("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
-        assert_eq!(result.source, HealSource::Drafter, "no memory seeded → must come from drafter");
-        assert!(result.context_notes.is_some(), "drafter path must surface context_notes");
-        assert_eq!(result.context_notes.as_deref(), Some("ParetoDominated 0.20-0.40x (Bench 013)"));
+        let result = p
+            .heal(
+                "precompute-table",
+                "let pop = v.iter().filter(|x| **x).count();",
+                &entries,
+            )
+            .unwrap();
+        assert_eq!(
+            result.source,
+            HealSource::Drafter,
+            "no memory seeded → must come from drafter"
+        );
+        assert!(
+            result.context_notes.is_some(),
+            "drafter path must surface context_notes"
+        );
+        assert_eq!(
+            result.context_notes.as_deref(),
+            Some("ParetoDominated 0.20-0.40x (Bench 013)")
+        );
     }
 
     #[test]
@@ -1320,7 +1361,10 @@ mod tests {
         let mut p = make_pipeline();
         let corpus = mock_corpus();
         let result = p.heal("needless_return", "return 42;", &corpus).unwrap();
-        assert!(result.context_notes.is_none(), "default clippy entries should have no context_notes");
+        assert!(
+            result.context_notes.is_none(),
+            "default clippy entries should have no context_notes"
+        );
     }
 
     #[test]
@@ -1341,10 +1385,26 @@ mod tests {
             "let pop = v.iter().filter(|x| **x).count();",
             "let pop = v.iter().filter(|x| **x).count(); // table".to_string(),
         );
-        let result = p.heal("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
-        assert_eq!(result.source, HealSource::Stage2Adaptive, "must come from Stage2 cache");
-        assert!(result.context_notes.is_some(), "Stage2 path must surface context_notes from corpus");
-        assert_eq!(result.context_notes.as_deref(), Some("ParetoDominated 0.20-0.40x (Bench 013)"));
+        let result = p
+            .heal(
+                "precompute-table",
+                "let pop = v.iter().filter(|x| **x).count();",
+                &entries,
+            )
+            .unwrap();
+        assert_eq!(
+            result.source,
+            HealSource::Stage2Adaptive,
+            "must come from Stage2 cache"
+        );
+        assert!(
+            result.context_notes.is_some(),
+            "Stage2 path must surface context_notes from corpus"
+        );
+        assert_eq!(
+            result.context_notes.as_deref(),
+            Some("ParetoDominated 0.20-0.40x (Bench 013)")
+        );
     }
 
     #[test]
@@ -1363,14 +1423,26 @@ mod tests {
         p.seed_from_corpus(&entries);
         // Report a success on the memory fix so its success_rate > drafter's.
         // Simulated outcome (no validator ran) — verified: false.
-        p.report_outcome("annotated-rule", "let buggy = 1;", "let fixed = 1;", true, false);
+        p.report_outcome(
+            "annotated-rule",
+            "let buggy = 1;",
+            "let fixed = 1;",
+            true,
+            false,
+        );
 
         let result = p.heal("annotated-rule", "let buggy = 1;", &entries);
         assert!(result.is_some(), "must produce a result");
         let r = result.unwrap();
         // The annotation must surface regardless of source (Drafter or Memory).
-        assert!(r.context_notes.is_some(), "memory path must surface context_notes from corpus");
-        assert_eq!(r.context_notes.as_deref(), Some("Mixed 2/4 Faster (Bench 013)"));
+        assert!(
+            r.context_notes.is_some(),
+            "memory path must surface context_notes from corpus"
+        );
+        assert_eq!(
+            r.context_notes.as_deref(),
+            Some("Mixed 2/4 Faster (Bench 013)")
+        );
     }
 
     // ── Issue 048 T3 — GP acquisition tie-break ─────────────────────────
@@ -1384,7 +1456,10 @@ mod tests {
     #[test]
     fn gp_tiebreak_default_pipeline_has_none_installed() {
         let p = make_pipeline();
-        assert!(!p.has_gp_tiebreak(), "default: no GP installed → bit-identical pre-048");
+        assert!(
+            !p.has_gp_tiebreak(),
+            "default: no GP installed → bit-identical pre-048"
+        );
     }
 
     #[test]
@@ -1455,8 +1530,14 @@ mod tests {
         // Without GP the tie resolves to first-index (the drafter candidate,
         // pushed first); with GP it must flip to B (the only unobserved
         // direction — highest σ²).
-        assert_eq!(r0.fixed_code, corpus[0].fixed_code, "no GP → first-index tie order");
-        assert_eq!(r1.fixed_code, "fn b() { 2 }", "GP tie-break must pick the unobserved direction");
+        assert_eq!(
+            r0.fixed_code, corpus[0].fixed_code,
+            "no GP → first-index tie order"
+        );
+        assert_eq!(
+            r1.fixed_code, "fn b() { 2 }",
+            "GP tie-break must pick the unobserved direction"
+        );
     }
 
     #[test]
@@ -1479,7 +1560,13 @@ mod tests {
         ));
         // 10 successes on A.
         for _ in 0..10 {
-            p.report_outcome("needless_return", "fn a() { return 1; }", "fn a() { 1 }", true, false);
+            p.report_outcome(
+                "needless_return",
+                "fn a() { return 1; }",
+                "fn a() { 1 }",
+                true,
+                false,
+            );
         }
         let dir_a = embed_helper("needless_return", "fn a() { 1 }");
         // Rebuild with GP seeded on A (the winner) — payoff must still pick A.
@@ -1495,24 +1582,43 @@ mod tests {
             "fn b() { 2 }".to_string(),
         ));
         for _ in 0..10 {
-            p2.report_outcome("needless_return", "fn a() { return 1; }", "fn a() { 1 }", true, false);
+            p2.report_outcome(
+                "needless_return",
+                "fn a() { return 1; }",
+                "fn a() { 1 }",
+                true,
+                false,
+            );
         }
         let mut p2 = p2.with_gp_tiebreak([dir_a]);
         let corpus = mock_corpus();
-        let r = p2.heal("needless_return", "fn a() { return 1; }", &corpus).unwrap();
-        assert_eq!(r.fixed_code, "fn a() { 1 }", "strictly better score wins regardless of σ²");
+        let r = p2
+            .heal("needless_return", "fn a() { return 1; }", &corpus)
+            .unwrap();
+        assert_eq!(
+            r.fixed_code, "fn a() { 1 }",
+            "strictly better score wins regardless of σ²"
+        );
     }
 
     #[test]
     fn gp_tiebreak_observations_grow_on_outcome() {
         let mut p = make_pipeline().with_gp_tiebreak([]);
-        p.report_outcome("needless_return", "fn a() { return 1; }", "fn a() { 1 }", true, false);
+        p.report_outcome(
+            "needless_return",
+            "fn a() { return 1; }",
+            "fn a() { 1 }",
+            true,
+            false,
+        );
         // Internal growth is observable via behavior: σ² for the reported
         // direction collapses. We can't read the private field from here —
         // pin via the standalone module instead (gp_acquisition's own tests
         // cover collapse); here just pin that outcomes don't panic + the
         // pipeline still heals.
         let corpus = mock_corpus();
-        assert!(p.heal("needless_return", "fn a() { return 1; }", &corpus).is_some());
+        assert!(p
+            .heal("needless_return", "fn a() { return 1; }", &corpus)
+            .is_some());
     }
 }

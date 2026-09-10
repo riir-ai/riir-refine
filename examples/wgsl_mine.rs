@@ -153,7 +153,10 @@ fn enumerate_commits(
     parse_log(&log, &move |f| set.iter().any(|p| p == f))
 }
 
-fn parse_log(log: &str, keep: &dyn Fn(&str) -> bool) -> Result<Vec<(String, String, String)>, String> {
+fn parse_log(
+    log: &str,
+    keep: &dyn Fn(&str) -> bool,
+) -> Result<Vec<(String, String, String)>, String> {
     let mut out = Vec::new();
     let mut commit = String::new();
     let mut subject = String::new();
@@ -237,9 +240,9 @@ fn main() {
         // rule on its OTHER unchanged kernels).
         const NEAR: i64 = 10;
         for f in &pre_findings {
-            let near_post = post_findings.iter().any(|p| {
-                p.rule_id == f.rule_id && (p.line as i64 - f.line as i64).abs() <= NEAR
-            });
+            let near_post = post_findings
+                .iter()
+                .any(|p| p.rule_id == f.rule_id && (p.line as i64 - f.line as i64).abs() <= NEAR);
             if near_post {
                 continue; // the finding persists — nothing to pair
             }
@@ -255,8 +258,11 @@ fn main() {
             // …whose fired line is diff-ASSOCIATED (removed directly, or inside
             // a changed hunk's old-side span — the 698 stride fix leaves the
             // accumulation as unchanged context inside the hunk).
-            let diff = git(&repo, &["diff", "-U3", &format!("{commit}^"), commit, "--", file])
-                .unwrap_or_default();
+            let diff = git(
+                &repo,
+                &["diff", "-U3", &format!("{commit}^"), commit, "--", file],
+            )
+            .unwrap_or_default();
             let (spans, removed) = hunk_spans_and_removed(&diff);
             let evidence = if removed.contains(&f.line) {
                 Evidence::Removed

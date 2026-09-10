@@ -11,9 +11,7 @@
 //! cargo run --example heal_demo
 //! ```
 
-use riir_clippy::{
-    build_seed_corpus, ClippyTernaryDrafter, RustAnalyzerPruner,
-};
+use riir_clippy::{build_seed_corpus, ClippyTernaryDrafter, RustAnalyzerPruner};
 
 fn main() {
     println!("╔══════════════════════════════════════════════════════════════╗");
@@ -23,7 +21,8 @@ fn main() {
 
     // ── L0: Build the corpus ─────────────────────────────────────────────
     let corpus = build_seed_corpus();
-    println!("📦 L0 Corpus: {} lint entries (BLAKE3 verified: {})",
+    println!(
+        "📦 L0 Corpus: {} lint entries (BLAKE3 verified: {})",
         corpus.entries.len(),
         if corpus.verify() { "✅" } else { "❌" }
     );
@@ -69,7 +68,11 @@ fn main() {
                 drafted += 1;
                 // L2: Validate the fix
                 let result = pruner.validate(&f.code, lint_name);
-                let status = if result.is_valid() { "✅ VALID" } else { "❌ INVALID" };
+                let status = if result.is_valid() {
+                    "✅ VALID"
+                } else {
+                    "❌ INVALID"
+                };
                 validated += if result.is_valid() { 1 } else { 0 };
 
                 println!("Lint: {} [{:?}]", lint_name, f.source);
@@ -77,8 +80,10 @@ fn main() {
                 if let Some(notes) = &f.context_notes {
                     println!("  ⚠️  Context-dependent: {}", notes);
                 }
-                println!("  Parse:      {}  Lint resolved: {}  {}",
-                    result.parses, result.lint_resolved, status);
+                println!(
+                    "  Parse:      {}  Lint resolved: {}  {}",
+                    result.parses, result.lint_resolved, status
+                );
                 if !result.diagnostics.is_empty() {
                     println!("  Diagnostics: {}", result.diagnostics.join("; "));
                 }
@@ -90,7 +95,10 @@ fn main() {
                 println!();
             }
             None => {
-                println!("Lint: {} — ⚠️  no fix drafted (empty candidates)", lint_name);
+                println!(
+                    "Lint: {} — ⚠️  no fix drafted (empty candidates)",
+                    lint_name
+                );
                 println!();
             }
         }
@@ -101,8 +109,14 @@ fn main() {
     println!("  Total lints:    {}", total);
     println!("  Fixes drafted:  {} (L1 ternary matvec)", drafted);
     println!("  Fixes valid:    {} (L2 syntax pruner)", validated);
-    println!("  Pass rate:      {:.1}%",
-        if drafted > 0 { validated as f64 / drafted as f64 * 100.0 } else { 0.0 });
+    println!(
+        "  Pass rate:      {:.1}%",
+        if drafted > 0 {
+            validated as f64 / drafted as f64 * 100.0
+        } else {
+            0.0
+        }
+    );
     println!();
 
     // ── Fallback mode demo (no weights) ──────────────────────────────────
@@ -117,7 +131,11 @@ fn main() {
         if let Some(notes) = &fix.context_notes {
             println!("  ⚠️  Context-dependent: {}", notes);
         }
-        println!("  Valid:    {} {}", result.parses, if result.is_valid() { "✅" } else { "❌" });
+        println!(
+            "  Valid:    {} {}",
+            result.parses,
+            if result.is_valid() { "✅" } else { "❌" }
+        );
     }
     println!();
     println!("✅ Pipeline demo complete.");

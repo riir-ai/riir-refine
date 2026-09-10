@@ -636,22 +636,21 @@ mod tests {
             vec![5.0, 5.0],
             vec![6.0, 6.0],
         ];
-        assert!(
-            std::panic::catch_unwind(|| scaffold_value(&ragged, &ModelabilityConfig::default()))
-                .is_err()
-        );
-        assert!(
-            std::panic::catch_unwind(|| {
-                scaffold_value(
-                    &vec![vec![0.0, 0.0]; 20],
-                    &ModelabilityConfig {
-                        k: 0,
-                        ..ModelabilityConfig::default()
-                    },
-                )
-            })
-            .is_err()
-        );
+        assert!(std::panic::catch_unwind(|| scaffold_value(
+            &ragged,
+            &ModelabilityConfig::default()
+        ))
+        .is_err());
+        assert!(std::panic::catch_unwind(|| {
+            scaffold_value(
+                &vec![vec![0.0, 0.0]; 20],
+                &ModelabilityConfig {
+                    k: 0,
+                    ..ModelabilityConfig::default()
+                },
+            )
+        })
+        .is_err());
     }
 
     #[test]
@@ -690,8 +689,17 @@ mod tests {
     #[test]
     fn rank_correlation_undefined_cases_return_none() {
         assert!(rank_correlation(&[1.0], &[2.0]).is_none(), "n < 2");
-        assert!(rank_correlation(&[1.0, 2.0], &[1.0]).is_none(), "length mismatch");
-        assert!(rank_correlation(&[7.0, 7.0, 7.0], &[1.0, 2.0, 3.0]).is_none(), "constant x");
-        assert!(rank_correlation(&[1.0, 2.0, 3.0], &[4.0, 4.0, 4.0]).is_none(), "constant y");
+        assert!(
+            rank_correlation(&[1.0, 2.0], &[1.0]).is_none(),
+            "length mismatch"
+        );
+        assert!(
+            rank_correlation(&[7.0, 7.0, 7.0], &[1.0, 2.0, 3.0]).is_none(),
+            "constant x"
+        );
+        assert!(
+            rank_correlation(&[1.0, 2.0, 3.0], &[4.0, 4.0, 4.0]).is_none(),
+            "constant y"
+        );
     }
 }

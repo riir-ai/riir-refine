@@ -16,7 +16,7 @@
 
 #![cfg(feature = "cf_workers_ai")]
 
-use riir_clippy::llm_spend::{SpendLedger, est_input_tokens};
+use riir_clippy::llm_spend::{est_input_tokens, SpendLedger};
 
 struct CountingAllocator;
 
@@ -66,7 +66,10 @@ fn g2_reserve_reconcile_release_path_is_alloc_free() {
 
     assert_eq!(mid, before, "reserve must not allocate");
     assert_eq!(after_reconcile, mid, "reconcile must not allocate");
-    assert_eq!(after_reserve3, after_reconcile, "a second reserve stays alloc-free");
+    assert_eq!(
+        after_reserve3, after_reconcile,
+        "a second reserve stays alloc-free"
+    );
     assert_eq!(after_release, after_reserve3, "release must not allocate");
 
     // The estimate helper is on the same hot path.
@@ -74,7 +77,10 @@ fn g2_reserve_reconcile_release_path_is_alloc_free() {
     let est = est_input_tokens(&prompt);
     let a = ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
     assert_eq!(a, b, "est_input_tokens must not allocate");
-    assert!(est > 10_000, "sanity: a 48 KiB prompt estimates a real token count (got {est})");
+    assert!(
+        est > 10_000,
+        "sanity: a 48 KiB prompt estimates a real token count (got {est})"
+    );
 
     let _ = std::fs::remove_dir_all(dir);
     println!("\n=== llm-spend G2 — reserve/reconcile/release, 0 allocs, est {est} in-tokens ===");

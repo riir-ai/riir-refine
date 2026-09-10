@@ -40,7 +40,8 @@ pub fn collect_edits(rule_id: &str, source: &str) -> Vec<RuleEdit> {
 /// [`collect_edits`] with caller-supplied evidence for the gated rules.
 #[must_use]
 pub fn collect_edits_with(rule_id: &str, source: &str, ctx: &ScanContext) -> Vec<RuleEdit> {
-    if FIXABLE_DOCKER.contains(&rule_id) { rules::scan_source_with(source, ctx)
+    if FIXABLE_DOCKER.contains(&rule_id) {
+        rules::scan_source_with(source, ctx)
             .into_iter()
             .filter(|f| f.rule_id == rule_id)
             .filter_map(|f| {
@@ -49,7 +50,10 @@ pub fn collect_edits_with(rule_id: &str, source: &str, ctx: &ScanContext) -> Vec
                     edit,
                 })
             })
-            .collect() } else { Vec::new() }
+            .collect()
+    } else {
+        Vec::new()
+    }
 }
 
 /// Apply every bounded fix the source triggers, in one pass.
@@ -89,7 +93,10 @@ mod tests {
                 .find(|r| r.rule_id == *id)
                 .expect("corpus rule");
             let edits = collect_edits_with(id, &rule.buggy_code, &fixture_ctx());
-            assert!(!edits.is_empty(), "{id} produced no edit on its own fixture");
+            assert!(
+                !edits.is_empty(),
+                "{id} produced no edit on its own fixture"
+            );
         }
     }
 

@@ -55,8 +55,8 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use riir_clippy::cf_workers_ai::{
-    self, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass, RegateHarness, Sample,
-    SampleSource, reachable_samples,
+    self, reachable_samples, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass,
+    RegateHarness, Sample, SampleSource,
 };
 use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_clippy::l4_daemon::DaemonL4;
@@ -120,7 +120,10 @@ impl Args {
         };
         let mut argv = std::env::args().skip(1);
         while let Some(arg) = argv.next() {
-            let mut val = || argv.next().unwrap_or_else(|| panic!("missing value for {arg}"));
+            let mut val = || {
+                argv.next()
+                    .unwrap_or_else(|| panic!("missing value for {arg}"))
+            };
             match arg.as_str() {
                 "--arm" => a.arm = val(),
                 "--source" => a.source = val(),
@@ -131,7 +134,9 @@ impl Args {
                         .collect();
                 }
                 "--limit" => a.limit = val().parse().expect("--limit must be an integer"),
-                "--few-shots" => a.few_shots = val().parse().expect("--few-shots must be an integer"),
+                "--few-shots" => {
+                    a.few_shots = val().parse().expect("--few-shots must be an integer")
+                }
                 "--max-new" => a.max_new = val().parse().expect("--max-new must be an integer"),
                 "--data-dir" => a.data_dir = Some(PathBuf::from(val())),
                 "--out" => a.out = Some(PathBuf::from(val())),
@@ -234,7 +239,10 @@ fn gate_samples(samples: Vec<Sample>, args: &Args) -> Vec<Sample> {
         match decision {
             GateDecision::Allow => kept.push(s),
             GateDecision::Redacted { payload, .. } => {
-                eprintln!("[regate] REDACTED {} (findings replaced; policy allows redacted)", s.id);
+                eprintln!(
+                    "[regate] REDACTED {} (findings replaced; policy allows redacted)",
+                    s.id
+                );
                 s.module = payload;
                 kept.push(s);
             }
@@ -250,7 +258,10 @@ fn gate_samples(samples: Vec<Sample>, args: &Args) -> Vec<Sample> {
             }
         }
     }
-    eprintln!("[regate] redaction gate: {} allowed, {blocked} blocked", kept.len());
+    eprintln!(
+        "[regate] redaction gate: {} allowed, {blocked} blocked",
+        kept.len()
+    );
     if kept.is_empty() {
         eprintln!("FATAL: redaction gate blocked every sample — nothing to run");
         std::process::exit(4);
@@ -341,7 +352,11 @@ struct GenStats {
 
 impl GenStats {
     fn empty() -> Self {
-        Self { latency_ms: 0, prompt_tokens: 0, completion_tokens: 0 }
+        Self {
+            latency_ms: 0,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+        }
     }
 }
 
@@ -502,7 +517,10 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         );
     }
 
-    let off_corpus = prepared.iter().filter(|p| p.miss == MissClass::OffCorpus).count();
+    let off_corpus = prepared
+        .iter()
+        .filter(|p| p.miss == MissClass::OffCorpus)
+        .count();
     let off_corpus_declined = prepared
         .iter()
         .filter(|p| p.miss == MissClass::OffCorpus)
@@ -544,12 +562,16 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     }
 
     println!("\n── v2edit reference responses (self-consistency; details for first 8) ──");
-    let v2 = prepared.iter().filter(|p| p.sample.source == SampleSource::V2edit);
+    let v2 = prepared
+        .iter()
+        .filter(|p| p.sample.source == SampleSource::V2edit);
     let (mut em_hits, mut em_total, mut merge_ok, mut control) = (0usize, 0, 0, 0);
     let mut kept = 0usize;
     let mut merge_strategies: Vec<&'static str> = Vec::new();
     for (idx, p) in v2.enumerate() {
-        let Some(exp) = p.sample.expected.as_deref() else { continue };
+        let Some(exp) = p.sample.expected.as_deref() else {
+            continue;
+        };
         let score = cf_workers_ai::score_case(verifier, &p.sample, exp, None);
         em_total += 1;
         em_hits += usize::from(score.em == Some(true));
@@ -568,7 +590,11 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
                 score.merge_strategy.map(|m| m.name()),
                 score.control_fires,
                 score.findings_before,
-                if score.findings_after == usize::MAX { -1 } else { score.findings_after as isize },
+                if score.findings_after == usize::MAX {
+                    -1
+                } else {
+                    score.findings_after as isize
+                },
                 score.keep_oracle,
             );
         }
@@ -601,7 +627,10 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             std::process::exit(3);
         }
     };
-    let mut out = args.out.as_ref().and_then(|p| std::fs::File::create(p).ok());
+    let mut out = args
+        .out
+        .as_ref()
+        .and_then(|p| std::fs::File::create(p).ok());
     let mut summary = ArmSummary::default();
     let (mut lat_total, mut lat_max) = (0u128, 0u128);
 
@@ -619,7 +648,15 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
                 eprintln!("  GEN FAILED (recorded unscoreable): {e}");
                 let score = cf_workers_ai::score_case(verifier, &p.sample, "", None);
                 summary.add(&score, p.reachable_miss, 0, 0, 0.0, 0.0);
-                record_case(&mut out, p, &args.arm, prompt, "", &GenStats::empty(), &score);
+                record_case(
+                    &mut out,
+                    p,
+                    &args.arm,
+                    prompt,
+                    "",
+                    &GenStats::empty(),
+                    &score,
+                );
                 continue;
             }
         };
@@ -643,7 +680,11 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             score.keep_strict,
             score.em,
             score.findings_before,
-            if score.findings_after == usize::MAX { -1 } else { score.findings_after as isize },
+            if score.findings_after == usize::MAX {
+                -1
+            } else {
+                score.findings_after as isize
+            },
             gen.latency_ms,
             gen.prompt_tokens,
             gen.completion_tokens,
@@ -670,7 +711,11 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         "  tokens: {} prompt + {} completion · $/fix ≈ {:.5}",
         summary.prompt_tokens,
         summary.completion_tokens,
-        if summary.n > 0 { summary.cost_usd / summary.n as f64 } else { 0.0 },
+        if summary.n > 0 {
+            summary.cost_usd / summary.n as f64
+        } else {
+            0.0
+        },
     );
     println!("  latency: total {lat_total}ms, max {lat_max}ms");
     println!("  {}", summary.verdict_vs_decline());
@@ -739,7 +784,8 @@ fn append_quality_history(arm: &str, model: &str, summary: &ArmSummary) {
     let path = std::env::var("RIIR_FIXER_QUALITY_HISTORY")
         .unwrap_or_else(|_| ".benchmarks/fixer_quality_history.jsonl".to_string());
     let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": arm,
@@ -764,7 +810,11 @@ fn append_quality_history(arm: &str, model: &str, summary: &ArmSummary) {
             "max": u64::try_from(summary.latency_ms_max).unwrap_or(u64::MAX),
         },
     });
-    let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    let mut f = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         Ok(f) => f,
         Err(e) => {
             eprintln!("[regate] quality-history write skipped ({path}: {e})");
@@ -792,7 +842,8 @@ fn append_cost_ledger(
     let path = std::env::var("RIIR_LLM_COST_LEDGER")
         .unwrap_or_else(|_| ".benchmarks/llm_cost_ledger.jsonl".to_string());
     let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": arm,
@@ -820,7 +871,11 @@ fn append_cost_ledger(
         "kat": serde_json::Value::Null,
         "note": "kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)",
     });
-    let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    let mut f = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         Ok(f) => f,
         Err(e) => {
             eprintln!("[regate] cost ledger write skipped ({path}: {e})");
@@ -835,7 +890,10 @@ fn append_cost_ledger(
 }
 
 fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
-    let (bin, gguf, lora) = if let (Some(b), Some(g), Some(l)) = (&args.l4_bin, &args.l4_gguf, &args.l4_lora) { (b.clone(), g.clone(), l.clone()) } else {
+    let (bin, gguf, lora) =
+        if let (Some(b), Some(g), Some(l)) = (&args.l4_bin, &args.l4_gguf, &args.l4_lora) {
+            (b.clone(), g.clone(), l.clone())
+        } else {
             eprintln!(
                 "SKIP arm C: --l4-bin, --l4-gguf and --l4-lora are all required (the riir-train \
                  driver refuses to start without --lora)"
@@ -853,7 +911,10 @@ fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         "[regate] LOAD-DISCLOSURE: record sibling GPU/CPU load before quoting arm C — numbers \
          measured under compute contention are provisional (the GPU-exclusivity rule)"
     );
-    let mut out = args.out.as_ref().and_then(|p| std::fs::File::create(p).ok());
+    let mut out = args
+        .out
+        .as_ref()
+        .and_then(|p| std::fs::File::create(p).ok());
     let mut summary = ArmSummary::default();
     let (mut lat_total, mut lat_max) = (0u128, 0u128);
 
@@ -877,9 +938,24 @@ fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             score.keep_oracle,
             score.keep_strict,
             score.findings_before,
-            if score.findings_after == usize::MAX { -1 } else { score.findings_after as isize },
+            if score.findings_after == usize::MAX {
+                -1
+            } else {
+                score.findings_after as isize
+            },
         );
-        record_case(&mut out, p, "C", &p.prompt_prepass, &text, &GenStats { latency_ms: latency, ..GenStats::empty() }, &score);
+        record_case(
+            &mut out,
+            p,
+            "C",
+            &p.prompt_prepass,
+            &text,
+            &GenStats {
+                latency_ms: latency,
+                ..GenStats::empty()
+            },
+            &score,
+        );
     }
 
     println!("\n═ arm C summary (daemon; tokens n/a) ═");
@@ -937,9 +1013,7 @@ fn bt8_first_fn(code: &str) -> Option<(&str, usize)> {
     let mut from = 0usize;
     while let Some(rel) = code[from..].find("fn ") {
         let at = from + rel;
-        let bounded = at == 0
-            || !code[..at]
-                .ends_with(|c: char| c.is_alphanumeric() || c == '_');
+        let bounded = at == 0 || !code[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_');
         let name_at = at + 3;
         let rest = &code[name_at..];
         let end = rest
@@ -979,11 +1053,14 @@ struct Bt8Pair {
 /// id-adjacent predecessors). Recorded in the bench doc BEFORE the run.
 #[cfg(feature = "score_bench")]
 fn bt8_build_pairs(harness: &mut RegateHarness, few_shots: usize) -> Vec<Bt8Pair> {
-use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
+    use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
 
     const ANCHOR: &str = "katgpt-rs-bench_ptrm_width_scaling-002";
     let mut fixtures = riir_clippy::score_bench::fixtures::fixtures();
-    assert!(fixtures.len() >= 12, "frozen set smaller than the pre-registered pair count");
+    assert!(
+        fixtures.len() >= 12,
+        "frozen set smaller than the pre-registered pair count"
+    );
     fixtures.sort_by(|a, b| a.id.cmp(b.id));
     let pos = fixtures
         .iter()
@@ -996,7 +1073,10 @@ use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
     };
     let selected: Vec<_> = fixtures[start..start + 12].to_vec();
     assert_eq!(selected.len(), 12, "the pre-registered pair count");
-    assert!(selected.iter().any(|f| f.id == ANCHOR), "anchor in the window");
+    assert!(
+        selected.iter().any(|f| f.id == ANCHOR),
+        "anchor in the window"
+    );
     eprintln!(
         "[bt8] window {start}..{} of {} fixtures (anchor at {pos}) — 12 pairs, named BEFORE the run",
         start + 12,
@@ -1005,8 +1085,8 @@ use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
 
     let mut pairs = Vec::with_capacity(selected.len());
     for f in selected {
-        let (name, _at) = bt8_first_fn(f.code)
-            .unwrap_or_else(|| panic!("fixture {} has no fn to twin", f.id));
+        let (name, _at) =
+            bt8_first_fn(f.code).unwrap_or_else(|| panic!("fixture {} has no fn to twin", f.id));
         let mut renamed = format!("{name}_alt");
         if ident_mentioned(f.code, &renamed) {
             renamed = format!("{name}_v2");
@@ -1035,13 +1115,8 @@ use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
         let (miss, modelless) = harness.classify(lint.as_deref().unwrap_or(""), &twin);
         let (traj, patterns) = harness.trajectory_context(&twin, 3);
         let channels_empty = traj.is_empty() && patterns.is_empty();
-        let prompt_a = cf_workers_ai::prompt_growing(
-            &twin,
-            modelless.as_deref(),
-            &fs_twin,
-            &traj,
-            &patterns,
-        );
+        let prompt_a =
+            cf_workers_ai::prompt_growing(&twin, modelless.as_deref(), &fs_twin, &traj, &patterns);
         // The ledger restates only TRUE identity fields: the real target lint
         // (None on clean fixtures — never a lie), the renamed symbol, and the
         // symbol's verbatim byte span in the twin.
@@ -1127,7 +1202,14 @@ fn bt8_grade(
 }
 
 #[cfg(feature = "score_bench")]
-fn bt8_row(out: &mut Option<std::fs::File>, p: &Bt8Pair, arm: &str, c: &Bt8Call, prompt: &str, gen: &str) {
+fn bt8_row(
+    out: &mut Option<std::fs::File>,
+    p: &Bt8Pair,
+    arm: &str,
+    c: &Bt8Call,
+    prompt: &str,
+    gen: &str,
+) {
     if let Some(f) = out.as_mut() {
         let row = serde_json::json!({
             "pair": p.fixture_id,
@@ -1164,7 +1246,8 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
         let mut all_pinned = true;
         for p in &pairs {
             let planted_follow = p.twin.clone();
-            let planted_regress = cf_workers_ai::perturb_symbol_ident(&p.twin, &p.renamed, &p.original);
+            let planted_regress =
+                cf_workers_ai::perturb_symbol_ident(&p.twin, &p.renamed, &p.original);
             let f = bt8_grade(verifier, p, &planted_follow, &args.behav_dir);
             let r = bt8_grade(verifier, p, &planted_regress, &args.behav_dir);
             let ok = f.follows && !f.prior && !r.follows && r.prior;
@@ -1184,7 +1267,11 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
         println!(
             "\n═ BT8DRY: {} pairs, planted instrument {} ═",
             pairs.len(),
-            if all_pinned { "PINNED" } else { "BROKEN — do not run BT8" }
+            if all_pinned {
+                "PINNED"
+            } else {
+                "BROKEN — do not run BT8"
+            }
         );
         if !all_pinned {
             std::process::exit(5);
@@ -1199,8 +1286,14 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
             std::process::exit(3);
         }
     };
-    let mut out = args.out.as_ref().and_then(|p| std::fs::File::create(p).ok());
-    let mut gens = args.gens.as_ref().and_then(|p| std::fs::File::create(p).ok());
+    let mut out = args
+        .out
+        .as_ref()
+        .and_then(|p| std::fs::File::create(p).ok());
+    let mut gens = args
+        .gens
+        .as_ref()
+        .and_then(|p| std::fs::File::create(p).ok());
     let mut per_pair: Vec<(bool, bool, Option<bool>, Option<bool>)> = Vec::new();
 
     for p in &pairs {
@@ -1244,17 +1337,31 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
             }
             println!(
                 "  {:<14} follows={} prior={} keep_s={:?} {}ms {}+{}tok",
-                arm, c.follows, c.prior, c.keep_strict, c.latency_ms, c.prompt_tokens, c.completion_tokens,
+                arm,
+                c.follows,
+                c.prior,
+                c.keep_strict,
+                c.latency_ms,
+                c.prompt_tokens,
+                c.completion_tokens,
             );
             bt8_row(&mut out, p, arm, &c, prompt, &gen.text);
             calls.push(c);
         }
-        per_pair.push((calls[0].follows, calls[1].follows, calls[0].keep_strict, calls[1].keep_strict));
+        per_pair.push((
+            calls[0].follows,
+            calls[1].follows,
+            calls[0].keep_strict,
+            calls[1].keep_strict,
+        ));
     }
 
     let follow_a = per_pair.iter().filter(|(a, ..)| *a).count();
     let follow_b = per_pair.iter().filter(|(_, b, ..)| *b).count();
-    let strict_a = per_pair.iter().filter(|(.., sa, _)| sa == &Some(true)).count();
+    let strict_a = per_pair
+        .iter()
+        .filter(|(.., sa, _)| sa == &Some(true))
+        .count();
     let strict_b = per_pair.iter().filter(|(.., sb)| sb == &Some(true)).count();
     let delta = follow_b as isize - follow_a as isize;
     let n = per_pair.len();
@@ -1273,7 +1380,11 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
     );
     println!(
         "  VERDICT: {}",
-        if bar_primary && bar_delta && bar_strict { "PASS" } else { "FAIL" }
+        if bar_primary && bar_delta && bar_strict {
+            "PASS"
+        } else {
+            "FAIL"
+        }
     );
     let server = client.fetch_usage_today().ok();
     if let Some(u) = &server {

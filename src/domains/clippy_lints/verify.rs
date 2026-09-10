@@ -141,7 +141,9 @@ impl ClippyVerifier {
         // Create the temp crate scaffold.
         let crate_dir = match self.prepare_crate(code) {
             Ok(dir) => dir,
-            Err(e) => return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}")),
+            Err(e) => {
+                return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
+            }
         };
 
         // Run cargo clippy.
@@ -178,8 +180,7 @@ impl ClippyVerifier {
         let dir = self.work_root.join(&hex[..16]);
 
         let src_dir = dir.join("src");
-        std::fs::create_dir_all(&src_dir)
-            .map_err(|e| format!("create_dir_all failed: {e}"))?;
+        std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
 
         // Write Cargo.toml (minimal, no deps).
         let cargo_toml = "[package]\n\
@@ -312,7 +313,10 @@ mod tests {
     fn parse_handles_malformed_json() {
         let json = "not json\n{\"reason\":\"compiler-message\"}\n{\"reason\":";
         let lints = parse_clippy_lints(json);
-        assert!(lints.is_empty(), "malformed JSON should be silently skipped");
+        assert!(
+            lints.is_empty(),
+            "malformed JSON should be silently skipped"
+        );
     }
 
     #[test]
@@ -374,10 +378,8 @@ mod tests {
 
     #[test]
     fn prepare_crate_writes_valid_scaffold() {
-        let tmp = std::env::temp_dir().join(format!(
-            "riir_clippy_test_prepare_{}",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("riir_clippy_test_prepare_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let code = "fn foo() -> i32 { 42 }";
@@ -404,10 +406,8 @@ mod tests {
     #[test]
     fn prepare_crate_stable_dir_for_same_code() {
         // Same code → same BLAKE3 hash → same dir (cargo cache reuse).
-        let tmp = std::env::temp_dir().join(format!(
-            "riir_clippy_test_stable_{}",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("riir_clippy_test_stable_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let code = "fn bar() -> u64 { 99 }";
@@ -421,10 +421,8 @@ mod tests {
 
     #[test]
     fn prepare_crate_different_code_different_dir() {
-        let tmp = std::env::temp_dir().join(format!(
-            "riir_clippy_test_diff_{}",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("riir_clippy_test_diff_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let dir1 = v.prepare_crate("fn a() {}").unwrap();

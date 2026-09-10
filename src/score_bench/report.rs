@@ -15,7 +15,11 @@
 // f32's 23-bit mantissa) + Hinnant's civil-calendar algorithm has bounded
 // intermediate ranges by construction. The pedantic cast lints are noise
 // here, allowed with cause.
-#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use serde::{Deserialize, Serialize};
 
@@ -311,7 +315,10 @@ pub fn print_report(score: &super::BenchScore) {
         "fixtures: {} ran / {} excluded (clean: {})",
         score.n_ran, score.n_excluded, score.n_clean
     );
-    println!("heal_rate            {:>6.1}%  (up is better)", score.heal_rate * 100.0);
+    println!(
+        "heal_rate            {:>6.1}%  (up is better)",
+        score.heal_rate * 100.0
+    );
     println!(
         "created_rate         {:>6.1}%  (down is better — {} new lint(s))",
         score.created_rate * 100.0,
@@ -349,13 +356,15 @@ pub fn print_report(score: &super::BenchScore) {
     // covers (the anomalous_negative reading: set composition, not substrate).
     // The OOD side resolves families through the raw span table — the frozen
     // fixtures carry construction-provenance, not the mining repo@sha.
+    print_provenance_families("ref", &ood.ref_set, &super::fixtures::fixtures(), |fx| {
+        super::ood::provenance_family(fx.provenance)
+    });
     print_provenance_families(
-        "ref",
-        &ood.ref_set,
-        &super::fixtures::fixtures(),
-        |fx| super::ood::provenance_family(fx.provenance),
+        "ood",
+        &ood.ood_set,
+        &super::generations::generation_v6(),
+        super::ood::ood_set_family,
     );
-    print_provenance_families("ood", &ood.ood_set, &super::generations::generation_v6(), super::ood::ood_set_family);
     println!("───────────────────────────────────────────────────────");
 }
 
@@ -387,7 +396,14 @@ struct ChartLayout {
 
 impl ChartLayout {
     const fn new() -> Self {
-        Self { w: 860.0, h: 400.0, ml: 64.0, mr: 16.0, mt: 56.0, mb: 44.0 }
+        Self {
+            w: 860.0,
+            h: 400.0,
+            ml: 64.0,
+            mr: 16.0,
+            mt: 56.0,
+            mb: 44.0,
+        }
     }
     fn plot_w(&self) -> f32 {
         self.w - self.ml - self.mr
@@ -410,10 +426,26 @@ struct SeriesSpec {
 
 fn series_specs() -> [SeriesSpec; 4] {
     [
-        SeriesSpec { label: "heal_rate", color: "#2e7d32", value: |r| r.heal_rate },
-        SeriesSpec { label: "decline_correct", color: "#1565c0", value: |r| r.decline_correctness },
-        SeriesSpec { label: "parse_safety", color: "#6a1b9a", value: |r| r.parse_safety },
-        SeriesSpec { label: "created_rate", color: "#c62828", value: |r| r.created_rate },
+        SeriesSpec {
+            label: "heal_rate",
+            color: "#2e7d32",
+            value: |r| r.heal_rate,
+        },
+        SeriesSpec {
+            label: "decline_correct",
+            color: "#1565c0",
+            value: |r| r.decline_correctness,
+        },
+        SeriesSpec {
+            label: "parse_safety",
+            color: "#6a1b9a",
+            value: |r| r.parse_safety,
+        },
+        SeriesSpec {
+            label: "created_rate",
+            color: "#c62828",
+            value: |r| r.created_rate,
+        },
     ]
 }
 
@@ -484,7 +516,11 @@ fn render_legend(w: &mut String, records: &[HistoryRecord], layout: &ChartLayout
         writeln!(w,
             "<line x1=\"{lx:.1}\" y1=\"36\" x2=\"{:.1}\" y2=\"36\" stroke=\"{}\" stroke-width=\"3\"/>",
             lx + 14.0, ser.color).unwrap();
-        writeln!(w, "<text x=\"{lx:.1}\" y=\"40\" font-size=\"11\" fill=\"#424242\">{text}</text>").unwrap();
+        writeln!(
+            w,
+            "<text x=\"{lx:.1}\" y=\"40\" font-size=\"11\" fill=\"#424242\">{text}</text>"
+        )
+        .unwrap();
     }
 }
 
@@ -516,9 +552,12 @@ fn render_series(w: &mut String, records: &[HistoryRecord], layout: &ChartLayout
             ser.color).unwrap();
         for (i, rec) in records.iter().enumerate() {
             let (x, y) = (x_of(i), layout.y_of((ser.value)(rec)));
-            writeln!(w,
+            writeln!(
+                w,
                 "<circle cx=\"{x:.1}\" cy=\"{y:.1}\" r=\"3\" fill=\"{}\"/>",
-                ser.color).unwrap();
+                ser.color
+            )
+            .unwrap();
         }
     }
 }
@@ -527,7 +566,12 @@ fn render_series(w: &mut String, records: &[HistoryRecord], layout: &ChartLayout
 fn render_x_labels(w: &mut String, records: &[HistoryRecord], layout: &ChartLayout) {
     use std::fmt::Write as _;
     let n = records.len();
-    let thin = if n <= 14 { 1 } else { (n as f32 / 14.0).ceil() as usize }.max(1);
+    let thin = if n <= 14 {
+        1
+    } else {
+        (n as f32 / 14.0).ceil() as usize
+    }
+    .max(1);
     let (base, step) = if n == 1 {
         (layout.ml + layout.plot_w() * 0.12, 0.0)
     } else {
@@ -579,7 +623,10 @@ mod tests {
 
     #[test]
     fn svg_is_well_formed_and_has_all_series() {
-        let records = vec![rec("2026-08-19T10:00:00", 0.72), rec("2026-08-19T11:00:00", 0.78)];
+        let records = vec![
+            rec("2026-08-19T10:00:00", 0.72),
+            rec("2026-08-19T11:00:00", 0.78),
+        ];
         let svg = render_svg(&records);
         assert!(svg.starts_with("<svg"));
         assert!(svg.trim_end().ends_with("</svg>"));
@@ -608,7 +655,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("history.jsonl");
         let _ = std::fs::remove_file(&path);
-        let recs = vec![rec("2026-08-19T10:00:00", 0.7), rec("2026-08-19T11:00:00", 0.75)];
+        let recs = vec![
+            rec("2026-08-19T10:00:00", 0.7),
+            rec("2026-08-19T11:00:00", 0.75),
+        ];
         for r in &recs {
             append_history(&path, r).unwrap();
         }
@@ -719,18 +769,27 @@ mod tests {
         let mut records: Vec<HistoryRecord> = (0..6).map(|i| gen_rec(i, 0.75, 1)).collect();
         records.push(gen_rec(6, 0.755, 1));
         let v = detect_saturation(&records, 1);
-        assert!(matches!(v, SaturationVerdict::Saturated { .. }), "0.005-class drift below ε saturates: {v:?}");
+        assert!(
+            matches!(v, SaturationVerdict::Saturated { .. }),
+            "0.005-class drift below ε saturates: {v:?}"
+        );
         // The boundary that IS active: a marginal comfortably above ε.
         records.push(gen_rec(7, 0.77, 1));
         let v = detect_saturation(&records, 1);
-        assert!(matches!(v, SaturationVerdict::Active { .. }), "0.02 gain is active: {v:?}");
+        assert!(
+            matches!(v, SaturationVerdict::Active { .. }),
+            "0.02 gain is active: {v:?}"
+        );
     }
 
     #[test]
     fn saturation_short_history_is_insufficient() {
         let records: Vec<HistoryRecord> = (0..5).map(|i| gen_rec(i, 0.9, 1)).collect();
         let v = detect_saturation(&records, 1);
-        assert_eq!(v, SaturationVerdict::InsufficientHistory { have: 5, need: 6 });
+        assert_eq!(
+            v,
+            SaturationVerdict::InsufficientHistory { have: 5, need: 6 }
+        );
     }
 
     #[test]
@@ -750,10 +809,15 @@ mod tests {
 
     #[test]
     fn saturation_line_renders_all_verdicts() {
-        assert!(saturation_line(&SaturationVerdict::Active { marginal: 0.02 }, 1).contains("ACTIVE"));
+        assert!(
+            saturation_line(&SaturationVerdict::Active { marginal: 0.02 }, 1).contains("ACTIVE")
+        );
         let s = saturation_line(&SaturationVerdict::Saturated { marginal: 0.0 }, 1);
         assert!(s.contains("SATURATED") && s.contains("--generation 2"));
-        let s = saturation_line(&SaturationVerdict::InsufficientHistory { have: 2, need: 6 }, 2);
+        let s = saturation_line(
+            &SaturationVerdict::InsufficientHistory { have: 2, need: 6 },
+            2,
+        );
         assert!(s.contains("no verdict") && s.contains("gen-2"));
     }
 }

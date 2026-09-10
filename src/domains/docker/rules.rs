@@ -142,12 +142,7 @@ pub fn scan_source_with(source: &str, ctx: &ScanContext) -> Vec<DockerFinding> {
 
 /// The detector proper — writes into the caller's buffer so both the
 /// allocating and the scratch-reusing entry points share ONE body.
-fn detect(
-    scan: &DockerfileScan,
-    source: &str,
-    ctx: &ScanContext,
-    out: &mut Vec<DockerFinding>,
-) {
+fn detect(scan: &DockerfileScan, source: &str, ctx: &ScanContext, out: &mut Vec<DockerFinding>) {
     for (idx, st) in scan.stanzas.iter().enumerate() {
         let args = logical_args(st, source, scan.escape);
         casing(st, source, out);
@@ -216,14 +211,19 @@ fn apk_no_cache(st: &Stanza, source: &str, args: &str, out: &mut Vec<DockerFindi
 /// DL3020 — `ADD` for a local path. `ADD` also fetches URLs and unpacks
 /// tarballs, so the rewrite fires ONLY when neither applies.
 fn add_to_copy(st: &Stanza, source: &str, args: &str, out: &mut Vec<DockerFinding>) {
-    let tokens: Vec<&str> = args.split_whitespace().filter(|t| !t.starts_with("--")).collect();
+    let tokens: Vec<&str> = args
+        .split_whitespace()
+        .filter(|t| !t.starts_with("--"))
+        .collect();
     let remote = tokens
         .iter()
         .any(|t| t.starts_with("http://") || t.starts_with("https://") || t.starts_with("git@"));
     let archive = tokens.iter().any(|t| {
-        [".tar", ".tgz", ".tar.gz", ".tar.bz2", ".tar.xz", ".tbz2", ".txz"]
-            .iter()
-            .any(|e| t.ends_with(e))
+        [
+            ".tar", ".tgz", ".tar.gz", ".tar.bz2", ".tar.xz", ".tbz2", ".txz",
+        ]
+        .iter()
+        .any(|e| t.ends_with(e))
     });
     // A JSON-array form or a checksum flag means the caller knows what
     // ADD does; leave it alone.
@@ -255,17 +255,19 @@ fn exec_form(st: &Stanza, source: &str, args: &str, out: &mut Vec<DockerFinding>
     }
     let shellish = trimmed.contains(['|', '&', ';', '>', '<', '$', '*', '`']);
     let quoted = trimmed.contains('\'') || trimmed.contains('"');
-    let fix = if shellish || quoted { None } else {
-            let parts: Vec<String> = trimmed
-                .split_whitespace()
-                .map(|t| format!("\"{t}\""))
-                .collect();
-            Some(SourceEdit {
-                start: st.start,
-                end: st.end,
-                replacement: format!("{} [{}]", st.keyword(source), parts.join(", ")),
-            })
-        };
+    let fix = if shellish || quoted {
+        None
+    } else {
+        let parts: Vec<String> = trimmed
+            .split_whitespace()
+            .map(|t| format!("\"{t}\""))
+            .collect();
+        Some(SourceEdit {
+            start: st.start,
+            end: st.end,
+            replacement: format!("{} [{}]", st.keyword(source), parts.join(", ")),
+        })
+    };
     let rule = match st.instruction_of(source).as_str() {
         "ENTRYPOINT" => "entrypoint-shell-form-signal-block",
         _ => "cmd-entrypoint-exec-form",
@@ -318,11 +320,15 @@ fn pipefail(
     if stage_shell_has_pipefail(scan, source, idx) {
         return;
     }
-    let fix = if stage_is_debian_family(scan, idx) { Some(SourceEdit {
+    let fix = if stage_is_debian_family(scan, idx) {
+        Some(SourceEdit {
             start: st.start,
             end: st.start,
             replacement: "SHELL [\"/bin/bash\", \"-o\", \"pipefail\", \"-c\"]\n".to_string(),
-        }) } else { None };
+        })
+    } else {
+        None
+    };
     out.push(finding("pipefail-before-piped-run", st, source, fix));
 }
 
@@ -446,7 +452,13 @@ fn apt_update_split(scan: &DockerfileScan, idx: usize, source: &str, out: &mut V
     out.push(DockerFinding {
         rule_id: "apt-update-install-same-run",
         line: st.line,
-        excerpt: st.text(source).lines().next().unwrap_or_default().trim().to_string(),
+        excerpt: st
+            .text(source)
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
         fix: Some(SourceEdit {
             start: st.start,
             end: next.end,
@@ -521,12 +533,7 @@ fn cargo_rules(
 /// the persistent target dir buys the same incrementality by another
 /// route, and both in-tree production Dockerfiles do exactly that
 /// deliberately. Without this guard the rule fires on known-good files.
-fn manifest_first(
-    scan: &DockerfileScan,
-    idx: usize,
-    source: &str,
-    out: &mut Vec<DockerFinding>,
-) {
+fn manifest_first(scan: &DockerfileScan, idx: usize, source: &str, out: &mut Vec<DockerFinding>) {
     let st = &scan.stanzas[idx];
     let args = logical_args(st, source, scan.escape);
     if !args.contains("cargo build") {
@@ -638,7 +645,9 @@ fn file_level(
     // shape. Suggest-only: the right id is the author's naming call.
     let mut seen: Vec<(usize, String)> = Vec::new();
     for st in &scan.stanzas {
-        let Scope::Stage(stage) = st.scope else { continue };
+        let Scope::Stage(stage) = st.scope else {
+            continue;
+        };
         for (id, target) in cache_mounts(&logical_args(st, source, scan.escape)) {
             // An explicitly-scoped mount is the FIX, not the defect.
             if id.is_some() {
@@ -672,7 +681,9 @@ fn file_level(
                 .any(|s| logical_args(s, source, scan.escape).contains("cargo build"));
             let arch_aware = scan.stanzas.iter().any(|s| {
                 let a = s.raw_args(source);
-                a.contains("TARGETPLATFORM") || a.contains("TARGETARCH") || a.contains("BUILDPLATFORM")
+                a.contains("TARGETPLATFORM")
+                    || a.contains("TARGETARCH")
+                    || a.contains("BUILDPLATFORM")
             });
             if compiles && stage.platform.is_none() && !arch_aware {
                 out.push(DockerFinding {
@@ -710,49 +721,49 @@ fn file_level(
     }
 }
 
-
 /// Rules whose subject is the RUNTIME stage: the base it ships and what it
 /// declares about identity and trust roots.
 fn runtime_stage_rules(scan: &DockerfileScan, source: &str, out: &mut Vec<DockerFinding>) {
     let Some(rt) = scan.runtime_stage(source) else {
         return;
     };
-        let stage = &scan.stages[rt];
-        let base = stage.base.to_ascii_lowercase();
-        let line = scan.stanzas[stage.stanza_idx].line;
-        if base.starts_with("gcr.io/distroless/") && !base.contains("-debian") && !base.contains('@')
-        {
+    let stage = &scan.stages[rt];
+    let base = stage.base.to_ascii_lowercase();
+    let line = scan.stanzas[stage.stanza_idx].line;
+    if base.starts_with("gcr.io/distroless/") && !base.contains("-debian") && !base.contains('@') {
+        out.push(DockerFinding {
+            rule_id: "distroless-distro-suffix-pin",
+            line,
+            excerpt: stage.base.clone(),
+            fix: None,
+        });
+    }
+    if !base.is_empty()
+        && base != "scratch"
+        && !scan
+            .stage_stanzas(rt)
+            .any(|s| s.instruction_of(source) == "USER")
+    {
+        out.push(DockerFinding {
+            rule_id: "runtime-stage-missing-user",
+            line,
+            excerpt: stage.base.clone(),
+            fix: None,
+        });
+    }
+    if base == "scratch" {
+        let copies_certs = scan
+            .stage_stanzas(rt)
+            .any(|s| s.raw_args(source).contains("ca-certificates"));
+        if !copies_certs {
             out.push(DockerFinding {
-                rule_id: "distroless-distro-suffix-pin",
+                rule_id: "musl-scratch-ca-certs",
                 line,
-                excerpt: stage.base.clone(),
+                excerpt: "FROM scratch".to_string(),
                 fix: None,
             });
         }
-        if !base.is_empty()
-            && base != "scratch"
-            && !scan.stage_stanzas(rt).any(|s| s.instruction_of(source) == "USER")
-        {
-            out.push(DockerFinding {
-                rule_id: "runtime-stage-missing-user",
-                line,
-                excerpt: stage.base.clone(),
-                fix: None,
-            });
-        }
-        if base == "scratch" {
-            let copies_certs = scan
-                .stage_stanzas(rt)
-                .any(|s| s.raw_args(source).contains("ca-certificates"));
-            if !copies_certs {
-                out.push(DockerFinding {
-                    rule_id: "musl-scratch-ca-certs",
-                    line,
-                    excerpt: "FROM scratch".to_string(),
-                    fix: None,
-                });
-            }
-        }
+    }
 }
 
 /// Plan 030 T2.1(b) — the suggest-only family, all four scoped to the
@@ -892,8 +903,14 @@ fn musl_allocator(
     line: usize,
     out: &mut Vec<DockerFinding>,
 ) {
-    let targets_musl = scan.stanzas.iter().any(|st| st.text(source).contains("-musl"))
-        || scan.stages.iter().any(|s| s.base.to_ascii_lowercase().contains("alpine"));
+    let targets_musl = scan
+        .stanzas
+        .iter()
+        .any(|st| st.text(source).contains("-musl"))
+        || scan
+            .stages
+            .iter()
+            .any(|s| s.base.to_ascii_lowercase().contains("alpine"));
     if !targets_musl {
         return;
     }
@@ -1009,9 +1026,17 @@ fn cache_mounts(args: &str) -> Vec<(Option<String>, String)> {
 
 fn stage_is_debian_family(scan: &DockerfileScan, stage: usize) -> bool {
     let base = scan.stages[stage].base.to_ascii_lowercase();
-    ["debian", "ubuntu", "bookworm", "trixie", "bullseye", "slim", "buildpack-deps"]
-        .iter()
-        .any(|m| base.contains(m))
+    [
+        "debian",
+        "ubuntu",
+        "bookworm",
+        "trixie",
+        "bullseye",
+        "slim",
+        "buildpack-deps",
+    ]
+    .iter()
+    .any(|m| base.contains(m))
         && !base.contains("alpine")
 }
 
@@ -1021,7 +1046,12 @@ fn stage_shell_has_pipefail(scan: &DockerfileScan, source: &str, stage: usize) -
 }
 
 fn first_line(st: &Stanza, source: &str) -> String {
-    st.text(source).lines().next().unwrap_or_default().trim().to_string()
+    st.text(source)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_string()
 }
 
 fn finding(
@@ -1040,12 +1070,7 @@ fn finding(
 
 /// Insert `flag` immediately after the first occurrence of `needle` in the
 /// stanza's source text.
-fn insert_flag_after(
-    st: &Stanza,
-    source: &str,
-    needle: &str,
-    flag: &str,
-) -> Option<SourceEdit> {
+fn insert_flag_after(st: &Stanza, source: &str, needle: &str, flag: &str) -> Option<SourceEdit> {
     let text = st.text(source);
     let rel = text.find(needle)?;
     let at = st.start + rel + needle.len();
@@ -1083,7 +1108,11 @@ fn append_to_run(st: &Stanza, source: &str, tail: &str) -> Option<SourceEdit> {
 }
 
 fn quote_if_needed(value: &str) -> String {
-    if value.contains(char::is_whitespace) && !value.starts_with('"') { format!("\"{value}\"") } else { value.to_string() }
+    if value.contains(char::is_whitespace) && !value.starts_with('"') {
+        format!("\"{value}\"")
+    } else {
+        value.to_string()
+    }
 }
 
 // ────────────────────── G4: the reusable scan path ──────────────────────

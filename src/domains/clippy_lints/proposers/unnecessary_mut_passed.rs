@@ -17,7 +17,10 @@ use syn::{Expr, File, Pat};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = CallScan { source, edits: Vec::new() };
+    let mut v = CallScan {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
 
     // Second pass: drop `mut` from fn parameter patterns (file-wide, when
@@ -66,13 +69,20 @@ mod tests {
     fn drops_mut_from_call_and_binding() {
         let input = "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(mut v: Vec<u8>) -> usize { count(&mut v) }";
         let out = propose_fix("unnecessary_mut_passed", input).expect("matched");
-        assert!(out.contains("count(&v)"), "call-site mut not dropped: {out}");
-        assert!(out.contains("fn go(v: Vec<u8>)"), "binding mut not dropped: {out}");
+        assert!(
+            out.contains("count(&v)"),
+            "call-site mut not dropped: {out}"
+        );
+        assert!(
+            out.contains("fn go(v: Vec<u8>)"),
+            "binding mut not dropped: {out}"
+        );
     }
 
     #[test]
     fn leaves_immutable_calls_unchanged() {
-        let input = "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(v: Vec<u8>) -> usize { count(&v) }";
+        let input =
+            "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(v: Vec<u8>) -> usize { count(&v) }";
         let out = propose_fix("unnecessary_mut_passed", input);
         assert!(out.is_none(), "non-mut call touched: {out:?}");
     }

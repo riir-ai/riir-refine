@@ -79,10 +79,12 @@ fn is_unsigned_path(ty: &syn::Type) -> bool {
     let syn::Type::Path(tp) = ty else {
         return false;
     };
-    tp.path.get_ident()
-        .is_some_and(|id| {
-            matches!(id.to_string().as_str(), "u8" | "u16" | "u32" | "u64" | "u128" | "usize")
-        })
+    tp.path.get_ident().is_some_and(|id| {
+        matches!(
+            id.to_string().as_str(),
+            "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
+        )
+    })
 }
 
 /// Collect the fn's provably-unsigned idents: typed parameters with unsigned
@@ -91,7 +93,10 @@ fn is_unsigned_path(ty: &syn::Type) -> bool {
 /// signed binding would false-fire, and that class is E0599 under plain
 /// check, i.e. verify-backstopped; the E0689 class this guard exists for is
 /// NOT check-visible).
-fn collect_unsigned_idents(fn_item_sig: &syn::Signature, body: Option<&syn::Block>) -> std::collections::HashSet<String> {
+fn collect_unsigned_idents(
+    fn_item_sig: &syn::Signature,
+    body: Option<&syn::Block>,
+) -> std::collections::HashSet<String> {
     let mut set = std::collections::HashSet::new();
     for input in &fn_item_sig.inputs {
         if let syn::FnArg::Typed(pat) = input {
@@ -135,7 +140,8 @@ fn collect_unsigned_lets(stmts: &[syn::Stmt], set: &mut std::collections::HashSe
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
         self.fn_stack.push(i.sig.ident.to_string());
-        self.unsigned_idents.push(collect_unsigned_idents(&i.sig, Some(&i.block)));
+        self.unsigned_idents
+            .push(collect_unsigned_idents(&i.sig, Some(&i.block)));
         syn::visit::visit_item_fn(self, i);
         self.unsigned_idents.pop();
         self.fn_stack.pop();
@@ -143,7 +149,8 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     fn visit_impl_item_fn(&mut self, i: &'ast syn::ImplItemFn) {
         self.fn_stack.push(i.sig.ident.to_string());
-        self.unsigned_idents.push(collect_unsigned_idents(&i.sig, Some(&i.block)));
+        self.unsigned_idents
+            .push(collect_unsigned_idents(&i.sig, Some(&i.block)));
         syn::visit::visit_impl_item_fn(self, i);
         self.unsigned_idents.pop();
         self.fn_stack.pop();
@@ -152,7 +159,8 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_trait_item_fn(&mut self, i: &'ast syn::TraitItemFn) {
         self.fn_stack.push(i.sig.ident.to_string());
         let body = i.default.as_ref();
-        self.unsigned_idents.push(collect_unsigned_idents(&i.sig, body));
+        self.unsigned_idents
+            .push(collect_unsigned_idents(&i.sig, body));
         syn::visit::visit_trait_item_fn(self, i);
         self.unsigned_idents.pop();
         self.fn_stack.pop();
@@ -296,16 +304,19 @@ fn dividend_provably_unsigned(
         Expr::Path(p) => p
             .path
             .get_ident()
-            .is_some_and(|id| {
-                unsigned_idents
-                    .is_some_and(|set| set.contains(&id.to_string()))
-            }),
+            .is_some_and(|id| unsigned_idents.is_some_and(|set| set.contains(&id.to_string()))),
         _ => false,
     }
 }
 
 fn is_float_lit(e: &Expr) -> bool {
-    matches!(e, Expr::Lit(ExprLit { lit: Lit::Float(_), .. }))
+    matches!(
+        e,
+        Expr::Lit(ExprLit {
+            lit: Lit::Float(_),
+            ..
+        })
+    )
 }
 
 #[cfg(test)]
@@ -316,7 +327,10 @@ mod tests {
     fn converts_modulo_zero_check() {
         let input = "fn f(n: u64) -> bool { n % 4 == 0 }";
         let out = propose_fix("manual_is_multiple_of", input).expect("matched");
-        assert!(out.contains("n.is_multiple_of(4)"), "fix not produced: {out}");
+        assert!(
+            out.contains("n.is_multiple_of(4)"),
+            "fix not produced: {out}"
+        );
         assert!(!out.contains("% 4"), "modulo remains: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -342,7 +356,10 @@ mod tests {
     fn converts_reversed_negated() {
         let input = "fn f(n: u64) -> bool { 0 != n % 4 }";
         let out = propose_fix("manual_is_multiple_of", input).expect("matched");
-        assert!(out.contains("!n.is_multiple_of(4)"), "reversed negated: {out}");
+        assert!(
+            out.contains("!n.is_multiple_of(4)"),
+            "reversed negated: {out}"
+        );
     }
 
     #[test]
@@ -466,7 +483,8 @@ mod tests {
         // Issue 031 H1 class: `self % 4 == 0` inside `fn is_multiple_of`
         // rewrites to a call of itself — infinite recursion the compile gate
         // cannot see (it compiles). Parse-valid fixture; need not compile.
-        let input = "impl M {\n    fn is_multiple_of(&self) -> bool {\n        self % 4 == 0\n    }\n}";
+        let input =
+            "impl M {\n    fn is_multiple_of(&self) -> bool {\n        self % 4 == 0\n    }\n}";
         let out = propose_fix("manual_is_multiple_of", input);
         assert!(out.is_none(), "self-recursion shape must not fire: {out:?}");
     }
@@ -478,13 +496,17 @@ mod tests {
         // The old positive control is now a documented skip.
         let input = "impl M {\n    fn check(&self) -> bool {\n        self % 4 == 0\n    }\n}";
         let out = propose_fix("manual_is_multiple_of", input);
-        assert!(out.is_none(), "untyped self receiver must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "untyped self receiver must not fire: {out:?}"
+        );
     }
 
     #[test]
     fn self_cast_to_unsigned_still_fires() {
         // Positive control for the skip above: the cast proves the type.
-        let input = "impl M {\n    fn check(&self) -> bool {\n        self.0 as u64 % 4 == 0\n    }\n}";
+        let input =
+            "impl M {\n    fn check(&self) -> bool {\n        self.0 as u64 % 4 == 0\n    }\n}";
         let out = propose_fix("manual_is_multiple_of", input).expect("matched");
         assert!(
             out.contains("(self.0 as u64).is_multiple_of(4)"),
@@ -528,7 +550,10 @@ mod tests {
     fn suffixed_unsigned_literal_dividend_fires() {
         let input = "fn f() -> bool { 4u64 % 2 == 0 }";
         let out = propose_fix("manual_is_multiple_of", input).expect("matched");
-        assert!(out.contains("4u64.is_multiple_of(2)"), "suffixed literal lost: {out}");
+        assert!(
+            out.contains("4u64.is_multiple_of(2)"),
+            "suffixed literal lost: {out}"
+        );
     }
 
     #[test]

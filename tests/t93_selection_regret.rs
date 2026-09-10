@@ -78,9 +78,9 @@ fn reliability(mode: SelectionMode, c: &Cand) -> f32 {
         // TetherBlend shares this reliability axis verbatim — it changes only
         // the MIX weight, which this harness holds fixed (its adaptive-ρ
         // regret is measured in t33_tether_selection_ab).
-        SelectionMode::BetaPosterior
-        | SelectionMode::Entropic
-        | SelectionMode::TetherBlend => katgpt_core::best_belief_score(c.s, c.f, EPSILON),
+        SelectionMode::BetaPosterior | SelectionMode::Entropic | SelectionMode::TetherBlend => {
+            katgpt_core::best_belief_score(c.s, c.f, EPSILON)
+        }
     }
 }
 
@@ -118,8 +118,8 @@ fn t93_selection_regret_gate() {
             let cands: Vec<Cand> = (0..n_cands)
                 .map(|_| {
                     let p = rng.f32(); // true quality, uniform on [0,1)
-                    // Each candidate has its own history depth — this is what
-                    // creates the 1/1-vs-many asymmetry the rate cannot see.
+                                       // Each candidate has its own history depth — this is what
+                                       // creates the 1/1-vs-many asymmetry the rate cannot see.
                     let n = 1 + rng.below(max_attempts as usize) as u32;
                     let (s, f) = observe(&mut rng, p, n);
                     // Evolution score is a NOISY view of quality, not an
@@ -164,7 +164,10 @@ fn t93_selection_regret_gate() {
         rb += f64::from(best_p - cands[pick(SelectionMode::BetaPosterior, &cands)].p);
     }
     let (rl, rb) = (rl / TRIALS as f64, rb / TRIALS as f64);
-    println!("\n  GATE (1..=5 attempts): linear {rl:.4} vs beta {rb:.4} -> {:+.1}%", (rb - rl) / rl * 100.0);
+    println!(
+        "\n  GATE (1..=5 attempts): linear {rl:.4} vs beta {rb:.4} -> {:+.1}%",
+        (rb - rl) / rl * 100.0
+    );
     println!(
         "  VERDICT: {}",
         if rb < rl {
@@ -182,8 +185,18 @@ fn t93_small_sample_pathology_is_fixed() {
     // Two candidates, identical evolution score. `lucky` went 1-for-1;
     // `proven` went 18-for-20. The raw rate calls lucky PERFECT (1.0) and
     // proven merely 0.9, so the blend picks the one with almost no evidence.
-    let lucky = Cand { p: 0.0, s: 1, f: 0, evo: 0.5 };
-    let proven = Cand { p: 1.0, s: 18, f: 2, evo: 0.5 };
+    let lucky = Cand {
+        p: 0.0,
+        s: 1,
+        f: 0,
+        evo: 0.5,
+    };
+    let proven = Cand {
+        p: 1.0,
+        s: 18,
+        f: 2,
+        evo: 0.5,
+    };
     let cands = vec![lucky, proven];
 
     assert_eq!(

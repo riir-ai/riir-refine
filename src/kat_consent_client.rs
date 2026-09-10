@@ -160,7 +160,9 @@ pub fn parse_consent_response(body: &[u8]) -> Result<&'static str, String> {
     match v.get("result").and_then(serde_json::Value::as_str) {
         Some("recorded") => Ok("recorded"),
         Some("unchanged") => Ok("unchanged"),
-        Some(other) => Err(format!("the consent response carried an unknown result — {other}")),
+        Some(other) => Err(format!(
+            "the consent response carried an unknown result — {other}"
+        )),
         None => Err("the consent response carried no `result`".to_string()),
     }
 }
@@ -193,7 +195,10 @@ fn post_consent(url_base: &str, body: &str) -> Result<Vec<u8>, String> {
                 .map(|_| buf)
                 .map_err(|e| format!("reading the consent response: {e}"))
         }
-        Ok(resp) => Err(format!("the consent endpoint answered HTTP {}", resp.status())),
+        Ok(resp) => Err(format!(
+            "the consent endpoint answered HTTP {}",
+            resp.status()
+        )),
         Err(ureq::Error::Status(c, _)) => Err(format!("the consent endpoint answered HTTP {c}")),
         Err(e) => Err(format!("the consent endpoint is unreachable ({e})")),
     }
@@ -283,7 +288,10 @@ mod tests {
         assert_eq!(in_msg[19], 1, "byte 19 is consent_u8: 1 = in");
         assert_eq!(out_msg[19], 2, "byte 19 is consent_u8: 2 = out");
         in_msg[19] = 2;
-        assert_eq!(in_msg, out_msg, "flipping byte 19 alone reconciles in ↔ out");
+        assert_eq!(
+            in_msg, out_msg,
+            "flipping byte 19 alone reconciles in ↔ out"
+        );
     }
 
     #[test]

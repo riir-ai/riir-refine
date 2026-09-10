@@ -50,8 +50,8 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Item};
 
-use crate::edit_emitter::comment_marker_positions;
 use super::{src, SourceEdit};
+use crate::edit_emitter::comment_marker_positions;
 
 /// The sort-family method names that license the rewrite (the precision
 /// guard): a comparator chain is only rewritten where a sort consumes it.
@@ -256,9 +256,7 @@ impl NanCmpWalker<'_> {
             return;
         };
         // Macro args: token-stream spans are unreliable — refuse.
-        if matches!(arg, Expr::Macro(_))
-            || matches!(partial.receiver.as_ref(), Expr::Macro(_))
-        {
+        if matches!(arg, Expr::Macro(_)) || matches!(partial.receiver.as_ref(), Expr::Macro(_)) {
             return;
         }
         // Tuple literals refuse: `total_cmp` is an f32/f64-inherent, NOT a
@@ -268,9 +266,7 @@ impl NanCmpWalker<'_> {
         // editor-widgets, sorted-by-rect-position test). Parse-only can't see
         // every no-total_cmp type, but a literal tuple IS the common
         // multi-field shape and is detectable — refuse it here.
-        if matches!(partial.receiver.as_ref(), Expr::Tuple(_))
-            || matches!(arg, Expr::Tuple(_))
-        {
+        if matches!(partial.receiver.as_ref(), Expr::Tuple(_)) || matches!(arg, Expr::Tuple(_)) {
             return;
         }
         let chain_start = byte_start(partial.receiver.as_ref());
@@ -283,13 +279,10 @@ impl NanCmpWalker<'_> {
             arg.span().byte_range(),
         ];
         if let Some(chain) = self.source.get(chain_start..chain_end) {
-            if comment_marker_positions(chain)
-                .iter()
-                .any(|&pos| {
-                    let abs = chain_start + pos;
-                    !kept.iter().any(|k| k.contains(&abs))
-                })
-            {
+            if comment_marker_positions(chain).iter().any(|&pos| {
+                let abs = chain_start + pos;
+                !kept.iter().any(|k| k.contains(&abs))
+            }) {
                 return;
             }
         } else {
@@ -505,6 +498,9 @@ mod tests {
         let edits = collect_edits(&rule.buggy_code, &file);
         assert_eq!(edits.len(), 1);
         let out = super::super::apply_edits(&rule.buggy_code, edits);
-        assert_eq!(out, rule.fixed_code, "the corpus fixed fixture is the exact rewrite");
+        assert_eq!(
+            out, rule.fixed_code,
+            "the corpus fixed fixture is the exact rewrite"
+        );
     }
 }

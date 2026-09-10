@@ -63,7 +63,12 @@ pub struct OracleVerdict {
 
 impl OracleVerdict {
     fn did_not_run(err: impl Into<String>) -> Self {
-        Self { ran: false, compiles: false, lints: BTreeSet::new(), error: Some(err.into()) }
+        Self {
+            ran: false,
+            compiles: false,
+            lints: BTreeSet::new(),
+            error: Some(err.into()),
+        }
     }
 
     /// The subset of reported lints that our corpus actually knows about.
@@ -123,7 +128,10 @@ impl ClippyOracle {
     /// Is cargo reachable? Callers should SKIP rather than fail when false.
     #[must_use]
     pub fn is_available(&self) -> bool {
-        Command::new(&self.cargo_bin).arg("--version").output().is_ok()
+        Command::new(&self.cargo_bin)
+            .arg("--version")
+            .output()
+            .is_ok()
     }
 
     /// Ask clippy what fires on `code`.
@@ -175,8 +183,9 @@ impl ClippyOracle {
         if snippets.is_empty() {
             return Vec::new();
         }
-        let module_files: Vec<String> =
-            (0..snippets.len()).map(|i| format!("src/s{i}.rs")).collect();
+        let module_files: Vec<String> = (0..snippets.len())
+            .map(|i| format!("src/s{i}.rs"))
+            .collect();
         let module_refs: Vec<&str> = module_files.iter().map(String::as_str).collect();
 
         let crate_dir = match self.prepare_batch_crate(snippets) {
@@ -228,8 +237,9 @@ impl ClippyOracle {
         if snippets.is_empty() {
             return Vec::new();
         }
-        let module_files: Vec<String> =
-            (0..snippets.len()).map(|i| format!("src/s{i}.rs")).collect();
+        let module_files: Vec<String> = (0..snippets.len())
+            .map(|i| format!("src/s{i}.rs"))
+            .collect();
         let module_refs: Vec<&str> = module_files.iter().map(String::as_str).collect();
 
         let Ok(crate_dir) = self.prepare_batch_crate_in("probe_", snippets) else {
@@ -255,9 +265,10 @@ impl ClippyOracle {
             // The crate shape is fully controlled, so this path should be
             // dead; when it fires anyway, per-snippet single-run probes are
             // the honest fallback (same rule as lints_for_batch).
-            BatchParse::Unattributable(_) => {
-                snippets.iter().map(|c| self.lints_for(c).compiles).collect()
-            }
+            BatchParse::Unattributable(_) => snippets
+                .iter()
+                .map(|c| self.lints_for(c).compiles)
+                .collect(),
         }
     }
 
@@ -373,7 +384,9 @@ pub fn parse_verdict(json_output: &str) -> OracleVerdict {
         if v.get("reason").and_then(serde_json::Value::as_str) != Some("compiler-message") {
             continue;
         }
-        let Some(message) = v.get("message") else { continue };
+        let Some(message) = v.get("message") else {
+            continue;
+        };
 
         // A hard error means the span never type-checked, so any lints on it
         // are unreliable and the span must be excluded, not scored.
@@ -464,9 +477,10 @@ fn parse_batch_verdicts(json_output: &str, module_files: &[&str]) -> BatchParse 
         if v.get("reason").and_then(serde_json::Value::as_str) != Some("compiler-message") {
             continue;
         }
-        let Some(message) = v.get("message") else { continue };
-        let is_error =
-            message.get("level").and_then(serde_json::Value::as_str) == Some("error");
+        let Some(message) = v.get("message") else {
+            continue;
+        };
+        let is_error = message.get("level").and_then(serde_json::Value::as_str) == Some("error");
         let module = primary_span_file(message).and_then(|f| module_of_file(f, module_files));
 
         if is_error {
@@ -537,9 +551,12 @@ mod tests {
         assert!(v.ran && v.compiles);
         assert_eq!(
             v.lints,
-            ["needless_return".to_string(), "redundant_closure".to_string()]
-                .into_iter()
-                .collect()
+            [
+                "needless_return".to_string(),
+                "redundant_closure".to_string()
+            ]
+            .into_iter()
+            .collect()
         );
     }
 
@@ -610,7 +627,12 @@ mod tests {
     fn batch_lints_attribute_to_their_own_module() {
         let out = [
             msg_in("src/s0.rs", "warning", Some("clippy::needless_return"), "x"),
-            msg_in("src/s1.rs", "warning", Some("clippy::redundant_closure"), "y"),
+            msg_in(
+                "src/s1.rs",
+                "warning",
+                Some("clippy::redundant_closure"),
+                "y",
+            ),
         ]
         .join("\n");
         let mods = ["src/s0.rs", "src/s1.rs"];
@@ -636,13 +658,21 @@ mod tests {
     fn batch_error_marks_only_its_own_module_uncompilable() {
         let out = [
             msg_in("src/s0.rs", "warning", Some("clippy::needless_return"), "x"),
-            msg_in("src/s1.rs", "error", None, "cannot find value `boom` in this scope"),
+            msg_in(
+                "src/s1.rs",
+                "error",
+                None,
+                "cannot find value `boom` in this scope",
+            ),
         ]
         .join("\n");
         let mods = ["src/s0.rs", "src/s1.rs"];
         match parse_batch_verdicts(&out, &mods) {
             BatchParse::Attributed(v) => {
-                assert!(v[0].compiles, "a sibling's error must not poison a clean module");
+                assert!(
+                    v[0].compiles,
+                    "a sibling's error must not poison a clean module"
+                );
                 assert!(!v[1].compiles);
                 assert!(v[1].error.as_deref().is_some_and(|e| e.contains("boom")));
             }
@@ -671,11 +701,19 @@ mod tests {
         // s13's diagnostics in s1.
         let names: Vec<String> = (0..14).map(|i| format!("src/s{i}.rs")).collect();
         let mods: Vec<&str> = names.iter().map(String::as_str).collect();
-        let out = msg_in("src/s13.rs", "warning", Some("clippy::needless_return"), "x");
+        let out = msg_in(
+            "src/s13.rs",
+            "warning",
+            Some("clippy::needless_return"),
+            "x",
+        );
         match parse_batch_verdicts(&out, &mods) {
             BatchParse::Attributed(v) => {
                 assert_eq!(v[13].lints.len(), 1, "s13 keeps its own lint");
-                assert!(v[..13].iter().all(|x| x.lints.is_empty()), "no suffix bleed into s0..s12");
+                assert!(
+                    v[..13].iter().all(|x| x.lints.is_empty()),
+                    "no suffix bleed into s0..s12"
+                );
             }
             BatchParse::Unattributable(t) => {
                 panic!("expected attribution, got Unattributable({t:?})");
@@ -715,11 +753,9 @@ mod tests {
 
     #[test]
     fn batch_labels_agree_with_per_snippet_labels_on_an_all_clean_batch() {
-        let oracle =
-            ClippyOracle::new().with_work_root(
-                std::env::temp_dir()
-                    .join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
-            );
+        let oracle = ClippyOracle::new().with_work_root(
+            std::env::temp_dir().join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
+        );
         if !oracle.is_available() {
             // The parse-level gates above carry the contract offline.
             return;
@@ -738,7 +774,10 @@ mod tests {
         // The attributed path must label clean snippets identically to the
         // single-snippet instrument — the contract that lets one dataset
         // use either path.
-        assert!(!single[0].lints.is_empty(), "expected the fixture lint to fire");
+        assert!(
+            !single[0].lints.is_empty(),
+            "expected the fixture lint to fire"
+        );
         assert_eq!(
             batch[0].lints, single[0].lints,
             "batch vs single label drift on a clean snippet"
@@ -755,11 +794,9 @@ mod tests {
         // as clean. The policy is therefore: one broken snippet ⇒ the
         // whole batch falls back to per-snippet runs, and every verdict
         // must match its single-run twin exactly.
-        let oracle =
-            ClippyOracle::new().with_work_root(
-                std::env::temp_dir()
-                    .join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
-            );
+        let oracle = ClippyOracle::new().with_work_root(
+            std::env::temp_dir().join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
+        );
         if !oracle.is_available() {
             return;
         }
@@ -770,10 +807,19 @@ mod tests {
         let batch = oracle.lints_for_batch(&snippets);
         let single: Vec<OracleVerdict> = snippets.iter().map(|c| oracle.lints_for(c)).collect();
         for (i, (b, s)) in batch.iter().zip(&single).enumerate() {
-            assert_eq!(b, s, "snippet {i}: fallback verdict must equal the single run");
+            assert_eq!(
+                b, s,
+                "snippet {i}: fallback verdict must equal the single run"
+            );
         }
-        assert!(!batch[1].compiles, "the broken snippet must read uncompilable");
-        assert!(batch[0].compiles, "the clean snippet must keep its real labels");
+        assert!(
+            !batch[1].compiles,
+            "the broken snippet must read uncompilable"
+        );
+        assert!(
+            batch[0].compiles,
+            "the clean snippet must keep its real labels"
+        );
     }
 
     #[test]

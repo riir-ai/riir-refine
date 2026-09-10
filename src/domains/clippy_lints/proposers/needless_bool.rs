@@ -24,7 +24,10 @@ use syn::{Block, Expr, ExprIf, File, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -49,8 +52,12 @@ impl Collector<'_> {
         if !i.attrs.is_empty() {
             return None;
         }
-        let Some((_, else_e)) = &i.else_branch else { return None };
-        let Expr::Block(eb) = &**else_e else { return None };
+        let Some((_, else_e)) = &i.else_branch else {
+            return None;
+        };
+        let Expr::Block(eb) = &**else_e else {
+            return None;
+        };
         if !eb.attrs.is_empty() {
             return None; // else-block attrs would be dropped by the splice
         }
@@ -80,7 +87,8 @@ impl Collector<'_> {
     fn retract_else_child(&mut self, i: &ExprIf) {
         if let Some((_, else_e)) = &i.else_branch {
             let span = (**else_e).span().byte_range();
-            self.edits.retain(|ed| ed.start != span.start || ed.end != span.end);
+            self.edits
+                .retain(|ed| ed.start != span.start || ed.end != span.end);
         }
     }
 }
@@ -101,7 +109,10 @@ mod tests {
     fn true_else_false_collapses_to_condition() {
         let input = "fn f(b: bool) -> bool { if b { true } else { false } }";
         let out = propose_fix("needless_bool", input).expect("matched");
-        assert!(out.contains("fn f(b: bool) -> bool { b }"), "not collapsed: {out}");
+        assert!(
+            out.contains("fn f(b: bool) -> bool { b }"),
+            "not collapsed: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -117,7 +128,10 @@ mod tests {
     fn comparison_condition_negated_with_parens() {
         let input = "fn f(a: u32, b: u32) -> bool { if a == b { false } else { true } }";
         let out = propose_fix("needless_bool", input).expect("matched");
-        assert!(out.contains("!(a == b)"), "comparison must be parenthesized: {out}");
+        assert!(
+            out.contains("!(a == b)"),
+            "comparison must be parenthesized: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

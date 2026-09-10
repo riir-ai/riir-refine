@@ -116,7 +116,7 @@ pub mod vec_with_capacity;
 // `rust_perf::proposers::{apply_edits, collect_edits, SourceEdit, ...}`
 // keeps compiling. The helpers stay `pub(crate)`-visible via the crate root.
 pub use crate::edit_emitter::{
-    apply_edits, delete_stmt_edit, edit, for_each_fn, line_indent, src, span_range,
+    apply_edits, delete_stmt_edit, edit, for_each_fn, line_indent, span_range, src,
     swallow_following_space, RuleEdit, SourceEdit,
 };
 
@@ -327,7 +327,10 @@ mod tests {
 
     #[test]
     fn unparseable_code_returns_none() {
-        assert_eq!(propose_fix("vec-with-capacity", "this is not rust {{{"), None);
+        assert_eq!(
+            propose_fix("vec-with-capacity", "this is not rust {{{"),
+            None
+        );
     }
 
     /// The load-bearing invariant of the span-preserving emitter: everything
@@ -339,13 +342,20 @@ mod tests {
                    // fill it\n    for i in 0..n { v.push(i as u32); }\n    let tail = 7;\n    v\n}\n";
         let out = propose_fix("vec-with-capacity", src).expect("pattern matched");
         assert!(out.contains("// header comment\n"), "{out}");
-        assert!(out.contains("// fill it\n    for i in 0..n { v.push(i as u32); }"), "{out}");
+        assert!(
+            out.contains("// fill it\n    for i in 0..n { v.push(i as u32); }"),
+            "{out}"
+        );
         assert!(out.contains("let tail = 7;"), "{out}");
         assert!(out.contains("let mut v = Vec::with_capacity(n);"), "{out}");
         // Exactly one line differs in structure: the init line.
         let orig_lines: Vec<&str> = src.lines().collect();
         let out_lines: Vec<&str> = out.lines().collect();
-        assert_eq!(orig_lines.len(), out_lines.len(), "line count changed: {out}");
+        assert_eq!(
+            orig_lines.len(),
+            out_lines.len(),
+            "line count changed: {out}"
+        );
         let diffs = orig_lines
             .iter()
             .zip(&out_lines)
@@ -414,9 +424,8 @@ mod tests {
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
         for (rule, buggy, marker) in cases {
-            let out = propose_fix(rule, buggy).unwrap_or_else(|| {
-                panic!("proposer did not fire for corpus fixture `{rule}`")
-            });
+            let out = propose_fix(rule, buggy)
+                .unwrap_or_else(|| panic!("proposer did not fire for corpus fixture `{rule}`"));
             assert!(
                 squash(&out).contains(&squash(marker)),
                 "`{rule}` output missing marker `{marker}`: {out}"

@@ -55,7 +55,11 @@ pub struct EvolveConfig {
 
 impl Default for EvolveConfig {
     fn default() -> Self {
-        Self { alpha: 0.1, beta: 0.05, temperature: 1.0 }
+        Self {
+            alpha: 0.1,
+            beta: 0.05,
+            temperature: 1.0,
+        }
     }
 }
 
@@ -107,13 +111,19 @@ impl LatentSkillEvolution {
     /// Construct with the given config.
     #[must_use]
     pub fn new(config: EvolveConfig) -> Self {
-        Self { directions: HashMap::new(), config }
+        Self {
+            directions: HashMap::new(),
+            config,
+        }
     }
 
     /// Pre-allocate capacity for `n` lints.
     #[must_use]
     pub fn with_capacity(n: usize) -> Self {
-        Self { directions: HashMap::with_capacity(n), config: EvolveConfig::default() }
+        Self {
+            directions: HashMap::with_capacity(n),
+            config: EvolveConfig::default(),
+        }
     }
 
     /// Number of lints with evolved directions.
@@ -165,7 +175,8 @@ impl LatentSkillEvolution {
             None if success => {
                 // First outcome is a success: initialize to the fix direction.
                 // This fix works, so it's a valid baseline.
-                self.directions.insert(lint_name.to_string(), *fix_direction);
+                self.directions
+                    .insert(lint_name.to_string(), *fix_direction);
             }
             None => {
                 // First outcome is a fail: no-op. A fail doesn't tell us what a
@@ -224,7 +235,10 @@ mod tests {
         let ev = LatentSkillEvolution::default();
         let dir = embed("needless_return", "42");
         let score = ev.score_candidate("needless_return", &dir);
-        assert!((score - 0.5).abs() < 1e-5, "unseen lint must score 0.5 (neutral), got {score}");
+        assert!(
+            (score - 0.5).abs() < 1e-5,
+            "unseen lint must score 0.5 (neutral), got {score}"
+        );
     }
 
     #[test]
@@ -248,13 +262,16 @@ mod tests {
     fn fail_lowers_score_for_that_fix() {
         let mut ev = LatentSkillEvolution::default();
         let bad_fix = embed("needless_return", "return 42;"); // a wrong fix
-        let good_fix = embed("needless_return", "42");        // a correct fix
+        let good_fix = embed("needless_return", "42"); // a correct fix
 
         // First: a fail with the bad fix. Under the new initialization rule,
         // a fail as the first outcome is a NO-OP (we don't know what a good
         // fix looks like yet, so we don't initialize the direction).
         ev.record_outcome("needless_return", &bad_fix, false);
-        assert!(!ev.contains("needless_return"), "first-fail must not initialize direction");
+        assert!(
+            !ev.contains("needless_return"),
+            "first-fail must not initialize direction"
+        );
 
         // Now record a success with the good fix — direction initializes to good_fix.
         ev.record_outcome("needless_return", &good_fix, true);
@@ -285,7 +302,10 @@ mod tests {
 
         let evolved = ev.get("needless_return").unwrap();
         for &v in evolved {
-            assert!((-1.0..=1.0).contains(&v), "component {v} drifted out of [-1, 1]");
+            assert!(
+                (-1.0..=1.0).contains(&v),
+                "component {v} drifted out of [-1, 1]"
+            );
             assert!(!v.is_nan());
         }
     }
@@ -348,7 +368,10 @@ mod tests {
         // Fail from dir=[α,0,..] with fix=[1,0,..]: moves AWAY by β·(1-α).
         let d = ema_step(&mut dir, &fix, false, &cfg);
         let expect = cfg.beta * (1.0 - cfg.alpha);
-        assert!((d - expect).abs() < 1e-6, "fail delta = β·distance, got {d}");
+        assert!(
+            (d - expect).abs() < 1e-6,
+            "fail delta = β·distance, got {d}"
+        );
         assert!((dir[0] - (cfg.alpha - expect)).abs() < 1e-6);
     }
 

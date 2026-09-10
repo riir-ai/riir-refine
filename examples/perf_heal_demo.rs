@@ -23,7 +23,10 @@ fn main() {
     // 1. Build the seed corpus.
     let corpus: Corpus<RustPerfDomain> = riir_clippy::build_perf_seed_corpus();
     println!("Seed corpus: {} entries", corpus.entries.len());
-    println!("Commitment (BLAKE3): {}", hex_commitment(&corpus.commitment));
+    println!(
+        "Commitment (BLAKE3): {}",
+        hex_commitment(&corpus.commitment)
+    );
     println!();
 
     // 2. List the rules by category.
@@ -31,10 +34,7 @@ fn main() {
     let mut entries = corpus.entries.clone();
     entries.sort_by(|a, b| a.category.cmp(&b.category).then(a.rule_id.cmp(&b.rule_id)));
     for entry in &entries {
-        println!(
-            "  [{}] {} — {}",
-            entry.category, entry.rule_id, entry.name
-        );
+        println!("  [{}] {} — {}", entry.category, entry.rule_id, entry.name);
     }
     println!();
 
@@ -56,7 +56,10 @@ fn main() {
         {
             let verdict = RustPerfDomain::validate(&entry.rule_id, &entry.fixed_code);
             let status = if verdict.test_passes { "OK" } else { "FAIL" };
-            println!("  [{status}] {} (passed={}, failed={})", entry.rule_id, verdict.passed, verdict.failed);
+            println!(
+                "  [{status}] {} (passed={}, failed={})",
+                entry.rule_id, verdict.passed, verdict.failed
+            );
             if !verdict.test_passes {
                 all_ok = false;
             }
@@ -76,7 +79,10 @@ fn main() {
     println!("  verify() on pristine corpus: {}", corpus.verify());
     let mut tampered = corpus.clone();
     tampered.entries[0].fixed_code = "// tampered".to_string();
-    println!("  verify() on tampered corpus: {} (expected: false)", tampered.verify());
+    println!(
+        "  verify() on tampered corpus: {} (expected: false)",
+        tampered.verify()
+    );
     println!();
 
     // 5. Trait impl exercise.
@@ -101,8 +107,10 @@ fn main() {
             let first = &corpus.entries[0];
             println!("  Verifying rule: {}", first.rule_id);
             let result = verifier.verify(&first.fixed_code, &first.rule_id);
-            println!("  ran={}, test_passes={}, passed={}, failed={}",
-                result.ran, result.test_passes, result.passed, result.failed);
+            println!(
+                "  ran={}, test_passes={}, passed={}, failed={}",
+                result.ran, result.test_passes, result.passed, result.failed
+            );
             if let Some(e) = &result.error {
                 println!("  error: {e}");
             }

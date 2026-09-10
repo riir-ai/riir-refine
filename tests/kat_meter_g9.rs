@@ -108,8 +108,7 @@ fn g9b_version_is_changelog_covered_and_rides_the_file() {
     std::fs::create_dir_all(&dir).unwrap();
     let m = KatMeter::open(&dir);
     m.save().unwrap();
-    let text =
-        std::fs::read_to_string(dir.join(".heal").join(KatMeter::FILE_NAME)).unwrap();
+    let text = std::fs::read_to_string(dir.join(".heal").join(KatMeter::FILE_NAME)).unwrap();
     let state: MeterState = serde_json::from_str(&text).unwrap();
     assert_eq!(state.version, METER_VERSION);
     let _ = std::fs::remove_dir_all(&dir);
@@ -129,9 +128,17 @@ fn meter_cumulative_burn_survives_reopen() {
     m1.save().unwrap();
 
     let mut m2 = KatMeter::open(&dir);
-    assert_eq!(m2.state().cumulative_tokens, a, "burn persists across reopen");
+    assert_eq!(
+        m2.state().cumulative_tokens,
+        a,
+        "burn persists across reopen"
+    );
     assert_eq!(m2.session_tokens(), 0, "session resets on open");
-    assert_eq!(m2.state().sessions, m1.state().sessions + 1, "one session per open");
+    assert_eq!(
+        m2.state().sessions,
+        m1.state().sessions + 1,
+        "one session per open"
+    );
     let b = m2.record_span(src_b);
     m2.save().unwrap();
 
@@ -150,7 +157,10 @@ fn meter_summary_carries_no_currency_figure() {
     let mut m = KatMeter::open(&dir);
     m.record_span(b"fn main() {}");
     let line = m.summary_line();
-    assert!(!line.contains('$'), "summary must not carry a currency figure: {line}");
+    assert!(
+        !line.contains('$'),
+        "summary must not carry a currency figure: {line}"
+    );
     assert!(!line.to_lowercase().contains("usd"));
     assert!(line.contains("token"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -180,16 +190,19 @@ fn g9_charge_version_is_changelog_covered_and_rides_the_file() {
         CHARGE_CHANGELOG.iter().any(|(v, _)| *v == CHARGE_VERSION),
         "CHARGE_VERSION {CHARGE_VERSION} has no changelog entry"
     );
-    let dir = std::env::temp_dir().join(format!("kat_chg_stamp_{}_{}", std::process::id(), line!()));
+    let dir =
+        std::env::temp_dir().join(format!("kat_chg_stamp_{}_{}", std::process::id(), line!()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut c = KatCharge::open(&dir, &meter_state(10));
     c.settle(&meter_state(15));
     c.save().unwrap();
-    let text =
-        std::fs::read_to_string(dir.join(".heal").join(KatCharge::FILE_NAME)).unwrap();
+    let text = std::fs::read_to_string(dir.join(".heal").join(KatCharge::FILE_NAME)).unwrap();
     let state: ChargeState = serde_json::from_str(&text).unwrap();
     assert_eq!(state.charge_version, CHARGE_VERSION);
-    assert_eq!(state.charged_kat, 15, "v1 rate: KAT charged == tokens charged");
+    assert_eq!(
+        state.charged_kat, 15,
+        "v1 rate: KAT charged == tokens charged"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -198,7 +211,8 @@ fn g9_charge_composition_through_the_bin_cycle() {
     // The bin's exact order: meter open → charge open (pre-session) → record
     // → settle at exit → save both → reopen. Two full cycles; the KAT charged
     // must equal the tokens billed, cumulatively, with no double-charging.
-    let dir = std::env::temp_dir().join(format!("kat_chg_cycle_{}_{}", std::process::id(), line!()));
+    let dir =
+        std::env::temp_dir().join(format!("kat_chg_cycle_{}_{}", std::process::id(), line!()));
     std::fs::create_dir_all(&dir).unwrap();
     let src_a = b"fn main() { println!(\"hello\"); }";
     let src_b = b"let x: u32 = 42;";
@@ -231,7 +245,11 @@ fn g9_charge_composition_through_the_bin_cycle() {
     let m3 = KatMeter::open(&dir);
     let mut c3 = KatCharge::open(&dir, m3.state());
     assert_eq!(c3.settle(m3.state()), 0);
-    assert_eq!(c3.state().charged_kat, a + b, "no re-charge on empty session");
+    assert_eq!(
+        c3.state().charged_kat,
+        a + b,
+        "no re-charge on empty session"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -246,8 +264,7 @@ fn g9_charge_is_deterministic_across_repeated_settles() {
         // Each iteration: a FRESH ledger file (recovered from the meter's
         // 500-token history at open), then a 500-token delta — every one must
         // produce the identical result.
-        let mut c =
-            KatCharge::open_at(dir.join(format!("det_{i}.json")), &meter_state(500));
+        let mut c = KatCharge::open_at(dir.join(format!("det_{i}.json")), &meter_state(500));
         assert_eq!(c.settle(&meter_state(1_000)), 500);
         assert_eq!(c.state().charged_kat, 1_000, "recovery(500) + settle(500)");
         assert_eq!(c.state().meter_watermark_tokens, 1_000);
@@ -259,7 +276,11 @@ fn g9_charge_is_deterministic_across_repeated_settles() {
     a.save().unwrap();
     let mut b = KatCharge::open_at(file, &meter_state(1_000));
     assert_eq!(b.settle(&meter_state(1_200)), 200);
-    assert_eq!(b.state().charged_kat, 1_200, "recovered(500) + settled(500+200)");
+    assert_eq!(
+        b.state().charged_kat,
+        1_200,
+        "recovered(500) + settled(500+200)"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -271,8 +292,22 @@ fn g9_charge_rate_arithmetic_matches_the_independent_mirror() {
         u64::try_from((u128::from(t) * u128::from(CHARGE_KAT_PER_MILLION_TOKENS)) / 1_000_000)
             .unwrap_or(u64::MAX)
     };
-    for t in [0u64, 1, 2, 999, 1_000, 1_000_000, 1_000_001, u64::MAX / 2, u64::MAX] {
-        assert_eq!(kat_for_tokens(t), mirror(t), "rate arithmetic diverged at {t}");
+    for t in [
+        0u64,
+        1,
+        2,
+        999,
+        1_000,
+        1_000_000,
+        1_000_001,
+        u64::MAX / 2,
+        u64::MAX,
+    ] {
+        assert_eq!(
+            kat_for_tokens(t),
+            mirror(t),
+            "rate arithmetic diverged at {t}"
+        );
     }
     // v1 pin: the rate IS 1 KAT per token — identity for every input.
     assert_eq!(CHARGE_KAT_PER_MILLION_TOKENS, 1_000_000);

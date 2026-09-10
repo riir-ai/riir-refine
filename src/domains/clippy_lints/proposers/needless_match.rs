@@ -19,7 +19,10 @@ use syn::{Arm, Expr, ExprMatch, File, Lit, Pat};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -43,12 +46,18 @@ impl Collector<'_> {
         if m.arms.len() != 2 || !m.attrs.is_empty() {
             return None;
         }
-        if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
+        if m.arms
+            .iter()
+            .any(|a| !a.attrs.is_empty() || a.guard.is_some())
+        {
             return None; // guards/arm-attrs would be lost by the splice
         }
         let scrutinee = src(self.source, &*m.expr)?;
-        let scrutinee =
-            if is_postfix_safe(&m.expr) { scrutinee } else { format!("({scrutinee})") };
+        let scrutinee = if is_postfix_safe(&m.expr) {
+            scrutinee
+        } else {
+            format!("({scrutinee})")
+        };
         for (a, b) in [(&m.arms[0], &m.arms[1]), (&m.arms[1], &m.arms[0])] {
             if (is_ctor_rebuild(a, "Some") && is_none_literal_arm(b))
                 || (is_ctor_rebuild(a, "Ok") && is_ctor_rebuild(b, "Err"))
@@ -65,7 +74,9 @@ impl Collector<'_> {
 /// `Ctor(v) => Ctor(v)` — tuple-struct pattern with one binding, rebuilt by
 /// a call to the same constructor with that same binding.
 fn is_ctor_rebuild(arm: &Arm, ctor: &str) -> bool {
-    let Some(binding) = single_ctor_binding(&arm.pat, ctor) else { return false };
+    let Some(binding) = single_ctor_binding(&arm.pat, ctor) else {
+        return false;
+    };
     match &*arm.body {
         Expr::Call(c) => {
             matches!(&*c.func, Expr::Path(p) if p.path.is_ident(ctor))
@@ -93,7 +104,9 @@ fn pat_is_bool(p: &Pat, want: bool) -> bool {
 
 /// The single `Ctor(<binding>)` pattern's binding ident.
 fn single_ctor_binding(pat: &Pat, ctor: &str) -> Option<syn::Ident> {
-    let Pat::TupleStruct(ts) = pat else { return None };
+    let Pat::TupleStruct(ts) = pat else {
+        return None;
+    };
     if !ts.path.is_ident(ctor) || ts.elems.len() != 1 {
         return None;
     }
@@ -109,7 +122,8 @@ mod tests {
 
     #[test]
     fn option_identity_collapses() {
-        let input = "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v), None => None } }";
+        let input =
+            "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v), None => None } }";
         let out = propose_fix("needless_match", input).expect("matched");
         assert!(out.contains("{ x }"), "identity not collapsed: {out}");
         assert!(!out.contains("match"), "match must be gone: {out}");
@@ -135,16 +149,21 @@ mod tests {
 
     #[test]
     fn none_first_arm_order_accepted() {
-        let input = "fn f(x: Option<u8>) -> Option<u8> { match x { None => None, Some(v) => Some(v) } }";
+        let input =
+            "fn f(x: Option<u8>) -> Option<u8> { match x { None => None, Some(v) => Some(v) } }";
         let out = propose_fix("needless_match", input).expect("matched");
         assert!(out.contains("{ x }"), "{out}");
     }
 
     #[test]
     fn deref_scrutinee_gets_parens() {
-        let input = "fn f(r: &Option<u8>) -> Option<u8> { match *r { Some(v) => Some(v), None => None } }";
+        let input =
+            "fn f(r: &Option<u8>) -> Option<u8> { match *r { Some(v) => Some(v), None => None } }";
         let out = propose_fix("needless_match", input).expect("matched");
-        assert!(out.contains("{ (*r) }"), "deref must be parenthesized: {out}");
+        assert!(
+            out.contains("{ (*r) }"),
+            "deref must be parenthesized: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -153,14 +172,20 @@ mod tests {
         let input =
             "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v + 1), None => None } }";
         let out = propose_fix("needless_match", input);
-        assert!(out.is_none(), "non-identity ctor body must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-identity ctor body must not fire: {out:?}"
+        );
     }
 
     #[test]
     fn unboxed_body_untouched() {
         let input = "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => v, None => None } }";
         let out = propose_fix("needless_match", input);
-        assert!(out.is_none(), "unboxed body is a different lint's shape: {out:?}");
+        assert!(
+            out.is_none(),
+            "unboxed body is a different lint's shape: {out:?}"
+        );
     }
 
     #[test]

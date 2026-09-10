@@ -175,7 +175,10 @@ pub fn ood_set_family(fixture: &BenchFixture) -> &str {
 /// coverage summary. Counts (which family contributes how many spans) ride
 /// [`family_counts`]; the row carries the distinct names.
 #[must_use]
-pub fn provenance_families(fixture_list: &[BenchFixture], family_of: fn(&BenchFixture) -> &str) -> Vec<String> {
+pub fn provenance_families(
+    fixture_list: &[BenchFixture],
+    family_of: fn(&BenchFixture) -> &str,
+) -> Vec<String> {
     let mut families: Vec<&str> = fixture_list.iter().map(family_of).collect();
     families.sort_unstable();
     families.dedup();
@@ -187,7 +190,10 @@ pub fn provenance_families(fixture_list: &[BenchFixture], family_of: fn(&BenchFi
 // Count→ratio-free census over fixture populations (≤ 10³); allowed.
 #[allow(clippy::cast_precision_loss)]
 #[must_use]
-pub fn family_counts(fixture_list: &[BenchFixture], family_of: fn(&BenchFixture) -> &str) -> Vec<(String, usize)> {
+pub fn family_counts(
+    fixture_list: &[BenchFixture],
+    family_of: fn(&BenchFixture) -> &str,
+) -> Vec<(String, usize)> {
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for fx in fixture_list {
         *counts.entry(family_of(fx).to_string()).or_insert(0) += 1;
@@ -212,8 +218,10 @@ pub fn family_counts(fixture_list: &[BenchFixture], family_of: fn(&BenchFixture)
 #[allow(clippy::cast_precision_loss)]
 pub fn rule_score_vector(code: &str) -> Option<Vec<f32>> {
     let parsed = syn::parse_file(code).ok()?;
-    let mut scores =
-        Vec::with_capacity(crate::domains::rust_perf::proposers::FIXABLE_RULES.len() + crate::domains::clippy_lints::proposers::FIXABLE_LINTS.len());
+    let mut scores = Vec::with_capacity(
+        crate::domains::rust_perf::proposers::FIXABLE_RULES.len()
+            + crate::domains::clippy_lints::proposers::FIXABLE_LINTS.len(),
+    );
     for rule in crate::domains::rust_perf::proposers::FIXABLE_RULES {
         if *rule == "fxhashmap" {
             continue;
@@ -363,8 +371,16 @@ mod tests {
         #![allow(clippy::float_cmp)]
         // Reference peaked (memorized home ground), OOD flat (diffuse on
         // unseen) → gap = ln 8 ≈ +2.08 > 1.0 → Memorizing.
-        let r = row_from_entropies(&sample(&SampleKind::Peaked, 16), &sample(&SampleKind::Flat, 16), (0, 0));
-        assert!(r.mean_gap > 1.0, "memorization gap must be large: {}", r.mean_gap);
+        let r = row_from_entropies(
+            &sample(&SampleKind::Peaked, 16),
+            &sample(&SampleKind::Flat, 16),
+            (0, 0),
+        );
+        assert!(
+            r.mean_gap > 1.0,
+            "memorization gap must be large: {}",
+            r.mean_gap
+        );
         assert!(r.mean_ref_entropy < 0.01);
         assert_eq!(r.regime, OodRegime::Memorizing);
         assert_eq!(r.ref_set, REF_SET);
@@ -372,7 +388,11 @@ mod tests {
 
         // Mirrored: held-out sharper than home ground → anomalous, not a
         // paper regime, never folded into Memorizing/Converged.
-        let r2 = row_from_entropies(&sample(&SampleKind::Flat, 16), &sample(&SampleKind::Peaked, 16), (0, 0));
+        let r2 = row_from_entropies(
+            &sample(&SampleKind::Flat, 16),
+            &sample(&SampleKind::Peaked, 16),
+            (0, 0),
+        );
         assert!(r2.mean_gap < -1.0);
         assert_eq!(r2.regime, OodRegime::AnomalousNegative);
 
@@ -414,8 +434,14 @@ mod tests {
         #![allow(clippy::float_cmp)]
         let r = row_from_entropies(&[], &sample(&SampleKind::Flat, 4), (3, 0));
         assert_eq!(r.regime, OodRegime::Insufficient);
-        assert_eq!(r.mean_ref_entropy, 0.0, "empty-sample mean is 0.0 (the primitive's convention)");
-        assert_eq!(r.mean_gap, r.mean_ood_entropy, "one-sided measurement, artifact-consistent");
+        assert_eq!(
+            r.mean_ref_entropy, 0.0,
+            "empty-sample mean is 0.0 (the primitive's convention)"
+        );
+        assert_eq!(
+            r.mean_gap, r.mean_ood_entropy,
+            "one-sided measurement, artifact-consistent"
+        );
         assert_eq!(r.n_ref, 0);
         assert_eq!(r.n_ref_skipped, 3);
     }
@@ -522,7 +548,10 @@ mod tests {
         sorted.dedup();
         assert_eq!(sorted, axis.ref_provenance_families);
         // v1: the composite era + exactly one real mining state family.
-        assert!(axis.ref_provenance_families.iter().any(|f| f == "authored-composite"));
+        assert!(axis
+            .ref_provenance_families
+            .iter()
+            .any(|f| f == "authored-composite"));
         assert_eq!(
             axis.ref_provenance_families
                 .iter()
@@ -538,9 +567,6 @@ mod tests {
                 .any(|f| f.starts_with("authored")),
             "gen6 must be all-real"
         );
-        assert!(axis
-            .ood_provenance_families
-            .iter()
-            .all(|f| f.contains('@')));
+        assert!(axis.ood_provenance_families.iter().all(|f| f.contains('@')));
     }
 }

@@ -39,9 +39,9 @@ use std::path::{Path, PathBuf};
 
 use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
-use riir_clippy::edit_emitter::RuleEdit;
-use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
 use riir_clippy::draft::span_source::collect_source_files;
+use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
+use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::EvolveRecorder;
 
 /// Proposal 005 Phase 0 T0.1 (Plan 025) + Phase 1 T1.6 (Plan 040): the KAT
@@ -121,7 +121,11 @@ fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
                     std::env::current_dir().ok()?.join(p)
                 };
                 let abs = abs.canonicalize().ok()?;
-                let mut dir = if abs.is_dir() { abs } else { abs.parent()?.to_path_buf() };
+                let mut dir = if abs.is_dir() {
+                    abs
+                } else {
+                    abs.parent()?.to_path_buf()
+                };
                 loop {
                     if dir.join(".git").exists() {
                         return Some(dir);
@@ -189,7 +193,9 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_clippy::kat_meter::KatMeter>
         return None;
     }
     if let Ok(file) = std::env::var("RIIR_HEAL_KAT_METER_FILE") {
-        return Some(riir_clippy::kat_meter::KatMeter::open_at(PathBuf::from(file)));
+        return Some(riir_clippy::kat_meter::KatMeter::open_at(PathBuf::from(
+            file,
+        )));
     }
     let root = resolve_heal_root(paths);
     Some(riir_clippy::kat_meter::KatMeter::open(&root))
@@ -215,7 +221,10 @@ fn open_kat_charge(
         ));
     }
     let root = resolve_heal_root(paths);
-    Some(riir_clippy::kat_meter::KatCharge::open(&root, meter.state()))
+    Some(riir_clippy::kat_meter::KatCharge::open(
+        &root,
+        meter.state(),
+    ))
 }
 
 /// Issue 076 client half: the ONE burn-sync status line (the
@@ -234,7 +243,9 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
             );
         }
         riir_clippy::kat_burn_client::BurnSync::Stacked { total, reason } => {
-            println!("burn sync: offline — {total} KAT stacked, reports with the next run ({reason})");
+            println!(
+                "burn sync: offline — {total} KAT stacked, reports with the next run ({reason})"
+            );
         }
         riir_clippy::kat_burn_client::BurnSync::Skipped => {}
     }
@@ -275,7 +286,9 @@ fn enforce_kat_soft_gate(args: &Args) {
         return;
     }
     let root = resolve_heal_root(&args.paths);
-    let ack_path = root.join(".heal").join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
+    let ack_path = root
+        .join(".heal")
+        .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
     let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");
@@ -298,8 +311,10 @@ fn enforce_kat_soft_gate(args: &Args) {
     // never asks a machine that already answered no (an explicit opt-out).
     #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
     let (verdict, offered) = {
-        if matches!(verdict, riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { .. })
-            && depleted_mine_offer()
+        if matches!(
+            verdict,
+            riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { .. }
+        ) && depleted_mine_offer()
         {
             eprintln!("cargo heal: out of KAT — contributing now (`cargo heal sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)");
             run_kat_sync();
@@ -580,9 +595,10 @@ fn run_mine_intro() {
     // account, which must never turn a completed --mine into a failure.
     #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
     {
-        let account_ok =
-            riir_clippy::kat_account::KatAccount::load(&riir_clippy::kat_account::KatAccount::default_dir())
-                .is_ok();
+        let account_ok = riir_clippy::kat_account::KatAccount::load(
+            &riir_clippy::kat_account::KatAccount::default_dir(),
+        )
+        .is_ok();
         if account_ok {
             println!();
             println!("sync: pushing what's queued (the same as running `cargo heal sync`):");
@@ -619,8 +635,7 @@ fn run_unmine() {
     if let Some(w) = warning {
         eprintln!("{w}");
     }
-    let already =
-        before == riir_clippy::kat_mining_consent::MiningConsent::OptedOut;
+    let already = before == riir_clippy::kat_mining_consent::MiningConsent::OptedOut;
 
     if let Err(e) = riir_clippy::kat_mining_consent::write(&dir, false) {
         eprintln!("unmine: could NOT record the opt-out — {e}");
@@ -632,7 +647,11 @@ fn run_unmine() {
         std::process::exit(1);
     }
 
-    if already { println!("KAT mining: already opted out — nothing changed") } else { println!("KAT mining: opted OUT on this machine") }
+    if already {
+        println!("KAT mining: already opted out — nothing changed")
+    } else {
+        println!("KAT mining: opted OUT on this machine")
+    }
     println!(
         "record: {}",
         riir_clippy::kat_mining_consent::consent_path(&dir).display()
@@ -675,9 +694,14 @@ fn run_unmine() {
     //    a tool that silently deletes the evidence of what it queued is
     //    not auditable; they are inert while opted out and the user
     //    decides).
-    let watermark = resolve_heal_root(&[]).join(".heal").join("kat_sync_watermark.json");
+    let watermark = resolve_heal_root(&[])
+        .join(".heal")
+        .join("kat_sync_watermark.json");
     match std::fs::remove_file(&watermark) {
-        Ok(()) => println!("UNSYNC: cleared the sync watermark ({})", watermark.display()),
+        Ok(()) => println!(
+            "UNSYNC: cleared the sync watermark ({})",
+            watermark.display()
+        ),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => eprintln!("unmine: could not clear the watermark: {e}"),
     }
@@ -698,7 +722,10 @@ fn run_unmine() {
         ),
     }
     println!();
-    println!("{}", riir_clippy::kat_mining_consent::MiningConsent::OptedOut.status_line());
+    println!(
+        "{}",
+        riir_clippy::kat_mining_consent::MiningConsent::OptedOut.status_line()
+    );
     println!("re-enable any time: cargo heal --mine");
 }
 
@@ -746,7 +773,9 @@ fn run_unmine_purge() {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => eprintln!("  purge: could not clear the outbox: {e}"),
             }
-            let watermark = resolve_heal_root(&[]).join(".heal").join("kat_sync_watermark.json");
+            let watermark = resolve_heal_root(&[])
+                .join(".heal")
+                .join("kat_sync_watermark.json");
             match std::fs::remove_file(&watermark) {
                 Ok(()) => println!("  watermark cleared: {}", watermark.display()),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -839,7 +868,9 @@ fn ensure_logged_in() -> Option<riir_clippy::kat_account::KatAccount> {
             }
             Err(e) => {
                 eprintln!("login:   FAILED — {e}");
-                eprintln!("login:   run `cargo heal login` to set the account up, then --mine again");
+                eprintln!(
+                    "login:   run `cargo heal login` to set the account up, then --mine again"
+                );
                 None
             }
         },
@@ -917,9 +948,8 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // the server aggregates at Phase 1.
     let root = resolve_heal_root(paths);
     let charge_path = root.join(".heal").join("kat_charge.json");
-    let charge = std::fs::read_to_string(&charge_path)
-        .ok()
-        .and_then(|text| match serde_json::from_str::<ChargeState>(&text) {
+    let charge = std::fs::read_to_string(&charge_path).ok().and_then(|text| {
+        match serde_json::from_str::<ChargeState>(&text) {
             Ok(charge) => Some(charge),
             Err(e) => {
                 eprintln!(
@@ -928,7 +958,8 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 );
                 None
             }
-        });
+        }
+    });
 
     // Issue 081: the grant projection is the meter CONSTANT now — the
     // canonical record no longer carries a grant_kat field (it was never
@@ -940,10 +971,17 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
             let kat = |micro: u64| {
                 riir_clippy::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
             };
-            println!("local burn:          {} charged this repo ({} tokens, watermark {})",
-                kat(charge.charged_kat), charge.meter_watermark_tokens, charge.meter_watermark_tokens);
-            println!("balance projection:  {} of {} (per-repo until server aggregation)",
-                kat(remaining), kat(grant));
+            println!(
+                "local burn:          {} charged this repo ({} tokens, watermark {})",
+                kat(charge.charged_kat),
+                charge.meter_watermark_tokens,
+                charge.meter_watermark_tokens
+            );
+            println!(
+                "balance projection:  {} of {} (per-repo until server aggregation)",
+                kat(remaining),
+                kat(grant)
+            );
             if remaining <= KAT_WARN_REMAINING {
                 println!("kat: WARN balance ≤ {} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)", kat(KAT_WARN_REMAINING));
             }
@@ -1000,14 +1038,18 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 // and never blocks the local view.
                 match account.signing_key() {
                     Ok(key) => {
-                        let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
-                        match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
+                        let payreq =
+                            riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
+                        match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct)
+                        {
                             Ok(Some(claim)) => {
-                                let kat = |micro: i64| {
-                                    riir_clippy::kat_payreq_client::render_kat(micro)
-                                };
+                                let kat =
+                                    |micro: i64| riir_clippy::kat_payreq_client::render_kat(micro);
                                 if claim.already {
-                                    println!("grant:  already claimed (balance {})", kat(claim.balance_micro));
+                                    println!(
+                                        "grant:  already claimed (balance {})",
+                                        kat(claim.balance_micro)
+                                    );
                                 } else {
                                     println!(
                                         "grant:  {} claimed — the free-tier grant is live (balance {})",
@@ -1101,7 +1143,9 @@ fn run_kat_update() {
         }
         riir_clippy::kat_lease_client::UpdateStatus::Failed(e) => {
             eprintln!("corpus lease: {e}");
-            eprintln!("corpus lease: proceeding on the local corpus (offline is a mode, not a failure)");
+            eprintln!(
+                "corpus lease: proceeding on the local corpus (offline is a mode, not a failure)"
+            );
         }
     }
     if let Err(e) = charge.save() {
@@ -1199,21 +1243,21 @@ fn push_mining_batch(
     }
     // Payload v2 is SIGNED with the account key (Issue 008) — the receiver
     // derives the submitter from it, so an account is required to sync.
-    let account =
-        match riir_clippy::kat_account::KatAccount::load(&riir_clippy::kat_account::KatAccount::default_dir())
-        {
-            Ok(a) => a,
-            Err(e) => {
-                if sv {
-                    eprintln!(
-                        "sync: no account ({e}) — payload v2 is signed with the account \
+    let account = match riir_clippy::kat_account::KatAccount::load(
+        &riir_clippy::kat_account::KatAccount::default_dir(),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            if sv {
+                eprintln!(
+                    "sync: no account ({e}) — payload v2 is signed with the account \
                          key; run `cargo heal login` first"
-                    );
-                    std::process::exit(1);
-                }
-                return MinePush::Skipped;
+                );
+                std::process::exit(1);
             }
-        };
+            return MinePush::Skipped;
+        }
+    };
     let signing_key = match account.signing_key() {
         Ok(k) => k,
         Err(e) => {
@@ -1291,13 +1335,10 @@ fn push_mining_batch(
             // The outbox copy of THIS batch is now delivered mail — remove
             // it (pruned per-file, never the directory; re-push is
             // idempotent server-side, so an early crash here is harmless).
-            let batch_file = root
-                .join(".heal")
-                .join("outbox")
-                .join(format!(
-                    "{}.ndjson",
-                    &payload.commitment[..12.min(payload.commitment.len())]
-                ));
+            let batch_file = root.join(".heal").join("outbox").join(format!(
+                "{}.ndjson",
+                &payload.commitment[..12.min(payload.commitment.len())]
+            ));
             if batch_file.is_file() {
                 let _ = std::fs::remove_file(&batch_file);
             }
@@ -1310,10 +1351,8 @@ fn push_mining_batch(
                 if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
                     &account.state().account_id,
                 ) {
-                    let payreq =
-                        riir_clippy::kat_payreq_client::HttpPayreqTransport::new(url, 10);
-                    match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct)
-                    {
+                    let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(url, 10);
+                    match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
                         Ok(Some(claim)) if !claim.already => {
                             if sv {
                                 println!(
@@ -1333,8 +1372,7 @@ fn push_mining_batch(
             }
             // Real acceptance → advance the watermark (the pushed rows are
             // no longer "pending-unsynced").
-            let wm =
-                riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(&payload);
+            let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(&payload);
             if let Err(e) = wm.save(
                 &root
                     .join(".heal")
@@ -1350,11 +1388,12 @@ fn push_mining_batch(
         resp => {
             let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
                 .ok()
-                .map_or_else(|| "(queue write failed)".to_string(), |p| p.display().to_string());
-            if sv {
-                println!(
-                    "sync: push NOT accepted ({resp:?}) — the service plane is not yet live;"
+                .map_or_else(
+                    || "(queue write failed)".to_string(),
+                    |p| p.display().to_string(),
                 );
+            if sv {
+                println!("sync: push NOT accepted ({resp:?}) — the service plane is not yet live;");
                 println!(
                     "sync: payload queued locally at {queued} (submits when the Worker lands; the watermark does not advance)"
                 );
@@ -1367,7 +1406,9 @@ fn push_mining_batch(
 
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
-    use riir_clippy::kat_lease_client::{run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore};
+    use riir_clippy::kat_lease_client::{
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+    };
 
     let root = resolve_heal_root(&[]);
     let store = LeaseStore::open(&root);
@@ -1508,8 +1549,7 @@ fn run_kat_claim(sig: Option<&str>) {
     {
         use riir_clippy::kat_lease_client::LeaseTransport;
         let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport =
-            riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, 10);
+        let transport = riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, 10);
         if let riir_clippy::kat_lease_client::HttpResponse::Ok(_) = transport.post_claim(&json) {
             println!("claim: submitted to {url} — the service verifies the five checks + mints at settlement");
             return;
@@ -1518,7 +1558,10 @@ fn run_kat_claim(sig: Option<&str>) {
     let root = resolve_heal_root(&[]);
     match queue_claim(&root, &req) {
         Ok(path) => {
-            println!("claim: service plane not yet live — queued locally at {}", path.display());
+            println!(
+                "claim: service plane not yet live — queued locally at {}",
+                path.display()
+            );
             println!(
                 "claim: the queued claim submits when the Worker lands; payment page: {}",
                 riir_clippy::kat_lease_client::payment_url(DEFAULT_SERVICE_URL, &req.account_id)
@@ -1591,7 +1634,9 @@ fn run_kat_stake(usd: Option<&str>, info: bool) {
                 println!("stake: transfer request from the service:");
                 println!("  {url}");
                 print_qr(&url);
-                println!("stake: the service verifies the five checks and credits the tranche at sync");
+                println!(
+                    "stake: the service verifies the five checks and credits the tranche at sync"
+                );
             }
             Ok(StakeOutcome::LocalQueued { url, queued_at }) => {
                 println!("stake: service plane not yet live — composed locally:");
@@ -1611,7 +1656,9 @@ fn run_kat_stake(usd: Option<&str>, info: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, amount_base, root, now_unix);
-        eprintln!("stake: composing a transfer request requires a build with --features kat_transport");
+        eprintln!(
+            "stake: composing a transfer request requires a build with --features kat_transport"
+        );
         std::process::exit(2);
     }
 }
@@ -1696,7 +1743,9 @@ fn run_kat_unstake() {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, root, now_unix);
-        eprintln!("unstake: composing a refund request requires a build with --features kat_transport");
+        eprintln!(
+            "unstake: composing a refund request requires a build with --features kat_transport"
+        );
         std::process::exit(2);
     }
 }
@@ -1823,12 +1872,16 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
     // settle). A supplied amount parses KAT → micro (positive, ≤6 decimals).
     let amount_micro = match amount {
         None | Some("") => None,
-        Some(s) => if let Some(m) = payreq::parse_kat_amount(s) { Some(m) } else {
+        Some(s) => {
+            if let Some(m) = payreq::parse_kat_amount(s) {
+                Some(m)
+            } else {
                 eprintln!(
                     "pay: --amount expects a positive KAT amount with at most 6 decimals (e.g. 2 or 1.5); omit it for an ANY-amount request"
                 );
                 std::process::exit(2);
-            },
+            }
+        }
     };
     let label = label.unwrap_or("");
     if label.len() > 64 {
@@ -1957,7 +2010,9 @@ fn run_kat_faucet(qr: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, qr);
-        eprintln!("faucet: opening a faucet request requires a build with --features kat_transport");
+        eprintln!(
+            "faucet: opening a faucet request requires a build with --features kat_transport"
+        );
         std::process::exit(2);
     }
 }
@@ -1992,13 +2047,17 @@ fn run_kat_refill(wait_secs: u64) {
             std::process::exit(1);
         }
     };
-    let acct_hex = if let Some(h) = riir_clippy::kat_account_client::service_account_hex(&account.state().account_id) { h.to_string() } else {
-            eprintln!(
-                "refill: the local account id does not carry a valid service account prefix — \
+    let acct_hex = if let Some(h) =
+        riir_clippy::kat_account_client::service_account_hex(&account.state().account_id)
+    {
+        h.to_string()
+    } else {
+        eprintln!(
+            "refill: the local account id does not carry a valid service account prefix — \
                  re-run `cargo heal login`"
-            );
-            std::process::exit(1);
-        };
+        );
+        std::process::exit(1);
+    };
 
     #[cfg(feature = "kat_transport")]
     {
@@ -2045,19 +2104,18 @@ fn run_kat_refill(wait_secs: u64) {
         // stale, the fuel is still real.
         if let Some(b) = &outcome.final_balance {
             let root = resolve_heal_root(&[]);
-            let ack_path =
-                root.join(".heal")
-                    .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
+            let ack_path = root
+                .join(".heal")
+                .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
             let (mut ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = warning {
                 eprintln!("{w}");
             }
             if riir_clippy::kat_refill::record_server_balance(&mut ack, b.balance_micro) {
                 match ack.save(&ack_path) {
-                    Ok(()) => println!(
-                        "refill: soft-gate input refreshed — {}",
-                        ack_path.display()
-                    ),
+                    Ok(()) => {
+                        println!("refill: soft-gate input refreshed — {}", ack_path.display())
+                    }
                     Err(e) => eprintln!("refill: the gate input refresh did not save: {e}"),
                 }
             }
@@ -2151,7 +2209,9 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
             &riir_clippy::kat_account::KatAccount::default_dir(),
         )
         .map_err(|e| format!("no account ({e})"))?;
-        let key = account.signing_key().map_err(|e| format!("account key unusable ({e})"))?;
+        let key = account
+            .signing_key()
+            .map_err(|e| format!("account key unusable ({e})"))?;
         let (traj, _bad) = riir_clippy::traj_store::TrajStore::open(&self.root)
             .map_err(|e| format!("trajectory store unreadable: {e}"))?;
         let rows = traj.dump();
@@ -2204,7 +2264,11 @@ fn run_kat_wetrun(dry_run: bool) {
 
     let url = riir_clippy::kat_lease_client::service_url_for_command();
     let network = riir_clippy::kat_wetrun::classify_service_url(&url);
-    let mode = if dry_run { RunMode::DryRun } else { RunMode::Full };
+    let mode = if dry_run {
+        RunMode::DryRun
+    } else {
+        RunMode::Full
+    };
 
     // Admission BEFORE anything else — including before the account load,
     // so a refused mainnet run cannot be confused with a missing key.
@@ -2255,12 +2319,8 @@ fn run_kat_wetrun(dry_run: bool) {
             );
             std::process::exit(2);
         }
-        let transport = riir_clippy::kat_wetrun::HttpWetrunTransport::new(
-            &url,
-            30,
-            signing_key,
-            crank_bearer,
-        );
+        let transport =
+            riir_clippy::kat_wetrun::HttpWetrunTransport::new(&url, 30, signing_key, crank_bearer);
         let mut legs = CliLocalLegs {
             root: resolve_heal_root(&[]),
         };
@@ -2331,7 +2391,10 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
     }
     let mut mem = riir_clippy::memory::LatentFixMemory::default();
     if let Err(e) = mem.load(&envelope) {
-        eprintln!("self-evolve: migration skipped — unreadable envelope ({}): {e}", envelope.display());
+        eprintln!(
+            "self-evolve: migration skipped — unreadable envelope ({}): {e}",
+            envelope.display()
+        );
         return;
     }
     let n = mem.len();
@@ -2401,7 +2464,9 @@ impl ReopenTrigger067 {
     /// apply/record time — rule id in the clippy lane, `code:strategy` in
     /// the compile lane). Logs at most once per key per run.
     fn note(&mut self, store: &riir_clippy::traj_store::TrajStore, lint_key: &str) {
-        let density = self.density.get_or_insert_with(|| store.certified_density());
+        let density = self
+            .density
+            .get_or_insert_with(|| store.certified_density());
         if let Some(n) = density.get(lint_key) {
             if *n >= Self::K && self.logged.insert(lint_key.to_string()) {
                 eprintln!(
@@ -2456,12 +2521,19 @@ fn record_traj_fail(
     replacement: &str,
     run_id: &str,
 ) {
-    let class = riir_clippy::component::classify(
-        &riir_clippy::component::FailureSignal::reverted(
-            riir_clippy::component::RevertKind::CompileGate,
-        ),
+    let class = riir_clippy::component::classify(&riir_clippy::component::FailureSignal::reverted(
+        riir_clippy::component::RevertKind::CompileGate,
+    ));
+    record_traj(
+        store,
+        rule_id,
+        restore,
+        replacement,
+        false,
+        false,
+        run_id,
+        Some(class),
     );
-    record_traj(store, rule_id, restore, replacement, false, false, run_id, Some(class));
 }
 
 /// P12: the recorded consecutive-fail streak for one exact edit pair —
@@ -2503,7 +2575,10 @@ fn pair_fail_streak(
 /// value set.
 fn suppression_disabled() -> bool {
     match std::env::var("RIIR_HEAL_SUPPRESS_REVERTED") {
-        Ok(v) => matches!(v.to_ascii_lowercase().as_str(), "0" | "off" | "false" | "no"),
+        Ok(v) => matches!(
+            v.to_ascii_lowercase().as_str(),
+            "0" | "off" | "false" | "no"
+        ),
         Err(_) => false,
     }
 }
@@ -2606,19 +2681,17 @@ fn write_with_fmt(
     });
     let decision = decision?;
     match decision {
-        FmtDecision::Format => {
-            match riir_clippy::fmt::apply(file, edition) {
-                Ok(()) => {
-                    fmt_summary.formatted += 1;
-                    Some("formatted".to_string())
-                }
-                Err(e) => {
-                    fmt_summary.failed += 1;
-                    eprintln!("fmt failed for {}: {e}", file.display());
-                    Some(format!("FAILED ({e})"))
-                }
+        FmtDecision::Format => match riir_clippy::fmt::apply(file, edition) {
+            Ok(()) => {
+                fmt_summary.formatted += 1;
+                Some("formatted".to_string())
             }
-        }
+            Err(e) => {
+                fmt_summary.failed += 1;
+                eprintln!("fmt failed for {}: {e}", file.display());
+                Some(format!("FAILED ({e})"))
+            }
+        },
         FmtDecision::SkipDrift => {
             fmt_summary.skip_drift += 1;
             Some("skip (pre-existing drift)".to_string())
@@ -3134,7 +3207,9 @@ fn parse_args() -> Args {
             "--refill" => args.refill = true,
             "--refill-wait" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--refill-wait requires a value (seconds; 0 = one after-read, no poll)");
+                    eprintln!(
+                        "--refill-wait requires a value (seconds; 0 = one after-read, no poll)"
+                    );
                     usage();
                 };
                 args.refill_wait = value.parse().unwrap_or_else(|_| {
@@ -3326,7 +3401,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
-                | "pay" | "faucet" | "wetrun"
+            | "pay" | "faucet" | "wetrun"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -3351,7 +3426,9 @@ fn parse_args() -> Args {
         usage();
     }
     if args.purge && !args.unmine {
-        eprintln!("--purge requires --unmine (it only makes sense as the destructive half of opting out)");
+        eprintln!(
+            "--purge requires --unmine (it only makes sense as the destructive half of opting out)"
+        );
         usage();
     }
     if args.refill_wait != 0 && !args.refill {
@@ -3464,11 +3541,13 @@ fn parse_args() -> Args {
 /// # Errors
 ///
 /// Returns the exact message `main` prints before `usage()`.
-fn validate_mode_flags(
-    args: &Args,
-) -> Result<(), &'static str> {
-    let (suggest, fix, fix_compile, dump_trajectories) =
-        (args.suggest, args.fix, args.fix_compile, args.dump_trajectories);
+fn validate_mode_flags(args: &Args) -> Result<(), &'static str> {
+    let (suggest, fix, fix_compile, dump_trajectories) = (
+        args.suggest,
+        args.fix,
+        args.fix_compile,
+        args.dump_trajectories,
+    );
     let (write, verify, verify_args, has_command) = (
         args.write,
         args.verify,
@@ -3597,7 +3676,10 @@ fn truncate(s: &str, n: usize) -> String {
 
 fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: Option<DomainId>) {
     let routed = s.routed_domain.label();
-    println!("{}:{}-{} (routed: {routed})", s.path, s.start_line, s.end_line);
+    println!(
+        "{}:{}-{} (routed: {routed})",
+        s.path, s.start_line, s.end_line
+    );
     for (domain, rules) in &s.by_domain {
         if domain_filter.is_some_and(|want| want != *domain) {
             continue;
@@ -3664,7 +3746,10 @@ fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
     if root.join(".heal").join("trajectories.kv").exists() {
         if let Ok((store, _)) = riir_clippy::traj_store::TrajStore::open(root) {
             return riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows(
-                store.dump().into_iter().map(|r| (r.lint_key, r.success_count, r.fail_count)),
+                store
+                    .dump()
+                    .into_iter()
+                    .map(|r| (r.lint_key, r.success_count, r.fail_count)),
             );
         }
     }
@@ -3673,7 +3758,8 @@ fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
         return std::collections::BTreeMap::new();
     }
     riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows(
-        mem.iter().map(|t| (t.lint_name.clone(), t.success_count, t.fail_count)),
+        mem.iter()
+            .map(|t| (t.lint_name.clone(), t.success_count, t.fail_count)),
     )
 }
 
@@ -3727,7 +3813,10 @@ fn run_score_bench(generation: u8) {
         3 => match sb::generations::v3_freeze_status() {
             Ok(admitted) => {
                 println!("generation v3: {admitted} admitted fixture(s) (freeze record present)");
-                (sb::generations::generation_v3(), "generation-v3 persist-stratified ladder")
+                (
+                    sb::generations::generation_v3(),
+                    "generation-v3 persist-stratified ladder",
+                )
             }
             Err(e) => {
                 eprintln!("generation v3: {e}");
@@ -3737,7 +3826,10 @@ fn run_score_bench(generation: u8) {
         6 => match sb::generations::v6_freeze_status() {
             Ok(admitted) => {
                 println!("generation v6: {admitted} admitted fixture(s) (freeze record present)");
-                (sb::generations::generation_v6(), "generation-v6 real-repo shape ladder")
+                (
+                    sb::generations::generation_v6(),
+                    "generation-v6 real-repo shape ladder",
+                )
             }
             Err(e) => {
                 eprintln!("generation v6: {e}");
@@ -3747,7 +3839,10 @@ fn run_score_bench(generation: u8) {
         7 => match sb::generations::v7_freeze_status() {
             Ok(admitted) => {
                 println!("generation v7: {admitted} admitted fixture(s) (freeze record present)");
-                (sb::generations::generation_v7(), "generation-v7 overlap-edit-chain ladder")
+                (
+                    sb::generations::generation_v7(),
+                    "generation-v7 overlap-edit-chain ladder",
+                )
             }
             Err(e) => {
                 eprintln!("generation v7: {e}");
@@ -3836,8 +3931,8 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
     use riir_clippy::score_bench as sb;
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
-    let rec =
-        sb::report::HistoryRecord::from_score(score, sb::report::git_sha()).with_generation(generation);
+    let rec = sb::report::HistoryRecord::from_score(score, sb::report::git_sha())
+        .with_generation(generation);
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
@@ -3875,8 +3970,7 @@ fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchSco
         if !series.is_empty() {
             let path = svg_path(g);
             let svg_g = sb::report::render_svg(&series);
-            std::fs::write(path, &svg_g)
-                .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+            std::fs::write(path, &svg_g).unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
             written_svgs.push(path);
         }
     }
@@ -3990,7 +4084,11 @@ fn run_score_bench_compile() {
             outcome.members_total,
             outcome.created_total,
             outcome.edits,
-            if outcome.label_ok { "" } else { " [LABEL-MISMATCH]" },
+            if outcome.label_ok {
+                ""
+            } else {
+                " [LABEL-MISMATCH]"
+            },
         );
     }
 
@@ -4122,11 +4220,17 @@ fn run_score_bench_perf() {
             .and_then(|rest| rest.split_once('-'))
             .map(|(_, names)| names.split('+').collect())
             .unwrap_or_default();
-        assert_eq!(member_names.len(), rules.len(), "member names/rules aligned on {}", spec.id);
+        assert_eq!(
+            member_names.len(),
+            rules.len(),
+            "member names/rules aligned on {}",
+            spec.id
+        );
         // Pre-heal regions: the created axis needs each member's BEFORE
         // marker state, read from the composed spec itself.
-        let before_regions: Vec<Option<String>> =
-            (0..rules.len()).map(|i| sb::generations::v5_module_region(&spec.code, i)).collect();
+        let before_regions: Vec<Option<String>> = (0..rules.len())
+            .map(|i| sb::generations::v5_module_region(&spec.code, i))
+            .collect();
 
         let (healed, edits, _passes) = sb::heal_fixpoint(&spec.code);
         edits_total += edits;
@@ -4265,11 +4369,8 @@ fn print_per_k_solve_rates(
 ) {
     use riir_clippy::score_bench as sb;
     use std::collections::BTreeMap;
-    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> = score
-        .outcomes
-        .iter()
-        .map(|o| (o.id.as_str(), o))
-        .collect();
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
+        score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
     let mut resolved: BTreeMap<usize, usize> = BTreeMap::new();
     let mut total: BTreeMap<usize, usize> = BTreeMap::new();
     for f in fixtures {
@@ -4310,11 +4411,8 @@ fn print_v6_territory_rates(
 ) {
     use riir_clippy::score_bench as sb;
     use std::collections::BTreeMap;
-    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> = score
-        .outcomes
-        .iter()
-        .map(|o| (o.id.as_str(), o))
-        .collect();
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
+        score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
     let mut resolved: BTreeMap<&str, usize> = BTreeMap::new();
     let mut total: BTreeMap<&str, usize> = BTreeMap::new();
     for f in fixtures {
@@ -4352,11 +4450,8 @@ fn print_v7_chain_tables(
 ) {
     use riir_clippy::score_bench as sb;
     use std::collections::BTreeMap;
-    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> = score
-        .outcomes
-        .iter()
-        .map(|o| (o.id.as_str(), o))
-        .collect();
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
+        score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
     let mut depth_resolved: BTreeMap<usize, usize> = BTreeMap::new();
     let mut depth_total: BTreeMap<usize, usize> = BTreeMap::new();
     let mut terr_resolved: BTreeMap<&str, usize> = BTreeMap::new();
@@ -4385,7 +4480,9 @@ fn print_v7_chain_tables(
     }
     println!("per-territory (never blended — the corpus's own stratification rule):");
     for terr in ["flat", "chain", "capped", "refused"] {
-        let Some(t) = terr_total.get(terr) else { continue };
+        let Some(t) = terr_total.get(terr) else {
+            continue;
+        };
         let r = terr_resolved.get(terr).copied().unwrap_or(0);
         println!("  {terr}: {r}/{t} = {:.1}%", pct(r, *t));
     }
@@ -4411,7 +4508,11 @@ fn print_v7_chain_tables(
 const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     ("kernel_opt", "src/domains/kernel_opt/corpus", "rule_id:"),
     ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
-    ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
+    (
+        "clippy_lints",
+        "src/domains/clippy_lints/corpus.rs",
+        "lint_name:",
+    ),
     ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
     // Docker's corpus uses the positional `rule()` shorthand constructor
     // (corpus.rs's own design note), so there is no per-entry `rule_id:`
@@ -4455,8 +4556,7 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
         }
         #[cfg(feature = "rust_perf")]
         "rust_perf" => Some(
-            u32::try_from(riir_clippy::build_perf_seed_corpus().entries.len())
-                .unwrap_or(u32::MAX),
+            u32::try_from(riir_clippy::build_perf_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "kernel_heal")]
         "kernel_opt" => Some(
@@ -4464,9 +4564,9 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
                 .unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "sec")]
-        "sec" => {
-            Some(u32::try_from(riir_clippy::build_sec_seed_corpus().entries.len()).unwrap_or(u32::MAX))
-        }
+        "sec" => Some(
+            u32::try_from(riir_clippy::build_sec_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+        ),
         #[cfg(feature = "docker")]
         "docker" => Some(
             u32::try_from(riir_clippy::build_docker_seed_corpus().entries.len())
@@ -4474,8 +4574,7 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
         ),
         #[cfg(feature = "dist")]
         "dist" => Some(
-            u32::try_from(riir_clippy::build_dist_seed_corpus().entries.len())
-                .unwrap_or(u32::MAX),
+            u32::try_from(riir_clippy::build_dist_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         _ => None,
     }
@@ -4489,7 +4588,9 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
 fn count_corpus_domain(repo: &Path, rel: &str, needle: &str) -> u32 {
     let path = repo.join(rel);
     if path.is_file() {
-        return std::fs::read_to_string(&path).map_or(0, |t| u32::try_from(t.matches(needle).count()).unwrap_or(u32::MAX));
+        return std::fs::read_to_string(&path).map_or(0, |t| {
+            u32::try_from(t.matches(needle).count()).unwrap_or(u32::MAX)
+        });
     }
     if !path.is_dir() {
         return 0;
@@ -4545,7 +4646,6 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
     }
     None
 }
-
 
 /// Plan 091 T1.3: the `--misses --report` mode — the conversion ledger
 /// (the real-G8 instrument). Prints conversion-per-authored-rule split by
@@ -4717,10 +4817,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
                     // The JSON contract needs the series — a store failure
                     // must not masquerade as an empty store (the consumer
                     // would project that emptiness over real history).
-                    eprintln!(
-                        "corpus-stats: store at {} unreadable: {e}",
-                        root.display()
-                    );
+                    eprintln!("corpus-stats: store at {} unreadable: {e}", root.display());
                     std::process::exit(1);
                 }
                 eprintln!(
@@ -4857,7 +4954,10 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
     });
 
     let fixture_list = riir_clippy::score_bench::fixtures::fixtures();
-    println!("frozen fixtures: {} — running post-hoc sweep…", fixture_list.len());
+    println!(
+        "frozen fixtures: {} — running post-hoc sweep…",
+        fixture_list.len()
+    );
 
     // 1. Post-hoc sweep of the LIVE overlay (withdraw regressors first so
     //    the new gate runs against a clean overlay).
@@ -4871,7 +4971,10 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 
     // 3. Persist + audit (the only side effects — never the score history).
     registry.save(&registry_path).unwrap_or_else(|e| {
-        eprintln!("registry save failed ({}) — decisions NOT persisted: {e}", registry_path.display());
+        eprintln!(
+            "registry save failed ({}) — decisions NOT persisted: {e}",
+            registry_path.display()
+        );
         std::process::exit(1);
     });
     let ts = riir_clippy::score_bench::report::local_iso_timestamp();
@@ -4916,7 +5019,10 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
     }
     if !audit.is_empty() {
         kp::append_audit(&audit_path, &audit).unwrap_or_else(|e| {
-            eprintln!("audit append failed ({}) — continuing: {e}", audit_path.display());
+            eprintln!(
+                "audit append failed ({}) — continuing: {e}",
+                audit_path.display()
+            );
         });
     }
     println!(
@@ -4943,11 +5049,7 @@ fn main() {
             KatCommand::Sync => run_kat_sync(),
             KatCommand::Stake => run_kat_stake(args.stake_usd.as_deref(), args.stake_info),
             KatCommand::Unstake => run_kat_unstake(),
-            KatCommand::Vote => run_kat_vote(
-                args.vote_proposal,
-                args.vote_yes,
-                args.vote_no,
-            ),
+            KatCommand::Vote => run_kat_vote(args.vote_proposal, args.vote_yes, args.vote_no),
             KatCommand::Pay => run_kat_pay(
                 args.pay_amount.as_deref(),
                 args.pay_label.as_deref(),
@@ -4974,16 +5076,20 @@ fn main() {
     // ── Plan 014: clippy-bench modes (standalone — no paths) ─────────────
     #[cfg(feature = "score_bench")]
     if args.score_report {
-        let history = riir_clippy::score_bench::report::load_history(
-            std::path::Path::new(riir_clippy::score_bench::report::HISTORY_JSONL),
-        );
+        let history = riir_clippy::score_bench::report::load_history(std::path::Path::new(
+            riir_clippy::score_bench::report::HISTORY_JSONL,
+        ));
         if history.is_empty() {
             eprintln!("no score history yet — run --score-bench first");
             std::process::exit(1);
         }
         // Per-generation curves (Plan 092 M5): gen-1 → score_history.svg,
         // gen-2 → score_history_v2.svg (only when v2 rows exist).
-        let v1: Vec<_> = history.iter().filter(|r| r.generation == 1).cloned().collect();
+        let v1: Vec<_> = history
+            .iter()
+            .filter(|r| r.generation == 1)
+            .cloned()
+            .collect();
         let svg = riir_clippy::score_bench::report::render_svg(&v1);
         std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG, &svg)
             .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
@@ -4992,7 +5098,11 @@ fn main() {
             riir_clippy::score_bench::report::HISTORY_SVG,
             v1.len()
         );
-        let v2: Vec<_> = history.iter().filter(|r| r.generation == 2).cloned().collect();
+        let v2: Vec<_> = history
+            .iter()
+            .filter(|r| r.generation == 2)
+            .cloned()
+            .collect();
         if !v2.is_empty() {
             let svg2 = riir_clippy::score_bench::report::render_svg(&v2);
             std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG_V2, &svg2)
@@ -5186,7 +5296,9 @@ fn main() {
                         // adoption day).
                         print!("{}", store.stats_report(bad));
                     }
-                    Err(e) => eprintln!("memory-stats: kv store at {} unreadable: {e}", kv.display()),
+                    Err(e) => {
+                        eprintln!("memory-stats: kv store at {} unreadable: {e}", kv.display())
+                    }
                 }
             } else {
                 println!(
@@ -5275,7 +5387,11 @@ fn main() {
                 spans,
                 &corpus,
             );
-            println!("collapse-report: fixture spans={} corpus_rules={}", spans.len(), corpus.len());
+            println!(
+                "collapse-report: fixture spans={} corpus_rules={}",
+                spans.len(),
+                corpus.len()
+            );
             println!("{}", fresh.report("  fresh(empty)"));
 
             // Production condition (a): the store, or the envelope fallback.
@@ -5298,7 +5414,10 @@ fn main() {
                         return;
                     }
                     Err(e) => {
-                        eprintln!("collapse-report: store at {} unreadable: {e}", root.display());
+                        eprintln!(
+                            "collapse-report: store at {} unreadable: {e}",
+                            root.display()
+                        );
                         std::process::exit(1);
                     }
                 }
@@ -5312,12 +5431,18 @@ fn main() {
                         return;
                     }
                     Err(e) => {
-                        eprintln!("collapse-report: envelope {} unreadable: {e}", envelope.display());
+                        eprintln!(
+                            "collapse-report: envelope {} unreadable: {e}",
+                            envelope.display()
+                        );
                         std::process::exit(1);
                     }
                 }
             }
-            eprintln!("collapse-report: no store at {} — showing the fresh baseline only", root.display());
+            eprintln!(
+                "collapse-report: no store at {} — showing the fresh baseline only",
+                root.display()
+            );
             return;
         }
         #[cfg(not(feature = "latent_retrieval"))]
@@ -5408,7 +5533,10 @@ fn main() {
                         return;
                     }
                     Err(e) => {
-                        eprintln!("dump-trajectories: store at {} unreadable: {e}", root.display());
+                        eprintln!(
+                            "dump-trajectories: store at {} unreadable: {e}",
+                            root.display()
+                        );
                         std::process::exit(1);
                     }
                 }
@@ -5722,8 +5850,11 @@ fn main() {
     // T2.4: with the promotion surface compiled in, Certified network rules
     // merge into the run overlay (never under a --corpus-epoch pin).
     #[cfg(all(feature = "kat_service", feature = "score_bench"))]
-    let run_overlay =
-        run_overlay_with_promotion(&lease_store, args.corpus_epoch, &resolve_heal_root(&args.paths));
+    let run_overlay = run_overlay_with_promotion(
+        &lease_store,
+        args.corpus_epoch,
+        &resolve_heal_root(&args.paths),
+    );
     #[cfg(all(feature = "kat_service", not(feature = "score_bench")))]
     let run_overlay = lease_overlay_for_run(&lease_store, args.corpus_epoch);
     #[cfg(feature = "kat_service")]
@@ -5804,10 +5935,7 @@ fn main() {
     for path in &args.paths {
         collect_cargo_tomls(path, &mut cargo_tomls);
     }
-    if files.is_empty()
-        && wgsl_files.is_empty()
-        && dockerfiles.is_empty()
-        && cargo_tomls.is_empty()
+    if files.is_empty() && wgsl_files.is_empty() && dockerfiles.is_empty() && cargo_tomls.is_empty()
     {
         eprintln!("no .rs/.wgsl/Dockerfile/Cargo.toml files under the given paths");
         std::process::exit(1);
@@ -5911,10 +6039,8 @@ fn main() {
         let service_url = riir_clippy::kat_lease_client::service_url_from_env();
         if phase_live && service_url.is_some() {
             let url = service_url.clone().unwrap_or_default();
-            let transport = riir_clippy::kat_lease_client::HttpLeaseTransport::new(
-                &url,
-                args.update_timeout,
-            );
+            let transport =
+                riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, args.update_timeout);
             let deadline =
                 std::time::Instant::now() + std::time::Duration::from_secs(args.update_timeout);
             let out_of_kat = kat_charge
@@ -5974,17 +6100,17 @@ fn main() {
     // fix) → the (file, line) of the first drop. Deduped by the pair, not
     // the line — a suppressed pattern stays in the text and is re-collected
     // (and re-dropped) on every fixpoint pass.
-    let mut suppressed_pairs: std::collections::HashMap<
-        (String, String, String),
-        (String, usize),
-    > = std::collections::HashMap::new();
+    let mut suppressed_pairs: std::collections::HashMap<(String, String, String), (String, usize)> =
+        std::collections::HashMap::new();
 
     // Issue 015: under --verify the fix collection loosens the
     // vec-with-capacity usize gate (rustc backs the revert) and adds the
     // VERIFY_LINTS (type-blind under parse-only, revertible under rustc).
     #[cfg(feature = "fix_verify")]
     let proposer_opts = if args.verify {
-        riir_clippy::domains::rust_perf::proposers::ProposerOpts { untyped_paths: true }
+        riir_clippy::domains::rust_perf::proposers::ProposerOpts {
+            untyped_paths: true,
+        }
     } else {
         riir_clippy::domains::rust_perf::proposers::ProposerOpts::default()
     };
@@ -6068,12 +6194,11 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
-            // fxhashmap dep gate (Issue 015): skip the rule for files in
-            // crates without the rustc-hash dependency.
+                             // fxhashmap dep gate (Issue 015): skip the rule for files in
+                             // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
             let fxhashmap_allowed = {
-                let pkg =
-                    riir_clippy::fix_verify::owning_package_root(file);
+                let pkg = riir_clippy::fix_verify::owning_package_root(file);
                 match pkg {
                     None => false,
                     Some(pkg) => *pkg_dep_cache.entry(pkg.clone()).or_insert_with(|| {
@@ -6143,11 +6268,9 @@ fn main() {
                     // refusals — every applied fix still rides the
                     // `--fix --verify` compile gate when enabled.
                     for rule in riir_clippy::domains::sec::proposers::FIXABLE_SEC {
-                        edits.extend(
-                            riir_clippy::domains::sec::proposers::collect_edits(
-                                rule, &current, &parsed,
-                            ),
-                        );
+                        edits.extend(riir_clippy::domains::sec::proposers::collect_edits(
+                            rule, &current, &parsed,
+                        ));
                     }
                 }
                 // ── P12: re-proposal suppression. A pair whose exact
@@ -6265,10 +6388,7 @@ fn main() {
         // settles. `--no-fmt` or a missing rustfmt disables (one warning).
         let fmt_decision = if args.fix && !all_edits.is_empty() && fmt_active {
             let edition = riir_clippy::fmt::edition_for(file);
-            Some((
-                riir_clippy::fmt::decide(&src, file, &edition),
-                edition,
-            ))
+            Some((riir_clippy::fmt::decide(&src, file, &edition), edition))
         } else {
             None
         };
@@ -6425,8 +6545,7 @@ fn main() {
                     .collect();
                 rules.sort();
                 rules.dedup();
-                ctx.pass1_tokens +=
-                    riir_clippy::kat_meter::count_word_tokens(text.as_bytes());
+                ctx.pass1_tokens += riir_clippy::kat_meter::count_word_tokens(text.as_bytes());
                 ctx.spans_seen += 1;
                 ctx.pass1
                     .entry(riir_clippy::kat_lease_client::span_key(&text))
@@ -6440,7 +6559,12 @@ fn main() {
     #[cfg(feature = "docker")]
     let n_docker = if (args.suggest || args.fix)
         && args.domain.is_none_or(|d| d == DomainId::Docker)
-        && !dockerfiles.is_empty() { run_docker_lane(&dockerfiles, args.suggest, args.fix, args.write) } else { 0 };
+        && !dockerfiles.is_empty()
+    {
+        run_docker_lane(&dockerfiles, args.suggest, args.fix, args.write)
+    } else {
+        0
+    };
     #[cfg(not(feature = "docker"))]
     let n_docker = 0usize;
     let _ = n_docker;
@@ -6530,8 +6654,7 @@ fn main() {
         // loudly when an owning package has non-default features and the
         // caller did not override the baseline via --verify-args.
         if args.verify_args.is_none() {
-            let mut warned: std::collections::HashSet<PathBuf> =
-                std::collections::HashSet::new();
+            let mut warned: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
             for b in &verify_batches {
                 let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
                     continue;
@@ -6567,7 +6690,10 @@ fn main() {
         } else {
             eprintln!(
                 "verify: {} cargo check(s) — kept {} file(s) / {} edit(s), reverted {} edit(s)",
-                report.n_checks, report.kept_files, report.kept_edits, report.reverted.len()
+                report.n_checks,
+                report.kept_files,
+                report.kept_edits,
+                report.reverted.len()
             );
             for r in &report.reverted {
                 eprintln!(
@@ -6640,7 +6766,9 @@ fn main() {
                     if !entry.0.contains(&e.rule_id) {
                         entry.0.push(e.rule_id.clone());
                     }
-                    entry.1.push((b.path.clone(), e.final_line, e.rule_id.clone()));
+                    entry
+                        .1
+                        .push((b.path.clone(), e.final_line, e.rule_id.clone()));
                 }
             }
             if !by_pkg.is_empty() {
@@ -6681,9 +6809,7 @@ fn main() {
                         let persists = findings.iter().any(|f| {
                             f.code == target
                                 && riir_clippy::fix_verify::resolve_reported_path(
-                                    &f.file,
-                                    ws_ref,
-                                    pkg,
+                                    &f.file, ws_ref, pkg,
                                 ) == *canon
                                 && *line >= f.line_start
                                 && *line <= f.line_end
@@ -6734,7 +6860,13 @@ fn main() {
                         ),
                     );
                     #[cfg(feature = "latent_retrieval")]
-                    record_traj_fail(&traj_store, &e.rule_id, &e.restore, &e.replacement, &heal_run_id);
+                    record_traj_fail(
+                        &traj_store,
+                        &e.rule_id,
+                        &e.restore,
+                        &e.replacement,
+                        &heal_run_id,
+                    );
                 }
                 continue;
             }
@@ -6763,9 +6895,8 @@ fn main() {
                 // Issue 047: a kept-but-unresolved edit (compile gate passed,
                 // full oracle says the lint persists) is C-class — the gate
                 // was too loose. Successes stay unattributed.
-                let fail_signal = (!success).then(
-                    riir_clippy::component::FailureSignal::gate_passed_ineffective,
-                );
+                let fail_signal =
+                    (!success).then(riir_clippy::component::FailureSignal::gate_passed_ineffective);
                 if let Some(sig) = &fail_signal {
                     evolve_rec.record_failure_signal(&e.rule_id, &e.restore, &e.replacement, sig);
                 } else {
@@ -6789,7 +6920,11 @@ fn main() {
                     fail_signal.as_ref().map(riir_clippy::component::classify),
                 );
             }
-            for e in b.edits.iter().filter(|e| reverted_lines.contains(&e.final_line)) {
+            for e in b
+                .edits
+                .iter()
+                .filter(|e| reverted_lines.contains(&e.final_line))
+            {
                 evolve_rec.record_failure_signal(
                     &e.rule_id,
                     &e.restore,
@@ -6799,32 +6934,38 @@ fn main() {
                     ),
                 );
                 #[cfg(feature = "latent_retrieval")]
-                record_traj_fail(&traj_store, &e.rule_id, &e.restore, &e.replacement, &heal_run_id);
+                record_traj_fail(
+                    &traj_store,
+                    &e.rule_id,
+                    &e.restore,
+                    &e.replacement,
+                    &heal_run_id,
+                );
             }
-            println!("fix {} ({} edit(s) verified):", b.path.display(), kept.len());
+            println!(
+                "fix {} ({} edit(s) verified):",
+                b.path.display(),
+                kept.len()
+            );
             for e in &kept {
                 println!("  [{:<24}] line {}", e.rule_id, e.final_line);
             }
             // Native fmt: the verified kept state is on disk — apply the
             // decided pass now (default-on; decisions were made against the
             // pre-heal originals above).
-            if let Some((_, decision, edition)) =
-                verify_fmt.iter().find(|(p, _, _)| *p == b.path)
-            {
+            if let Some((_, decision, edition)) = verify_fmt.iter().find(|(p, _, _)| *p == b.path) {
                 use riir_clippy::fmt::FmtDecision;
                 match decision {
-                    FmtDecision::Format => {
-                        match riir_clippy::fmt::apply(&b.path, edition) {
-                            Ok(()) => {
-                                fmt_summary.formatted += 1;
-                                println!("  fmt: formatted");
-                            }
-                            Err(e) => {
-                                fmt_summary.failed += 1;
-                                eprintln!("fmt failed for {}: {e}", b.path.display());
-                            }
+                    FmtDecision::Format => match riir_clippy::fmt::apply(&b.path, edition) {
+                        Ok(()) => {
+                            fmt_summary.formatted += 1;
+                            println!("  fmt: formatted");
                         }
-                    }
+                        Err(e) => {
+                            fmt_summary.failed += 1;
+                            eprintln!("fmt failed for {}: {e}", b.path.display());
+                        }
+                    },
                     FmtDecision::SkipDrift => {
                         fmt_summary.skip_drift += 1;
                         println!("  fmt: skip (pre-existing drift)");
@@ -6896,9 +7037,7 @@ fn main() {
         } else {
             " (review only — add --write)"
         };
-        format!(
-            ", fixed {n_fixed_files} file(s) / {n_fixed_edits} edit(s){applied_note}"
-        )
+        format!(", fixed {n_fixed_files} file(s) / {n_fixed_edits} edit(s){applied_note}")
     } else {
         String::new()
     };
@@ -6922,7 +7061,9 @@ fn main() {
             "suppressed {} previously-reverted edit(s) (2+ consecutive compile-gate fails; RIIR_HEAL_SUPPRESS_REVERTED=0 forces retry):",
             suppressed_pairs.len()
         );
-        for ((rule, restore, _fix), (file, line)) in suppressed_pairs.iter().take(MAX_SUPPRESSED_SHOWN) {
+        for ((rule, restore, _fix), (file, line)) in
+            suppressed_pairs.iter().take(MAX_SUPPRESSED_SHOWN)
+        {
             println!(
                 "  [{rule:<24}] {}:{} — {}",
                 file,
@@ -6931,7 +7072,10 @@ fn main() {
             );
         }
         if suppressed_pairs.len() > MAX_SUPPRESSED_SHOWN {
-            println!("  ... and {} more", suppressed_pairs.len() - MAX_SUPPRESSED_SHOWN);
+            println!(
+                "  ... and {} more",
+                suppressed_pairs.len() - MAX_SUPPRESSED_SHOWN
+            );
         }
     }
     println!(
@@ -6952,7 +7096,10 @@ fn main() {
     #[cfg(feature = "kat_service")]
     if let Some(m) = &kat_meter {
         if let Err(e) = m.save() {
-            eprintln!("kat-meter: could not persist burn ledger ({}): {e}", m.path().display());
+            eprintln!(
+                "kat-meter: could not persist burn ledger ({}): {e}",
+                m.path().display()
+            );
         }
         println!("{}", m.summary_line());
     }
@@ -6965,7 +7112,10 @@ fn main() {
     if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_mut()) {
         c.settle(m.state());
         if let Err(e) = c.save() {
-            eprintln!("kat-charge: could not persist charge ledger ({}): {e}", c.path().display());
+            eprintln!(
+                "kat-charge: could not persist charge ledger ({}): {e}",
+                c.path().display()
+            );
         }
         println!("{}", c.summary_line());
         let remaining = c.balance_projection();
@@ -7134,7 +7284,11 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
         let ctx = docker_scan_context(path);
         let findings = scan_source_with(&src, &ctx);
         for f in &findings {
-            let kind = if FIXABLE_DOCKER.contains(&f.rule_id) && f.fix.is_some() { "fix    " } else { "suggest" };
+            let kind = if FIXABLE_DOCKER.contains(&f.rule_id) && f.fix.is_some() {
+                "fix    "
+            } else {
+                "suggest"
+            };
             println!(
                 "{}:{} [docker {kind}] {:<40} — {}",
                 path.display(),
@@ -7151,17 +7305,21 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
         if fixed == src {
             continue;
         }
-        if write { match std::fs::write(path, &fixed) {
+        if write {
+            match std::fs::write(path, &fixed) {
                 Ok(()) => println!("  wrote {}", path.display()),
                 Err(e) => eprintln!("  FAILED to write {}: {e}", path.display()),
-            } } else { println!(
+            }
+        } else {
+            println!(
                 "  {} bounded fix(es) available for {} (re-run with --write to apply)",
                 findings
                     .iter()
                     .filter(|f| f.fix.is_some() && FIXABLE_DOCKER.contains(&f.rule_id))
                     .count(),
                 path.display()
-            ); }
+            );
+        }
     }
     let _ = suggest;
     printed
@@ -7255,7 +7413,11 @@ fn run_overlay_with_promotion(
                 .collect(),
         )
     });
-    let merged = promotion_run_overlay(leased_str.as_ref().map(|(_, o)| o.as_slice()), &registry, pin.is_some())?;
+    let merged = promotion_run_overlay(
+        leased_str.as_ref().map(|(_, o)| o.as_slice()),
+        &registry,
+        pin.is_some(),
+    )?;
     let overlay: Vec<(DomainId, Vec<_>)> = merged
         .into_iter()
         .filter_map(|(domain, triples)| {
@@ -7286,8 +7448,8 @@ fn lease_overlay_for_run(
     pin: Option<u64>,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_clippy::kat_lease_client::{
-        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF,
-        PACK_DOMAIN_DOCKER, PACK_DOMAIN_SEC, PACK_DOMAIN_DIST,
+        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER,
+        PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF, PACK_DOMAIN_SEC,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -7374,9 +7536,11 @@ fn reheat_fix_pass(
         }
         if run_clippy {
             for lint in FIXABLE_LINTS {
-                edits.extend(riir_clippy::domains::clippy_lints::proposers::collect_edits(
-                    lint, &current, &parsed,
-                ));
+                edits.extend(
+                    riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                        lint, &current, &parsed,
+                    ),
+                );
             }
         }
         #[cfg(feature = "sec")]
@@ -7400,7 +7564,10 @@ fn reheat_fix_pass(
             if applied.contains(&(re.edit.start, re.edit.end)) {
                 let line = current[..re.edit.start].matches('\n').count() + 1;
                 if verify_mode {
-                    println!("reheat (review-only under --verify): {display}:{line} [{}]", re.rule_id);
+                    println!(
+                        "reheat (review-only under --verify): {display}:{line} [{}]",
+                        re.rule_id
+                    );
                 } else {
                     println!("reheat: {display}:{line} [{}]", re.rule_id);
                 }
@@ -7413,15 +7580,17 @@ fn reheat_fix_pass(
             break;
         }
     }
-    if (changed && write && !verify_mode && current != src) && (std::fs::write(path, &current).is_ok() && fmt_active) {
-            let edition = riir_clippy::fmt::edition_for(path);
-            if matches!(
-                riir_clippy::fmt::decide(&current, path, &edition),
-                riir_clippy::fmt::FmtDecision::Format
-            ) {
-                let _ = riir_clippy::fmt::apply(path, &edition);
-            }
+    if (changed && write && !verify_mode && current != src)
+        && (std::fs::write(path, &current).is_ok() && fmt_active)
+    {
+        let edition = riir_clippy::fmt::edition_for(path);
+        if matches!(
+            riir_clippy::fmt::decide(&current, path, &edition),
+            riir_clippy::fmt::FmtDecision::Format
+        ) {
+            let _ = riir_clippy::fmt::apply(path, &edition);
         }
+    }
     total_applied
 }
 
@@ -7451,7 +7620,9 @@ fn run_reheat_pass(
     let store = riir_clippy::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
     let mut charge = riir_clippy::kat_lease_client::LeaseCharge::open(&store);
     let current = store.current();
-    let etag = current.as_ref().map(|m| riir_clippy::kat_lease_client::hex32(&m.commitment));
+    let etag = current
+        .as_ref()
+        .map(|m| riir_clippy::kat_lease_client::hex32(&m.commitment));
     let body = match transport.get_lease(etag.as_deref()) {
         riir_clippy::kat_lease_client::HttpResponse::NotModified => return None,
         riir_clippy::kat_lease_client::HttpResponse::Ok(b) => b,
@@ -7476,11 +7647,7 @@ fn run_reheat_pass(
             // reheat — pass 1's results stand). T2.4: promotions merge into
             // the rebuilt overlay too (same helper as the run-start build).
             #[cfg(all(feature = "kat_service", feature = "score_bench"))]
-            let rebuilt = run_overlay_with_promotion(
-                &store,
-                None,
-                &resolve_heal_root(&[]),
-            );
+            let rebuilt = run_overlay_with_promotion(&store, None, &resolve_heal_root(&[]));
             #[cfg(all(feature = "kat_service", not(feature = "score_bench")))]
             let rebuilt = lease_overlay_for_run(&store, None);
             if let Some((_, overlay)) = rebuilt {
@@ -7495,9 +7662,8 @@ fn run_reheat_pass(
             let mut pass2: Vec<PassSpans> = Vec::new();
             let mut span_texts: std::collections::HashMap<[u8; 32], String> =
                 std::collections::HashMap::new();
-            let mut file_changed: std::collections::HashSet<
-                std::path::PathBuf,
-            > = std::collections::HashSet::new();
+            let mut file_changed: std::collections::HashSet<std::path::PathBuf> =
+                std::collections::HashSet::new();
             for file in files {
                 let Ok(src) = std::fs::read_to_string(file) else {
                     continue;
@@ -7528,15 +7694,16 @@ fn run_reheat_pass(
                     continue;
                 };
                 let display = file.display().to_string();
-                let any_changed = matcher
-                    .suggest_file(&src, &display, args.top_k)
-                    .iter()
-                    .any(|s| {
-                        let text = extract_span_text(&src, s.start_line, s.end_line);
-                        plan.changed
-                            .iter()
-                            .any(|(k, _)| *k == riir_clippy::kat_lease_client::span_key(&text))
-                    });
+                let any_changed =
+                    matcher
+                        .suggest_file(&src, &display, args.top_k)
+                        .iter()
+                        .any(|s| {
+                            let text = extract_span_text(&src, s.start_line, s.end_line);
+                            plan.changed
+                                .iter()
+                                .any(|(k, _)| *k == riir_clippy::kat_lease_client::span_key(&text))
+                        });
                 if any_changed {
                     file_changed.insert(file.clone());
                 }
@@ -7554,13 +7721,8 @@ fn run_reheat_pass(
             let mut new_fixes = 0usize;
             if args.fix {
                 for file in &file_changed {
-                    new_fixes += reheat_fix_pass(
-                        file,
-                        args.domain,
-                        args.write,
-                        args.verify,
-                        !args.no_fmt,
-                    );
+                    new_fixes +=
+                        reheat_fix_pass(file, args.domain, args.write, args.verify, !args.no_fmt);
                 }
             }
             let report = riir_clippy::kat_lease_client::ReheatReport {
@@ -7589,7 +7751,13 @@ mod fix_review_note_tests {
     fn render(rule_id: &str, note: Option<&'static str>) -> String {
         format_fix_review(
             "x.rs",
-            &[(rule_id.to_string(), 7, "r".to_string(), "o".to_string(), note)],
+            &[(
+                rule_id.to_string(),
+                7,
+                "r".to_string(),
+                "o".to_string(),
+                note,
+            )],
             None,
         )
     }
@@ -7679,7 +7847,10 @@ mod fix_review_note_tests {
         );
         assert!(out.contains("  \u{26a0} semantic change: first line\n"));
         assert!(!out.contains("second line"), "only the first line renders");
-        assert!(out.ends_with("  fmt: would-format\n"), "fmt line stays last");
+        assert!(
+            out.ends_with("  fmt: would-format\n"),
+            "fmt line stays last"
+        );
     }
 
     #[test]
@@ -7702,17 +7873,26 @@ mod fix_domain_tests {
         // The Issue 031 H2 regression: `--domain clippy` must not run
         // rust_perf proposers (vec-with-capacity applied under
         // `--domain clippy` in the katgpt-pruners batch).
-        assert_eq!(fix_domain_scopes(Some(DomainId::Clippy)), (false, true, false));
+        assert_eq!(
+            fix_domain_scopes(Some(DomainId::Clippy)),
+            (false, true, false)
+        );
     }
 
     #[test]
     fn perf_scopes_out_clippy() {
-        assert_eq!(fix_domain_scopes(Some(DomainId::Perf)), (true, false, false));
+        assert_eq!(
+            fix_domain_scopes(Some(DomainId::Perf)),
+            (true, false, false)
+        );
     }
 
     #[test]
     fn kernel_runs_neither_syn_domain() {
-        assert_eq!(fix_domain_scopes(Some(DomainId::Kernel)), (false, false, false));
+        assert_eq!(
+            fix_domain_scopes(Some(DomainId::Kernel)),
+            (false, false, false)
+        );
     }
 
     #[test]
@@ -7729,12 +7909,14 @@ mod fix_domain_tests {
 /// of a silently-wrong dashboard series.
 #[cfg(test)]
 mod corpus_stats_needle_tests {
-    use super::{count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE};
+    use super::{
+        count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE,
+    };
 
     #[test]
     fn source_walk_agrees_with_runtime_count_for_compiled_domains() {
-        let repo = resolve_corpus_repo_root()
-            .expect("corpus paths must resolve when tests run in-repo");
+        let repo =
+            resolve_corpus_repo_root().expect("corpus paths must resolve when tests run in-repo");
         let mut checked = 0;
         for (domain, rel, needle) in CORPUS_DOMAIN_TABLE {
             let Some(runtime) = runtime_corpus_count(domain) else {
@@ -7748,7 +7930,10 @@ mod corpus_stats_needle_tests {
             );
             checked += 1;
         }
-        assert!(checked >= 2, "expected to pin at least the default-on domains, checked {checked}");
+        assert!(
+            checked >= 2,
+            "expected to pin at least the default-on domains, checked {checked}"
+        );
     }
 
     #[test]
@@ -7803,42 +7988,104 @@ mod mode_flag_tests {
         assert!(v(&a(true, false, false, false)).is_ok(), "--suggest");
         assert!(v(&a(false, true, false, false)).is_ok(), "--fix");
         assert!(v(&a(false, false, true, false)).is_ok(), "--fix-compile");
-        assert!(v(&a(false, false, false, true)).is_ok(), "--dump-trajectories");
+        assert!(
+            v(&a(false, false, false, true)).is_ok(),
+            "--dump-trajectories"
+        );
         // --write with each writing mode.
-        assert!(v(&Args { write: true, ..a(false, true, false, false) }).is_ok(), "--fix --write");
-        assert!(v(&Args { write: true, ..a(false, false, true, false) }).is_ok(), "--fix-compile --write");
+        assert!(
+            v(&Args {
+                write: true,
+                ..a(false, true, false, false)
+            })
+            .is_ok(),
+            "--fix --write"
+        );
+        assert!(
+            v(&Args {
+                write: true,
+                ..a(false, false, true, false)
+            })
+            .is_ok(),
+            "--fix-compile --write"
+        );
         // The trap this task closed: --fix-compile --write --verify-args.
         assert!(
-            v(&Args { write: true, verify_args: Some(String::new()), ..a(false, false, true, false) }).is_ok(),
+            v(&Args {
+                write: true,
+                verify_args: Some(String::new()),
+                ..a(false, false, true, false)
+            })
+            .is_ok(),
             "--fix-compile --write --verify-args \"...\""
         );
         // --verify still needs --fix (its batch semantics are --fix's).
-        assert!(v(&Args { write: true, verify: true, ..a(false, true, false, false) }).is_ok(), "--fix --write --verify");
-        assert!(v(&Args { write: true, verify: true, verify_args: Some(String::new()), ..a(false, true, false, false) }).is_ok(), "--fix --verify --verify-args");
+        assert!(
+            v(&Args {
+                write: true,
+                verify: true,
+                ..a(false, true, false, false)
+            })
+            .is_ok(),
+            "--fix --write --verify"
+        );
+        assert!(
+            v(&Args {
+                write: true,
+                verify: true,
+                verify_args: Some(String::new()),
+                ..a(false, true, false, false)
+            })
+            .is_ok(),
+            "--fix --verify --verify-args"
+        );
         // The owner's just-works defaults (2026-09-08): a bare invocation
         // with a KAT command is NOT a mode error, and no-mode-no-command is
         // the dry run (main defaults it BEFORE the matrix, so the matrix
         // itself never sees that shape — but a KAT command must satisfy it).
-        assert!(v(&Args { command: Some(super::KatCommand::Account), ..a(false, false, false, false) }).is_ok(), "KAT command alone");
+        assert!(
+            v(&Args {
+                command: Some(super::KatCommand::Account),
+                ..a(false, false, false, false)
+            })
+            .is_ok(),
+            "KAT command alone"
+        );
     }
 
     #[test]
     fn rejected_combinations() {
         assert!(v(&a(false, false, false, false)).is_err(), "no mode");
         assert!(
-            v(&Args { write: true, ..a(false, false, false, false) }).is_err(),
+            v(&Args {
+                write: true,
+                ..a(false, false, false, false)
+            })
+            .is_err(),
             "--write without a mode"
         );
         assert!(
-            v(&Args { verify: true, ..a(false, false, false, false) }).is_err(),
+            v(&Args {
+                verify: true,
+                ..a(false, false, false, false)
+            })
+            .is_err(),
             "--verify without --fix"
         );
         assert!(
-            v(&Args { verify: true, ..a(false, false, true, false) }).is_err(),
+            v(&Args {
+                verify: true,
+                ..a(false, false, true, false)
+            })
+            .is_err(),
             "--verify with --fix-compile does NOT satisfy the --fix requirement"
         );
         assert!(
-            v(&Args { verify_args: Some(String::new()), ..a(true, false, false, false) }).is_err(),
+            v(&Args {
+                verify_args: Some(String::new()),
+                ..a(true, false, false, false)
+            })
+            .is_err(),
             "--verify-args without --verify/--fix-compile"
         );
         assert!(
@@ -7846,7 +8093,11 @@ mod mode_flag_tests {
             "--dump-trajectories is standalone (no other mode)"
         );
         assert!(
-            v(&Args { write: true, ..a(false, false, false, true) }).is_err(),
+            v(&Args {
+                write: true,
+                ..a(false, false, false, true)
+            })
+            .is_err(),
             "--write does not apply to --dump-trajectories"
         );
     }

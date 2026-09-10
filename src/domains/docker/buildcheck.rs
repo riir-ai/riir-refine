@@ -174,7 +174,11 @@ pub fn build_check(source: &str) -> CheckRun {
 ///    wording changing lands `Errored` — loud, never a fake `Ran`.
 #[must_use]
 pub fn classify(_exit: i32, stdout: &str, stderr: &str) -> CheckRun {
-    if let Some(err) = stderr.lines().map(str::trim).find(|l| l.starts_with("ERROR:")) {
+    if let Some(err) = stderr
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("ERROR:"))
+    {
         return CheckRun::Errored(err.to_string());
     }
     if !stdout.contains("Check complete") {
@@ -288,15 +292,22 @@ fn parse_checks(stdout: &str) -> Vec<BuildCheckFinding> {
             pending = (!name.is_empty()).then(|| name.to_string());
             continue;
         }
-        let Some(name) = pending.as_ref() else { continue };
+        let Some(name) = pending.as_ref() else {
+            continue;
+        };
         // The location line: `<path>:<n>`. Anchor on the Dockerfile name so
         // a message that happens to end in `:12` cannot be mistaken for one.
-        let Some((path, num)) = line.rsplit_once(':') else { continue };
+        let Some((path, num)) = line.rsplit_once(':') else {
+            continue;
+        };
         if !path.ends_with("Dockerfile") {
             continue;
         }
         if let Ok(n) = num.trim().parse::<usize>() {
-            out.push(BuildCheckFinding { check: name.clone(), line: n });
+            out.push(BuildCheckFinding {
+                check: name.clone(),
+                line: n,
+            });
             pending = None;
         }
     }
@@ -323,8 +334,14 @@ WARNING: LegacyKeyValueFormat - https://docs.docker.com/go/dockerfile/rule/legac
         assert_eq!(
             got,
             vec![
-                BuildCheckFinding { check: "ConsistentInstructionCasing".into(), line: 1 },
-                BuildCheckFinding { check: "LegacyKeyValueFormat".into(), line: 2 },
+                BuildCheckFinding {
+                    check: "ConsistentInstructionCasing".into(),
+                    line: 1
+                },
+                BuildCheckFinding {
+                    check: "LegacyKeyValueFormat".into(),
+                    line: 2
+                },
             ]
         );
     }
@@ -341,20 +358,26 @@ WARNING: LegacyKeyValueFormat - https://docs.docker.com/go/dockerfile/rule/legac
         let report = "WARNING: SomeCheck - https://x\n\
 see also RFC 1234:56\n\
 /tmp/d/Dockerfile:7\n";
-        assert_eq!(parse_checks(report), vec![BuildCheckFinding {
-            check: "SomeCheck".into(),
-            line: 7
-        }]);
+        assert_eq!(
+            parse_checks(report),
+            vec![BuildCheckFinding {
+                check: "SomeCheck".into(),
+                line: 7
+            }]
+        );
     }
 
     #[test]
     fn a_warning_with_no_location_is_dropped_not_guessed() {
         let report = "WARNING: Orphan - https://x\nmessage only\n\
 WARNING: Real - https://y\n/tmp/d/Dockerfile:3\n";
-        assert_eq!(parse_checks(report), vec![BuildCheckFinding {
-            check: "Real".into(),
-            line: 3
-        }]);
+        assert_eq!(
+            parse_checks(report),
+            vec![BuildCheckFinding {
+                check: "Real".into(),
+                line: 3
+            }]
+        );
     }
 
     // ── classify: the two failure gates, unit-tested without a daemon ──
@@ -373,7 +396,10 @@ WARNING: LegacyKeyValueFormat - https://docs.docker.com/go/dockerfile/rule/legac
                 line: 2
             }])
         );
-        assert_eq!(classify(0, "Check complete, no warnings found.\n", ""), CheckRun::Ran(vec![]));
+        assert_eq!(
+            classify(0, "Check complete, no warnings found.\n", ""),
+            CheckRun::Ran(vec![])
+        );
     }
 
     #[test]
@@ -419,9 +445,6 @@ for docker.io/library/alpine:3.20: DeadlineExceeded: context deadline exceeded\n
             classify(1, COMPLETED_DIRTY, progress),
             CheckRun::Ran(_)
         ));
-        assert!(matches!(
-            classify(1, "", progress),
-            CheckRun::Errored(_)
-        ));
+        assert!(matches!(classify(1, "", progress), CheckRun::Errored(_)));
     }
 }

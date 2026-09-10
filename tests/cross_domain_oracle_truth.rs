@@ -22,8 +22,8 @@
 use std::collections::BTreeSet;
 
 use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::{ClippyOracle, DomainId};
 use riir_clippy::draft::switch_cost::cross_domain_spans;
+use riir_clippy::draft::{ClippyOracle, DomainId};
 
 fn vocabulary() -> BTreeSet<String> {
     riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()

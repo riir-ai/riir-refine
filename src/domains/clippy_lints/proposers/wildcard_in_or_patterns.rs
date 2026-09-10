@@ -66,7 +66,13 @@ mod tests {
 
     #[test]
     fn lone_wildcard_arm_unchanged() {
-        let out = propose_fix("wildcard_in_or_patterns", "fn f(n: u8) -> u8 { match n { _ => 9, } }");
-        assert!(out.is_none(), "single-case `or` is not an or-pattern: {out:?}");
+        let out = propose_fix(
+            "wildcard_in_or_patterns",
+            "fn f(n: u8) -> u8 { match n { _ => 9, } }",
+        );
+        assert!(
+            out.is_none(),
+            "single-case `or` is not an or-pattern: {out:?}"
+        );
     }
 }

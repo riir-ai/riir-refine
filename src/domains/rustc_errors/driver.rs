@@ -185,7 +185,14 @@ fn order_candidates(cands: &mut [FixCandidate]) {
 /// re-apply the same failed move at the same site. Includes every edit
 /// (primary + extras) so two strategies differing only in their extra
 /// edits stay distinct.
-type TriedKey = (PathBuf, String, usize, usize, String, Vec<((usize, usize), String)>);
+type TriedKey = (
+    PathBuf,
+    String,
+    usize,
+    usize,
+    String,
+    Vec<((usize, usize), String)>,
+);
 
 fn tried_key(c: &FixCandidate) -> TriedKey {
     (
@@ -339,7 +346,10 @@ impl CompileDriver {
             // from the CURRENT source, then order.
             for c in &mut candidates {
                 if let Ok(src) = std::fs::read_to_string(&c.file) {
-                    c.shape = src.get(c.byte_span.0..c.byte_span.1).unwrap_or("").to_string();
+                    c.shape = src
+                        .get(c.byte_span.0..c.byte_span.1)
+                        .unwrap_or("")
+                        .to_string();
                 }
             }
             match &self.ordering {
@@ -454,7 +464,9 @@ impl CompileDriver {
                 });
                 tried.insert(tried_key(&best));
             }
-            report.iter_ms.push(iter_t0.elapsed().as_secs_f64() * 1000.0);
+            report
+                .iter_ms
+                .push(iter_t0.elapsed().as_secs_f64() * 1000.0);
         }
 
         report.remaining = diags.len();
@@ -509,7 +521,9 @@ fn collect_candidates(
             line: 0,
             message: d.message.clone(),
             rendered: d.rendered.clone(),
-            component: crate::component::classify(&crate::component::FailureSignal::miss_no_candidates()),
+            component: crate::component::classify(
+                &crate::component::FailureSignal::miss_no_candidates(),
+            ),
         });
         return Vec::new();
     };
@@ -522,7 +536,9 @@ fn collect_candidates(
             line,
             message: format!("(unreadable) {}", d.message),
             rendered: d.rendered.clone(),
-            component: crate::component::classify(&crate::component::FailureSignal::miss_no_candidates()),
+            component: crate::component::classify(
+                &crate::component::FailureSignal::miss_no_candidates(),
+            ),
         });
         return Vec::new();
     };
@@ -534,7 +550,9 @@ fn collect_candidates(
             line,
             message: d.message.clone(),
             rendered: d.rendered.clone(),
-            component: crate::component::classify(&crate::component::FailureSignal::miss_no_candidates()),
+            component: crate::component::classify(
+                &crate::component::FailureSignal::miss_no_candidates(),
+            ),
         });
         return Vec::new();
     }
@@ -606,13 +624,14 @@ mod tests {
 
     #[test]
     fn apply_edits_rejects_bad_spans() {
-        assert_eq!(apply_edits("héllo", (1, 2), "x", &[]), None, "non-char boundary");
+        assert_eq!(
+            apply_edits("héllo", (1, 2), "x", &[]),
+            None,
+            "non-char boundary"
+        );
         assert_eq!(apply_edits("abc", (2, 1), "x", &[]), None, "end < start");
         assert_eq!(apply_edits("abc", (0, 9), "x", &[]), None, "out of bounds");
-        assert_eq!(
-            apply_edits("abc", (0, 3), "x", &[]).as_deref(),
-            Some("x")
-        );
+        assert_eq!(apply_edits("abc", (0, 3), "x", &[]).as_deref(), Some("x"));
     }
 
     #[test]

@@ -55,8 +55,8 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprReference, Local, Pat, UnOp};
 
-use crate::domains::rustc_errors::diag::RustcErrorDiag;
 use super::{anchor, cand, CompileProposer, FixCandidate, Playbooks, SpanEdit};
+use crate::domains::rustc_errors::diag::RustcErrorDiag;
 
 // ── shared syn extraction ─────────────────────────────────────────────
 
@@ -207,7 +207,12 @@ impl CompileProposer for E0502DerefRemoval {
         "E0502"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -273,7 +278,12 @@ impl CompileProposer for E0502CloneOut {
         "E0502"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -328,12 +338,16 @@ impl CompileProposer for E0499SwapSecondDecl {
         "E0499"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
-        let Some(second) = anchor(diag, |l| l.contains("second mutable borrow occurs here"))
-        else {
+        let Some(second) = anchor(diag, |l| l.contains("second mutable borrow occurs here")) else {
             return Vec::new();
         };
         let Some(last_use) = anchor(diag, |l| l.contains("first borrow later used here")) else {
@@ -402,12 +416,18 @@ impl CompileProposer for E0505CloneAtMove {
         "E0505"
     }
 
-    fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
-        let Some(moved) = anchor(diag, |l| l.contains("move out of") && l.contains("occurs here"))
-        else {
+        let Some(moved) = anchor(diag, |l| {
+            l.contains("move out of") && l.contains("occurs here")
+        }) else {
             return Vec::new();
         };
         let end = moved.byte_end;
@@ -422,7 +442,9 @@ impl CompileProposer for E0505CloneAtMove {
             ".clone()".to_string(),
             self.name(),
         )
-        .with_note("clones at the move — the destination owns a copy; the source borrow is preserved")]
+        .with_note(
+            "clones at the move — the destination owns a copy; the source borrow is preserved",
+        )]
     }
 }
 
@@ -503,7 +525,11 @@ mod tests {
     /// splice, for asserting the fixed form).
     fn apply(source: &str, c: &FixCandidate) -> String {
         let mut edits = vec![(c.byte_span, c.replacement.clone())];
-        edits.extend(c.extra_edits.iter().map(|e| (e.byte_span, e.replacement.clone())));
+        edits.extend(
+            c.extra_edits
+                .iter()
+                .map(|e| (e.byte_span, e.replacement.clone())),
+        );
         edits.sort_by_key(|((s, _), _)| *s);
         let mut out = String::new();
         let mut cursor = 0;
@@ -775,7 +801,9 @@ mod tests {
         assert_eq!(pb.len(), 4);
         for (src, diag) in srcs.iter().zip(&diags) {
             for c in pb.propose(diag, Path::new("/x/src/lib.rs"), src) {
-                for text in std::iter::once(&c.replacement).chain(c.extra_edits.iter().map(|e| &e.replacement)) {
+                for text in std::iter::once(&c.replacement)
+                    .chain(c.extra_edits.iter().map(|e| &e.replacement))
+                {
                     assert!(
                         !text.contains("Box::leak") && !text.contains("::leak("),
                         "{} proposed a leak: {text}",

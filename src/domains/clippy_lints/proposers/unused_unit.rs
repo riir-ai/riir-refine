@@ -5,14 +5,17 @@
 //! too, so no double space remains. Covers free fns, impl/trait methods,
 //! and closures' enclosing fns alike via `visit_signature`.
 
-use crate::edit_emitter::span_range;
 use super::SourceEdit;
+use crate::edit_emitter::span_range;
 use syn::visit::Visit;
 use syn::{File, ReturnType, Signature, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }

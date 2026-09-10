@@ -33,8 +33,7 @@ const NOT_HEAL_FLAGS: &[&str] = &[
 
 fn heal_source() -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bin/heal.rs");
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()))
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()))
 }
 
 /// Long flags mentioned inside `fn usage()`'s body.
@@ -59,7 +58,9 @@ fn parser_flags(src: &str) -> BTreeSet<String> {
     // (the "extraction hollows out path guards" lesson).
     for (i, _) in src.match_indices("\"--") {
         let rest = &src[i + 1..];
-        let Some(close) = rest.find('"') else { continue };
+        let Some(close) = rest.find('"') else {
+            continue;
+        };
         let flag = &rest[..close];
         if !is_long_flag(flag) {
             continue;

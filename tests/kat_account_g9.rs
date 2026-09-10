@@ -85,19 +85,17 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     assert!(first.summary_lines().iter().any(|l| {
         l.contains("grant projection")
             && l.contains(&riir_clippy::kat_payreq_client::render_kat(
-                i64::try_from(FREE_TIER_GRANT_KAT).unwrap_or(i64::MAX)
+                i64::try_from(FREE_TIER_GRANT_KAT).unwrap_or(i64::MAX),
             ))
     }));
 
     // Re-login: Existing — the record (incl. grant + created_at) is preserved
     // byte-for-byte semantics: "granted once per account key".
-    let record_before =
-        std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
+    let record_before = std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
     let (second, outcome) = KatAccount::login(&dir).unwrap();
     assert!(matches!(outcome, LoginOutcome::Existing { .. }));
     assert_eq!(second.state(), first.state());
-    let record_after =
-        std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
+    let record_after = std::fs::read_to_string(dir.join(KatAccount::RECORD_FILE)).unwrap();
     assert_eq!(
         record_before, record_after,
         "an idempotent re-login must not rewrite the record"
@@ -134,7 +132,9 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
 
     // Read back through the persisted JSON — the same file the CLI reads.
     let text = std::fs::read_to_string(
-        repo_dir.join(".heal").join(riir_clippy::kat_meter::KatCharge::FILE_NAME),
+        repo_dir
+            .join(".heal")
+            .join(riir_clippy::kat_meter::KatCharge::FILE_NAME),
     )
     .unwrap();
     let persisted: ChargeState = serde_json::from_str(&text).unwrap();
@@ -189,7 +189,10 @@ fn g9_verify_catches_a_key_swap_and_load_follows_the_key() {
     )
     .unwrap();
     // (1) held state vs swapped key:
-    assert!(account.verify().is_err(), "held state must not verify against a swapped key");
+    assert!(
+        account.verify().is_err(),
+        "held state must not verify against a swapped key"
+    );
     // (2) fresh load follows the key:
     let followed = KatAccount::load(&dir).unwrap();
     assert_eq!(

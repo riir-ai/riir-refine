@@ -234,7 +234,12 @@ fn draw_pool(rng: &mut Lcg, evo_noise: f32) -> Pool {
         for d in &mut draws {
             *d = rng.f32() < p;
         }
-        cands.push(Cand { p, s, f: n - s, evo });
+        cands.push(Cand {
+            p,
+            s,
+            f: n - s,
+            evo,
+        });
         outcomes.push(draws);
     }
     Pool { cands, outcomes }
@@ -244,7 +249,11 @@ fn draw_pool(rng: &mut Lcg, evo_noise: f32) -> Pool {
 fn pick_counts(arm: Arm, cands: &[Cand]) -> usize {
     let mut best = (0usize, f32::NEG_INFINITY);
     for (i, c) in cands.iter().enumerate() {
-        let reliability = if arm == Arm::LinearBlend { rate(c) } else { belief(c) };
+        let reliability = if arm == Arm::LinearBlend {
+            rate(c)
+        } else {
+            belief(c)
+        };
         let score = W_EVO * c.evo + W_RATE * reliability;
         if score > best.1 {
             best = (i, score);
@@ -302,11 +311,19 @@ fn replay_with(
             elo.play(choice, hit);
         }
         if hit {
-            return TrialOut { found: true, first_pick, attempts: attempt };
+            return TrialOut {
+                found: true,
+                first_pick,
+                attempts: attempt,
+            };
         }
         cands[choice].f += 1;
     }
-    TrialOut { found: false, first_pick, attempts: BUDGET + 1 }
+    TrialOut {
+        found: false,
+        first_pick,
+        attempts: BUDGET + 1,
+    }
 }
 
 fn replay(arm: Arm, pool: &Pool) -> TrialOut {
@@ -321,7 +338,11 @@ fn run_cell(arm: Arm, seed: u64, evo_noise: f32) -> (f64, f64, f64) {
     for _ in 0..TRIALS {
         let pool = draw_pool(&mut rng, evo_noise);
         let out = replay(arm, &pool);
-        let max_p = pool.cands.iter().map(|c| c.p).fold(f32::NEG_INFINITY, f32::max);
+        let max_p = pool
+            .cands
+            .iter()
+            .map(|c| c.p)
+            .fold(f32::NEG_INFINITY, f32::max);
         regret += f64::from(max_p - pool.cands[out.first_pick].p);
         if out.found {
             found += 1;
@@ -361,7 +382,11 @@ fn promotion_gate(cells: &[GateCell]) -> GateVerdict {
             && c.z > 1.96
             && c.challenger_regret <= c.incumbent_regret + 1e-9
     });
-    if strict { GateVerdict::Promote } else { GateVerdict::ReportOnly }
+    if strict {
+        GateVerdict::Promote
+    } else {
+        GateVerdict::ReportOnly
+    }
 }
 
 // ── Tests ──
@@ -371,10 +396,17 @@ fn promotion_gate(cells: &[GateCell]) -> GateVerdict {
 #[test]
 fn t39_real_sparsity_discovery_ab() {
     println!("\n=== Issue 039 T5 — discovery at REAL pool sparsity (BUDGET {BUDGET}, TRIALS {TRIALS}) ===");
-    println!("  pre-obs from REAL_ROW_COUNTS {{0:8106, 1:110, 2:9, 3:2, 4:1}} / 8228 — 98.5% unseen");
+    println!(
+        "  pre-obs from REAL_ROW_COUNTS {{0:8106, 1:110, 2:9, 3:2, 4:1}} / 8228 — 98.5% unseen"
+    );
     for &evo_noise in &[0.6f32, 0.2] {
         println!("  evo_noise = {evo_noise}:");
-        for arm in [Arm::LinearBlend, Arm::BetaPosterior, Arm::EloStatic, Arm::EloOnline] {
+        for arm in [
+            Arm::LinearBlend,
+            Arm::BetaPosterior,
+            Arm::EloStatic,
+            Arm::EloOnline,
+        ] {
             let (disc, att, reg) = run_cell(arm, 0x5EED_0039, evo_noise);
             println!(
                 "    {:<13} discovery {:.4}  mean-attempts {:.3}  first-pick regret {:.4}",
@@ -389,10 +421,22 @@ fn t39_real_sparsity_discovery_ab() {
         let (d2, _, r2) = run_cell(Arm::EloStatic, 0x5EED_0039, evo_noise);
         let (d1b, _, r1b) = run_cell(Arm::BetaPosterior, 0x5EED_0039, evo_noise);
         let (d2b, _, r2b) = run_cell(Arm::EloStatic, 0x5EED_0039, evo_noise);
-        assert_eq!(d1.to_bits(), d1b.to_bits(), "BetaPosterior cell must be deterministic");
-        assert_eq!(d2.to_bits(), d2b.to_bits(), "Elo-static cell must be deterministic");
+        assert_eq!(
+            d1.to_bits(),
+            d1b.to_bits(),
+            "BetaPosterior cell must be deterministic"
+        );
+        assert_eq!(
+            d2.to_bits(),
+            d2b.to_bits(),
+            "Elo-static cell must be deterministic"
+        );
         assert_eq!(r1.to_bits(), r1b.to_bits(), "regret must be deterministic");
-        assert_eq!(r2.to_bits(), r2b.to_bits(), "ELO regret must be deterministic");
+        assert_eq!(
+            r2.to_bits(),
+            r2b.to_bits(),
+            "ELO regret must be deterministic"
+        );
     }
 }
 
@@ -487,7 +531,11 @@ fn t39_paired_mcnemar_vs_beta() {
                 let pool = draw_pool(&mut rng, evo_noise);
                 let inc = replay(Arm::BetaPosterior, &pool);
                 let ch = replay(challenger, &pool);
-                let max_p = pool.cands.iter().map(|x| x.p).fold(f32::NEG_INFINITY, f32::max);
+                let max_p = pool
+                    .cands
+                    .iter()
+                    .map(|x| x.p)
+                    .fold(f32::NEG_INFINITY, f32::max);
                 inc_regret += f64::from(max_p - pool.cands[inc.first_pick].p);
                 ch_regret += f64::from(max_p - pool.cands[ch.first_pick].p);
                 inc_found += u64::from(inc.found);
@@ -501,7 +549,11 @@ fn t39_paired_mcnemar_vs_beta() {
             }
             let n = PAIRED_TRIALS as f64;
             let disc = (b + c) as f64;
-            let z = if disc > 0.0 { (b as f64 - c as f64) / disc.sqrt() } else { 0.0 };
+            let z = if disc > 0.0 {
+                (b as f64 - c as f64) / disc.sqrt()
+            } else {
+                0.0
+            };
             println!(
                 "    {:<13} {:.4} vs {:.4}  (both {both}, challenger-only {b}, incumbent-only {c}, neither {neither})",
                 arm_name(challenger),
@@ -599,7 +651,12 @@ fn t39_dense_rule_evidence_cells() {
                     for d in &mut draws {
                         *d = rng.f32() < p;
                     }
-                    cands.push(Cand { p, s, f: n - s, evo });
+                    cands.push(Cand {
+                        p,
+                        s,
+                        f: n - s,
+                        evo,
+                    });
                     hist.push((hs, pop - hs));
                     outcomes.push(draws);
                 }
@@ -618,7 +675,11 @@ fn t39_dense_rule_evidence_cells() {
             }
             let n = TRIALS as f64;
             let disc = (b + c) as f64;
-            let z = if disc > 0.0 { (b as f64 - c as f64) / disc.sqrt() } else { 0.0 };
+            let z = if disc > 0.0 {
+                (b as f64 - c as f64) / disc.sqrt()
+            } else {
+                0.0
+            };
             println!(
                 "  span_dev {span_dev} evo_noise {evo_noise}: Beta {:.4}  Elo-dense {:.4}  Elo-dense-online {:.4}",
                 inc_found as f64 / n,
@@ -641,27 +702,71 @@ fn t39_dense_rule_evidence_cells() {
 fn t39_unseen_pool_all_arms_pick_identically() {
     let pool = Pool {
         cands: vec![
-            Cand { p: 0.30, s: 0, f: 0, evo: 0.40 },
-            Cand { p: 0.85, s: 0, f: 0, evo: 0.75 },
-            Cand { p: 0.50, s: 0, f: 0, evo: 0.55 },
+            Cand {
+                p: 0.30,
+                s: 0,
+                f: 0,
+                evo: 0.40,
+            },
+            Cand {
+                p: 0.85,
+                s: 0,
+                f: 0,
+                evo: 0.75,
+            },
+            Cand {
+                p: 0.50,
+                s: 0,
+                f: 0,
+                evo: 0.55,
+            },
         ],
         outcomes: vec![[false; BUDGET as usize]; 3],
     };
-    for arm in [Arm::LinearBlend, Arm::BetaPosterior, Arm::EloStatic, Arm::EloOnline] {
+    for arm in [
+        Arm::LinearBlend,
+        Arm::BetaPosterior,
+        Arm::EloStatic,
+        Arm::EloOnline,
+    ] {
         let out = replay(arm, &pool);
-        assert_eq!(out.first_pick, 1, "{:?} must pick the max-evo candidate", arm);
+        assert_eq!(
+            out.first_pick, 1,
+            "{:?} must pick the max-evo candidate",
+            arm
+        );
     }
     // Equal evos too: every arm ties completely and takes the first index
     // (production `select_best_candidate` keeps the earlier on `>`).
     let tied = Pool {
         cands: vec![
-            Cand { p: 0.3, s: 0, f: 0, evo: 0.5 },
-            Cand { p: 0.9, s: 0, f: 0, evo: 0.5 },
+            Cand {
+                p: 0.3,
+                s: 0,
+                f: 0,
+                evo: 0.5,
+            },
+            Cand {
+                p: 0.9,
+                s: 0,
+                f: 0,
+                evo: 0.5,
+            },
         ],
         outcomes: vec![[false; BUDGET as usize]; 2],
     };
-    for arm in [Arm::LinearBlend, Arm::BetaPosterior, Arm::EloStatic, Arm::EloOnline] {
-        assert_eq!(replay(arm, &tied).first_pick, 0, "{:?} ties must keep first index", arm);
+    for arm in [
+        Arm::LinearBlend,
+        Arm::BetaPosterior,
+        Arm::EloStatic,
+        Arm::EloOnline,
+    ] {
+        assert_eq!(
+            replay(arm, &tied).first_pick,
+            0,
+            "{:?} ties must keep first index",
+            arm
+        );
     }
 }
 
@@ -678,8 +783,7 @@ fn t39_beta_spread_exceeds_elo_spread_on_one_observation() {
     // One match from base moves ±K/2 = ±16 exactly (the elo.rs fixture).
     let (r_win, _) = update_pair(default_elo(), default_elo(), true);
     let (r_loss, _) = update_pair(default_elo(), default_elo(), false);
-    let elo_spread =
-        expected_score(r_win, default_elo()) - expected_score(r_loss, default_elo());
+    let elo_spread = expected_score(r_win, default_elo()) - expected_score(r_loss, default_elo());
 
     println!("\nT5 mechanism: beta spread {beta_spread:.4} vs elo spread {elo_spread:.4}");
     assert!(
@@ -703,7 +807,11 @@ fn t39_promotion_gate_logic() {
     assert_eq!(promotion_gate(&[win, win]), GateVerdict::Promote);
 
     // Discovery not strictly better somewhere -> report-only.
-    let flat = GateCell { challenger_discovery: 0.90, incumbent_discovery: 0.90, ..win };
+    let flat = GateCell {
+        challenger_discovery: 0.90,
+        incumbent_discovery: 0.90,
+        ..win
+    };
     assert_eq!(promotion_gate(&[win, flat]), GateVerdict::ReportOnly);
 
     // Not significant -> report-only ("no per-seed regression beyond noise"
@@ -712,11 +820,20 @@ fn t39_promotion_gate_logic() {
     assert_eq!(promotion_gate(&[win, ns]), GateVerdict::ReportOnly);
 
     // Regret regression -> report-only.
-    let reg = GateCell { challenger_regret: 0.13, incumbent_regret: 0.12, ..win };
+    let reg = GateCell {
+        challenger_regret: 0.13,
+        incumbent_regret: 0.12,
+        ..win
+    };
     assert_eq!(promotion_gate(&[win, reg]), GateVerdict::ReportOnly);
 
     // Significantly WORSE -> report-only (the honest-loss branch).
-    let worse = GateCell { challenger_discovery: 0.85, incumbent_discovery: 0.90, z: -3.0, ..win };
+    let worse = GateCell {
+        challenger_discovery: 0.85,
+        incumbent_discovery: 0.90,
+        z: -3.0,
+        ..win
+    };
     assert_eq!(promotion_gate(&[worse]), GateVerdict::ReportOnly);
 }
 

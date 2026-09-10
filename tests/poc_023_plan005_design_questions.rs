@@ -33,7 +33,7 @@ use std::time::Instant;
 use katgpt_core::conformal::{
     ConformalIntervalCalibrator, DecayUnit, PointForecaster, PredictiveInterval, ResidualMode,
 };
-use katgpt_core::poincare::{FitConfig, fit_poincare_adapter, poincare_navigate_into};
+use katgpt_core::poincare::{fit_poincare_adapter, poincare_navigate_into, FitConfig};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic PRNG — no `rand` dep, reproducible across runs/machines.
@@ -48,7 +48,10 @@ impl Lcg {
     /// Uniform in `[0, 1)`.
     fn f32(&mut self) -> f32 {
         // Numerical Recipes LCG constants.
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         ((self.0 >> 40) as f32) / (16_777_216.0)
     }
 }
@@ -87,9 +90,9 @@ fn new_calibrator() -> ConformalIntervalCalibrator<FixForecaster> {
     ConformalIntervalCalibrator::new(
         FixForecaster,
         /* n_channels */ 1, // one channel = one rule key (T9.2's per-rule pool)
-        /* max_h */ 1,      // fix correctness is a horizon-1 question
-        /* m */ 1,          // no seasonality in a fix stream
-        /* capacity */ 64,  // T9.2's stated ring capacity
+        /* max_h */ 1, // fix correctness is a horizon-1 question
+        /* m */ 1, // no seasonality in a fix stream
+        /* capacity */ 64, // T9.2's stated ring capacity
         /* exp_lambda */ 0.0, // no recency decay: equal weight, the friendliest case
         DecayUnit::Step,
         ResidualMode::Paper,
@@ -114,7 +117,12 @@ fn coverage_after_warmup(n_warmup: usize, seed: u64) -> (f32, f32) {
 
     let mut covered = 0usize;
     let mut width_sum = 0.0_f32;
-    let mut interval = PredictiveInterval { lower: 0.0, point: 0.0, upper: 0.0, alpha: ALPHA };
+    let mut interval = PredictiveInterval {
+        lower: 0.0,
+        point: 0.0,
+        upper: 0.0,
+        alpha: ALPHA,
+    };
 
     for _ in 0..N_EVAL {
         let (confidence, outcome) = draw_observation(&mut rng);
@@ -132,7 +140,10 @@ fn coverage_after_warmup(n_warmup: usize, seed: u64) -> (f32, f32) {
 fn poc023_q1_conformal_warmup_curve() {
     println!("\n=== POC 023 Q1 — per-rule conformal warm-up (95% interval) ===");
     println!("  gate: T9.5 requires empirical coverage >= 90%");
-    println!("{:>8}  {:>10}  {:>10}  {:>8}", "n_resid", "coverage", "mean_width", "gate");
+    println!(
+        "{:>8}  {:>10}  {:>10}  {:>8}",
+        "n_resid", "coverage", "mean_width", "gate"
+    );
 
     // Averaged over seeds so a single unlucky warm-up draw can't decide the
     // answer (`rerun-numeric-gates-three-times` discipline).
@@ -166,7 +177,9 @@ fn poc023_q1_conformal_warmup_curve() {
     }
 
     match first_pass_n {
-        Some(n) => println!("\n  → warm-up threshold: {n} residuals before the T9.5 gate is reachable"),
+        Some(n) => {
+            println!("\n  → warm-up threshold: {n} residuals before the T9.5 gate is reachable")
+        }
         None => println!("\n  → gate NEVER reached within a 64-slot pool"),
     }
 
@@ -174,7 +187,10 @@ fn poc023_q1_conformal_warmup_curve() {
     // conservative interval — it produces a ZERO-WIDTH one that silently
     // claims certainty. This is the failure mode the plan must guard against.
     let (cold_cov, cold_width) = coverage_after_warmup(0, 7);
-    println!("  → cold pool (n=0): width={cold_width:.6}, coverage={:.1}%", cold_cov * 100.0);
+    println!(
+        "  → cold pool (n=0): width={cold_width:.6}, coverage={:.1}%",
+        cold_cov * 100.0
+    );
     assert!(
         cold_width < 1e-6,
         "expected a degenerate zero-width interval on an empty pool, got {cold_width}"
@@ -278,7 +294,11 @@ fn poc023_q2_l2_vs_imagination_latency() {
                 &mut hidden_scratch,
             );
             // T11.3's `score_fix_goodness`: dot + sigmoid.
-            let dot: f32 = z_out.iter().zip(goodness_dir.iter()).map(|(a, b)| a * b).sum();
+            let dot: f32 = z_out
+                .iter()
+                .zip(goodness_dir.iter())
+                .map(|(a, b)| a * b)
+                .sum();
             let score = 1.0 / (1.0 + (-dot).exp());
             std::hint::black_box(score);
         }
@@ -301,7 +321,10 @@ fn poc023_q2_l2_vs_imagination_latency() {
     //    T11.6 gates at ≥1.5×; T11.5 claims ≥20% rejection suffices.
     let t_base = (RETRIEVE_NS_PER_CHUNK + l2_ns_per_fix) as f64;
     println!("\n  Amdahl ceiling on end-to-end speedup (T11.6 gate = 1.50x):");
-    println!("{:>12}  {:>10}  {:>10}", "bad-fix rate", "recall", "speedup");
+    println!(
+        "{:>12}  {:>10}  {:>10}",
+        "bad-fix rate", "recall", "speedup"
+    );
     let mut best = 0.0_f64;
     for base_rate in [0.05_f64, 0.15, 0.30, 0.50, 1.00] {
         for recall in [0.30_f64, 1.00] {

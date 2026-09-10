@@ -24,7 +24,9 @@
 
 #![cfg(feature = "docker")]
 
-use riir_clippy::domains::docker::rules::{scan_source, scan_source_with, ScanContext, FIXABLE_DOCKER};
+use riir_clippy::domains::docker::rules::{
+    scan_source, scan_source_with, ScanContext, FIXABLE_DOCKER,
+};
 use riir_clippy::domains::docker::scanner::{self, Scope};
 
 /// The four in-tree Dockerfiles, as sibling-relative paths.
@@ -46,10 +48,12 @@ const IN_TREE: &[(&str, &str)] = &[
 
 fn read(name: &str) -> Option<String> {
     let path = IN_TREE.iter().find(|(n, _)| *n == name)?.1;
-    if let Ok(s) = std::fs::read_to_string(path) { Some(s) } else {
-            println!("SKIP {name}: sibling repo absent at {path} (degrading, not passing silently)");
-            None
-        }
+    if let Ok(s) = std::fs::read_to_string(path) {
+        Some(s)
+    } else {
+        println!("SKIP {name}: sibling repo absent at {path} (degrading, not passing silently)");
+        None
+    }
 }
 
 /// The origin-resolved view of a sibling file: the pins below pin
@@ -66,7 +70,9 @@ fn read_pinned(name: &str) -> Option<String> {
     // the process CWD, so from the file's own directory the `./<file>`
     // form is the one that resolves (the repo-root-relative form 404s from
     // a subdir — measured, error 128).
-    let (repo_dir, file_name) = path.rsplit_once('/').map(|(d, f)| (d, f.rsplit_once('/').map_or(f, |(_, f)| f)))?;
+    let (repo_dir, file_name) = path
+        .rsplit_once('/')
+        .map(|(d, f)| (d, f.rsplit_once('/').map_or(f, |(_, f)| f)))?;
     let Ok(out) = std::process::Command::new("git")
         .args(["show", &format!("origin/develop:./{file_name}")])
         .current_dir(repo_dir)
@@ -112,7 +118,9 @@ fn t5_control_scanner_structure_on_in_tree_files() {
         ("tick-test", 2, 9, "rust:1-slim"),
     ];
     for (name, stages, stanzas, base) in expected {
-        let Some(src) = read_pinned(name) else { continue };
+        let Some(src) = read_pinned(name) else {
+            continue;
+        };
         let scan = scanner::scan(&src);
         assert_eq!(scan.stages.len(), *stages, "{name}: stage count drifted");
         assert_eq!(scan.stanzas.len(), *stanzas, "{name}: stanza count drifted");
@@ -146,8 +154,14 @@ fn t5_control_multiline_run_spans_the_whole_continuation() {
         run.end_line - run.line + 1
     );
     let text = run.text(&src);
-    assert!(text.contains("--mount=type=cache"), "flags lost from the span");
-    assert!(text.contains("cp \"target/"), "the span stops before its last line");
+    assert!(
+        text.contains("--mount=type=cache"),
+        "flags lost from the span"
+    );
+    assert!(
+        text.contains("cp \"target/"),
+        "the span stops before its last line"
+    );
 }
 
 #[test]
@@ -179,7 +193,9 @@ fn t5_control_comment_blocks_attach_to_their_stanza() {
         .iter()
         .find(|s| s.instruction_of(&src) == "FROM")
         .expect("the builder FROM");
-    let start = from.comment_start.expect("the builder FROM carries a comment block");
+    let start = from
+        .comment_start
+        .expect("the builder FROM carries a comment block");
     assert!(start < from.start);
     assert!(
         src[start..from.start].contains("Builder"),
@@ -288,7 +304,10 @@ fn g5_prediction_holds_on_the_pre_adoption_content() {
         "cache-mount-missing-on-cargo-build",
         "runtime-stage-missing-user",
     ] {
-        assert!(got.contains(&want), "the pre-adoption content lost the {want} finding (got {got:?})");
+        assert!(
+            got.contains(&want),
+            "the pre-adoption content lost the {want} finding (got {got:?})"
+        );
     }
 }
 
@@ -299,7 +318,9 @@ fn g5_prediction_holds_on_the_pre_adoption_content() {
 /// own `scripts/dockerfile_heal_gate.sh` is the other half of this pin.
 #[test]
 fn edge_wallet_stays_healed_after_adoption() {
-    let Some(src) = read_pinned("edge-wallet") else { return };
+    let Some(src) = read_pinned("edge-wallet") else {
+        return;
+    };
     let fixable: Vec<&str> = scan_source(&src)
         .into_iter()
         .filter(|f| FIXABLE_DOCKER.contains(&f.rule_id))
@@ -332,7 +353,9 @@ fn edge_wallet_stays_healed_after_adoption() {
 
 #[test]
 fn g5_target_fixes_keep_the_file_scannable() {
-    let Some(src) = read("edge-wallet") else { return };
+    let Some(src) = read("edge-wallet") else {
+        return;
+    };
     let fixed = riir_clippy::domains::docker::proposers::fix_all(&src, &ScanContext::default());
     let scan = scanner::scan(&fixed);
     assert_eq!(scan.stages.len(), 2, "the fix changed the stage graph");
@@ -384,6 +407,9 @@ fn gated_rules_stay_silent_without_evidence() {
         "dockerignore-missing",
         "build-stage-missing-buildplatform",
     ] {
-        assert!(armed.contains(&gated), "{gated} did not fire even WITH its evidence");
+        assert!(
+            armed.contains(&gated),
+            "{gated} did not fire even WITH its evidence"
+        );
     }
 }

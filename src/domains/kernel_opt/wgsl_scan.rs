@@ -88,7 +88,9 @@ const PRIVATE_ARRAY_FLOOR: u64 = 128;
 
 fn re_workgroup_size() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"@workgroup_size\(\s*(\d+)\s*(?:,\s*\d+\s*){0,2}\)").expect("valid regex"))
+    RE.get_or_init(|| {
+        Regex::new(r"@workgroup_size\(\s*(\d+)\s*(?:,\s*\d+\s*){0,2}\)").expect("valid regex")
+    })
 }
 
 /// P2 — single-thread workgroup mapping (`row-dot-split` regime): a compute
@@ -147,8 +149,7 @@ fn scan_single_slot_staging(source: &str) -> Vec<WgslFinding> {
     static BARE_LOAD_WRITE: OnceLock<Regex> = OnceLock::new();
     static INC_ADD: OnceLock<Regex> = OnceLock::new();
     static INC_SELF: OnceLock<Regex> = OnceLock::new();
-    let decl =
-        DECL.get_or_init(|| Regex::new(r"var<workgroup>\s+(\w+)\s*:").expect("valid regex"));
+    let decl = DECL.get_or_init(|| Regex::new(r"var<workgroup>\s+(\w+)\s*:").expect("valid regex"));
     let bare_load_write = BARE_LOAD_WRITE.get_or_init(|| {
         // `A[...] = src[...];` and NOTHING else on the line (an optional `as`
         // cast on the RHS index is Rust-cube text; WGSL has none).
@@ -184,8 +185,12 @@ fn scan_single_slot_staging(source: &str) -> Vec<WgslFinding> {
 
     let mut out = Vec::new();
     for (li, raw) in lines.iter().enumerate() {
-        let Some(dm) = decl.captures(raw) else { continue };
-        let Some(name) = dm.get(1).map(|g| g.as_str()) else { continue };
+        let Some(dm) = decl.captures(raw) else {
+            continue;
+        };
+        let Some(name) = dm.get(1).map(|g| g.as_str()) else {
+            continue;
+        };
 
         // Occurrence scan: `name[…]` on every line; classify write (followed
         // by `=` not `==`) vs read; collect the read-index texts.
@@ -197,7 +202,9 @@ fn scan_single_slot_staging(source: &str) -> Vec<WgslFinding> {
             let mut from = 0usize;
             while let Some(p) = l[from..].find(&open) {
                 let start = from + p + open.len();
-                let Some(rel) = l[start..].find(']') else { break };
+                let Some(rel) = l[start..].find(']') else {
+                    break;
+                };
                 let idx = l[start..start + rel].trim().to_string();
                 let after = l[start + rel + 1..].trim_start();
                 if let Some(rest) = after.strip_prefix('=') {
@@ -225,10 +232,11 @@ fn scan_single_slot_staging(source: &str) -> Vec<WgslFinding> {
         }
         // The index is a single bare identifier (no compound transpose/tile
         // expressions) that never self-increments (per-thread-constant slot).
-        let is_bare_ident = first
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_')
-            && first.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_');
+        let is_bare_ident = first.chars().all(|c| c.is_alphanumeric() || c == '_')
+            && first
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_');
         if !is_bare_ident || incremented.iter().any(|v| v == &first) {
             continue;
         }
@@ -337,9 +345,10 @@ fn scan_invariant_operand_accumulation(source: &str) -> Vec<WgslFinding> {
     static PRODUCT: OnceLock<Regex> = OnceLock::new();
     let for_head =
         FOR_HEAD.get_or_init(|| Regex::new(r"for\s*\(\s*var\s+(\w+)\s*=").expect("valid regex"));
-    let acc = ACC.get_or_init(|| Regex::new(r"^\s*(?:var\s+)?(\w+)\s*(\+=|=)\s*(.*?);\s*(?://.*)?$").expect("valid regex"));
-    let product =
-        PRODUCT.get_or_init(|| Regex::new(r"^(\w+)\s*\*\s*(.+)$").expect("valid regex"));
+    let acc = ACC.get_or_init(|| {
+        Regex::new(r"^\s*(?:var\s+)?(\w+)\s*(\+=|=)\s*(.*?);\s*(?://.*)?$").expect("valid regex")
+    });
+    let product = PRODUCT.get_or_init(|| Regex::new(r"^(\w+)\s*\*\s*(.+)$").expect("valid regex"));
 
     // Loop-var stack with brace depth bookkeeping (line-approximate: pushes
     // on a for-header line, pops when the closing brace returns to the push
@@ -362,7 +371,9 @@ fn scan_invariant_operand_accumulation(source: &str) -> Vec<WgslFinding> {
             if let Some(m) = acc.captures(&code) {
                 let acc_var = m.get(1).map_or(String::new(), |g| g.as_str().to_string());
                 let op = m.get(2).map_or("", |g| g.as_str());
-                let mut rhs = m.get(3).map_or(String::new(), |g| g.as_str().trim().to_string());
+                let mut rhs = m
+                    .get(3)
+                    .map_or(String::new(), |g| g.as_str().trim().to_string());
                 if op == "=" {
                     // Normalize `acc = acc + <expr>` to `<expr>`; anything else
                     // (plain assignment) is not an accumulation.
@@ -442,17 +453,25 @@ fn scan_serial_row_dot(source: &str) -> Vec<WgslFinding> {
     let lines: Vec<String> = source.lines().map(strip_line_comment).collect();
     let idents = |idx: &str| -> Vec<String> {
         idx.split(|c: char| !(c.is_alphanumeric() || c == '_'))
-            .filter(|t| t.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_'))
+            .filter(|t| {
+                t.chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphabetic() || c == '_')
+            })
             .map(str::to_string)
             .collect()
     };
 
     let mut out = Vec::new();
     for (i, code) in lines.iter().enumerate() {
-        let Some(m) = acc.captures(code) else { continue };
+        let Some(m) = acc.captures(code) else {
+            continue;
+        };
         let acc_var = m.get(1).map_or(String::new(), |g| g.as_str().to_string());
         let op = m.get(2).map_or("", |g| g.as_str());
-        let mut rhs = m.get(3).map_or(String::new(), |g| g.as_str().trim().to_string());
+        let mut rhs = m
+            .get(3)
+            .map_or(String::new(), |g| g.as_str().trim().to_string());
         if op == "=" {
             let prefix = format!("{acc_var} + ");
             if let Some(stripped) = rhs.strip_prefix(&prefix) {
@@ -461,7 +480,9 @@ fn scan_serial_row_dot(source: &str) -> Vec<WgslFinding> {
                 continue; // plain assignment, not an accumulation
             }
         }
-        let Some(d) = dual.captures(&rhs) else { continue };
+        let Some(d) = dual.captures(&rhs) else {
+            continue;
+        };
         let (idx_a, idx_b) = (
             d.get(2).map_or("", |g| g.as_str()),
             d.get(4).map_or("", |g| g.as_str()),
@@ -791,8 +812,9 @@ fn k() {
         j += PLANE_DIM;
     }
 }";
-        assert!(!rules(&experimental.scan(fixed))
-            .contains(&"row-dot-split-inner-axis-block-reduce"));
+        assert!(
+            !rules(&experimental.scan(fixed)).contains(&"row-dot-split-inner-axis-block-reduce")
+        );
 
         // WGSL for-header serial stride — fires (the m2p phase-1 shape).
         let wgsl_buggy = "fn qkv(input_seq: array<f32>, w: array<f32>, h: u32) -> f32 {
@@ -818,11 +840,12 @@ fn k() {
     /// The pattern sets cite only corpus rule ids (the citation contract).
     #[test]
     fn every_pattern_cites_a_corpus_rule() {
-        let corpus_ids: Vec<String> = crate::domains::kernel_opt::corpus::build_kernel_seed_corpus()
-            .entries
-            .iter()
-            .map(|e| e.rule_id.clone())
-            .collect();
+        let corpus_ids: Vec<String> =
+            crate::domains::kernel_opt::corpus::build_kernel_seed_corpus()
+                .entries
+                .iter()
+                .map(|e| e.rule_id.clone())
+                .collect();
         for id in WGSL_PATTERN_RULES.iter().chain(WGSL_EXPERIMENTAL_RULES) {
             assert!(
                 corpus_ids.iter().any(|c| c == id),
@@ -841,7 +864,10 @@ fn k() {
         let src = "// `#[cube]` mention in a comment\n#[cfg(feature = \"cubecl_runtime\")]\n#[cube(launch_unchecked)]\nfn k(input: &[f32]) {\n    var buf: array<f32, 256>;\n}\n";
         let found = WgslScanner::default().scan_cube_rust(src);
         assert_eq!(found.len(), 1, "got {found:?}");
-        assert_eq!(found[0].rule_id, "declared-max-array-taxed-per-thread-under-runtime-bound");
+        assert_eq!(
+            found[0].rule_id,
+            "declared-max-array-taxed-per-thread-under-runtime-bound"
+        );
         // The body line is file line 5 (attr at 3, body decl at 5).
         assert_eq!(found[0].line, 5);
         assert!(found[0].excerpt.contains("array<f32, 256>"));
@@ -855,10 +881,14 @@ fn k() {
     /// over 200 scans. Release-only per the repo's G2 convention (debug
     /// regex timing is meaningless for the budget).
     #[test]
-    #[cfg_attr(debug_assertions, ignore = "release-only: debug regex timing is meaningless for the budget gate")]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "release-only: debug regex timing is meaningless for the budget gate"
+    )]
     #[allow(clippy::cast_precision_loss)]
     fn g2_scan_latency_under_1ms_per_file() {
-        const FIXTURE: &str = include_str!("../../../tests/fixtures/m2p_attention_postfix_701.wgsl");
+        const FIXTURE: &str =
+            include_str!("../../../tests/fixtures/m2p_attention_postfix_701.wgsl");
         let s = WgslScanner::default();
         let n = 200usize;
         let t = std::time::Instant::now();

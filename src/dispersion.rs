@@ -144,7 +144,10 @@ impl PoolEntry {
     /// A new entry with the given id and (possibly empty) history.
     #[must_use]
     pub fn new(id: impl Into<String>, outcomes: Vec<OutcomeClass>) -> Self {
-        Self { id: id.into(), outcomes }
+        Self {
+            id: id.into(),
+            outcomes,
+        }
     }
 }
 
@@ -302,12 +305,22 @@ mod tests {
     #[test]
     fn frontier_ties_break_by_id_and_higher_entropy_wins_within_regime() {
         let pool = vec![
-            PoolEntry::new("b_low", vec![OutcomeClass::Kept, OutcomeClass::Reverted, OutcomeClass::Reverted]),
-            PoolEntry::new("a_high", vec![
-                OutcomeClass::Kept,
-                OutcomeClass::Reverted,
-                OutcomeClass::Missed,
-            ]),
+            PoolEntry::new(
+                "b_low",
+                vec![
+                    OutcomeClass::Kept,
+                    OutcomeClass::Reverted,
+                    OutcomeClass::Reverted,
+                ],
+            ),
+            PoolEntry::new(
+                "a_high",
+                vec![
+                    OutcomeClass::Kept,
+                    OutcomeClass::Reverted,
+                    OutcomeClass::Missed,
+                ],
+            ),
         ];
         let ordered = frontier_order(&pool);
         assert_eq!(ordered[0].id, "a_high");

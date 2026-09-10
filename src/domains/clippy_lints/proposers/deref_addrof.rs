@@ -13,7 +13,10 @@ use syn::{Expr, ExprUnary, File, UnOp};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -44,18 +47,16 @@ mod tests {
 
     #[test]
     fn deref_of_ref_collapses() {
-        let out =
-            propose_fix("deref_addrof", "fn f(x: u32) -> u32 { let y = *&x; y }")
-                .expect("pattern matched");
+        let out = propose_fix("deref_addrof", "fn f(x: u32) -> u32 { let y = *&x; y }")
+            .expect("pattern matched");
         assert_eq!(out, "fn f(x: u32) -> u32 { let y = x; y }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
     fn deref_of_mut_ref_collapses() {
-        let out =
-            propose_fix("deref_addrof", "fn f(v: u32) -> u32 { let y = *&mut v; y }")
-                .expect("pattern matched");
+        let out = propose_fix("deref_addrof", "fn f(v: u32) -> u32 { let y = *&mut v; y }")
+            .expect("pattern matched");
         assert_eq!(out, "fn f(v: u32) -> u32 { let y = v; y }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }

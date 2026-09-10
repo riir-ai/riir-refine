@@ -77,7 +77,8 @@ fn machine_applicable_matches_the_measured_premise() {
     for (case, o) in PROBE_CASES.iter().zip(&outcomes) {
         let has_auto = o.machine_applicable > 0;
         assert_eq!(
-            has_auto, case.expect_machine_applicable,
+            has_auto,
+            case.expect_machine_applicable,
             "{} ({}): expected machine_applicable={} but measured {} suggestion span(s), \
              {} machine-applicable {:?}. \
              If rustc changed, RE-MEASURE and update Issue 035's table — do not \

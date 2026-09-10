@@ -100,7 +100,12 @@ fn t1_healer_corpus_withheld_pair_ood() {
 
     // Arm A: PURE RETRIEVAL (no instantiation evidence) — the arm the
     // preregistered P1/P2 bars apply to.
-    let off = run_withheld_pair(pop.clone(), None, RerankMode::Off, "pure-retrieval (no rerank)");
+    let off = run_withheld_pair(
+        pop.clone(),
+        None,
+        RerankMode::Off,
+        "pure-retrieval (no rerank)",
+    );
     print_matrix(&off);
     print_report(&off);
     assert_instrument_is_alive(&off);
@@ -142,7 +147,11 @@ fn t1_healer_corpus_withheld_pair_ood() {
         "  P4 (Structural Δ ≤ 10.0pp): {}",
         verdict_word(structural.drop_pp(1) <= 10.0)
     );
-    println!("  VERDICT (retrieval arm Δ={:+.1}pp): {}", off.drop_pp(1), verdict(off.drop_pp(1)));
+    println!(
+        "  VERDICT (retrieval arm Δ={:+.1}pp): {}",
+        off.drop_pp(1),
+        verdict(off.drop_pp(1))
+    );
 }
 
 #[cfg(feature = "rustc_errors")]
@@ -169,7 +178,11 @@ fn t2_rustc_errors_withheld_pair_ood() {
         verdict_word(r.drop_pp(1) >= 20.0),
         r.drop_pp(1)
     );
-    println!("  VERDICT (Δ={:+.1}pp): {}", r.drop_pp(1), verdict(r.drop_pp(1)));
+    println!(
+        "  VERDICT (Δ={:+.1}pp): {}",
+        r.drop_pp(1),
+        verdict(r.drop_pp(1))
+    );
 }
 
 fn verdict_word(held: bool) -> &'static str {

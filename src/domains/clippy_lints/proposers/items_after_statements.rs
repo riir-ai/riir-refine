@@ -53,7 +53,7 @@
 //!   scoping.
 
 use super::helpers::{byte_range, comment_marker_positions};
-use super::{SourceEdit, src};
+use super::{src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Block, File, Item, Stmt};
@@ -247,7 +247,10 @@ mod tests {
             "fn f() -> u32 { let y = 3u32; struct P { a: u32 } P { a: y }.a }",
         )
         .expect("pattern matched");
-        assert!(out.find("struct P").unwrap() < out.find("let y").unwrap(), "{out}");
+        assert!(
+            out.find("struct P").unwrap() < out.find("let y").unwrap(),
+            "{out}"
+        );
         assert!(out.contains("P { a: y }.a }"), "{out}");
     }
 
@@ -282,7 +285,10 @@ mod tests {
             "fn f() -> i32 { let a = 1; fn h() -> i32 { 5 } let b = 2; a + b + h() }",
         )
         .expect("pattern matched");
-        assert!(out.find("fn h").unwrap() < out.find("let a").unwrap(), "{out}");
+        assert!(
+            out.find("fn h").unwrap() < out.find("let a").unwrap(),
+            "{out}"
+        );
         assert!(out.contains("let b = 2;"), "kept stmt lost: {out}");
         assert!(out.contains("a + b + h() }"), "{out}");
     }
@@ -290,16 +296,23 @@ mod tests {
     #[test]
     fn leading_comment_guards_the_item() {
         // The comment above h describes h — hoisting would displace it.
-        let input = "fn f() -> i32 { let x = 1; // h doubles x\n fn h(v: i32) -> i32 { v * 2 } h(x) }";
+        let input =
+            "fn f() -> i32 { let x = 1; // h doubles x\n fn h(v: i32) -> i32 { v * 2 } h(x) }";
         let out = propose_fix("items_after_statements", input);
-        assert!(out.is_none(), "leading-comment item must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "leading-comment item must be refused: {out:?}"
+        );
     }
 
     #[test]
     fn trailing_same_line_comment_guards_the_item() {
         let input = "fn f() -> i32 { let x = 1; fn h(v: i32) -> i32 { v * 2 } // helper\n h(x) }";
         let out = propose_fix("items_after_statements", input);
-        assert!(out.is_none(), "trailing-comment item must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "trailing-comment item must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -307,7 +320,8 @@ mod tests {
         // A comment in the item's LEADING gap would stay behind while the
         // item moves — the hoist is refused (conservative; real clippy keeps
         // firing on it, the documented we-stay-silent class).
-        let input = "fn f() -> i32 { let a = 1; /* mid */ fn h() -> i32 { 5 } let b = 2; a + b + h() }";
+        let input =
+            "fn f() -> i32 { let a = 1; /* mid */ fn h() -> i32 { 5 } let b = 2; a + b + h() }";
         let out = propose_fix("items_after_statements", input);
         assert!(out.is_none(), "mid-gap comment must guard: {out:?}");
     }
@@ -318,7 +332,10 @@ mod tests {
         // `m!();` is a statement (Stmt::Macro), not an item — the const
         // after it still fires and hoists past it.
         let out = propose_fix("items_after_statements", input).expect("pattern matched");
-        assert!(out.find("const K").unwrap() < out.find("let x").unwrap(), "{out}");
+        assert!(
+            out.find("const K").unwrap() < out.find("let x").unwrap(),
+            "{out}"
+        );
         assert!(out.contains("m!();"), "statement must survive: {out}");
     }
 
@@ -330,7 +347,10 @@ mod tests {
             out.contains("#[inline]"),
             "attribute must move with the item: {out}"
         );
-        assert!(out.find("#[inline]").unwrap() < out.find("let x").unwrap(), "{out}");
+        assert!(
+            out.find("#[inline]").unwrap() < out.find("let x").unwrap(),
+            "{out}"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -342,7 +362,10 @@ mod tests {
         let inner = out.find("fn inner").expect("inner");
         let y = out.find("let y").expect("y");
         assert!(inner < y, "inner block hoisted: {out}");
-        assert!(out.find("fn outer").unwrap() < out.find("let x").unwrap(), "{out}");
+        assert!(
+            out.find("fn outer").unwrap() < out.find("let x").unwrap(),
+            "{out}"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
@@ -360,8 +383,14 @@ mod tests {
         let l = out.find("let l").expect("let");
         assert!(d14 < d15 && d15 < l, "order + hoist: {out}");
         assert!(out.contains("\n    const D14"), "D14 indent: {out}");
-        assert!(out.contains("\n    const D15"), "D15 indent (was col 0): {out}");
-        assert!(out.contains("\n\n    let l"), "kept let re-indented (was col 0): {out}");
+        assert!(
+            out.contains("\n    const D15"),
+            "D15 indent (was col 0): {out}"
+        );
+        assert!(
+            out.contains("\n\n    let l"),
+            "kept let re-indented (was col 0): {out}"
+        );
     }
 
     #[test]
@@ -372,7 +401,10 @@ mod tests {
         // hoist is now refused (all-or-nothing).
         let input = "fn f(l: L) {\n    let r = l.go();\n    assert_eq!(r, 4);\n\n    // Simulate the crash window.\n    struct LandsOnce;\n    impl Sub for LandsOnce {\n        fn go(&mut self) -> u32 { 1 }\n    }\n    let p = 1;\n}";
         let out = propose_fix("items_after_statements", input);
-        assert!(out.is_none(), "guarded struct must refuse the whole hoist: {out:?}");
+        assert!(
+            out.is_none(),
+            "guarded struct must refuse the whole hoist: {out:?}"
+        );
     }
 
     #[test]
@@ -392,7 +424,10 @@ mod tests {
         let h2 = out.find("fn h2").expect("h2");
         let x = out.find("let x").expect("x");
         assert!(h1 < h2 && h2 < x, "{out}");
-        assert!(out.contains("\n    fn h2"), "second item at block indent: {out}");
+        assert!(
+            out.contains("\n    fn h2"),
+            "second item at block indent: {out}"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 

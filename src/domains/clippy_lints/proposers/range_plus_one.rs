@@ -14,7 +14,10 @@ use syn::{BinOp, Expr, ExprBinary, ExprRange, File, RangeLimits};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -80,33 +83,44 @@ mod tests {
 
     #[test]
     fn half_open_plus_one_becomes_inclusive() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..n+1; let _ = r; }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..n+1; let _ = r; }",
+        )
+        .expect("pattern matched");
         assert_eq!(out, "fn f(n: u32) { let r = 0..=n; let _ = r; }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
     fn literal_one_on_the_left_also_fires() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..1+n; let _ = r; }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..1+n; let _ = r; }",
+        )
+        .expect("pattern matched");
         assert_eq!(out, "fn f(n: u32) { let r = 0..=n; let _ = r; }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
     fn open_start_range_rewrites_without_start() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = ..n+1; let _ = r; }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = ..n+1; let _ = r; }",
+        )
+        .expect("pattern matched");
         assert_eq!(out, "fn f(n: u32) { let r = ..=n; let _ = r; }");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
     fn named_end_variable_keeps_fragment() {
-        let out =
-            propose_fix("range_plus_one", "fn f(limit: usize) { let r = 0..limit+1; let _ = r; }")
-                .expect("pattern matched");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(limit: usize) { let r = 0..limit+1; let _ = r; }",
+        )
+        .expect("pattern matched");
         assert_eq!(out, "fn f(limit: usize) { let r = 0..=limit; let _ = r; }");
     }
 
@@ -119,14 +133,20 @@ mod tests {
             "fn f(depth: usize) { let v: Vec<u8> = (0..(depth + 1)).map(|_| 1u8).collect(); let _ = v; }",
         )
         .expect("pattern matched");
-        assert!(out.contains("(0..=depth)"), "paren end not unwrapped: {out}");
+        assert!(
+            out.contains("(0..=depth)"),
+            "paren end not unwrapped: {out}"
+        );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
     fn doubly_parenthesized_end_fires() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..((n + 1)); let _ = r; }")
-            .expect("pattern matched");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..((n + 1)); let _ = r; }",
+        )
+        .expect("pattern matched");
         assert!(out.contains("0..=n"), "nested parens not unwrapped: {out}");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
@@ -134,8 +154,10 @@ mod tests {
     #[test]
     fn parenthesized_non_plus_one_unchanged() {
         // Unwrapping parens must not loosen the +1 requirement.
-        let out =
-            propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..(n + 2); let _ = r; }");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..(n + 2); let _ = r; }",
+        );
         assert!(out.is_none(), "(n+2) must not fire: {out:?}");
     }
 
@@ -152,26 +174,38 @@ mod tests {
 
     #[test]
     fn already_inclusive_unchanged() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..=n; let _ = r; }");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..=n; let _ = r; }",
+        );
         assert!(out.is_none(), "inclusive range changed: {out:?}");
     }
 
     #[test]
     fn plain_half_open_unchanged() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..n; let _ = r; }");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..n; let _ = r; }",
+        );
         assert!(out.is_none(), "non-plus-one range changed: {out:?}");
     }
 
     #[test]
     fn plus_two_unchanged() {
-        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..n+2; let _ = r; }");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: u32) { let r = 0..n+2; let _ = r; }",
+        );
         assert!(out.is_none(), "n+2 is not an inclusive rewrite: {out:?}");
     }
 
     #[test]
     fn float_one_unchanged() {
         // `1.0` is a float literal — never a `..=` bound rewrite.
-        let out = propose_fix("range_plus_one", "fn f(n: f64) { let r = 0.0..n+1.0; let _ = r; }");
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(n: f64) { let r = 0.0..n+1.0; let _ = r; }",
+        );
         assert!(out.is_none(), "float literal must not fire: {out:?}");
     }
 }

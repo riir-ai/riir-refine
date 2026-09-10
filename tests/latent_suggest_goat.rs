@@ -314,8 +314,15 @@ fn threshold_calibration_distribution() {
             .find(|(d, _)| d == domain)
             .and_then(|(_, rules)| rules.first());
         if let Some(r) = top {
-            let mark = if r.rule_id == *expected { "hit " } else { "MISS" };
-            eprintln!("  {mark} {:<28} {:>8.3}  ({})", r.rule_id, r.score, expected);
+            let mark = if r.rule_id == *expected {
+                "hit "
+            } else {
+                "MISS"
+            };
+            eprintln!(
+                "  {mark} {:<28} {:>8.3}  ({})",
+                r.rule_id, r.score, expected
+            );
             pos_scores.push(r.score);
         } else {
             eprintln!("  NONE for {expected}");
@@ -335,7 +342,13 @@ fn threshold_calibration_distribution() {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some((d, r)) = best {
-            eprintln!("  {:<28} {:>8.3}  [{}]  {}", r.rule_id, r.score, d.label(), head(snippet));
+            eprintln!(
+                "  {:<28} {:>8.3}  [{}]  {}",
+                r.rule_id,
+                r.score,
+                d.label(),
+                head(snippet)
+            );
             neg_scores.push(r.score);
         } else {
             eprintln!("  (no rules)  {}", head(snippet));
@@ -377,7 +390,10 @@ fn scoring_mode_calibration_whole_vs_deep() {
             .into_iter()
             .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
             .collect::<Vec<_>>();
-        indexes.push((DomainId::Clippy, RuleIndex::build(patterns).expect("clippy index")));
+        indexes.push((
+            DomainId::Clippy,
+            RuleIndex::build(patterns).expect("clippy index"),
+        ));
     }
     #[cfg(feature = "rust_perf")]
     {
@@ -385,7 +401,10 @@ fn scoring_mode_calibration_whole_vs_deep() {
             .into_iter()
             .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
             .collect::<Vec<_>>();
-        indexes.push((DomainId::Perf, RuleIndex::build(patterns).expect("perf index")));
+        indexes.push((
+            DomainId::Perf,
+            RuleIndex::build(patterns).expect("perf index"),
+        ));
     }
 
     let mut cases: Vec<(DomainId, &str, bool)> = Vec::new(); // (domain, snippet, is_positive)
@@ -413,8 +432,16 @@ fn scoring_mode_calibration_whole_vs_deep() {
         let Some((_, index)) = indexes.iter().find(|(d, _)| d == domain) else {
             continue;
         };
-        let whole = index.suggest(snippet, 1).first().map(|r| r.score).unwrap_or(f32::NAN);
-        let deep = index.suggest_deep(snippet, 1).first().map(|r| r.score).unwrap_or(f32::NAN);
+        let whole = index
+            .suggest(snippet, 1)
+            .first()
+            .map(|r| r.score)
+            .unwrap_or(f32::NAN);
+        let deep = index
+            .suggest_deep(snippet, 1)
+            .first()
+            .map(|r| r.score)
+            .unwrap_or(f32::NAN);
         eprintln!(
             "{:<8} {:>9.3} {:>9.3}  [{}] {}",
             if *is_pos { "POS" } else { "NEG" },
@@ -445,7 +472,11 @@ fn scoring_mode_calibration_whole_vs_deep() {
             "{label}: positives [{:.3} ..], negatives [..= {:.3}] → {}",
             pmin,
             nmax,
-            if nmax < pmin { "CLEAN separation" } else { "OVERLAP" }
+            if nmax < pmin {
+                "CLEAN separation"
+            } else {
+                "OVERLAP"
+            }
         );
     }
 }

@@ -43,7 +43,10 @@ use super::{delete_stmt_edit, edit, src, SourceEdit};
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     // The if-statement can nest anywhere (loop bodies, match arms, closures),
     // so walk every stmt in the file.
-    let mut scan = IfScan { source, edits: Vec::new() };
+    let mut scan = IfScan {
+        source,
+        edits: Vec::new(),
+    };
     scan.visit_file(file);
     scan.edits
 }
@@ -71,14 +74,22 @@ impl IfScan<'_> {
         }
 
         // cond: !recv.contains(arg)
-        let Expr::Unary(unary) = &*eif.cond else { return };
+        let Expr::Unary(unary) = &*eif.cond else {
+            return;
+        };
         let UnOp::Not(_) = unary.op else { return };
-        let Expr::MethodCall(ck) = &*unary.expr else { return };
+        let Expr::MethodCall(ck) = &*unary.expr else {
+            return;
+        };
         if ck.method != "contains" || ck.args.len() != 1 {
             return;
         }
-        let Expr::Path(recv) = &*ck.receiver else { return };
-        let Some(contains_arg) = ck.args.first() else { return };
+        let Expr::Path(recv) = &*ck.receiver else {
+            return;
+        };
+        let Some(contains_arg) = ck.args.first() else {
+            return;
+        };
 
         // then: exactly one `recv.insert(key)` stmt with an equivalent key.
         let recv_txt = match recv.path.to_token_stream().to_string() {
@@ -89,12 +100,18 @@ impl IfScan<'_> {
         let mut matched: Option<(&Stmt, &ExprMethodCall)> = None;
         let mut match_count = 0usize;
         for stmt in &eif.then_branch.stmts {
-            let Stmt::Expr(Expr::MethodCall(ins), _) = stmt else { continue };
+            let Stmt::Expr(Expr::MethodCall(ins), _) = stmt else {
+                continue;
+            };
             if ins.method != "insert" || ins.args.len() != 1 {
                 continue;
             }
-            let Expr::Path(ins_recv) = &*ins.receiver else { continue };
-            let Some(ins_arg) = ins.args.first() else { continue };
+            let Expr::Path(ins_recv) = &*ins.receiver else {
+                continue;
+            };
+            let Some(ins_arg) = ins.args.first() else {
+                continue;
+            };
             if ins_recv.path.to_token_stream().to_string() != recv_txt {
                 continue;
             }
@@ -107,10 +124,14 @@ impl IfScan<'_> {
         if match_count != 1 {
             return;
         }
-        let Some((ins_stmt, ins)) = matched else { return };
+        let Some((ins_stmt, ins)) = matched else {
+            return;
+        };
 
         // New condition text from the INSERT call's own fragments.
-        let Some(recv_src) = src(self.source, recv) else { return };
+        let Some(recv_src) = src(self.source, recv) else {
+            return;
+        };
         let Some(key_src) = src(self.source, ins.args.first().expect("1 arg")) else {
             return;
         };

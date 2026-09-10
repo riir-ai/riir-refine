@@ -33,7 +33,10 @@ use super::{count_ident_occurrences, edit, src, SourceEdit};
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     // The statement can nest anywhere (match-arm blocks, closures, loop
     // bodies, ...), so walk every stmt in the file.
-    let mut scan = IfScan { source, edits: Vec::new() };
+    let mut scan = IfScan {
+        source,
+        edits: Vec::new(),
+    };
     scan.visit_file(file);
     scan.edits
 }
@@ -64,13 +67,19 @@ impl IfScan<'_> {
         }
 
         // cond: !recv.contains_key(<key>)
-        let Expr::Unary(unary) = &*eif.cond else { return None };
+        let Expr::Unary(unary) = &*eif.cond else {
+            return None;
+        };
         let UnOp::Not(_) = unary.op else { return None };
-        let Expr::MethodCall(ck) = &*unary.expr else { return None };
+        let Expr::MethodCall(ck) = &*unary.expr else {
+            return None;
+        };
         if ck.method != "contains_key" || ck.args.len() != 1 {
             return None;
         }
-        let Expr::Path(recv) = &*ck.receiver else { return None };
+        let Expr::Path(recv) = &*ck.receiver else {
+            return None;
+        };
 
         // then: exactly one stmt — recv.insert(k, v)
         if eif.else_branch.is_some() || eif.then_branch.stmts.len() != 1 {
@@ -82,7 +91,9 @@ impl IfScan<'_> {
         if ins.method != "insert" || ins.args.len() != 2 {
             return None;
         }
-        let Expr::Path(ins_recv) = &*ins.receiver else { return None };
+        let Expr::Path(ins_recv) = &*ins.receiver else {
+            return None;
+        };
         if ins_recv.path.to_token_stream().to_string() != recv.path.to_token_stream().to_string() {
             return None;
         }
@@ -190,7 +201,10 @@ mod tests {
              if !map.contains_key(&k) { map.insert(k, k * 2 + compute(k)); }\n}\nfn compute(x: u32) -> u32 { x }",
         )
         .expect("pattern matched");
-        assert!(out.contains("map.entry(k).or_insert(k * 2 + compute(k));"), "{out}");
+        assert!(
+            out.contains("map.entry(k).or_insert(k * 2 + compute(k));"),
+            "{out}"
+        );
     }
 
     #[test]

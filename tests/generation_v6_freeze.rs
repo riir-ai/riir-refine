@@ -34,7 +34,10 @@ use riir_clippy::score_bench::{draft_oracle, generations};
 #[ignore = "runs the freeze gates + prints the paste-ready record; run with --ignored --test-threads=1"]
 fn freeze_and_verify_generation_v6() {
     let oracle = draft_oracle();
-    assert!(oracle.is_available(), "cargo not on PATH — the freeze needs the real oracle");
+    assert!(
+        oracle.is_available(),
+        "cargo not on PATH — the freeze needs the real oracle"
+    );
 
     let specs = generations::specs_v6();
     assert!(!specs.is_empty(), "span table produced nothing");
@@ -57,17 +60,32 @@ fn freeze_and_verify_generation_v6() {
         // ── G1: the compile fence (the oracle's std-only filter) ───────
         let v = oracle.lints_for(&riir_clippy::score_bench::wrap(&s.code));
         if !v.ran {
-            println!("⚠ spec {}: oracle did not run ({:?}) — excluding", s.id, v.error);
+            println!(
+                "⚠ spec {}: oracle did not run ({:?}) — excluding",
+                s.id, v.error
+            );
             fresh_exclusions.push(s.id.clone());
             continue;
         }
         if !v.compiles {
-            println!("⚠ spec {}: does not compile in the bare stub — excluding", s.id);
+            println!(
+                "⚠ spec {}: does not compile in the bare stub — excluding",
+                s.id
+            );
             fresh_exclusions.push(s.id.clone());
             continue;
         }
         // ── G2: the label fence (mining claims vs the bench instrument) ─
-        let hits: Vec<String> = v.lints.intersection(&s.expect_lints.iter().cloned().collect::<std::collections::BTreeSet<_>>()).cloned().collect();
+        let hits: Vec<String> = v
+            .lints
+            .intersection(
+                &s.expect_lints
+                    .iter()
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>(),
+            )
+            .cloned()
+            .collect();
         let vocab_all = riir_clippy::score_bench::vocabulary();
         let mining_only: Vec<String> = s
             .expect_lints
@@ -91,7 +109,12 @@ fn freeze_and_verify_generation_v6() {
         }
         let mut label: Vec<String> = v
             .lints
-            .intersection(&s.expect_lints.iter().cloned().collect::<std::collections::BTreeSet<_>>())
+            .intersection(
+                &s.expect_lints
+                    .iter()
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>(),
+            )
             .cloned()
             .collect();
         // The bench-only hits that are ALSO in-vocabulary count toward the
@@ -113,7 +136,10 @@ fn freeze_and_verify_generation_v6() {
             s.id
         );
         if label.is_empty() {
-            println!("⚠ spec {}: zero vocabulary lints at freeze — excluding", s.id);
+            println!(
+                "⚠ spec {}: zero vocabulary lints at freeze — excluding",
+                s.id
+            );
             fresh_exclusions.push(s.id.clone());
             continue;
         }
@@ -144,12 +170,14 @@ fn freeze_and_verify_generation_v6() {
         relabeled.len()
     );
     let per_territory: std::collections::BTreeMap<&str, usize> =
-        verified.iter().fold(std::collections::BTreeMap::new(), |mut m, (id, label)| {
-            let terr = if label.len() >= 2 { "multi" } else { "single" };
-            *m.entry(terr).or_default() += 1;
-            let _ = id;
-            m
-        });
+        verified
+            .iter()
+            .fold(std::collections::BTreeMap::new(), |mut m, (id, label)| {
+                let terr = if label.len() >= 2 { "multi" } else { "single" };
+                *m.entry(terr).or_default() += 1;
+                let _ = id;
+                m
+            });
     for (terr, n) in &per_territory {
         println!("  territory {terr}: {n} verified span(s)");
     }
@@ -172,7 +200,11 @@ fn freeze_and_verify_generation_v6() {
     for (id, label) in &verified {
         println!(
             "    (\"{id}\", &[{}]),  // k={}",
-            label.iter().map(|l| format!("\"{l}\"")).collect::<Vec<_>>().join(", "),
+            label
+                .iter()
+                .map(|l| format!("\"{l}\""))
+                .collect::<Vec<_>>()
+                .join(", "),
             label.len()
         );
     }

@@ -25,7 +25,7 @@
 //! existing rule): B58 output-buffer-rotation-pool-multi-forward gets the
 //! bidirectional peer-exchange credit face. Batch 119 / Plan 098 / Research 143.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

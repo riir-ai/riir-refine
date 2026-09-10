@@ -87,7 +87,11 @@ fn state(dir: &Path) -> riir_clippy::kat_mining_consent::MiningConsent {
 fn unmine_records_the_opt_out_and_names_what_still_works() {
     use riir_clippy::kat_mining_consent::MiningConsent;
     let dir = scratch("optout");
-    assert_eq!(state(&dir), MiningConsent::Unset, "a fresh dir starts unset");
+    assert_eq!(
+        state(&dir),
+        MiningConsent::Unset,
+        "a fresh dir starts unset"
+    );
 
     let (code, text) = heal(&dir, &["--unmine"]);
     assert_eq!(code, Some(0), "--unmine must exit 0. output:\n{text}");
@@ -230,7 +234,10 @@ fn mine_and_unmine_together_are_rejected_without_writing() {
     let dir = scratch("conflict");
     let (code, text) = heal(&dir, &["--mine", "--unmine"]);
     assert_eq!(code, Some(2), "the conflict must exit 2. output:\n{text}");
-    assert!(text.contains("--mine") && text.contains("--unmine"), "output:\n{text}");
+    assert!(
+        text.contains("--mine") && text.contains("--unmine"),
+        "output:\n{text}"
+    );
     assert_eq!(
         state(&dir),
         MiningConsent::Unset,

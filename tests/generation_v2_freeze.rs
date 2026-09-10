@@ -22,7 +22,10 @@ use riir_clippy::score_bench::{draft_oracle, generations, wrap};
 #[ignore = "spawns real cargo+clippy (the freeze oracle); run with --ignored --test-threads=1"]
 fn freeze_and_measure_generation_v2() {
     let oracle = draft_oracle();
-    assert!(oracle.is_available(), "cargo not on PATH — cannot run the freeze oracle");
+    assert!(
+        oracle.is_available(),
+        "cargo not on PATH — cannot run the freeze oracle"
+    );
 
     let atom_list = generations::atoms();
     assert!(!atom_list.is_empty(), "atom factory produced nothing");
@@ -36,14 +39,15 @@ fn freeze_and_measure_generation_v2() {
             .intersection(&riir_clippy::score_bench::vocabulary())
             .cloned()
             .collect();
-        let want: std::collections::BTreeSet<String> =
-            std::iter::once(atom.lint.clone()).collect();
+        let want: std::collections::BTreeSet<String> = std::iter::once(atom.lint.clone()).collect();
         if !out.ran || !out.compiles || vocab != want {
             bad_atoms.push(atom.lint.clone());
         }
     }
     if !bad_atoms.is_empty() {
-        println!("⚠ atoms that failed freeze verification (exclude from FROZEN_LABELS): {bad_atoms:?}");
+        println!(
+            "⚠ atoms that failed freeze verification (exclude from FROZEN_LABELS): {bad_atoms:?}"
+        );
     }
 
     // ── Pass 2: label-verify every composite against the union gold ─────
@@ -58,12 +62,12 @@ fn freeze_and_measure_generation_v2() {
     let mut fresh_exclusions: Vec<String> = Vec::new();
     let mut drift: Vec<String> = Vec::new();
     let mut labeled_specs: Vec<(
-        String, // id
-        usize,  // k
+        String,                             // id
+        usize,                              // k
         std::collections::BTreeSet<String>, // oracle labels
-        String, // healed code
-        usize,  // vocab_before
-        usize,  // resolved
+        String,                             // healed code
+        usize,                              // vocab_before
+        usize,                              // resolved
     )> = Vec::new();
     for s in &specs {
         if excluded.contains(s.id.as_str()) {
@@ -75,13 +79,9 @@ fn freeze_and_measure_generation_v2() {
             fresh_exclusions.push(s.id.clone());
             continue;
         }
-        let got: std::collections::BTreeSet<String> = out
-            .lints
-            .intersection(&vocab)
-            .cloned()
-            .collect();
-        let want: std::collections::BTreeSet<String> =
-            s.expect_lints.iter().cloned().collect();
+        let got: std::collections::BTreeSet<String> =
+            out.lints.intersection(&vocab).cloned().collect();
+        let want: std::collections::BTreeSet<String> = s.expect_lints.iter().cloned().collect();
         if got != want {
             println!(
                 "⚠ spec {} union-identity FAILS (oracle {got:?} ≠ union {want:?}) — excluding (interference composite)",
@@ -93,7 +93,8 @@ fn freeze_and_measure_generation_v2() {
         // Frozen-label drift (labels already landed → they must still match).
         if let Some(l) = frozen.get(s.id.as_str()) {
             let have: std::collections::BTreeSet<&str> = l.iter().copied().collect();
-            let got_ref: std::collections::BTreeSet<&str> = got.iter().map(String::as_str).collect();
+            let got_ref: std::collections::BTreeSet<&str> =
+                got.iter().map(String::as_str).collect();
             if have != got_ref {
                 drift.push(s.id.clone());
             }
@@ -159,10 +160,19 @@ fn freeze_and_measure_generation_v2() {
         let (k_lo, r_lo) = pair[0];
         let (k_hi, r_hi) = pair[1];
         if r_hi > r_lo + 1e-9 {
-            violations.push(format!("k={k_hi} solve {r_hi:.1}% > k={k_lo} solve {r_lo:.1}%"));
+            violations.push(format!(
+                "k={k_hi} solve {r_hi:.1}% > k={k_lo} solve {r_lo:.1}%"
+            ));
         }
     }
-    println!("\nM4 monotone-decay gate: {}", if violations.is_empty() { "PASS" } else { "FAIL" });
+    println!(
+        "\nM4 monotone-decay gate: {}",
+        if violations.is_empty() {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+    );
     for v in &violations {
         println!("  VIOLATION: {v}");
     }
@@ -205,10 +215,14 @@ fn freeze_and_measure_generation_v2() {
         let lints: Vec<String> = want.iter().cloned().collect();
         println!(
             "    (\"{id}\", &[{}]),  // k={k}",
-            lints.iter().map(|l| format!("\"{l}\"")).collect::<Vec<_>>().join(", ")
+            lints
+                .iter()
+                .map(|l| format!("\"{l}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
-    println!("];", );
+    println!("];",);
 
     // The gate IS the test: a decay violation fails the run so the finding
     // is loud (never a silent green over a dead mechanism).
@@ -224,8 +238,16 @@ fn atom_table_joins_the_bench_vocabulary_and_parses() {
     // benchable only when the atom table is non-trivial and vocabulary-clean.
     let atoms = generations::atoms();
     let vocab = riir_clippy::score_bench::vocabulary();
-    assert!(atoms.len() >= 8, "atom table too thin for a k-ladder: {}", atoms.len());
+    assert!(
+        atoms.len() >= 8,
+        "atom table too thin for a k-ladder: {}",
+        atoms.len()
+    );
     for a in &atoms {
-        assert!(vocab.contains(a.lint.as_str()), "{} not in vocabulary", a.lint);
+        assert!(
+            vocab.contains(a.lint.as_str()),
+            "{} not in vocabulary",
+            a.lint
+        );
     }
 }

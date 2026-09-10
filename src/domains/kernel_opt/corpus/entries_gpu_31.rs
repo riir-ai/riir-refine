@@ -16,7 +16,7 @@
 //! gate is byte-identical output (frontier-logit dumps), which is what makes
 //! the perf claims believable. Batch 123 / Plan 103 / Research 146.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

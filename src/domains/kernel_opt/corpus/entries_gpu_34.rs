@@ -22,7 +22,7 @@
 //! opponent's tree (process intel, rides the rule text). Batch 128 / Plan
 //! 109 / Research 150.
 
-use crate::domains::kernel_opt::corpus::{KernelRule};
+use crate::domains::kernel_opt::corpus::KernelRule;
 
 pub fn entries() -> Vec<KernelRule> {
     vec![

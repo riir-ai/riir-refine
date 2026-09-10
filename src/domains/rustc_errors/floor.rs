@@ -391,11 +391,7 @@ impl DriverFixer {
         if let Some(f) = &self.ordering {
             driver = driver.with_ordering(f.clone());
         }
-        Ok(driver.run(
-            &[lib],
-            &super::playbooks::Playbooks::production(),
-            true,
-        ))
+        Ok(driver.run(&[lib], &super::playbooks::Playbooks::production(), true))
     }
 }
 
@@ -649,8 +645,7 @@ impl FloorHarness {
         let mut reports = Vec::with_capacity(cases.len());
         let mut invalid_mutants = Vec::new();
         for case in cases {
-            let slot: std::cell::RefCell<Option<FixCompileReport>> =
-                std::cell::RefCell::new(None);
+            let slot: std::cell::RefCell<Option<FixCompileReport>> = std::cell::RefCell::new(None);
             let outcome = self.measure_one_by(case, |dir| {
                 let r = fixer.fix_returning_report(dir)?;
                 *slot.borrow_mut() = Some(r);
@@ -662,10 +657,7 @@ impl FloorHarness {
                     case.name, case.expect_code, outcome.codes_before
                 ));
             }
-            let rep = slot
-                .borrow_mut()
-                .take()
-                .unwrap_or_default();
+            let rep = slot.borrow_mut().take().unwrap_or_default();
             reports.push((case.name.to_string(), rep));
             outcomes.push(outcome);
         }
@@ -764,10 +756,7 @@ impl FloorHarness {
     /// # Errors
     ///
     /// I/O or cargo-spawn failure.
-    pub fn verify_seed_tests(
-        &self,
-        cases: &[HarnessCase<'_>],
-    ) -> Result<Vec<String>, String> {
+    pub fn verify_seed_tests(&self, cases: &[HarnessCase<'_>]) -> Result<Vec<String>, String> {
         let mut bad = Vec::new();
         for case in cases {
             let dir = self.scaffold(case.name, case.seed)?;
