@@ -7,11 +7,52 @@
 > historical record. Numbering stays monotonic — issue/plan/bench/batch
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
+# HISTORY.md — riir-clippy
+
+## Issue 087 resolved — kat_burn_stack e2e: stale harness units, not the account plane (2026-09-10)
+
+Resolved-record for the now-removed issue file (removed per the
+noise-reduction rule; full narrative in git history,
+`git log -- .issues/087_kat_burn_stack_autoreport_skipped.md`).
+
+- **Finding** (surfaced during Issue 080 validation): `cargo test --test
+  kat_burn_stack` failed 3 tests at clean HEAD `fcc478c` — the burn
+  auto-report returned `Skipped` before any dial, mock server received
+  zero requests. Reproduced in an isolated worktree, so committed-state,
+  not WIP.
+- **Root cause NOT the account plane** (the issue's own suspect was
+  refuted): commit `e9eca71d` (2026-09-09 11:21, Issue 081's client fix —
+  the whole-KAT wire conversion at the sync boundary) changed
+  `run_burn_sync_at`'s skip predicate from the raw micro book to
+  `wire_kat_total(charged_kat) <= ack`, while this harness (`f3a7cf28`,
+  landed ~11 h EARLIER) bills only 11 micro-KAT per run —
+  `wire_kat_total(11) = 0 ≤ ack 0` is a LEGITIMATE `Skipped` before any
+  dial. The conversion itself is correct and cross-repo-pinned; the
+  lesson generalizes Issue 081's: a contract change must re-pin its e2e
+  the same day, not just its unit goldens.
+- **Fix `fbedf6d2` (harness-side, no assertions relaxed):** the fixture
+  now bills exactly 1_000_000 micro-KAT (1 whole KAT) per run via a
+  comment-only `a.rs` (AstChunker's whole-file single-chunk fallback;
+  billing is raw-byte parse-independent per the T0.5 contract) with an
+  in-test `count_word_tokens == 1_000_000` self-assert; the three stale
+  assertions re-pinned to the WIRE unit (`sent == wire_kat_total(y)`,
+  `ack.burn_kat_total == wire_kat_total(charged)`, exact stacked-line
+  format; signature over the wire number). Coverage is STRICTER: exact
+  wire totals 1→2 KAT, real dials proven.
+- Validated: 3/3 at the required-features set AND at `--all-features`
+  (the ci_feature_guard Layer 5c configuration); `kat_soft_gate_cli`
+  13/13; clippy clean on the touched file. Recorded follow-up (coordinator
+  call, not owed): a cheap dedicated `--test kat_burn_stack` row in a fast
+  local gate would shorten the next between-windows red stretch (Layer
+  5c/5d already cover it; the ~1-day red window was a manual-run gap).
 
 ## Issue 080 resolved — the sticky-grace marker retired, server truth only (2026-09-10)
 
-Resolved-record for `.issues/080_sticky_grace_server_truth.md` (the file
-stays, with its dated closure block). The two-stage arc is complete: T3
+Resolved-record for `.issues/080_sticky_grace_server_truth.md`
+(now removed per the noise-reduction rule — the closure block's one
+load-bearing fact is folded into this record; full narrative in git
+history, `git log -- .issues/080_sticky_grace_server_truth.md`). The
+two-stage arc is complete: T3
 landed the truth-wins swap (`587132b`, 2026-09-09) and the DATED REMOVAL
 landed once the fleet was v3 (dapps Issue 027 live; owner account's
 contribution fact verified server-side via the live v3 burn ack,
@@ -34,8 +75,11 @@ contribution fact verified server-side via the live v3 burn ack,
 - Docs: AGENTS.md soft-gate bullet (the marker sentence rewritten —
   transitional → retired), README soft-gate section,
   `kat_soft_gate.rs`/`kat_burn_client.rs` docs, Cargo.toml test-row
-  comment. Transition edge: mitigation (1) accepted + documented in the
-  issue's closure block.
+  comment. Transition edge (pre-fleet contributors: fact predates the v3
+  server + depleted + quiet outbox): mitigation (1) ACCEPTED — a
+  historical contributor queues any one fix (trajectories accumulate
+  naturally) and syncs; the fact records; the next drain lifts. Population
+  = the owner's own fleet; revisit only if the deployment grows.
 
 ## Issues 077 + 082 resolved — margin-weighted mining + the OOD axis (2026-09-09)
 
