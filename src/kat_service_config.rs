@@ -47,16 +47,10 @@ pub const SERVICE_CONFIG_FILE: &str = "service_url.json";
 /// config > default). One spelling, owned here.
 pub const SERVICE_URL_ENV_VAR: &str = "RIIR_HEAL_KAT_SERVICE_URL";
 
-/// The pinned devnet host (its own worker; fresh ledger; inline drain).
-pub const DEVNET_SERVICE_URL: &str = "https://devnet.ai.gist.rs";
-
-/// The pinned testnet host (the offline-demo deployment).
-pub const TESTNET_SERVICE_URL: &str = "https://testnet.ai.gist.rs";
-
-/// The pinned mainnet host — the apex, and (deliberately) the SAME string
-/// as [`crate::kat_lease_client::DEFAULT_SERVICE_URL`]: the const never
-/// moves, so the QR goldens never trip (Plan 023's premise).
-pub const MAINNET_SERVICE_URL: &str = "https://ai.gist.rs";
+// issue 088: the host strings moved to the protocol tier's `kat_service_urls`
+// (one source shared with the transports) — re-exported so every existing
+// path (`crate::kat_service_config::MAINNET_SERVICE_URL`) resolves.
+pub use crate::kat_service_urls::{DEVNET_SERVICE_URL, MAINNET_SERVICE_URL, TESTNET_SERVICE_URL};
 
 /// The PINNED alias map (Plan 023 g1): exactly three entries, full-word
 /// aliases only — no `localhost` alias, no partial-word matching, so a typo

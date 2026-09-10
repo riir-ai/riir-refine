@@ -329,6 +329,11 @@ fn e0499_flatten(out: &mut Vec<GeneratedCase>) {
 /// index can run off the end of the initial vec and panic the seed's own
 /// ground-truth test (idx 2 on a 2-element vec), which the brace-balance
 /// net cannot catch.
+// The 20-row table is the data — 118 lines under `kat_transport` (the
+// function carries no cfg, but the sibling crates' line-count baseline
+// shifts with the feature graph), 100 is the pedantic budget. Splitting it
+// would separate the table from its consumer for nothing.
+#[allow(clippy::too_many_lines)]
 fn e0502_copy_index(out: &mut Vec<GeneratedCase>) {
     // (ty, init elems, push val, idx, expected, final vec)
     const TABLE: [(&str, &str, &str, usize, &str, &str); 20] = [

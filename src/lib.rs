@@ -196,6 +196,33 @@ pub mod kat_mining_consent;
 // the two cannot drift. Zero new deps (serde_json only).
 pub mod kat_service_config;
 
+// ── issue 088: the KAT protocol tier (the `riir-kat` spin-out prep) ──────
+// Pure serde wire types extracted per client area + the unit system + the
+// pinned hosts. Dependency-free by construction — the shared vocabulary
+// both sides of the KAT network speak (client here, riir-dapps ledger plane
+// server-side). `kat_units` + `kat_service_urls` are UNGATED: the ungated
+// config tier names the hosts, and rendering a KAT amount is not client
+// behavior. The protocol modules gate-match their client consumers for now;
+// the spin-out makes them the member's ungated protocol tier.
+pub mod kat_service_urls;
+pub mod kat_units;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_payreq;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_burn;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_lease;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_account;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_stake;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_vote;
+#[cfg(feature = "kat_service")]
+pub mod kat_protocol_wetrun;
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+pub mod kat_protocol_consent;
+
 // Proposal 005 Phase 0 T0.2 (Plan 026): the redaction gate — no payload
 // leaves the machine before passing it. Deny-by-default `.heal-sync-policy`
 // allowlist (origin + path glob + span cap) + a 12-rule secret scanner +

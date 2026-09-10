@@ -38,10 +38,9 @@
 use crate::kat_account::KatAccount;
 use crate::kat_payreq_client::hex_encode;
 
-/// The signing domain — the first bytes of every consent signature. The
-/// version suffix (`-v1`) is part of the pinned bytes: changing it is a
-/// wire break against the service's own composer, not a tweak.
-pub const CONSENT_SIGNING_DOMAIN: &[u8] = b"riir-kat-consent-v1";
+// The wire constant lives in the protocol tier (issue 088); re-exported so
+// every existing `kat_consent_client::` path keeps resolving.
+pub use crate::kat_protocol_consent::CONSENT_SIGNING_DOMAIN;
 
 /// The exact signed bytes:
 /// `CONSENT_SIGNING_DOMAIN ‖ [consent_u8] ‖ machine_len_le32 ‖ machine_utf8

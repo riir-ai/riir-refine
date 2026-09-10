@@ -31,6 +31,12 @@ use std::path::{Path, PathBuf};
 
 use ed25519_dalek::Signer as _;
 
+// ── the wire types (the protocol tier; re-exported so every existing
+//    `crate::kat_vote_client::X` path resolves unchanged) ──────────────────
+pub use crate::kat_protocol_vote::{
+    GOVOTE_SIGNING_DOMAIN, ProposalView, VOTE_VERSION, VoteAck, VoteChoice, VoteIntent,
+};
+
 // ── the mirrored wire contract (riir-dapps kat::governance — no dep) ─────
 
 /// Lowercase hex of a byte slice (the wire encoding for pubkeys +
@@ -44,40 +50,6 @@ pub fn hex_encode(bytes: &[u8]) -> String {
         out.push(HEX[usize::from(b & 0x0F)] as char);
     }
     out
-}
-
-/// MIRROR of dapps `GOVOTE_SIGNING_DOMAIN` (pinned by the golden test).
-pub const GOVOTE_SIGNING_DOMAIN: &[u8] = b"riir-dapps.kat.govote.v1";
-
-/// The vote-request schema version.
-pub const VOTE_VERSION: u32 = 1;
-
-/// A vote choice, wire form ("yes"/"no" — the service's JSON vocabulary).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VoteChoice {
-    Yes,
-    No,
-}
-
-impl VoteChoice {
-    /// The wire string (JSON `choice`).
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Yes => "yes",
-            Self::No => "no",
-        }
-    }
-
-    /// Parse the wire string (the service response's echo).
-    #[must_use]
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "yes" => Some(Self::Yes),
-            "no" => Some(Self::No),
-            _ => None,
-        }
-    }
 }
 
 /// MIRROR of dapps `vote_message` — the exact signed bytes:
@@ -111,45 +83,6 @@ pub fn sign_vote(
         .sign(&vote_message(proposal_id, &pubkey, choice))
         .to_bytes();
     (sig, pubkey)
-}
-
-// ── the views (the service's JSON responses, deserialized) ───────────────
-
-/// One governance proposal as the service serves it (the render source).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ProposalView {
-    pub id: u64,
-    /// "ban" | "unban".
-    pub kind: String,
-    /// The account named by the proposal (the ledger's 16-B id, hex).
-    pub account_hex: String,
-    pub reason_code: u16,
-    /// BLAKE3 evidence hash, hex — **rendered on every vote** (the debate's
-    /// anchor; pinned at open, immutable mid-vote).
-    pub evidence_hash_hex: String,
-    /// Optional advisory-transcript hash, hex ("" when none).
-    pub advisory_hash_hex: String,
-    /// "open" | "passed" | "rejected" | "executed" | "expired".
-    pub state: String,
-    pub open_tick: u64,
-    pub close_tick: u64,
-    pub exec_eligible_tick: u64,
-    /// The frozen quorum denominator (USDC base units).
-    pub eligible_total: u64,
-    pub yes_weight: u64,
-    pub no_weight: u64,
-    /// THE CALLER's snapshot weight on this proposal (USDC base units —
-    /// `0` means the tranches are too young / staked after open: recorded
-    /// intent, zero influence).
-    pub your_weight: u64,
-}
-
-/// The vote-submit response (the service's ack).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct VoteAck {
-    pub proposal_id: u64,
-    pub choice: String,
-    pub snapshot_weight: u64,
 }
 
 // ── the renders (pure; the copy gates pin them) ──────────────────────────
@@ -239,20 +172,6 @@ pub fn vote_confirm_line(ack: &VoteAck) -> String {
 }
 
 // ── the local intent queue (.heal/vote/ — the stake-queue pattern) ───────
-
-/// A queued vote intent — signed locally when the service plane is not
-/// live; submitted at sync time later (the signature covers the exact
-/// message, so the queued intent is as good as the account's word).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct VoteIntent {
-    pub vote_version: u32,
-    pub account_id: String,
-    pub proposal_id: u64,
-    pub choice: String,
-    pub voter_pubkey_hex: String,
-    pub signature_hex: String,
-    pub queued_unix: u64,
-}
 
 /// Append a vote intent to `.heal/vote/pending.jsonl`.
 ///

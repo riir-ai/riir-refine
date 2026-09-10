@@ -38,7 +38,7 @@
 //! account is fleet-canonical now.
 //!
 //! **Accounting-only (G9d):** the grant line is the LOCAL projection of the
-//! §KAT free tier — now literally [`crate::kat_meter::FREE_TIER_GRANT_KAT`].
+//! §KAT free tier — now literally [`crate::kat_units::FREE_TIER_GRANT_KAT`].
 //! The record no longer carries a `grant_kat` field: it was never mutated
 //! after first write, so the constant IS the projection (the canonical
 //! record shape is riir-auth's — `github_user` login provenance instead).
@@ -55,7 +55,7 @@ pub use riir_auth::account_key::{
     account_id_for, short_id, AccountState, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
 };
 
-use crate::kat_meter::FREE_TIER_GRANT_KAT;
+use crate::kat_units::FREE_TIER_GRANT_KAT;
 
 /// A loaded (or just-created) KAT account — a kat-facing newtype over the
 /// [`AccountKey`] substrate (a type alias cannot carry the kat-specific
@@ -243,7 +243,7 @@ impl KatAccount {
     #[must_use]
     pub fn summary_lines(&self) -> Vec<String> {
         let kat = |micro: u64| {
-            crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+            crate::kat_units::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
         };
         let mut lines = vec![
             format!(
@@ -284,7 +284,7 @@ impl KatAccount {
 #[must_use]
 pub fn history_lines(grant_kat: u64, spent_kat: u64, metered_tokens: u64) -> Vec<String> {
     let kat =
-        |micro: u64| crate::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX));
+        |micro: u64| crate::kat_units::render_kat(i64::try_from(micro).unwrap_or(i64::MAX));
     vec![
         "history (local view — server events land with the service half):".to_string(),
         format!("  earned:  {} (login grant projection)", kat(grant_kat)),
@@ -582,7 +582,7 @@ mod tests {
         }
         // Issue 031: renders go through the shared 6-decimal formatter —
         // the balance is the saturation subtraction, rendered as KAT.
-        let expected = crate::kat_payreq_client::render_kat(
+        let expected = crate::kat_units::render_kat(
             i64::try_from(FREE_TIER_GRANT_KAT - 1_234).unwrap_or(i64::MAX),
         );
         assert!(
@@ -605,7 +605,7 @@ mod tests {
             .iter()
             .find(|l| l.contains("grant projection"))
             .expect("the grant line survives the facade move");
-        let expected = crate::kat_payreq_client::render_kat(
+        let expected = crate::kat_units::render_kat(
             i64::try_from(FREE_TIER_GRANT_KAT).unwrap_or(i64::MAX),
         );
         assert!(grant_line.contains(&expected), "{grant_line}");
