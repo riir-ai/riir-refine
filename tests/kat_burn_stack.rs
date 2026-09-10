@@ -5,9 +5,14 @@
 //!
 //! | phase | service | expected |
 //! |---|---|---|
-//! | 1. a run with burn N, service down | closed port | exit 0, ONE `burn sync: … stacked` line, NO ack file — the delta is a local commit |
-//! | 2. the next run, burn grows to Y | live mock | ONE `POST /burn` carrying `burn_kat_total == Y` (the FULL stacked total, not the delta), the signature verifies over the documented message, the ack advances to Y, the success line carries the server balance from the response |
+//! | 1. a run with burn ≥ 1 whole KAT, service down | closed port | exit 0, ONE `burn sync: … stacked` line, NO ack file — the delta is a local commit |
+//! | 2. the next run, burn grows past the next whole-KAT crossing | live mock | ONE `POST /burn` carrying `burn_kat_total ==` the FULL stacked total floored to WHOLE KAT (not the delta), the signature verifies over the documented message, the ack advances to it, the success line carries the server balance from the response |
 //! | 3. a run with NO new burn | live mock | ZERO requests (skip path), no `burn sync:` line, exit 0, ack untouched |
+//!
+//! Units (issue 081): the charge book is MICRO-KAT, the wire is WHOLE KAT —
+//! `wire_kat_total` floors at the sync boundary and sub-KAT remainders ride
+//! the next crossing. Every run bills exactly [`ONE_RUN_MICRO_KAT`] so each
+//! wire total is exact.
 //!
 //! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
 //! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`) + service URL; the lease/reheat lanes
@@ -38,9 +43,43 @@ use riir_clippy::kat_burn_client::{self, KatBurnAck};
 /// The closed loopback port — connection REFUSED, instantly, no network.
 const CLOSED_PORT: &str = "http://127.0.0.1:1";
 
-/// One tiny source file — enough to bill a nonzero cumulative burn on the
-/// first run (1 KAT per code word token).
-const A_RS: &str = "pub fn add(a: u32, b: u32) -> u32 { a.wrapping_add(b) }\n";
+/// One run must bill at least ONE WHOLE KAT (1_000_000 micro-KAT) or the
+/// burn auto-report legitimately skips as sub-granularity: the wire (and
+/// the ack) is WHOLE KAT — `wire_kat_total` floors the micro-KAT charge
+/// book at the sync boundary and sub-KAT remainders ride the next crossing
+/// (issue 081: the 10⁶× over-report incident). Exactly 1M per run keeps
+/// every wire total an exact whole number (1 KAT, then 2 KAT, …).
+const ONE_RUN_MICRO_KAT: u64 = 1_000_000;
+
+/// The billed fixture: ONE source file worth exactly [`ONE_RUN_MICRO_KAT`]
+/// word tokens. Billing is per source READ, raw bytes, parse-independent
+/// (the T0.5 contract), so the words ride in a comment: the file is valid
+/// Rust that parses to zero items, which is AstChunker's documented
+/// whole-file single-chunk fallback — one span, no per-item work, and no
+/// signature matching over megabytes.
+fn write_a_rs(dir: &Path) {
+    let render = |words: u64| {
+        let filler: Vec<String> = (0..words).map(|i| format!("w{i}")).collect();
+        format!("// {}\n", filler.join(" "))
+    };
+    // Every filler word is exactly one `count_word_tokens` token (the same
+    // counter the binary bills with — `//` is its own token), so one linear
+    // adjustment lands exactly on the target; the assert keeps the
+    // arithmetic honest instead of trusting it.
+    let mut words = ONE_RUN_MICRO_KAT.saturating_sub(8);
+    let mut file = render(words);
+    let actual = riir_clippy::kat_meter::count_word_tokens(file.as_bytes());
+    if actual != ONE_RUN_MICRO_KAT {
+        words += ONE_RUN_MICRO_KAT - actual;
+        file = render(words);
+    }
+    assert_eq!(
+        riir_clippy::kat_meter::count_word_tokens(file.as_bytes()),
+        ONE_RUN_MICRO_KAT,
+        "the fixture must bill exactly one whole KAT per run"
+    );
+    std::fs::write(dir.join("a.rs"), file).expect("write a.rs");
+}
 
 // ── the mock server (std TCP; the kat_lease_client_g10 shape) ─────────────
 
@@ -75,8 +114,13 @@ fn spawn_burn_mock() -> BurnMock {
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { return };
-            let Some((path, body)) = read_request(&mut stream) else { continue };
-            cap.lock().unwrap().push(Captured { path, body: body.clone() });
+            let Some((path, body)) = read_request(&mut stream) else {
+                continue;
+            };
+            cap.lock().unwrap().push(Captured {
+                path,
+                body: body.clone(),
+            });
             let total = serde_json::from_str::<serde_json::Value>(&body)
                 .ok()
                 .and_then(|v| v.get("burn_kat_total").and_then(serde_json::Value::as_u64))
@@ -118,7 +162,10 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, String)> {
         .unwrap_or_default()
         .to_string();
     let content_length: usize = lines
-        .find_map(|l| l.strip_prefix("Content-Length:").and_then(|v| v.trim().parse().ok()))
+        .find_map(|l| {
+            l.strip_prefix("Content-Length:")
+                .and_then(|v| v.trim().parse().ok())
+        })
         .unwrap_or(0);
     while buf.len() < header_end + 4 + content_length {
         let n = stream.read(&mut tmp).ok()?;
@@ -172,11 +219,11 @@ fn heal(dir: &Path, url: &str, args: &[&str]) -> (Option<i32>, String) {
 
 fn login(dir: &Path) {
     let (code, text) = heal(dir, CLOSED_PORT, &["login"]);
-    assert_eq!(code, Some(0), "hermetic login must succeed. output:\n{text}");
-}
-
-fn write_a_rs(dir: &Path) {
-    std::fs::write(dir.join("a.rs"), A_RS).expect("write a.rs");
+    assert_eq!(
+        code,
+        Some(0),
+        "hermetic login must succeed. output:\n{text}"
+    );
 }
 
 /// The settled cumulative burn, read off the charge ledger the run saved.
@@ -223,7 +270,8 @@ fn a_failed_push_is_a_local_commit() {
 
     let (code, text) = heal(&dir, CLOSED_PORT, &[]);
     assert_eq!(
-        code, Some(0),
+        code,
+        Some(0),
         "a failed burn push must never change the exit code. output:\n{text}"
     );
     let total = charged_kat(&dir);
@@ -233,10 +281,18 @@ fn a_failed_push_is_a_local_commit() {
         1,
         "exactly one burn-sync status line. output:\n{text}"
     );
-    assert!(text.contains("stacked"), "the failure line must say stacked. output:\n{text}");
     assert!(
-        text.contains(&total.to_string()),
-        "the stacked line must carry the stacked total {total}. output:\n{text}"
+        text.contains("stacked"),
+        "the failure line must say stacked. output:\n{text}"
+    );
+    // The stacked total is the WIRE total (whole KAT — issue 081), not the
+    // micro book; assert the exact line, unit-honestly.
+    let wire = kat_burn_client::wire_kat_total(total);
+    assert!(
+        text.contains(&format!(
+            "burn sync: offline — {wire} KAT stacked, reports with the next run"
+        )),
+        "the stacked line must carry the stacked wire total {wire}. output:\n{text}"
     );
     assert!(
         !ack_path(&dir).exists(),
@@ -260,7 +316,10 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
     assert_eq!(code1, Some(0));
     let x = charged_kat(&dir);
     assert!(x > 0, "the first run must bill something");
-    assert!(ack_of(&dir).is_none(), "the failed push must not advance the ack");
+    assert!(
+        ack_of(&dir).is_none(),
+        "the failed push must not advance the ack"
+    );
 
     // Phase 2: the live mock.
     let mock = spawn_burn_mock();
@@ -280,8 +339,10 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
         .and_then(serde_json::Value::as_u64)
         .expect("burn_kat_total");
     assert_eq!(
-        sent, y,
-        "the report carries the FULL stacked total, not just the delta"
+        sent,
+        kat_burn_client::wire_kat_total(y),
+        "the report carries the FULL stacked total floored to the wire's whole-KAT unit, not \
+         just the delta (y={y} micro)"
     );
     let watermark = v
         .get("meter_watermark_tokens")
@@ -351,15 +412,17 @@ fn a_run_with_no_new_burn_sends_nothing() {
     let ack = ack_of(&dir).expect("drained");
     assert_eq!(
         ack.burn_kat_total,
-        charged_kat(&dir),
-        "the drain leaves the cumulative fully reported"
+        kat_burn_client::wire_kat_total(charged_kat(&dir)),
+        "the drain leaves the cumulative fully reported AT THE WIRE'S whole-KAT granularity \
+         (a sub-KAT remainder would ride the next crossing)"
     );
 
     // No new burn: the source file now bills ZERO tokens (whitespace-only
     // — `count_word_tokens` bills nothing for it, pinned by kat_meter's own
-    // tests), so the run settles a zero delta and `charged_kat == ack` →
-    // the skip path, zero dials. (Deleting the file entirely would exit 1
-    // at the no-sources guard BEFORE the charge block — the wrong reason.)
+    // tests), so the run settles a zero delta and
+    // `wire_kat_total(charged_kat) == ack` → the skip path, zero dials.
+    // (Deleting the file entirely would exit 1 at the no-sources guard
+    // BEFORE the charge block — the wrong reason.)
     std::fs::write(dir.join("a.rs"), "\n").expect("blank out a.rs");
     let mock3 = spawn_burn_mock();
     let (code3, text3) = heal(&dir, &mock3.base(), &[]);
