@@ -117,8 +117,8 @@ pub struct BurnReportAck {
     /// Whether the service says this account has EVER had an accepted
     /// mining batch (issue 080) — the sticky-grace SERVER truth, persisted
     /// into the ack verbatim. `None` = the field was absent or not a bool
-    /// (a pre-v3 server answer); the client then falls back to the legacy
-    /// machine-local marker.
+    /// (a pre-v3 server answer); since the dated removal (2026-09-10) that
+    /// is simply NOT contributed — there is no local-marker fallback.
     pub contributed: Option<bool>,
     /// The commitment hex of the first accepted batch (64 hex chars per
     /// the contract; provenance only — the gate never reads it). `None`
@@ -206,8 +206,9 @@ pub struct KatBurnAck {
     /// Whether the service has ever ACCEPTED a mining batch from this
     /// account, exactly as the burn-push response answered (`None` = a
     /// pre-v3 ack / pre-v3 server). Issue 080: the sticky-grace SERVER
-    /// truth — when `Some(false)` the legacy machine-local marker must
-    /// NOT lift the gate; the marker only fills in while this is `None`.
+    /// truth and, since the dated removal (2026-09-10), the ONLY input —
+    /// `Some(true)` lifts the gate; `None`/`Some(false)` do not, and the
+    /// retired machine-local marker has zero effect in every case.
     #[serde(default)]
     pub contributed: Option<bool>,
     /// The first accepted batch's commitment hex (provenance only — the

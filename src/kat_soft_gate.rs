@@ -17,18 +17,22 @@
 //!    the local projection (the projection models neither the daily faucet
 //!    drip nor mining credits — 075 prerequisite 1). `None` (never synced)
 //!    is NOT ≤ 0: it is warn-only.
-//! 4. **not yet contributed-and-synced** — SERVER TRUTH WINS (issue 080):
-//!    the burn-ack v3 `contributed` field (written only from the
-//!    authenticated burn-push response) decides when the server has stated
-//!    it; the machine-global [`crate::kat_contribution`] marker fills in
-//!    ONLY while the ack says `None` (a pre-v3 server) — a planted marker
-//!    can no longer lift the gate once the server has answered `false`.
-//!    This IS the `OptedIn` grace: mining payouts land at the 7-day epoch
-//!    settle (`pay_due_rewards` rides `settle_epoch`, NOT the hourly burn
-//!    bucket), so a time-boxed grace would brick contributing users
-//!    mid-epoch — the exact failure 075 forbids. Once contributed, the
-//!    gate stays lifted (sticky); the balance leg alone re-arms it for
-//!    fresh depleted accounts.
+//! 4. **not yet contributed-and-synced** — SERVER TRUTH ONLY (issue 080,
+//!    dated removal 2026-09-10): the burn-ack v3 `contributed` field
+//!    (written only from the authenticated burn-push response) is the sole
+//!    input — `Some(true)` lifts the gate, and `None`/`Some(false)` are
+//!    simply NOT contributed (the balance leg then decides). The legacy
+//!    machine-local `contributed_once.json` marker that once filled in
+//!    while the ack said `None` is RETIRED: the `kat_contribution` module
+//!    is deleted and any file a pre-removal install left on disk has ZERO
+//!    effect — the forge surface is fully removed. The sticky-grace
+//!    semantics are unchanged: this IS the `OptedIn` grace — mining payouts
+//!    land at the 7-day epoch settle (`pay_due_rewards` rides
+//!    `settle_epoch`, NOT the hourly burn bucket), so a time-boxed grace
+//!    would brick contributing users mid-epoch — the exact failure 075
+//!    forbids. Once the server has stated `true`, the gate stays lifted
+//!    (sticky); the balance leg alone re-arms it for fresh depleted
+//!    accounts.
 //!
 //! An env kill-switch (`RIIR_HEAL_KAT_GATE=0`) and the shared billing
 //! kill-switch (`RIIR_HEAL_KAT_METER=0`) both disarm the gate at the call
@@ -44,12 +48,11 @@ pub struct SoftGateInput {
     pub account_present: bool,
     /// The last-synced server balance, micro-units (`None` = never synced).
     pub last_synced_balance_micro: Option<i64>,
-    /// The sticky-grace leg, pre-bridged by the caller (issue 080): the
-    /// burn-ack v3 `contributed` server truth (`Some(true)`), OR the
-    /// legacy machine-global marker read
-    /// (`kat_contribution::has_contributed`) ONLY while the ack says
-    /// `None` (a pre-v3 server). A planted marker does NOT lift the gate
-    /// once the server has said `Some(false)`.
+    /// The sticky-grace leg, pre-bridged by the caller (issue 080, dated
+    /// removal 2026-09-10): the burn-ack v3 `contributed` server truth —
+    /// `Some(true)` only. A planted/leftover `contributed_once.json` has
+    /// zero effect (the `kat_contribution` reader is deleted); `None` and
+    /// `Some(false)` both arrive here as `false`.
     pub contributed_and_synced: bool,
 }
 

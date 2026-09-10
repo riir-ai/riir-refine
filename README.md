@@ -353,11 +353,13 @@ three paths: `cargo heal --refill` (the dev/test faucet refill — Plan 117),
 contributing (`cargo heal --mine`, then one accepted `cargo heal sync` — the
 burn-push ack records the server's `contributed` truth, which lifts the gate
 for good), or paying (the web payment page). Since Issue 080 the sticky
-grace is **server truth**: the burn-ack v3 `contributed` field decides —
-`false` refuses even when a machine-local marker exists (the forgeable
-`contributed_once.json` input is closed), and the marker is honored only
-while a pre-v3 server has never said otherwise (removed once the fleet
-upgrades). Logged-out, offline, and never-synced machines stay warn-only —
+grace is **server truth only** (dated removal 2026-09-10,
+fleet v3 live): the burn-ack v3 `contributed` field decides — `Some(true)`
+lifts the gate; `false` refuses; `None` (a pre-v3 ack/server) is simply not
+contributed. The former machine-local `contributed_once.json` marker is
+RETIRED — the `kat_contribution` module is deleted, nothing reads or writes
+the file, and a copy left on disk by a pre-removal install has zero effect.
+Logged-out, offline, and never-synced machines stay warn-only —
 no server authority, no honest gate. The refusal names all three refuel
 paths. `RIIR_HEAL_KAT_GATE=0` (or the
 shared `RIIR_HEAL_KAT_METER=0` billing switch) disarms the gate; the burn

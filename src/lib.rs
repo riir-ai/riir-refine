@@ -307,20 +307,14 @@ pub mod kat_consent_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_burn_client;
 
-// Issue 075: the machine-global "contributed at least once" record — one
-// fact, one file in the account dir, written on the first ACCEPTED telemetry
-// push. Feature-free (std + serde): the sync path writes it and the soft
-// gate reads it in every build where both halves exist. The read direction
-// is anti-brick by design (corrupt reads as contributed — the module docs
-// carry the argument).
-pub mod kat_contribution;
-
 // Issue 075 (owner soft gate, 2026-09-08): the depleted-account refusal —
 // the pure four-leg predicate over the last SYNCED server balance (the burn
 // ack's `last_balance_micro`, never the local projection), the account, and
-// the contribution truth — the burn-ack v3 `contributed` server truth, the
-// machine-local marker only as the pre-v3 fallback (issue 080). Warn-only
-// (no honest gate) for no-transport, anonymous, and never-synced inputs.
+// the contribution truth — the burn-ack v3 `contributed` server truth ONLY
+// (`Some(true)` lifts; issue 080's dated removal retired the machine-local
+// `contributed_once.json` marker + the `kat_contribution` module 2026-09-10,
+// fleet v3 live — any file left on disk is ignored). Warn-only (no honest
+// gate) for no-transport, anonymous, and never-synced inputs.
 // Feature-free: the cfg lives at the
 // bin's call site, where the capability is known.
 pub mod kat_soft_gate;

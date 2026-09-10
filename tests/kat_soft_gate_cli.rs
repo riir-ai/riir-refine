@@ -11,28 +11,31 @@
 //!
 //! | leg broken/hold | seeded state | exit |
 //! |---|---|---|
-//! | all four held | account + ack(balance ≤ 0) + no marker | **1** + `REFUSED` + both refuel paths named + no `scanned` line (the refusal precedes the scan) |
-//! | contributed | + `contributed_once.json` | 0 (the sticky OptedIn grace) |
-//! | balance > 0 | ack(balance 5_000_000), no marker | 0 |
+//! | all four held | account + ack(balance ≤ 0), no server truth | **1** + `REFUSED` + both refuel paths named + no `scanned` line (the refusal precedes the scan) |
+//! | contributed | ack `contributed: Some(true)` | 0 (the sticky OptedIn grace) |
+//! | balance > 0 | ack(balance 5_000_000), no truth | 0 |
 //! | kill switch | depleted ack + `RIIR_HEAL_KAT_GATE=0` | 0 |
 //! | billing switch | depleted ack + `RIIR_HEAL_KAT_METER=0` | 0 |
 //! | no account | depleted ack, NO login | 0 (anonymous runs are never gated) |
 //! | never synced | account, NO ack | 0 (no server truth → warn-only) |
-//! | 079 offer (auto-yes) | depleted ack + `RIIR_HEAL_KAT_PROMPT_YES=1` | 1 + `contributing now` + the sync output, then still `REFUSED` (closed port / no store → no marker) |
+//! | 079 offer (auto-yes) | depleted ack + `RIIR_HEAL_KAT_PROMPT_YES=1` | 1 + `contributing now` + the sync output, then still `REFUSED` (closed port / no store → nothing accepted) |
 //! | 079 offer (TTY ask) | depleted ack, no env, piped stdin | 1 + plain refusal, NO `contributing now` (no TTY → the 075 shape) |
 //!
-//! Issue 080 rows — the sticky grace became SERVER TRUTH (the burn-ack v3
-//! `contributed` field, written only from the authenticated burn-push
-//! response):
+//! Issue 080 rows — the sticky grace is SERVER TRUTH, and since the DATED
+//! REMOVAL (2026-09-10, fleet v3 live) it is server truth ONLY: the
+//! burn-ack v3 `contributed` field (written only from the authenticated
+//! burn-push response) is the sole input, the `kat_contribution` marker
+//! module is deleted, and any `contributed_once.json` left on disk by a
+//! pre-removal install has ZERO effect (the forge surface is gone):
 //!
-//! | server truth | marker | exit |
+//! | server truth | marker file | exit |
 //! |---|---|---|
-//! | `Some(false)` | planted | **1** (the forge-closure regression — the marker can no longer lift the gate) |
+//! | `Some(false)` | planted | **1** (the forge-closure regression — the file is ignored entirely) |
 //! | `Some(true)` | none | 0 (sticky grace, unchanged) |
-//! | `None` (pre-v3) | planted | 0 (the fleet transition) |
-//! | `None` + no balance, no marker | none | 0 (never-synced warn-only, the unchanged 075 shape) |
-//! | a v2 ack FILE (no new fields) | none | 1 (read-back compat: old files still gate) |
-//! | a v2 ack FILE (no new fields) | planted | 0 (read-back compat: the transition survives)
+//! | `None` (pre-v3), balance ≤ 0 | planted | **1** (the removal: no fallback — the marker lifts nothing) |
+//! | `None`, no balance | leftover marker | 0 (never-synced warn-only, the unchanged 075 shape) |
+//! | a v2 ack FILE (no new fields), balance 0 | none | 1 (read-back compat: old files still gate) |
+//! | a v2 ack FILE (no new fields), balance 0 | planted | **1** (the removal: the transition arm is gone) |
 //!
 //! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
 //! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`); the service URL points at a closed
@@ -111,8 +114,8 @@ fn login(dir: &Path) {
 }
 
 /// Seed an ack with the given server balance — the gate's input.
-/// `contributed` stays `None`: the pre-v3 transition state the existing
-/// issue-075 rows were written against (issue 080 adds the truth fields).
+/// `contributed` stays `None`: no server truth stated (a pre-v3 answer or
+/// a v2 file) — since the dated removal that is simply NOT contributed.
 fn seed_ack(dir: &Path, balance_micro: i64) {
     let ack = KatBurnAck {
         version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
@@ -161,7 +164,10 @@ fn seed_v2_ack_file(dir: &Path, balance_micro: i64) {
     .expect("seed v2 ack file");
 }
 
-/// Seed the contribution marker (the sticky grace) in the account dir.
+/// Seed a LEFTOVER `contributed_once.json` in the account dir — the file
+/// the retired `kat_contribution` module once read. Since the dated
+/// removal (2026-09-10) nothing reads it; tests seed it to prove it has
+/// ZERO effect (the forge surface is gone, not merely outranked).
 fn seed_marker(dir: &Path) {
     std::fs::write(
         dir.join("contributed_once.json"),
@@ -245,28 +251,35 @@ fn prompt_yes_offers_contribute_now_then_still_refuses_offline() {
         "the fallthrough must say why. output:\n{text}"
     );
     assert!(!text.contains("scanned "), "output:\n{text}");
-    // The offer path writes no marker of its own — only an accepted push
-    // does (the closed port refused everything).
+    // The offer path never wrote the (now-retired) marker of its own —
+    // only an accepted push records the server truth, and the closed port
+    // refused everything. Post-removal NOTHING writes this file.
     assert!(
         !dir.join("contributed_once.json").exists(),
-        "a failed push must not write the sticky-grace marker"
+        "a failed push must not write the retired sticky-grace marker"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The sticky grace: a contributed-and-synced machine is never gated, even
-/// at a deep negative balance (payouts land at the epoch settle).
+/// THE dated-removal proof (issue 080, 2026-09-10): the local marker alone
+/// no longer lifts ANYTHING — the `kat_contribution` reader is deleted, so
+/// a contributed_once.json with NO server truth behaves exactly like no
+/// marker: the depleted balance refuses.
 #[test]
-fn the_contribution_marker_lifts_the_gate() {
+fn the_local_marker_no_longer_lifts_the_gate() {
     let dir = scratch("marker");
     write_a_rs(&dir);
     login(&dir);
     seed_ack(&dir, 0);
-    seed_marker(&dir);
+    seed_marker(&dir); // the leftover file — zero effect
 
     let (code, text) = heal(&dir, &[], &[]);
-    assert_eq!(code, Some(0), "output:\n{text}");
-    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    assert_eq!(
+        code,
+        Some(1),
+        "the retired marker must have zero effect. output:\n{text}"
+    );
+    assert!(text.contains("REFUSED"), "output:\n{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -340,8 +353,9 @@ fn write_a_rs(dir: &Path) {
 
 /// THE forge-closure regression (issue 080): the server said
 /// `contributed: false` on the authenticated burn-push ack, so a planted
-/// machine-local `contributed_once.json` must NOT lift the gate — server
-/// truth wins, the marker forge is closed.
+/// machine-local `contributed_once.json` must NOT lift the gate. Since the
+/// dated removal the file is not even read — zero effect, the forge
+/// surface is fully removed.
 #[test]
 fn issue_080_server_said_false_closes_the_planted_marker_forge() {
     let dir = scratch("forge080");
@@ -376,28 +390,34 @@ fn issue_080_server_said_true_lifts_the_gate() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The fleet transition (issue 080): a pre-v3 server answer (`None`) falls
-/// back to the legacy marker, which still lifts the gate — no contributor
-/// is bricked mid-rollout.
+/// The dated-removal inverse of the old transition test (issue 080): a
+/// pre-v3 answer (`None`) no longer falls back to anything — with the
+/// leftover marker present and a depleted balance the gate STILL refuses.
+/// The marker is dead code's dead file.
 #[test]
-fn issue_080_server_silent_marker_still_lifts_the_gate() {
+fn issue_080_server_silent_leftover_marker_has_zero_effect() {
     let dir = scratch("trans080");
     write_a_rs(&dir);
     login(&dir);
     seed_ack_with_contributed(&dir, 0, None);
-    seed_marker(&dir);
+    seed_marker(&dir); // the leftover file — zero effect
 
     let (code, text) = heal(&dir, &[], &[]);
-    assert_eq!(code, Some(0), "output:\n{text}");
-    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    assert_eq!(
+        code,
+        Some(1),
+        "`None` + marker must NOT lift the gate post-removal. output:\n{text}"
+    );
+    assert!(text.contains("REFUSED"), "output:\n{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The unchanged 075 warn-only shape over a v3 ack (issue 080): absent
-/// fields serde-default to `None`, and a never-synced balance with no
-/// marker anywhere stays warn-only — never gated.
+/// fields serde-default to `None`, and a never-synced balance stays
+/// warn-only — never gated — EVEN with a leftover marker on disk (the
+/// anti-brick direction is preserved at the ack level, permissive).
 #[test]
-fn issue_080_v3_ack_without_truth_and_no_marker_stays_warn_only() {
+fn issue_080_never_synced_stays_warn_only_even_with_a_leftover_marker() {
     let dir = scratch("empty080");
     write_a_rs(&dir);
     login(&dir);
@@ -409,6 +429,7 @@ fn issue_080_v3_ack_without_truth_and_no_marker_stays_warn_only() {
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME)).expect("seed ack");
+    seed_marker(&dir); // the leftover file — still zero effect, still warn-only
 
     let (code, text) = heal(&dir, &[], &[]);
     assert_eq!(code, Some(0), "output:\n{text}");
@@ -417,11 +438,12 @@ fn issue_080_v3_ack_without_truth_and_no_marker_stays_warn_only() {
 }
 
 /// Read-back compat (issue 080): a pre-existing v2 ack FILE — no new
-/// fields — must keep working both ways: its balance still gates (the gate
-/// did not go blind to old files), and its transition still honors the
-/// legacy marker (existing contributed machines survive the upgrade).
+/// fields — must keep gating (the gate did not go blind to old files; its
+/// absent fields read `None` = not contributed). The second arm is the
+/// removal's hardest case: the SAME v2 file with the legacy marker that
+/// once lifted it now refuses — the transition arm is gone.
 #[test]
-fn issue_080_v2_ack_files_keep_gating_and_transition() {
+fn issue_080_v2_ack_files_keep_gating_and_the_marker_died() {
     // v2 file, balance 0, no marker → still REFUSED.
     let dir = scratch("v2refuse");
     write_a_rs(&dir);
@@ -433,7 +455,8 @@ fn issue_080_v2_ack_files_keep_gating_and_transition() {
     assert!(text.contains("REFUSED"), "output:\n{text}");
     let _ = std::fs::remove_dir_all(&dir);
 
-    // v2 file + legacy marker → allowed (the transition survives).
+    // v2 file + legacy marker → STILL REFUSED (the removal: the marker
+    // lifts nothing, the pre-removal transition arm is gone).
     let dir = scratch("v2marker");
     write_a_rs(&dir);
     login(&dir);
@@ -441,7 +464,11 @@ fn issue_080_v2_ack_files_keep_gating_and_transition() {
     seed_marker(&dir);
 
     let (code, text) = heal(&dir, &[], &[]);
-    assert_eq!(code, Some(0), "output:\n{text}");
-    assert!(!text.contains("REFUSED"), "output:\n{text}");
+    assert_eq!(
+        code,
+        Some(1),
+        "post-removal the marker must NOT lift a v2-file gate. output:\n{text}"
+    );
+    assert!(text.contains("REFUSED"), "output:\n{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }

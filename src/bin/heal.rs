@@ -240,24 +240,20 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
     }
 }
 
-/// Issue 080 — the sticky-grace leg, SERVER TRUTH WINS: the burn-ack v3
-/// `contributed` field (written only from the authenticated burn-push
-/// response) decides when the server has stated it — `Some(false)` refuses
-/// even when a machine-local marker is present, planted or stale, which is
-/// what closes the `contributed_once.json` forge. The marker fills in ONLY
-/// while the server has never said otherwise (`None`, a pre-v3 ack/server)
-/// so the fleet transition never bricks a real contributor. (NB: the
-/// issue's shorthand `Some(true) || marker` would let a planted marker
-/// lift the gate under `Some(false)` — the unwrapped form below is the
-/// contract; the CLI test pins it.)
-// TODO(issue 080): remove legacy marker read after fleet v3
+/// Issue 080 — the sticky-grace leg is SERVER TRUTH ONLY (the dated removal,
+/// 2026-09-10, fleet v3 live): the burn-ack v3 `contributed` field (written
+/// only from the authenticated burn-push response) decides, so
+/// `Some(false)` refuses and `None` (a pre-v3 ack/server, or a v2 file) is
+/// simply NOT contributed — the gate then follows the balance leg. The
+/// legacy machine-local `contributed_once.json` marker is RETIRED: the
+/// `kat_contribution` module is gone, any file left on disk by a
+/// pre-removal install is ignored, and the forge surface it armed is fully
+/// removed. (Anti-brick direction preserved at the ACK level: a
+/// corrupt/missing/unparseable ack loads empty → no balance → the gate is
+/// warn-only, never a refusal.)
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
-fn sticky_grace(
-    ack: &riir_clippy::kat_burn_client::KatBurnAck,
-    account_dir: &std::path::Path,
-) -> bool {
-    ack.contributed
-        .unwrap_or_else(|| riir_clippy::kat_contribution::has_contributed(account_dir))
+fn sticky_grace(ack: &riir_clippy::kat_burn_client::KatBurnAck) -> bool {
+    ack.contributed == Some(true)
 }
 
 /// Issue 075 (owner soft gate, 2026-09-08): the depleted-account refusal.
@@ -289,16 +285,17 @@ fn enforce_kat_soft_gate(args: &Args) {
         transport_capable: true,
         account_present: riir_clippy::kat_account::KatAccount::load(&account_dir).is_ok(),
         last_synced_balance_micro: ack.last_balance_micro,
-        contributed_and_synced: sticky_grace(&ack, &account_dir),
+        contributed_and_synced: sticky_grace(&ack),
     });
 
     // Issue 079 (owner ask, 2026-09-09): a flat refusal gives a depleted
     // user no choice — OFFER the contribute-now path first. One accepted
-    // push writes the machine-global marker (the 075 sticky grace), so a
-    // yes here lifts the gate for good; payouts land at each epoch settle.
-    // The re-evaluation re-reads ONLY what `run_kat_sync` can change (the
-    // marker + the ack's server balance); `depleted_mine_offer` never asks
-    // a machine that already answered no (an explicit opt-out).
+    // push records the server's `contributed` truth in the burn ack (the
+    // 075 sticky grace, server-side since issue 080), so a yes here lifts
+    // the gate for good; payouts land at each epoch settle. The
+    // re-evaluation re-reads ONLY what `run_kat_sync` can change (the ack's
+    // server balance + its `contributed` truth); `depleted_mine_offer`
+    // never asks a machine that already answered no (an explicit opt-out).
     #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
     let (verdict, offered) = {
         if matches!(verdict, riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { .. })
@@ -316,7 +313,7 @@ fn enforce_kat_soft_gate(args: &Args) {
                     account_present: riir_clippy::kat_account::KatAccount::load(&account_dir)
                         .is_ok(),
                     last_synced_balance_micro: reloaded.last_balance_micro,
-                    contributed_and_synced: sticky_grace(&reloaded, &account_dir),
+                    contributed_and_synced: sticky_grace(&reloaded),
                 });
             (verdict, true)
         } else {
@@ -1303,15 +1300,6 @@ fn push_mining_batch(
                 ));
             if batch_file.is_file() {
                 let _ = std::fs::remove_file(&batch_file);
-            }
-            // Issue 075: record the machine-global contributed-once fact
-            // (the soft gate's sticky grace). Fail-soft — the service
-            // already accepted; a lost marker costs a gate miss, not a brick.
-            if let Err(e) = riir_clippy::kat_contribution::mark(
-                &riir_clippy::kat_account::KatAccount::default_dir(),
-                &payload.commitment,
-            ) {
-                eprintln!("sync: contribution marker not recorded — {e}");
             }
             // T079: the ledger-plane half of "the service sees the key" —
             // claim the once-per-key free-tier grant (read-first; a no-op
