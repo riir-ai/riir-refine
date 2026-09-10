@@ -960,42 +960,7 @@ impl TrajStore {
         // over observed rules where EVERY one reads zero entropy is the
         // vacuous flag: selection tuning over a no-dispersion loop is the
         // T39 finding, surfaced as standing telemetry instead of a one-off.
-        {
-            let mut by_rule: std::collections::BTreeMap<&str, (u32, u32)> =
-                std::collections::BTreeMap::new();
-            for r in &rows {
-                let e = by_rule.entry(r.lint_key.as_str()).or_insert((0, 0));
-                e.0 += r.success_count;
-                e.1 += r.fail_count;
-            }
-            let mut ents: Vec<(String, f64)> = by_rule
-                .iter()
-                .map(|(rule, (s, f))| {
-                    let outcomes = crate::dispersion::from_counts(*s as usize, *f as usize, 0);
-                    (
-                        (*rule).to_string(),
-                        crate::dispersion::outcome_entropy(&outcomes),
-                    )
-                })
-                .collect();
-            ents.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-            let vacuous = !ents.is_empty() && ents.iter().all(|(_, h)| *h <= f64::EPSILON);
-            let _ = writeln!(
-                report,
-                "dispersion: {} rules observed | vacuous window: {} | top: {}",
-                ents.len(),
-                if vacuous {
-                    "YES (no rule shows outcome dispersion — selection tuning is blind)"
-                } else {
-                    "no"
-                },
-                ents.iter()
-                    .take(3)
-                    .map(|(r, h)| format!("{r}={h:.2}"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
+        write_dispersion_section(&mut report, &rows);
         let _ = writeln!(
             report,
             "{}",
@@ -1477,6 +1442,50 @@ pub struct EloRecomputeSummary {
     pub spans_rated: usize,
     /// Total matches replayed (Σ success+fail counts).
     pub matches: usize,
+}
+
+/// The standing dispersion column (Issue 072 T7) — per-rule outcome
+/// entropy (success/fail, the store's two classes; the driver's 3-class
+/// version lives in `dispersion.rs`). A report over observed rules where
+/// EVERY one reads zero entropy is the vacuous flag: selection tuning over
+/// a no-dispersion loop is the T39 finding, surfaced as standing telemetry
+/// instead of a one-off.
+fn write_dispersion_section(report: &mut String, rows: &[TrajRowDoc]) {
+    use std::fmt::Write as _;
+    let mut by_rule: std::collections::BTreeMap<&str, (u32, u32)> =
+        std::collections::BTreeMap::new();
+    for r in rows {
+        let e = by_rule.entry(r.lint_key.as_str()).or_insert((0, 0));
+        e.0 += r.success_count;
+        e.1 += r.fail_count;
+    }
+    let mut ents: Vec<(String, f64)> = by_rule
+        .iter()
+        .map(|(rule, (s, f))| {
+            let outcomes = crate::dispersion::from_counts(*s as usize, *f as usize, 0);
+            (
+                (*rule).to_string(),
+                crate::dispersion::outcome_entropy(&outcomes),
+            )
+        })
+        .collect();
+    ents.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    let vacuous = !ents.is_empty() && ents.iter().all(|(_, h)| *h <= f64::EPSILON);
+    let _ = writeln!(
+        report,
+        "dispersion: {} rules observed | vacuous window: {} | top: {}",
+        ents.len(),
+        if vacuous {
+            "YES (no rule shows outcome dispersion — selection tuning is blind)"
+        } else {
+            "no"
+        },
+        ents.iter()
+            .take(3)
+            .map(|(r, h)| format!("{r}={h:.2}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 }
 
 /// The `--memory-stats` EMA learn section (Issue 037 E3) — per-rule learn

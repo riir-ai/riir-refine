@@ -38,10 +38,11 @@
 //! The CORPUS half — [`strategy_for`] + [`construction_pairs`], which import
 //! `rustc_errors::corpus_gen::generate_corpus` + `floor::MutatorKind` — is
 //! `cfg(feature = "rustc_errors")` inside the file. The latent-only arm used
-//! to import the corpus unconditionally: every latent-without-rustc_errors
-//! combo (latent_retrieval, tpr_structure, bonsai_retrieval, cf_workers_ai,
-//! fix_verify, margin_mining, pav_data, score_bench) failed E0433 from the day
-//! 072 landed until the sweep caught it.
+//! to import the corpus unconditionally: every latent-without-`rustc_errors`
+//! combo (`latent_retrieval`, `tpr_structure`, `bonsai_retrieval`,
+//! `cf_workers_ai`, `fix_verify`, `margin_mining`, `pav_data`,
+//! `score_bench`) failed E0433 from the day 072 landed until the sweep
+//! caught it.
 //!
 //! ## Strategy ids
 //!

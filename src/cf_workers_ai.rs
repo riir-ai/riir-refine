@@ -1005,7 +1005,7 @@ pub fn contract_idents(code: &str) -> BTreeSet<String> {
     // Same two-strategy parse the pruner uses, so this sees exactly what the
     // pruner accepted.
     if let Ok(f) = syn::parse_file(code) {
-        v.visit_file(&f)
+        v.visit_file(&f);
     } else if let Ok(f) = syn::parse_file(&format!("fn _wrap() {{\n{code}\n}}")) {
         v.visit_file(&f);
     }

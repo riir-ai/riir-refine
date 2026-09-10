@@ -310,6 +310,11 @@ fn unaligned_word_load_matches_assembly_exhaustive() {
     }
 }
 
+// Exhaustive ladder-vs-reference verification (u16 sweep + band boundaries
+// + LCG sample); the four ladder fns are the fixture under test and read
+// best adjacent to their references (corpus-test precedent: the
+// e0502_copy_index allow, f5c3feda).
+#[allow(clippy::too_many_lines)]
 #[test]
 fn varint_ladder_matches_reference_loop_exhaustive() {
     // (a) The SHIPPED ladder — mirror of the corpus fixture (same math).
@@ -3623,8 +3628,30 @@ fn batch141_rules_present_and_parse() {
 /// window and snaps out of atomic spans;
 /// (3) the stream holdback never exceeds the marker length and flushes
 /// verbatim on the first mismatch.
+// Cohesive three-scenario block (reserve / tail boundary / stream holdback);
+// the scenarios share fixtures and the 108-line body is the scenario list —
+// split would break the (1)(2)(3) contract narrative (corpus-test precedent:
+// the e0502_copy_index allow, f5c3feda).
+#[allow(clippy::too_many_lines)]
 #[test]
 fn batch141_reserve_boundary_holdback_semantics() {
+    // The span vocabulary for scenario (2), hoisted above the statements
+    // (items_after_statements) — the tail-boundary walk classifies tokens.
+    #[derive(Clone, Copy, PartialEq)]
+    enum Tok {
+        Sys,
+        UserTurn,
+        Filler,
+    }
+    // Scenario (3)'s wire shapes, hoisted above the statements
+    // (items_after_statements) — the marker is the source's exact string and
+    // the holder's array bound IS the marker length (the type-level rule).
+    const MARKER: &[u8] = b"> **Hint:**"; // 11 bytes, the source's exact marker
+    #[derive(Default)]
+    struct Holder {
+        held: [u8; 11], // the bound IS the marker length
+        held_len: usize,
+    }
     // (1) Reserve: measured reserve lifts a naive constant threshold.
     let summary_budget = |window: usize| (window / 8).clamp(256, 8_192);
     let reserve = |measured: usize, window: usize| measured + 64 + summary_budget(window);
@@ -3643,12 +3670,6 @@ fn batch141_reserve_boundary_holdback_semantics() {
     );
 
     // (2) Tail boundary: complete-turn walk + span snap.
-    #[derive(Clone, Copy, PartialEq)]
-    enum Tok {
-        Sys,
-        UserTurn,
-        Filler,
-    }
     let toks = [
         Tok::Sys,      // 0: protected prefix
         Tok::UserTurn, // 1: turn A
@@ -3693,12 +3714,6 @@ fn batch141_reserve_boundary_holdback_semantics() {
     assert_eq!(snap(9, &spans), 9, "before the span is untouched");
 
     // (3) Stream holdback: bounded window + verbatim mismatch flush.
-    const MARKER: &[u8] = b"> **Hint:**"; // 11 bytes, the source's exact marker
-    #[derive(Default)]
-    struct Holder {
-        held: [u8; 11], // the bound IS the marker length
-        held_len: usize,
-    }
     let mut h = Holder::default();
     let mut out: Vec<u8> = Vec::new();
     let feed = |h: &mut Holder, out: &mut Vec<u8>, b: u8| {
