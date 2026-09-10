@@ -8,6 +8,35 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Issue 080 resolved — the sticky-grace marker retired, server truth only (2026-09-10)
+
+Resolved-record for `.issues/080_sticky_grace_server_truth.md` (the file
+stays, with its dated closure block). The two-stage arc is complete: T3
+landed the truth-wins swap (`587132b`, 2026-09-09) and the DATED REMOVAL
+landed once the fleet was v3 (dapps Issue 027 live; owner account's
+contribution fact verified server-side via the live v3 burn ack,
+`"contributed": true` + `first_commitment_hex`). Commit
+`143c5a8`:
+
+- `src/kat_contribution.rs` deleted (+ its `pub mod` decl) — the locally
+  forgeable `contributed_once.json` input is gone entirely: nothing reads
+  it, nothing writes it, a pre-removal leftover has ZERO effect. The sync
+  success path no longer marks anything.
+- Gate predicate: `sticky_grace(ack) = ack.contributed == Some(true)`
+  (server truth ONLY, both evaluation sites in `src/bin/heal.rs`).
+  Anti-brick preserved where it belongs — at the ack: corrupt/missing →
+  empty → `NeverSynced` → warn-only.
+- Tests re-pinned (`tests/kat_soft_gate_cli.rs`): the forge-closure
+  regression kept; three arms INVERTED to prove the marker dead (`None` +
+  marker + depleted → REFUSED; v2 ack file + marker → REFUSED; marker
+  alone → REFUSED) and the never-synced + leftover-marker arm pins the
+  permissive direction. Header truth table rewritten.
+- Docs: AGENTS.md soft-gate bullet (the marker sentence rewritten —
+  transitional → retired), README soft-gate section,
+  `kat_soft_gate.rs`/`kat_burn_client.rs` docs, Cargo.toml test-row
+  comment. Transition edge: mitigation (1) accepted + documented in the
+  issue's closure block.
+
 ## Issues 077 + 082 resolved — margin-weighted mining + the OOD axis (2026-09-09)
 
 Resolved-record for the two now-removed issue files (full narratives live in

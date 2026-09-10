@@ -3,7 +3,18 @@
 **Status:** OPEN — filed 2026-09-09 (found in the owner's live e2e recheck).
 Client fix LANDED same day: `wire_kat_total` conversion at the sync boundary
 (see the commit ref in the plan note); this issue tracks the SERVER-side
-residue + the prose fixes. 2026-09-09 later: the LESSON's cross-repo unit
+residue + the prose fixes. 2026-09-10: owner item 1's migration SURFACE is
+LANDED in riir-dapps (`791fed5` route `POST /admin/burn-watermark/rescale`
+— bearer + typed ack + CAS + whole-scale guard, ÷1,000,000 in one
+CommitBatch via the /burn row path — + 7 route tests + ledger units green;
+record `d577636` there; dapps mirror issue `081`); item 3 was already DONE.
+REMAINS: the owner-gated EXECUTION (deploy from a clean sibling-placed
+worktree AFTER the sibling's Plan 020 Phase 3 pushes — its worker half is
+committed locally `0c6f803` but unpushed — then the one rescale curl + the
+replay-is-the-read verification; full runbook in the dapps mirror issue
+`.issues/081_burn_wire_unit_mismatch.md`), and item 2's per-account fleet
+pass = the same curl per account once the deployment grows past the owner.
+2026-09-09 later: the LESSON's cross-repo unit
 golden LANDED both sides — riir-dapps `tests/kat_burn.rs` + riir-clippy
 `src/kat_burn_client.rs`, both named `cross_repo_unit_golden_book_micro_to_wire_to_debit`,
 pinning the same concrete table (book 999_999 / 1_000_000 / 2_380_972 /

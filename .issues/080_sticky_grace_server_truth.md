@@ -1,6 +1,6 @@
 # Issue 080 — the sticky-grace input is a locally forgeable file: swap the gate to server truth (burn-ack v3 `contributed`), retire `contributed_once.json`
 
-**Status:** IN PROGRESS — filed 2026-09-09; client half LANDED on develop `587132b` (Plan 327 T3: burn-ack v3 `contributed` + `first_commitment_hex`, truth-wins gate, CLI regression tests, docs); server half = riir-dapps Issue 027; REMAINS: the dated removal of `kat_contribution` + the legacy marker read after fleet v3 (docs re-update then)
+**Status:** RESOLVED — filed 2026-09-09; client half LANDED on develop `587132b` (Plan 327 T3: burn-ack v3 `contributed` + `first_commitment_hex`, truth-wins gate, CLI regression tests, docs); server half = riir-dapps Issue 027, landed + live; DATED REMOVAL LANDED 2026-09-10 (fleet v3 live; commit `143c5a8`) — closure block at the end of this file
 
 ## The finding
 
@@ -94,3 +94,40 @@ Mitigations (owner call, pick one before the fleet is treated as v3):
 
 Default = (1) until real users exist; revisit at fleet v3 sign-off (the
 same gate as the dated marker removal).
+
+## Closure — the dated removal landed 2026-09-10 (fleet v3 live)
+
+The follow-up task this issue reserved is DONE. Commit
+`143c5a8`:
+
+- `src/kat_contribution.rs` DELETED (+ the `pub mod` decl in `src/lib.rs`)
+  — the forgeable `contributed_once.json` reader is gone; nothing in the
+  crate reads or writes the file, and a copy left on disk by a pre-removal
+  install has ZERO effect (not merely outranked).
+- Gate predicate is server truth ONLY: `sticky_grace(ack) =
+  ack.contributed == Some(true)` (src/bin/heal.rs, both evaluation sites).
+  `Some(false)` refuses; `None` is simply NOT contributed and the balance
+  leg decides. The local marker WRITE at the sync success path is removed
+  with it.
+- Anti-brick direction preserved at the ack level: corrupt/missing/
+  unparseable ack → empty ack → `NeverSynced` → warn-only (permissive).
+- Tests (`tests/kat_soft_gate_cli.rs`): the forge-closure regression
+  (planted file + `Some(false)` → REFUSED) is kept; the marker is
+  additionally proven dead in every arm — `None` + marker + depleted →
+  REFUSED, a v2 ack file + marker + depleted → REFUSED, never-synced +
+  leftover marker → warn-only; the old `the_contribution_marker_lifts_the_gate`
+  allow-test is inverted to `the_local_marker_no_longer_lifts_the_gate`.
+- Docs re-updated in the same change: AGENTS.md soft-gate bullet, README
+  soft-gate section, `kat_soft_gate.rs`/`kat_burn_client.rs` module + field
+  docs, Cargo.toml test-row comment, HISTORY.md resolved-record.
+- **Transition-edge decision (recorded): mitigation (1) — accept +
+  document.** A pre-fleet contributor with a quiet outbox must queue one
+  fix and sync once so the server records the fact. Verified inapplicable
+  to the owner account 2026-09-10: the live burn ack at `.heal/
+  kat_burn_ack.json` is v3 with `"contributed": true` + a
+  `first_commitment_hex` — the fact IS recorded server-side for this
+  account (fleet = v3, dapps Issue 027 live).
+- Standing truth table after removal: `Some(true)` → allowed (sticky);
+  `Some(false)` → REFUSED regardless of any marker file; `None` + depleted
+  → REFUSED (no fallback); never-synced (no balance) → warn-only even with
+  a leftover marker on disk.
