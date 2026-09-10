@@ -4626,7 +4626,11 @@ fn print_v7_chain_tables(
 // this binary (feature off), labeled honestly in the table + the store stamp.
 const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     ("kernel_opt", "src/domains/kernel_opt/corpus", "rule_id:"),
-    ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
+    // The corpus outgrew the single `corpus.rs` file (Batch 130s split it
+    // into entries_01..06) — the row points at the DIRECTORY and the walker
+    // counts the direct children (mod.rs excluded). The old file path
+    // counted 0 at every rev after the split (the failing test's shape).
+    ("rust_perf", "src/domains/rust_perf/corpus", "rule_id:"),
     (
         "clippy_lints",
         "src/domains/clippy_lints/corpus.rs",
