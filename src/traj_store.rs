@@ -2975,6 +2975,9 @@ mod tests {
 
     // ── Issue 072 T1/T3: the construction-pair family ────────────
 
+    // construction_pairs() needs the rustc_errors corpus half of
+    // frontier_pairs — this test is meaningless without it.
+    #[cfg(feature = "rustc_errors")]
     #[test]
     fn pair_import_is_idempotent_and_never_touches_tiers() {
         let root = tmp_root("pair_import");
@@ -3009,6 +3012,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "rustc_errors")]
     #[test]
     fn rate_pairs_orders_playbook_strategies_above_generator_losers() {
         let root = tmp_root("rate_pairs");

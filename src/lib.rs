@@ -58,9 +58,14 @@ pub mod edit_emitter;
 pub mod elo;
 pub mod embedder;
 pub mod fmt;
-// Issue 072 PoC — construction-pair factory. Deps: rustc_errors::corpus_gen +
-// traj_store::ConstructionPair consumers, so the module rides whichever of
-// those two features is on (the 5a no-default state compiles to nothing).
+// Issue 072 PoC — construction-pair factory. Two halves: the TYPE +
+// fence-arithmetic half is dependency-free (traj_store's latent_retrieval-only
+// builds hold ConstructionPair rows); the corpus half (strategy_for +
+// construction_pairs → rustc_errors::corpus_gen + floor::MutatorKind) is
+// cfg(rustc_errors) inside the file. The module gate stays any(...) so EITHER
+// feature alone compiles it — the 2026-09-10 each-feature rot-gate sweep caught
+// the latent-only arm importing the corpus unconditionally (E0433 on all 8
+// latent-without-rustc_errors combos since 072 landed).
 #[cfg(any(feature = "rustc_errors", feature = "latent_retrieval"))]
 pub mod frontier_pairs;
 pub mod modelability;

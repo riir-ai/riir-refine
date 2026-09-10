@@ -29,6 +29,20 @@
 //! emitted by this `PoC`: they need behavior-test arbitration to stay truthful,
 //! which is post-PoC plan material (issue 072 T5's composite ladder).
 //!
+//! ## Two feature halves (the 2026-09-10 each-feature sweep fix)
+//!
+//! The module rides `any(rustc_errors, latent_retrieval)`: `traj_store` (the
+//! latent_retrieval-only durable backend) holds [`ConstructionPair`] rows, so
+//! the TYPE + fence-arithmetic half ([`ConstructionPair`], [`PairVerdict`],
+//! [`FenceReport`], [`fence_verdicts`], [`fence_sample`]) is dependency-free.
+//! The CORPUS half — [`strategy_for`] + [`construction_pairs`], which import
+//! `rustc_errors::corpus_gen::generate_corpus` + `floor::MutatorKind` — is
+//! `cfg(feature = "rustc_errors")` inside the file. The latent-only arm used
+//! to import the corpus unconditionally: every latent-without-rustc_errors
+//! combo (latent_retrieval, tpr_structure, bonsai_retrieval, cf_workers_ai,
+//! fix_verify, margin_mining, pav_data, score_bench) failed E0433 from the day
+//! 072 landed until the sweep caught it.
+//!
 //! ## Strategy ids
 //!
 //! Construction truth names the playbook strategy that performs the inverse
@@ -41,7 +55,9 @@
 //! gate would reject the diagnostic (a mislabeled player would poison the
 //! very table the pairs feed).
 
+#[cfg(feature = "rustc_errors")]
 use crate::domains::rustc_errors::corpus_gen::generate_corpus;
+#[cfg(feature = "rustc_errors")]
 use crate::domains::rustc_errors::floor::MutatorKind;
 
 /// The construction-provenance tag every row from this module carries
@@ -76,6 +92,7 @@ pub struct ConstructionPair {
 /// table in the module docs. `None` never happens for the shipped corpus
 /// (the match is total) — the `Option` keeps the fn total against future
 /// kinds and the factory `expect`s, loudly, at construction.
+#[cfg(feature = "rustc_errors")]
 #[must_use]
 pub fn strategy_for(code: &str, kind: MutatorKind) -> String {
     match (code, kind) {
@@ -100,6 +117,7 @@ pub fn strategy_for(code: &str, kind: MutatorKind) -> String {
 
 /// FNV-1a over bytes — the deterministic partner rotator (no RNG, the
 /// `corpus_gen` house style: byte-stable per build).
+#[cfg(feature = "rustc_errors")]
 fn fnv1a(bytes: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in bytes {
@@ -112,6 +130,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 /// The full construction-pair corpus: one resolution pair per generated
 /// case. Deterministic (partner = hash-rotated cross-code case) — the
 /// byte-stability is pinned by test.
+#[cfg(feature = "rustc_errors")]
 #[must_use]
 pub fn construction_pairs() -> Vec<ConstructionPair> {
     let cases = generate_corpus();
@@ -233,7 +252,61 @@ pub fn fence_sample(pairs: &[ConstructionPair], k: usize) -> Vec<&ConstructionPa
 }
 
 #[cfg(test)]
-mod tests {
+mod fence_tests {
+    // The fence-arithmetic half needs no corpus generator — it runs in every
+    // feature state that compiles the module (latent_retrieval-only included).
+    use super::*;
+
+    #[test]
+    fn fence_verdicts_agree_arithmetic() {
+        let v = vec![
+            (
+                "a",
+                PairVerdict {
+                    good_resolves: true,
+                    bad_premise_holds: true,
+                },
+            ),
+            (
+                "b",
+                PairVerdict {
+                    good_resolves: true,
+                    bad_premise_holds: false,
+                },
+            ),
+        ];
+        let r = fence_verdicts(&v);
+        assert_eq!(r.pairs_checked, 2);
+        assert_eq!(r.agreements, 1);
+        assert!((r.rate() - 0.5).abs() < 1e-12);
+        assert!(!r.passes(0.95));
+        assert_eq!(r.disagreements, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn fence_passes_at_threshold() {
+        let verdicts: Vec<(&str, PairVerdict)> = (0..20)
+            .map(|i| {
+                let name: &'static str = Box::leak(format!("p{i}").into_boxed_str());
+                (
+                    name,
+                    PairVerdict {
+                        good_resolves: true,
+                        bad_premise_holds: i != 0, // 19/20 = 95%
+                    },
+                )
+            })
+            .collect();
+        let r = fence_verdicts(&verdicts);
+        assert!((r.rate() - 0.95).abs() < 1e-12);
+        assert!(r.passes(0.95));
+    }
+}
+
+#[cfg(all(test, feature = "rustc_errors"))]
+mod corpus_tests {
+    // The corpus half: needs `generate_corpus`/`construction_pairs` — runs
+    // wherever rustc_errors is on (default-on, so every guard layer sees it).
     use super::*;
 
     #[test]
@@ -285,51 +358,6 @@ mod tests {
                 case.kind
             );
         }
-    }
-
-    #[test]
-    fn fence_verdicts_agree_arithmetic() {
-        let v = vec![
-            (
-                "a",
-                PairVerdict {
-                    good_resolves: true,
-                    bad_premise_holds: true,
-                },
-            ),
-            (
-                "b",
-                PairVerdict {
-                    good_resolves: true,
-                    bad_premise_holds: false,
-                },
-            ),
-        ];
-        let r = fence_verdicts(&v);
-        assert_eq!(r.pairs_checked, 2);
-        assert_eq!(r.agreements, 1);
-        assert!((r.rate() - 0.5).abs() < 1e-12);
-        assert!(!r.passes(0.95));
-        assert_eq!(r.disagreements, vec!["b".to_string()]);
-    }
-
-    #[test]
-    fn fence_passes_at_threshold() {
-        let verdicts: Vec<(&str, PairVerdict)> = (0..20)
-            .map(|i| {
-                let name: &'static str = Box::leak(format!("p{i}").into_boxed_str());
-                (
-                    name,
-                    PairVerdict {
-                        good_resolves: true,
-                        bad_premise_holds: i != 0, // 19/20 = 95%
-                    },
-                )
-            })
-            .collect();
-        let r = fence_verdicts(&verdicts);
-        assert!((r.rate() - 0.95).abs() < 1e-12);
-        assert!(r.passes(0.95));
     }
 
     #[test]

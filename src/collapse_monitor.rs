@@ -422,7 +422,11 @@ mod tests {
         assert_eq!(normalized_entropy(&[0, 9, 0]).to_bits(), 0.0f32.to_bits());
     }
 
-    #[cfg(all(test, feature = "latent_retrieval"))]
+    // Needs clippy_lints (the domain whose corpus the loop exercises) +
+    // latent_retrieval (the memory being measured) — clippy_lints is
+    // default-on, so every guard layer runs these; a latent-only build
+    // (the 2026-09-10 each-feature sweep's failing class) correctly drops them.
+    #[cfg(all(test, feature = "latent_retrieval", feature = "clippy_lints"))]
     mod loop_tests {
         use super::super::*;
         use crate::domains::clippy_lints::ClippyFixEntry;
