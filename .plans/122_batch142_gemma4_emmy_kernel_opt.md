@@ -1,6 +1,6 @@
 # 122 — Batch 142: the CloudRift "Outperforming vLLM and Llama.cpp on Gemma4-12B" distill (Research 163's kernel_opt batch)
 
-**Status:** OPEN — plan-first landed 2026-09-10 ~00:5x (this session, zero-build prefix T0–T2 executed under the box gate: the 851 v9 quiet-gate stalemate + agent-B all-features builds make every cargo process a contamination event, so the cargo-gated halves T3b–T6 wait; the zero-build halves are done). **Hold RECLASSIFIED at plan time:** Research 163's original hold cited (a) the 085 dist lane untracked — **LANDED since** (`79dcf9b`, the owner reversal, 6th domain shipped) — and (b) sibling WIP in `entries_gpu_27..35.rs`. Re-verified 09-10: that WIP is 13h-stale MECHANICAL single-line import fixups (`use …::{KernelRule}` → brace-less, 9 files × 1 line, clippy single-item-import class), **disjoint from this batch's write set** (new `entries_gpu_39.rs`-class file + registry), and stays the sibling's uncommitted property — this plan neither touches nor commits it. The binding blocker for T3b+ is build contention, not tree ownership.
+**Status:** COMPLETE 2026-09-10 (the 09-10 cargo window; all tasks [x]; commits `5991eafa` batch+gates+pins + the research-RECORD commit; .raw/emmy removed). T0–T2 plan-first + zero-build halves landed 09-10 ~00:5x under the box gate; T3a authored same session; T3b–T6 executed 09-10 ~11:3x–12:1x when the 851 v9 bench exited and the window opened (the quiet-gate hold below is HISTORICAL — the bench fired/expired and T4 ran clean). **Hold RECLASSIFIED at plan time:** Research 163's original hold cited (a) the 085 dist lane untracked — **LANDED since** (`79dcf9b`, the owner reversal, 6th domain shipped) — and (b) sibling WIP in `entries_gpu_27..35.rs`. Re-verified 09-10: that WIP is 13h-stale MECHANICAL single-line import fixups (`use …::{KernelRule}` → brace-less, 9 files × 1 line, clippy single-item-import class), **disjoint from this batch's write set** (new `entries_gpu_39.rs`-class file + registry), and stays the sibling's uncommitted property — this plan neither touches nor commits it. The binding blocker for T3b+ was build contention, not tree ownership.
 
 ## Source (Research 163 = the batch spec; blog = quote authority)
 
@@ -52,41 +52,18 @@
       — its target `entries_gpu_34.rs` carries sibling WIP (mechanical import fixups);
       lands with the next batch touching that file. mod.rs wired (decl + concat + slices
       A 129→130, N 43→44 with count comments).
-- [ ] T3b — (CARGO-GATED) batch142 standing gates (`batch142_rules_present` /
-      `batch142_concepts_covered` / `batch142_pseudocode_parses`) + count pins
-      (corpus.rs header ×2, category table, KERNEL_CATEGORIES slices, mod.rs
-      history paragraph + entries.len, AGENTS ×2, README ×2, `.docs/11_domains/`).
-      **STATIC PRE-CLEARANCE 09-10 (zero-cargo review, this session): all 8
-      string fields (2 rules × 4) escape-aware delimiter-balanced; field sets
-      complete; vec structure closed; import already in the clippy brace-less
-      single-item form (sibling's 27–35 fixups do not touch this file); mod.rs
-      wiring + slices + counts verified consistent (605→607; A 130 @ mod.rs:1887,
-      N 44 @ :2537, both rule_ids present in the correct slices); all 6 rider
-      splices (02/07/18/36/38/39) end with intact `.to_string(),` terminators +
-      RIDER attribution. The syn-parse hazard class is pre-cleared statically —
-      T3b's real work at the window is the compile gates + the doc-surface
-      pins, nothing else.**
-- [ ] T4 — (CARGO-GATED) GOAT: G1 batch gates by name; G2 lib in all feature
-      states; G3 clippy 0 both/all states + retrieval-precision re-measure
-      (floors: kernel 100/100/100, blended — re-read the current pins at run
-      time; a decay FAILS the batch or re-pins with the delta recorded, never
-      silent); rust_perf NotBenchable annotations + context_notes for the
-      decision-content rules (this batch is ALL source-measured 5090 content —
-      expect every rule NotBenchable-annotated); score-bench + corpus-stats.
-      **T4 also owes Issue 085's promotion runs (see its 09-10 UPDATE): the
-      score-bench +dist twin (the dist-off canonical #87 FLAT already ran at
-      Batch 140) + a real-consumer `--domain dist` scan with a true-positive
-      cite. The E0631 (d2d2388 restored) + `.parses` (91493a1 accessor)
-      blockers are already repaired at HEAD — the all-features arm is
-      EXPECTED to compile; a red there is new information, not the known
-      conflict.**
-- [ ] T5 — (zero-build write, after T4 numbers) Research note: Research 163 →
-      RECORD with the landing deltas; `.research/.highwater` bump if a new note
-      opens (else 163 closes in place).
-- [ ] T6 — (mixed) Landing sequence: commit authoring+gates → docs/pins →
-      plan close + queue snapshot (live-state line moves 163 DISTILLED →
-      Batch 142 LANDED) → `.raw/emmy` rm → push. Commit path-limited (the
-      sibling's 27–35 import fixups stay untouched and uncommitted).
+- [x] T3b — (CARGO-GATED) DONE 09-10: batch142 standing gates WRITTEN + GREEN (`batch142_rules_present` / `batch142_concepts_covered` / `batch142_pseudocode_parses` 3/3 — the static pre-clearance below held, one wrong host-id guess caught by the gate itself: `two-pass-split-softmax-long-context` → `split-k-two-pass-attention-decode-long-context`) + count pins LANDED (corpus.rs-header equivalent = mod.rs 605-rule comment + Batch-142 history paragraph; category-table comment counts A 130 / N 44 already wired by T3a; KERNEL_CATEGORIES slices verified consistent; mod.rs `entries.len` pin 605→607 in tests.rs ×2 + category totals ×2 + router total + the batch116 pin moved with its message; AGENTS ×2 (605→607); README ×2 (Batch 1-139→1-142, 605→607, Emmy ×3→×4); `.docs/11_domains/kernel_opt.md` seed-corpus row + Batch-142 ledger paragraph). **STATIC PRE-CLEARANCE 09-10 (zero-cargo review, plan-time session): all 8 string fields (2 rules × 4) escape-aware delimiter-balanced; field sets complete; vec structure closed; import already in the clippy brace-less single-item form (sibling's 27–35 fixups do not touch this file); mod.rs wiring + slices + counts verified consistent (605→607; A 130 @ mod.rs:1887, N 44 @ :2537, both rule_ids present in the correct slices); all 6 rider splices (02/07/18/36/38/39) end with intact `.to_string(),` terminators + RIDER attribution. The syn-parse hazard class was pre-cleared statically — T3b's real work at the window was the compile gates + the doc-surface pins, nothing else.**
+- [x] T4 — (CARGO-GATED) DONE 09-10: GOAT G1 batch gates 3/3; G2 lib ALL states — default 1190/0, kernel_heal 1530/0/1i, kernel_heal+latent 1652/0/2i (290s), all-features 2235/0/17i (366s; the `91493a1` .parses fix HOLDS — the plan's expectation confirmed); G3 clippy 0 from the batch write set in all four states (default/kernel_heal/all-features-lib/+latent) — the residue is NOT this batch's: 2 pre-existing at HEAD (`rust_perf/corpus.rs:11944` `let mut feed` + one pedantic fn-length) + 4 WIP-introduced in sibling-overlapped files (corpus_gen e0502 44→103 lines by their table expansion, traj_store/cf trailing-`;`), isolated via a stash-baseline probe (stash→clippy→pop, 4-file scope, restored byte-identical); retrieval-precision re-measure — kernel 100/100/100 (9th consecutive), blended 94.7/96.9/97.7 byte-identical; router 92/131 = 70.2% (was 91/131 at B137) — floor re-pinned 86→87 per the Plan-030 −5 convention, delta recorded in the floor fn, never silent; rust_perf NotBenchable n/a (this batch is ALL kernel_opt; the NotBenchable-in-this-stack rationale is IN-RULE per the source-measured 5090 content); score-bench #93 FLAT 96.2/1.9/100 edits-64 vocab-38 artifact byte-identical `faa021c8…` (10th consecutive — kernel_opt corpus provably does not move the scored clippy/perf path); corpus-stats 607/124/49/15/31/4. **T4's Issue-085 rider: ALREADY DISCHARGED before this session** — the score-bench +dist twin (#92) + the condition-(4) consumer scans + B1/B2 landed at the 085 window sessions (Bench 082 + its §6 addendum; `759e209d`); remaining gate there is owner pull evidence ONLY, not a run.
+- [x] T5 — (zero-build write, after T4 numbers) DONE 09-10: Research 163 →
+      RECORD with the landing deltas (no new note needed; 163 closes in place;
+      no `.research/.highwater` bump).
+- [x] T6 — (mixed) DONE 09-10: landing sequence executed — commit authoring+gates
+      (`5991eafa`, path-limited: entries_gpu_40 + mod.rs + tests.rs + router.rs +
+      retrieval_eval.rs + AGENTS + README + kernel_opt.md + score_history.jsonl/svg)
+      → docs/pins in the same commit → research RECORD (separate docs commit) →
+      plan close (this) + queue snapshot live-state line (163 DISTILLED → Batch 142
+      LANDED, same-commit below) → `.raw/emmy` rm → push. The sibling's 27–35
+      import fixups + their wider WIP stay untouched and uncommitted.
 
 ## Non-goals
 
