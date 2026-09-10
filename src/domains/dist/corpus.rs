@@ -1,11 +1,14 @@
 //! The dist seed corpus — Phase 1 (Issue 085).
 //!
-//! Four rules, all suggest-only, every one with measured provenance from the
-//! session that found the class (the owner had to ASK why the binary was
-//! 2x — that is the failure this domain exists to prevent). The dedup
+//! Five rules, all suggest-only, every one with measured provenance — the
+//! first four from the session that found the class (the owner had to ASK why
+//! the binary was 2x — that is the failure this domain exists to prevent),
+//! the fifth from upstream's own measured compile-time series (Batch 143 —
+//! nnethercote Dec-2025: `windows`/`rustix`/`aws-sdk-ec2` named with
+//! `-Zhint-mostly-unused` wins for small-fraction consumers). The dedup
 //! verdict rides each rule's `incumbent` field: `cargo` itself warns about
 //! NOTHING here (checked live 2026-09-09 — a bare release build of a bin
-//! crate with no profile section compiles silent), so all four are Class B
+//! crate with no profile section compiles silent), so all five are Class B
 //! (novel detection) with no incumbent to overlay.
 //!
 //! | Rule | Family | Fix | Incumbent |
@@ -14,6 +17,7 @@
 //! | `shipped-binary-missing-size-profile` | `ShipSize` | suggest | none |
 //! | `cli-panic-unwind-tables` | `ShipSize` | suggest | none |
 //! | `member-profile-ignored` | `ProfilePlacement` | suggest (gated) | none |
+//! | `large-api-dependency-mostly-unused-hint` | `BuildTime` | suggest | none |
 
 use super::{DistDomain, DistFamily, DistRule};
 use crate::corpus::Corpus;
@@ -83,6 +87,15 @@ fn entries() -> Vec<DistRule> {
             "# The block belongs in the workspace ROOT manifest; see that file.\n[package]\nname = \"member-tool\"\n\n[[bin]]\nname = \"member-tool\"\n",
             F::ProfilePlacement,
             Some("Precision caveat: the evidence is a nearest-ancestor [workspace] walk. An `exclude`d member (built standalone) legitimately keeps its profiles — the advice text hedges accordingly. Silent without the walk evidence, never guessed (the docker ScanContext pattern)."),
+        ),
+        rule(
+            "large-api-dependency-mostly-unused-hint",
+            "a small-fraction consumer of a very large API crate pays the crate's whole compile-time cost — rustc's -Zhint-mostly-unused tells the compiler only a tiny fraction is used, with big compile-time wins reported for windows/rustix/aws-sdk-* consumers",
+            "a manifest whose [dependencies] (or any *dependencies section) names a known-large API crate: windows, windows-sys, rustix, or aws-sdk-*",
+            "[package]\nname = \"widget\"\n\n[dependencies]\nserde = \"1\"\nwindows = { version = \"0.58\", features = [\"Win32_Foundation\", \"Win32_Storage\"] }\n",
+            "# The fix is NOT a manifest edit — the hint is a rustc flag, set once\n# for the workspace. This IS the fixed artifact: .cargo/config.toml\n# (nightly-only; MEASURE per crate before adopting).\n[build]\nrustflags = [\"-Z\", \"hint-mostly-unused\"]\n",
+            F::BuildTime,
+            Some("Source: nnethercote, \"How to speed up the Rust compiler in December 2025\" — 'Josh Triplett introduced a new experimental flag, -Zhint-mostly-unused, which can give big compile time wins for people using small fractions of very large crates ... such as windows, rustix, and aws-sdk-ec2.' Caveats the advice text carries: nightly-only -Z; the flag lives in .cargo/config.toml rustflags — OUTSIDE the manifest, which is why the fixed fixture IS the config file (the scanner is manifest-scoped and cannot see adoption, so the suggestion repeats until the dep is dropped or the hint is measured in); per-crate measurement required before adopting. The crate table (windows, windows-sys, rustix, aws-sdk- prefix) is deliberately small — a miss is a silent no-advice, an over-broad table is noise."),
         ),
     ]
 }
@@ -176,6 +189,41 @@ mod tests {
         // evidence flag — nothing ships from it.
         let root = "[workspace]\nmembers = [\"m\"]\n";
         assert!(scan_source_with(root, ctx).is_empty());
+    }
+
+    /// Batch 143 — the large-API rule: fires ONCE per manifest at the first
+    /// hit across every *dependencies section; the config.toml fix is silent
+    /// (no dependency sections — the out-of-manifest honesty the notes
+    /// carry); small/commented deps never fire.
+    #[test]
+    fn large_api_dep_fires_once_and_config_silences() {
+        let multi = "[dependencies]\nserde = \"1\"\nwindows = \"0.58\"\nrustix = \"1\"\n\n[dev-dependencies]\naws-sdk-ec2 = \"1\"\n";
+        let findings = scan_source_with(multi, DistContext::default());
+        let r3: Vec<_> = findings
+            .iter()
+            .filter(|f| f.rule_id == "large-api-dependency-mostly-unused-hint")
+            .collect();
+        assert_eq!(
+            r3.len(),
+            1,
+            "one advice per manifest, anchored at the FIRST large dep"
+        );
+        assert_eq!(r3[0].line, 3, "windows is the first large dependency");
+        assert!(
+            r3[0].excerpt.starts_with("windows"),
+            "the excerpt names the triggering crate"
+        );
+
+        // The fixed artifact — the .cargo/config.toml — is silent.
+        let fixed = entries()
+            .into_iter()
+            .find(|r| r.rule_id == "large-api-dependency-mostly-unused-hint")
+            .unwrap();
+        assert!(scan_source_with(&fixed.fixed_code, DistContext::default()).is_empty());
+
+        // A manifest without large deps never fires.
+        let small = "[dependencies]\nserde = \"1\"\ntokio.workspace = true\n";
+        assert!(scan_source_with(small, DistContext::default()).is_empty());
     }
 
     /// The negative controls: lib-only crates never get ship-size advice,

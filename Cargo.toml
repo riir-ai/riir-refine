@@ -120,6 +120,11 @@ riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features
 # serde_json: already a main dep (zero new tree cost) — the 038 e2e parses
 # --dump-trajectories JSONL rows.
 serde_json = "1"
+# log: already in the lock as a transitive of every kat_transport/ureq build
+# (zero new packages) — the Batch-143 G1 gate exercises the REAL macro
+# semantics (log_enabled! + lazy format args) rather than a hand-rolled
+# level-atomic model.
+log = "0.4"
 # T2.4 vote-client fixtures sign/verify directly. Already in the tree for
 # every kat_service build via ssh-key's ed25519 feature + the direct
 # optional dep above — zero new packages (dev-deps unify to the same

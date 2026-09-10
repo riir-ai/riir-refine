@@ -23,7 +23,7 @@ release lane at package time; this domain watches EVERY manifest the healer
 scans at dev time, before the bloat ships. `cargo bloat` first: 70% of
 `.text` was own-code corpus tables — codegen knobs win, dep removal does not.
 
-## The Phase-1 corpus (4 rules, all suggest-only)
+## The Phase-1 corpus (5 rules, all suggest-only)
 
 | Rule | Family | Fires when | Advice |
 |---|---|---|---|
@@ -31,9 +31,13 @@ scans at dev time, before the bloat ships. `cargo bloat` first: 70% of
 | `shipped-binary-missing-size-profile` | `ShipSize` | `[[bin]]` + no `lto` key | add `[profile.dist]` (lto fat + codegen-units 1 + opt-level "s" + panic abort + strip), never edit release |
 | `cli-panic-unwind-tables` | `ShipSize` | `[[bin]]` + no `panic` key | `panic = "abort"` for CLIs; NOT for panic-isolating servers (context note) |
 | `member-profile-ignored` | `ProfilePlacement` | member manifest with `[profile.*]` + parent `[workspace]` evidence (ScanContext pattern) | the block belongs in the workspace root |
+| `large-api-dependency-mostly-unused-hint` | `BuildTime` (Batch 143) | any `*dependencies` section naming a known-large API crate (`windows`, `windows-sys`, `rustix`, `aws-sdk-*`) | measure `-Zhint-mostly-unused` (nightly-only, `.cargo/config.toml` rustflags; nnethercote Dec-2025: big compile-time wins for small-fraction consumers of windows/rustix/aws-sdk-ec2) |
 
 Context notes ride the corpus (`context_notes`): the bench-inheritance caveat
-(rule 2) and the panic-isolation caveat (rule 3).
+(rule 2), the panic-isolation caveat (rule 3), and the Batch-143 rule's
+out-of-manifest honesty — the hint is a rustc flag the manifest-scoped
+scanner cannot see adopted, so the fixed fixture IS the `.cargo/config.toml`
+snippet and the advice carries the measure-first caveat.
 
 ## The refusals are load-bearing
 

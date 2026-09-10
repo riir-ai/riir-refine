@@ -57,6 +57,8 @@ pub enum DistFamily {
     ShipSize,
     /// Profiles in the wrong manifest (workspace-member trap).
     ProfilePlacement,
+    /// Compile-time/build-cost knobs (dependency-shape advice).
+    BuildTime,
 }
 
 impl DistFamily {
@@ -66,6 +68,7 @@ impl DistFamily {
         match self {
             Self::ShipSize => "ship-size",
             Self::ProfilePlacement => "profile-placement",
+            Self::BuildTime => "build-time",
         }
     }
 }

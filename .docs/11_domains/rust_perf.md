@@ -23,9 +23,34 @@
 
 ## Corpus
 
-124 rules across 12 categories (rust-optimize skill checklist +
+126 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 124 rules — Batch 141 (2026-09-09,
+profiling guide, Research 032; **now 126 rules — Batch 143 (2026-09-10,
+Plan 123 / Research 164 — the nnethercote "How to speed up the Rust compiler
+in December 2025" post distill, the PERF-SEARCH intake row staged at
+`cf9e44ae`; one MEASURED benchable rule + one NotBenchable-annotated rule,
+both complexity):
+`debug-level-gated-computation` (complexity, BENCHABLE — a hot-path binding
+whose only consumer is a `debug!`/`trace!` call pays its computation every
+iteration: the binding is a real statement and the level check is a runtime
+atomic load LLVM cannot const-fold (without release_max_level_* features);
+fix = `log_enabled!` around the computation, or move it into the macro's
+lazy format args; source #147293 verbatim ("more than 3% in the best case"),
+the mechanism home the perf-book Logging-and-Debugging chapter; the note
+also carries #143684's wall-time-vs-icount inversion — icount −1.70% /
+cycles −0.90% but wall +0.26%: "Wall-time is the true metric" — the corpus's
+wall-clock GOAT discipline externally confirmed), and
+`macro-generated-code-optimize-at-generation-point` (complexity,
+NotBenchable annotated — proc-macro emitters trim/dedupe generated code AT
+the generation point, where the field-set context makes redundancy visible;
+measure with `-Zmacro-stats`; the Bevy `#[derive(Reflect)]` series:
+bevy_ui 27,000 generated lines vs a 16,000-line crate, bevy_window −39%
+generated → `cargo check` wall −16% → peak mem −5%; the load-bearing
+sentence: optimize at generation rather than "relying on sophisticated
+optimization machinery further down the compilation pipeline").
+Also rode the batch: the dist domain's fifth rule (`large-api-dependency-
+mostly-unused-hint`, a new `BuildTime` family — see dist.md). Previously
+124 — Batch 141 (2026-09-09,
 Plan 121 / Research 162 — the antirez/ds4 Part-B walk, the batch Research 162
 staged behind the Issue-085 lane; three NotBenchable-annotated decision-content
 rules from the agent/context layer at pin `6289c516`):
@@ -297,7 +322,7 @@ annotation is x86-source-cited only, the Batch 86 bitflag rule is a
 deterministic size axis, the Batch 94 read-coalescing annotation is
 workload-level (source-reported, the cacheability coupling is the decision
 content), and the Batch 109 rule is the measurement-honesty axis itself (a
-timing gate whose work folds away has no nonzero baseline to ratio). 67 of 124 carry
+timing gate whose work folds away has no nonzero baseline to ratio). 69 of 126 carry
 `context_notes` — the class ledger that follows is the early-corpus
 accounting; Batches 83–112 kept adding to the annotated set, and the per-rule
 verdicts live in the table below — 11 verdict-class (4 `ParetoDominated` + 7

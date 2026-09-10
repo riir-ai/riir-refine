@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 124 entries across 12 categories (complexity 19, allocation 24, simd 8,
+//! 126 entries across 12 categories (complexity 21, allocation 24, simd 8,
 //! layout 10, iterators 10, concurrency 13, io 21, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 90 are benchable; 30 are honestly
+//! caching 4, bevy 1, wasm 1). 91 are benchable; 35 are honestly
 //! NotBenchable — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) (8 external-runtime/size-class + 2
@@ -36,7 +36,11 @@
 //! comparison; oracle-contract content, not speed) plus the three agent-
 //! context annotations (Batch 141 — measured reserve for a destructive
 //! rewrite, semantic truncation boundaries, pattern-bounded stream holdback;
-//! budget/boundary/stream discipline, not speed).
+//! budget/boundary/stream discipline, not speed) plus the two Batch-143
+//! annotations (the log-only hot-path computation behind a level gate — its
+//! note carries the #143684 wall-time-vs-icount measurement-honesty rider;
+//! and the macro-emission build-time rule — upstream-measured compile-time
+//! content, no runtime A/B axis).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -237,12 +241,14 @@
 //! - `compaction-reserve-before-prompt-build` (a destructive rewrite's reserve is MEASURED from the real prompt — tokenize it, add slack + output budget — and every headroom consumer reads that one figure; Batch 141, ds4 Part-B distill)
 //! - `compaction-tail-boundary-prefers-complete-turn` (truncation boundaries are semantic: bounded walk-back to the latest complete user turn, atomic spans snap the boundary to their start; Batch 141, ds4 Part-B distill)
 //! - `streaming-prefix-holdback-bounded-buffer` (a stream recognizer holds back at most the marker's own length, gated to the line boundary, flushing verbatim on mismatch — no line-length pending window; Batch 141, ds4 Part-B distill)
+//! - `debug-level-gated-computation` (a hot-path binding whose only consumer is a `debug!`/`trace!` call pays its computation every iteration — the level check is a runtime atomic, not a compile-time fact; gate the computation with `log_enabled!` or move it into the macro's lazy args; Batch 143, nnethercote Dec-2025 distill)
+//! - `macro-generated-code-optimize-at-generation-point` (proc-macro emitters trim/dedupe generated code where the context lives — downstream optimization machinery must reconstruct what the emitter already knew; measure with `-Zmacro-stats`; Batch 143, annotated)
 //! - `prefault-admission-keyed-to-ram-headroom` (admission-policy annotation,
 //!   source-reported — the DECISION CONTENT is the headroom predicate + the
 //!   fail-closed direction + the mincore instrument refusal; page-cache state
 //!   dominates any microbench; Batch 139, ds4-metal PR #5 PLE prefault)
 //!
-//! Not benchable (34/124) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
+//! Not benchable (35/126) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context + Batch 143 nnethercote build-time rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -3389,6 +3395,33 @@ fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<It
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
+        // ── Batch 143 (2026-09-10, Plan 123 — the nnethercote Dec-2025
+// rustc-perf post distill; the PERF-SEARCH intake row staged at cf9e44ae).
+// Two rules from the compiler-perf trenches: one classic runtime gate
+// (benchable — the win is measured, not asserted), one build-time
+// emission discipline (annotated NotBenchable — compile-time content).
+// ── complexity: the computation a disabled log call still pays ────
+        PerfRule {
+            rule_id: "debug-level-gated-computation".to_string(),
+            name: "a hot-path value computed into a binding whose ONLY consumer is a debug!/trace! call runs on every iteration even with the level off — the binding is a real statement and the level check is a runtime atomic load LLVM cannot const-fold (without release_max_level_* features), so gate the computation itself with log_enabled! (or move it into the macro's lazy format args) instead of computing first and logging after".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// The tick loop builds a per-event summary for a debug! that is\n// effectively always off in production (no logger configured). The\n// summary binding is a REAL statement: it executes on every event\n// even though the macro drops it — the level check happens inside\n// the macro expansion, AFTER the computation already ran.\nfn tick(events: &[Event], stats: &mut Stats) {\n    for e in events {\n        apply(e, stats);\n        let summary = format!(\"{:?}\", summarize(e)); // paid every event\n        debug!(\"event summary: {summary}\");\n    }\n}".to_string(),
+            fixed_code: "// The computation lives INSIDE the level gate: with the level off\n// (or no logger) the summary is never built; with the level on, both\n// arms emit identical records. Moving the computation into the\n// macro's format args is the equivalent lazy form.\nfn tick(events: &[Event], stats: &mut Stats) {\n    for e in events {\n        apply(e, stats);\n        if log_enabled!(log::Level::Debug) {\n            let summary = format!(\"{:?}\", summarize(e));\n            debug!(\"event summary: {summary}\");\n        }\n    }\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 verdict-stable (batch143_pareto: 2184-2534x at 100-10K items, alloc axis EXACT 2200/22000/220000 → 0 — with no logger installed the gated arm builds ZERO summaries; the magnitude is the whole log-only computation's share, not a representative tick: real-world speedup = the summary cost ÷ the whole loop body). SOURCE-CITED (nnethercote, \"How to speed up the Rust compiler in December 2025\", 2025-12-05, #147293 verbatim: 'In the query system there was a value computed on a hot path that was only used within a debug! call. In this PR I avoided doing that computation unless necessary, which gave icount reductions across many benchmark results, more than 3% in the best case. This was such a classic micro-optimization that I added it as an example to the Logging and Debugging chapter of the The Rust Performance Book' — the doubled 'The' is in the original). THE MECHANISM: log's max level is a RUNTIME atomic (AtomicUsize), so LLVM cannot const-fold the disabled macro branch — a binding computed on its own line and consumed only by the macro's enabled-arm is still a real statement that executes every iteration; log_enabled! reads the SAME atomic but gates the computation itself, and moving the computation into the macro's format args is the equivalent lazy form (log macros evaluate args only on the enabled path). MEASUREMENT-HONESTY RIDER (same post, #143684): the LLVM-21 bump measured mean icount −1.70% and cycles −0.90% while mean wall-time went UP 0.26% — 'Wall-time is the true metric, because it's what users perceive' — third-party confirmation of this corpus's wall-clock GOAT discipline: an instruction-count A/B can invert on wall; never promote on icount alone. Regime: hot loops (tick handlers, per-request paths, query kernels) whose diagnostic summaries are built unconditionally beside their log calls. ANTI-REGIMES: the value has ANY other consumer (compute once, log freely — the binding is live); the crate enables release_max_level_* (the branch is compiled out either way — the fix is moot); the level is compile-time static (cfg'd-out logging). Distinct from log-write-direct (the ALLOCATION of formatting — push_str(&format!) vs write! into the buffer; this is whether the formatting COMPUTATION runs at all), from debug-stat-full-scan-out-of-hot-path (that diagnostic IS consumed every call and moved out; this one is consumed only when a level is on and gated in place), from debug-assert-length-hoist (assertion ERASURE changes optimization — the opposite direction: there the check must run, here it must not). Fixtures original. Source: nnethercote.github.io Dec-2025 post (#147293 + #143684), the mechanism home the perf-book Logging and Debugging chapter. Batch 143 / Plan 123 / Research 164.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(debug_level_gate_bench_spec()),
+        },
+        // ── complexity: build-time content the compiler deletes anyway ────
+        PerfRule {
+            rule_id: "macro-generated-code-optimize-at-generation-point".to_string(),
+            name: "code a proc macro emits should be trimmed and deduped AT the generation point — where the emitter's context makes redundancy visible — not left for downstream optimization machinery to reconstruct: measure the emitted volume with -Zmacro-stats, then hoist invariant emission out of per-field loops, drop dead blocks, and dedupe repeated bounds once per impl instead of once per method".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// The derive emitter writes, for EVERY field: a no-op const block,\n// the trait bound repeated per method, and a closure that only\n// forwards to a call. rustc parses, type-checks, and optimizes the\n// redundancy away — every compile, every crate, forever.\nfn emit_reflect_impl(fields: &[Field]) -> String {\n    let mut out = String::new();\n    for f in fields {\n        out.push_str(\"const _: () = ();\\n\");            // dead in every impl\n        out.push_str(&format!(\"fn get_{n}(v: &{t}) -> &{t} where {t}: Reflect, {t}: Reflect {{\n\", n = f.name, t = f.ty));\n        out.push_str(&format!(\"    |v: &{t}| v.field()\\n}}\\n\", t = f.ty)); // closure forwards only\n    }\n    out\n}".to_string(),
+            fixed_code: "// The impl's shared parts are emitted ONCE; per field, only what\n// actually varies. Same generated semantics — a fraction of the\n// tokens for rustc to parse, check, and represent in memory.\nfn emit_reflect_impl(fields: &[Field]) -> String {\n    let mut out = String::new();\n    out.push_str(\"fn dispatch(v: &Self, idx: usize) -> &Field { ... }\\n\"); // once\n    for f in fields {\n        // per field: only the accessor table entry\n        out.push_str(&format!(\"    /* {} => slot {} */\\n\", f.name, f.idx));\n    }\n    out\n}".to_string(),
+            context_notes: Some("HONESTLY NotBenchable, build-time content (upstream-measured, no runtime A/B axis — the corpus benches RUNTIME loops; a proc-macro emitter's cost is cargo-check wall and peak memory on CRATES that use the macro, not a runnable fixture pair). SOURCE (nnethercote, \"How to speed up the Rust compiler in December 2025\", 2025-12-05 section 'Proc macro wins in Bevy', quotes verbatim): bevy_ui was \"around 16,000 lines and 563,000 bytes of source code\" while its #[derive(Reflect)] output was \"around 27,000 lines and 1,544,000 bytes\" — \"Macro expansion almost quadrupled the size of the code, mostly because of this one macro!\"; after the cleanup PRs, \"[t]he size of the code generated by #[derive(Reflect)] was reduced by 39%, which reduced cargo check wall-time for that crate by 16%, and peak memory usage by 5%\". THE LOAD-BEARING SENTENCE: \"it is more efficient to optimize away redundancies at the generation point, where context-specific and domain-specific information is available, rather than relying on sophisticated optimization machinery further down the compilation pipeline that has to reconstruct information. And it's just less code to parse and represent in memory.\" THE INSTRUMENT: -Zmacro-stats (introduced June 2025 — \"How much code does that proc macro generate?\", same blog; measure BEFORE and AFTER, per crate). DECISION CONTENT: an emitter's per-field redundancy (bounds repeated per method, dead const blocks, forwarding closures) is invisible in source and enormous in expansion; the emitter KNOWS the field set at generation and can hoist/dedupe what downstream must rediscover. Regime: derive-like proc macros over large crates, build-heavy workspaces, compile-time-sensitive CI. ANTI-REGIMES: handwritten code (the compiler's optimizer IS the right tool there — no generation point exists); emission already at the measured floor. Suggestion-only (a parse-only proposer cannot see macro emission volume; -Zmacro-stats is nightly-only). Fixtures original. Batch 143 / Plan 123 / Research 164.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
     ])
 }
 
@@ -5067,6 +5100,25 @@ pub fn run_fixed(input: &[u64]) {
 }
 "#
         .to_string(),
+    }
+}
+
+/// Bench spec for `debug-level-gated-computation`: a log-only summary built
+/// unconditionally beside its `debug!` call vs the same computation behind
+/// `log_enabled!`.
+///
+/// With no logger configured (the bench crate never installs one), the fixed
+/// arm builds ZERO summaries; the buggy arm builds one per item — the binding
+/// is a real statement and log's runtime max-level atomic keeps the disabled
+/// branch from being const-folded. Expected ParetoDominant (the fixed arm
+/// does strictly less work; the observable log output is identical: nothing).
+/// Default `log` features ONLY — a `release_max_level_*` feature would compile
+/// the whole regime away and make both arms tie at zero.
+#[cfg(feature = "rust_perf_bench")]
+fn debug_level_gate_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000],
+        harness: "// [dep: log = \"0.4\"]\n\nconst EVENT_PARTS: usize = 8;\n\nfn summarize(item: &str) -> String {\n    // an expensive, log-only diagnostic: bracket every part, then fold\n    let mut acc = String::new();\n    for part in item.split('/') {\n        acc.push_str(&format!(\"[{part}]\"));\n    }\n    let mut digest = acc.len();\n    for b in acc.bytes() {\n        digest = digest.wrapping_mul(31).wrapping_add(b as usize);\n    }\n    format!(\"{acc} (len={digest})\")\n}\n\nmod buggy {\n    use super::summarize;\n    // The binding is a REAL statement: log's max level is a runtime atomic,\n    // so the macro's enabled branch is never const-folded away — the summary\n    // executes on every item even though the record is never emitted.\n    pub fn tick(items: &[String]) {\n        for it in items {\n            let summary = summarize(it);\n            log::debug!(\"event summary: {summary}\");\n        }\n    }\n}\n\nmod fixed {\n    use super::summarize;\n    // The computation lives INSIDE the level gate. With no logger (the bench\n    // regime) `log_enabled!` is false and the summary is never built.\n    pub fn tick(items: &[String]) {\n        for it in items {\n            if log::log_enabled!(log::Level::Debug) {\n                let summary = summarize(it);\n                log::debug!(\"event summary: {summary}\");\n            }\n        }\n    }\n}\n\npub fn make_input(n: usize) -> Vec<String> {\n    (0..n)\n        .map(|i| {\n            (0..EVENT_PARTS)\n                .map(|p| format!(\"p{}x{}\", p, (i * 31 + p) % 97))\n                .collect::<Vec<_>>()\n                .join(\"/\")\n        })\n        .collect()\n}\n\npub fn run_buggy(input: &[String]) {\n    buggy::tick(std::hint::black_box(input));\n}\n\npub fn run_fixed(input: &[String]) {\n    fixed::tick(std::hint::black_box(input));\n}\n".to_string(),
     }
 }
 
@@ -8696,7 +8748,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 124); // Batch 141 (ds4 Part-B) 121 → 124
+        assert_eq!(corpus.entries.len(), 126); // Batch 143 (nnethercote Dec-2025) 124 → 126
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -10457,7 +10509,7 @@ mod tests {
             .iter()
             .filter(|e| e.bench_spec.is_some())
             .count();
-        assert_eq!(with_spec, 90, "expected 90 benchable rules (Batch 135 added the three Wild-linker article benches), got {with_spec}");
+        assert_eq!(with_spec, 91, "expected 91 benchable rules (Batch 143 added the debug-level-gated-computation Pareto bench), got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -10474,7 +10526,7 @@ mod tests {
         // annotations (13 rules) were never counted here — the pin sat at the
         // Batch-109-era 14 while reality moved to 27. The test only compiles
         // under `rust_perf_bench`, so nobody ran it.
-        assert_eq!(without_spec.len(), 34); // 124 total − 90 benchable
+        assert_eq!(without_spec.len(), 35); // 126 total − 91 benchable
         assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
         assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -10485,6 +10537,7 @@ mod tests {
         assert!(without_spec.contains(&"compaction-reserve-before-prompt-build")); // Batch 141 — control-flow sizing, not an A/B axis
         assert!(without_spec.contains(&"compaction-tail-boundary-prefers-complete-turn")); // Batch 141 — boundary semantics, not an A/B axis
         assert!(without_spec.contains(&"streaming-prefix-holdback-bounded-buffer")); // Batch 141 — streaming-latency discipline, not an A/B axis
+        assert!(without_spec.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — build-time emission content, no runtime A/B axis
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -10547,7 +10600,9 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 67, "expected 67 context-annotated rules (Batch 141 added the three ds4-Part-B annotations)");
+        assert_eq!(annotated.len(), 69, "expected 69 context-annotated rules (Batch 143 added the nnethercote source-citation annotation + the build-time rationale)");
+        assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
+        assert!(annotated.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — the build-time rationale + the -Zmacro-stats instrument
         assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
         assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"resume-revalidates-provenance-before-reuse")); // Batch 121 — the ds4 IQ2 resume-provenance annotation
@@ -10606,7 +10661,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (121 total - 64 annotated; the Batch 139 rule joined the ANNOTATED side)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (126 total - 69 annotated; both Batch 143 rules joined the ANNOTATED side, so the count is unchanged)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -10618,7 +10673,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 67); // Batch 141: 64 → 67
+        assert_eq!(annotated, 69); // Batch 143: 67 → 69
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -10653,13 +10708,13 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 67 annotated rules.
+        // Filter to the 69 annotated rules.
         let annotated: Vec<&PerfRule> = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_some())
             .collect();
-        assert_eq!(annotated.len(), 67, "expected 67 annotated rules");
+        assert_eq!(annotated.len(), 69, "expected 69 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -12425,6 +12480,202 @@ mod tests {
         // the holdback's bound IS the marker's length: held: [u8; 11] and
         // MARKER.len() == 11 — the type-level bound the rule demands.
         assert_eq!(MARKER.len(), 11);
+    }
+
+    /// Batch 143 (2026-09-10, Plan 123 — the nnethercote Dec-2025 rustc-perf
+    /// post distill): R1 + R2 present, parse, carry the concept needles, sit
+    /// in their categories. R1 is BENCHABLE (the without_spec membership pin
+    /// does NOT apply; the Pareto runner carries the measurement half); R2 is
+    /// NotBenchable with its rationale in context_notes.
+    #[test]
+    fn batch143_rules_present_and_parse() {
+        let corpus = build_perf_seed_corpus();
+        for (rid, category, needles) in [
+            (
+                "debug-level-gated-computation",
+                "complexity",
+                vec![
+                    "log_enabled",
+                    "runtime atomic",
+                    "lazy",
+                    "Wall-time is the true metric",
+                ],
+            ),
+            (
+                "macro-generated-code-optimize-at-generation-point",
+                "complexity",
+                vec![
+                    "-Zmacro-stats",
+                    "generation point",
+                    "39%",
+                    "16%",
+                    "downstream optimization machinery",
+                ],
+            ),
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-143 rule '{rid}' missing from corpus"));
+            assert_eq!(e.category, category, "batch-143 rule '{rid}' category");
+            assert!(
+                syn::parse_file(&e.buggy_code)
+                    .and_then(|_| syn::parse_file(&e.fixed_code))
+                    .is_ok(),
+                "batch-143 '{rid}' buggy/fixed must both parse"
+            );
+            assert!(
+                e.context_notes.is_some(),
+                "batch-143 '{rid}' must carry its source citation in context_notes"
+            );
+            let text = format!(
+                "{}\n{}\n{}\n{}",
+                e.name,
+                e.buggy_code,
+                e.fixed_code,
+                e.context_notes.clone().unwrap_or_default()
+            );
+            for needle in needles {
+                assert!(
+                    text.contains(needle),
+                    "batch-143 {rid} concept {needle:?} missing"
+                );
+            }
+        }
+        // R1 is the batch's ONE benchable rule — assert the spec exists.
+        #[cfg(feature = "rust_perf_bench")]
+        {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == "debug-level-gated-computation")
+                .unwrap();
+            assert!(
+                e.bench_spec.is_some(),
+                "batch-143 R1 must ship its Pareto bench spec"
+            );
+        }
+    }
+
+    /// Batch 143 — G1 semantics: the level gate decides whether the log-only
+    /// computation runs at all, and the lazy-args alternative is equivalent.
+    /// Uses the REAL `log` crate (dev-dependency; zero new tree cost) with NO
+    /// logger installed — the production regime the rule describes.
+    #[test]
+    fn batch143_log_gate_computation_parity() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static COMPUTED: AtomicUsize = AtomicUsize::new(0);
+
+        fn summarize(item: &str) -> String {
+            COMPUTED.fetch_add(1, Ordering::SeqCst);
+            format!("[{item}]")
+        }
+
+        let items = ["a", "b", "c"];
+
+        // The test process never installs a logger and log's default
+        // features leave STATIC_MAX_LEVEL at trace: log_enabled! is decided
+        // by the runtime max-level atomic alone. Assert the regime first.
+        assert!(!log::log_enabled!(log::Level::Debug));
+
+        // Buggy shape: the binding is a real statement — computed every time.
+        COMPUTED.store(0, Ordering::SeqCst);
+        for it in items {
+            let summary = summarize(it);
+            log::debug!("event summary: {summary}");
+        }
+        assert_eq!(
+            COMPUTED.load(Ordering::SeqCst),
+            items.len(),
+            "the ungated binding runs even with the level off (the #147293 defect)"
+        );
+
+        // Fixed shape, gate form: log_enabled! wraps the computation.
+        COMPUTED.store(0, Ordering::SeqCst);
+        for it in items {
+            if log::log_enabled!(log::Level::Debug) {
+                let summary = summarize(it);
+                log::debug!("event summary: {summary}");
+            }
+        }
+        assert_eq!(
+            COMPUTED.load(Ordering::SeqCst),
+            0,
+            "the gated computation is skipped entirely with the level off"
+        );
+
+        // Fixed shape, lazy-args form: the computation moved INTO the macro's
+        // format args is equivalent — log macros evaluate args only on the
+        // enabled path.
+        COMPUTED.store(0, Ordering::SeqCst);
+        for it in items {
+            log::debug!("event summary: {}", summarize(it));
+        }
+        assert_eq!(
+            COMPUTED.load(Ordering::SeqCst),
+            0,
+            "the lazy-args form is the equivalent skip"
+        );
+
+        // The defect is CONSUMER-SHAPE, not macro behavior: the same lazy
+        // macro still runs the computation when it was hoisted OUT first —
+        // which is why the fix must move/gate the COMPUTATION, not the call.
+        COMPUTED.store(0, Ordering::SeqCst);
+        for it in items {
+            let summary = summarize(it); // the hoist
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!("event summary: {summary}"); // still pays it
+            }
+        }
+        assert_eq!(
+            COMPUTED.load(Ordering::SeqCst),
+            items.len(),
+            "gating the CALL without moving the COMPUTATION fixes nothing"
+        );
+    }
+
+    /// Batch 143 — the measured Pareto verdict for R1. SLOW (spawns a cargo
+    /// build + run in a temp bench crate): run explicitly with
+    /// `cargo test --lib --features rust_perf_bench batch143_pareto --
+    /// --ignored --nocapture`.
+    #[cfg(feature = "rust_perf_bench")]
+    #[test]
+    #[ignore = "slow: spawns cargo build+run (temp bench crate)"]
+    fn batch143_pareto_benches() {
+        let corpus = build_perf_seed_corpus();
+        let validator = crate::domains::rust_perf::bench::PerfBenchValidator::new();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "debug-level-gated-computation")
+            .expect("batch-143 R1 missing from corpus");
+        let verdict = validator.validate(e.rule_id.as_str(), e.bench_spec.as_ref());
+        assert!(!verdict.is_not_benchable(), "batch-143 R1 has a spec");
+        let b = match &verdict {
+            crate::domains::rust_perf::bench::BenchVerdict::Pareto(p) => p,
+            crate::domains::rust_perf::bench::BenchVerdict::NotBenchable(n) => {
+                panic!("batch-143 R1 unexpectedly NotBenchable: {n:?}")
+            }
+        };
+        assert!(b.ran, "batch-143 R1 bench must run: {:?}", b.error);
+        println!(
+            "batch-143 debug-level-gated-computation: {:?} faster={} slower={} tie={}",
+            b.overall, b.faster_count, b.slower_count, b.tie_count
+        );
+        for r in &b.results {
+            println!(
+                "  n={:>6} buggy={:>9}ns fixed={:>9}ns speedup={:.2}x allocs {}→{} outcome={:?}",
+                r.size,
+                r.buggy_ns,
+                r.fixed_ns,
+                r.speedup,
+                r.buggy_allocs,
+                r.fixed_allocs,
+                r.outcome
+            );
+        }
     }
 }
 

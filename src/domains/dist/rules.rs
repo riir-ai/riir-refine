@@ -45,6 +45,7 @@ pub const DIST_RULES: &[&str] = &[
     "shipped-binary-missing-size-profile",
     "cli-panic-unwind-tables",
     "member-profile-ignored",
+    "large-api-dependency-mostly-unused-hint",
 ];
 
 /// Phase 1 is suggest-only — no rule carries a bounded fix. The constant
@@ -65,6 +66,26 @@ pub struct ManifestScan {
     pub has_package: bool,
     /// Profile sections: (profile name, 1-based line, keys seen).
     pub profiles: Vec<(String, usize, Vec<String>)>,
+    /// Dependency names matching the known-large API crate table, in file
+    /// order: (crate name, 1-based line of the dependency key). Collected from
+    /// every section whose name ends with `dependencies` — the value-shaped
+    /// facts (versions, features) are deliberately NOT read, keeping the
+    /// scanner's key/name-PRESENCE contract intact.
+    pub large_dependencies: Vec<(String, usize)>,
+}
+
+/// The known-large API crate table for `large_dependencies` (Batch 143 —
+/// nnethercote Dec-2025, "Faster compilation of large API crates": `windows`,
+/// `rustix`, and `aws-sdk-ec2` named; the `aws-sdk-` prefix generalizes the
+/// service-crate family the post's example belongs to). Deliberately SMALL:
+/// a missed crate is a false negative (advice simply not offered), an
+/// over-broad table is noise on every small consumer.
+const LARGE_API_CRATES_EXACT: &[&str] = &["windows", "windows-sys", "rustix"];
+const LARGE_API_CRATES_PREFIX: &[&str] = &["aws-sdk-"];
+
+fn is_large_api_crate(name: &str) -> bool {
+    LARGE_API_CRATES_EXACT.contains(&name)
+        || LARGE_API_CRATES_PREFIX.iter().any(|p| name.starts_with(p))
 }
 
 /// Whether `line` is a section header (`[x]` / `[[x]]`), and its name.
@@ -126,7 +147,7 @@ pub fn scan(source: &str) -> ManifestScan {
             m.sections.push((name, line_no));
             continue;
         }
-        // Inside a non-array profile section: collect `key =` presences.
+        // Inside a non-array section: collect `key =` presences.
         if let Some((false, name)) = &current {
             if name.starts_with("profile.") {
                 if let Some(eq) = trimmed.find('=') {
@@ -135,6 +156,18 @@ pub fn scan(source: &str) -> ManifestScan {
                         if let Some(last) = m.profiles.last_mut() {
                             last.2.push(key.to_ascii_lowercase());
                         }
+                    }
+                }
+            } else if name.ends_with("dependencies") {
+                // A dependency key: `name = ...`, `name = { ... }`, or the
+                // workspace-inherited `name.workspace = true`. The dep NAME
+                // is the key up to the first '.'; only large-API names are
+                // recorded (the table is the rule's whole vocabulary).
+                if let Some(eq) = trimmed.find('=') {
+                    let raw = trimmed[..eq].trim();
+                    let dep_name = raw.split('.').next().unwrap_or(raw).trim();
+                    if is_large_api_crate(dep_name) {
+                        m.large_dependencies.push((dep_name.to_string(), line_no));
                     }
                 }
             }
@@ -299,6 +332,21 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
             advice: "these profile sections are IGNORED when the crate is built via its workspace — profiles only apply from the workspace-root manifest; move the block to the root (keeping it only matters for standalone builds)",
         });
     }
+
+    // Rule 5 — dependency-shape advice (Batch 143). The trigger is IN the
+    // manifest (a known-large API crate in any dependencies section); the FIX
+    // is out-of-band (-Zhint-mostly-unused lives in .cargo/config.toml
+    // rustflags, not the manifest), so Phase 1 advises and the notes carry
+    // the measure-first caveat. One finding per manifest, anchored at the
+    // first hit.
+    if let Some((name, line)) = scan.large_dependencies.first() {
+        out.push(DistFinding {
+            rule_id: "large-api-dependency-mostly-unused-hint",
+            line: *line,
+            excerpt: format!("{name} = ..."),
+            advice: "if this large API crate is a small fraction of your actual usage, measure `-Zhint-mostly-unused` (nightly-only rustc flag, set via [build] rustflags in .cargo/config.toml) — big compile-time wins are reported for small-fraction consumers of windows/rustix/aws-sdk-*; measure per crate before adopting",
+        });
+    }
 }
 
 #[cfg(test)]
@@ -361,5 +409,43 @@ mod tests {
             wrong_case.profiles.is_empty(),
             "a case-variant header is not a profile section"
         );
+    }
+
+    #[test]
+    fn large_api_dependency_names_are_collected_across_dependency_sections() {
+        let src = "[package]\nname = \"x\"\n\n[dependencies]\nserde = \"1\"\nwindows = { version = \"0.58\", features = [\"Win32_Foundation\"] }\n\n[dev-dependencies]\nrustix = \"1\"\n\n[workspace]\n\n[workspace.dependencies]\naws-sdk-ec2 = \"1\"\n";
+        let m = scan(src);
+        let names: Vec<&str> = m
+            .large_dependencies
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["windows", "rustix", "aws-sdk-ec2"],
+            "every *dependencies section counts, in file order"
+        );
+        assert_eq!(
+            m.large_dependencies[0].1, 6,
+            "anchor line is 1-based at the key"
+        );
+    }
+
+    #[test]
+    fn small_and_commented_dependencies_stay_unrecorded() {
+        let src = "[dependencies]\nserde = \"1\"\n# windows = \"0.58\"\ntokio.workspace = true\n";
+        let m = scan(src);
+        assert!(
+            m.large_dependencies.is_empty(),
+            "small deps, commented deps, and non-table large keys never fire"
+        );
+    }
+
+    #[test]
+    fn workspace_inherited_form_resolves_the_dep_name() {
+        let src = "[dependencies]\nwindows.workspace = true\n";
+        let m = scan(src);
+        assert_eq!(m.large_dependencies.len(), 1);
+        assert_eq!(m.large_dependencies[0].0, "windows");
     }
 }
