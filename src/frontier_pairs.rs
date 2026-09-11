@@ -31,10 +31,10 @@
 //!
 //! ## Two feature halves (the 2026-09-10 each-feature sweep fix)
 //!
-//! The module rides `any(rustc_errors, latent_retrieval)`: `traj_store` (the
-//! latent_retrieval-only durable backend) holds [`ConstructionPair`] rows, so
-//! the TYPE + fence-arithmetic half ([`ConstructionPair`], [`PairVerdict`],
-//! [`FenceReport`], [`fence_verdicts`], [`fence_sample`]) is dependency-free.
+//! The TYPE half ([`ConstructionPair`], [`PairVerdict`], [`FenceReport`],
+//! [`fence_verdicts`], [`fence_sample`], the provenance vocabulary +
+//! [`provenance_weight`]) is dependency-free and UNGATED (Issue 089 T5:
+//! [`crate::frontier_report`] consumes the vocabulary from every feature build).
 //! The CORPUS half — [`strategy_for`] + [`construction_pairs`], which import
 //! `rustc_errors::corpus_gen::generate_corpus` + `floor::MutatorKind` — is
 //! `cfg(feature = "rustc_errors")` inside the file. The latent-only arm used
@@ -64,6 +64,40 @@ use crate::domains::rustc_errors::floor::MutatorKind;
 /// The construction-provenance tag every row from this module carries
 /// (the pair path must never be confusable with outcome evidence).
 pub const PROVENANCE: &str = "construction";
+
+/// Issue 089 T5 — the organic provenance class: pairs mined from real
+/// feature churn (an observed kept-fix ≻ reverted-fix on a real repo),
+/// never planted by a generator. No organic miner ships yet; the
+/// vocabulary + weighting land first so the day one lands, its rows are
+/// priced correctly and fenced correctly (report-first — the weight
+/// gates nothing today). Never inject failures on purpose to make
+/// organic-looking rows: the class exists to MEASURE churn, and a
+/// fabricated row priced 1.0 is the worst lie in the table.
+pub const PROVENANCE_ORGANIC: &str = "organic";
+
+/// Issue 089 T5 — ε, the synthetic/injected pair weight (organic = 1.0).
+/// Prices construction pairs in weighted-yield arithmetic ONLY. The paper
+/// effect (+2.06 organic vs +0.00 injected; TaskPilot/FrogNano) prices
+/// injected near zero but NOT zero: construction truth is verified by the
+/// fence and bootstraps pools with no organic evidence yet (this store's
+/// whole BT fit). The value is a report-time pricing knob — measurable
+/// once organic rows exist, and never an admission gate (the T4 law:
+/// report-first, gate-later).
+pub const SYNTHETIC_PAIR_WEIGHT: f32 = 0.05;
+
+/// Issue 089 T5 — the provenance weight: organic feature-churn = 1.0,
+/// construction/synthetic = ε, anything else = 0.0 (fail-closed — an
+/// unrecognized provenance is priced out of weighted yield entirely, and
+/// [`crate::traj_store::TrajStore::rate_pairs`] fences it out of rating
+/// outright).
+#[must_use]
+pub fn provenance_weight(provenance: &str) -> f32 {
+    match provenance {
+        PROVENANCE_ORGANIC => 1.0,
+        PROVENANCE => SYNTHETIC_PAIR_WEIGHT,
+        _ => 0.0,
+    }
+}
 
 /// One construction-labeled preference pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -257,6 +291,19 @@ mod fence_tests {
     // The fence-arithmetic half needs no corpus generator — it runs in every
     // feature state that compiles the module (latent_retrieval-only included).
     use super::*;
+
+    #[test]
+    fn provenance_weight_prices_the_three_classes() {
+        // Issue 089 T5: organic churn = 1.0, construction/synthetic = ε,
+        // anything else = 0.0 (fail-closed — an unrecognized tag is priced
+        // out entirely, and rate_pairs fences it out of rating outright).
+        assert_eq!(provenance_weight(PROVENANCE_ORGANIC), 1.0);
+        assert_eq!(provenance_weight(PROVENANCE), SYNTHETIC_PAIR_WEIGHT);
+        assert!(SYNTHETIC_PAIR_WEIGHT > 0.0 && SYNTHETIC_PAIR_WEIGHT < 1.0);
+        assert_eq!(provenance_weight(""), 0.0);
+        assert_eq!(provenance_weight("Organic"), 0.0, "case-sensitive on purpose");
+        assert_eq!(provenance_weight("injected"), 0.0);
+    }
 
     #[test]
     fn fence_verdicts_agree_arithmetic() {

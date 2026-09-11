@@ -2869,8 +2869,13 @@ USAGE:
     --frontier-report
                     Print the learnability-frontier band report (Issue 089):
                     per-rule r/f/n/p̂/LCB₅, the band-mass health metric
-                    (fraction 0<p̂≤0.5), and the saturation demotion
-                    CANDIDATES (p̂=1 ∧ n≥50 — report-only, never deletes).
+                    (fraction 0<p̂≤0.5), the saturation demotion
+                    CANDIDATES (p̂=1 ∧ n≥50 — report-only, never deletes),
+                    plus the T5 provenance tail: the pair namespace priced
+                    by provenance (organic=1.0, construction=ε, unknown=0.0)
+                    and the outcome-feed split (generated-case ':' keys vs
+                    real-repo rows — band-mass per feed; the weight prices
+                    arithmetic, gates nothing).
                     Read-only; refuses (exit 1) on an empty population —
                     never a green zero. Needs --features latent_retrieval.
     --config-audit Scan .rs files for config knobs that cannot be turned
@@ -3227,13 +3232,16 @@ struct Args {
     /// into the trajectory store (idempotent upserts). Works with or
     /// without `--corpus-stats`. Needs `latent_retrieval`.
     import_series: bool,
-    /// Issue 089 T1+T2: `--frontier-report` — the learnability-frontier
+    /// Issue 089 T1+T2+T5: `--frontier-report` — the learnability-frontier
     /// band report over the trajectory store's per-rule outcome counters:
     /// r/f/n/p̂/LCB₅ per rule, the band-mass health metric (fraction
-    /// 0<p̂≤0.5), and the saturation demotion CANDIDATE list (p̂=1 ∧ n≥50,
-    /// report-only — never deletes). Read-only standalone mode (the
-    /// memory-stats pattern); refuses with exit 1 on an empty population
-    /// (never a green zero). Needs `latent_retrieval` (the store).
+    /// 0<p̂≤0.5), the saturation demotion CANDIDATE list (p̂=1 ∧ n≥50,
+    /// report-only — never deletes), plus the T5 provenance tail: the
+    /// pair namespace priced by provenance (organic=1.0, construction=ε,
+    /// unknown=0.0) + the outcome-feed split (generated-case ':' keys vs
+    /// real-repo rows — band-mass per feed). Read-only standalone mode
+    /// (the memory-stats pattern); refuses with exit 1 on an empty
+    /// population (never a green zero). Needs `latent_retrieval` (the store).
     frontier_report: bool,
     /// Plan 124: `--config-audit` — the config-hygiene report (classes A+B
     /// from the post-mining intake): Default-impl fields that default to a
@@ -5732,6 +5740,29 @@ fn main() {
                     print!(
                         "{}",
                         riir_clippy::frontier_report::render(&summary, score.as_ref())
+                    );
+                    // Issue 089 T5 — provenance weighting, the report tail:
+                    // (a) the pair namespace priced by provenance (organic
+                    // 1.0 / construction ε / unknown 0.0 fail-closed);
+                    // (b) the outcome-feed split — generated-case ':' keys
+                    // vs real-repo rows, band-mass measured PER FEED (what
+                    // T4's admission gate will consume). Report-first: the
+                    // weight prices arithmetic, gates nothing.
+                    let pair_rows = store.pair_rows().unwrap_or_default();
+                    let mut pair_counts: std::collections::BTreeMap<String, usize> =
+                        std::collections::BTreeMap::new();
+                    for p in &pair_rows {
+                        *pair_counts.entry(p.provenance.clone()).or_insert(0) += 1;
+                    }
+                    let prow = riir_clippy::frontier_report::provenance_summary(&pair_counts);
+                    print!(
+                        "{}",
+                        riir_clippy::frontier_report::render_provenance_section(&prow)
+                    );
+                    let feed_rows = riir_clippy::frontier_report::provenance_yield_split(&entries);
+                    print!(
+                        "{}",
+                        riir_clippy::frontier_report::render_provenance_yield(&feed_rows)
                     );
                 }
                 Err(e) => {

@@ -9,6 +9,55 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 089 T5 — provenance weighting: the priced pair namespace + the enforced rating fence (2026-09-12)
+
+The learnability-frontier instrument gained its provenance axis (the
+TaskPilot/FrogNano +2.06-organic-vs-+0.00-injected effect, made measurable at
+the feeds that exist today). Four coordinated halves:
+
+1. **The vocabulary + weights** (`src/frontier_pairs.rs`, with the pair
+   types): `PROVENANCE_ORGANIC` (feature-churn mined — no miner ships yet,
+   the vocabulary lands first so the day one lands its rows are priced
+   correctly), `SYNTHETIC_PAIR_WEIGHT = 0.05` (ε — near-zero per the paper,
+   NOT zero: construction truth is fence-verified and bootstraps pools with
+   no organic evidence), `provenance_weight()` (unknown tags → 0.0
+   fail-closed). The module is UNGATED since this landing — the type half
+   was always dependency-free (the 09-10 E0433 fix already cfg'd the corpus
+   half); the any() gate was the transitional shape. `frontier_report`
+   (ungated) consumes the vocabulary from every feature build.
+2. **The fence, load-bearing** (`traj_store::rate_pairs`): only
+   `construction` rows feed the BT fit. The PairRowDoc contract has said
+   "any other provenance must never feed a rating" since Issue 072 —
+   vacuous while every row was construction. Now enforced: non-construction
+   rows are excluded + counted loud. The semantic: organic rows are
+   curriculum-priced 1.0 precisely because they are OBSERVED, and observed
+   wins are never rating evidence (the healer must not grade its own
+   behavior — the non-circularity law).
+3. **The `--frontier-report` tail**: the pair-namespace provenance section
+   (count/share/weight/weighted per class; EMPTY-loud when no pair rows —
+   both live stores honestly show 0) + the outcome-feed split
+   (`{code}:{strategy}` keys = synthetic/generated-case vs every other key
+   = organic/real-repo; band-mass measured PER FEED — what T4's admission
+   gate will consume; a band living only in the synthetic feed is a
+   curriculum artifact). Live measurements: riir-ai 21 organic/0 synthetic
+   (0.0% band-mass), this repo 18 organic/0 synthetic (5.6%) — the band
+   mass is all-organic on both stores.
+4. **The honest blocker, stated in the report tail**: per-BATCH causal yield
+   (the paper's effect size) needs generation/batch tags on rows the store
+   deliberately does not carry (construction rows are byte-deterministic,
+   no timestamps; learn rows are cumulative counters) — the T2 snapshot
+   precedent. The split is per-FEED health, never presented as the
+   curriculum effect.
+
+Tests: 6 new lib tests (weights fail-closed pricing, the rate_pairs fence
+with a hand-put organic row, summary canonical-order + share/weight
+arithmetic, split attribution by key shape incl. measured-empty feeds,
+render needles incl. EMPTY-loud). Lanes: lib 1211/1211 default + 1333/1333
+latent_retrieval; clippy `-D warnings` clean at default, no-default,
+latent+rustc, all-features (lib); the bin lane
+(`latent_retrieval,rust_perf,clippy_lints,kat_service`) green; frontier PoC
+A/B 4/4 (the required-features catch from T3 applied).
+
 ## Issue 088 resolved — the kat service-plane spin-out: every task + fleet follow-up landed, file removed at close (2026-09-10 → 2026-09-12)
 
 The KAT service plane (protocol tier + client plane + transports, 25 modules)

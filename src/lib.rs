@@ -59,14 +59,15 @@ pub mod elo;
 pub mod embedder;
 pub mod fmt;
 // Issue 072 PoC — construction-pair factory. Two halves: the TYPE +
-// fence-arithmetic half is dependency-free (traj_store's latent_retrieval-only
-// builds hold ConstructionPair rows); the corpus half (strategy_for +
+// fence-arithmetic half is dependency-free; the corpus half (strategy_for +
 // construction_pairs → rustc_errors::corpus_gen + floor::MutatorKind) is
-// cfg(rustc_errors) inside the file. The module gate stays any(...) so EITHER
-// feature alone compiles it — the 2026-09-10 each-feature rot-gate sweep caught
-// the latent-only arm importing the corpus unconditionally (E0433 on all 8
-// latent-without-rustc_errors combos since 072 landed).
-#[cfg(any(feature = "rustc_errors", feature = "latent_retrieval"))]
+// cfg(rustc_errors) inside the file. UNGATED since Issue 089 T5: the
+// provenance vocabulary (tags + weights) lives with the pair types and the
+// ungated frontier_report consumes it — the module's own imports stay pure
+// std with the corpus half cfg'd, so every feature build compiles it. (The
+// 2026-09-10 each-feature sweep caught the latent-only arm importing the
+// corpus unconditionally — E0433 on all 8 latent-without-rustc_errors combos;
+// the any() gate was the transitional shape of that fix.)
 pub mod frontier_pairs;
 pub mod modelability;
 pub mod pruner;

@@ -1404,6 +1404,16 @@ impl TrajStore {
     /// [`Self::recompute_elo`]: this touches NO trajectory row, bumps NO
     /// counter, and answers from the `pair:` namespace only.
     ///
+    /// Issue 089 T5 — the non-circularity fence, ENFORCED: only rows
+    /// carrying [`crate::frontier_pairs::PROVENANCE`] ("construction")
+    /// feed the fit. The row contract has said "any other provenance must
+    /// never feed a rating" since 072; it was vacuous while every row was
+    /// construction, and is load-bearing now that the organic vocabulary
+    /// exists — an organic row is curriculum (weight 1.0 in yield
+    /// accounting) precisely because it is OBSERVED, and observed wins are
+    /// never rating evidence (the healer must not grade its own behavior).
+    /// Excluded rows are counted loud, never silently dropped.
+    ///
     /// Returns `(fit, pairs_rated)`; the fit maps strategy id → Elo-scale
     /// rating (the same base/scale the outcome table uses, so the two
     /// tables are directly comparable and combinable by the consumer).
@@ -1416,7 +1426,17 @@ impl TrajStore {
         iters: usize,
     ) -> Result<(std::collections::BTreeMap<String, f32>, usize), String> {
         let rows = self.pair_rows()?;
-        let obs: Vec<crate::elo::PairObservation> = rows
+        let fenced: Vec<&PairRowDoc> = rows
+            .iter()
+            .filter(|r| r.provenance == crate::frontier_pairs::PROVENANCE)
+            .collect();
+        if fenced.len() < rows.len() {
+            eprintln!(
+                "traj-store: rate_pairs excluded {} pair row(s) with non-construction provenance (the non-circularity fence, Issue 089 T5)",
+                rows.len() - fenced.len()
+            );
+        }
+        let obs: Vec<crate::elo::PairObservation> = fenced
             .iter()
             .map(|r| crate::elo::PairObservation {
                 winner: r.good_strategy.clone(),
@@ -3051,5 +3071,46 @@ mod tests {
             assert!(fit.contains_key(want), "{want} missing from pair fit");
         }
         let _ = base;
+    }
+
+    // Issue 089 T5 — the non-circularity fence, load-bearing: an organic
+    // pair row (weight 1.0 in YIELD accounting) must never feed the RATING
+    // fit. Hand-put one organic row beside imported construction rows and
+    // assert it is fenced out — count and players both.
+    #[cfg(feature = "rustc_errors")]
+    #[test]
+    fn rate_pairs_fences_non_construction_provenance_out_of_the_fit() {
+        let root = tmp_root("rate_pairs_fence");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let pairs = crate::frontier_pairs::construction_pairs();
+        store.import_pairs(&pairs).unwrap();
+        let n_construction = pairs.len();
+
+        // A fabricated-for-test organic row — distinctive strategy ids so its
+        // absence from the fit is unambiguous ("never inject failures on
+        // purpose" governs PRODUCTION rows; a unit test's fixture row is the
+        // measurement, not the curriculum).
+        let organic = PairRowDoc {
+            code: "E0597".into(),
+            bad_code: "E0502".into(),
+            case_name: "organic_probe_case".into(),
+            good_strategy: "organic-winner-probe".into(),
+            bad_strategy: "organic-loser-probe".into(),
+            good_fix: String::new(),
+            bad_fix: String::new(),
+            span_shape_hash: String::new(),
+            provenance: crate::frontier_pairs::PROVENANCE_ORGANIC.into(),
+        };
+        store
+            .put_row_if_changed(&TrajStore::pair_key("E0597", "organic_probe_case"), &organic)
+            .unwrap();
+        assert_eq!(store.pair_rows().unwrap().len(), n_construction + 1);
+
+        let (fit, rated) = store.rate_pairs(50).unwrap();
+        // Count: the fence rated exactly the construction rows.
+        assert_eq!(rated, n_construction, "fence must pass construction rows only");
+        // Players: the organic row's strategies never enter the fit.
+        assert!(!fit.contains_key("organic-winner-probe"));
+        assert!(!fit.contains_key("organic-loser-probe"));
     }
 }

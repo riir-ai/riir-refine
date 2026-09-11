@@ -397,6 +397,227 @@ pub fn render_domain_queue(domain: &str, rows: &[DomainQueueRow], corpus_size: u
     out
 }
 
+// ── Issue 089 T5: provenance weighting — pair population + yield split ──
+
+/// One provenance class's pair-population row (the `pair:` namespace —
+/// construction pairs today, organic pairs the day a miner lands).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProvenanceRow {
+    pub provenance: String,
+    pub pairs: usize,
+    /// `pairs / total` — the class's share of the pair namespace.
+    pub share: f32,
+    /// [`crate::frontier_pairs::provenance_weight`] of the class.
+    pub weight: f32,
+    /// `pairs × weight` — the class's priced contribution to weighted yield.
+    pub weighted: f32,
+}
+
+/// Aggregate pair counts per provenance class (Issue 089 T5).
+/// Deterministic: known classes in canonical order (organic first — the
+/// class the paper prices 1.0 — then construction), then any unrecognized
+/// tag ascending (counted loud at weight 0.0, never silently dropped).
+#[must_use]
+pub fn provenance_summary(pair_counts: &BTreeMap<String, usize>) -> Vec<ProvenanceRow> {
+    let total: usize = pair_counts.values().sum();
+    // Canonical classes first (organic — priced 1.0 — then construction),
+    // then any unrecognized tag ascending (counted loud at weight 0.0,
+    // never silently dropped).
+    let mut ordered: Vec<String> = [
+        crate::frontier_pairs::PROVENANCE_ORGANIC,
+        crate::frontier_pairs::PROVENANCE,
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
+    let mut unknown: Vec<String> = pair_counts
+        .keys()
+        .filter(|k| !ordered.iter().any(|c| c == *k))
+        .cloned()
+        .collect();
+    unknown.sort();
+    ordered.append(&mut unknown);
+    ordered
+        .into_iter()
+        .map(|p| {
+            let pairs = pair_counts.get(&p).copied().unwrap_or(0);
+            let weight = crate::frontier_pairs::provenance_weight(&p);
+            #[allow(clippy::cast_precision_loss)] // fractions over usize counts — the report's quantity
+            let share = if total == 0 {
+                0.0
+            } else {
+                pairs as f32 / total as f32
+            };
+            #[allow(clippy::cast_precision_loss)] // priced count — usize body, f32 price
+            let weighted = pairs as f32 * weight;
+            ProvenanceRow {
+                pairs,
+                share,
+                weight,
+                weighted,
+                provenance: p,
+            }
+        })
+        .collect()
+}
+
+/// Render the pair-provenance section (the `--frontier-report` tail). An
+/// empty namespace renders its loud empty marker — a quiet namespace is a
+/// measurement, not an error (the `render_domain_queue` precedent).
+#[must_use]
+pub fn render_provenance_section(rows: &[ProvenanceRow]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(256 + rows.len() * 96);
+    let total: usize = rows.iter().map(|r| r.pairs).sum();
+    if total == 0 {
+        let _ = writeln!(
+            out,
+            "pair provenance (Issue 089 T5): EMPTY — 0 pair rows in this namespace (construction pairs import via the rustc_errors A/B; an organic miner does not exist yet)\n"
+        );
+        return out;
+    }
+    let _ = writeln!(
+        out,
+        "pair provenance (Issue 089 T5 — organic=1.0, construction/synthetic=ε={}, unknown=0.0 fail-closed; the weight prices yield arithmetic, gates nothing):",
+        crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT
+    );
+    let _ = writeln!(
+        out,
+        "  {:<16} {:>6} {:>8} {:>7} {:>9}",
+        "provenance", "pairs", "share", "weight", "weighted"
+    );
+    for r in rows {
+        let _ = writeln!(
+            out,
+            "  {:<16} {:>6} {:>7.1}% {:>7.2} {:>9.2}",
+            r.provenance,
+            r.pairs,
+            r.share * 100.0,
+            r.weight,
+            r.weighted
+        );
+    }
+    let _ = writeln!(
+        out,
+        "  (never inject failures on purpose — a fabricated row priced 1.0 is the worst lie in the table)"
+    );
+    out
+}
+
+/// One outcome-feed's provenance split row (Issue 089 T5). The feed split
+/// measures the two evidence pipelines SEPARATELY — per-feed band-mass is
+/// what T4's admission gate will actually need (a band living only in the
+/// synthetic feed is a curriculum artifact, not a learnable corpus).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProvenanceYieldRow {
+    /// `"organic"` (real-repo heal outcomes) or `"synthetic"`.
+    pub feed: &'static str,
+    /// Rules in this feed (learn-row keys attributed by shape).
+    pub rules: usize,
+    /// Rules with `n ≥ 1` in this feed.
+    pub seen: usize,
+    /// In-band rules (`0 < p̂ ≤ 0.5`) in this feed.
+    pub band: usize,
+    /// `band / seen` — the T2 metric, per feed.
+    pub band_mass: f32,
+    /// Pooled `Σr / Σn` across the feed (the aggregate resolve rate — a
+    /// difficulty read, NOT the paper's causal curriculum effect).
+    pub resolve_rate: f32,
+}
+
+/// The organic feed's label: plain store keys — real-repo heal outcomes
+/// (the corpus rules + any real-run row; feature churn evidence).
+pub const FEED_ORGANIC: &str = "organic";
+/// The synthetic feed's label: `{code}:{strategy}` keys — generated-case
+/// rows (the `corpus_gen` mutator planted the break; injected evidence).
+pub const FEED_SYNTHETIC: &str = "synthetic";
+
+/// Split the learn rows into the two provenance feeds (Issue 089 T5).
+/// Attribution by key shape — the store's documented convention: rustc
+/// trajectory keys are `"{code}:{strategy_id}"` and are the ONLY ':'-shaped
+/// keys the store carries (generated cases); every other key is a
+/// real-repo heal outcome. Returns `[organic, synthetic]` — always both
+/// rows, zeros included, so a missing feed reads as measured-empty.
+#[must_use]
+pub fn provenance_yield_split(entries: &[(String, u32, u32)]) -> [ProvenanceYieldRow; 2] {
+    // Per-feed accumulators: (rules, Σr, Σn, seen, band).
+    let mut feeds = [(0usize, 0u32, 0u32, 0usize, 0usize); 2];
+    for (key, r, f) in entries {
+        // ':'-shaped keys are the generated-case convention — the ONLY
+        // ':'-shaped keys the store carries (documented; --misses relies on
+        // the same attribution).
+        let idx = usize::from(key.contains(':'));
+        let (rules, sum_r, sum_n, seen, band) = &mut feeds[idx];
+        *rules += 1;
+        *sum_r += *r;
+        *sum_n += *r + *f;
+        let n = *r + *f;
+        if n >= 1 {
+            *seen += 1;
+            #[allow(clippy::cast_precision_loss)] // rate over u32 counters — the report's quantity
+            let rate = *r as f32 / n as f32;
+            if rate > 0.0 && rate <= ADMISSION_BAND_MAX_P_HAT {
+                *band += 1;
+            }
+        }
+    }
+    let row = |feed: &'static str, (rules, r, n, seen, band): (usize, u32, u32, usize, usize)| {
+        #[allow(clippy::cast_precision_loss)] // fractions over usize counts — the report's quantity
+        let band_mass = if seen == 0 {
+            0.0
+        } else {
+            band as f32 / seen as f32
+        };
+        #[allow(clippy::cast_precision_loss)] // rate over u32 counters — the report's quantity
+        let resolve_rate = if n == 0 { 0.0 } else { r as f32 / n as f32 };
+        ProvenanceYieldRow {
+            feed,
+            rules,
+            seen,
+            band,
+            band_mass,
+            resolve_rate,
+        }
+    };
+    [row(FEED_ORGANIC, feeds[0]), row(FEED_SYNTHETIC, feeds[1])]
+}
+
+/// Render the outcome-feed provenance split + the honest per-batch blocker
+/// (the T2 precedent: the causal yield — the paper's +2.06 organic vs
+/// +0.00 injected — needs per-generation rows the store deliberately does
+/// not carry; stated, not silently narrowed).
+#[must_use]
+pub fn render_provenance_yield(rows: &[ProvenanceYieldRow]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(320 + rows.len() * 96);
+    let _ = writeln!(
+        out,
+        "outcome-feed provenance split (Issue 089 T5 — {FEED_SYNTHETIC} = generated-case '{{code}}:{{strategy}}' keys; every other key = {FEED_ORGANIC} real-repo heal outcomes):"
+    );
+    let _ = writeln!(
+        out,
+        "  {:<10} {:>6} {:>5} {:>5} {:>10} {:>12}",
+        "feed", "rules", "seen", "band", "band-mass", "Σr/Σn"
+    );
+    for r in rows {
+        let _ = writeln!(
+            out,
+            "  {:<10} {:>6} {:>5} {:>5} {:>9.1}% {:>12.3}",
+            r.feed,
+            r.rules,
+            r.seen,
+            r.band,
+            r.band_mass * 100.0,
+            r.resolve_rate
+        );
+    }
+    let _ = writeln!(
+        out,
+        "  (per-BATCH causal yield is BLOCKED: rows carry no generation/batch tag — the T2 snapshot precedent; this split is per-feed health, not the curriculum effect)"
+    );
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -655,5 +876,99 @@ mod tests {
         );
         // No table header on an empty domain — nothing to rank.
         assert!(!text.contains("| rank |"));
+    }
+
+    // ── Issue 089 T5: provenance weighting ────────────────────────────────
+
+    fn pair_counts_fixture() -> BTreeMap<String, usize> {
+        let mut m = BTreeMap::new();
+        m.insert(crate::frontier_pairs::PROVENANCE.to_string(), 200);
+        m.insert(crate::frontier_pairs::PROVENANCE_ORGANIC.to_string(), 10);
+        m.insert("hand-waved".to_string(), 3);
+        m
+    }
+
+    #[test]
+    fn provenance_summary_orders_prices_and_shares() {
+        let rows = provenance_summary(&pair_counts_fixture());
+        // Canonical order first (organic, construction), unknown tail asc.
+        let order: Vec<&str> = rows.iter().map(|r| r.provenance.as_str()).collect();
+        assert_eq!(order, ["organic", "construction", "hand-waved"]);
+        // Total = 213; shares sum to 1; weights price the classes.
+        let organic = &rows[0];
+        let construction = &rows[1];
+        let unknown = &rows[2];
+        assert_eq!(organic.pairs, 10);
+        assert_eq!(organic.weight, 1.0);
+        assert_eq!(organic.weighted, 10.0);
+        assert_eq!(construction.pairs, 200);
+        assert_eq!(construction.weight, crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT);
+        assert!((construction.weighted - 200.0 * crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT).abs() < 1e-6);
+        assert_eq!(unknown.weight, 0.0, "unrecognized tags priced out entirely");
+        assert_eq!(unknown.weighted, 0.0);
+        let share_sum: f32 = rows.iter().map(|r| r.share).sum();
+        assert!((share_sum - 1.0).abs() < 1e-6);
+        // Canonical classes with ZERO pairs still render (a missing class
+        // reads as measured-empty, not absent).
+        let mut only_unknown = BTreeMap::new();
+        only_unknown.insert("hand-waved".to_string(), 1);
+        let rows2 = provenance_summary(&only_unknown);
+        assert_eq!(rows2.len(), 3);
+        assert_eq!(rows2[0].pairs, 0);
+        assert_eq!(rows2[1].pairs, 0);
+        assert_eq!(rows2[2].pairs, 1);
+    }
+
+    #[test]
+    fn render_provenance_section_needles() {
+        let rows = provenance_summary(&pair_counts_fixture());
+        let text = render_provenance_section(&rows);
+        assert!(text.contains("pair provenance (Issue 089 T5"), "{text}");
+        assert!(text.contains("construction"), "{text}");
+        assert!(text.contains("never inject failures on purpose"), "{text}");
+        assert!(text.contains("weighted"), "{text}");
+        // The empty namespace is LOUD, not a green nothing.
+        let empty = render_provenance_section(&[]);
+        assert!(empty.contains("EMPTY") && empty.contains("0 pair rows"), "{empty}");
+    }
+
+    #[test]
+    fn provenance_yield_split_attributes_by_key_shape() {
+        let entries = vec![
+            // organic (plain keys): one in-band, one above, one unseen.
+            ("manual_is_multiple_of".into(), 2, 2),  // p̂=0.5 → band
+            ("use_self".into(), 172, 0),              // p̂=1 → above/saturated-class feed
+            ("never_fired".into(), 0, 0),             // n=0 unseen
+            // synthetic (':'-shaped keys): one in-band, one below.
+            ("E0597:e0597-scope-hoist".into(), 1, 3), // p̂=0.25 → band
+            ("E0507:gen:E0507:clone-at-move".into(), 0, 4), // p̂=0 → below
+        ];
+        let [organic, synthetic] = provenance_yield_split(&entries);
+        assert_eq!(organic.feed, "organic");
+        assert_eq!(organic.rules, 3);
+        assert_eq!(organic.seen, 2);
+        assert_eq!(organic.band, 1);
+        assert!((organic.resolve_rate - 174.0 / 176.0).abs() < 1e-6);
+        assert_eq!(synthetic.feed, "synthetic");
+        assert_eq!(synthetic.rules, 2);
+        assert_eq!(synthetic.seen, 2);
+        assert_eq!(synthetic.band, 1);
+        assert!((synthetic.resolve_rate - 1.0 / 8.0).abs() < 1e-6);
+        // Band-mass per feed: 1/2 both here.
+        assert!((organic.band_mass - 0.5).abs() < 1e-6);
+        assert!((synthetic.band_mass - 0.5).abs() < 1e-6);
+        // Both feeds always render — zeros included (measured-empty).
+        let [o2, s2] = provenance_yield_split(&[]);
+        assert_eq!((o2.rules, o2.seen, s2.rules, s2.seen), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn render_provenance_yield_needles() {
+        let [o, s] = provenance_yield_split(&[]);
+        let text = render_provenance_yield(&[o, s]);
+        assert!(text.contains("outcome-feed provenance split"), "{text}");
+        assert!(text.contains("organic") && text.contains("synthetic"), "{text}");
+        assert!(text.contains("per-BATCH causal yield is BLOCKED"), "{text}");
+        assert!(text.contains("band-mass"), "{text}");
     }
 }
