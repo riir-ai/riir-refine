@@ -1,6 +1,6 @@
 # Issue 088 — spin the kat SERVICE PLANE out of riir-clippy into a NEW PRIVATE REPO (`riir-kat`)
 
-**Status:** LANDED 2026-09-10 — riir-kat first commit `90a990e` (github.com/gist-rs/riir-kat, private, develop default); riir-clippy consumer rewiring in the issue-088 phase-2 commit; root re-exports verified bit-identical (lib tests 1180 default / 1329 service+transport+latent, refill-cli 4/4 + soft-gate-cli 13/13 through the re-export paths, cross-repo redact-floor pin 1/1).
+**Status:** LANDED 2026-09-10 — riir-kat first commit `90a990e` (github.com/gist-rs/riir-kat, private, develop default); riir-clippy consumer rewiring in the issue-088 phase-2 commit; root re-exports verified bit-identical (lib tests 1180 default / 1329 service+transport+latent, refill-cli 4/4 + soft-gate-cli 13/13 through the re-export paths, cross-repo redact-floor pin 1/1). **All fleet follow-ups CLOSED 2026-09-11** — the owner-greenlit dapps/dao protocol-tier adoption landed (see the fleet follow-ups box).
 
 ## Landed state (v4 as built)
 
@@ -110,7 +110,7 @@ root re-exports.
 ## Fleet follow-ups (NOT blockers)
 
 - [x] katgpt-rs `scripts/repo_set.txt` + AGENTS.md workspace-count prose (17 → 18) — landed 2026-09-10 katgpt-rs `ff5ab9f9` (agents/skill/population repo-set gates + docs_gate 14/14 green)
-- [ ] riir-dapps / riir-dao protocol-tier adoption (retire the symmetric golden duplication) — owner decision, needs dapps BOUNDARY.md allowlist row
+- [x] riir-dapps / riir-dao protocol-tier adoption (retire the symmetric golden duplication) — owner-greenlit 2026-09-11 and LANDED same day: riir-kat `3482a3c` lifted the two-sided composers into the feature-free protocol tier (goldens moved with them; resolve/settle digests computed independently via b3sum, the method validated against the historical create/faucet pins); riir-dapps `f2498d2` (Issue 082: burn/payreq/mining-consent/lease mirrors retired, BOUNDARY row, standalone gate re-pinned 3→13 rust.yml provisioning fixed, full guard GREEN) + riir-dao `7823daa` (units twin retired against kat_units; the LIVE grant cross-pin added; direction-gate allowlist widened, self-test re-proven). Workspace boundary contract green at 18 repos / 273 edges (the two new declared edges measured). The SYNC-payload mirror deliberately stays dual-pinned — its canonical is this repo's healer-coupled `kat_sync_payload` keeper (the 088 non-goal)
 - [x] 4090 box: cloned gist-rs/riir-kat → `E:\git\riir-kat` @ a80985e (2026-09-10, both-boxes sync rule)
 - [x] ci_feature_guard full run (all layers) — **GREEN 2026-09-10 evening (GUARD_EXIT=0)** after the sweep surfaced + fixed 6 latent rot classes: the 8-combo E0433 frontier_pairs break (`412f2323`), the 23 orphaned kat_* files (`c127a819`), 5a clippy findings (`dd9d0f7c`), the corpus-split source-walk needle (`5c5c47df`), the dist Phase-1 pin (`b7f25c02`), the modelability kernel/slice-b vacuity (`03f0ffcc`), the P12 scratch-crate manifest (`44ac9cc1`), and the --mine explainer pin (`f9cef9cc`). The orphan-file finding was the owner's kat_* grep — a deletion claim is verified by `git show --stat`, not by green builds
 - [x] Pre-existing pedantic `too_many_lines` findings — healed 2026-09-10 in the 5a green commit `dd9d0f7c` (traj_store dispersion block extracted; corpus tests took the house allow with reasons; items_after_statements hoisted)
