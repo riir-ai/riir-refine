@@ -38,6 +38,17 @@ fn scratch_root(tag: &str) -> PathBuf {
     // the spawned binary's store and the test's seeded store are the SAME
     // store (resolve_heal_root contract).
     std::fs::create_dir_all(d.join(".git")).unwrap();
+    // The just-works UX (56bd9bf5, 2026-09-08) made `--fix` imply the
+    // compile gate — and the gate correctly refuses a file with no owning
+    // package ("no Cargo.toml above"). The scratch crate is a REAL crate:
+    // a minimal manifest so the gate's baseline + apply cargo checks run.
+    // (The test predates the flip and passed while verify was opt-in —
+    // latent until the first full layer-5c sweep after the UX change.)
+    std::fs::write(
+        d.join("Cargo.toml"),
+        "[package]\nname = \"riir_p12_scratch\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
     d
 }
 
