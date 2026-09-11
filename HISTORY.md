@@ -9,6 +9,41 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 91 T1.5 — the per-attempt ring: `--fix-compile` attempt sequences to `.heal/fixseq/` (2026-09-12)
+
+The instrumentation prerequisite both remaining rustc_errors-side tasks
+blocked on, landed the same day as the T4/T8 emission halves (the same
+class: emission-first, analysis-when-data-exists).
+
+**Why:** T1's mining verdict — the trajectory kv records per-FAMILY aggregated
+counters, NOT per-attempt sequences; the fix-compile side had ZERO recorded
+trajectories. T2's oscillation detector (error A → fix → error B → fix →
+error A = saddle-circling) and Issue 093's per-run strategy posterior both
+need the ORDERED attempt sequence, which no shipped surface held. One
+instrumentation, two kernel consumers (katgpt-rs 593 SaddleEscapeGate + 592).
+
+**What:** `AttemptRecord { seq, code, span_hash, strategy_id, outcome,
+errors }` on `FixCompileReport`, pushed at ALL five loop outcome sites (kept /
+no-progress revert / the two io reverts / span-drift revert — the `applied` +
+`reverted` Vecs lose the interleaved order; the ring keeps it).
+`span_hash` = blake3(`"file:line"`) first 16 hex — stable across runs and
+machines; the driver's canonical path resolution feeds it, so symlink forms
+(/tmp vs /private/tmp) cannot fork the identity. `evolve::dump_fixseq`
+writes one `run-<ts>.jsonl` per write-mode run into `<repo>/.heal/fixseq/`
+(the `.heal/misses/` sibling; idempotent README; the dump_misses law —
+warnings never gate, attempt-less runs write nothing). Review mode makes no
+attempts and writes no file, by construction.
+
+**E2E (live, this session):** a fresh /tmp crate with the E0502 borrow shape
+→ `e0502-deref-removal` kept, `errors [1,0]`, exactly one ring row + the
+README; the clean re-run wrote no second file.
+
+Validation: lib 1223/1223 @ default (+3: span-hash stability/discrimination,
+ring serde round-trip, dump ordered-jsonl + README-once + attempt-less
+no-op), bin lane clippy clean, live e2e above. T2 remains open on
+ACCUMULATION (real fix-compile runs to replay); T3 stands (analysis-only,
+no data needed).
+
 ## Issue 089 T4+T8 — the evidence-emission halves: band-mass snapshots + per-rule bench rows (2026-09-12)
 
 Both remaining Issue 089 tasks were blocked on EVIDENCE that only future

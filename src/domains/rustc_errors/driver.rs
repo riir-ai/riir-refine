@@ -37,12 +37,75 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::compile_oracle::{
     owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
 };
 
 use super::diag::{dedupe_by_site, parse_error_diags, RustcErrorDiag};
 use super::playbooks::{FixCandidate, Playbooks, SpanEdit};
+
+/// One attempt in the fix-compile loop's ORDERED sequence (Issue 91 T1.5 —
+/// the per-attempt ring). The report's `applied`/`reverted` Vecs lose the
+/// interleaved order, and the trajectory store holds per-FAMILY counters
+/// (the T1 mining verdict) — T2's oscillation detector (error A → fix →
+/// error B → fix → error A) and Issue 093's per-run strategy posterior both
+/// consume THIS sequence: one instrumentation, two kernel consumers
+/// (katgpt-rs 593 + 592).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttemptRecord {
+    /// 0-based position in the run's attempt order.
+    pub seq: usize,
+    /// The rustc error code the candidate answered (e.g. `E0507`).
+    pub code: String,
+    /// Stable site identity: [`span_hash`] of (file, line) — 16 hex. The
+    /// oscillation key is `(code, span_hash)`: the same error RETURNING to
+    /// the same site after an intervening fix is the saddle-circling
+    /// signature.
+    pub span_hash: String,
+    /// The playbook strategy that was tried.
+    pub strategy_id: String,
+    /// The loop outcome at this attempt.
+    pub outcome: AttemptOutcome,
+    /// Coded-error count before → after the attempt (equal on every revert
+    /// path; strictly decreasing on `Kept`).
+    pub errors: (usize, usize),
+}
+
+/// The loop outcome of one [`AttemptRecord`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum AttemptOutcome {
+    /// Applied and kept — the coded-error count strictly decreased.
+    Kept = 0,
+    /// Reverted: no progress (count did not decrease, or the span drifted).
+    RevertedNoProgress = 1,
+    /// Reverted: i/o (the file could not be read or written).
+    RevertedIo = 2,
+}
+
+impl AttemptOutcome {
+    /// The stable render label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Kept => "kept",
+            Self::RevertedNoProgress => "reverted:no-progress",
+            Self::RevertedIo => "reverted:io",
+        }
+    }
+}
+
+/// Stable site identity for an attempt: blake3(`"file:line"`), first 16
+/// hex — deterministic across runs and machines (the oscillation detector
+/// joins attempts across the run by it).
+#[must_use]
+pub fn span_hash(file: &Path, line: usize) -> String {
+    let full = blake3::hash(format!("{}:{}", file.display(), line).as_bytes());
+    let hex = full.to_hex();
+    hex[..16].to_string()
+}
 
 /// One applied-and-kept fix, for the report.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +226,36 @@ pub struct FixCompileReport {
     /// Why the run could not complete (cargo could not run, unreadable
     /// package...).
     pub error: Option<String>,
+    /// The ORDERED per-attempt ring (Issue 91 T1.5) — every candidate the
+    /// loop tried, in try order, regardless of outcome. Empty in review
+    /// mode (no attempts are made) and on a clean first check. Dumped per
+    /// run to `<root>/.heal/fixseq/run-<ts>.jsonl` by the CLI (the
+    /// `dump_misses` law: an aid, never a gate).
+    pub attempts: Vec<AttemptRecord>,
+}
+
+impl FixCompileReport {
+    /// Append one attempt to the ring (seq = current length — the push
+    /// order IS the try order).
+    fn push_attempt(
+        &mut self,
+        code: &str,
+        file: &Path,
+        line: usize,
+        strategy_id: &str,
+        outcome: AttemptOutcome,
+        errors: (usize, usize),
+    ) {
+        let seq = self.attempts.len();
+        self.attempts.push(AttemptRecord {
+            seq,
+            code: code.to_string(),
+            span_hash: span_hash(file, line),
+            strategy_id: strategy_id.to_string(),
+            outcome,
+            errors,
+        });
+    }
 }
 
 /// Candidate-ordering key: stable (file, line, code) with the shortest
@@ -366,6 +459,14 @@ impl CompileDriver {
 
             // Apply: splice + write.
             let Ok(original) = std::fs::read_to_string(&best.file) else {
+                report.push_attempt(
+                    &best.code,
+                    &best.file,
+                    best.line,
+                    &best.strategy_id,
+                    AttemptOutcome::RevertedIo,
+                    (before_errors, before_errors),
+                );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
                     line: best.line,
@@ -391,6 +492,14 @@ impl CompileDriver {
             ) else {
                 // Span drifted (should not happen — proposed against the
                 // same read) — treat as no-progress revert.
+                report.push_attempt(
+                    &best.code,
+                    &best.file,
+                    best.line,
+                    &best.strategy_id,
+                    AttemptOutcome::RevertedNoProgress,
+                    (before_errors, before_errors),
+                );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
                     line: best.line,
@@ -405,6 +514,14 @@ impl CompileDriver {
                 continue;
             };
             if std::fs::write(&best.file, &applied_text).is_err() {
+                report.push_attempt(
+                    &best.code,
+                    &best.file,
+                    best.line,
+                    &best.strategy_id,
+                    AttemptOutcome::RevertedIo,
+                    (before_errors, before_errors),
+                );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
                     line: best.line,
@@ -431,6 +548,14 @@ impl CompileDriver {
             };
 
             if new_diags.len() < before_errors {
+                report.push_attempt(
+                    &best.code,
+                    &best.file,
+                    best.line,
+                    &best.strategy_id,
+                    AttemptOutcome::Kept,
+                    (before_errors, new_diags.len()),
+                );
                 report.applied.push(AppliedRecord {
                     file: best.file.clone(),
                     line: best.line,
@@ -452,6 +577,14 @@ impl CompileDriver {
             } else {
                 // No progress → exact revert (T1.4).
                 let _ = std::fs::write(&best.file, &original);
+                report.push_attempt(
+                    &best.code,
+                    &best.file,
+                    best.line,
+                    &best.strategy_id,
+                    AttemptOutcome::RevertedNoProgress,
+                    (before_errors, new_diags.len()),
+                );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
                     line: best.line,
@@ -613,6 +746,39 @@ fn apply_edits(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 91 T1.5 — the span identity is STABLE (same site → same hash,
+    /// across calls) and DISCRIMINATING (different site → different hash);
+    /// 16 hex chars.
+    #[test]
+    fn span_hash_is_stable_and_discriminating() {
+        let a = span_hash(Path::new("/x/src/lib.rs"), 7);
+        let a2 = span_hash(Path::new("/x/src/lib.rs"), 7);
+        let b = span_hash(Path::new("/x/src/lib.rs"), 8);
+        let c = span_hash(Path::new("/x/src/other.rs"), 7);
+        assert_eq!(a, a2, "same site is stable");
+        assert_ne!(a, b, "line discriminates");
+        assert_ne!(a, c, "file discriminates");
+        assert_eq!(a.len(), 16, "16 hex chars: {a}");
+    }
+
+    /// Issue 91 T1.5 — the ring record round-trips through the jsonl
+    /// encoding the fixseq dump writes.
+    #[test]
+    fn attempt_record_round_trips() {
+        let r = AttemptRecord {
+            seq: 3,
+            code: "E0507".to_string(),
+            span_hash: span_hash(Path::new("/x/src/lib.rs"), 7),
+            strategy_id: "e0507-move-out".to_string(),
+            outcome: AttemptOutcome::RevertedNoProgress,
+            errors: (4, 4),
+        };
+        let line = serde_json::to_string(&r).unwrap();
+        let back: AttemptRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, r);
+        assert_eq!(r.outcome.label(), "reverted:no-progress");
+    }
 
     #[test]
     fn apply_edits_replaces_exact_span() {

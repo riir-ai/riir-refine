@@ -169,6 +169,81 @@ pub fn dump_misses(root: &Path, misses: &[MissRecord]) -> (Vec<PathBuf>, Vec<Str
     (written, warnings)
 }
 
+// ── Issue 91 T1.5: the per-attempt ring's dump ──────────────────────────
+
+/// Where per-run attempt sequences land (Issue 91 T1.5):
+/// `<root>/.heal/fixseq/` — the `misses` sibling.
+#[must_use]
+pub fn fixseq_dir(root: &Path) -> PathBuf {
+    root.join(".heal").join("fixseq")
+}
+
+/// The standing README for the fixseq store (idempotent — the misses
+/// law: written only when absent, the documented contract).
+///
+/// # Errors
+///
+/// I/O — caller warns and continues.
+pub fn write_fixseq_readme(dir: &Path) -> std::io::Result<()> {
+    let readme = dir.join("README.md");
+    if readme.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dir)?;
+    std::fs::write(
+        readme,
+        "# The fix-compile attempt ring (fixseq)\n\n\
+         One `run-<ts>.jsonl` per `cargo heal --fix-compile --write` run: the\n\
+         ORDERED per-attempt sequence (seq, error code, span_hash, strategy,\n\
+         outcome, errors before→after) as jsonl lines. The trajectory store\n\
+         holds per-FAMILY counters — attempt ORDER lives only here.\n\n\
+         Consumers: the Issue 91 T2 oscillation detector (same `(code,\n\
+         span_hash)` returning after an intervening fix) and the Issue 093\n\
+         per-run strategy posterior (the strategy sequence per run).\n\
+         Append-only; never edited in place.\n",
+    )
+}
+
+/// Dump one run's ordered attempt ring as a single jsonl file (Issue 91
+/// T1.5). Returns the path written (`None` when the run made no attempts —\n\
+/// review mode / clean first check / dump failure). Failures → warnings,
+/// never a gate (the `dump_misses` law).
+#[must_use]
+pub fn dump_fixseq(
+    root: &Path,
+    attempts: &[super::driver::AttemptRecord],
+) -> (Option<PathBuf>, Vec<String>) {
+    if attempts.is_empty() {
+        return (None, Vec::new());
+    }
+    let dir = fixseq_dir(root);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return (None, vec![format!("fixseq dir: {e}")]);
+    }
+    let mut warnings = Vec::new();
+    if let Err(e) = write_fixseq_readme(&dir) {
+        warnings.push(format!("fixseq README: {e}"));
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let path = dir.join(format!("run-{nanos}.jsonl"));
+    let mut body = String::with_capacity(attempts.len() * 128);
+    for a in attempts {
+        match serde_json::to_string(a) {
+            Ok(line) => {
+                body.push_str(&line);
+                body.push('\n');
+            }
+            Err(e) => warnings.push(format!("fixseq serialize seq={}: {e}", a.seq)),
+        }
+    }
+    match std::fs::write(&path, body) {
+        Ok(()) => (Some(path), warnings),
+        Err(e) => (None, vec![format!("fixseq write: {e}")]),
+    }
+}
+
 // ── Issue 072 T5 (Plan 092): the frontier-ordered authoring queue ───────
 
 /// The error code of a queue file name (`E0502-1690000000.md` → `E0502`).
@@ -579,6 +654,68 @@ mod tests {
             })
             .count();
         assert_eq!(n, 2, "two entries, one README");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Issue 91 T1.5 — the fixseq dump: one ordered jsonl per run, the
+    /// README once, nothing on an attempt-less run.
+    #[test]
+    fn dump_fixseq_writes_ordered_jsonl_and_readme_once() {
+        use crate::domains::rustc_errors::driver::{AttemptOutcome, AttemptRecord};
+        let root =
+            std::env::temp_dir().join(format!("riir_91_fixseq_{}_{}", std::process::id(), line!()));
+        let _ = std::fs::remove_dir_all(&root);
+
+        // Attempt-less: no file, no warnings, no dir creation.
+        let (none, warns0) = dump_fixseq(&root, &[]);
+        assert!(none.is_none() && warns0.is_empty());
+        assert!(!root.join(".heal").join("fixseq").exists());
+
+        let attempts = vec![
+            AttemptRecord {
+                seq: 0,
+                code: "E0502".to_string(),
+                span_hash: "aaaa1111aaaa1111".to_string(),
+                strategy_id: "e0502-deref-removal".to_string(),
+                outcome: AttemptOutcome::Kept,
+                errors: (3, 2),
+            },
+            AttemptRecord {
+                seq: 1,
+                code: "E0507".to_string(),
+                span_hash: "bbbb2222bbbb2222".to_string(),
+                strategy_id: "e0507-move-out".to_string(),
+                outcome: AttemptOutcome::RevertedNoProgress,
+                errors: (2, 2),
+            },
+        ];
+        let (path, warns) = dump_fixseq(&root, &attempts);
+        assert!(warns.is_empty(), "{warns:?}");
+        let path = path.expect("run file written");
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("run-") && name.ends_with(".jsonl"), "{name}");
+
+        // The ORDERED sequence round-trips, line per attempt.
+        let body = std::fs::read_to_string(&path).unwrap();
+        let back: Vec<AttemptRecord> = body
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str(l).expect("line parses"))
+            .collect();
+        assert_eq!(back, attempts);
+
+        // The README landed once (idempotent on a second dump).
+        let dir = root.join(".heal").join("fixseq");
+        assert!(dir.join("README.md").exists());
+        let (_, warns2) = dump_fixseq(&root, &attempts[..1]);
+        assert!(warns2.is_empty());
+        let readme = std::fs::read_to_string(dir.join("README.md")).unwrap();
+        assert_eq!(readme.matches("# The fix-compile attempt ring").count(), 1);
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            3,
+            "README + two run files"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -2857,7 +2857,13 @@ USAGE:
                     bounded by --max-iters. Review mode (default) prints the plan;
                     --write applies. Registry: the E0597 family (Phase 2) — six
                     ranked templates keyed on the diagnostic's labeled spans; other
-                    codes report as misses until Phase 3.
+                    codes report as misses until Phase 3. Every --write run also
+                    dumps the ORDERED per-attempt ring (Issue 91 T1.5 — seq, error
+                    code, span_hash, strategy, outcome, errors before→after) to
+                    <repo>/.heal/fixseq/run-<ts>.jsonl — the replay substrate for
+                    the oscillation detector (T2) + the per-run strategy posterior
+                    (Issue 093); the misses queue (.heal/misses/) stays the
+                    authoring surface.
     --max-iters <N> --fix-compile iteration bound (default 5).
     --dump-trajectories  Export the self-evolve trajectory store to stdout as
                     JSONL (Plan 019 T4.3b — the human grep surface; one source
@@ -6464,24 +6470,44 @@ fn main() {
                     }
                 }
             }
-            // ── Phase 4 (T4.4): misses → the authoring queue.
-            if !report.misses.is_empty() {
+            // ── Phase 4 (T4.4) + Issue 91 T1.5: misses → the authoring
+            // queue; the attempt ring → the fixseq replay store.
+            if !report.misses.is_empty() || !report.attempts.is_empty() {
                 let root = args
                     .paths
                     .first()
                     .and_then(|p| riir_clippy::compile_oracle::owning_package_root(p.as_path()))
                     .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-                let (written, warnings) = evolve::dump_misses(&root, &report.misses);
-                for w in &warnings {
-                    eprintln!("fix-compile: miss dump: {w}");
+                if !report.misses.is_empty() {
+                    let (written, warnings) = evolve::dump_misses(&root, &report.misses);
+                    for w in &warnings {
+                        eprintln!("fix-compile: miss dump: {w}");
+                    }
+                    if !written.is_empty() {
+                        println!(
+                            "fix-compile: {} miss(es) → {}",
+                            written.len(),
+                            evolve::misses_dir(&root).display()
+                        );
+                    }
                 }
-                if !written.is_empty() {
-                    println!(
-                        "fix-compile: {} miss(es) → {}",
-                        written.len(),
-                        evolve::misses_dir(&root).display()
-                    );
+                // Issue 91 T1.5 — the per-attempt ring: one instrumentation,
+                // two kernel consumers (the T2 oscillation detector over
+                // (code, span_hash) + Issue 093's per-run strategy
+                // posterior). The dump is an aid, never a gate.
+                if !report.attempts.is_empty() {
+                    let (written, warnings) = evolve::dump_fixseq(&root, &report.attempts);
+                    for w in &warnings {
+                        eprintln!("fix-compile: fixseq dump: {w}");
+                    }
+                    if let Some(p) = written {
+                        println!(
+                            "fix-compile: {} attempt(s) → {}",
+                            report.attempts.len(),
+                            p.display()
+                        );
+                    }
                 }
             }
             println!(
