@@ -2825,6 +2825,7 @@ USAGE:
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
     cargo heal --collapse-report                      (self-collapse monitor, 042)
     cargo heal --corpus-stats [--json] [--import-series]  (corpus/score series, 050 T2)
+    cargo heal --frontier-report                       (learnability band report, 089 T1+T2)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
@@ -2865,6 +2866,13 @@ USAGE:
                     tier/outcome counts, top rules, commitment status, the
                     E1 record / E2 verdict / E3 learn state — the one-command
                     \"is the loop actually closed?\" query. Read-only.
+    --frontier-report
+                    Print the learnability-frontier band report (Issue 089):
+                    per-rule r/f/n/p̂/LCB₅, the band-mass health metric
+                    (fraction 0<p̂≤0.5), and the saturation demotion
+                    CANDIDATES (p̂=1 ∧ n≥50 — report-only, never deletes).
+                    Read-only; refuses (exit 1) on an empty population —
+                    never a green zero. Needs --features latent_retrieval.
     --misses       Print the `.heal/misses/` authoring queue in FRONTIER
                     order (Plan 091 T1.2): dispersion-informative error
                     codes first — resolving THOSE converts uncertain
@@ -3207,6 +3215,14 @@ struct Args {
     /// into the trajectory store (idempotent upserts). Works with or
     /// without `--corpus-stats`. Needs `latent_retrieval`.
     import_series: bool,
+    /// Issue 089 T1+T2: `--frontier-report` — the learnability-frontier
+    /// band report over the trajectory store's per-rule outcome counters:
+    /// r/f/n/p̂/LCB₅ per rule, the band-mass health metric (fraction
+    /// 0<p̂≤0.5), and the saturation demotion CANDIDATE list (p̂=1 ∧ n≥50,
+    /// report-only — never deletes). Read-only standalone mode (the
+    /// memory-stats pattern); refuses with exit 1 on an empty population
+    /// (never a green zero). Needs `latent_retrieval` (the store).
+    frontier_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -3267,6 +3283,7 @@ fn parse_args() -> Args {
         corpus_stats: false,
         json: false,
         import_series: false,
+        frontier_report: false,
     };
     // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
     // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
@@ -3324,6 +3341,7 @@ fn parse_args() -> Args {
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
+            "--frontier-report" => args.frontier_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -3631,6 +3649,7 @@ fn parse_args() -> Args {
         && !args.collapse_report
         && !args.corpus_stats
         && !args.import_series
+        && !args.frontier_report
         && args.candidates_path.is_none()
     {
         eprintln!("no paths given");
@@ -5441,6 +5460,75 @@ fn main() {
                     kv.display()
                 );
             }
+        }
+        return;
+    }
+
+    // ── Issue 089 T1+T2: --frontier-report — the learnability band report ──
+    // Read-only standalone mode (the memory-stats pattern). Report-first,
+    // gate-later: nothing here admits/demotes/deletes anything — the T4
+    // wiring waits on the report proving band-mass is predictive.
+    if args.frontier_report {
+        #[cfg(feature = "latent_retrieval")]
+        {
+            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+                .map(PathBuf::from)
+                .or_else(|_| std::env::current_dir())
+                .unwrap_or_default();
+            let kv = root.join(".heal").join("trajectories.kv");
+            if !kv.exists() {
+                eprintln!(
+                    "frontier-report: no store at {} — run any --fix in this repo first",
+                    kv.display()
+                );
+                std::process::exit(1);
+            }
+            match riir_clippy::traj_store::TrajStore::open(&root) {
+                Ok((store, bad)) => {
+                    if bad > 0 {
+                        eprintln!(
+                            "frontier-report: {bad} corrupt rows skipped in {}",
+                            kv.display()
+                        );
+                    }
+                    let entries: Vec<(String, u32, u32)> = store
+                        .learn_rows()
+                        .into_iter()
+                        .map(|row| (row.lint_key, row.successes, row.fails))
+                        .collect();
+                    let summary = riir_clippy::frontier_report::summarize(&entries);
+                    if summary.population == 0 {
+                        // Never a green zero: an empty population is a
+                        // refusal, not "measured, all healthy".
+                        eprintln!(
+                            "frontier-report: store at {} carries ZERO learn rows — nothing to report on",
+                            kv.display()
+                        );
+                        std::process::exit(1);
+                    }
+                    let runs = store.score_runs().ok();
+                    let score = runs.as_ref().and_then(|r| r.last()).map(|latest| {
+                        riir_clippy::frontier_report::ScoreContext {
+                            runs: runs.as_ref().map_or(0, Vec::len),
+                            latest_generation: latest.generation,
+                            latest_heal_rate: latest.heal_rate,
+                        }
+                    });
+                    print!(
+                        "{}",
+                        riir_clippy::frontier_report::render(&summary, score.as_ref())
+                    );
+                }
+                Err(e) => {
+                    eprintln!("frontier-report: kv store at {} unreadable: {e}", kv.display());
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(feature = "latent_retrieval"))]
+        {
+            eprintln!("frontier-report: needs a latent_retrieval build (the trajectory store)");
+            std::process::exit(1);
         }
         return;
     }

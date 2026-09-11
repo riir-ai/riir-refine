@@ -268,6 +268,15 @@ pub mod kat_promotion;
 #[cfg(feature = "latent_retrieval")]
 pub mod traj_store;
 
+// Issue 089 T1+T2: the learnability-frontier band report — per-rule
+// r/f/n/p̂/LCB₅ + band-mass + saturation candidates, PURE arithmetic over
+// outcome counters (store-free, ungated so lib tests cover it at default
+// features; the `--frontier-report` CLI half in bin/heal.rs feeds it
+// `learn_rows()` under `latent_retrieval`). Report-first, gate-later
+// (R135/Bench 047 law: no admission gate wires until the report proves
+// band-mass is predictive).
+pub mod frontier_report;
+
 // Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 // history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)
 // against real-`cargo clippy` ground truth on frozen fixtures mined from
