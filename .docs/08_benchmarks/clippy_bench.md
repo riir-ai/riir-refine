@@ -35,9 +35,14 @@ mine time; every run re-derives + warns loudly on toolchain drift.
 | `created_rate` | Σ newly-created clippy lints (ANY) / Σ vocab-before — the false-positive axis |
 | `parse_safety` | healed output still compiles / edited fixtures |
 | `decline_correctness` | clean fixtures untouched (declining is a correct answer) |
+| `shaped_rate` (gen 8+, Issue 089 T7) | the half-win axis: resolved findings credited at `verdict × resolved` — a fixture whose heal clears its target AND leaves new diagnostics behind earns 0.5 per finding (`shaped_rate ≤ heal_rate` always) |
 
 Plus the **miss map**: which lints persist where, most-frequent first —
-the diagnostic for WHERE healing still fails.
+the diagnostic for WHERE healing still fails. Instrumentation axes riding
+every row (the additive serde law): the **OOD entropy-gap axis** (issue 077),
+the **provenance strata** (Issue 089 T6 — heal rate split by repo/authored/
+construction class), and the **shaped record** (Issue 089 T7 — n_shaped,
+shaped_rate, per-rule half_counts).
 
 ## Score history (the curve so far)
 
@@ -70,10 +75,28 @@ changed (the per-fixture detail ships as the `#[ignore]`d
 | `single_option_map` created | NURSERY design-opinion lint ("fn that only maps over argument") — fires on `manual_map`'s OUTPUT, which is exactly what clippy itself suggests | **documented benign** — `cargo clippy --fix` produces the same cascade; not fixable without refusing correct fixes |
 | `useless_format` persist (remains) | the String-typed inlined-named form `format!("{elem}")` still fires (probe) — clippy's own fix (`elem.to_string()`) then fires `implicit_clone` on `&String` (probe) — the true terminal `elem.clone()` needs the arg's TYPE | **documented boundary** — firing would trade the persist for an `implicit_clone` created (bench-symmetric +1.9pp each way); `created` is the trust axis, so the persist stays. The parse-only frontier: clippy's own `--fix` converges only because `implicit_clone` is ALSO a clippy fix |
 
+## Generations (the M5 ratchet — `--generation <N>`)
+
+A new generation is admitted only if it measures HARDER than v1 (gen 8:
+only if the run measures ≥1 shaped verdict — its targets all clear by
+construction). Records: `HISTORY.md` per generation.
+
+| gen | ladder | admission |
+|---|---|---|
+| 1 | the frozen v1 real-code set (default) | the baseline |
+| 2 | construction k-ladder over corpus atoms (issue 072 T5) | REFUSED first-freeze (100% ≥ v1 — not harder); the record stays as the drift gate |
+| 3 | persist-stratified ladder (Bench 069 reopen #1) | admitted |
+| 4 | rustc-errors k-ladder vs rustc ground truth (Plan 093) | admitted (cross-domain floor) |
+| 5 | `rust_perf` vocabulary ladder, mechanical shape oracle (Plan 094) | admitted |
+| 6 | real-repo shape ladder, spans carved from pre-heal sibling states (Plan 095) | admitted |
+| 7 | overlap-edit-chain ladder, manufactured drop-and-refire overlap, depth rungs 1–5 (Plan 096) | admitted |
+| 8 | **shaped-verdict ladder** (Issue 089 T7): atoms whose heal clears the target AND leaves new diagnostics — the closure-birth mechanism (`manual_map`'s arm→closure splice fires born-closure lints OUTSIDE FIXABLE: `redundant_closure`, `map_clone`, `map_identity`+`single_option_map`), so the fixpoint cannot dissolve them. 4 admitted / 3 excluded-on-record (dissolved). First run: shaped_rate 50.0% vs heal_rate 100.0%, 4/4 shaped, half_counts `manual_map`×3 (the "Beta (half-count)" feed; the Elo twin is the tie) | shape non-vacuity (n_shaped ≥ 1) |
+
 ## Run
 
 ```sh
-cargo run --features score_bench --bin cargo-heal -- --score-bench   # run + append + render
+cargo run --features score_bench --bin cargo-heal -- --score-bench   # run + append + render (gen 1)
+cargo run --features score_bench --bin cargo-heal -- --score-bench --generation 8   # the shaped-verdict ladder
 cargo run --features score_bench --bin cargo-heal -- --score-report  # re-render SVG only
 ```
 
