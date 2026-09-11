@@ -4726,3 +4726,61 @@ corpus pair (clippy × docker).
 
 Full record + 180-label appendix: `.benchmarks/083_gw_corpus_alignment_poc.md`.
 Issue 092 closed (T2–T4 never fired). Research note 166 §A verdict updated.
+
+## 2026-09-12 — Issue 093 T1: the per-run strategy-posterior PoC, measured WIN (defend-wrong)
+
+The 373/592 fusion idea (a per-run `NonergodicFilter` over strategy
+ generators — 545 §4's "file-level posterior, nonergodic upgrade of the
+router", at strategy level) ran its defend-wrong PoC and WON all three
+scenarios.
+
+**Instrument:** the katgpt-rs Plan 592 kernel consumed directly —
+`katgpt-micro-belief` becomes an 11th escaping path dep (opt-in, feature-
+forwarded `nonergodic_belief`; already transitive via katgpt-core defaults —
+the row is the direct gate, BOUNDARY + standalone pin updated same commit).
+Harness: `examples/nonergodic_driver_poc.rs` behind opt-in `nonergodic_poc`
+(measurement-only). Arm B is the REAL `shape_conditional_order` over a seeded
+TrajStore — the actual shipped competitor, not a simulation of it.
+
+**Protocol:** 1,200 paired file-runs per cell (240 files × 5 seeds); 10 REAL
+playbook strategies (E0597's 6-strategy menu is where ordering bites);
+outcomes are BLAKE3 draws from frozen (regime × difficulty) tables keyed by
+(site, strategy, context-hash) — same bytes + same context → same outcome
+(the tried-set guarantee), context change → fresh draw (the compiler's
+verdict on a re-proposed edit depends on the current file). Scenarios:
+aligned / stale (regime-swapped store — the world changed under the store) /
+cold. Fourth arm D composes store+filter (λ_t = t/(t+1)) — the T2 production
+shape.
+
+**Result:** C (filter) resolved 41.7% vs A (min-delta) 35.2% and B 36.7%
+aligned / 34.3% stale (B drops BELOW A under a stale store); wasted-attempt
+54.8% vs 58.6/56.5; McNemar 160/82 vs A (z≈5.0), 146/86 vs B aligned (z≈3.9).
+Misspec pass (±20% on the filter's tables, world unchanged): edge holds
+entirely — the load-bearing property is the regime winner-SPREAD, not exact
+values. C is store-independent by construction (identical rows across
+scenarios — the paired-design sanity check).
+
+**The harness bug worth remembering:** the first draft's revive rule fired on
+posterior flip alone — 356 revives, 0 helped, provably: a frozen-context
+retry is the same bytes against the same file, so its outcome CANNOT change.
+Fixed before the recorded run: revive requires the suppression CONTEXT to
+have moved too (another fix landed in between), which is also the faithful
+model of the real driver (a changed diagnostic at the site is a NEW
+TriedKey, not a revive). Post-fix: 57/50 net-positive. D under a stale store
+shows the cost of composing with a lying prior (78/137 revives, 38.2% —
+the λ-schedule needs a stale-detection gate, recorded as T2 design space).
+
+**Honest bounds:** C's model family matches the world generator family by
+construction (regimes ARE the generators; misspec covers parameters, not
+family); the toy store is deliberately sparse (2 events/shape — B's aligned
+win over A is NOT significant at this density, 138/120 p≈0.24, and NO claim
+is made about the shipped ordering at real densities). T2's GOAT on the real
+1%-fail surface is the family-error test.
+
+**T2 unlocked** (T1 win + Issue 91 T1.5 ring landed `795ddc4c`): opt-in
+wiring at the `rustc_errors` driver ordering seam, uniform or store-seeded
+priors per run, context-scoped revives, GOAT = resolved-rate-at-equal-budget
+on the real corpus via the G6/G7 floor A/B harness.
+
+Full record: `.benchmarks/084_nonergodic_driver_poc.md`. Research note 166 §B
+verdict updated.

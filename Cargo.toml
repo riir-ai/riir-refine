@@ -13,6 +13,12 @@ path = "src/lib.rs"
 [dependencies]
 # Public substrate: ConstraintPruner trait + ternary SIMD matvec
 katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", features = ["entropic_tilt", "rating"] }
+# Issue 093 T1: NonergodicFilter kernel (katgpt-rs Plan 592) for the
+# per-run strategy-posterior PoC. Already in the graph transitively via
+# katgpt-core's default features (bom_sampling -> micro_belief) — this row
+# adds the direct path + the `nonergodic_belief` gate the PoC consumes.
+# Optional, opt-in `nonergodic_poc` only.
+katgpt-micro-belief = { path = "../katgpt-rs/crates/katgpt-micro-belief", version = "0.2.1", optional = true, features = ["nonergodic_belief"] }
 
 # Serialization for corpus freeze/thaw (BLAKE3-committed)
 blake3 = "1"
@@ -197,6 +203,15 @@ tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_
 # scoping verdict stands). Opt-in, measurement-only, report-first
 # (R135/Bench-047 doctrine — no wiring until the PoC verdict).
 gw_corpus = ["katgpt-core/gw_alignment", "clippy_lints", "rust_perf"]
+
+# Issue 093 T1: per-run strategy-posterior PoC — NonergodicFilter
+# (katgpt-rs Plan 592, opt-in) over strategy/error-class generators vs the
+# SHIPPED static shape-conditional BetaPosterior ordering (the real
+# `shape_conditional_order` over a seeded TrajStore) vs no-posterior
+# (min-delta). Gates `examples/nonergodic_driver_poc.rs` — defend-wrong toy
+# corpus, scripted outcomes, report-first (R135/Bench-047 doctrine; no
+# wiring until the PoC verdict). Opt-in, measurement-only.
+nonergodic_poc = ["dep:katgpt-micro-belief", "rustc_errors", "latent_retrieval"]
 
 # Plan 019 T0.3: the retrieval-free apply→check→revert substrate shared by
 # `fix_verify` (the `--fix --verify` batch gate) and the `rustc_errors`
@@ -479,6 +494,10 @@ required-features = ["rust_perf_bench"]
 [[example]]
 name = "gw_corpus_poc"
 required-features = ["gw_corpus"]
+
+[[example]]
+name = "nonergodic_driver_poc"
+required-features = ["nonergodic_poc"]
 
 [[example]]
 name = "clippy_verify_demo"

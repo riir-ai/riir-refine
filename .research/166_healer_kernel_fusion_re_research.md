@@ -1,6 +1,6 @@
 # Research 166 — Healer Kernel-Fusion Re-Research: Nonergodic 592 · Saddle 593 · GW 594 onto riir-clippy
 
-**Status:** RECORD — three healer-surface verdicts filed (Issue 092 **CLOSED 2026-09-12: T1 measured, GW LOSES at the trigram embedding — Bench 083**; Issue 093 execution ticket; Issue 91 kernel-landed update); katgpt-rs `gw_coupling` accessor landed `b09f1368` (the PoC's instrument).
+**Status:** RECORD — three healer-surface verdicts filed (Issue 092 **CLOSED 2026-09-12: T1 measured, GW LOSES at the trigram embedding — Bench 083**; Issue 093 **T1 measured WIN 2026-09-12 — Bench 084, T2 unlocked**; Issue 91 kernel-landed update); katgpt-rs `gw_coupling` accessor landed `b09f1368` (the PoC's instrument).
 
 > **Origin:** owner challenge — riir-ai Research 371/373/374 were distilled with the healer surface recorded thin or deferred; fusion priority #2 demands the consumer read (the canonical-failure-#5 class: the fusion hunt that never reads the healer). All three kernels landed 2026-09-11: katgpt-rs Plan 592 `NonergodicFilter<K,D>` (`crates/katgpt-micro-belief/src/nonergodic.rs`, feature `nonergodic_belief`, Bench 706, G1–G4 PASS, opt-in), Plan 593 `SaddleEscapeGate` (`crates/katgpt-core/src/saddle_escape.rs`, feature `saddle_escape`, Bench 707, G1–G5 PASS, opt-in), Plan 594 `gw_alignment` (Gromov–Wasserstein quotient alignment, `crates/katgpt-core/src/gw_alignment/`, Bench 709, 11 gates green, opt-in).
 > **Method:** three parallel subagents — codebase grep (selection math, driver loops, corpus/dedup, reference sweep) · published prior art (14 searches, claims pinned BEFORE searching) · kernel/note status sweep. Evidence cited file:line. Healer-state ground truth first, then per-claim verdicts.
@@ -32,7 +32,7 @@
 2. **R135 interplay — design constraint, not objection.** Bench 047's starvation law (98.5% of candidates unseen) punishes selection sophistication at pool sparsity — but the filter learns **within the run budget** from THIS run's outcomes, which is exactly R135 lesson 2 ("any future rating-based selection must update online"). Report-first regardless (R135 doctrine), and per 373's own validation protocol: PoC before any wiring.
 3. **Shared instrumentation.** The per-attempt error-code ring (Issue 91 T1.5) is the substrate for BOTH this posterior and Issue 91's trap detector — one instrumentation, two kernel consumers.
 
-**Verdict:** **Gain (delta-recording + execution ticket).** Filed **Issue 093** (PoC-first, three competitors, report-first; wiring only behind an opt-in flag if the PoC wins AND the T1.5 ring lands). No new novelty asserted over 545.
+**Verdict:** **Gain (delta-recording + execution ticket).** Filed **Issue 093** (PoC-first, three competitors, report-first; wiring only behind an opt-in flag if the PoC wins AND the T1.5 ring lands). No new novelty asserted over 545. **T1 MEASURED WIN 2026-09-12 (Bench 084):** the per-run filter beats min-delta AND the shipped shape-conditional ordering in all three store scenarios (paired McNemar p<1e-4), immune to a stale store, robust to ±20% misspec — T2 (opt-in wiring at the driver seam, real-corpus GOAT) is the family-error test the synthetic PoC cannot provide.
 
 ## C. 374/593 — fix-loop trap detection (already tracked; kernel-landed update only)
 

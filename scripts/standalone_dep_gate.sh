@@ -20,7 +20,10 @@
 # entries, three siblings — its Issue 028). Here the surface is ten entries
 # across FOUR siblings, three of them private:
 #
-#   katgpt-rs      (public)   katgpt-core, katgpt-device-verify
+#   katgpt-rs      (public)   katgpt-core, katgpt-device-verify,
+#                            katgpt-micro-belief (Issue 093 T1 — opt-in
+#                            nonergodic_poc; already transitive via
+#                            katgpt-core defaults, this is the direct row)
 #   riir-ai        (private)  riir-engine, riir-gpu, riir-rag
 #                             + cubecl-runtime, cubecl-wgpu, wgpu-hal
 #                             (the [patch.crates-io] vendor paths)
@@ -53,7 +56,7 @@ cd "$(dirname "$0")/.."
 
 # The pinned inventory: "<manifest-relative-path> <dep-name>", sorted.
 #
-# 10 entries as of 2026-09-09 (Issue 081 added riir-auth). `[patch]` entries
+# 11 entries as of 2026-09-12 (Issue 093 added katgpt-micro-belief). `[patch]` entries
 # resolve through the same lexical scan (their lines are `name = { path = "…" }`
 # exactly like dependency lines) and are pinned — a new vendor patch is a new
 # repo CI must provision. `katgpt-core` appears twice in the root manifest (the
@@ -65,6 +68,7 @@ Cargo.toml cubecl-runtime
 Cargo.toml cubecl-wgpu
 Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
+Cargo.toml katgpt-micro-belief
 Cargo.toml riir-engine
 Cargo.toml riir-gpu
 Cargo.toml riir-kat

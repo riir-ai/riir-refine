@@ -34,6 +34,7 @@ and `kat_promotion` (score_bench/domain).
 | Crate | Location | Condition |
 |---|---|---|
 | katgpt-core | `../katgpt-rs/crates/katgpt-core` | **the only dep in the default build** |
+| katgpt-micro-belief | `../katgpt-rs/crates/katgpt-micro-belief` | opt-in `nonergodic_poc` only (Issue 093 T1 — the `NonergodicFilter` kernel, feature-forwarded `nonergodic_belief`). Already in the graph transitively via katgpt-core defaults (bom_sampling → micro_belief); this row is the direct path + feature gate. |
 | katgpt-device-verify | `../katgpt-rs/crates/katgpt-device-verify` | **`[patch]` entry only — no code-level dep** (`grep katgpt_device_verify` over `*.rs`: 0 files). A patch section must cover EVERY crate resolved from the patched source, and `riir-neuron-db` resolves this one under `latent_retrieval`; without the row its git copy survives and seven katgpt crates compile twice (Issue 058). Same ride-along shape as `riir-mmorpg-examples`'s row. |
 | riir-engine, riir-gpu | `../riir-ai/crates/*` | opt-in `ternary_inference` only |
 | riir-rag | `../riir-ai/crates/riir-rag` | opt-in `latent_retrieval` only |
