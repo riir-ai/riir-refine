@@ -174,13 +174,16 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
     let (code, text) = heal(&dir, &["--mine"]);
     assert_eq!(code, Some(0), "--mine must exit 0. output:\n{text}");
 
-    // The pinned explainer blocks — added to, never removed.
+    // The pinned explainer blocks — added to, never removed. (72b65676
+    // collapsed the 4-step START to 3 — login is now automatic inside
+    // --mine, the explicit `cargo heal login` line stays as the repair
+    // path — and the pin follows the product.)
     for needle in [
         "KAT mining — turn your healing work into network credit",
         "WHAT: every cargo heal run records HOW the healer behaved",
         "POLICY (read before contributing):",
         "Devnet: KAT carries NO cash value and NO redemption right.",
-        "START (4 steps):",
+        "START (3 steps):",
         "https://ai.gist.rs",
         "cargo heal login",
         "cargo heal --fix",
