@@ -4361,3 +4361,48 @@ syn analysis, report-first gates nothing, always exit 0).
 - Class C (`config-path-orphaned-by-refactor`) stays an intake row — it
   needs git history, not a per-compile scan (the intake itself says
   review-time).
+
+## 2026-09-12 — Issue 089 T3: `--misses` generalized to every domain + the 09-08 bare-default regression fixed
+
+`cargo heal --misses` now prints the Plan 091 rustc_errors per-CODE queue
+VERBATIM plus one frontier-ordered RULE queue per ENABLED retrieval domain
+(clippy/perf/kernel/sec/docker; `dist` excluded — suggest-only advice never
+writes trajectories). Attribution is by corpus membership
+(`frontier_report::{domain_queue, render_domain_queue}`, observed-rows-only
+tables + per-domain coverage lines + an unattributed-keys footer for
+partial-feature builds); the ordering is the shared dispersion control law,
+and the per-RULE band report (`--frontier-report`, T1/T2) stays the separate
+admission instrument — additive, not a replacement, exactly as the task
+row specified.
+
+The landing required three en-route fixes, each caught by the validation
+itself:
+
+1. **`cargo heal --misses` had been exit-2 broken since 2026-09-08.** The
+   just-works bare default fired under EVERY standalone mode (only the four
+   primary modes were excluded), setting `suggest=true` — and `--misses` is
+   the one standalone mode with a strict conflict guard. `is_bare_posture`
+   now excludes every standalone mode, pinned by
+   `standalone_modes_are_never_bare` (16 modes; a new standalone mode adds
+   its row there in the same commit).
+2. **The first loader was an undercounting `collect()`** — store rows are
+   per-(rule, shape), so a map-collect keeps only the last row per rule.
+   `load_rule_outcomes` sums; live-validated against the T1 measurement
+   (`use_self` 172 kept, learn-rows == dump-summed).
+3. **Two "clean" clippy `--bins` lanes were INERT** — `cargo-heal` carries
+   `required-features` (`latent_retrieval,rust_perf,clippy_lints,kat_service`)
+   and cargo SILENTLY skips the target when unsatisfied (the katgpt-rs
+   Issue 513 class, caught here in-session). The real lanes re-ran with the
+   required set and found the two compile errors the inert lanes had
+   blessed. `run_conversion_report` was also an ungated use of the
+   `rustc_errors` module — now cfg-gated with a loud refusal.
+
+The healer rode the same file for 5 pre-existing mechanical findings
+(4× `semicolon_if_nothing_returned`, 1× `redundant_closure` — compile-gated,
+verified). Validation: lib 1206/1206 default, bin 16/16 at the full feature
+lane, clippy clean on lib+bins at default and at
+`latent_retrieval,kat_service,kernel_heal,sec`; live smoke on this repo's
+store: clippy 15/49 observed (`manual_is_multiple_of` 2/2 informative at
+rank 1 — the queue's first genuinely informative domain row), perf 3/126,
+sec 2/15, kernel 0/607 honest-empty, `--limit` caps per section,
+`--misses --report` unchanged. Issue 089 T3 row carries the full record.

@@ -653,9 +653,9 @@ fn run_unmine() {
     }
 
     if already {
-        println!("KAT mining: already opted out — nothing changed")
+        println!("KAT mining: already opted out — nothing changed");
     } else {
-        println!("KAT mining: opted OUT on this machine")
+        println!("KAT mining: opted OUT on this machine");
     }
     println!(
         "record: {}",
@@ -2203,7 +2203,7 @@ fn run_kat_refill(wait_secs: u64) {
             if riir_clippy::kat_refill::record_server_balance(&mut ack, b.balance_micro) {
                 match ack.save(&ack_path) {
                     Ok(()) => {
-                        println!("refill: soft-gate input refreshed — {}", ack_path.display())
+                        println!("refill: soft-gate input refreshed — {}", ack_path.display());
                     }
                     Err(e) => eprintln!("refill: the gate input refresh did not save: {e}"),
                 }
@@ -2882,14 +2882,17 @@ USAGE:
                     Suggest-only, always exit 0; the detector sees only the
                     scanned set (sibling/upstream consumers under-reported).
                     Reads paths from the CLI (default `.`).
-    --misses       Print the `.heal/misses/` authoring queue in FRONTIER
-                    order (Plan 091 T1.2): dispersion-informative error
-                    codes first — resolving THOSE converts uncertain
-                    candidates — then unobserved, regenerate, saturated.
+    --misses       Print the authoring queues in FRONTIER order (Plan 091
+                    + Issue 089 T3): the `.heal/misses/` rustc_errors
+                    per-CODE queue (dispersion-informative error codes first
+                    — resolving THOSE converts uncertain candidates), then
+                    one per-RULE queue per ENABLED retrieval domain
+                    (clippy/perf/kernel/sec/docker — same control law at
+                    rule granularity, attribution by corpus membership).
                     Pool evidence comes from the trajectory store when the
                     build ships latent_retrieval; without it the order
-                    degenerates to code-sorted. `--limit <N>` caps the
-                    output. Read-only standalone mode.
+                    degenerates to id-sorted. `--limit <N>` caps the table
+                    rows of EACH section. Read-only standalone mode.
     --report       With `--misses`: print the conversion ledger instead of
                     the queue (Plan 091 T1.3) — conversion-per-authored-rule
                     split by authoring era (the FIFO baseline the WIRED
@@ -3619,12 +3622,14 @@ fn parse_args() -> Args {
     //   * `--fix` = REAL fix: writes (the explicit flag is the consent)
     //     and compile-gates on fix_verify builds (opt out --no-verify);
     //   * `--suggest` stays the explicit review command (unchanged).
-    let bare = !args.suggest
-        && !args.fix
-        && !args.fix_compile
-        && !args.dump_trajectories
-        && !args.refill
-        && args.command.is_none();
+    //
+    // EVERY standalone early-return mode is excluded (`is_bare_posture`):
+    // the original 4-flag check set `suggest=true` under `--misses` too,
+    // and the --misses standalone guard then refused it — `cargo heal
+    // --misses` was exit-2 broken from the 09-08 default until this list
+    // was completed (the same regression class would hit any future
+    // standalone mode added here without a row).
+    let bare = is_bare_posture(&args);
     if bare {
         args.suggest = true;
         args.bare_default = true;
@@ -3678,6 +3683,36 @@ fn parse_args() -> Args {
         usage();
     }
     args
+}
+
+/// The just-works `bare` posture: NO mode flag, NO standalone command, NO
+/// KAT command — the exact set that defaults to a dry-run suggest over `.`.
+/// Mirrors the standalone-mode list the paths guard keeps; a standalone
+/// mode missing here silently breaks that mode's own guard (the --misses
+/// regression: bare set `suggest=true` under it, its strict standalone
+/// check refused, exit 2 from 2026-09-08 until the list was completed).
+fn is_bare_posture(args: &Args) -> bool {
+    !args.suggest
+        && !args.fix
+        && !args.fix_compile
+        && !args.dump_trajectories
+        && !args.refill
+        && !args.score_bench
+        && !args.score_report
+        && !args.memory_stats
+        && !args.mine
+        && !args.unmine
+        && !args.version
+        && !args.misses
+        && !args.misses_report
+        && !args.recompute_elo
+        && !args.collapse_report
+        && !args.corpus_stats
+        && !args.import_series
+        && !args.frontier_report
+        && !args.config_audit
+        && args.candidates_path.is_none()
+        && args.command.is_none()
 }
 
 /// Plan 019 T1.5: the mode-flag validation matrix, extracted so every
@@ -3853,70 +3888,221 @@ fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: 
     }
 }
 
-/// Plan 091 T1.2 / Plan 092 T5 (the collision merge): the `.heal/misses/`
-/// authoring queue in frontier order — read-only, standalone. Outcomes per
-/// code come from the trajectory store (`latent_retrieval` builds) or the
-/// JSON envelope fallback, so the report works in every default build
-/// (`rustc_errors` is default-on). `limit` caps the rendered rows (the
-/// `--limit` flag; the whole queue is small, so the default prints all).
-#[cfg(feature = "rustc_errors")]
+/// Plan 091 T1.2 / Plan 092 T5 (the collision merge) + Issue 089 T3 (the
+/// generalization): the frontier-ordered authoring queue — read-only,
+/// standalone. Two halves:
+///
+/// - the ORIGINAL rustc_errors per-code queue (`.heal/misses/`, Plan 091
+///   verbatim — kept, not replaced);
+/// - one frontier-ordered RULE queue per ENABLED retrieval domain
+///   (clippy/perf/kernel/sec/docker — corpus membership attributes store
+///   rows; a disabled feature simply has no section, the router precedent).
+///
+/// Outcomes come from the trajectory store (`latent_retrieval` builds) or
+/// the JSON envelope fallback, so the report works in every build.
+/// `limit` caps the rendered TABLE rows of each section (the `--limit` flag).
 fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
-    use riir_clippy::domains::rustc_errors::evolve;
-
     let root = resolve_heal_root(paths);
-    let dir = evolve::misses_dir(&root);
-    let outcomes = load_code_outcomes(&root);
-    let report = evolve::frontier_queue_report(&dir, &outcomes);
-    match limit {
-        // Honor the cap on the table rows: keep the header lines, print at
-        // most `limit` table rows.
-        Some(n) => {
-            let mut in_table = false;
-            let mut shown = 0usize;
-            for line in report.lines() {
-                if line.starts_with("| rank") || line.starts_with("|---") {
-                    in_table = true;
-                    println!("{line}");
-                    continue;
-                }
-                if in_table && line.starts_with("| ") {
-                    if shown < n {
-                        println!("{line}");
-                        shown += 1;
-                    }
-                    continue;
-                }
-                println!("{line}");
-            }
+    let outcomes = load_rule_outcomes(&root);
+
+    // Section 1 — the rustc_errors per-code queue (Plan 091, unchanged).
+    #[cfg(feature = "rustc_errors")]
+    {
+        use riir_clippy::domains::rustc_errors::evolve;
+        let dir = evolve::misses_dir(&root);
+        // rustc trajectory keys are "{code}:{strategy_id}" (the compile
+        // domain's documented convention — the only ':'-shaped keys the
+        // store carries); per-code aggregation runs over those alone.
+        let code_rows = outcomes
+            .iter()
+            .filter(|(k, _)| k.contains(':'))
+            .map(|(k, (s, f))| (k.clone(), *s as u32, *f as u32));
+        let code_outcomes = evolve::code_outcomes_from_rows(code_rows);
+        let report = evolve::frontier_queue_report(&dir, &code_outcomes);
+        print_report_capped(&report, limit);
+    }
+
+    // Sections 2.. — the per-domain rule queues (Issue 089 T3).
+    let sections = domain_corpus_sections();
+    let mut known: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for (domain, rules) in &sections {
+        known.extend(rules.iter().map(String::as_str));
+        let rows = riir_clippy::frontier_report::domain_queue(rules, &outcomes);
+        let section =
+            riir_clippy::frontier_report::render_domain_queue(domain, &rows, rules.len());
+        print_report_capped(&section, limit);
+    }
+
+    // With rustc_errors compiled in the code queue always renders; without
+    // it, at least one domain section must have — else this build can order
+    // nothing and says so instead of printing a green nothing.
+    #[cfg(feature = "rustc_errors")]
+    let rendered_any = true;
+    #[cfg(not(feature = "rustc_errors"))]
+    let rendered_any = !sections.is_empty();
+    if !rendered_any {
+        eprintln!(
+            "misses: no healing domain compiled into this build — rebuild with at least one domain feature"
+        );
+        std::process::exit(1);
+    }
+
+    // Attribution honesty: store keys no ENABLED domain's corpus claims and
+    // that are not rustc "{code}:{strategy}" rows (e.g. written by a feature
+    // this build lacks) — counted loud, never silently dropped.
+    let unattributed: Vec<&str> = outcomes
+        .keys()
+        .filter(|k| !k.contains(':') && !known.contains(k.as_str()))
+        .map(String::as_str)
+        .collect();
+    if !unattributed.is_empty() {
+        println!(
+            "unattributed store rows: {} (not in any ENABLED domain's corpus — the owning feature may be off)",
+            unattributed.len()
+        );
+        for k in unattributed.iter().take(5) {
+            println!("  {k}");
         }
-        None => print!("{report}"),
+        if unattributed.len() > 5 {
+            println!("  ... +{} more", unattributed.len() - 5);
+        }
     }
 }
 
-/// Per-code `(kept, reverted)` counts for the misses report: store-first,
-/// envelope fallback (both aggregate through
-/// [`riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows`]).
-#[cfg(feature = "rustc_errors")]
-fn load_code_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize, usize)> {
+/// Print a rendered report, capping only its markdown TABLE rows at `n`
+/// (headers and prose always print — the `--limit` contract; extracted from
+/// the Plan 091 queue printer now that every section shares it).
+fn print_report_capped(report: &str, limit: Option<usize>) {
+    let Some(n) = limit else {
+        print!("{report}");
+        return;
+    };
+    let mut in_table = false;
+    let mut shown = 0usize;
+    for line in report.lines() {
+        if line.starts_with("| rank") || line.starts_with("|---") {
+            in_table = true;
+            println!("{line}");
+            continue;
+        }
+        if in_table && line.starts_with("| ") {
+            if shown < n {
+                println!("{line}");
+                shown += 1;
+            }
+            continue;
+        }
+        println!("{line}");
+    }
+}
+
+/// The ENABLED retrieval domains' corpus rule ids, in `DomainId::ALL`
+/// order (Issue 089 T3). One entry per domain whose feature compiled in;
+/// `dist` is deliberately absent — it is suggest-only advice and never
+/// writes trajectories, so it has no queue to order. Corpus builds are
+/// in-memory table reads (cold path, no cargo involved).
+#[allow(clippy::vec_init_then_push)] // every arm is feature-gated; a vec![] literal cannot carry cfg'd elements
+fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
+    use riir_clippy::HealEntry;
+    let mut out = Vec::new();
+    #[cfg(feature = "clippy_lints")]
+    out.push((
+        "clippy",
+        riir_clippy::build_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect(),
+    ));
+    #[cfg(feature = "rust_perf")]
+    out.push((
+        "perf",
+        riir_clippy::build_perf_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect(),
+    ));
+    #[cfg(feature = "kernel_heal")]
+    out.push((
+        "kernel",
+        riir_clippy::build_kernel_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect(),
+    ));
+    #[cfg(feature = "sec")]
+    out.push((
+        "sec",
+        riir_clippy::build_sec_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect(),
+    ));
+    #[cfg(feature = "docker")]
+    out.push((
+        "docker",
+        riir_clippy::build_docker_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect(),
+    ));
+    out
+}
+
+/// Per-rule `(kept, reverted)` counts keyed by RAW store rule ids — the
+/// `--misses` generalization's attribution source: store-first
+/// (`latent_retrieval` builds), envelope fallback (every other build), the
+/// `load_code_outcomes` precedent minus the per-code `':'` aggregation
+/// (attribution by corpus membership replaces it).
+///
+/// Both backends carry ONE ROW PER (rule, shape) — duplicates are SUMMED,
+/// never overwritten (a silent last-row-wins here would undercount every
+/// multi-shape rule; the old per-code path summed through
+/// `code_outcomes_from_rows`, and this keeps that arithmetic).
+fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize, usize)> {
+    fn sum_into(
+        map: &mut std::collections::BTreeMap<String, (usize, usize)>,
+        key: String,
+        kept: usize,
+        reverted: usize,
+    ) {
+        let e = map.entry(key).or_default();
+        e.0 += kept;
+        e.1 += reverted;
+    }
     #[cfg(feature = "latent_retrieval")]
     if root.join(".heal").join("trajectories.kv").exists() {
         if let Ok((store, _)) = riir_clippy::traj_store::TrajStore::open(root) {
-            return riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows(
-                store
-                    .dump()
-                    .into_iter()
-                    .map(|r| (r.lint_key, r.success_count, r.fail_count)),
-            );
+            let mut out = std::collections::BTreeMap::new();
+            for r in store.dump() {
+                sum_into(
+                    &mut out,
+                    r.lint_key,
+                    r.success_count as usize,
+                    r.fail_count as usize,
+                );
+            }
+            return out;
         }
     }
     let mut mem = riir_clippy::memory::LatentFixMemory::default();
     if mem.load(&default_memory_path()).is_err() {
         return std::collections::BTreeMap::new();
     }
-    riir_clippy::domains::rustc_errors::evolve::code_outcomes_from_rows(
-        mem.iter()
-            .map(|t| (t.lint_name.clone(), t.success_count, t.fail_count)),
-    )
+    let mut out = std::collections::BTreeMap::new();
+    for t in mem.iter() {
+        sum_into(
+            &mut out,
+            t.lint_name.clone(),
+            t.success_count as usize,
+            t.fail_count as usize,
+        );
+    }
+    out
 }
 
 /// Plan 014: run the clippy-bench, append the score history, re-render the
@@ -4347,7 +4533,7 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(|rule| sb::generations::v5_is_removal_rule(rule))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
@@ -4815,6 +5001,11 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
 /// feature-free [`ConversionSignal`]s; without the store the conversion
 /// columns print `n/a` (an absent store is NOT a zero — the honest
 /// degeneration, the T1.2 convention).
+///
+/// rustc_errors-only by nature (the playbook inventory IS the rustc
+/// playbooks); a build without the feature refuses loud instead of
+/// compiling to nothing.
+#[cfg(feature = "rustc_errors")]
 fn run_conversion_report() {
     use riir_clippy::domains::rustc_errors::evolve;
     let root = std::env::current_dir().unwrap_or_default();
@@ -5340,7 +5531,13 @@ fn main() {
             std::process::exit(2);
         }
         if args.misses_report {
+            #[cfg(feature = "rustc_errors")]
             run_conversion_report();
+            #[cfg(not(feature = "rustc_errors"))]
+            {
+                eprintln!("--misses --report requires a build with --features rustc_errors");
+                std::process::exit(1);
+            }
         } else {
             run_misses_queue(args.misses_limit, &args.paths);
         }
@@ -5469,7 +5666,7 @@ fn main() {
                         print!("{}", store.stats_report(bad));
                     }
                     Err(e) => {
-                        eprintln!("memory-stats: kv store at {} unreadable: {e}", kv.display())
+                        eprintln!("memory-stats: kv store at {} unreadable: {e}", kv.display());
                     }
                 }
             } else {
@@ -8225,6 +8422,49 @@ mod corpus_stats_needle_tests {
 #[cfg(test)]
 mod mode_flag_tests {
     use super::{validate_mode_flags as v, Args};
+
+    /// The --misses regression pin: the 2026-09-08 just-works bare default
+    /// fired under EVERY standalone mode (only the four primary modes were
+    /// excluded), setting `suggest=true` — and `--misses`'s strict
+    /// standalone guard then refused it, so `cargo heal --misses` exited 2
+    /// from 09-08 until the exclusion list was completed. Every standalone
+    /// mode must stay out of the bare posture; every new standalone mode
+    /// adds a row here in the same commit.
+    #[test]
+    fn standalone_modes_are_never_bare() {
+        use super::is_bare_posture as bare;
+        type ModeSetter = Box<dyn Fn(&mut Args)>;
+        let cases: Vec<(&str, ModeSetter)> = vec![
+            ("--misses", Box::new(|m| m.misses = true)),
+            ("--misses --report", Box::new(|m| m.misses_report = true)),
+            ("--score-bench", Box::new(|m| m.score_bench = true)),
+            ("--score-report", Box::new(|m| m.score_report = true)),
+            ("--memory-stats", Box::new(|m| m.memory_stats = true)),
+            ("--mine", Box::new(|m| m.mine = true)),
+            ("--unmine", Box::new(|m| m.unmine = true)),
+            ("--version", Box::new(|m| m.version = true)),
+            ("--recompute-elo", Box::new(|m| m.recompute_elo = true)),
+            ("--collapse-report", Box::new(|m| m.collapse_report = true)),
+            ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),
+            ("--import-series", Box::new(|m| m.import_series = true)),
+            ("--frontier-report", Box::new(|m| m.frontier_report = true)),
+            ("--config-audit", Box::new(|m| m.config_audit = true)),
+            ("--refill", Box::new(|m| m.refill = true)),
+            ("--dump-trajectories", Box::new(|m| m.dump_trajectories = true)),
+        ];
+        for (label, set) in cases {
+            let mut m = Args::default();
+            set(&mut m);
+            assert!(!bare(&m), "{label} must not take the bare suggest default");
+        }
+        // The bare posture itself still fires for a no-flag invocation.
+        assert!(bare(&Args::default()));
+        // And the primary modes still count as modes.
+        assert!(!bare(&a(true, false, false, false)), "--suggest");
+        assert!(!bare(&a(false, true, false, false)), "--fix");
+        assert!(!bare(&a(false, false, true, false)), "--fix-compile");
+        assert!(!bare(&a(false, false, false, true)), "--dump-trajectories");
+    }
 
     /// Named-field construction keeps each matrix row self-describing —
     /// the positional-8-bool form this replaced is the shape

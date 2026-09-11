@@ -25,8 +25,19 @@
 //! The CLI half (bin/heal.rs `--frontier-report`) feeds `learn_rows()` +
 //! `score_runs()` from the trajectory store into [`summarize`]; this module
 //! stays store-free so the stats are unit-testable at default features.
+//!
+//! T3 (the `--misses` generalization): [`domain_queue`] +
+//! [`render_domain_queue`] extend the Plan 091 frontier ordering beyond its
+//! `rustc_errors`-only roots — one frontier-ordered RULE queue per retrieval
+//! domain (clippy/perf/kernel/sec/docker), attribution by corpus membership.
+//! The per-CODE rustc queue is kept verbatim (additive, not a replacement);
+//! the per-RULE band above stays this module's admission instrument.
+
+use std::collections::BTreeMap;
 
 use katgpt_core::best_belief_score;
+
+use crate::dispersion::{from_counts, frontier_order, PoolEntry, Regime};
 
 /// The frontier LCB ε — 0.05, the 95% lower bound (katgpt-core's documented
 /// `FRONTIER_EPSILON` convention; NOT the 0.32 strategy-ordering ε).
@@ -277,6 +288,115 @@ pub fn render(summary: &FrontierSummary, score: Option<&ScoreContext>) -> String
     out
 }
 
+// ── Issue 089 T3: the per-domain frontier rule queue (`--misses` generalization) ──
+
+/// One per-domain queue row: a corpus rule with observed store outcomes,
+/// frontier-ordered (the Plan 091 control law applied at rule granularity).
+#[derive(Clone, Debug, PartialEq)]
+pub struct DomainQueueRow {
+    pub rank: usize,
+    pub rule: String,
+    pub kept: usize,
+    pub reverted: usize,
+    pub entropy: f64,
+    pub regime: Regime,
+}
+
+/// Build one domain's frontier-ordered rule queue from its corpus rule ids
+/// and the store's per-rule `(kept, reverted)` counters.
+///
+/// Population = corpus rules that have store rows (**observed only** — an
+/// unobserved rule has no queue entry; [`render_domain_queue`] carries the
+/// unobserved count as a coverage line instead of hundreds of empty rows).
+/// Pool outcomes are `from_counts(kept, reverted, 0)` — the `Missed` class
+/// exists only where a miss FILE exists (the rustc queue); here a no-candidate
+/// lint lands in the store as a fail, reading `regenerate` (the corpus-gap
+/// signal). Ordering is the shared control law: informative (mixed evidence)
+/// first, then empty (a row with zero verdicts — one probe is cheap), then
+/// regenerate, saturated last.
+///
+/// Deterministic: `frontier_order` ties break by rule id (the corpus house
+/// rule). Store keys outside the corpus are ignored — attribution is the
+/// CLI's job (it knows which domains are enabled).
+#[must_use]
+pub fn domain_queue(
+    corpus_rules: &[String],
+    outcomes: &BTreeMap<String, (usize, usize)>,
+) -> Vec<DomainQueueRow> {
+    let pool: Vec<PoolEntry> = corpus_rules
+        .iter()
+        .filter_map(|rule| {
+            outcomes
+                .get(rule)
+                .map(|(kept, reverted)| PoolEntry::new(rule.clone(), from_counts(*kept, *reverted, 0)))
+        })
+        .collect();
+    frontier_order(&pool)
+        .into_iter()
+        .enumerate()
+        .map(|(i, verdict)| DomainQueueRow {
+            rank: i + 1,
+            kept: outcomes.get(verdict.id.as_str()).map_or(0, |(k, _)| *k),
+            reverted: outcomes.get(verdict.id.as_str()).map_or(0, |(_, r)| *r),
+            rule: verdict.id,
+            entropy: verdict.entropy,
+            regime: verdict.regime,
+        })
+        .collect()
+}
+
+/// Render one domain's section for the `--misses` output (house style:
+/// `String` + `fmt::Write`, deterministic). An all-empty domain renders its
+/// loud `(empty …)` marker — exit 0, the rustc empty-queue precedent (a
+/// quiet domain is a measurement, not an error).
+#[must_use]
+pub fn render_domain_queue(domain: &str, rows: &[DomainQueueRow], corpus_size: usize) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(256 + rows.len() * 96);
+
+    if rows.is_empty() {
+        let _ = writeln!(
+            out,
+            "# {domain} — frontier rule queue (0 observed / {corpus_size} corpus rules)\n\
+             (empty: no store row attributes to this domain's corpus)\n"
+        );
+        return out;
+    }
+
+    let _ = writeln!(
+        out,
+        "# {domain} — frontier rule queue ({} observed / {corpus_size} corpus rules)\n",
+        rows.len()
+    );
+    out.push_str(
+        "Plan 091 control law at rule granularity: informative pools first (mixed \
+         kept/reverted — resolving those converts the most per corpus pass), then \
+         empty (a row with zero verdicts), regenerate (all-fail: the fix family is \
+         wrong — author/refine here), saturated last.\n\n",
+    );
+    out.push_str("| rank | rule | kept | reverted | entropy | regime |\n");
+    out.push_str("|---|---|---|---|---|---|\n");
+    for r in rows {
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {:.3} | {} |",
+            r.rank,
+            r.rule,
+            r.kept,
+            r.reverted,
+            r.entropy,
+            r.regime.label()
+        );
+    }
+    let unobserved = corpus_size.saturating_sub(rows.len());
+    let _ = writeln!(
+        out,
+        "\n(corpus coverage: {} of {corpus_size}; {unobserved} rule(s) unobserved — no store rows)",
+        rows.len()
+    );
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,5 +576,84 @@ mod tests {
         ] {
             assert!(text.contains(name), "{name} missing from table");
         }
+    }
+
+    // ── Issue 089 T3: the per-domain frontier rule queue ──────────────────
+
+    fn domain_fixtures() -> (Vec<String>, BTreeMap<String, (usize, usize)>) {
+        let corpus = vec![
+            "mixed_rule".to_string(),
+            "all_fail_rule".to_string(),
+            "saturated_rule".to_string(),
+            "zero_verdict_row".to_string(),
+            "never_touched".to_string(),
+        ];
+        let mut outcomes = BTreeMap::new();
+        outcomes.insert("mixed_rule".to_string(), (2, 2));
+        outcomes.insert("all_fail_rule".to_string(), (0, 3));
+        outcomes.insert("saturated_rule".to_string(), (5, 0));
+        outcomes.insert("zero_verdict_row".to_string(), (0, 0));
+        // A key OUTSIDE the corpus — attribution is the CLI's job; the queue
+        // must ignore it, never invent a row for it.
+        outcomes.insert("not_in_corpus".to_string(), (9, 9));
+        (corpus, outcomes)
+    }
+
+    #[test]
+    fn domain_queue_orders_by_control_law_and_ignores_foreign_keys() {
+        let (corpus, outcomes) = domain_fixtures();
+        let rows = domain_queue(&corpus, &outcomes);
+        // observed only: never_touched (no store row) and not_in_corpus
+        // (foreign key) are both absent.
+        assert_eq!(rows.len(), 4, "{rows:?}");
+        assert!(!rows.iter().any(|r| r.rule == "never_touched"));
+        assert!(!rows.iter().any(|r| r.rule == "not_in_corpus"));
+        // Control law: informative → empty → regenerate → saturated.
+        let order: Vec<&str> = rows.iter().map(|r| r.rule.as_str()).collect();
+        assert_eq!(
+            order,
+            vec!["mixed_rule", "zero_verdict_row", "all_fail_rule", "saturated_rule"],
+            "frontier order must hold at rule granularity: {rows:?}"
+        );
+        // Ranks are 1-based and contiguous.
+        for (i, r) in rows.iter().enumerate() {
+            assert_eq!(r.rank, i + 1);
+        }
+        // The informative row carries its counts verbatim.
+        let mixed = &rows[0];
+        assert_eq!((mixed.kept, mixed.reverted), (2, 2));
+    }
+
+    #[test]
+    fn domain_queue_deterministic() {
+        let (corpus, outcomes) = domain_fixtures();
+        assert_eq!(
+            domain_queue(&corpus, &outcomes),
+            domain_queue(&corpus, &outcomes)
+        );
+    }
+
+    #[test]
+    fn render_domain_queue_needles() {
+        let (corpus, outcomes) = domain_fixtures();
+        let rows = domain_queue(&corpus, &outcomes);
+        let text = render_domain_queue("clippy", &rows, corpus.len());
+        assert!(text.contains("# clippy — frontier rule queue (4 observed / 5 corpus rules)"), "{text}");
+        assert!(text.contains("| 1 | mixed_rule | 2 | 2 |"), "{text}");
+        assert!(text.contains("informative"), "{text}");
+        assert!(text.contains("regenerate"), "{text}");
+        assert!(text.contains("saturated"), "{text}");
+        assert!(text.contains("coverage: 4 of 5; 1 rule(s) unobserved"), "{text}");
+    }
+
+    #[test]
+    fn render_domain_queue_empty_is_loud_but_not_an_error() {
+        let text = render_domain_queue("sec", &[], 15);
+        assert!(
+            text.contains("0 observed / 15 corpus rules") && text.contains("(empty"),
+            "{text}"
+        );
+        // No table header on an empty domain — nothing to rank.
+        assert!(!text.contains("| rank |"));
     }
 }
