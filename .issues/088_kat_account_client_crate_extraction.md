@@ -109,11 +109,11 @@ root re-exports.
 
 ## Fleet follow-ups (NOT blockers)
 
-- [ ] katgpt-rs `scripts/repo_set.txt` + AGENTS.md workspace-count prose (17 → 18) + any membership floors — the workspace count pins are katgpt-rs-owned gates; update in a katgpt-rs commit referencing this issue
+- [x] katgpt-rs `scripts/repo_set.txt` + AGENTS.md workspace-count prose (17 → 18) — landed 2026-09-10 katgpt-rs `ff5ab9f9` (agents/skill/population repo-set gates + docs_gate 14/14 green)
 - [ ] riir-dapps / riir-dao protocol-tier adoption (retire the symmetric golden duplication) — owner decision, needs dapps BOUNDARY.md allowlist row
-- [ ] 4090 box: clone gist-rs/riir-kat beside the other siblings (both-boxes sync rule)
-- [ ] ci_feature_guard full run (all layers incl. cargo-hack --each-feature + layer 5c sweep) — the landing validated targeted feature states; the full guard is the next rot-gate pass
-- [ ] Pre-existing pedantic `too_many_lines` findings outside this landing's write set: `src/traj_store.rs:893` (keeper) + `src/domains/rust_perf/corpus/tests.rs` ×3 (sibling-landed b472dae0) — fire only under latent_retrieval/all-features combos; owners heal in their own passes
+- [x] 4090 box: cloned gist-rs/riir-kat → `E:\git\riir-kat` @ a80985e (2026-09-10, both-boxes sync rule)
+- [x] ci_feature_guard full run (all layers) — **GREEN 2026-09-10 evening (GUARD_EXIT=0)** after the sweep surfaced + fixed 6 latent rot classes: the 8-combo E0433 frontier_pairs break (`412f2323`), the 23 orphaned kat_* files (`c127a819`), 5a clippy findings (`dd9d0f7c`), the corpus-split source-walk needle (`5c5c47df`), the dist Phase-1 pin (`b7f25c02`), the modelability kernel/slice-b vacuity (`03f0ffcc`), the P12 scratch-crate manifest (`44ac9cc1`), and the --mine explainer pin (`f9cef9cc`). The orphan-file finding was the owner's kat_* grep — a deletion claim is verified by `git show --stat`, not by green builds
+- [x] Pre-existing pedantic `too_many_lines` findings — healed 2026-09-10 in the 5a green commit `dd9d0f7c` (traj_store dispersion block extracted; corpus tests took the house allow with reasons; items_after_statements hoisted)
 
 ## Non-goals
 
