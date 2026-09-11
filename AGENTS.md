@@ -35,7 +35,7 @@ The pipeline (shared across all domains):
 - `fix_verify` = the compile-gated `--fix` mode (baseline check → apply → revert offending edits). `self_evolve` DEFAULT-ON (Bench 023); trajectories persist on the neuron-db Warm-tier store under `latent_retrieval` (`.heal/trajectories.kv`); opt-out `RIIR_HEAL_SELF_EVOLVE=0`.
 - Domain GOATs on record: `rustc_errors` at N=212 (Bench 045), `docker` Phase 0+1 (Bench 056), `sec` Phase 0+1 (Bench 046).
 - L4 fallback seam installed but NOT promoted — riir-train Plan 336 measured FAIL (0/60); `decline` is a correct answer.
-- score-bench: run `cargo heal --score-bench` after every proposer/corpus change (append-only `.benchmarks/score_history.jsonl`; generations 2–7 records in `HISTORY.md`).
+- score-bench: run `cargo heal --score-bench` after every proposer/corpus change (append-only `.benchmarks/score_history.jsonl`; generations 2–7 records in `HISTORY.md`). Since Issue 089 T6 (2026-09-12) every clippy-lane run also prints + persists the **provenance strata** — the run's heal rate split by fixture class (repo-mined / authored / construction), additive on the jsonl row the way `ood` is (instrumentation, not scored; the Warm-tier mirror drops it). First measurement exposed the v1 blind spot: the 96.2% aggregate is authored-dominated (authored 98.0%/51 findings vs repo 50.0%/2 — 6 of 8 repo fixtures are clean spans); v6's all-repo ladder reads 95.2%.
 
 ## CF ops surface + the `.env` contract (read before touching ops)
 

@@ -51,6 +51,9 @@ pub mod report;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use serde::Deserialize;
+use serde::Serialize;
+
 use crate::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use crate::domains::rust_perf::proposers::FIXABLE_RULES;
 use crate::draft::clippy_oracle::ClippyOracle;
@@ -94,6 +97,156 @@ pub fn draft_oracle() -> ClippyOracle {
 #[must_use]
 pub fn wrap(code: &str) -> String {
     format!("#![allow(dead_code)]\n#![allow(unused)]\n{code}")
+}
+
+// ── Issue 089 T6: the provenance-stratified score-bench read ───────────
+
+/// The provenance CLASS of a bench fixture — the coarse axis the stratified
+/// read aggregates over (the family, via [`super::ood::provenance_family`],
+/// is the fine-grained `repo@sha` identity; the class is the organic-vs-
+/// synthetic question the frontier curriculum cares about, the same axis
+/// Issue 089 T5 put on the pair + outcome feeds).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ProvenanceClass {
+    /// `repo@sha` family — a span mined from a real repo state (organic
+    /// feature churn: `katgpt-rs@9e0e6a57`, `riir-train@a1197e06~1`, …).
+    Repo,
+    /// `authored-composite` family — hand-built multi-lint composites.
+    Authored,
+    /// `construction` family — generated/planted ladders (`construction:gen…`,
+    /// the v2/v3/v7 frozen-conversion tag; the same word the pair vocabulary
+    /// uses, deliberately).
+    Construction,
+    /// Anything else — counted loud, never silently dropped (the frontier
+    /// fail-closed convention).
+    Other,
+}
+
+impl ProvenanceClass {
+    /// The stable render + wire label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Repo => "repo",
+            Self::Authored => "authored",
+            Self::Construction => "construction",
+            Self::Other => "other",
+        }
+    }
+}
+
+/// Classify one provenance FAMILY (the prefix [`super::ood::provenance_family`]
+/// extracts — classify the FAMILY, not the full string, or the `:`-suffix
+/// defeats the exact matches).
+#[must_use]
+pub fn provenance_class(family: &str) -> ProvenanceClass {
+    match family {
+        "authored-composite" => ProvenanceClass::Authored,
+        "construction" => ProvenanceClass::Construction,
+        f if f.contains('@') => ProvenanceClass::Repo,
+        _ => ProvenanceClass::Other,
+    }
+}
+
+/// One stratum of the stratified read: this run's outcomes aggregated over
+/// one provenance class. Heals the v1 blind spot — the frozen set mixes
+/// repo-mined spans and authored composites into ONE `heal_rate`; the class
+/// split shows whether the rate holds on real-mined material (the bench-side
+/// form of T5's outcome-feed question).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProvenanceStratum {
+    /// The class label ([`ProvenanceClass::label`]).
+    pub class: String,
+    /// Fixtures of this class that ran (excluded ones count nowhere).
+    pub n_ran: usize,
+    /// Ran fixtures with ≥1 vocabulary finding before healing.
+    pub n_healable: usize,
+    /// Ran fixtures with zero vocabulary findings (the decline axis).
+    pub n_clean: usize,
+    /// Σ vocabulary findings before.
+    pub vocab_before: usize,
+    /// Σ findings resolved by healing.
+    pub resolved: usize,
+    /// Σ lints (any) newly created by healing.
+    pub created: usize,
+    /// `resolved / vocab_before` (0.0 when the class had no findings) — the
+    /// aggregate `heal_rate` semantics, per class.
+    pub heal_rate: f32,
+}
+
+/// Stratify one finished bench run by fixture provenance class (Issue 089
+/// T6 — the honest half of the task; the D-formula half is declined on the
+/// record in the issue). Pure arithmetic over the run's outcomes; the
+/// fixture join resolves families through [`super::ood::ood_set_family`]
+/// (the mining join — v6 ids redirect to their real `repo@sha` provenance,
+/// the frozen-construction tag is freeze-gate metadata, not mining truth).
+///
+/// Deterministic: canonical class order (repo, authored, construction,
+/// other), classes with zero RAN fixtures omitted (an empty class is not a
+/// measurement — the ood families precedent lists only present families).
+/// An outcome whose id matches no fixture is defensive-counted into `other`
+/// (never silently dropped — the run and the stratify call share one
+/// fixture list, so a miss is a bug this makes visible instead of hiding).
+#[must_use]
+// Fractions over usize/u32 counters — the report's quantity; allowed.
+#[allow(clippy::cast_precision_loss)]
+pub fn stratify(fixture_list: &[BenchFixture], score: &BenchScore) -> Vec<ProvenanceStratum> {
+    // id → mining family (the join the ood axis already owns).
+    let families: BTreeMap<&str, &str> = fixture_list
+        .iter()
+        .map(|fx| (fx.id, ood::ood_set_family(fx)))
+        .collect();
+    // Per-class accumulators: (ran, healable, clean, vocab_before, resolved, created).
+    let mut acc: BTreeMap<ProvenanceClass, (usize, usize, usize, usize, usize, usize)> =
+        BTreeMap::new();
+    for o in &score.outcomes {
+        if !o.ran {
+            continue;
+        }
+        let family = families.get(o.id.as_str()).copied().unwrap_or("other");
+        let class = provenance_class(family);
+        let e = acc.entry(class).or_insert((0, 0, 0, 0, 0, 0));
+        e.0 += 1;
+        let vb = o.vocab_before.len();
+        if vb == 0 {
+            e.2 += 1;
+        } else {
+            e.1 += 1;
+        }
+        e.3 += vb;
+        e.4 += o.resolved();
+        e.5 += o.created.len();
+    }
+    let canonical = [
+        ProvenanceClass::Repo,
+        ProvenanceClass::Authored,
+        ProvenanceClass::Construction,
+        ProvenanceClass::Other,
+    ];
+    canonical
+        .into_iter()
+        .filter_map(|class| {
+            let (n_ran, n_healable, n_clean, vocab_before, resolved, created) =
+                acc.remove(&class)?;
+            if n_ran == 0 {
+                return None;
+            }
+            Some(ProvenanceStratum {
+                class: class.label().to_string(),
+                n_ran,
+                n_healable,
+                n_clean,
+                vocab_before,
+                resolved,
+                created,
+                heal_rate: if vocab_before == 0 {
+                    0.0
+                } else {
+                    resolved as f32 / vocab_before as f32
+                },
+            })
+        })
+        .collect()
 }
 
 /// Per-fixture run outcome (diagnostics for the console report).
@@ -458,6 +611,136 @@ fn finalize_rates(score: &mut BenchScore, accum: &Accum) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Issue 089 T6: the stratified read ─────────────────────────────────
+
+    #[test]
+    fn provenance_class_maps_the_real_families() {
+        use super::ood::provenance_family;
+        // Classify the FAMILY (the prefix), never the full string.
+        assert_eq!(
+            provenance_class(provenance_family(
+                "katgpt-rs@9e0e6a57:bench_ptrm_width_scaling.rs",
+            )),
+            ProvenanceClass::Repo
+        );
+        assert_eq!(
+            provenance_class(provenance_family(
+                "riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs",
+            )),
+            ProvenanceClass::Repo
+        );
+        assert_eq!(
+            provenance_class(provenance_family(
+                "authored-composite:T3.5.5:return_plus_identity_op",
+            )),
+            ProvenanceClass::Authored
+        );
+        assert_eq!(
+            provenance_class(provenance_family("construction:gen6:k2:match_bool+use_self")),
+            ProvenanceClass::Construction
+        );
+        assert_eq!(provenance_class("mystery"), ProvenanceClass::Other);
+    }
+
+    /// A v6 fixture — id on the raw-span table — classifies REPO through the
+    /// mining join even though its frozen bench provenance says
+    /// `construction:gen6:…` (the mislabel guard: the frozen tag is
+    /// freeze-gate metadata, the raw table is mining truth).
+    #[test]
+    fn v6_fixtures_classify_repo_through_the_mining_join() {
+        let v6 = super::generations::generation_v6();
+        let fx = v6
+            .iter()
+            .find(|f| f.id == "gen6-svr-fn3-000")
+            .expect("v6 fixture present");
+        assert!(fx.provenance.starts_with("construction:gen6"));
+        let family = super::ood::ood_set_family(fx);
+        assert_eq!(family, "riir-train@a1197e06~1");
+        assert_eq!(provenance_class(family), ProvenanceClass::Repo);
+    }
+
+    /// The stratified read's arithmetic + ordering, over synthetic fixtures
+    /// covering every class + the excluded/clean/unattributed edges.
+    #[test]
+    fn stratify_splits_classes_and_orders_canonically() {
+        let fixtures = vec![
+            BenchFixture {
+                id: "repo-a",
+                provenance: "katgpt-rs@9e0e6a57:a.rs",
+                code: "",
+                expect_lints: &[],
+                clean: false,
+            },
+            BenchFixture {
+                id: "repo-b",
+                provenance: "riir-chain@7421245a~1:b.rs",
+                code: "",
+                expect_lints: &[],
+                clean: false,
+            },
+            BenchFixture {
+                id: "authored-a",
+                provenance: "authored-composite:T3.5.5:x",
+                code: "",
+                expect_lints: &[],
+                clean: false,
+            },
+            BenchFixture {
+                id: "construction-a",
+                provenance: "construction:gen2:k2:a+b",
+                code: "",
+                expect_lints: &[],
+                clean: false,
+            },
+        ];
+        let mk = |id: &str, ran: bool, before: &[&str], persist: &[&str], created: &[&str]| {
+            FixtureOutcome {
+                id: id.to_string(),
+                ran,
+                vocab_before: before.iter().map(|s| s.to_string()).collect(),
+                all_before: BTreeSet::new(),
+                all_after: BTreeSet::new(),
+                vocab_persist: persist.iter().map(|s| s.to_string()).collect(),
+                created: created.iter().map(|s| s.to_string()).collect(),
+                edits: 0,
+                passes: 0,
+                parses: true,
+                drifted: false,
+            }
+        };
+        let mut score = BenchScore::default();
+        score.outcomes = vec![
+            // repo-a: 2 findings, 1 resolved, 1 created.
+            mk("repo-a", true, &["a", "b"], &["b"], &["new"]),
+            // repo-b: CLEAN (0 findings, ran).
+            mk("repo-b", true, &[], &[], &[]),
+            // authored-a: 1 finding, resolved.
+            mk("authored-a", true, &["a"], &[], &[]),
+            // construction-a: EXCLUDED (ran=false — counts nowhere).
+            mk("construction-a", false, &["a"], &["a"], &[]),
+            // An outcome with no fixture (a defensive-count case → other).
+            mk("orphan", true, &["z"], &["z"], &[]),
+        ];
+        let strata = stratify(&fixtures, &score);
+        let labels: Vec<&str> = strata.iter().map(|s| s.class.as_str()).collect();
+        // Canonical order; construction omitted (0 ran).
+        assert_eq!(labels, ["repo", "authored", "other"]);
+        let repo = &strata[0];
+        assert_eq!(repo.n_ran, 2);
+        assert_eq!(repo.n_healable, 1);
+        assert_eq!(repo.n_clean, 1);
+        assert_eq!(repo.vocab_before, 2);
+        assert_eq!(repo.resolved, 1);
+        assert_eq!(repo.created, 1);
+        assert!((repo.heal_rate - 0.5).abs() < 1e-6);
+        let authored = &strata[1];
+        assert_eq!((authored.n_ran, authored.vocab_before, authored.resolved), (1, 1, 1));
+        assert!((authored.heal_rate - 1.0).abs() < 1e-6);
+        let other = &strata[2];
+        assert_eq!(other.n_ran, 1);
+        assert_eq!(other.heal_rate, 0.0); // 1 finding, 0 resolved
+    }
 
     #[test]
     fn heal_fixpoint_fixes_a_known_lint() {

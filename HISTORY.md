@@ -9,6 +9,52 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 089 T6 — the stratified score-bench read + the D-formula decline (2026-09-12)
+
+Split verdict on the difficulty-proxy task: the closed-form D is DECLINED on
+the record (both readings insufficient — mining-time D has no per-rule data
+path, healing-time D measures exposure volume, not difficulty, and would
+restate the n column), while the stratified-read half LANDED and paid for
+itself on its first run.
+
+The stratified read (`score_bench::{provenance_class, ProvenanceStratum,
+stratify}`): every clippy-lane bench run's heal rate split by fixture
+provenance class — `repo` (`repo@sha` families, organic mined), `authored`
+(`authored-composite:*`), `construction` (the generated ladders — the same
+word the pair vocabulary uses), `other` (fail-closed catch-all). The fixture
+join REUSES the ood mining join (`ood_set_family`): v6's frozen bench rows
+ carry `construction:gen6:…` metadata, but their ids live on the raw span
+table with the real `repo@sha` provenance — the strata classify v6 as REPO
+(guarded by test; without the join the v6 ladder would have read
+construction). Printed after every clippy-lane bench + persisted additively
+on the jsonl row (`HistoryRecord.strata`, the ood law: instrumentation, not
+scored — SVG + saturation ignore it, the Warm-tier `ScoreRunRow` mirror
+drops it, old rows deserialize as `None`). The gen-4/5 lanes write no
+strata (single-class ladders — a one-row stratum would restate the
+aggregate).
+
+**First measurements (live, 2026-09-12):** v1's 96.2% aggregate is
+authored-dominated — authored 98.0% (27 fixtures, 51 findings, 50 resolved)
+vs repo 50.0% (8 fixtures but only 2 findings — 6 are clean/decline spans).
+The v6 all-repo ladder reads 95.2% (17 spans, 21 findings, 20 resolved).
+So the healer holds ~95% on real-mined material at depth (v6) and ~98% on
+authored composites; v1's tiny repo surface is sample-noise territory (2
+findings). The per-CLASS trend across generations is now measurable — every
+bench row is generation-tagged, which is exactly what the T5 outcome-feed
+per-batch blocker lacks.
+
+En-route fix the lane required: the score_bench BIN lane had been E0631-
+broken (`v5_is_removal_rule` passed as a bare fn filter over `String`
+items) — a lane nobody compiles (the Issue-513 class); fixed with the
+closure wrap. 4 new tests: classifier families, the v6 mining-join guard,
+stratify arithmetic/order/edges (clean/excluded/orphan), the additive-serde
+law (pre-T6 rows deserialize `strata: None`; a stratified row round-trips).
+Lanes: lib 1433/1433 at `score_bench`, 1211/1211 default; clippy `-D
+warnings` clean at `score_bench` and `score_bench,latent_retrieval`; the
+full bin lane (`latent_retrieval,rust_perf,clippy_lints,kat_service,
+score_bench,rustc_errors`) green; two live bench runs appended (v1 gen-1
+#77, v6) with strata on the rows.
+
 ## Issue 089 T5 — provenance weighting: the priced pair namespace + the enforced rating fence (2026-09-12)
 
 The learnability-frontier instrument gained its provenance axis (the

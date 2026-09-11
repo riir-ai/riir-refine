@@ -59,6 +59,15 @@ pub struct HistoryRecord {
     /// traj-store schema-identity test).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ood: Option<super::ood::OodRow>,
+    /// Issue 089 T6 — the provenance-stratified read: this run's heal rate
+    /// split by fixture provenance class (repo-mined / authored /
+    /// construction / other; the v1 set mixes the first two into one number).
+    /// The same additive law as `ood`: instrumentation, not a scored axis —
+    /// the SVG renderer and the saturation detector ignore it, and the
+    /// Warm-tier mirror drops it. Rows predating the strata (and the gen-4/5
+    /// lanes, whose ladders are single-class) deserialize as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strata: Option<Vec<super::ProvenanceStratum>>,
 }
 
 /// The serde default for pre-generation rows (issue 072 T4).
@@ -237,6 +246,7 @@ impl HistoryRecord {
             vocab_size: score.vocab_size,
             generation: 1,
             ood: Some(super::ood::ood_axis().clone()),
+            strata: None,
         }
     }
 
@@ -244,6 +254,17 @@ impl HistoryRecord {
     #[must_use]
     pub fn with_generation(mut self, generation: u8) -> Self {
         self.generation = generation;
+        self
+    }
+
+    /// Attach the provenance-stratified read (Issue 089 T6) — the caller
+    /// owns the fixture list, so the strata are computed where both inputs
+    /// live (the clippy bench lane) and attached here. `None`/absent on the
+    /// gen-4/5 lanes (single-class ladders — a one-row stratum would restate
+    /// the aggregate) and on all rows predating the field.
+    #[must_use]
+    pub fn with_strata(mut self, strata: Vec<super::ProvenanceStratum>) -> Self {
+        self.strata = Some(strata);
         self
     }
 }
@@ -382,6 +403,36 @@ fn print_provenance_families(
         .map(|(f, n)| format!("{f}×{n}"))
         .collect();
     println!("  {side} ({set}) families: {}", joined.join(", "));
+}
+
+/// Print the provenance-stratified read (Issue 089 T6) — this run's heal
+/// rate split by fixture class. The console half of the stratified
+/// score-bench read; the same strata ride the appended JSONL row (the
+/// trend-across-generations half — what the T5 per-batch blocker could not
+/// measure on the outcome feed, unblocked here because every bench row IS
+/// generation-tagged).
+pub fn print_strata(strata: &[super::ProvenanceStratum]) {
+    if strata.is_empty() {
+        println!("provenance strata: (none — no ran fixtures attributed)");
+        return;
+    }
+    println!("provenance strata (Issue 089 T6 — heal rate by fixture class; repo=real-mined, authored=composites, construction=generated ladders):");
+    println!(
+        "  {:<13} {:>4} {:>8} {:>9} {:>8} {:>6} {:>7}",
+        "class", "ran", "vocab", "resolved", "created", "clean", "heal%"
+    );
+    for s in strata {
+        println!(
+            "  {:<13} {:>4} {:>8} {:>9} {:>8} {:>6} {:>6.1}%",
+            s.class,
+            s.n_ran,
+            s.vocab_before,
+            s.resolved,
+            s.created,
+            s.n_clean,
+            s.heal_rate * 100.0
+        );
+    }
 }
 
 /// Chart geometry constants (860×400, y ∈ [0,1] from percent).
@@ -618,7 +669,35 @@ mod tests {
             vocab_size: 33,
             generation: 1,
             ood: None,
+            strata: None,
         }
+    }
+
+    /// Issue 089 T6 — the additive-`strata` law: rows predating the field
+    /// deserialize as `None` (never fail), and a `with_strata` row round-trips.
+    #[test]
+    fn strata_field_is_additive_and_round_trips() {
+        // A pre-T6 row (no `strata` key in the JSON at all).
+        let old_row = "{\"ts\":\"2026-08-19T10:00:00\",\"sha\":\"abc\",\"n_ran\":1,\"n_healable\":1,\"n_clean\":0,\"heal_rate\":0.5,\"created_rate\":0.0,\"parse_safety\":1.0,\"decline_correctness\":1.0,\"edits_total\":1,\"vocab_size\":33,\"generation\":1}";
+        let rec: HistoryRecord = serde_json::from_str(old_row).expect("old row deserializes");
+        assert_eq!(rec.strata, None);
+        assert_eq!(rec.ood, None);
+
+        // A stratified row round-trips through the jsonl encoding.
+        let stratified = rec.with_strata(vec![crate::score_bench::ProvenanceStratum {
+            class: "repo".to_string(),
+            n_ran: 2,
+            n_healable: 1,
+            n_clean: 1,
+            vocab_before: 4,
+            resolved: 3,
+            created: 0,
+            heal_rate: 0.75,
+        }]);
+        let line = serde_json::to_string(&stratified).unwrap();
+        assert!(line.contains("\"strata\":"), "{line}");
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.strata, stratified.strata);
     }
 
     #[test]

@@ -4207,6 +4207,13 @@ fn run_score_bench(generation: u8) {
     );
     let score = sb::run_bench(&oracle, &fixture_list);
     sb::report::print_report(&score);
+    // Issue 089 T6 — the provenance-stratified read: this run's heal rate
+    // split by fixture class (repo/authored/construction). Printed here,
+    // attached to the history row in finish_score_bench — the per-class
+    // trend across generations becomes measurable (every bench row is
+    // generation-tagged; the outcome-feed per-batch blocker does not apply).
+    let strata = sb::stratify(&fixture_list, &score);
+    sb::report::print_strata(&strata);
     if generation >= 2 {
         print_per_k_solve_rates(&fixture_list, &score);
     }
@@ -4226,7 +4233,7 @@ fn run_score_bench(generation: u8) {
         std::process::exit(1);
     }
 
-    finish_score_bench(generation, &score);
+    finish_score_bench(generation, &score, Some(strata));
 }
 
 /// The M5 non-vacuity admission gate, shared by the clippy and compile
@@ -4276,13 +4283,24 @@ fn admission_gate(
 /// re-render every per-generation SVG (v1 always; v2/v3/v4 when non-empty),
 /// print the history line, and report saturation telemetry. One
 /// implementation for both runners — the ratchet invariants live here.
+///
+/// `strata` (Issue 089 T6): the provenance-stratified read, computed by the
+/// clippy lane (which owns the fixture list); `None` on the gen-4/5 lanes
+/// (single-class ladders — a one-row stratum would restate the aggregate).
 #[cfg(feature = "score_bench")]
-fn finish_score_bench(generation: u8, score: &riir_clippy::score_bench::BenchScore) {
+fn finish_score_bench(
+    generation: u8,
+    score: &riir_clippy::score_bench::BenchScore,
+    strata: Option<Vec<riir_clippy::score_bench::ProvenanceStratum>>,
+) {
     use riir_clippy::score_bench as sb;
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
-    let rec = sb::report::HistoryRecord::from_score(score, sb::report::git_sha())
+    let mut rec = sb::report::HistoryRecord::from_score(score, sb::report::git_sha())
         .with_generation(generation);
+    if let Some(s) = strata {
+        rec = rec.with_strata(s);
+    }
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
@@ -4500,7 +4518,7 @@ fn run_score_bench_compile() {
         std::process::exit(1);
     }
 
-    finish_score_bench(4, &score);
+    finish_score_bench(4, &score, None);
 }
 
 /// The generation-5 bench runner (Plan 094): the rust_perf vocabulary
@@ -4541,7 +4559,9 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        .filter(sb::generations::v5_is_removal_rule)
+        // fn(&str) over String items — the closure adapts (a bare fn path
+        // here failed E0631 on this score_bench-only lane, pre-existing).
+        .filter(|r| sb::generations::v5_is_removal_rule(r))
         .collect();
 
     let mut members_total = 0usize;
@@ -4707,7 +4727,7 @@ fn run_score_bench_perf() {
         std::process::exit(1);
     }
 
-    finish_score_bench(5, &score);
+    finish_score_bench(5, &score, None);
 }
 
 /// The M4 difficulty measurement: per-k solve rates over the ladder
