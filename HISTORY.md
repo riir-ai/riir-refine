@@ -4687,3 +4687,42 @@ store: clippy 15/49 observed (`manual_is_multiple_of` 2/2 informative at
 rank 1 — the queue's first genuinely informative domain row), perf 3/126,
 sec 2/15, kernel 0/607 honest-empty, `--limit` caps per section,
 `--misses --report` unchanged. Issue 089 T3 row carries the full record.
+
+## 2026-09-12 — Issue 092 T1: the GW corpus-alignment PoC, measured and closed (defend-wrong NEGATIVE)
+
+The 371/594 fusion idea (align two healer rule-corpora's similarity spaces
+with GW → cross-domain correspondence map for dedup + fix-transfer) ran its
+defend-wrong PoC and lost, cleanly and at matched review budget.
+
+**Instrument:** katgpt-rs `b09f1368` exposed the GW coupling publicly
+(`gw_coupling` — same deterministic multi-start solve, returns the winning
+coupling matrix instead of only its scalar loss; identity-correspondence +
+bit-determinism unit tests). The PoC harness is `examples/gw_corpus_poc.rs`
+behind opt-in `gw_corpus` (measurement-only; no heal-path, no router).
+
+**Protocol:** clippy_lints (49) × rust_perf (126) = 6,174 pairs. Arm (a) GW:
+trigram-cosine distance over `buggy_code`+`fixed_code` ONLY (names withheld —
+sharing the baseline's lexical signal would be circular), perf split even/odd
+into 63-halves (GW_MAX=64), two solves unioned. Arm (b): token Jaccard over
+rule identifiers (today's name/convention dedup as a ranking). Arm (c): stride
+base rate. Ground truth: 180 hand-labeled pair reads (ALL top-60 of each arm +
+60 stride pairs) against criteria fixed before labeling.
+
+**Result:** GW precision@60 = 0.017 = the base rate (no signal); name/keyword
+0.083 = 5× base rate. GW's strongest couplings (full-column masses) were
+structural artifacts (`collapsible_else_if`×`powi-vs-powf`); the one
+GW-exclusive TRUE (`manual_slice_fill`×`retain-inplace`) is a data point, not
+a win. Robust to any single label flip. The planned known-negative class was
+EMPTY (no perf `context_notes` names any of the 49 clippy lints — the
+"Distinct from" refs are all within-domain).
+
+**Mechanism:** surface-trigram distance structure is not fix-shape structure;
+and this test bed's true correspondences are name-visible by construction
+(both corpora name rules after the same Rust API surface — the disjoint-
+vocabulary regime where structure-only alignment could win does not exist
+between these two corpora). Reopen trigger recorded in the issue: a semantic
+fix-shape embedding (AST/transform fingerprints) or a disjoint-vocabulary
+corpus pair (clippy × docker).
+
+Full record + 180-label appendix: `.benchmarks/083_gw_corpus_alignment_poc.md`.
+Issue 092 closed (T2–T4 never fired). Research note 166 §A verdict updated.

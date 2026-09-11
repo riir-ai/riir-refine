@@ -188,6 +188,16 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # on a feature is the vacuous-instrument failure this bench exists to avoid.
 tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_heal"]
 
+# Issue 092 T1: cross-domain rule-corpus alignment PoC (GW on rule-similarity
+# spaces). Enables katgpt-core's `gw_alignment` primitive (Plan 594, opt-in)
+# and gates `examples/gw_corpus_poc.rs` — the defend-wrong harness (GW
+# correspondence map vs name/keyword baseline vs no-alignment base rate over
+# the clippy_lints (49) × rust_perf (126) corpora). OFFLINE corpus-curation
+# instrumentation only: no heal-path, no router (cross_domain_routing.md's
+# scoping verdict stands). Opt-in, measurement-only, report-first
+# (R135/Bench-047 doctrine — no wiring until the PoC verdict).
+gw_corpus = ["katgpt-core/gw_alignment", "clippy_lints", "rust_perf"]
+
 # Plan 019 T0.3: the retrieval-free apply→check→revert substrate shared by
 # `fix_verify` (the `--fix --verify` batch gate) and the `rustc_errors`
 # `--fix-compile` driver (Phase 1). Owns the cargo-check subprocess, the
@@ -465,6 +475,10 @@ required-features = ["rust_perf"]
 [[example]]
 name = "perf_bench_demo"
 required-features = ["rust_perf_bench"]
+
+[[example]]
+name = "gw_corpus_poc"
+required-features = ["gw_corpus"]
 
 [[example]]
 name = "clippy_verify_demo"
