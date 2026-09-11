@@ -287,6 +287,33 @@ impl FixtureOutcome {
     pub fn clean_violation(&self) -> bool {
         self.vocab_before.is_empty() && self.edits > 0
     }
+
+    /// The shaped verdict (Issue 089 T7): `1.0` clean clear (targets
+    /// resolved, nothing created), [`SHAPED_VERDICT`] "target cleared ∧ new
+    /// diags introduced" (a half win — full credit would reward feeding
+    /// the created axis, zero would ignore the target it did clear), `0.0`
+    /// otherwise (persist / broken output / declined). Fixture-attributed:
+    /// every resolved finding of the fixture earns the fixture's verdict —
+    /// per-edit attribution would need edit→diagnostic tracing, so the v8
+    /// generation keeps this exact BY CONSTRUCTION (one target lint per
+    /// atom; multi-target fixtures score the same way, documented here).
+    #[must_use]
+    pub fn shaped_verdict(&self) -> f32 {
+        if !self.parses || self.resolved() == 0 {
+            return 0.0;
+        }
+        if self.created.is_empty() {
+            1.0
+        } else {
+            SHAPED_VERDICT
+        }
+    }
+
+    /// Is this outcome the shaped case (`verdict == SHAPED_VERDICT`)?
+    #[must_use]
+    pub fn is_shaped(&self) -> bool {
+        self.parses && self.resolved() > 0 && !self.created.is_empty()
+    }
 }
 
 /// Aggregate bench score — feeds one `score_history.jsonl` record.
@@ -311,7 +338,28 @@ pub struct BenchScore {
     /// Persisting (lint, count) — the miss diagnostic, most-frequent first.
     pub persist: Vec<(String, usize)>,
     pub outcomes: Vec<FixtureOutcome>,
+    // ── Issue 089 T7: the shaped-verdict axis (instrumentation, not a
+    // scored axis — the admission/ratchet math keeps reading heal_rate;
+    // the shaped axis prices the half-win the plain rate over-credits) ──
+    /// Ran healable fixtures whose verdict is exactly [`SHAPED_VERDICT`].
+    pub n_shaped: usize,
+    /// Σ verdict × resolved findings — the shaped-weighted credit
+    /// ([`FixtureOutcome::shaped_verdict`] per fixture).
+    pub shaped_credit: f32,
+    /// `shaped_credit / Σ vocab-before` — strictly ≤ `heal_rate`.
+    pub shaped_rate: f32,
+    /// Per-RULE shaped counts (Issue 089 T7's "Beta (half-count)" feed):
+    /// the target rule of each shaped fixture earns one row entry worth
+    /// `+0.5 r AND +0.5 f`. Attribution is unambiguous only for
+    /// single-target fixtures — a shaped fixture with ≠1 `vocab_before`
+    /// lint counts in the rates above but NOT here (recorded, not guessed).
+    pub shaped_half_counts: Vec<(String, u32)>,
 }
+
+/// The shaped-verdict value (Issue 089 T7): a heal that clears its target
+/// AND introduces new diagnostics is a HALF WIN — see
+/// [`FixtureOutcome::shaped_verdict`].
+pub const SHAPED_VERDICT: f32 = 0.5;
 
 /// The production `--fix` heal loop, mirrored from `src/bin/heal.rs`
 /// (`MAX_FIX_PASSES = 4`, perf + clippy lanes, overlap-selected splices).
@@ -448,6 +496,7 @@ pub fn run_bench(oracle: &ClippyOracle, fixture_list: &[BenchFixture]) -> BenchS
 /// trial share identical denominators by construction — the promotion
 /// gate compares integer totals, never floats.
 #[allow(clippy::cast_precision_loss)]
+#[must_use]
 pub fn run_bench_with(
     oracle: &ClippyOracle,
     fixture_list: &[BenchFixture],
@@ -459,13 +508,7 @@ pub fn run_bench_with(
         vocab_size: vocab.len(),
         ..BenchScore::default()
     };
-    let mut vocab_before_total = 0usize;
-    let mut resolved_total = 0usize;
-    let mut persist_counts: BTreeMap<String, usize> = BTreeMap::new();
-    let mut clean_total = 0usize;
-    let mut clean_ok = 0usize;
-    let mut edited = 0usize;
-    let mut parses_ok = 0usize;
+    let mut acc = RunAccum::default();
 
     for fx in fixture_list {
         let before = oracle.lints_for(&wrap(fx.code));
@@ -488,16 +531,7 @@ pub fn run_bench_with(
             continue;
         }
         let vocab_before: BTreeSet<String> = before.lints.intersection(&vocab).cloned().collect();
-        let frozen: BTreeSet<String> = fx.expect_lints.iter().map(ToString::to_string).collect();
-        let drifted = vocab_before != frozen;
-        if drifted {
-            eprintln!(
-                "score_bench: DRIFT {} — frozen {:?} vs fresh {:?} (fresh wins)",
-                fx.id,
-                frozen.iter().map(String::as_str).collect::<Vec<_>>(),
-                vocab_before.iter().map(String::as_str).collect::<Vec<_>>(),
-            );
-        }
+        let drifted = warn_label_drift(fx, &vocab_before);
 
         let (healed, edits, passes) = heal_fixpoint_with(fx.code, candidates);
         let (after_lints, output_ok, vocab_persist, created) =
@@ -518,22 +552,32 @@ pub fn run_bench_with(
         };
 
         if vocab_before.is_empty() {
-            clean_total += 1;
+            acc.clean_total += 1;
             if !outcome.clean_violation() {
-                clean_ok += 1;
+                acc.clean_ok += 1;
             }
         } else {
-            vocab_before_total += vocab_before.len();
-            resolved_total += outcome.resolved();
+            acc.vocab_before_total += vocab_before.len();
+            acc.resolved_total += outcome.resolved();
             for l in &vocab_persist {
-                *persist_counts.entry(l.clone()).or_default() += 1;
+                *acc.persist_counts.entry(l.clone()).or_default() += 1;
+            }
+            // Issue 089 T7 — the shaped verdict (healable fixtures only: a
+            // clean fixture has no target to have cleared).
+            acc.shaped_credit += outcome.shaped_verdict() * outcome.resolved() as f32;
+            if outcome.is_shaped() {
+                acc.n_shaped += 1;
+                if vocab_before.len() == 1 {
+                    let target = vocab_before.iter().next().cloned().unwrap_or_default();
+                    *acc.half_counts.entry(target).or_default() += 1;
+                }
             }
         }
         score.created_total += created.len();
         if edits > 0 {
-            edited += 1;
+            acc.edited += 1;
             if output_ok {
-                parses_ok += 1;
+                acc.parses_ok += 1;
             }
         }
         score.edits_total += edits;
@@ -541,25 +585,15 @@ pub fn run_bench_with(
     }
 
     score.n_ran = score.outcomes.len();
-    score.n_clean = clean_total;
-    finalize_rates(
-        &mut score,
-        &Accum {
-            vocab_before_total,
-            resolved_total,
-            clean_total,
-            clean_ok,
-            edited,
-            parses_ok,
-            persist_counts,
-        },
-    );
+    score.n_clean = acc.clean_total;
+    finalize_rates(&mut score, &acc);
     score
 }
 
-/// Loop accumulators for [`run_bench`] (kept as one struct so the
-/// finalize step + the loop stay under the line budget).
-struct Accum {
+/// The loop accumulators for [`run_bench_with`] (one struct so the loop
+/// + [`finalize_rates`] stay under the line budget).
+#[derive(Default)]
+struct RunAccum {
     vocab_before_total: usize,
     resolved_total: usize,
     clean_total: usize,
@@ -567,14 +601,34 @@ struct Accum {
     edited: usize,
     parses_ok: usize,
     persist_counts: BTreeMap<String, usize>,
+    /// Issue 089 T7 — shaped-verdict counters.
+    n_shaped: usize,
+    shaped_credit: f32,
+    half_counts: BTreeMap<String, u32>,
+}
+
+/// The frozen-label drift warning (the fresh verdict wins at bench time;
+/// the print is the drift record). Returns whether drift was detected.
+fn warn_label_drift(fx: &BenchFixture, vocab_before: &BTreeSet<String>) -> bool {
+    let frozen: BTreeSet<String> = fx.expect_lints.iter().map(ToString::to_string).collect();
+    let drifted = *vocab_before != frozen;
+    if drifted {
+        eprintln!(
+            "score_bench: DRIFT {} — frozen {:?} vs fresh {:?} (fresh wins)",
+            fx.id,
+            frozen.iter().map(String::as_str).collect::<Vec<_>>(),
+            vocab_before.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+    drifted
 }
 
 /// Compute the aggregate rates from the loop accumulators.
 // Count→ratio casts over fixture counts (< 10⁴) — far below f32's
 // mantissa; allowed with cause.
 #[allow(clippy::cast_precision_loss)]
-fn finalize_rates(score: &mut BenchScore, accum: &Accum) {
-    let Accum {
+fn finalize_rates(score: &mut BenchScore, accum: &RunAccum) {
+    let RunAccum {
         vocab_before_total,
         resolved_total,
         clean_total,
@@ -582,12 +636,23 @@ fn finalize_rates(score: &mut BenchScore, accum: &Accum) {
         edited,
         parses_ok,
         persist_counts,
+        n_shaped,
+        shaped_credit,
+        half_counts,
     } = accum;
     score.heal_rate = if *vocab_before_total > 0 {
         *resolved_total as f32 / *vocab_before_total as f32
     } else {
         0.0
     };
+    score.n_shaped = *n_shaped;
+    score.shaped_credit = *shaped_credit;
+    score.shaped_rate = if *vocab_before_total > 0 {
+        *shaped_credit / *vocab_before_total as f32
+    } else {
+        0.0
+    };
+    score.shaped_half_counts = half_counts.clone().into_iter().collect();
     score.created_rate = if *vocab_before_total > 0 {
         score.created_total as f32 / *vocab_before_total as f32
     } else {
@@ -740,6 +805,79 @@ mod tests {
         let other = &strata[2];
         assert_eq!(other.n_ran, 1);
         assert_eq!(other.heal_rate, 0.0); // 1 finding, 0 resolved
+    }
+
+    // ── Issue 089 T7: the shaped verdict ─────────────────────────────────
+
+    #[test]
+    fn shaped_verdict_prices_the_three_outcomes() {
+        let mk = |before: &[&str], persist: &[&str], created: &[&str], parses: bool| {
+            FixtureOutcome {
+                id: "x".to_string(),
+                ran: true,
+                vocab_before: before.iter().map(ToString::to_string).collect(),
+                all_before: BTreeSet::new(),
+                all_after: BTreeSet::new(),
+                vocab_persist: persist.iter().map(ToString::to_string).collect(),
+                created: created.iter().map(ToString::to_string).collect(),
+                edits: 1,
+                passes: 1,
+                parses,
+                drifted: false,
+            }
+        };
+        // Clean clear → 1.0.
+        let clean_clear = mk(&["a"], &[], &[], true);
+        assert!((clean_clear.shaped_verdict() - 1.0).abs() < 1e-6);
+        assert!(!clean_clear.is_shaped());
+        // Target cleared ∧ new diags → exactly SHAPED_VERDICT (0.5).
+        let shaped = mk(&["a"], &[], &["redundant_closure"], true);
+        assert!((shaped.shaped_verdict() - SHAPED_VERDICT).abs() < 1e-6);
+        assert!((SHAPED_VERDICT - 0.5).abs() < 1e-6);
+        assert!(shaped.is_shaped());
+        // Persist → 0.0 (nothing cleared).
+        let persist = mk(&["a"], &["a"], &[], true);
+        assert!((persist.shaped_verdict() - 0.0).abs() < 1e-6);
+        // Broken output → 0.0 even though vocab_persist is empty (the
+        // after_verdict contract already scores breakage as nothing
+        // resolved — the verdict must not re-credit it).
+        let broken = mk(&["a"], &[], &["x"], false);
+        assert!((broken.shaped_verdict() - 0.0).abs() < 1e-6);
+        // Clean fixture (declined, no target) → 0.0 — a shaped verdict needs
+        // a target to have cleared.
+        let declined = mk(&[], &[], &[], true);
+        assert!((declined.shaped_verdict() - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn shaped_half_counts_attribute_single_target_fixtures_only() {
+        // The attribution law: a shaped fixture with EXACTLY ONE vocab lint
+        // credits that rule; a multi-target shaped fixture counts in the
+        // rates but NOT in half_counts (recorded, not guessed). Exercised
+        // through the loop accumulator shape — the arithmetic is
+        // `run_bench_with`'s; here we pin the classification inputs.
+        let single = FixtureOutcome {
+            id: "one".to_string(),
+            ran: true,
+            vocab_before: ["manual_map".to_string()].into_iter().collect(),
+            all_before: BTreeSet::new(),
+            all_after: BTreeSet::new(),
+            vocab_persist: BTreeSet::new(),
+            created: ["redundant_closure".to_string()].into_iter().collect(),
+            edits: 1,
+            passes: 1,
+            parses: true,
+            drifted: false,
+        };
+        assert!(single.is_shaped());
+        assert_eq!(single.vocab_before.len(), 1);
+        let multi = FixtureOutcome {
+            vocab_before: ["a".to_string(), "b".to_string()].into_iter().collect(),
+            created: ["c".to_string()].into_iter().collect(),
+            ..single.clone()
+        };
+        assert!(multi.is_shaped());
+        assert_ne!(multi.vocab_before.len(), 1);
     }
 
     #[test]

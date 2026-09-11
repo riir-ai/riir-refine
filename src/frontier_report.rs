@@ -618,6 +618,127 @@ pub fn render_provenance_yield(rows: &[ProvenanceYieldRow]) -> String {
     out
 }
 
+// ── Issue 089 T7: the "Beta (half-count)" feed contract ────────────────
+
+/// One row of the shaped half-count fold: what a rule's counters become
+/// when the bench's shaped verdicts ("target cleared ∧ new diags
+/// introduced", priced at 0.5 — `score_bench::SHAPED_VERDICT` on the
+/// feature-gated bench side) are folded in at HALF EVIDENCE — `r += s/2
+/// AND f += s/2`, so `p̂` drifts toward 0.5 (exactly half a success and
+/// half a failure per shaped outcome). The Elo twin of the same verdict
+/// is the TIE ([`crate::elo::update_pair_scored`] at `s = 0.5`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShapedHalfRow {
+    pub rule: String,
+    /// Shaped-outcome count (each worth +0.5 r AND +0.5 f).
+    pub s: u32,
+    /// The store's integer counters before the fold.
+    pub r: u32,
+    pub f: u32,
+    /// `r + s/2`.
+    pub r_eff: f64,
+    /// `f + s/2`.
+    pub f_eff: f64,
+    /// The store's `p̂` (0.0 when the store has never seen the rule — the
+    /// bench-only rule case; the "0.0" here is "no organic evidence", NOT
+    /// [`BandClass::BelowBand`]).
+    pub p_hat_store: f64,
+    /// `(r + s/2) / (r + f + s)` — the half-count-folded rate.
+    pub p_hat_with_halves: f64,
+}
+
+/// Fold the bench's per-rule shaped counts into the store's integer
+/// outcome counters (Issue 089 T7). Rules named by `half_counts` that the
+/// store has never seen heal with `r = f = 0` — their folded `p̂` is
+/// EXACTLY 0.5 (the admission-band ceiling by construction: a rule whose
+/// only evidence is shaped sits at the band's edge, never above it).
+///
+/// Deliberately NOT wired into [`summarize`]/the LCB math: the u32
+/// `best_belief_score` primitive cannot price halves without doubling
+/// counts (Beta(1+2r+s, 1+2f+s) fakes concentration), and the admission
+/// gate stays on the organic store feed — this fold is the REPORT
+/// representation (report-first law), the same standing as the strata.
+#[must_use]
+pub fn shaped_half_rows(
+    entries: &[(String, u32, u32)],
+    half_counts: &[(String, u32)],
+) -> Vec<ShapedHalfRow> {
+    use std::collections::BTreeMap;
+    let by_rule: BTreeMap<&str, (u32, u32)> = entries
+        .iter()
+        .map(|(r, s, f)| (r.as_str(), (*s, *f)))
+        .collect();
+    let mut rows: Vec<ShapedHalfRow> = half_counts
+        .iter()
+        .filter(|(_, s)| *s > 0)
+        .map(|(rule, s)| {
+            let (r, f) = by_rule.get(rule.as_str()).copied().unwrap_or((0, 0));
+            let half = f64::from(*s) / 2.0;
+            let (r_eff, f_eff) = (f64::from(r) + half, f64::from(f) + half);
+            let p_store = if r + f == 0 {
+                0.0
+            } else {
+                f64::from(r) / f64::from(r + f)
+            };
+            ShapedHalfRow {
+                rule: rule.clone(),
+                s: *s,
+                r,
+                f,
+                r_eff,
+                f_eff,
+                p_hat_store: p_store,
+                p_hat_with_halves: r_eff / (r_eff + f_eff),
+            }
+        })
+        .collect();
+    rows.sort_by(|a, b| b.s.cmp(&a.s).then(a.rule.cmp(&b.rule)));
+    rows
+}
+
+/// Render the half-count section (EMPTY-Loud on no shaped rows — an absent
+/// feed is stated, never rendered as a zero-measurement).
+#[must_use]
+pub fn render_shaped_half_rows(rows: &[ShapedHalfRow]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(256 + rows.len() * 112);
+    if rows.is_empty() {
+        let _ = writeln!(
+            out,
+            "shaped half-count fold (Issue 089 T7): EMPTY — no shaped verdict rows in the score history (generation 8 unrun here)"
+        );
+        return out;
+    }
+    let _ = writeln!(
+        out,
+        "shaped half-count fold (Issue 089 T7 — each shaped verdict = +0.5 r AND +0.5 f; the Elo twin is the tie):"
+    );
+    let _ = writeln!(
+        out,
+        "  {:<28} {:>4} {:>9} {:>9} {:>10} {:>10}",
+        "rule", "s", "r→r_eff", "f→f_eff", "p̂_store", "p̂_folded"
+    );
+    for row in rows {
+        let _ = writeln!(
+            out,
+            "  {:<28} {:>4} {:>4}→{:<4.1} {:>4}→{:<4.1} {:>10.3} {:>10.3}",
+            row.rule,
+            row.s,
+            row.r,
+            row.r_eff,
+            row.f,
+            row.f_eff,
+            row.p_hat_store,
+            row.p_hat_with_halves
+        );
+    }
+    let _ = writeln!(
+        out,
+        "  (report-first: the admission/LCB math stays on the store's integer feed — doubling counts to fit u32 would fake Beta concentration)"
+    );
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -970,5 +1091,55 @@ mod tests {
         assert!(text.contains("organic") && text.contains("synthetic"), "{text}");
         assert!(text.contains("per-BATCH causal yield is BLOCKED"), "{text}");
         assert!(text.contains("band-mass"), "{text}");
+    }
+
+    // ── Issue 089 T7: the half-count fold ───────────────────────────────
+
+    #[test]
+    // float_cmp: the fold's arithmetic is exact in f64 at these magnitudes
+    // — equality against the hand-computed rationals IS the fixture.
+    #[allow(clippy::float_cmp)]
+    fn shaped_half_rows_fold_at_half_evidence() {
+        let entries = vec![
+            ("manual_map".into(), 9u32, 1u32), // p̂_store = 0.9
+            ("use_self".into(), 172, 0),       // saturated — untouched below
+        ];
+        let half_counts = vec![
+            ("manual_map".into(), 2u32), // r_eff = 10, f_eff = 2 → p̂ 10/12
+            ("bench_only_rule".into(), 3), // r=f=0 → p̂ EXACTLY 0.5
+        ];
+        let rows = shaped_half_rows(&entries, &half_counts);
+        assert_eq!(rows.len(), 2);
+        // Ordered by s desc: bench_only_rule (3) first.
+        assert_eq!(rows[0].rule, "bench_only_rule");
+        assert!((rows[0].p_hat_with_halves - 0.5).abs() < 1e-9);
+        assert_eq!(rows[0].p_hat_store, 0.0);
+        let mm = &rows[1];
+        assert_eq!((mm.r, mm.f, mm.s), (9, 1, 2));
+        assert!((mm.r_eff - 10.0).abs() < 1e-9 && (mm.f_eff - 2.0).abs() < 1e-9);
+        assert!((mm.p_hat_with_halves - 10.0 / 12.0).abs() < 1e-9);
+        assert!((mm.p_hat_store - 0.9).abs() < 1e-9);
+        // p̂ DRIFTED DOWN toward 0.5 — the fold's whole point: shaped
+        // outcomes are half evidence AGAINST the rule too.
+        assert!(mm.p_hat_with_halves < mm.p_hat_store);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // 0.0 comparisons on no-store rows — exact by construction
+    fn shaped_half_rows_drop_zero_counts_and_render_empty_loud() {
+        let rows = shaped_half_rows(&[("a".into(), 1, 1)], &[("a".into(), 0)]);
+        assert!(rows.is_empty(), "a zero-count half row is not a measurement");
+        let text = render_shaped_half_rows(&[]);
+        assert!(text.contains("EMPTY"), "{text}");
+        assert!(text.contains("generation 8 unrun"), "{text}");
+        // The populated render carries the columns + the LCB caveat.
+        let rows = shaped_half_rows(
+            &[("manual_map".into(), 4, 1)],
+            &[("manual_map".into(), 1)],
+        );
+        let text = render_shaped_half_rows(&rows);
+        assert!(text.contains("shaped half-count fold"), "{text}");
+        assert!(text.contains("p̂_folded"), "{text}");
+        assert!(text.contains("fake Beta concentration"), "{text}");
     }
 }

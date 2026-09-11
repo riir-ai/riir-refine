@@ -2806,7 +2806,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -3384,15 +3384,15 @@ fn parse_args() -> Args {
             }
             "--generation" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, 6, or 7)");
+                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, 6, 7, or 8)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if !(1..=7).contains(&g) {
-                    eprintln!("--generation accepts 1, 2, 3, 4, 5, 6, or 7, got {g}");
+                if !(1..=8).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, 3, 4, 5, 6, 7, or 8, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
@@ -4199,6 +4199,19 @@ fn run_score_bench(generation: u8) {
                 std::process::exit(1);
             }
         },
+        8 => match sb::generations::v8_freeze_status() {
+            Ok(admitted) => {
+                println!("generation v8: {admitted} admitted fixture(s) (freeze record present)");
+                (
+                    sb::generations::generation_v8(),
+                    "generation-v8 shaped-verdict ladder",
+                )
+            }
+            Err(e) => {
+                eprintln!("generation v8: {e}");
+                std::process::exit(1);
+            }
+        },
         _ => (sb::fixtures::fixtures(), "frozen v1 set"),
     };
     println!(
@@ -4214,7 +4227,9 @@ fn run_score_bench(generation: u8) {
     // generation-tagged; the outcome-feed per-batch blocker does not apply).
     let strata = sb::stratify(&fixture_list, &score);
     sb::report::print_strata(&strata);
-    if generation >= 2 {
+    // The k-ladder axis is gens 2–7 (composition width / depth rungs);
+    // gen-8's axis is the SHAPE — its per-atom table replaces this.
+    if (2..=7).contains(&generation) {
         print_per_k_solve_rates(&fixture_list, &score);
     }
     if generation == 6 {
@@ -4222,6 +4237,9 @@ fn run_score_bench(generation: u8) {
     }
     if generation == 7 {
         print_v7_chain_tables(&fixture_list, &score);
+    }
+    if generation == 8 {
+        print_v8_shaped_table(&fixture_list, &score);
     }
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
@@ -4251,6 +4269,27 @@ fn admission_gate(
     history_before: &[riir_clippy::score_bench::report::HistoryRecord],
 ) -> Result<(), String> {
     if generation < 2 || history_before.iter().any(|r| r.generation == generation) {
+        return Ok(());
+    }
+    // Issue 089 T7 — the gen-8 admission axis is the SHAPE, not heal_rate:
+    // every v8 atom's target CLEARS by construction (heal_rate ≈ 1.0 — the
+    // plain gate would refuse it as "not harder"), and the generation's
+    // whole measurement is the half-win the created diagnostics price.
+    // Non-vacuity = the run measured ≥1 shaped verdict; a zero-shaped run
+    // means the creation shapes dissolved (the Plan 097 T1 precedent) and
+    // the generation measures nothing the plain axis does not.
+    if generation == 8 {
+        if score.n_shaped == 0 {
+            return Err(
+                "generation v8 admission REFUSED (shape non-vacuity, Issue 089 T7): 0 shaped verdicts measured — \
+                 every atom's creation dissolved; re-run the freeze e2e (the shapes changed). Nothing appended."
+                    .to_string(),
+            );
+        }
+        println!(
+            "generation v8 ADMITTED: {} shaped verdict(s), shaped_rate {:.4} vs heal_rate {:.4} — the half-win axis begins",
+            score.n_shaped, score.shaped_rate, score.heal_rate
+        );
         return Ok(());
     }
     let Some(v1_rate) = history_before
@@ -4326,6 +4365,7 @@ fn finish_score_bench(
         5 => sb::report::HISTORY_SVG_V5,
         6 => sb::report::HISTORY_SVG_V6,
         7 => sb::report::HISTORY_SVG_V7,
+        8 => sb::report::HISTORY_SVG_V8,
         _ => sb::report::HISTORY_SVG,
     };
     let v1_series = gen_series(1);
@@ -4333,7 +4373,7 @@ fn finish_score_bench(
     std::fs::write(sb::report::HISTORY_SVG, &svg)
         .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
     let mut written_svgs = vec![sb::report::HISTORY_SVG];
-    for g in [2_u8, 3, 4, 5, 6, 7] {
+    for g in [2_u8, 3, 4, 5, 6, 7, 8] {
         let series = gen_series(g);
         if !series.is_empty() {
             let path = svg_path(g);
@@ -4343,7 +4383,7 @@ fn finish_score_bench(
         }
     }
     println!(
-        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}, gen-6 {}, gen-7 {}) → {}{}",
+        "history: {} run(s) (gen-1 {}, gen-2 {}, gen-3 {}, gen-4 {}, gen-5 {}, gen-6 {}, gen-7 {}, gen-8 {}) → {}{}",
         history.len(),
         v1_series.len(),
         gen_series(2).len(),
@@ -4352,6 +4392,7 @@ fn finish_score_bench(
         gen_series(5).len(),
         gen_series(6).len(),
         gen_series(7).len(),
+        gen_series(8).len(),
         sb::report::HISTORY_JSONL,
         written_svgs
             .iter()
@@ -4487,6 +4528,9 @@ fn run_score_bench_compile() {
         vocab_size: members_total,
         persist: persist.into_iter().collect(),
         outcomes: Vec::new(),
+        // Gen-4 lane: no clippy-oracle verdicts — the shaped axis is
+        // vacuously zero (same convention as the other non-clippy lanes).
+        ..sb::BenchScore::default()
     };
     sb::report::print_report(&score);
 
@@ -4696,6 +4740,9 @@ fn run_score_bench_perf() {
         vocab_size: members_total,
         persist: persist.into_iter().collect(),
         outcomes: Vec::new(),
+        // Gen-5 lane: the mechanical shape oracle — the shaped axis is
+        // vacuously zero (same convention as the other non-clippy lanes).
+        ..sb::BenchScore::default()
     };
     sb::report::print_report(&score);
 
@@ -4859,6 +4906,61 @@ fn print_v7_chain_tables(
     println!("passes-to-quiet distribution (specs):");
     for (p, n) in &passes_hist {
         println!("  {p} pass(es): {n} spec(s)");
+    }
+    println!("───────────────────────────────────────────");
+}
+
+/// The generation-8 shaped-verdict table (Issue 089 T7): per atom — the
+/// creation class, the target's fate, the diagnostics the heal LEFT
+/// BEHIND, and the verdict (1.0 / 0.5 / 0.0). The generation's whole
+/// measurement: the aggregate axes above price what these rows carry.
+#[cfg(feature = "score_bench")]
+fn print_v8_shaped_table(
+    fixtures: &[riir_clippy::score_bench::BenchFixture],
+    score: &riir_clippy::score_bench::BenchScore,
+) {
+    use riir_clippy::score_bench as sb;
+    use std::collections::BTreeMap;
+    let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
+        score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
+    let frozen_created: BTreeMap<&str, &[&str]> = sb::generations::V8_CREATED
+        .iter()
+        .map(|(id, l)| (*id, *l))
+        .collect();
+    let mut class_shaped: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut class_total: BTreeMap<&str, usize> = BTreeMap::new();
+    println!("\n─ generation-8 shaped verdicts (Issue 089 T7) ───────────");
+    for f in fixtures {
+        let Some(o) = by_id.get(f.id) else { continue };
+        if !o.ran {
+            continue;
+        }
+        let class = sb::generations::v8_creation_class(f.id);
+        *class_total.entry(class).or_default() += 1;
+        let verdict = o.shaped_verdict();
+        if o.is_shaped() {
+            *class_shaped.entry(class).or_default() += 1;
+        }
+        let created: Vec<&str> = o.created.iter().map(String::as_str).collect();
+        let frozen = frozen_created.get(f.id).copied().unwrap_or(&[]);
+        let drift_note = if created != frozen {
+            format!("  ⚠ created drift vs freeze record {frozen:?}")
+        } else {
+            String::new()
+        };
+        println!(
+            "  {:<26} {:<13} verdict {:>4.1}  created {:?}{}",
+            f.id,
+            class,
+            verdict,
+            created,
+            drift_note
+        );
+    }
+    println!("per creation class (shaped / ran):");
+    for (class, total) in &class_total {
+        let shaped = class_shaped.get(class).copied().unwrap_or(0);
+        println!("  {class}: {shaped}/{total}");
     }
     println!("───────────────────────────────────────────");
 }
@@ -5783,6 +5885,35 @@ fn main() {
                     print!(
                         "{}",
                         riir_clippy::frontier_report::render_provenance_yield(&feed_rows)
+                    );
+                    // Issue 089 T7 — the "Beta (half-count)" feed contract:
+                    // the LATEST generation-8 bench row's per-rule shaped
+                    // counts, folded at half evidence (+0.5 r / +0.5 f).
+                    // Plain serde_json read of the committed jsonl — the
+                    // score_bench types stay feature-gated; the path is the
+                    // score-bench's HISTORY_JSONL (stable, documented there).
+                    let half_counts: Vec<(String, u32)> =
+                        std::fs::read_to_string(".benchmarks/score_history.jsonl")
+                            .map(|text| {
+                                text.lines()
+                                    .filter(|l| !l.trim().is_empty())
+                                    .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                                    .filter(|v| {
+                                        v.get("generation").and_then(|g| g.as_u64()) == Some(8)
+                                    })
+                                    .filter_map(|v| {
+                                        let hc = v.get("shaped")?.get("half_counts")?.clone();
+                                        serde_json::from_value::<Vec<(String, u32)>>(hc).ok()
+                                    })
+                                    .next_back()
+                                    .unwrap_or_default()
+                            })
+                            .unwrap_or_default();
+                    let shaped_rows =
+                        riir_clippy::frontier_report::shaped_half_rows(&entries, &half_counts);
+                    print!(
+                        "{}",
+                        riir_clippy::frontier_report::render_shaped_half_rows(&shaped_rows)
                     );
                 }
                 Err(e) => {

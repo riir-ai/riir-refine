@@ -80,6 +80,27 @@ pub fn update_pair(a: f32, b: f32, a_won: bool) -> (f32, f32) {
     katgpt_core::rating::update_f32(a, b, a_won, ELO_K, ELO_SCALE)
 }
 
+/// One zero-sum SCORED match update — the half-win representation (Issue
+/// 089 T7): `score_a ∈ [0,1]` is `a`'s realized outcome (`1.0` win, `0.0`
+/// loss, `0.5` the shaped verdict / a draw). The
+/// `katgpt_core::rating::update_scored` twin at f32 (delegating through
+/// the f64 primitive — the module's house pattern; K/scale/0.5 are exact
+/// in both widths). Zero-sum by construction: `a` gains exactly what `b`
+/// loses, and `score_a = 0.5` between EQUAL ratings is a no-op (a draw
+/// the expected score already predicted).
+#[must_use]
+#[allow(clippy::cast_possible_truncation)] // f64→f32 twin of the persisted-rating contract
+pub fn update_pair_scored(a: f32, b: f32, score_a: f32) -> (f32, f32) {
+    let (na, nb) = katgpt_core::rating::update_scored(
+        f64::from(a),
+        f64::from(b),
+        f64::from(score_a),
+        katgpt_core::rating::STANDARD_K,
+        katgpt_core::rating::STANDARD_SCALE,
+    );
+    (na as f32, nb as f32)
+}
+
 /// A rating table over string player ids. The two namespaces are disjoint
 /// by construction at the one call site ([`TrajStore::recompute_elo`]):
 /// rule ids are `lint_key`s, span ids are shape-hash hex. Unseen players
@@ -127,6 +148,19 @@ impl EloTable {
     /// Play one match `a` vs `b`, updating both sides.
     pub fn play(&mut self, a: &str, b: &str, a_won: bool) {
         let (ra, rb) = update_pair(self.rating(a), self.rating(b), a_won);
+        self.ratings.insert(a.to_string(), ra);
+        self.ratings.insert(b.to_string(), rb);
+    }
+
+    /// Play one SCORED match `a` vs `b` (Issue 089 T7): `score_a = 0.5`
+    /// is the tie a shaped verdict ("target cleared ∧ new diags
+    /// introduced") replays as — the rule banked half a win against the
+    /// span. The feed contract: when a shaped outcome enters the verdict
+    /// history, THIS is the match it plays (the store's replay currently
+    /// knows only win/loss counts; the primitive is the wired-in-advance
+    /// representation the bench's `shaped` axis prices).
+    pub fn play_scored(&mut self, a: &str, b: &str, score_a: f32) {
+        let (ra, rb) = update_pair_scored(self.rating(a), self.rating(b), score_a);
         self.ratings.insert(a.to_string(), ra);
         self.ratings.insert(b.to_string(), rb);
     }
@@ -461,6 +495,69 @@ mod tests {
         }
         assert_eq!(t1.rating("a"), t2.rating("a"));
         assert_eq!(t1.rating("b"), t2.rating("b"));
+    }
+
+    // ── Issue 089 T7: the tie / shaped-verdict representation ──────────
+
+    #[test]
+    #[allow(clippy::float_cmp)] // E = 0.5 exactly at equal ratings — equality IS the fixture
+    fn tie_between_equal_ratings_is_a_no_op() {
+        // The draw the expected score already predicted: zero movement,
+        // bit-exact (0.5 and the ratings are exactly representable).
+        let (a, b) = update_pair_scored(1200.0, 1200.0, 0.5);
+        assert_eq!(a, 1200.0);
+        assert_eq!(b, 1200.0);
+    }
+
+    #[test]
+    fn tie_between_unequal_ratings_pulls_both_toward_the_middle() {
+        // E_a = 1/(1+10^(-400/400)) = 1/(1+0.1) = 1/11 ≈ 0.909: the
+        // favorite's expected score EXCEEDS the tie's 0.5 realized score,
+        // so a tie pulls the favorite DOWN and the underdog UP — both
+        // strictly toward the middle, and strictly less than a full win
+        // (resp. loss) would move either.
+        let (tie_a, tie_b) = update_pair_scored(1200.0, 800.0, 0.5);
+        assert!(tie_a < 1200.0 && tie_a > 1200.0 - ELO_K, "favorite: {tie_a}");
+        assert!(tie_b > 800.0 && tie_b < 800.0 + ELO_K, "underdog: {tie_b}");
+        let (win_a, _) = update_pair(1200.0, 800.0, true);
+        assert!(win_a > 1200.0, "a full win lifts the favorite where a tie lowers it");
+        // Zero-sum at the tie too.
+        assert!((tie_a + tie_b - 2000.0).abs() < 1e-3);
+    }
+
+    #[test]
+    // float_cmp: the endpoint-agreement contract is BIT-identity — the
+    // scored path must reproduce the bool path's exact f32 bits.
+    #[allow(clippy::float_cmp)]
+    fn scored_endpoints_agree_with_the_bool_update() {
+        // s = 1.0 / 0.0 must reproduce `update_pair` exactly — the scored
+        // path is a SUPERSET of the bool path, never a second math.
+        for &(ra, rb) in &[(1200.0, 1200.0), (1300.0, 900.0), (1184.0, 1216.0)] {
+            let (w1, l1) = update_pair(ra, rb, true);
+            let (w2, l2) = update_pair_scored(ra, rb, 1.0);
+            assert_eq!(w1, w2, "win endpoint drifted at {ra}/{rb}");
+            assert_eq!(l1, l2, "loss endpoint drifted at {ra}/{rb}");
+            let (x1, y1) = update_pair(ra, rb, false);
+            let (x2, y2) = update_pair_scored(ra, rb, 0.0);
+            assert_eq!(x1, x2);
+            assert_eq!(y1, y2);
+        }
+    }
+
+    #[test]
+    fn table_plays_a_tie_between_players() {
+        // The feed contract in miniature: rule vs span, shaped verdict →
+        // both sides stay rated (the tie INSERTS both players), movement
+        // is half a win's magnitude.
+        let mut tie = EloTable::new();
+        tie.play_scored("rule", "span", 0.5);
+        assert!(tie.contains("rule") && tie.contains("span"));
+        let mut win = EloTable::new();
+        win.play("rule", "span", true);
+        assert!(win.rating("rule") - default_elo() > tie.rating("rule") - default_elo());
+        // And the pair-sum is conserved.
+        let s = tie.rating("rule") + tie.rating("span");
+        assert!((s - 2.0 * default_elo()).abs() < 1e-3);
     }
 
     #[test]

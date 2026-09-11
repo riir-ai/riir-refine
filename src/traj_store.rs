@@ -2942,6 +2942,7 @@ mod tests {
             generation: 1,
             ood: None,
             strata: None,
+            shaped: None,
         };
         let row = ScoreRunRow::from(&rec);
         assert_eq!(row.ts, rec.ts);

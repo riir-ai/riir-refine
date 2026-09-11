@@ -3495,6 +3495,287 @@ pub fn generation_v7() -> Vec<BenchFixture> {
     generation_fixtures(specs_v7(), 7, FROZEN_LABELS_V7, EXCLUDED_IDS_V7)
 }
 
+// ── generation 8 (Issue 089 T7): the shaped-verdict ladder ─────────────
+//
+// The half-win generation: single-target atoms whose heal resolves the
+// target AND leaves a NEW diagnostic behind — the "target cleared ∧ new
+// diags introduced" shape the shaped verdict prices at
+// [`super::SHAPED_VERDICT`] (0.5). The creation mechanism is deliberate:
+// match-arm → closure rewrites BIRTH an expression shape that did not
+// exist pre-fix (manual_map's verbatim arm splice: `match o { Some(v) =>
+// Some(f(v)), None => None }` → `o.map(|v| f(v))`), and the born closure
+// fires `redundant_closure` / `redundant_closure_for_method_calls` — lints
+// OUTSIDE `FIXABLE_LINTS` (VERIFY-only / pedantic), so the fixpoint cannot
+// dissolve them.
+//
+// Precedent + anti-precedent (why these atoms are authored, not mined):
+// v7's `gen7-flat-nrl-format` WAS a created-lint chain until Plan 097 T1's
+// universal `*__elem` deref splice dissolved it — a created shape that
+// CAN be re-healed disappears from `created` after the fixpoint and stops
+// being shaped. The v8 atoms target the SURVIVING creation classes; the
+// freeze e2e adjudicates each claim (a dissolved claim is excluded +
+// recorded, never silently kept).
+#[allow(clippy::needless_raw_string_hashes)]
+pub static RAW_ATOMS_V8: &[(&str, &str)] = &[
+    // ── closure-birth: fn-call (redundant_closure, style/VERIFY-only) ──
+    (
+        "gen8-birth-fncall",
+        r#"pub fn apply(o: Option<u32>, f: fn(u32) -> u32) -> Option<u32> {
+    match o {
+        Some(v) => Some(f(v)),
+        None => None,
+    }
+}
+"#,
+    ),
+    // ── closure-birth: associated-fn path call (redundant_closure) ──
+    (
+        "gen8-birth-pathcall",
+        r#"pub fn words(o: Option<&str>) -> Option<String> {
+    match o {
+        Some(v) => Some(String::from(v)),
+        None => None,
+    }
+}
+"#,
+    ),
+    // ── closure-birth: inherent method (redundant_closure_for_method_calls,
+    //    pedantic — outside the fixable vocabulary entirely) ──
+    (
+        "gen8-birth-method",
+        r#"pub fn lens(o: Option<String>) -> Option<usize> {
+    match o {
+        Some(v) => Some(v.len()),
+        None => None,
+    }
+}
+"#,
+    ),
+    // ── closure-birth: clone method (redundant_closure_for_method_calls) ──
+    (
+        "gen8-birth-clone",
+        r#"pub fn twin(o: Option<String>) -> Option<String> {
+    match o {
+        Some(v) => Some(v.clone()),
+        None => None,
+    }
+}
+"#,
+    ),
+    // ── closure-birth: trait method via deref (redundant_closure_for_method_calls) ──
+    (
+        "gen8-birth-traitmethod",
+        r#"pub fn labels(o: Option<u32>) -> Option<String> {
+    match o {
+        Some(v) => Some(v.to_string()),
+        None => None,
+    }
+}
+"#,
+    ),
+    // ── closure-birth: identity arm (map_identity, pedantic — the born
+    //    closure `|v| v` IS the identity) ──
+    (
+        "gen8-birth-identity",
+        r#"pub fn passthru(o: Option<u32>) -> Option<u32> {
+    match o {
+        Some(v) => Some(v),
+        None => None,
+    }
+}
+"#,
+    ),
+    // ── iterable-splice: the needless_range_loop rewrite's emitted shape
+    //    (the class that produced v7's created-chain before Plan 097 T1
+    //    dissolved the `__elem` half — whatever SURVIVES here is the
+    //    creation the current splice still makes; the freeze adjudicates) ──
+    (
+        "gen8-splice-nrl",
+        r#"pub fn count_filled(names: &[String]) -> usize {
+    let mut n = 0;
+    for i in 0..names.len() {
+        if !names[i].is_empty() {
+            n += 1;
+        }
+    }
+    n
+}
+"#,
+    ),
+];
+
+/// The pre-freeze TARGET claims (the vocabulary lint each atom fires at
+/// freeze time). The freeze e2e adjudicates both directions and the fresh
+/// verdict wins at bench time.
+const EXPECTED_LINTS_V8: &[(&str, &[&str])] = &[
+    ("gen8-birth-fncall", &["manual_map"]),
+    ("gen8-birth-pathcall", &["manual_map"]),
+    ("gen8-birth-method", &["manual_map"]),
+    ("gen8-birth-clone", &["manual_map"]),
+    ("gen8-birth-traitmethod", &["manual_map"]),
+    ("gen8-birth-identity", &["manual_map"]),
+    ("gen8-splice-nrl", &["needless_range_loop"]),
+];
+
+/// The pre-freeze CREATED claims (Issue 089 T7's innocence fence input):
+/// the diagnostic each atom's heal is expected to LEAVE BEHIND. A claim is
+/// adjudicated by the freeze e2e's after-verdict — measured-created wins,
+/// and a claim whose created set comes back EMPTY (the shape dissolved —
+/// the Plan 097 T1 precedent) is EXCLUDED, not kept unmeasured.
+const V8_CREATED_CLAIMS: &[(&str, &[&str])] = &[
+    ("gen8-birth-fncall", &["redundant_closure"]),
+    ("gen8-birth-pathcall", &["redundant_closure"]),
+    // Measured by the 2026-09-12 freeze: `map_clone`, NOT the originally
+    // claimed redundant_closure_for_method_calls (the oracle won).
+    ("gen8-birth-clone", &["map_clone"]),
+    // Measured by the 2026-09-12 freeze: BOTH fire on the born `|v| v`.
+    (
+        "gen8-birth-identity",
+        &["map_identity", "single_option_map"],
+    ),
+    // The three EXCLUDED atoms' claims (inherent/trait method calls, the
+    // nrl splice) measured EMPTY — dissolved, excluded, recorded.
+    (
+        "gen8-birth-method",
+        &["redundant_closure_for_method_calls"],
+    ),
+    (
+        "gen8-birth-traitmethod",
+        &["redundant_closure_for_method_calls"],
+    ),
+    ("gen8-splice-nrl", &[]),
+];
+
+/// The created-claims table for the freeze e2e (owned copies — the test
+/// builds its adjudication maps from this).
+#[must_use]
+pub fn v8_created_claims() -> Vec<(String, Vec<String>)> {
+    V8_CREATED_CLAIMS
+        .iter()
+        .map(|(id, l)| {
+            (
+                (*id).to_string(),
+                l.iter().map(ToString::to_string).collect(),
+            )
+        })
+        .collect()
+}
+
+/// The generation-8 spec list: one spec per authored atom, k = 1 (the
+/// generation's axis is the SHAPE, not composition width or depth).
+/// Byte-stable — pinned by test.
+#[must_use]
+pub fn specs_v8() -> Vec<GenSpec> {
+    RAW_ATOMS_V8
+        .iter()
+        .map(|(id, code)| GenSpec {
+            id: (*id).to_string(),
+            k: 1,
+            expect_lints: EXPECTED_LINTS_V8
+                .iter()
+                .find(|(i, _)| *i == *id)
+                .map_or_else(Vec::new, |(_, l)| {
+                    l.iter().map(ToString::to_string).collect()
+                }),
+            code: (*code).to_string(),
+        })
+        .collect()
+}
+
+/// The creation class of a generation-8 spec id: `closure-birth` (the
+/// `manual_map` arm→closure splice) or `iter-splice` (the
+/// `needless_range_loop` iterable rewrite).
+#[must_use]
+pub fn v8_creation_class(spec_id: &str) -> &'static str {
+    if spec_id.starts_with("gen8-birth-") {
+        "closure-birth"
+    } else {
+        "iter-splice"
+    }
+}
+
+/// The expected `heal_fixpoint` pass count for a generation-8 spec id
+/// (the chain-truth pre-registration): every atom is a single rewrite
+/// whose created lint is unfixable by the fixpoint — 1 pass, then
+/// convergence (the next pass finds no fixable lint). Excluded ids answer
+/// 0 (they never run).
+#[must_use]
+pub fn v8_expected_passes(spec_id: &str) -> usize {
+    usize::from(!EXCLUDED_IDS_V8.contains(&spec_id))
+}
+
+/// Spec ids the generation-8 freeze run EXCLUDED (dissolved shapes — the
+/// honest negative controls, kept as recorded evidence): `gen8-birth-method`
+/// (`|v| v.len()` fires nothing) and `gen8-birth-traitmethod`
+/// (`|v| v.to_string()` fires nothing) — inherent/trait method calls do NOT
+/// trip `redundant_closure_for_method_calls` in the bench configuration;
+/// `gen8-splice-nrl` — the `*__elem` deref splice (Plan 097 T1) confirmed
+/// to leave NO created lint on this shape. Landed by the freeze e2e
+/// (2026-09-12).
+pub static EXCLUDED_IDS_V8: &[&str] = &[
+    "gen8-birth-method",
+    "gen8-birth-traitmethod",
+    "gen8-splice-nrl",
+];
+
+/// The generation-8 frozen labels (spec id → vocabulary lints the BENCH
+/// instrument fired at freeze time) — landed by the freeze e2e
+/// (2026-09-12). 4 admitted atoms, all closure-birth class. The identity
+/// atom fires TWO targets (`manual_map` + `needless_match` — the match
+/// satisfies both; the `manual_map` rewrite subsumes the `needless_match`
+/// edit, resolving both in one pass).
+pub static FROZEN_LABELS_V8: &[(&str, &[&str])] = &[
+    ("gen8-birth-clone", &["manual_map"]),
+    ("gen8-birth-fncall", &["manual_map"]),
+    ("gen8-birth-identity", &["manual_map", "needless_match"]),
+    ("gen8-birth-pathcall", &["manual_map"]),
+];
+
+/// The generation-8 measured CREATED record (spec id → the diagnostics
+/// the heal left behind at freeze time, oracle-derived) — Issue 089 T7's
+/// shape record, landed by the freeze e2e (2026-09-12). Measured beat two
+/// pre-registered claims (the oracle is the authority): `clone` births
+/// `map_clone` (not the claimed `redundant_closure_for_method_calls`);
+/// `identity` births BOTH `map_identity` AND `single_option_map`. Every
+/// created lint here is OUTSIDE `FIXABLE_LINTS` — the fixpoint cannot
+/// dissolve them; the bench run re-derives this table live
+/// (`FixtureOutcome.created`) and the v8 table flags drift against it.
+pub static V8_CREATED: &[(&str, &[&str])] = &[
+    ("gen8-birth-clone", &["map_clone"]),
+    ("gen8-birth-fncall", &["redundant_closure"]),
+    (
+        "gen8-birth-identity",
+        &["map_identity", "single_option_map"],
+    ),
+    ("gen8-birth-pathcall", &["redundant_closure"]),
+];
+
+/// Freeze readiness for generation 8 — Err until the freeze e2e lands the
+/// record.
+///
+/// # Errors
+///
+/// The un-frozen state: how many specs lack oracle labels.
+pub fn v8_freeze_status() -> Result<usize, String> {
+    freeze_status_for(
+        &specs_v8(),
+        8,
+        "generation_v8_freeze",
+        FROZEN_LABELS_V8,
+        EXCLUDED_IDS_V8,
+    )
+}
+
+/// The admitted generation-8 fixture set.
+///
+/// # Panics
+///
+/// Only on a freeze-record hole — callers check [`v8_freeze_status`] first.
+#[must_use]
+pub fn generation_v8() -> Vec<BenchFixture> {
+    generation_fixtures(specs_v8(), 8, FROZEN_LABELS_V8, EXCLUDED_IDS_V8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3566,6 +3847,113 @@ mod tests {
             }
             let mods = s.code.matches("mod gen_").count();
             assert_eq!(mods, s.k, "composite {} wraps k atoms", s.id);
+        }
+    }
+
+    // ── generation 8 (Issue 089 T7): the shaped-verdict ladder gates ────
+
+    #[test]
+    fn v8_specs_parse_are_single_target_and_stable() {
+        let s1 = specs_v8();
+        let s2 = specs_v8();
+        assert_eq!(s1, s2, "v8 specs must be byte-stable");
+        assert_eq!(s1.len(), RAW_ATOMS_V8.len(), "spec table hole");
+        for s in &s1 {
+            assert!(
+                syn::parse_file(&s.code).is_ok(),
+                "v8 atom {} does not parse",
+                s.id
+            );
+            assert_eq!(
+                s.expect_lints.len(),
+                1,
+                "v8 atom {} must be single-target (the half-count attribution law)",
+                s.id
+            );
+            assert_eq!(s.k, 1, "the v8 axis is the shape, not width/depth");
+        }
+    }
+
+    #[test]
+    fn v8_created_claims_are_innocent() {
+        // The innocence fence, statically: a created claim that ALSO fires
+        // pre-heal is not a created lint — it would be a persisting lint
+        // mislabeled as creation (the freeze e2e re-checks this against the
+        // live oracle; this pins the table's internal coherence).
+        for (id, created) in V8_CREATED_CLAIMS {
+            let target: &[&str] = EXPECTED_LINTS_V8
+                .iter()
+                .find(|(i, _)| i == id)
+                .map_or(&[], |(_, l)| *l);
+            for c in *created {
+                assert!(
+                    !target.contains(c),
+                    "v8 atom {id}: created claim {c} is also a target — contradiction"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn v8_chain_truth_matches_the_preregistered_passes() {
+        // The cargo-less chain-truth gate (the v7 pre-registration law):
+        // measured heal_fixpoint passes == v8_expected_passes per atom. A
+        // drift here means a proposer changed shape — re-adjudicate the
+        // freeze before trusting any v8 bench row.
+        for (id, code) in RAW_ATOMS_V8 {
+            if EXCLUDED_IDS_V8.contains(id) {
+                continue;
+            }
+            let (_healed, _edits, passes) = super::super::heal_fixpoint(code);
+            assert_eq!(
+                passes,
+                v8_expected_passes(id),
+                "chain-truth drift on {id}: measured {passes}"
+            );
+        }
+    }
+
+    #[test]
+    fn v8_closure_birth_marker_survives_the_fixpoint() {
+        // The mechanism canary (cargo-less, textual — the freeze e2e's
+        // oracle verdict is the REAL gate; this catches the birth itself
+        // dissolving): every closure-birth atom's healed output still
+        // carries a born `.map(|` closure. If a future manual_map change
+        // simplifies the splice (emitting `.map(f)` directly), the creation
+        // mechanism is GONE and this reds before any oracle run does.
+        for (id, code) in RAW_ATOMS_V8 {
+            if v8_creation_class(id) != "closure-birth" || EXCLUDED_IDS_V8.contains(id) {
+                continue;
+            }
+            let (healed, edits, _) = super::super::heal_fixpoint(code);
+            assert!(edits > 0, "birth atom {id} took no edits");
+            assert!(
+                healed.contains(".map(|"),
+                "birth atom {id} healed without a born closure: {healed}"
+            );
+        }
+    }
+
+    #[test]
+    fn v8_freeze_status_is_loud_pre_freeze() {
+        // Pre-freeze (no labels landed): Err — a silently-empty generation
+        // must never reach the bench. Post-freeze: every spec labeled or
+        // excluded (freeze_status_for's own assertion).
+        if FROZEN_LABELS_V8.is_empty() && EXCLUDED_IDS_V8.is_empty() {
+            assert!(v8_freeze_status().is_err(), "pre-freeze must not claim readiness");
+        } else {
+            assert!(v8_freeze_status().is_ok());
+            // The created record covers every admitted atom (the shape
+            // record's hole check — an admitted atom with no created row
+            // would read as "measured, created nothing" by accident).
+            let excluded: BTreeSet<&str> = EXCLUDED_IDS_V8.iter().copied().collect();
+            let created_ids: BTreeSet<&str> = V8_CREATED.iter().map(|(id, _)| *id).collect();
+            for (id, _) in FROZEN_LABELS_V8 {
+                assert!(
+                    created_ids.contains(id) || excluded.contains(id),
+                    "admitted atom {id} has no V8_CREATED row"
+                );
+            }
         }
     }
 

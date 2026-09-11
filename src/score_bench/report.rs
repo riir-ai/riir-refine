@@ -68,6 +68,32 @@ pub struct HistoryRecord {
     /// lanes, whose ladders are single-class) deserialize as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strata: Option<Vec<super::ProvenanceStratum>>,
+    /// Issue 089 T7 — the shaped-verdict axis: this run's half-win
+    /// accounting ("target cleared ∧ new diags introduced" = 0.5 credit
+    /// per resolved finding; the per-rule half-counts are the "Beta
+    /// (half-count)" feed contract). The same additive law as
+    /// `ood`/`strata`: instrumentation, not a scored axis — the SVG
+    /// renderer and the saturation detector ignore it, and the Warm-tier
+    /// mirror drops it. Rows predating the field deserialize as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shaped: Option<ShapedRecord>,
+}
+
+/// The shaped-verdict read of one bench run (Issue 089 T7) — the half-win
+/// the plain `heal_rate` over-credits: a resolved target that left NEW
+/// diagnostics behind is worth [`super::SHAPED_VERDICT`] (0.5), not 1.0.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ShapedRecord {
+    /// Ran healable fixtures whose verdict is exactly 0.5.
+    pub n_shaped: usize,
+    /// Σ verdict × resolved / Σ vocab-before — strictly ≤ `heal_rate`.
+    pub shaped_rate: f32,
+    /// Per-rule shaped counts, sorted by rule (deterministic — the
+    /// `BTreeMap` iteration order at build time): each entry is worth
+    /// `+0.5 r AND +0.5 f` when the frontier's Beta feed prices it. Only
+    /// single-target fixtures attribute (multi-target shaped fixtures
+    /// count in the rates above, not here — recorded, not guessed).
+    pub half_counts: Vec<(String, u32)>,
 }
 
 /// The serde default for pre-generation rows (issue 072 T4).
@@ -93,9 +119,12 @@ pub const HISTORY_SVG_V5: &str = ".benchmarks/score_history_v5.svg";
 /// The generation-6 curve (Plan 095, the real-repo shape ladder) — rendered
 /// only when v6 rows exist.
 pub const HISTORY_SVG_V6: &str = ".benchmarks/score_history_v6.svg";
-/// The generation-7 curve (Plan 096, the overlap-edit-chain ladder) —
-/// rendered only when v7 rows exist.
+/// The generation-7 curve (Plan 096, the overlap-edit-chain ladder) — rendered
+/// only when v7 rows exist.
 pub const HISTORY_SVG_V7: &str = ".benchmarks/score_history_v7.svg";
+/// The generation-8 curve (Issue 089 T7, the shaped-verdict ladder) —
+/// rendered only when v8 rows exist.
+pub const HISTORY_SVG_V8: &str = ".benchmarks/score_history_v8.svg";
 
 /// The M5 saturation window: marginal gain = rate[last] − rate[last − N].
 /// R = 5 ≈ the observed spacing between step changes in the 45-run history
@@ -247,6 +276,11 @@ impl HistoryRecord {
             generation: 1,
             ood: Some(super::ood::ood_axis().clone()),
             strata: None,
+            shaped: Some(ShapedRecord {
+                n_shaped: score.n_shaped,
+                shaped_rate: score.shaped_rate,
+                half_counts: score.shaped_half_counts.clone(),
+            }),
         }
     }
 
@@ -351,6 +385,22 @@ pub fn print_report(score: &super::BenchScore) {
         score.decline_correctness * 100.0
     );
     println!("edits applied: {}", score.edits_total);
+    // Issue 089 T7 — the shaped-verdict read: how much of the heal rate is
+    // half-wins (target cleared, new diags left behind). Instrumentation:
+    // the scored axes above are unchanged; this prices what they over-credit.
+    if score.n_shaped > 0 {
+        println!(
+            "shaped verdicts      {} fixture(s) at 0.5 — shaped_rate {:>6.1}% vs heal_rate {:>6.1}%",
+            score.n_shaped,
+            score.shaped_rate * 100.0,
+            score.heal_rate * 100.0
+        );
+        for (rule, n) in score.shaped_half_counts.iter().take(6) {
+            println!("  half-count {rule:<28} x{n} (+0.5 r / +0.5 f each)");
+        }
+    } else {
+        println!("shaped verdicts      0 fixture(s) — every clear left no new diags");
+    }
     if !score.persist.is_empty() {
         println!("persisting (the miss map — where healing still fails):");
         for (lint, count) in score.persist.iter().take(10) {
@@ -670,6 +720,7 @@ mod tests {
             generation: 1,
             ood: None,
             strata: None,
+            shaped: None,
         }
     }
 
@@ -698,6 +749,46 @@ mod tests {
         assert!(line.contains("\"strata\":"), "{line}");
         let back: HistoryRecord = serde_json::from_str(&line).unwrap();
         assert_eq!(back.strata, stratified.strata);
+    }
+
+    /// Issue 089 T7 — the additive-`shaped` law (the strata/ood precedent):
+    /// rows predating the field deserialize as `None`, a shaped row
+    /// round-trips, and `from_score` populates it from the bench score.
+    #[test]
+    fn shaped_field_is_additive_and_round_trips() {
+        // A pre-T7 row (no `shaped` key in the JSON at all).
+        let old_row = "{\"ts\":\"2026-08-19T10:00:00\",\"sha\":\"abc\",\"n_ran\":1,\"n_healable\":1,\"n_clean\":0,\"heal_rate\":0.5,\"created_rate\":0.0,\"parse_safety\":1.0,\"decline_correctness\":1.0,\"edits_total\":1,\"vocab_size\":33,\"generation\":1}";
+        let base: HistoryRecord = serde_json::from_str(old_row).expect("old row deserializes");
+        assert_eq!(base.shaped, None);
+
+        // A shaped row round-trips through the jsonl encoding.
+        let shaped = ShapedRecord {
+            n_shaped: 5,
+            shaped_rate: 0.4375,
+            half_counts: vec![("manual_map".to_string(), 5)],
+        };
+        let with = HistoryRecord {
+            shaped: Some(shaped.clone()),
+            ..base.clone()
+        };
+        let line = serde_json::to_string(&with).unwrap();
+        assert!(line.contains("\"shaped\":"), "{line}");
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.shaped, Some(shaped));
+
+        // An unshaped row (n_shaped = 0, e.g. the v1 set on a clean run)
+        // writes the key with the zero — the axis is always measured, and
+        // the additive law is about ABSENT fields, not suppressed zeros.
+        let zero = HistoryRecord {
+            shaped: Some(ShapedRecord {
+                n_shaped: 0,
+                shaped_rate: 0.962,
+                half_counts: Vec::new(),
+            }),
+            ..base
+        };
+        let line = serde_json::to_string(&zero).unwrap();
+        assert!(line.contains("\"n_shaped\":0"), "{line}");
     }
 
     #[test]

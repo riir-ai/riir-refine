@@ -9,6 +9,92 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 089 T7 — the shaped 0.5 verdict: generation 8 + the Elo-tie / Beta-half-count feeds (2026-09-12)
+
+The optional third-track task, landed as a full generation. "Target cleared
+∧ new diags introduced" is now a FIRST-CLASS verdict — priced 0.5 (half win)
+in the bench, represented as a TIE in Elo and a HALF-COUNT (+0.5 r AND +0.5
+f) in the Beta feed — with its own append-only score-bench generation.
+
+**The creation mechanism (why the shapes exist at all):** `manual_map`'s
+span-preserving rewrite splices the Some-arm body VERBATIM into a BORN
+closure (`match o { Some(v) => Some(f(v)), None => None }` → `o.map(|v|
+f(v))`) — the closure expression did not exist pre-fix, and the born shape
+fires lints OUTSIDE `FIXABLE_LINTS` (VERIFY-only / pedantic), so the bounded
+fixpoint cannot dissolve them; they SURVIVE as `created`. Anti-precedent
+honored: v7's `gen7-flat-nrl-format` WAS a created-chain until Plan 097 T1's
+universal `*__elem` splice dissolved it — the v8 freeze confirms the splice
+class creates NOTHING today (the `gen8-splice-nrl` atom measured empty and
+is excluded ON RECORD, with `gen8-birth-method` (`|v| v.len()`) and
+`gen8-birth-traitmethod` (`|v| v.to_string()`) — inherent/trait method calls
+do not trip `redundant_closure_for_method_calls` in the bench configuration).
+
+**Generation v8** (`specs_v8` / `generation_v8`, `--score-bench --generation
+8`): 7 authored atoms, freeze-adjudicated 2026-09-12 — 4 ADMITTED (all
+closure-birth: `fncall`/`pathcall` birth `redundant_closure`; `clone` births
+`map_clone` — measured beat the claimed `redundant_closure_for_method_calls`,
+the oracle wins both directions; `identity` (`Some(v) => Some(v)` →
+`o.map(|v| v)`) births BOTH `map_identity` AND `single_option_map`, and its
+freeze label carries TWO targets — `manual_map` + `needless_match`, the
+outer rewrite SUBSUMING the inner fix in one pass), 3 EXCLUDED as
+dissolved shapes. Freeze e2e (`tests/generation_v8_freeze.rs`, the v7
+convention + two NEW fences): the INNOCENCE fence (claimed-created lints
+must NOT fire pre-heal — a created lint that already fires is a persist
+mislabeled as creation) and the SHAPE gate (heal must clear the target AND
+leave the created set non-empty; a dissolved atom is EXCLUDED with the
+reason, never silently kept — SHAPE-NEGATIVE is a first-class freeze
+verdict). Always-on gates in `generations.rs`: parse/single-target,
+claim-innocence coherence, cargo-less chain-truth (all admitted atoms = 1
+pass), the closure-birth `.map(|` textual canary (a future `manual_map`
+change that simplifies the splice reds BEFORE any oracle run), and the
+freeze-hole check over BOTH record tables (`FROZEN_LABELS_V8` + the new
+`V8_CREATED` measured-created record, drift-gated by the freeze re-run).
+
+**Scoring** (`score_bench`): `FixtureOutcome::shaped_verdict()` — 1.0 clean
+clear, [`SHAPED_VERDICT`] = 0.5 target-cleared-with-new-diags, 0.0 otherwise
+(broken output re-scores 0 by the existing after_verdict contract);
+`BenchScore { n_shaped, shaped_credit, shaped_rate, shaped_half_counts }`;
+`HistoryRecord.shaped` (the additive serde law — old rows read `None`, the
+Warm-tier mirror drops it, SVG/saturation ignore it). Attribution law:
+half_counts credit SINGLE-TARGET fixtures only — the identity atom's
+`needless_match` resolution is deliberately NOT credited (subsumed by the
+outer rewrite, not fixed by its proposer — crediting it would be
+mis-attribution; the single-target law prevents this by construction).
+Gen-8 admission is SHAPE non-vacuity (`n_shaped ≥ 1`), deliberately NOT the
+M5 heal_rate comparison — every v8 target clears by construction, so the
+plain gate would refuse the generation for measuring exactly what it exists
+to measure. First live run (row #98, 2026-09-12): 4/4 shaped, **shaped_rate
+50.0% vs heal_rate 100.0%**, created 5 lints across 4 atoms, half_counts
+`manual_map`×3; the run report prints the per-atom shaped table with
+drift-check against `V8_CREATED`.
+
+**The rating feeds** (the task's second half): `elo::{update_pair_scored,
+EloTable::play_scored}` — the tie representation, delegating to the
+katgpt-core `update_scored` f64 primitive (substrate-first: it already
+existed with draw tests; ties at equal ratings are bit-exact no-ops, the
+s=1/0 endpoints are bit-identical with `update_pair`, zero-sum throughout —
+pinned by 4 new tests). `frontier_report::{shaped_half_rows,
+render_shaped_half_rows}` — the "Beta (half-count)" fold: each shaped
+verdict adds +0.5 r AND +0.5 f, p̂ drifts toward 0.5; a rule whose only
+evidence is shaped sits AT the band edge (exactly 0.500, never above — the
+admission-band-ceiling-by-construction property, pinned by test). Wired
+into `--frontier-report` via a plain-serde read of the latest gen-8 jsonl
+row (no feature dep; EMPTY-loud when v8 has never run). The LCB/admission
+math stays on the store's INTEGER feed — doubling counts to fit u32 would
+fake Beta concentration (Beta(1+2r+s, 1+2f+s) ≠ Beta(1+r+s/2, 1+f+s/2));
+stated in the section footer, the report-first law. Live first read:
+`manual_map` r 0→1.5, f 0→1.5, p̂_folded 0.500 — the store has no organic
+`manual_map` row, so the fold's band-edge property is on live display.
+
+Validation: lib 1447/1447 @ score_bench (14 new) + 1217/1217 @ default (6
+new); the freeze e2e green twice (first run = the probe, second = the
+drift-gated re-run); clippy 0 new findings on lib/tests @ score_bench, 0 @
+default, 0 @ the full release bin lane (`score_bench,latent_retrieval,
+kat_service,kat_transport,fix_verify`); the live bench + frontier runs
+above. En-route: `run_bench_with` restructured under the line budget
+(`RunAccum` + the extracted `warn_label_drift`); the k-ladder section now
+skips gen 8 (its axis is the shape, not width/depth).
+
 ## Issue 089 T6 — the stratified score-bench read + the D-formula decline (2026-09-12)
 
 Split verdict on the difficulty-proxy task: the closed-form D is DECLINED on
