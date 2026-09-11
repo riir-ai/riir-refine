@@ -678,5 +678,5 @@ No new substrate invented. The novelty is the **composition** (real-file healing
 - [Plan 005](../.plans/005_real_file_span_healing.md) — the execution plan for this proposal.
 - `src/domains/clippy_lints/proposers/` — the 10 proposer codemods this generalizes.
 - `katgpt-core` `TernaryDrafter` — the shallow-reasoning embedder.
-- [Bench 013](../.benchmarks/013_*.md) — the perf-rule Pareto verdict (34/38 dominant) that prioritizes proposer coverage.
+- [Bench 013](../.benchmarks/013_rust_perf_bench_pareto_goat.md) — the perf-rule Pareto verdict (34/38 dominant) that prioritizes proposer coverage.
 - `quest_grammar` (riir-games-quest) — the drafter+pruner+corpus precedent.

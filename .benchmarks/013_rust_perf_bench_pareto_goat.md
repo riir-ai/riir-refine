@@ -394,5 +394,5 @@ cargo run --example perf_bench_demo --features rust_perf_bench --release
 - [Proposal 001 caveat 3](../.proposals/001_multi_domain_modelless_code_healer.md) — the perf validator weakness this closes
 - [Plan 001 Phase 2](../.plans/001_multi_domain_framework_refactor.md) — the rust_perf domain scaffold this validator completes
 - [`.docs/11_domains/rust_perf.md`](../.docs/11_domains/rust_perf.md) — domain doc (updated with the validator hierarchy)
-- [`rust-optimize` skill](~/.agents/skills/rust-optimize/SKILL.md) — the checklist source (11 items)
+- `rust-optimize` skill (~/.agents/skills/rust-optimize/SKILL.md) — the checklist source (11 items)
 - [nnethercote/perf-book](https://github.com/nnethercote/perf-book) — the Rust Performance Book (canonical perf reference; 3 rules distilled: ok-or-else, swap-remove, chunks-exact; 3 candidates tested + rejected)
