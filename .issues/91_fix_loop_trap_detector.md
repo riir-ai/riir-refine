@@ -1,11 +1,17 @@
 # Issue 91: Fix-loop trap detector — saddle-circling between near-fixes
 
-**Status:** Open — fusion idea, novelty TBD; PoC-first on real `.heal/` trajectories (2026-09-11)
+**Status:** T1 MINED — verdict: **UNMEASURABLE with shipped data** (2026-09-11). T2/T3 blocked pending the T1.5 instrumentation prerequisite. Re-open condition: a `--fix-compile` run with the per-attempt ring recording.
 
 > **Research:** katgpt-rs [Research 546](../../katgpt-rs/.research/546_Fractal_Basins_Saddle_Trap_Latent_Reasoning.md) (arXiv:2609.04963)
 
 Fusion idea: `--fix-compile` iterates fix→compile cycles; an oscillating pair (error A → fix B → error B → fix A) is saddle-circling between nearly-correct fixes — the same transient-chaos shape the paper documents for latent loops. A flip-rate/persistence detector over per-span fix attempts could escalate, switch domain, or decline instead of burning the fix budget (the L4 datum: ~191 s/fix at 0/60 EM — trapped loops are expensive here).
 
-- [ ] T1 Mine existing `.heal/trajectories.kv` + burn-ack history: how prevalent are oscillating fix pairs (same error code reappearing after ≥1 intervening fix)? Prevalence gates everything else.
-- [ ] T2 If prevalence material: prototype a two-way detector (flip-count threshold on the error-code ring) in the rustc_errors domain driver; measure decline-early vs burn-full-budget on replayed trajectories
-- [ ] T3 Escape (kick) semantics do NOT transfer (fixes are discrete edits, not latent states) — only trap *detection* is in scope here; record the delta in the closing note
+- [x] T1 Mine existing `.heal/trajectories.kv` + burn-ack history: how prevalent are oscillating fix pairs (same error code reappearing after ≥1 intervening fix)? Prevalence gates everything else.
+  - **Verdict: the question is unmeasurable with the shipped stores.** Mined 2026-09-11 (`--memory-stats` over every on-disk store + the burn-ack files):
+    - The trajectory kv records per-FAMILY aggregated counters (read-modify-write rows), NOT per-attempt sequences — the attempt ORDER (error A → fix → error B → fix → error A) is not reconstructible from any shipped surface.
+    - The rustc_errors (fix-compile) side has **ZERO recorded trajectories** (`traj:E*` rows absent across all repos' stores) — the clippy-side families dominate (riir-ai: 2495 rows, success 3226 / fail 34 ≈ 1% fail, 23 rows with consecutive fails; riir-chain: 109 rows, 21/6). The fix-compile loop either never ran with the store enabled or does not record families.
+    - The cited "~191 s/fix at 0/60 EM" L4 datum is a riir-poc bench, not production trajectory data.
+  - What the mining DID establish: the clippy-side loop has a 1% fail rate and 23 stuck families (repeated-failure cousins of traps, no pair structure) — low prevalence on the surface that IS measured, consistent with the detector being low-value there; the fix-compile surface (the actual fusion target) is uninstrumented.
+- [ ] T1.5 (new — the instrumentation prerequisite): record a per-attempt error-code ring in the `rustc_errors` driver's recorder (`<repo>/.heal/misses/` sibling or a `fixseq:` kv family): per fix-compile run, the ordered (error-code, span-hash, strategy) sequence. ~1 day; gates T2.
+- [ ] T2 If prevalence material: prototype a two-way detector (flip-count threshold on the error-code ring) in the rustc_errors domain driver; measure decline-early vs burn-full-budget on replayed trajectories. **Blocked on T1.5 + a real run.**
+- [ ] T3 Escape (kick) semantics do NOT transfer (fixes are discrete edits, not latent states) — only trap *detection* is in scope here; record the delta in the closing note. Stands unchanged (analysis only; no data needed).
