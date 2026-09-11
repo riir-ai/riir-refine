@@ -9,6 +9,42 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 090 resolved — latent-only test lane: 17 domain-panic tests gated on the calibration state (2026-09-11, 23e051bc)
+
+The latent-only lane (`cargo test --lib --no-default-features --features
+latent_retrieval`) compiled three draft test modules whose bodies need the
+matcher AND the clippy+perf fixture state: 17 tests panicked at
+`LatentMatcher: no domains enabled`. Found by the 2026-09-10 each-feature
+rot-gate sweep; compile half fixed same day, runtime half tracked here.
+
+The fix (23e051bc): all three modules (`draft::latent_matcher::tests`,
+`draft::headroom_probe::tests`, `draft::retrieval_eval::tests`) now gate on
+`all(test, latent_retrieval, clippy_lints, rust_perf)` — the exact predicate
+`retrieval_eval`'s `cross_domain_agreement_rate_report` already carried
+in-file, and the state the fixture set + regression floors are calibrated
+on (blended floors sit ABOVE clippy-only precision; `per_domain` rows are
+positional 0=clippy/1=perf). The issue's sketched `any(single-domain)` gate
+would have been WRONG: the tests assert `DomainId::Clippy` rows and the
+perf seed (`overlay_replaces_the_covered_domain_and_keeps_the_rest`), so a
+`latent+sec`-style lane would still fail them post-gate — the matcher
+builds with sec, then the clippy-row asserts panic. clippy+perf is what
+the tests actually need, which was the issue's own governing phrase.
+
+Validated: latent-only 232p/17f → 230p/0f (two passing tests also drop
+from THIS lane — `mutate_shape_keeps_embedded_tokens` (pure) and
+`router_spectral_poc_report` (router report) — both still run in every
+clippy+perf+latent lane); calibration lane (default+latent) 1301p/0f with
+24 of the modules' tests present by name (5+6+13; `kernel_mutation_*`
+stays out until kernel_heal joins); clippy clean at both feature sets.
+Standing caveat, out of scope: the latent-only lane carries ~15 pre-existing
+domain-less dead-code warnings (unused `index_domain` macro, unused
+`HealDomain` imports, `mut`-not-needed on `router_domains`) — the lane has
+no clippy guard, which is the same premise this issue existed to close.
+No guard-layer count moves: the guard's lanes (5b default, 5c all-features)
+always satisfy the new gates.
+
+Issue file removed per the noise-reduction rule; this section is the record.
+
 ## The domain swap — the client half + the config surface, post-flip state (2026-09-10, riir-dapps Plans 023+024)
 
 The riir-dapps-side record carries the server half (the export/import move,
