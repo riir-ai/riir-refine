@@ -4292,3 +4292,39 @@ simply not completed since the flip. 6/6 `qr_*` + 30/30
 `kat_lease_client` green, clippy `-D warnings` clean at
 `--features kat_transport`. Issue file removed per the noise-reduction
 rule; this section is the record.
+
+## 2026-09-11 — Plan 124: `--config-audit` (post-mining intake classes A+B consumed)
+
+The idle loop's Protocol C unit: the top-ranked open intake classes from
+`.distill/001_mining_queue_snapshot.md` §Post-mining intake, consumed as a
+report lane (the `--frontier-report` shape — top-level ungated module, pure
+syn analysis, report-first gates nothing, always exit 0).
+
+- **Class A** `config-default-is-a-named-constant-and-the-consumer-reads-the-constant`:
+  a `pub` config field whose hand-written `Default` init is a bare const
+  path, with ZERO field reads anywhere while the const IS read elsewhere.
+  Probe-verified boundary (Plan 124 T1): clippy 1.98 fires ZERO findings on
+  the inert shape in both lib and bin crate forms — the gap is measured, not
+  assumed. Detector precision over the consumer's Python heuristic:
+  destructuring binds count as reads (the documented blind spot that put
+  three LIVE fields in its most-confident bucket), qualified defaults match
+  full-path only (kills the cross-type `::COUNT` collision), and the
+  Default's own RHS does not satisfy the "read elsewhere" condition.
+- **Class B** `assert-on-default-config-value`: fields only ever asserted
+  against their own Default (literal / const / `None` / tautological bool).
+  The T5 hand-check on riir-chain forced the precision clause the intake
+  spec names: asserts against COMPUTED expectations are behavioral coverage
+  and count as reads (`GuardVerdict.backoff_ticks` — 8 asserts against decay
+  curves, correctly silent; `GuardVerdict.redirect` — only ever
+  `assert_eq!(v.redirect, None)`, accurately reported).
+- Validation (T5): riir-chain 177 files/41 candidates → 1 verified TP;
+  riir-neuron-db 102/76 → 0; self 232/34 → 0. Zero false positives.
+- GOAT: G1 15/15 fixture matrix (fire/silent incl. blind-spot guard,
+  cross-file index, collision guard, condition-3 self-read suppression,
+  behavioral-assert refinement); G3 full lib suite green + clippy clean;
+  G2/G4 N/A report-only; score-bench N/A (no proposer change). Ungated by
+  design (zero new deps — syn + proc-macro2 + quote already core deps;
+  rustc_errors precedent).
+- Class C (`config-path-orphaned-by-refactor`) stays an intake row — it
+  needs git history, not a per-compile scan (the intake itself says
+  review-time).

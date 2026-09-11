@@ -2873,6 +2873,15 @@ USAGE:
                     CANDIDATES (p̂=1 ∧ n≥50 — report-only, never deletes).
                     Read-only; refuses (exit 1) on an empty population —
                     never a green zero. Needs --features latent_retrieval.
+    --config-audit Scan .rs files for config knobs that cannot be turned
+                    (Plan 124, intake classes A+B): Default-impl fields whose
+                    init is a bare const path, with ZERO field reads anywhere
+                    while the const IS read elsewhere (class A — silent-wrong
+                    configuration, invisible to clippy); and fields only ever
+                    touched inside assert*! macros (class B — fake coverage).
+                    Suggest-only, always exit 0; the detector sees only the
+                    scanned set (sibling/upstream consumers under-reported).
+                    Reads paths from the CLI (default `.`).
     --misses       Print the `.heal/misses/` authoring queue in FRONTIER
                     order (Plan 091 T1.2): dispersion-informative error
                     codes first — resolving THOSE converts uncertain
@@ -3223,6 +3232,12 @@ struct Args {
     /// memory-stats pattern); refuses with exit 1 on an empty population
     /// (never a green zero). Needs `latent_retrieval` (the store).
     frontier_report: bool,
+    /// Plan 124: `--config-audit` — the config-hygiene report (classes A+B
+    /// from the post-mining intake): Default-impl fields that default to a
+    /// const nobody's field-read while the const IS read elsewhere (the
+    /// knob that cannot be turned), and fields only ever asserted. Pure syn
+    /// scan, zero new deps, ungated; always exit 0 (report, not a gate).
+    config_audit: bool,
 }
 
 fn parse_args() -> Args {
@@ -3284,6 +3299,7 @@ fn parse_args() -> Args {
         json: false,
         import_series: false,
         frontier_report: false,
+        config_audit: false,
     };
     // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
     // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
@@ -3342,6 +3358,7 @@ fn parse_args() -> Args {
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
             "--frontier-report" => args.frontier_report = true,
+            "--config-audit" => args.config_audit = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -3650,6 +3667,7 @@ fn parse_args() -> Args {
         && !args.corpus_stats
         && !args.import_series
         && !args.frontier_report
+        && !args.config_audit
         && args.candidates_path.is_none()
     {
         eprintln!("no paths given");
@@ -5530,6 +5548,22 @@ fn main() {
             eprintln!("frontier-report: needs a latent_retrieval build (the trajectory store)");
             std::process::exit(1);
         }
+        return;
+    }
+
+    // ── Plan 124: --config-audit — the config-hygiene report ──────────────
+    // Report-first, gates nothing (the frontier-report law): classes A+B
+    // from the post-mining intake. Always exit 0 — a report that reds is a
+    // gate nobody runs. Paths default to `.` (same convention as the scan
+    // modes). Ungated: pure syn scan, zero new deps.
+    if args.config_audit {
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        let report = riir_clippy::config_audit::audit_paths(&targets);
+        print!("{}", report.render());
         return;
     }
 

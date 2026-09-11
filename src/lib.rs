@@ -277,6 +277,12 @@ pub mod traj_store;
 // band-mass is predictive).
 pub mod frontier_report;
 
+// Plan 124: the config-hygiene audit — intake classes A + B as a report
+// lane (`--config-audit` in bin/heal.rs). Pure syn analysis over the scanned
+// file set, zero new deps, ungated so lib tests cover it at default
+// features. Report-first, gates nothing (the frontier-report law).
+pub mod config_audit;
+
 // Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 // history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)
 // against real-`cargo clippy` ground truth on frozen fixtures mined from

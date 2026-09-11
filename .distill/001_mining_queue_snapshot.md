@@ -960,7 +960,9 @@
   comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
-- **2026-09-07 (M3, riir-ai Issue 888 consumer session) — OPEN class A:
+- **2026-09-07 (M3, riir-ai Issue 888 consumer session) — class A: DONE 2026-09-11
+  (Plan 124 — `cargo heal --config-audit`, the `--frontier-report` report-lane shape;
+  fixture matrix 15/15, 511 real files → 1 verified TP / 0 FP):
   `config-default-is-a-named-constant-and-the-consumer-reads-the-constant`.**
   A static, cheap, high-precision lint candidate, measured **3x in one repo**:
 
@@ -987,7 +989,10 @@
   three LIVE fields in the report's most-confident bucket — and the defining crate may be
   **upstream**, so 7 of 22 rows turned out live in a sibling repo. A lint runs per-crate
   with type info and dodges both, which is exactly why it belongs here and not in a sweep.
-- **2026-09-07 (same session) — OPEN class B: `assert-on-default-config-value`.**
+- **2026-09-07 (same session) — class B: DONE 2026-09-11 (Plan 124 — same lane;
+  the T5 hand-check forced the intake's own precision clause — asserts against
+  COMPUTED expectations are behavioral reads, only against-Default asserts are
+  class B): `assert-on-default-config-value`.**
   A test that asserts a config field equals its own default —
   `assert!(cfg.sc_inference)`, `assert!(!cfg.track_variance)`,
   `assert!((c.learning_rate - 0.0002).abs() < 1e-6)` — is often the **only** read of that
