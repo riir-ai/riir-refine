@@ -9,6 +9,39 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 088 resolved — the kat service-plane spin-out: every task + fleet follow-up landed, file removed at close (2026-09-10 → 2026-09-12)
+
+The KAT service plane (protocol tier + client plane + transports, 25 modules)
+became the private sibling leaf `gist-rs/riir-kat` (single crate; riir-auth
+optional is its only sibling dep; zero katgpt-core). riir-clippy is now a
+consumer: `riir-kat = { path = "../riir-kat", default-features = false }`
+(non-optional), root `lib.rs` re-exports every moved module at its historical
+path, and the three healer-coupled keepers stayed root (`kat_promotion`,
+`kat_sync_payload`, `kat_pending_estimator`). The redact-floor pin went
+cross-crate as `tests/kat_issue088_cross_repo_pins.rs`.
+
+Landing trail: riir-kat first commit `90a990e` (2026-09-10) + the riir-clippy
+consumer-rewiring phase-2 commit; full `ci_feature_guard` GREEN 2026-09-10
+(GUARD_EXIT=0) after the sweep surfaced + fixed 8 latent rot classes
+(`412f2323` 8-combo E0433, `c127a819` 23 orphaned kat_* files — the phase-2
+commit message's deletion claim was wrong, caught by the owner's grep,
+`dd9d0f7c` 5a clippy + too_many_lines, `5c5c47df` corpus-split walk needle,
+`b7f25c02` dist Phase-1 pin, `03f0ffcc` kernel/slice-b vacuity, `44ac9cc1`
+P12 scratch manifest, `f9cef9cc` --mine explainer pin).
+
+Fleet follow-ups — all closed 2026-09-11: katgpt-rs `repo_set.txt` + AGENTS
+count 17→18 (`ff5ab9f9`); the owner-greenlit dapps/dao protocol-tier adoption
+(riir-kat `3482a3c` lifted the two-sided composers into the feature-free
+protocol tier with their goldens; riir-dapps `f2498d2` Issue 082 mirrors
+retired; riir-dao `7823daa` units twin retired + live grant cross-pin) —
+boundary contract green at 18 repos / 273 edges; the SYNC-payload mirror
+deliberately stays dual-pinned (canonical = this repo's healer-coupled
+`kat_sync_payload` keeper — the 088 non-goal); the 4090 box cloned
+`E:\git\riir-kat` @ `a80985e`. Non-goals held: no public publishing, no
+API change at the riir-clippy surface. Issue file removed at close per the
+noise-reduction rule (this entry + BOUNDARY.md prose + riir-kat's own
+HISTORY are the record).
+
 ## Issue 090 resolved — latent-only test lane: 17 domain-panic tests gated on the calibration state (2026-09-11, 23e051bc)
 
 The latent-only lane (`cargo test --lib --no-default-features --features
