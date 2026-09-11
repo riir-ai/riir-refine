@@ -445,3 +445,20 @@ moka+PUCT fused policy/value search with draft-and-verify. This fuses the paper'
    single-trajectory settle matched parallel+selection in its domain; ours differs (cheap
    external verifier, multi-solution), so this is a measurement obligation, not an
    assumption either way.
+
+## Addendum — 2026-09-11: HRM-Text second-pass recipe feeds the TRAINER lane (stop rule UNCHANGED)
+
+Owner asked whether Plan 082b's HRM-Text distill (which "got really good results for 1B")
+fuses further into this proposal. Answer, honest: **not into the drafter lane — into the
+trainer.** Plan 049's stop rule has FIRED (in-vocab band 0.94pp < 2.0pp) and the settle-refiner
+prerequisite (trainer capability gate, next-action 2 above) FAILED with riir-train Plan 387
+Phase 3 (2.0%/0.0% exact-match, representational plateau). A second-pass HRM-Text re-mine
+(katgpt-rs [Research 547](../../katgpt-rs/.research/547_HRM_Text_Second_Pass_Training_Recipe.md),
+pinned `aaa948ea`) landed the missing recipe — sum-reduction accounting, two-level bp
+allocation, Adam-atan2+EMA wiring with the v1-divergence stress arm, LPT packing, learned
+carry init — as **riir-train Plan 394** (OPEN, NOT SCHEDULED), plus a modelless queue in
+katgpt-rs Issue 744. This proposal's reopen trigger stays corpus-side (the fired-histogram
+roadmap); Plan 394 only shortens the path IF the corpus band ever clears 2pp and the
+capability gate is re-run. The one live takeaway for THIS repo: modelless extraction #1
+(one-cumsum segmented reduction) has `AstChunker`-stream + oracle-metric consumers with no
+dependency on any training lane.
