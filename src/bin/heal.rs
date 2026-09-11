@@ -2876,8 +2876,15 @@ USAGE:
                     and the outcome-feed split (generated-case ':' keys vs
                     real-repo rows — band-mass per feed; the weight prices
                     arithmetic, gates nothing).
-                    Read-only; refuses (exit 1) on an empty population —
-                    never a green zero. Needs --features latent_retrieval.
+                    Also appends the T4 evidence-clock snapshot — one
+                    band-mass row per state change to the committed
+                    .benchmarks/frontier_snapshots.jsonl (an unchanged
+                    store at the same generation appends nothing; ≥3
+                    generations of rows are T4's GO evidence).
+                    Read-only report; the snapshot append is best-effort and
+                    never fails the run. Refuses (exit 1) on an empty
+                    population — never a green zero. Needs --features
+                    latent_retrieval.
     --config-audit Scan .rs files for config knobs that cannot be turned
                     (Plan 124, intake classes A+B): Default-impl fields whose
                     init is a bare const path, with ZERO field reads anywhere
@@ -4340,6 +4347,17 @@ fn finish_score_bench(
     if let Some(s) = strata {
         rec = rec.with_strata(s);
     }
+    // Issue 089 T8 — the per-rule outcome rows: the per-candidate evidence
+    // the α grid-fit replays (recorded AT BENCH TIME; the aggregate axes
+    // cannot be decomposed retroactively — the T2/T5 per-batch blocker
+    // class, closed on the bench axis).
+    let rule_read = sb::rule_outcomes(score);
+    println!(
+        "rule outcomes (089 T8): {} rule(s) recorded single-target, {} multi-target fixture(s) unattributed (aggregate axes carry them)",
+        rule_read.rows.len(),
+        rule_read.skipped_multi_target
+    );
+    rec = rec.with_rule_outcomes(rule_read.rows);
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
@@ -5915,6 +5933,44 @@ fn main() {
                         "{}",
                         riir_clippy::frontier_report::render_shaped_half_rows(&shaped_rows)
                     );
+                    // Issue 089 T4's evidence clock — append the band-mass
+                    // snapshot (state-change dedup: an unchanged store at the
+                    // same generation frontier appends nothing). Best-effort:
+                    // a failed append NEVER fails the report (report-first
+                    // law). The generation is the FRONTIER (max generation
+                    // ever run in this cwd), not the latest lane — lanes
+                    // interleave (v1 reruns after v8 landings), and the T4
+                    // x-axis must be monotone: a new row means "a new
+                    // generation EXISTS", the boundary the correlation
+                    // samples.
+                    let generation_frontier = runs.as_ref().map_or(0, |rs| {
+                        rs.iter().map(|r| r.generation).max().unwrap_or(0)
+                    });
+                    let snap = riir_clippy::frontier_report::snapshot_from(
+                        &summary,
+                        &feed_rows,
+                        generation_frontier,
+                        riir_clippy::frontier_report::git_sha(),
+                        riir_clippy::frontier_report::local_iso_timestamp(),
+                    );
+                    match riir_clippy::frontier_report::append_snapshot(
+                        std::path::Path::new(riir_clippy::frontier_report::SNAPSHOTS_JSONL),
+                        &snap,
+                    ) {
+                        Ok(true) => println!(
+                            "frontier snapshot: appended (generation {}, band-mass {:.1}%) → {}",
+                            snap.generation,
+                            snap.band_mass * 100.0,
+                            riir_clippy::frontier_report::SNAPSHOTS_JSONL
+                        ),
+                        Ok(false) => println!(
+                            "frontier snapshot: unchanged since the last row (generation {}) — not appended",
+                            snap.generation
+                        ),
+                        Err(e) => {
+                            eprintln!("frontier snapshot: append failed (report unaffected): {e}");
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("frontier-report: kv store at {} unreadable: {e}", kv.display());

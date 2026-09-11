@@ -77,6 +77,18 @@ pub struct HistoryRecord {
     /// mirror drops it. Rows predating the field deserialize as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shaped: Option<ShapedRecord>,
+    /// Issue 089 T8 — the per-RULE outcome read (the per-candidate evidence
+    /// the α grid-fit replays; the aggregate `heal_rate` cannot be
+    /// decomposed per rule retroactively — the same class as T2/T5's
+    /// per-batch blockers, so it is recorded AT BENCH TIME). Single-target
+    /// attribution only (the T7 `shaped_half_counts` law): multi-target
+    /// composites count in the aggregate axes, never here. The same
+    /// additive law as `ood`/`strata`/`shaped`: instrumentation, not a
+    /// scored axis — the SVG renderer and the saturation detector ignore
+    /// it, and the Warm-tier mirror drops it. Rows predating the field
+    /// deserialize as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule_outcomes: Option<Vec<super::RuleOutcome>>,
 }
 
 /// The shaped-verdict read of one bench run (Issue 089 T7) — the half-win
@@ -174,17 +186,12 @@ pub fn load_history(path: &std::path::Path) -> Vec<HistoryRecord> {
         .collect()
 }
 
-/// Best-effort short git sha of the current repo.
-#[must_use]
-pub fn git_sha() -> String {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default()
-}
+/// Best-effort short git sha + the UTC ISO-8601 timestamp — moved UNGATED
+/// to `frontier_report` (Issue 089 T4: the frontier snapshot writer needs
+/// both without the bench feature); re-exported here so every historical
+/// `sb::report::*` call site stays stable.
+pub use crate::frontier_report::git_sha;
+pub use crate::frontier_report::local_iso_timestamp;
 
 /// Issue 050 T2 — the Warm-tier dual-write: mirror one finished bench run
 /// into the repo-local trajectory store as a
@@ -213,40 +220,6 @@ pub fn record_store_best_effort(rec: &HistoryRecord) {
             eprintln!("score_bench: store dual-write skipped, store unavailable: {e}");
         }
     }
-}
-
-/// UTC ISO-8601 timestamp, std-only (Howard Hinnant's civil-from-days —
-/// same algorithm chrono uses; no dependency for one timestamp per run).
-/// UTC deliberately: deterministic across machines.
-// The date math's intermediate casts are bounded by the algorithm's ranges
-// (era ≤ ~5M years); the single-char names are y/m/d/h/min/s — deliberate.
-#[must_use]
-#[allow(clippy::cast_possible_wrap, clippy::many_single_char_names)]
-pub fn local_iso_timestamp() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64);
-    let days = secs.div_euclid(86_400);
-    let tod = secs.rem_euclid(86_400);
-    let (y, m, d) = civil_from_days(days);
-    let (h, min, s) = (tod / 3600, (tod % 3600) / 60, tod % 60);
-    format!("{y:04}-{m:02}-{d:02}T{h:02}:{min:02}:{s:02}")
-}
-
-/// days-since-epoch → (y, m, d) — Hinnant's `civil_from_days`.
-// Bounded intermediate ranges by construction (the algorithm's own comments).
-#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64; // [0, 146096]
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
-    let mp = (5 * doy + 2) / 153; // [0, 11]
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
-    (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
 impl HistoryRecord {
@@ -281,6 +254,7 @@ impl HistoryRecord {
                 shaped_rate: score.shaped_rate,
                 half_counts: score.shaped_half_counts.clone(),
             }),
+            rule_outcomes: None,
         }
     }
 
@@ -299,6 +273,15 @@ impl HistoryRecord {
     #[must_use]
     pub fn with_strata(mut self, strata: Vec<super::ProvenanceStratum>) -> Self {
         self.strata = Some(strata);
+        self
+    }
+
+    /// Attach the per-rule outcome rows (Issue 089 T8) — the same additive
+    /// law as [`Self::with_strata`]: absent on rows predating the field,
+    /// never a scored axis.
+    #[must_use]
+    pub fn with_rule_outcomes(mut self, rows: Vec<super::RuleOutcome>) -> Self {
+        self.rule_outcomes = Some(rows);
         self
     }
 }
@@ -721,6 +704,7 @@ mod tests {
             ood: None,
             strata: None,
             shaped: None,
+            rule_outcomes: None,
         }
     }
 
@@ -789,6 +773,34 @@ mod tests {
         };
         let line = serde_json::to_string(&zero).unwrap();
         assert!(line.contains("\"n_shaped\":0"), "{line}");
+    }
+
+    /// Issue 089 T8 — the additive-`rule_outcomes` law (the strata/shaped
+    /// precedent): rows predating the field deserialize as `None`, and a
+    /// `with_rule_outcomes` row round-trips.
+    #[test]
+    fn rule_outcomes_field_is_additive_and_round_trips() {
+        // A pre-T8 row (no `rule_outcomes` key in the JSON at all).
+        let old_row = "{\"ts\":\"2026-08-19T10:00:00\",\"sha\":\"abc\",\"n_ran\":1,\"n_healable\":1,\"n_clean\":0,\"heal_rate\":0.5,\"created_rate\":0.0,\"parse_safety\":1.0,\"decline_correctness\":1.0,\"edits_total\":1,\"vocab_size\":33,\"generation\":1}";
+        let base: HistoryRecord = serde_json::from_str(old_row).expect("old row deserializes");
+        assert_eq!(base.rule_outcomes, None);
+
+        // A per-rule row round-trips through the jsonl encoding.
+        let rows = vec![crate::score_bench::RuleOutcome {
+            rule: "manual_map".to_string(),
+            fixtures: 4,
+            resolved: 0,
+            persist: 0,
+            broken: 0,
+            created: 2,
+            edits: 4,
+            shaped: 4,
+        }];
+        let with = base.with_rule_outcomes(rows.clone());
+        let line = serde_json::to_string(&with).unwrap();
+        assert!(line.contains("\"rule_outcomes\":"), "{line}");
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.rule_outcomes, Some(rows));
     }
 
     #[test]

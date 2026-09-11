@@ -9,6 +9,71 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 089 T4+T8 — the evidence-emission halves: band-mass snapshots + per-rule bench rows (2026-09-12)
+
+Both remaining Issue 089 tasks were blocked on EVIDENCE that only future
+runs accumulate — but until this landing, nothing accumulated it: neither
+the band-mass snapshot writer nor the per-rule bench emission existed.
+Their emission halves are now live; T4/T8 stay open only on ACCUMULATION
+(time + future generations), with the clock started 2026-09-12.
+
+**T4's half — `frontier_snapshots.jsonl`:** every `--frontier-report` run
+appends the just-measured band-mass to the COMMITTED append-only
+`.benchmarks/frontier_snapshots.jsonl` (the score-history law: the committed
+file is the projection). State-change dedup: an unchanged store at the same
+generation appends NOTHING (ts-only differences are not rows) — one row per
+measurable state, not one per report run. The `generation` field is the
+FRONTIER (max generation ever run in the cwd, NOT the latest lane): lanes
+interleave (a v1 rerun landed between the v8 run and the first snapshot —
+latest-lane semantics would have recorded a spurious 8→1→8 oscillation on
+the T4 x-axis, caught live in this session), so a new row means "a new
+generation EXISTS" — the boundary the correlation samples. Rows carry:
+ts/sha (the store discriminator — different repos' stores share the file,
+no machine paths committed), generation frontier, population/seen/
+band_count/band_mass/saturated, and the T5 per-feed split. Best-effort by
+law: a failed append prints one stderr line and never fails the report.
+First row: gen-8 frontier, band-mass 5.6%, saturated 2 (`use_self` 172,
+`nan-unsafe-sort-comparator` 133), feeds all-organic 18/18. Dedup validated
+live on the immediate re-run ("unchanged since the last row — not
+appended"). The ≥3-generations GO evidence clock is RUNNING; the gate
+itself stays unwired until the band-mass ↔ next-generation yield
+correlation is measurable on the file.
+
+**T8's half — `rule_outcomes` on every bench row:** the α grid-fit blocker
+was that `score_history.jsonl` carried AGGREGATE heal rates per run —
+nothing could be replayed per candidate. Every row now carries per-rule
+`fixtures/resolved/persist/broken/created/edits/shaped`, attribution by the
+T7 `shaped_half_counts` law: single-target fixtures only (a ran fixture
+whose `vocab_before` is exactly one lint); multi-target composites count in
+the aggregate axes, never here — the count prints loud per run ("N
+multi-target fixture(s) unattributed"). The `persist`/`broken` fork is the
+T4 triage vocabulary: `broken` = `FixtureOutcome::parses` false (the FULL
+output-ok signal — syn-parse ∧ oracle-ran ∧ compiles), `persist` = output
+ok but the target still fires. `edits` is the log-length proxy the R(n)
+tie-break consumes. Same additive serde law as `ood`/`strata`/`shaped`
+(instrumentation, not scored; the Warm-tier `ScoreRunRow` mirror drops it
+— the schema-identity test's exceptions list extended to three). First
+live row (#98, v1 lane): 4 rules attributed — `deref_addrof` 1/1,
+`filter_next` 1/1, `map_unwrap_or` 2 fixtures 1 resolved + 1 PERSIST
+(cross-checked against the console persist map: "map_unwrap_or x1"),
+`needless_return` 1/1 (edits 2); 24 multi-target skipped. The α fit itself
+stays blocked until generations of per-rule rows accumulate.
+
+**En-route (DRY):** `git_sha` + `local_iso_timestamp` (+ private
+`civil_from_days`) moved UNGATED from `score_bench::report` to
+`frontier_report` (the snapshot writer needs both without the bench
+feature; the bench re-exports them so every `sb::report::*` call site is
+stable) — the moved `civil_from_days` also carries the module-level
+`cast_possible_truncation` allow it used to inherit from report.rs's
+module-level block.
+
+Validation: lib 1220/1220 @ default (+3 snapshot tests), 1452/1452 @
+score_bench (+2 per-rule tests), `generation_v8_freeze` e2e green, clippy
+clean on lib (both feature states) + the full `cargo-heal` bin lane; live
+runs: `--frontier-report` (snapshot #1 appended + dedup) and `--score-bench`
+(row #98, first `rule_outcomes`). Issue 089 T4/T8 rows updated — blocked
+on accumulation, not on emission.
+
 ## Issue 089 T7 — the shaped 0.5 verdict: generation 8 + the Elo-tie / Beta-half-count feeds (2026-09-12)
 
 The optional third-track task, landed as a full generation. "Target cleared

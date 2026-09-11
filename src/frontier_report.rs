@@ -36,6 +36,7 @@
 use std::collections::BTreeMap;
 
 use katgpt_core::best_belief_score;
+use serde::{Deserialize, Serialize};
 
 use crate::dispersion::{from_counts, frontier_order, PoolEntry, Regime};
 
@@ -739,6 +740,203 @@ pub fn render_shaped_half_rows(rows: &[ShapedHalfRow]) -> String {
     out
 }
 
+// ── Issue 089 T4's evidence clock: band-mass snapshots ──────────────────
+//
+// T2's honest blocker, made accumulable: the store holds CUMULATIVE
+// counters, so historical band-mass at generation boundaries cannot be
+// reconstructed retroactively — and T4's GO evidence is the band-mass ↔
+// next-generation yield correlation over ≥3 generations. Every
+// `--frontier-report` run appends the just-measured band-mass to a
+// COMMITTED append-only jsonl (the score-history law: the committed file
+// is the projection), deduped by state change — an unchanged store at the
+// same generation appends nothing. The report-first law is unchanged:
+// the file gates nothing; it makes the evidence exist.
+
+/// The committed append-only snapshot log (relative to the report's cwd).
+pub const SNAPSHOTS_JSONL: &str = ".benchmarks/frontier_snapshots.jsonl";
+
+/// One band-mass snapshot — the T2 metric frozen at a point in time
+/// (Issue 089 T4's x-axis: band-mass AT a generation boundary, correlated
+/// later against that generation's yield).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FrontierSnapshot {
+    /// UTC ISO-8601 timestamp of the report run.
+    pub ts: String,
+    /// Best-effort git sha of the report's cwd — the STORE DISCRIMINATOR:
+    /// snapshots of different repos' stores share the one file, and the
+    /// sha (+ `population`) tells them apart without committing machine
+    /// paths.
+    pub sha: String,
+    /// The generation FRONTIER — the max score-history generation ever run
+    /// in this cwd (0 = no history yet). Deliberately NOT the latest lane:
+    /// lanes interleave (v1 reruns after v8 landings) and the T4 x-axis
+    /// (band-mass at a generation boundary) must be monotone.
+    pub generation: u8,
+    /// Learn rows scanned (the population — the green-zero defense's axis).
+    pub population: usize,
+    /// Rows with `n ≥ 1` (p̂ defined).
+    pub seen: usize,
+    /// In-band rules (`0 < p̂ ≤ 0.5`).
+    pub band_count: usize,
+    /// `band_count / seen` — the T2 health metric.
+    pub band_mass: f32,
+    /// `p̂=1 ∧ n≥W` rows — the demotion-candidate count.
+    pub saturated: usize,
+    /// The T5 outcome-feed split, per-feed band-mass (a band living only
+    /// in the synthetic feed is a curriculum artifact; T4's gate needs the
+    /// split, not just the pooled mass).
+    pub feeds: Vec<FeedSnapshot>,
+}
+
+/// One feed's band-mass inside a [`FrontierSnapshot`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FeedSnapshot {
+    /// [`FEED_ORGANIC`] / [`FEED_SYNTHETIC`].
+    pub feed: String,
+    /// Rules in this feed.
+    pub rules: usize,
+    /// Rules with `n ≥ 1` in this feed.
+    pub seen: usize,
+    /// In-band rules in this feed.
+    pub band: usize,
+    /// `band / seen` — the T2 metric, per feed.
+    pub band_mass: f32,
+}
+
+impl FrontierSnapshot {
+    /// Same measured state (everything but `ts` — two runs over an
+    /// unchanged store differ only by timestamp, which is not a new row).
+    fn same_state(&self, other: &Self) -> bool {
+        self.sha == other.sha
+            && self.generation == other.generation
+            && self.population == other.population
+            && self.seen == other.seen
+            && self.band_count == other.band_count
+            && self.saturated == other.saturated
+            && self.feeds == other.feeds
+    }
+}
+
+/// Build the snapshot of a just-rendered report (pure — the CLI passes the
+/// already-computed summary + feed rows; `ts`/`sha` come from the helpers
+/// below so both stay std-only + best-effort).
+#[must_use]
+pub fn snapshot_from(
+    summary: &FrontierSummary,
+    feeds: &[ProvenanceYieldRow],
+    generation: u8,
+    sha: String,
+    ts: String,
+) -> FrontierSnapshot {
+    FrontierSnapshot {
+        ts,
+        sha,
+        generation,
+        population: summary.population,
+        seen: summary.seen,
+        band_count: summary.band_count,
+        band_mass: summary.band_mass,
+        saturated: summary
+            .rows
+            .iter()
+            .filter(|r| r.class == BandClass::Saturated)
+            .count(),
+        feeds: feeds
+            .iter()
+            .map(|f| FeedSnapshot {
+                feed: f.feed.to_string(),
+                rules: f.rules,
+                seen: f.seen,
+                band: f.band,
+                band_mass: f.band_mass,
+            })
+            .collect(),
+    }
+}
+
+/// Append one snapshot unless the last row carries the SAME measured state
+/// (the state-change dedup). `Ok(true)` = appended; `Ok(false)` =
+/// unchanged, not appended. A malformed trailing line is loudly skipped
+/// (the `load_history` law), never fatal — the file is instrumentation.
+///
+/// # Errors
+///
+/// Propagates filesystem errors (create dir / open / append write).
+pub fn append_snapshot(path: &std::path::Path, snap: &FrontierSnapshot) -> std::io::Result<bool> {
+    use std::io::Write;
+    if let Ok(text) = std::fs::read_to_string(path) {
+        if let Some(last) = text.lines().rev().find(|l| !l.trim().is_empty()) {
+            match serde_json::from_str::<FrontierSnapshot>(last) {
+                Ok(prev) if prev.same_state(snap) => return Ok(false),
+                Ok(_) => {}
+                Err(e) => eprintln!("frontier snapshot: skipping malformed last row: {e}"),
+            }
+        }
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    let mut line = serde_json::to_string(snap).map_err(std::io::Error::other)?;
+    line.push('\n');
+    f.write_all(line.as_bytes())?;
+    Ok(true)
+}
+
+/// Best-effort short git sha of the current repo (empty outside a repo).
+/// Moved UNGATED to this module (Issue 089 T4) from `score_bench::report`
+/// so the snapshot writer does not drag the feature-gated bench module
+/// into every build; the bench re-exports it (`sb::report::git_sha`) so
+/// existing call sites are stable.
+#[must_use]
+pub fn git_sha() -> String {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
+/// UTC ISO-8601 timestamp, std-only (Howard Hinnant's civil-from-days —
+/// same algorithm chrono uses; no dependency for one timestamp per run).
+/// UTC deliberately: deterministic across machines. Same move-ungated
+/// story as [`git_sha`] (Issue 089 T4; re-exported by the bench report).
+#[must_use]
+#[allow(clippy::cast_possible_wrap, clippy::many_single_char_names)]
+pub fn local_iso_timestamp() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    let (h, min, s) = (tod / 3600, (tod % 3600) / 60, tod % 60);
+    format!("{y:04}-{m:02}-{d:02}T{h:02}:{min:02}:{s:02}")
+}
+
+/// days-since-epoch → (y, m, d) — Hinnant's `civil_from_days`.
+// Bounded intermediate ranges by construction (the algorithm's own
+// comments; the truncation/wrap/sign allows mirror the score_bench report's
+// module-level set — the fn moved homes, not semantics).
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1141,5 +1339,80 @@ mod tests {
         assert!(text.contains("shaped half-count fold"), "{text}");
         assert!(text.contains("p̂_folded"), "{text}");
         assert!(text.contains("fake Beta concentration"), "{text}");
+    }
+
+    // ── Issue 089 T4: band-mass snapshots ──────────────────────────────────
+
+    fn snap_fixtures() -> (FrontierSummary, [ProvenanceYieldRow; 2]) {
+        let summary = summarize(&fixtures());
+        let feeds = provenance_yield_split(&fixtures());
+        (summary, feeds)
+    }
+
+    #[test]
+    fn snapshot_from_copies_state_and_feeds() {
+        let (summary, feeds) = snap_fixtures();
+        let snap = snapshot_from(
+            &summary,
+            &feeds,
+            8,
+            "deadbee".to_string(),
+            "2026-09-12T05:00:00".to_string(),
+        );
+        assert_eq!(snap.ts, "2026-09-12T05:00:00");
+        assert_eq!(snap.sha, "deadbee");
+        assert_eq!(snap.generation, 8);
+        assert_eq!(snap.population, summary.population);
+        assert_eq!(snap.seen, summary.seen);
+        assert_eq!(snap.band_count, summary.band_count);
+        // The fixtures() set carries exactly two saturated rows
+        // (saturated_edge n=50, saturated_deep n=120).
+        assert_eq!(snap.saturated, 2);
+        // The feed split rides verbatim, organic-first.
+        assert_eq!(snap.feeds.len(), 2);
+        assert_eq!(snap.feeds[0].feed, FEED_ORGANIC);
+        assert_eq!(snap.feeds[0].rules, feeds[0].rules);
+        assert_eq!(snap.feeds[1].feed, FEED_SYNTHETIC);
+    }
+
+    #[test]
+    fn snapshot_jsonl_round_trips() {
+        let (summary, feeds) = snap_fixtures();
+        let snap = snapshot_from(&summary, &feeds, 0, "abc123".to_string(), "t".to_string());
+        let line = serde_json::to_string(&snap).unwrap();
+        let back: FrontierSnapshot = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, snap);
+    }
+
+    #[test]
+    fn append_snapshot_dedups_unchanged_state_and_persists_change() {
+        let dir = std::env::temp_dir().join(format!("frontier_snap_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("snapshots.jsonl");
+        let (summary, feeds) = snap_fixtures();
+
+        // First append: state never seen → row #1.
+        let a = snapshot_from(&summary, &feeds, 8, "aaaa".to_string(), "t1".to_string());
+        assert!(append_snapshot(&path, &a).unwrap());
+        // Same state, different ts only → deduped, file unchanged.
+        let a2 = snapshot_from(&summary, &feeds, 8, "aaaa".to_string(), "t2".to_string());
+        assert!(!append_snapshot(&path, &a2).unwrap());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 1);
+
+        // Changed state (generation bump) → row #2.
+        let b = snapshot_from(&summary, &feeds, 9, "aaaa".to_string(), "t3".to_string());
+        assert!(append_snapshot(&path, &b).unwrap());
+        // Unchanged again → deduped against row #2 (the LAST row, not #1).
+        assert!(!append_snapshot(&path, &b).unwrap());
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 2);
+
+        // A malformed trailing line never blocks the append (loud skip).
+        std::fs::write(&path, "not json\n").unwrap();
+        assert!(append_snapshot(&path, &a).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

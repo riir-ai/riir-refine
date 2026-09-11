@@ -41,8 +41,15 @@ Plus the **miss map**: which lints persist where, most-frequent first —
 the diagnostic for WHERE healing still fails. Instrumentation axes riding
 every row (the additive serde law): the **OOD entropy-gap axis** (issue 077),
 the **provenance strata** (Issue 089 T6 — heal rate split by repo/authored/
-construction class), and the **shaped record** (Issue 089 T7 — n_shaped,
-shaped_rate, per-rule half_counts).
+construction class), the **shaped record** (Issue 089 T7 — n_shaped,
+shaped_rate, per-rule half_counts), and the **per-rule outcome rows**
+(Issue 089 T8 — fixtures/resolved/persist/broken/created/edits/shaped per
+rule, single-target attribution only, the T7 law; `persist` vs `broken` is
+T4's triage fork, `edits` is the log-length proxy the R(n) tie-break
+consumes). Companion file (T4's evidence clock): every
+`--frontier-report` run appends a state-change-deduped band-mass snapshot
+to `.benchmarks/frontier_snapshots.jsonl` (generation = the frontier, max
+not latest lane; ≥3 generations of rows are T4's GO evidence).
 
 ## Score history (the curve so far)
 

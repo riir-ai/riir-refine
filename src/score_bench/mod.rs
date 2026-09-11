@@ -361,6 +361,125 @@ pub struct BenchScore {
 /// [`FixtureOutcome::shaped_verdict`].
 pub const SHAPED_VERDICT: f32 = 0.5;
 
+// ── Issue 089 T8: the per-rule outcome read (per-candidate evidence) ────
+
+/// One rule's outcome over this run's single-target fixtures (Issue 089
+/// T8 — the emission half of the α-fit blocker: `score_history.jsonl`
+/// carried AGGREGATE heal rates per run, so nothing could be replayed per
+/// candidate; these rows are what a grid-fit replays, recorded AT BENCH
+/// TIME). Attribution follows the T7 `shaped_half_counts` law:
+/// single-target fixtures only (a ran fixture whose `vocab_before` is
+/// exactly one lint); multi-target composites and clean fixtures count in
+/// the aggregate axes, never here — recorded via
+/// [`RuleOutcomeRead::skipped_multi_target`], never guessed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleOutcome {
+    /// The target lint/rule name.
+    pub rule: String,
+    /// Ran single-target fixtures of this rule. Name-presence scoring: the
+    /// bench scores a fixture per lint NAME, so this IS the rule's finding
+    /// count this run.
+    pub fixtures: usize,
+    /// Fixtures whose target resolved (name absent from `vocab_persist`).
+    pub resolved: usize,
+    /// Fixtures still firing after healing (output ok — the persist fork of
+    /// T4's triage).
+    pub persist: usize,
+    /// Fixtures whose healed output broke — `FixtureOutcome::parses` is the
+    /// FULL output-ok signal (syn-parse ∧ oracle-ran ∧ compiles), so this
+    /// is the complete broken fork; `vocab_persist` mirrors `vocab_before`
+    /// there by construction.
+    pub broken: usize,
+    /// Σ created lints (any) across this rule's fixtures.
+    pub created: usize,
+    /// Σ proposer edits across this rule's fixtures — the log-length proxy
+    /// the R(n) tie-break consumes (`R = 1 if n≤N else 1−α·ln(n/N)`).
+    pub edits: usize,
+    /// Fixtures with the [`SHAPED_VERDICT`] half-win verdict.
+    pub shaped: usize,
+}
+
+/// The per-rule read of one finished bench run (Issue 089 T8).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RuleOutcomeRead {
+    /// Per-rule rows, rule ascending (`BTreeMap` iteration order — the
+    /// `shaped_half_counts` determinism law).
+    pub rows: Vec<RuleOutcome>,
+    /// Ran healable fixtures with ≥2 vocabulary lints — unattributable per
+    /// rule (counted in the aggregate axes, loud here, never guessed).
+    pub skipped_multi_target: usize,
+}
+
+/// The per-rule loop accumulator (named fields — the `RunAccum` precedent;
+/// a 7-tuple would trip `type_complexity` and read by index).
+#[derive(Default)]
+struct RuleAccum {
+    fixtures: usize,
+    resolved: usize,
+    persist: usize,
+    broken: usize,
+    created: usize,
+    edits: usize,
+    shaped: usize,
+}
+
+impl RuleAccum {
+    fn record(&mut self, o: &FixtureOutcome) {
+        self.fixtures += 1;
+        if !o.parses {
+            self.broken += 1; // output-ok is the full signal
+        } else if o.resolved() > 0 {
+            self.resolved += 1; // single target ⇒ resolved() ∈ {0, 1}
+        } else {
+            self.persist += 1; // still firing
+        }
+        self.created += o.created.len();
+        self.edits += o.edits;
+        if o.is_shaped() {
+            self.shaped += 1;
+        }
+    }
+}
+
+/// Decompose one finished bench run into per-rule outcomes (Issue 089 T8).
+/// Pure arithmetic over [`BenchScore::outcomes`] — the `stratify`
+/// precedent (post-hoc over the run, no hot-loop change). Per-rule fork
+/// invariant: `fixtures == resolved + persist + broken` for every row.
+#[must_use]
+pub fn rule_outcomes(score: &BenchScore) -> RuleOutcomeRead {
+    let mut acc: BTreeMap<String, RuleAccum> = BTreeMap::new();
+    let mut skipped_multi_target = 0usize;
+    for o in &score.outcomes {
+        if !o.ran || o.vocab_before.is_empty() {
+            continue; // excluded (never ran) / clean (the decline axis, not per-rule)
+        }
+        if o.vocab_before.len() > 1 {
+            skipped_multi_target += 1;
+            continue;
+        }
+        let Some(rule) = o.vocab_before.iter().next().cloned() else {
+            continue;
+        };
+        acc.entry(rule).or_default().record(o);
+    }
+    RuleOutcomeRead {
+        rows: acc
+            .into_iter()
+            .map(|(rule, a)| RuleOutcome {
+                rule,
+                fixtures: a.fixtures,
+                resolved: a.resolved,
+                persist: a.persist,
+                broken: a.broken,
+                created: a.created,
+                edits: a.edits,
+                shaped: a.shaped,
+            })
+            .collect(),
+        skipped_multi_target,
+    }
+}
+
 /// The production `--fix` heal loop, mirrored from `src/bin/heal.rs`
 /// (`MAX_FIX_PASSES = 4`, perf + clippy lanes, overlap-selected splices).
 ///
@@ -676,6 +795,106 @@ fn finalize_rates(score: &mut BenchScore, accum: &RunAccum) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Issue 089 T8: the per-rule outcome read ──────────────────────────
+
+    /// Hand-build a single-target `FixtureOutcome` (the bench scores per
+    /// lint NAME — `vocab_before` is a set, one name per fixture here).
+    fn outcome(
+        rule: &str,
+        ran: bool,
+        resolved: bool,
+        parses: bool,
+        created: usize,
+        edits: usize,
+    ) -> FixtureOutcome {
+        let vocab_before: BTreeSet<String> = if rule.is_empty() {
+            BTreeSet::new()
+        } else {
+            BTreeSet::from([rule.to_string()])
+        };
+        let vocab_persist = if parses && resolved {
+            BTreeSet::new()
+        } else {
+            vocab_before.clone()
+        };
+        FixtureOutcome {
+            id: format!("fx-{rule}"),
+            ran,
+            vocab_before: vocab_before.clone(),
+            all_before: vocab_before.clone(),
+            all_after: vocab_before.clone(),
+            vocab_persist,
+            created: BTreeSet::from_iter(
+                (0..created).map(|i| format!("created_lint_{i}")),
+            ),
+            edits,
+            passes: usize::from(edits > 0),
+            parses,
+            drifted: false,
+        }
+    }
+
+    fn multi_target_outcome(rules: &[&str]) -> FixtureOutcome {
+        FixtureOutcome {
+            id: "fx-multi".to_string(),
+            ran: true,
+            vocab_before: BTreeSet::from_iter(rules.iter().map(ToString::to_string)),
+            all_before: BTreeSet::new(),
+            all_after: BTreeSet::new(),
+            vocab_persist: BTreeSet::new(),
+            created: BTreeSet::new(),
+            edits: 3,
+            passes: 1,
+            parses: true,
+            drifted: false,
+        }
+    }
+
+    #[test]
+    fn rule_outcomes_single_target_attribution_and_forks() {
+        let score = BenchScore {
+            outcomes: vec![
+                // manual_map: one clean clear (shaped=no) + one shaped clear.
+                outcome("manual_map", true, true, true, 0, 2),
+                outcome("manual_map", true, true, true, 2, 3),
+                // needless_return: still firing after the heal (persist).
+                outcome("needless_return", true, false, true, 0, 1),
+                // map_clone: healed output broke (broken fork).
+                outcome("map_clone", true, false, false, 0, 2),
+                // Excluded (oracle never ran) — counts nowhere.
+                outcome("excluded_rule", false, true, true, 0, 0),
+                // Clean fixture (the decline axis) — no rule.
+                outcome("", true, false, true, 0, 0),
+                // Multi-target composites — skipped loud, never guessed.
+                multi_target_outcome(&["manual_map", "map_clone"]),
+                multi_target_outcome(&["a", "b", "c"]),
+            ],
+            ..BenchScore::default()
+        };
+        let read = rule_outcomes(&score);
+        assert_eq!(read.skipped_multi_target, 2);
+        assert_eq!(read.rows.len(), 3, "rules: {:?}", read.rows);
+
+        // Deterministic order: rule ascending.
+        let names: Vec<&str> = read.rows.iter().map(|r| r.rule.as_str()).collect();
+        assert_eq!(names, ["manual_map", "map_clone", "needless_return"]);
+
+        let mm = &read.rows[0];
+        assert_eq!((mm.fixtures, mm.resolved, mm.persist, mm.broken), (2, 2, 0, 0));
+        assert_eq!((mm.created, mm.edits, mm.shaped), (2, 5, 1));
+
+        let nr = &read.rows[2];
+        assert_eq!((nr.fixtures, nr.resolved, nr.persist, nr.broken), (1, 0, 1, 0));
+
+        let mc = &read.rows[1];
+        assert_eq!((mc.fixtures, mc.resolved, mc.persist, mc.broken), (1, 0, 0, 1));
+
+        // The fork invariant: fixtures == resolved + persist + broken.
+        for r in &read.rows {
+            assert_eq!(r.fixtures, r.resolved + r.persist + r.broken, "{}", r.rule);
+        }
+    }
 
     // ── Issue 089 T6: the stratified read ─────────────────────────────────
 
