@@ -1133,7 +1133,12 @@ pub fn print_rerank_sweep(rows: &[RerankSweepRow]) {
     }
 }
 
-#[cfg(test)]
+// Issue 090: these tests need clippy_lints AND rust_perf — the fixtures
+// are clippy+perf labeled spans, the regression-gate floors are calibrated
+// on the clippy+perf blend (blended floors sit ABOVE clippy-only precision),
+// and per_domain rows are positional (0=clippy, 1=perf). A latent-only
+// build (the matcher refuses a domain-less build) correctly drops them.
+#[cfg(all(test, feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
 mod tests {
     use super::*;
 

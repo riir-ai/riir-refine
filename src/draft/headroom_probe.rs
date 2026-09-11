@@ -604,7 +604,11 @@ pub fn print_headroom_decomposition(d: &HeadroomDecomposition) {
     );
 }
 
-#[cfg(test)]
+// Issue 090: these tests need clippy_lints AND rust_perf — the fixture
+// set is clippy+perf labeled spans and the probe scores per-domain rows in
+// the clippy/perf calibration order. A latent-only build (the matcher
+// refuses a domain-less build) correctly drops them.
+#[cfg(all(test, feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
 mod tests {
     use super::*;
 
