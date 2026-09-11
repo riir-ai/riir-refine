@@ -1,0 +1,14 @@
+# Issue 092: Cross-domain rule-corpus alignment (GW on rule-similarity graphs) — dedup + fix-transfer map
+
+**Status:** OPEN — PoC-first; T1 gates everything. No wiring before the defend-wrong result. Report-first per R135/Bench-047 doctrine.
+
+> **Research:** riir-clippy [note 166](../.research/166_healer_kernel_fusion_re_research.md) §A (re-research of riir-ai Research 371's healer surface) · **Kernel:** katgpt-rs Plan 594 `gw_alignment` (Gromov–Wasserstein quotient alignment, `crates/katgpt-core/src/gw_alignment/`, feature `gw_alignment`, Bench 709, 11 gates green, opt-in).
+
+Fusion idea: the healer's six rule corpora (clippy_lints 49 · rust_perf 126 · kernel_opt 607 · sec 15 · docker 31 · dist 5) are curated in isolation. Dedup today is name/convention-level (mining-time "dropped as duplicates", in-rule "Distinct from …" cross-refs) and the index-level `zone_hash` only catches identical text (`draft/corpus_index.rs:201-211`). Align two domains' rule-similarity spaces — embed each rule's `buggy_code`/`fixed_code` pair, build the per-domain similarity matrix, GW-align — producing a cross-domain rule-correspondence map for: (a) validated dedup actions, (b) fix-space transfer (a matched pair shares candidate evidence), (c) ingest-time duplicate screening for newly mined domains (the standing distill-program dedup-grep concern).
+
+**Boundary note:** this is OFFLINE corpus curation. `.docs/11_domains/cross_domain_routing.md` scopes OUT the heal-time cross-domain ROUTER ("caller picks domain via feature flag"; spectral router killed, Bench 025) — this issue proposes no router and changes no heal-path behavior. Published prior art: a vendor-confirmed gap (SonarQube: "we have no 'similar rule' mapping"; eslint↔sonar mapping requests unanswered; `eslint-plugin-sonarjs` = manual porting) — citations in note 166 §A. In-stack: no canonical-form/equivalence/cross-domain machinery exists (grep-swept, note 166 §0).
+
+- [ ] T1 Defend-wrong PoC (gates everything): align clippy_lints (49) × rust_perf (126) via `katgpt_core::gw_alignment`. Competitors: (a) the GW correspondence map, (b) name/keyword-similarity dedup baseline, (c) no-alignment (manual review only). Ground truth: hand-labeled validation subset (~30–60 pairs, including the in-rule "Distinct from …" cross-refs as known negatives). Metric: correspondence precision/recall vs baseline at matched review budget. Report-first either way; raw numbers → next `.benchmarks/083_*`.
+- [ ] T2 If T1 wins: dedup actions on validated pairs + an ingest-time screening step in the distill workflow (doc + checklist first, code second).
+- [ ] T3 Transfer experiment (gated on T1+T2): does evidence sharing across a validated matched pair move any measurable heal axis — on its OWN harness (R135: the score-bench's `heal_fixpoint` bypasses selection; selection/curation changes need their own bench).
+- [ ] T4 GOAT gate for any promoted wiring; stays opt-in until then (525/Bench-834 precedent).

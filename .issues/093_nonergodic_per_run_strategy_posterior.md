@@ -1,0 +1,15 @@
+# Issue 093: Per-run strategy posterior — the healer half of katgpt-rs Research 545 §4 (Plan 592 consumer)
+
+**Status:** OPEN — PoC-first, report-first (R135/Bench-047 doctrine). Execution ticket for 545 §4's recorded fusion idea, unblocked 2026-09-11 (Plan 592 GOAT G1–G4 PASS). NOT a novelty claim.
+
+> **Research:** katgpt-rs Research 545 §4 (verbatim: "A file-level domain posterior + per-domain inner state is the nonergodic upgrade of the healer's router. Deferred pending the kernel's GOAT") · **Kernel:** Plan 592 `NonergodicFilter<K,D>` (`crates/katgpt-micro-belief/src/nonergodic.rs`, feature `nonergodic_belief`, Bench 706, opt-in; `revive_margin`/`revive_gate` accessors) · healer deltas: riir-clippy [note 166](../.research/166_healer_kernel_fusion_re_research.md) §B.
+
+**Grounded reframe (the delta over 545's domain-level wording):** the DOMAIN-level reading partially collides with `.docs/11_domains/cross_domain_routing.md` ("caller picks domain via feature flag … auto-detection would add complexity for a non-problem"). The promising surface is WITHIN-RUN, WITHIN-DOMAIN: the `--fix-compile` driver is inherently multi-attempt (check → propose → apply → recheck → keep|revert, ≤ `max_iters` = 5, `domains/rustc_errors/driver.rs`) with per-attempt strategy/error-class observables. Today's within-run state is NEGATIVE memory only — the `tried: HashSet<TriedKey>` suppression set and the P12 re-proposal suppression never revive. A `NonergodicFilter` over strategy/error-class generators would add positive per-run belief sharpening across the driver's iterations, with 592's revive accessors turning suppression into principled revive-on-contradiction.
+
+**R135 interplay (design constraint, not objection):** Bench 047's starvation law (98.5% of candidates unseen) punishes selection sophistication at pool sparsity — but the filter learns WITHIN the run budget from THIS run's outcomes, which is exactly R135 lesson 2 ("any future rating-based selection must update online"). Report-first regardless; selection changes get their own harness (the score-bench's `heal_fixpoint` bypasses `select_best_candidate` entirely).
+
+**Shared instrumentation:** the per-attempt error-code ring (Issue 91 T1.5) is the substrate for BOTH this posterior and Issue 91's trap detector — land T1.5 once, consume twice.
+
+- [ ] T1 PoC (defend-wrong, three competitors): per-run `NonergodicFilter` over strategy/error-class generators vs the shipped static shape-conditional BetaPosterior ordering vs no-posterior; toy multi-error file corpus with scripted fix outcomes; measure resolved-within-budget + wasted-attempt rate. Report-first; numbers → `.benchmarks/`.
+- [ ] T2 If T1 wins AND Issue 91 T1.5 ring lands: wire behind an opt-in feature flag at the rustc_errors driver ordering seam; GOAT gate (correctness = resolved rate at equal budget; no regression on the measured 1%-fail surface).
+- [ ] T3 Otherwise: record the negative verdict + reopen trigger (store densification per R135/Bench-047) in note 166; close this issue.
