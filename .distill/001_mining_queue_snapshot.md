@@ -2,6 +2,26 @@
 
 > **Live queue state (2026-09-05, post-Batch-111 + the R134 perf-search unit)**
 
+> **CROSS-OOO MERGE CANDIDATES (Issue 098 T4, 2026-09-12; Bench 086):** the
+> rule-corpus cross-OOO axis (the Research 552 absorption/splitting audit over
+> the 100-span real oracle-labeled clippy pool, TF-IDF cosine at op-bigram
+> granularity) measured **3 absorption candidates** (cross < 0.6):
+> `manual_map ↔ needless_return 0.462` (real entanglement — the gen-8
+> closure-birth mechanism; `manual_map`'s arm→closure splice produces
+> needless-return-shaped code; both interpretable, `manual_map` curation-pruned
+> — consolidate the born-lint cluster docs, NOT a merge: the lints are
+> semantically distinct, the AXIS finding is the shared credit-splitting),
+> `manual_map ↔ single_match_else 0.500`, and `single_match ↔ single_match_else
+> 0.500` (**the calibration anchor** — clippy's own split of one lint; genuine
+> consolidation candidate for a future corpus refactor: one rule, two
+> else-arm variants). Curation: `unique_feature_count = 12 of 17` audited
+> (25 single-span rules unauditable). Non-clippy domains: population 0
+> (all corpora 1-entry-per-rule — multi-span corpus growth is the
+> prerequisite, an owner decision, not a mining batch). Standing state: the
+> axis prints on every `--score-bench` run + `--frontier-report` (additive
+> section); `.benchmarks/086_rule_corpus_cross_ooo_axis.md` carries the full
+> tables.
+
 > **FOLDED 2026-08-31:** the closed-batch history (every idle-loop cycle entry through
 > Batch 93 + the FULL post-mining intake records + the sweep/batch-landing sections)
 > lives VERBATIM at `.research/108_mining_queue_snapshot_history.md`. This file keeps

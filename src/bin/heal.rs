@@ -4389,6 +4389,22 @@ fn finish_score_bench(
         rule_read.skipped_multi_target
     );
     rec = rec.with_rule_outcomes(rule_read.rows);
+    // Issue 098 T4 — the cross-OOO axis on the console (the row carries it
+    // too, via HistoryRecord::cross_ooo; one shared cached measurement).
+    {
+        let axis = sb::cross_ooo::cross_ooo_axis();
+        println!(
+            "cross-OOO axis (098): unique_feature_count = {}/{} audited (clippy pool {} spans) · absorption candidates < {}: {}",
+            axis.curated_kept,
+            axis.audited_units,
+            axis.pooled_spans,
+            sb::cross_ooo::REDUNDANT_PAIR_CROSS,
+            axis.redundant_pairs.len()
+        );
+        for (a, b, c) in axis.redundant_pairs.iter().take(5) {
+            println!("  absorption candidate: {a} <-> {b} : {c:.3}");
+        }
+    }
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
@@ -5912,6 +5928,22 @@ fn main() {
                         "{}",
                         riir_clippy::frontier_report::render(&summary, score.as_ref())
                     );
+                    // Issue 098 T3 — the cross-OOO additive section: one
+                    // line per audited frontier rule (min_cross + partner).
+                    // Gated: the axis lives under score_bench; ungated builds
+                    // print exactly what they printed before.
+                    #[cfg(feature = "score_bench")]
+                    {
+                        let axis = riir_clippy::score_bench::cross_ooo::cross_ooo_axis();
+                        let rules: Vec<String> =
+                            summary.rows.iter().map(|r| r.rule.clone()).collect();
+                        print!(
+                            "{}",
+                            riir_clippy::score_bench::cross_ooo::render_frontier_cross_section(
+                                axis, &rules
+                            )
+                        );
+                    }
                     // Issue 089 T5 — provenance weighting, the report tail:
                     // (a) the pair namespace priced by provenance (organic
                     // 1.0 / construction ε / unknown 0.0 fail-closed);

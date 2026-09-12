@@ -5054,3 +5054,60 @@ adds no prefix — the L132 symlink comment shows the class was half-seen).
 Fixed: canonicalize the root for the comparison only. This is the
 "validated-on-one-OS" lesson again — the sibling-session's 1247/0 was true
 on macOS and silently false on Windows.
+
+## 2026-09-12 — Issue 098: the rule-corpus cross-OOO axis, measured PASS + wired (absorption candidates found)
+
+**Issue 098 RESOLVED** ([Bench 086](.benchmarks/086_rule_corpus_cross_ooo_axis.md);
+the Research 552 §F2 fusion from katgpt-rs Issue 759 / riir-ai Research 378).
+The absorption/splitting audit aimed at this repo's own rule bank: rules =
+units, each rule's oracle-labeled triggering spans = its MEI set (ALL of
+them — a binary oracle has no graded activation, so the bank is RAGGED and
+the free `ooo_score`/`cross_ooo` kernels compose into a hand-built
+`BankAudit` for `greedy_curate`; `audit_bank_into`'s uniform top-K does not
+apply).
+
+**Metric evolution (the Bench 758 metric-granularity law, observed live):**
+plain TF-cosine over `RustOpBigramTokenizer` tokens was the control and was
+REJECTED — it let the generic scaffold swamp the rare op signatures on
+micro-span rules and pinned three pairs at exactly 0.500 (the tie
+signature). The tokenizer's own design doc names the law ("ubiquitous runs
+earn near-zero IDF... rare ones earn high IDF and do the separating") —
+final metric: **TF-IDF cosine** (idf = ln(N/df), pool-ubiquitous terms read
+exactly 0).
+
+**Population (honest):** every non-clippy corpus is 1-entry-per-rule
+(rust_perf 126/126, kernel_opt 607/607, sec 15/15, docker 31/31) — the axis
+is UNMEASURABLE there at K≥2 (a corpus-shape finding; multi-span corpus
+growth is the prerequisite). The clippy audit runs on the 100-span real
+oracle-labeled fixture pool (v1_frozen 33 + gen6_real_repo 17 +
+CLIPPY_SPANS 50; 42 rules, 17 auditable, 25 unauditable-reported).
+
+**T3 verdict: PASS — 3 absorption candidates** (cross < 0.6):
+`manual_map↔needless_return 0.462` (the gen-8 closure-birth entanglement,
+independently corroborated), `manual_map↔single_match_else 0.500`, and
+`single_match↔single_match_else 0.500` — **the calibration anchor**:
+clippy's own split of one lint, detected by the axis unprompted
+(defend-wrong validation, pinned by test). `unique_feature_count = 12 of
+17` at paper-default cutoffs.
+
+**Wiring (T3+T4):** `score_bench` forwards
+`katgpt-core/direction_bank_audit` (the ood/regime_probe precedent);
+`src/score_bench/cross_ooo.rs` (pool + TF-IDF sim + ragged audit + render,
+7 lib tests); `frontier-report` gains the additive cross section (bin-side
+under the gate — `frontier_report::render` stays ungated/untouched);
+`score_history.jsonl` rows gain `cross_ooo` (the ood/strata additive law;
+Warm-tier `ScoreRunRow` mirror drops it — the FOUR-exception
+schema-identity contract); `--score-bench` prints the axis beside
+rule-outcomes (one cached measurement, the `ood_axis` precedent); the
+mining queue carries the merge candidates (single_match-family
+consolidation candidate + the manual_map born-lint cluster record).
+
+**Gates:** cross_ooo 7/7 · score_bench-lane module tests 80/80 · report
+17/17 · traj_store 38/38 · default lib 1247/0 · clippy 0 warnings both
+lanes (default + score_bench `--lib --examples`). En route: `cargo heal`
+routed the new Rust files to the perf/docker domains and proposed only
+false positives (0 edits) — logged as a healer router miss for the
+post-mining queue; manual fixes landed instead.
+
+Issue file removed per the noise rule; this entry + Bench 086 are the
+record.

@@ -265,8 +265,12 @@ fix_verify = ["compile_oracle", "latent_retrieval"]
 # fixtures through their respective FIXABLE_* proposer tables). The
 # entropy-gap OOD axis (issue 077 T1/T4) rides this feature via the
 # katgpt-core/regime_probe forward — a doubly-gated row nobody runs is
-# documentation, not a consumer.
-score_bench = ["clippy_verify", "latent_retrieval", "clippy_lints", "rust_perf", "katgpt-core/regime_probe"]
+# documentation, not a consumer. The cross-OOO rule-redundancy axis
+# (Issue 098) rides the same way via katgpt-core/direction_bank_audit
+# (the Issue 759 primitive; offline instrumentation, never in the heal
+# path — computed at score-bench run time, persisted additively on the
+# history row, the ood precedent).
+score_bench = ["clippy_verify", "latent_retrieval", "clippy_lints", "rust_perf", "katgpt-core/regime_probe", "katgpt-core/direction_bank_audit"]
 
 # Issue 077 T3: e^{−2M} margin-weighted mining order (arXiv:2604.26841's
 # margin law on WHERE the carve miner spends its file budget — smallest
@@ -647,6 +651,14 @@ required-features = ["self_evolve", "clippy_verify"]
 [[example]]
 name = "plan342_t37_test_labeled_corpus"
 required-features = ["clippy_lints"]
+
+# Issue 098 T1+T2: rule-corpus Cross-OOO axis driver — the absorption/
+# splitting audit over the pooled real oracle-labeled clippy spans + the
+# per-domain K>=2 population scan. kernel_heal/sec are for the population
+# tables only (their corpora are 1-entry-per-rule; the scan proves it).
+[[example]]
+name = "cross_ooo_axis"
+required-features = ["score_bench", "kernel_heal", "sec", "docker"]
 
 # Issue 094: trajectory covariability-class mining POC — does the sliceTCA
 # drift-class share (leave-one-rule-out ΔEVR_time over X[rule, day,

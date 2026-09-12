@@ -2921,13 +2921,13 @@ mod tests {
     fn score_run_row_is_schema_identical_to_history_record() {
         // The jsonl ↔ store schema-identity contract (Issue 050 T2): a
         // HistoryRecord round-trips through ScoreRunRow with every scored
-        // field preserved — only `recorded_unix` is added. The three
+        // field preserved — only `recorded_unix` is added. The four
         // DELIBERATE exceptions (instrumentation, not scored axes — the
-        // additive law): `ood` (issue 077 T4), `strata` (issue 089 T6), and
-        // `rule_outcomes` (issue 089 T8). The store row drops all three and
-        // the jsonl stays the committed projection; the asymmetry is pinned
-        // by the second half of this test (an instrumented line still
-        // imports).
+        // additive law): `ood` (issue 077 T4), `strata` (issue 089 T6),
+        // `rule_outcomes` (issue 089 T8), and `cross_ooo` (issue 098 T3/T4).
+        // The store row drops all four and the jsonl stays the committed
+        // projection; the asymmetry is pinned by the second half of this
+        // test (an instrumented line still imports).
         let rec = crate::score_bench::report::HistoryRecord {
             ts: "2026-08-19T04:49:29".to_string(),
             sha: "72bac03".to_string(),
@@ -2942,6 +2942,7 @@ mod tests {
             vocab_size: 33,
             generation: 1,
             ood: None,
+            cross_ooo: None,
             strata: None,
             shaped: None,
             rule_outcomes: None,

@@ -59,6 +59,15 @@ pub struct HistoryRecord {
     /// traj-store schema-identity test).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ood: Option<super::ood::OodRow>,
+    /// Issue 098 T3/T4 — the cross-OOO rule-redundancy axis (see
+    /// [`super::cross_ooo`]): this run's view of the clippy rule bank's
+    /// absorption structure. The same additive law as `ood`/`strata`:
+    /// instrumentation, not a scored axis — the SVG renderer and the
+    /// saturation detector ignore it. Cached per process (the appended row
+    /// and the console report share one measurement). Rows predating the
+    /// axis deserialize as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cross_ooo: Option<super::cross_ooo::CrossOooRow>,
     /// Issue 089 T6 — the provenance-stratified read: this run's heal rate
     /// split by fixture provenance class (repo-mined / authored /
     /// construction / other; the v1 set mixes the first two into one number).
@@ -248,6 +257,7 @@ impl HistoryRecord {
             vocab_size: score.vocab_size,
             generation: 1,
             ood: Some(super::ood::ood_axis().clone()),
+            cross_ooo: Some(super::cross_ooo::cross_ooo_axis().summary_row()),
             strata: None,
             shaped: Some(ShapedRecord {
                 n_shaped: score.n_shaped,
@@ -702,6 +712,7 @@ mod tests {
             vocab_size: 33,
             generation: 1,
             ood: None,
+            cross_ooo: None,
             strata: None,
             shaped: None,
             rule_outcomes: None,
@@ -733,6 +744,32 @@ mod tests {
         assert!(line.contains("\"strata\":"), "{line}");
         let back: HistoryRecord = serde_json::from_str(&line).unwrap();
         assert_eq!(back.strata, stratified.strata);
+    }
+
+    /// Issue 098 T3/T4 — the additive-`cross_ooo` law (the ood/strata/shaped
+    /// precedent): rows predating the field deserialize as `None`, and a
+    /// populated row round-trips through the jsonl encoding.
+    #[test]
+    fn cross_ooo_field_is_additive_and_round_trips() {
+        // A pre-098 row (no `cross_ooo` key in the JSON at all).
+        let old_row = "{\"ts\":\"2026-09-12T10:00:00\",\"sha\":\"abc\",\"n_ran\":1,\"n_healable\":1,\"n_clean\":0,\"heal_rate\":0.5,\"created_rate\":0.0,\"parse_safety\":1.0,\"decline_correctness\":1.0,\"edits_total\":1,\"vocab_size\":33,\"generation\":1}";
+        let base: HistoryRecord = serde_json::from_str(old_row).expect("old row deserializes");
+        assert_eq!(base.cross_ooo, None);
+
+        let row = crate::score_bench::cross_ooo::CrossOooRow {
+            pooled_spans: 100,
+            rules_total: 42,
+            audited_units: 17,
+            unique_feature_count: 12,
+            redundant_pairs: 3,
+            min_cross: 0.462,
+        };
+        let mut rec2 = rec("ts", 0.5);
+        rec2.cross_ooo = Some(row.clone());
+        let line = serde_json::to_string(&rec2).unwrap();
+        assert!(line.contains("\"cross_ooo\":"), "{line}");
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.cross_ooo, Some(row));
     }
 
     /// Issue 089 T7 — the additive-`shaped` law (the strata/ood precedent):
