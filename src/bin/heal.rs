@@ -2900,6 +2900,20 @@ USAGE:
                     Suggest-only, always exit 0; the detector sees only the
                     scanned set (sibling/upstream consumers under-reported).
                     Reads paths from the CLI (default `.`).
+    --orphan-report Scan .rs files for config knobs ORPHANED BY OPTIMIZATION
+                    (Plan 126, intake class C1 — the shape a perf refactor
+                    leaves when it replaces a config-fed path with a
+                    compile-time table): Default-impl fields with zero
+                    external reads at HEAD (the class-A condition-2 set at
+                    field granularity) PLUS git-history evidence that a
+                    read-shaped occurrence vanished (probe lattice + pickaxe
+                    attribution; a perf/refactor-shaped newest subject tags
+                    the row LIKELY-BY-OPTIMIZATION). Never-read fields print
+                    as [stillborn] one-liners. Report-first, gates nothing;
+                    exit 0 on every real scan, refuses exit 1 on an empty
+                    scan or a missing git history leg (the frontier-report
+                    law — never a confident green zero). Run it after commits
+                    touching config inits (the review-time post-hoc check).
     --misses       Print the authoring queues in FRONTIER order (Plan 091
                     + Issue 089 T3): the `.heal/misses/` rustc_errors
                     per-CODE queue (dispersion-informative error codes first
@@ -3262,6 +3276,13 @@ struct Args {
     /// knob that cannot be turned), and fields only ever asserted. Pure syn
     /// scan, zero new deps, ungated; always exit 0 (report, not a gate).
     config_audit: bool,
+    /// Plan 126: `--orphan-report` — the class-C1 report (the config knob
+    /// orphaned by optimization): Default-impl fields with zero external
+    /// reads at HEAD + git-history evidence that a read-shaped occurrence
+    /// vanished (probe lattice + pickaxe attribution; the
+    /// LIKELY-BY-OPTIMIZATION tag). Refuses exit 1 on an empty scan or a
+    /// blind history leg — never a confident green zero.
+    orphan_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -3324,6 +3345,7 @@ fn parse_args() -> Args {
         import_series: false,
         frontier_report: false,
         config_audit: false,
+        orphan_report: false,
     };
     // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
     // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
@@ -3383,6 +3405,7 @@ fn parse_args() -> Args {
             "--memory-stats" => args.memory_stats = true,
             "--frontier-report" => args.frontier_report = true,
             "--config-audit" => args.config_audit = true,
+            "--orphan-report" => args.orphan_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -3694,6 +3717,7 @@ fn parse_args() -> Args {
         && !args.import_series
         && !args.frontier_report
         && !args.config_audit
+        && !args.orphan_report
         && args.candidates_path.is_none()
     {
         eprintln!("no paths given");
@@ -3732,6 +3756,7 @@ fn is_bare_posture(args: &Args) -> bool {
         && !args.import_series
         && !args.frontier_report
         && !args.config_audit
+        && !args.orphan_report
         && args.candidates_path.is_none()
         && args.command.is_none()
 }
@@ -6005,6 +6030,31 @@ fn main() {
         };
         let report = riir_clippy::config_audit::audit_paths(&targets);
         print!("{}", report.render());
+        return;
+    }
+
+    // ── Plan 126: --orphan-report — the class-C1 report ───────────────────
+    // The orphaned-by-optimization knob (intake class C1, the last open
+    // class): current-state zero-external-read fields (the class-A
+    // condition-2 set at field granularity) + git-history evidence that a
+    // read-shaped occurrence vanished (probe lattice + pickaxe
+    // attribution). Report-first — gates nothing. Refuses exit 1 on a
+    // blind history leg or an empty scan: never a confident green zero
+    // (the frontier-report law, not config-audit's).
+    if args.orphan_report {
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        let report = riir_clippy::orphan_report::report_paths(
+            &targets,
+            &riir_clippy::orphan_report::DEFAULT_PROBE_DEPTHS,
+        );
+        print!("{}", report.render());
+        if report.blind.is_some() {
+            std::process::exit(1);
+        }
         return;
     }
 
@@ -8713,6 +8763,7 @@ mod mode_flag_tests {
             ("--import-series", Box::new(|m| m.import_series = true)),
             ("--frontier-report", Box::new(|m| m.frontier_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
+            ("--orphan-report", Box::new(|m| m.orphan_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),
             ("--dump-trajectories", Box::new(|m| m.dump_trajectories = true)),
         ];

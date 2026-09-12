@@ -959,8 +959,9 @@
   GPU-training-forward lane's live state = riir-train Issue 729 (open-loop, option-1
   deferred with reopen trigger). Flag consumed — no open doc-sync leads remain from the
   09-03 plan-board sweep.
-- **Post-mining intake: 3 open classes** (A + B filed 2026-09-07, C filed 2026-09-08 —
-  all from riir-ai Issue 888; the three entries below). P8 nan-unsafe float sort
+- **Post-mining intake: ALL intake classes CLOSED** (A + B + C filed
+  2026-09-07/08 from riir-ai Issue 888; A/B landed via Plan 124, C2 via
+  Plan 125, C1 via Plan 126). P8 nan-unsafe float sort
   comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
@@ -1013,7 +1014,8 @@
   ("at f=0.5 `bytes_total()` is ~half the f=1.0 value"; "`target_modules=[Q,V]` yields 2
   adapters, not 6"). Same family as the Plan-014 fake-coverage concern this file tracks.
 - **2026-09-08 (M3, riir-ai Issue 888 T15/T16/T18 follow-up) — class C
-  HALF-DONE 2026-09-12 (C2 landed via Plan 125; C1 remains):
+  CLOSED 2026-09-12 (C2 landed via Plan 125; C1 landed via Plan 126 —
+  `cargo heal --orphan-report`):
   `config-path-orphaned-by-refactor-or-never-plumbed` (two sub-shapes, one detector
   family).**
 
@@ -1029,16 +1031,42 @@
   orphan, the extracted-for-a-consumer shape whose consumer never materialized;
   `melee_reach` 0 reads anywhere), 0 FP (self-scan clean). 23 fixture tests.
 
-  **C1 — orphaned-by-optimization** (the T17 watch, filed per its mandate): a perf
-  refactor replaces a config-fed path with a compile-time table/match and copies the
-  values faithfully — zero test fails, the knob stays pub and looks live. Measured once
-  (riir-games-civ `BehaviorConfig.alarm_radius`: a 20-arm `match` duplicated all 22
-  per-species values after the const-table optimization; fixed by wiring to the
-  SpeciesRegistry, riir-ai `88c51824b`). Detection needs HISTORY, not just syntax —
-  the field had a reader that vanished — so this is a **review-time + sweep-time**
-  heuristic, not a per-compile lint: on any commit touching a `Default`/constructor
-  init of a `pub` config field, check the field still has a non-test reader at the new
-  HEAD (the class-A lint's condition 2 reused as a post-hoc check).
+  **C1 — orphaned-by-optimization: DONE 2026-09-12 (Plan 126, `cargo heal
+  --orphan-report`; 0 FP across all hand-adjudicated samples).** The
+  review/sweep-time instrument the intake asked for, as a two-leg report:
+  current-state zero-external-read fields (the class-A condition-2 set at
+  field granularity, `external = total − tests − own_impl`) + git-history
+  evidence (read-shaped `\\.name` occurrence DELTA between HEAD and probe
+  commits HEAD~10/50/200/1000; `git log --pickaxe-regex -S` attribution; a
+  perf/refactor-shaped newest subject tags the row LIKELY-BY-OPTIMIZATION).
+  Verdicts: ORPHANED rows (delta evidence), `[stillborn]` one-liners (never
+  read within the window), silent. Two honest corrections the landing
+  measured: (1) the canonical `alarm_radius` case forced a **serde-literal
+  candidate extension** — `BehaviorConfig` has no `impl Default` (the
+  designer surface is `#[serde(default)]` + handwritten literal tables), so
+  the A/B/C2 net could not see the intake's OWN canonical case; the orphan
+  leg now also collects constructor-init candidates from serde-backed
+  structs (Serialize-only excluded — the derive reads those fields
+  invisibly). (2) **The intake's "reader that vanished" narrative is
+  syntactically false for the canonical case**: repo-wide pickaxe over all
+  history shows `.alarm_radius` member-reads NEVER changed before the fix —
+  the const-table fn was born 2026-06-06 (Plan 225 T2), the config field
+  2026-06-08 (Plan 245) with the values already copied in. The knob was BORN
+  unwired; the instrument fires it honestly as `[stillborn]` (first row at
+  the pre-fix control tree). The ORPHANED class is real too: current
+  riir-ai yields exactly one verified TP — `ReplayVerificationResponse
+  .server_hash`, orphaned by the ffi-dissolve refactor `23389c801` (6→1
+  occurrences; the survivor is a test assert). Validation: self-scan 1 TP /
+  0 FP (`PavDataConfig.ground_truth`); pre-fix control fires with 9/9
+  sampled rows TRUE; current-tree stillborn sample 8 TRUE + 3 benign-true
+  (repr(C) Pod padding — `AssetViewState._pad*`, the documented benign
+  subclass). 37/37 fixtures. Post-landing residue for the OWNING lanes
+  (deletion/wiring not the instrument's call): the current-tree stillborn
+  rows naming real unwired knobs — civ `boids`/`initial_goal`/
+  `use_predator_weights`, engine `BeliefDeltaStepLocalizer
+  .default_tau_reliable` + `CommittedBlendConfig.summary_kind`, rest
+  `server_hash`. The review-time half = the report run at HEAD after any
+  commit touching config inits (documented in `--help`).
 
   **C2 — self-referential-config-struct** (the T18 escalation): a whole `pub` config
   struct whose only readers are its own `validate()`, its own tests, and a GOAT-proof

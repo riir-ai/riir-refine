@@ -9,6 +9,65 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Plan 126 — orphan-report: intake class C1, the config knob orphaned by optimization (2026-09-12)
+
+The LAST open post-mining intake class, closing the 888-derived class-C
+family (A/B Plan 124, C2 Plan 125). `cargo heal --orphan-report [PATHS…]`:
+the review/sweep-time instrument the intake mandated — a two-leg REPORT
+(current-state zero-external-read fields via the shared `config_audit`
+scan core + git-history evidence of vanished read-shaped occurrences),
+never a per-compile lint. Ungated, zero new deps (syn + git subprocess),
+report-first; refuses exit 1 on an empty scan or a blind history leg (the
+frontier-report law — never a confident green zero).
+
+**Two findings that reshaped the instrument (both measured, both recorded
+in the intake row):**
+
+1. **The canonical case forced a serde-literal candidate extension.**
+   `BehaviorConfig` has no `impl Default` — the designer surface is
+   `#[serde(default)]` + handwritten literal tables (`hardcoded_config()`),
+   so the A/B/C2 candidate net could not see the intake's OWN canonical
+   case (`alarm_radius`). The orphan leg additionally collects
+   constructor-init candidates from serde-backed structs (any `#[serde(…)]`
+   on the item, or a derive naming Deserialize; Serialize-only excluded —
+   the derive reads those fields invisibly and every one would read as a
+   stillborn FP). Classes A/B/C2 deliberately keep the narrower net —
+   their plans' measured rates stand.
+2. **The intake's "reader that vanished" narrative is syntactically false
+   for the canonical case.** Repo-wide pickaxe over ALL riir-ai history:
+   `.alarm_radius` member-read occurrences never changed before the fix —
+   the const-table fn was born 2026-06-06 (Plan 225 T2) and the config
+   field 2026-06-08 (Plan 245), two days LATER, with the values already
+   copied into the table. The knob was BORN unwired, not orphaned by a
+   refactor. The instrument fires it honestly as `[stillborn]` — first
+   row at the pre-fix control tree (worktree of `88c51824b^`, sampled 9/9
+   rows TRUE repo-wide). The ORPHANED machinery stays for real vanished
+   readers: current riir-ai (2613 files) yields exactly one —
+   `ReplayVerificationResponse.server_hash` (6→1 read-shaped occurrences
+   across `23389c801` "refactor(570): dissolve riir-ffi"; the survivor is
+   a test assert) — VERIFIED TRUE.
+
+**Validation:** self-scan 1 TP / 0 FP (`PavDataConfig.ground_truth`); the
+pre-fix control fires the canonical case; current-riir-ai stillborn sample
+8 TRUE unwired knobs (civ `boids`/`initial_goal`/
+`use_predator_weights` — the post-`alarm_radius` remainder of the same
+designer surface; engine `default_tau_reliable`, `summary_kind`; rest
+`server_hash`) + 3 benign-true (repr(C) Pod padding — the documented
+benign subclass) / 0 FP. 37/37 fixtures (incl. a REAL-git e2e:
+init→wire→optimize→orphan in a throwaway tempdir repo). 1241 lib green;
+clippy clean on every touched file (healed first; the repo-wide `-D
+warnings` residue is PRE-EXISTING in the 093/frontier lane's committed
+files). Those stillborn rows are findings for their OWNING lanes —
+recorded, not deleted (the instrument never edits).
+
+**En-route lessons:** (a) `git rev-parse --show-toplevel` returns the
+PHYSICAL path on macOS — canonicalize scan paths before `strip_prefix` or
+every pathspec is silently dropped (the first e2e run read as BLIND);
+(b) scanning the repo root itself yields an EMPTY rel — map it to the
+whole-tree pathspec `.`, not to a dropped probe; (c) the probe-lattice +
+pickaxe pair needs BOTH directions: the lattice proves the delta, the
+pickaxe names the commit — neither alone convicts.
+
 ## Plan 125 — config-audit class C2: the self-referential config struct detector (2026-09-12)
 
 The post-mining intake's top open class, consumed at the idle window (the

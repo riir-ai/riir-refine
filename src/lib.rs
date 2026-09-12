@@ -283,6 +283,7 @@ pub mod frontier_report;
 // file set, zero new deps, ungated so lib tests cover it at default
 // features. Report-first, gates nothing (the frontier-report law).
 pub mod config_audit;
+pub mod orphan_report;
 
 // Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 // history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)

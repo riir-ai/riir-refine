@@ -94,7 +94,7 @@
 //! FALSE NEGATIVE, same direction as A/B; never a false positive from
 //! name-matching.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -167,6 +167,27 @@ pub struct ConfigAuditReport {
     pub self_referential: Vec<SelfReferentialConfig>,
 }
 
+/// One field with zero EXTERNAL reads — the class-A condition-2 set at field
+/// granularity (Plan 126, the orphan-report current leg). `external =
+/// total − tests − own_impl` clamped at 0, so test-confined and
+/// validate-confined reads do NOT keep a field out of this set (the intake's
+/// mandate: "check the field still has a non-test reader").
+#[derive(Debug, Clone)]
+pub struct ZeroReadField {
+    pub candidate: FieldCandidate,
+    pub total_reads: usize,
+    pub test_reads: usize,
+    pub self_impl_reads: usize,
+}
+
+/// The zero-external-read field scan — input to the C1 history leg.
+#[derive(Debug, Default)]
+pub struct ZeroReadScan {
+    pub files_scanned: usize,
+    pub candidates: usize,
+    pub fields: Vec<ZeroReadField>,
+}
+
 /// Class-B comparator context: field name → the default representations it
 /// can assert against (const last segment, init token text).
 type DefaultsByField = BTreeMap<String, Vec<(Option<String>, Option<String>)>>;
@@ -176,6 +197,82 @@ type DefaultsByField = BTreeMap<String, Vec<(Option<String>, Option<String>)>>;
 /// skipped silently (a report must not die on one broken fixture file).
 #[must_use]
 pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
+    let (candidates, ix, files) = scan_core(sources);
+    classify(&candidates, &ix, files.len())
+}
+
+/// Fields whose reads are all test- or own-impl-confined (the C1 candidate
+/// set, Plan 126): `external(f) = total − tests − own_impl(T, f) == 0` per
+/// field. Unlike class A (which requires total==0, not even test reads) this
+/// is the intake's exact "no NON-TEST reader at HEAD" condition.
+///
+/// The Plan-126 canonical case forced one extension over the A/B/C2
+/// candidate net: `BehaviorConfig.alarm_radius` (riir-games-civ, the
+/// YAML designer surface a const-table optimization orphaned) has NO
+/// `impl Default` — it is constructed by serde + handwritten struct
+/// literals. So this scan ALSO collects constructor-init candidates from
+/// serde-backed structs (`#[serde(…)]` anywhere on the item, or a derive
+/// naming `Deserialize`; Serialize-only structs are excluded — their
+/// fields are read by the derive, invisible to the member-read tally).
+#[must_use]
+pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
+    let (mut candidates, ix, files) = scan_core(sources);
+    let files_scanned = files.len();
+    let serde_structs = collect_serde_config_structs(&files);
+    if !serde_structs.is_empty() {
+        let mut extra: Vec<FieldCandidate> = Vec::new();
+        for (name, file) in &files {
+            let mut v = StructLitCollector {
+                serde_structs: &serde_structs,
+                file: name,
+                out: &mut extra,
+            };
+            v.visit_file(file);
+        }
+        for c in extra {
+            if !candidates
+                .iter()
+                .any(|e| e.struct_name == c.struct_name && e.field_name == c.field_name)
+            {
+                candidates.push(c);
+            }
+        }
+        candidates.sort_by(|a, b| a.struct_name.cmp(&b.struct_name).then(a.field_name.cmp(&b.field_name)));
+    }
+    let mut fields = Vec::new();
+    for cand in &candidates {
+        let total = ix.field_reads.get(&cand.field_name).copied().unwrap_or(0);
+        let tests = ix
+            .field_reads_tests
+            .get(&cand.field_name)
+            .copied()
+            .unwrap_or(0);
+        let own = ix
+            .field_reads_in_impl
+            .get(&(cand.field_name.clone(), cand.struct_name.clone()))
+            .copied()
+            .unwrap_or(0);
+        if total.saturating_sub(tests).saturating_sub(own) == 0 {
+            fields.push(ZeroReadField {
+                candidate: cand.clone(),
+                total_reads: total,
+                test_reads: tests,
+                self_impl_reads: own,
+            });
+        }
+    }
+    ZeroReadScan {
+        files_scanned,
+        candidates: candidates.len(),
+        fields,
+    }
+}
+
+/// The shared scan core (DRY across `audit_sources` and the orphan-report's
+/// current leg): parse → Default-impl candidates → interaction tally.
+fn scan_core(
+    sources: &[(String, String)],
+) -> (Vec<FieldCandidate>, InteractionIndex, Vec<(String, syn::File)>) {
     let files: Vec<(String, syn::File)> = sources
         .iter()
         .filter_map(|(name, src)| syn::parse_file(src).ok().map(|f| (name.clone(), f)))
@@ -192,8 +289,8 @@ pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
     }
     dedup_candidates(&mut candidates);
 
-    // Class-B comparator context: field name → the default representations
-    // it can assert against (const last segment / init token text).
+    // Class-B comparator context: field name → the default representations it
+    // can assert against (const last segment / init token text).
     let mut defaults_by_field: DefaultsByField = BTreeMap::new();
     for c in &candidates {
         let last = c
@@ -221,25 +318,102 @@ pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
         v.visit_file(file);
     }
 
-    classify(&candidates, &ix, files.len())
+    (candidates, ix, files)
+}
+
+/// Struct names that look like serde-backed config (the Plan-126 extension:
+/// the canonical C1 knob has no `impl Default`): any `#[serde(…)]`
+/// attribute on the item or one of its fields, or a derive naming
+/// `Deserialize`. Serialize-only structs are deliberately excluded — their
+/// fields are read by the generated code, invisible to the member-read
+/// tally, so they would all read as stillborn false positives.
+fn collect_serde_config_structs(files: &[(String, syn::File)]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for (_name, file) in files {
+        let mut v = SerdeStructMarker { out: &mut out };
+        v.visit_file(file);
+    }
+    out
+}
+
+struct SerdeStructMarker<'a> {
+    out: &'a mut BTreeSet<String>,
+}
+
+impl Visit<'_> for SerdeStructMarker<'_> {
+    fn visit_item_struct(&mut self, item: &syn::ItemStruct) {
+        let derives_deserialize = item.attrs.iter().any(|a| {
+            a.path().is_ident("derive")
+                && a.to_token_stream().to_string().contains("Deserialize")
+        });
+        let has_serde_attr = item
+            .attrs
+            .iter()
+            .any(|a| a.path().is_ident("serde"))
+            || item.fields.iter().any(|f| {
+                f.attrs.iter().any(|a| a.path().is_ident("serde"))
+            });
+        if derives_deserialize || has_serde_attr {
+            self.out.insert(item.ident.to_string());
+        }
+        syn::visit::visit_item_struct(self, item);
+    }
+}
+
+/// Collects constructor-init candidates from struct literals whose type is
+/// a serde-backed config struct (anywhere in the file — `hardcoded_config()`
+/// tables, registry builders). `Self`-typed literals are skipped: outside
+/// an `impl` the type name cannot be resolved, and inside `impl Default`
+/// the scan-core pass already collected them with the impl type resolved.
+struct StructLitCollector<'a> {
+    serde_structs: &'a BTreeSet<String>,
+    file: &'a str,
+    out: &'a mut Vec<FieldCandidate>,
+}
+
+impl<'ast> Visit<'ast> for StructLitCollector<'_> {
+    fn visit_expr_struct(&mut self, lit: &'ast syn::ExprStruct) {
+        if let Some(ty) = struct_lit_type(&lit.path) {
+            if self.serde_structs.contains(&ty) {
+                for fv in &lit.fields {
+                    let Some(field) = field_member_name(&fv.member) else {
+                        continue;
+                    };
+                    self.out.push(FieldCandidate {
+                        struct_name: ty.clone(),
+                        field_name: field,
+                        const_path: const_path_of(&fv.expr),
+                        init_token: init_token_of(&fv.expr),
+                        origin: format!("{}:{}", self.file, fv.expr.span().start().line),
+                    });
+                }
+            }
+        }
+        syn::visit::visit_expr_struct(self, lit);
+    }
 }
 
 /// Walk `paths` (dirs recursively / files), parse every `.rs`, audit.
 #[must_use]
 pub fn audit_paths(paths: &[PathBuf]) -> ConfigAuditReport {
+    audit_sources(&read_sources(paths))
+}
+
+/// Walk `paths` (dirs recursively / files), read every `.rs` — shared by
+/// [`audit_paths`] and the orphan-report path wrapper (Plan 126).
+pub(crate) fn read_sources(paths: &[PathBuf]) -> Vec<(String, String)> {
     let mut rust_files: Vec<PathBuf> = Vec::new();
     for p in paths {
         collect_rust_files(p, &mut rust_files);
     }
-    let sources: Vec<(String, String)> = rust_files
+    rust_files
         .iter()
         .filter_map(|p| {
             fs::read_to_string(p)
                 .ok()
                 .map(|src| (p.display().to_string(), src))
         })
-        .collect();
-    audit_sources(&sources)
+        .collect()
 }
 
 fn collect_rust_files(p: &Path, out: &mut Vec<PathBuf>) {
@@ -1423,4 +1597,3 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         assert_eq!(r.self_referential.len(), 1, "tests/-file reads are test-context");
     }
 }
-
