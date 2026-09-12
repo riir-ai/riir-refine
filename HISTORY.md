@@ -39,7 +39,7 @@ deferred guides stay deferred — their unblocker needs a different consumer
 class. Reproduce: `cargo run --release --features linking_confusion_poc
 --example linking_confusion_poc`.
 
-## Orphan-report serde boundary — the Issue 934 follow-on repair (2026-09-12, `d2e39d1f`)
+## Orphan-report serde boundary — the riir-ai Issue 934 follow-on repair (2026-09-12, `d2e39d1f`)
 
 The first consumer-repo landing produced the instrument's first measured
 false-positive class, and the repair landed the same day. riir-ai Issue 934
@@ -51,7 +51,7 @@ invisibly to the syntactic member-read tally — the known Serialize-only
 exclusion, now in a Ser+De struct.
 
 **The boundary is the ATTR, not the derive pair.** The probe evidence was
-the Issue 934 full flagged sample: `BehaviorConfig` itself derives BOTH
+the riir-ai Issue 934 full flagged sample: `BehaviorConfig` itself derives BOTH
 (round-trips YAML) and carried every true positive (`alarm_radius`,
 `boids`, `initial_goal`) with plain `#[serde(default)]` attrs — a
 Ser+De-pair exclusion would have killed the instrument's canonical case —
@@ -101,7 +101,7 @@ in the intake row):**
    for the canonical case.** Repo-wide pickaxe over ALL riir-ai history:
    `.alarm_radius` member-read occurrences never changed before the fix —
    the const-table fn was born 2026-06-06 (Plan 225 T2) and the config
-   field 2026-06-08 (Plan 245), two days LATER, with the values already
+   field 2026-06-08 (riir-ai Plan 245), two days LATER, with the values already
    copied into the table. The knob was BORN unwired, not orphaned by a
    refactor. The instrument fires it honestly as `[stillborn]` — first
    row at the pre-fix control tree (worktree of `88c51824b^`, sampled 9/9
