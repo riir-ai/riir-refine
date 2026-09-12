@@ -214,11 +214,23 @@ pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
 /// serde-backed structs (`#[serde(…)]` anywhere on the item, or a derive
 /// naming `Deserialize`; Serialize-only structs are excluded — their
 /// fields are read by the derive, invisible to the member-read tally).
+///
+/// The measured serde boundary (riir-ai Issue 934 first-contact, the
+/// `ConversationEntry` false positive): fields carrying
+/// `#[serde(skip_serializing_if = …)]` are EXCLUDED — conditionally-emitted
+/// output-schema surface whose reader is the Serialize derive (invisible
+/// here). Plain `#[serde(default)]` fields in the SAME Ser+De struct stay
+/// candidates: on the full flagged sample the skip-attrs fields were
+/// exactly the two false positives and the plain-default fields
+/// (`alarm_radius`, `boids`, …) the true positives — persistence mirrors
+/// whose functional read is what the report measures. `#[serde(skip)]`
+/// (never serialized NOR deserialized) is NOT excluded — the derive never
+/// touches it, so a never-member-read skip field is genuinely dead.
 #[must_use]
 pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
     let (mut candidates, ix, files) = scan_core(sources);
     let files_scanned = files.len();
-    let serde_structs = collect_serde_config_structs(&files);
+    let (serde_structs, skip_ser_fields) = collect_serde_config_structs(&files);
     if !serde_structs.is_empty() {
         let mut extra: Vec<FieldCandidate> = Vec::new();
         for (name, file) in &files {
@@ -239,6 +251,15 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
         }
         candidates.sort_by(|a, b| a.struct_name.cmp(&b.struct_name).then(a.field_name.cmp(&b.field_name)));
     }
+    // The measured serde boundary (Issue 934's `ConversationEntry` FP):
+    // `skip_serializing_if` fields are conditionally-emitted output schema —
+    // the Serialize derive reads them, invisibly to this tally. Drop them
+    // from the C1 net (both candidate paths — Default-impl AND literal).
+    candidates.retain(|c| {
+        !skip_ser_fields
+            .get(&c.struct_name)
+            .is_some_and(|fields| fields.contains(&c.field_name))
+    });
     let mut fields = Vec::new();
     for cand in &candidates {
         let total = ix.field_reads.get(&cand.field_name).copied().unwrap_or(0);
@@ -321,23 +342,31 @@ fn scan_core(
     (candidates, ix, files)
 }
 
-/// Struct names that look like serde-backed config (the Plan-126 extension:
-/// the canonical C1 knob has no `impl Default`): any `#[serde(…)]`
-/// attribute on the item or one of its fields, or a derive naming
-/// `Deserialize`. Serialize-only structs are deliberately excluded — their
-/// fields are read by the generated code, invisible to the member-read
-/// tally, so they would all read as stillborn false positives.
-fn collect_serde_config_structs(files: &[(String, syn::File)]) -> BTreeSet<String> {
+/// Serde-backed config surface for the C1 net (Plan 126): struct names
+/// (any `#[serde(…)]` attribute on the item or one of its fields, or a
+/// derive naming `Deserialize`) PLUS the per-struct set of fields carrying
+/// `#[serde(skip_serializing_if = …)]` (the FP exclusion — see
+/// [`zero_external_read_fields`]). Serialize-only structs are deliberately
+/// absent — their fields are read by the generated code, invisible to the
+/// member-read tally, so they would all read as stillborn false positives.
+fn collect_serde_config_structs(
+    files: &[(String, syn::File)],
+) -> (BTreeSet<String>, BTreeMap<String, BTreeSet<String>>) {
     let mut out = BTreeSet::new();
+    let mut skip_ser_fields = BTreeMap::new();
     for (_name, file) in files {
-        let mut v = SerdeStructMarker { out: &mut out };
+        let mut v = SerdeStructMarker {
+            out: &mut out,
+            skip_ser_fields: &mut skip_ser_fields,
+        };
         v.visit_file(file);
     }
-    out
+    (out, skip_ser_fields)
 }
 
 struct SerdeStructMarker<'a> {
     out: &'a mut BTreeSet<String>,
+    skip_ser_fields: &'a mut BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Visit<'_> for SerdeStructMarker<'_> {
@@ -355,6 +384,15 @@ impl Visit<'_> for SerdeStructMarker<'_> {
             });
         if derives_deserialize || has_serde_attr {
             self.out.insert(item.ident.to_string());
+            let skip_fields = self.skip_ser_fields.entry(item.ident.to_string()).or_default();
+            for f in &item.fields {
+                if f.attrs.iter().any(|a| {
+                    a.path().is_ident("serde")
+                        && a.to_token_stream().to_string().contains("skip_serializing_if")
+                }) {
+                    skip_fields.insert(f.ident.as_ref().map_or_default(ToString::to_string));
+                }
+            }
         }
         syn::visit::visit_item_struct(self, item);
     }

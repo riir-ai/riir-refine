@@ -42,7 +42,11 @@
 //! footer); a reader MOVED rather than removed still drops the count
 //! (validate-refactor false positives — measure, don't assume away); probes
 //! bound the lookback window (an orphan older than the deepest probe reads
-//! as stillborn).
+//! as stillborn); fields carrying `#[serde(skip_serializing_if = …)]` are
+//! excluded from the net entirely (conditionally-emitted output schema —
+//! the derive reads them, invisibly; the Issue 934 measured boundary —
+//! adjudicate serialized-output structs by hand if you suspect a dead
+//! schema field).
 //!
 //! Exit contract (the frontier-report law, not config-audit's): exit 0 for
 //! every real scan; **refuse exit 1** on an empty population or a blind
@@ -426,7 +430,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary)"
         );
         out
     }
@@ -756,6 +760,51 @@ pub fn emit() -> WireOut { WireOut { seq: 1 } }
 ";
         let scan = scan_of(src);
         assert!(scan.fields.is_empty(), "Serialize-only structs are excluded");
+    }
+
+    /// The Issue 934 regression pin (the `ConversationEntry` false
+    /// positive): a Ser+De struct whose field carries
+    /// `#[serde(skip_serializing_if)]` is conditionally-emitted OUTPUT
+    /// SCHEMA — the Serialize derive reads it when the condition holds,
+    /// invisibly to the member-read tally. Never a C1 candidate.
+    #[test]
+    fn skip_serializing_if_field_is_not_a_candidate() {
+        let src = r#"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ConversationEntry {
+    pub state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_tick: Option<u64>,
+}
+pub fn make() -> ConversationEntry {
+    ConversationEntry { state: "Failed".into(), deadline_tick: None }
+}
+pub fn state_of(e: &ConversationEntry) -> &str { &e.state }
+"#;
+        let scan = scan_of(src);
+        assert!(scan.fields.is_empty(), "skip_serializing_if fields are excluded (derive-read schema)");
+    }
+
+    /// The FN guard on the same boundary (the `BehaviorConfig` canonical
+    /// family): a plain `#[serde(default)]` field in a struct deriving BOTH
+    /// Serialize AND Deserialize STAYS a candidate — persistence-mirror
+    /// surface whose functional read is exactly what the report measures.
+    /// The Issue 934 sample: every skip-attrs field was an FP, every
+    /// plain-default field in the same derive shape a TP — the boundary is
+    /// the attr, NOT the derive pair.
+    #[test]
+    fn plain_serde_default_in_ser_de_struct_stays_candidate() {
+        let src = r#"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct BehaviorConfig {
+    #[serde(default = "default_alarm_radius")]
+    pub alarm_radius: f32,
+}
+pub fn make() -> BehaviorConfig { BehaviorConfig { alarm_radius: 15.0 } }
+"#;
+        let scan = scan_of(src);
+        assert_eq!(scan.fields.len(), 1, "plain serde(default) fields stay candidates");
+        assert_eq!(scan.fields[0].candidate.field_name, "alarm_radius");
     }
 
     #[test]
