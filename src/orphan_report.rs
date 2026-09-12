@@ -122,6 +122,14 @@ impl GitCli {
             return None;
         }
         let cwd = std::env::current_dir().ok()?;
+        // Windows: `canonicalize()` yields the verbatim form (`\\?\C:\…`)
+        // while `rev-parse --show-toplevel` returns `C:/…` — component-wise
+        // `strip_prefix` then fails for EVERY pathspec and the whole history
+        // leg reads blind (same symptom class as the macOS symlink note
+        // below, Windows shape). Canonicalize the root for the COMPARISON
+        // only; git calls keep the non-verbatim root (git -C accepts both,
+        // the display stays clean).
+        let root_cmp = root.canonicalize().unwrap_or_else(|_| root.clone());
         let mut pathspecs = Vec::new();
         for p in paths {
             let joined = if p.is_absolute() {
@@ -133,7 +141,7 @@ impl GitCli {
             // while git reports the real path — canonicalize before the
             // prefix comparison or every pathspec is dropped.
             let abs = joined.canonicalize().unwrap_or(joined);
-            if let Ok(rel) = abs.strip_prefix(&root) {
+            if let Ok(rel) = abs.strip_prefix(&root_cmp) {
                 let rel = rel.display().to_string();
                 // Scanning the repo root itself: rel is empty — the
                 // pathspec is the whole tree ("."), never a blind leg.
