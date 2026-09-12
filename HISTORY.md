@@ -9,6 +9,40 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Orphan-report serde boundary — the Issue 934 follow-on repair (2026-09-12, `d2e39d1f`)
+
+The first consumer-repo landing produced the instrument's first measured
+false-positive class, and the repair landed the same day. riir-ai Issue 934
+(`08322e814`, the Plan-126 residue adjudication) found
+`ConversationEntry.deadline_tick`/`.failed_at_tick` flagged stillborn while
+being LIVE YAML-output schema: `add_auto_fail` populates both and the
+`g4_2`/`g5_2b` tests pin their serialized presence. The derive reads fields
+invisibly to the syntactic member-read tally — the known Serialize-only
+exclusion, now in a Ser+De struct.
+
+**The boundary is the ATTR, not the derive pair.** The probe evidence was
+the Issue 934 full flagged sample: `BehaviorConfig` itself derives BOTH
+(round-trips YAML) and carried every true positive (`alarm_radius`,
+`boids`, `initial_goal`) with plain `#[serde(default)]` attrs — a
+Ser+De-pair exclusion would have killed the instrument's canonical case —
+while the only two `skip_serializing_if` fields in the flagged set were
+exactly the two false positives. Semantics: `skip_serializing_if` marks
+conditionally-emitted OUTPUT-schema surface (the derive reads the field
+when the condition holds); plain serde-default fields are persistence
+mirrors whose functional read is what the report measures.
+`#[serde(skip)]` stays a candidate — the derive never touches it, so a
+never-member-read skip field is genuinely dead.
+
+Implementation: `SerdeStructMarker` now also collects the per-struct
+`skip_serializing_if` field set; `zero_external_read_fields` retains it
+out of BOTH candidate paths (Default-impl and literal). Fixtures: the
+exact `ConversationEntry` shape (regression pin) + the exact
+`BehaviorConfig` Ser+De plain-default shape (the FN guard) — 39/39.
+1247/0 lib; clippy `-D warnings` clean on both touched files (the 12
+residual `--all-targets` findings are the known sibling
+frontier/rustc_errors lane). AGENTS.md bullet + the `.distill` intake row
+updated in-commit (`d585aae1`).
+
 ## Plan 126 — orphan-report: intake class C1, the config knob orphaned by optimization (2026-09-12)
 
 The LAST open post-mining intake class, closing the 888-derived class-C
