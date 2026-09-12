@@ -196,6 +196,14 @@ adjudicated here rather than deferred:
 1. **The revert rate leaves ~0.** 0/230 today. Adding *speculative* playbook
    strategies (ones that can fail a recheck) creates a wasted-attempt population,
    and §5's "nothing to reclaim" argument dies with it. Re-run this bench.
+   **A second route to the same trigger, filed 2026-09-12 as
+   [Issue 099](../.issues/099_interacting_error_corpus.md): an INTERACTING-error
+   corpus.** Every corpus this bench ran on is built from independent
+   single-mutation cases — `compose_multi` concatenates members that cannot
+   affect each other — so a fix can never re-break anything, which is a
+   precondition for both a flip and a revert. 099 T3 re-runs this bench over a
+   corpus where repairing A changes B's diagnostic set; 099 T1 is the
+   admissibility gate that has to prove it does.
 2. **A cross-run join finds recurrence.** Once real `.heal/fixseq/` corpora
    accumulate, join rings by `(repo, span_hash)` across `run-<ts>` files.
    Cross-run is the one path §4 does not close.
