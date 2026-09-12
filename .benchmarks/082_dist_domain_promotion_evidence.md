@@ -129,3 +129,23 @@ Owner pull evidence only (the issue's §Promotion path, condition on adoption). 
 ## Run + environment
 
 macOS M3 Max, 2026-09-10 ~01:00–01:15 local, zero cargo/GPU contention (solo session; sibling WIP present in the tree but not executing). All cargo at isolated `CARGO_TARGET_DIR=/tmp/plan085`. Score-bench ran the frozen v1 set (35 fixtures, real-clippy oracle, gen-1). Scans: suggest lane only, zero writes to any repo; the meter lines are accounting-only local projections (no `kat_transport` in the build → no network surface compiled).
+
+---
+
+## Addendum 2026-09-12 — condition (1) re-EXECUTED at HEAD
+
+`dist_gates` had been green at `759e209d` (§6) and was carried forward on a
+*source count* thereafter. Re-run at HEAD `b08ef85d`:
+
+```
+cargo test -p riir-clippy --features dist --test dist_gates
+running 13 tests ... test result: ok. 13 passed; 0 failed; 0 ignored; finished in 0.01s
+```
+
+All 13 named in the output (`autodiscovered_main_rs_fires_all_three_ship_size_rules`,
+`member_manifest_satisfied_by_root_knobs`, … ) — the distinction that matters here
+is that an `#![cfg(feature = "dist")]` target with the feature OFF prints
+`ok. 0 passed` and exits 0 too. 13 named passes is the proof; the count alone
+would not have been. Condition (1) holds at HEAD; the promotion gate is
+unchanged (owner pull evidence).
+
