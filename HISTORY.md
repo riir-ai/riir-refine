@@ -9,6 +9,39 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 91 resolved — fix-loop trap detector: T2 measured NEGATIVE (structural), T3 recorded, detector NOT built (2026-09-12, `e44e885f` / Bench 087)
+
+The saddle-circling fusion idea (katgpt-rs Research 546 → Plan 593
+`SaddleEscapeGate` kernel landed) is retired on a **structural** negative,
+not a low-prevalence estimate: 0 flips on all three keys over 230 attempts /
+252 runs at real depth power (20 runs at the `max_iters=5` ceiling), 0/230
+wasted attempts, and the loop-invariant check HOLDS 230/230 — the shipped
+`--fix-compile` loop carries a well-founded measure (`error-count ↓`,
+`|tried| ↑`) that makes a within-run state revisit **impossible**. A
+detector with no phenomenon to detect and no budget burn to reclaim is not
+built; the kernel stays landed and unconsumed (its own GOAT passed
+independently).
+
+T1's mining verdict stands as the instrumentation rationale: the trajectory
+kv holds per-family aggregates only (no attempt order reconstructible), and
+the fix-compile surface had zero recorded trajectories — the T1.5 per-attempt
+ring (`795ddc4c`, HISTORY section below) is the durable output this issue
+leaves behind, consumed by Issue 093's per-run posterior and this bench.
+
+T3 CONFIRMED negative: the Kick does not transfer to discrete edits, and the
+flip-rate EMA is the wrong statistic (not a retune). Issue 093 T2's revive
+hook landed mid-measurement and is adjudicated in Bench 087 §5.5 — the
+measure SURVIVES it because revival is one-shot per
+`(span_hash, strategy_id)`.
+
+Four reopen triggers live in [Bench 087 §6](.benchmarks/087_fixseq_flip_prevalence.md)
+(the sharpest: a revert rate leaving ~0 — Issue 099's interacting-error corpus
+is the filed route; also cross-run ring joins, a non-monotone keep rule, a
+multi-shot revive). Replicated bit-identical across two code bases
+(`e9c64748` + `aef0f331`).
+
+Issue file removed per the noise-reduction rule; this section is the record.
+
 ## Issue 097 resolved — linking↔confusion PoC: NO-GO, the fusion idea retired as measured-refuted (2026-09-12)
 
 The katgpt-rs Issue 757 follow-up gate ("no plan until a PoC on the
