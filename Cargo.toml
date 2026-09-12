@@ -614,6 +614,15 @@ required-features = ["self_evolve", "clippy_verify"]
 name = "plan342_t37_test_labeled_corpus"
 required-features = ["clippy_lints"]
 
+# Issue 094: trajectory covariability-class mining POC — does the sliceTCA
+# drift-class share (leave-one-rule-out ΔEVR_time over X[rule, day,
+# shape-bucket] built from the per-repo TrajStores) rank re-mined rules
+# above stable ones (exact MW AUC vs the 2026-09-12 ground-truth snapshot)?
+# Print-only report, always exit 0. Reads stores via /tmp mirrors only.
+[[example]]
+name = "tca_covariability_poc"
+required-features = ["latent_retrieval"]
+
 # E2E tokens/sec harness (Bonsai/llama.cpp head-to-head denominator).
 # Emits JSONL of (lint, emitted fix, latency); tokens are counted externally by
 # scripts/bench_bonsai_vs_clippy_tokps.py using the SAME Bonsai tokenizer, so
