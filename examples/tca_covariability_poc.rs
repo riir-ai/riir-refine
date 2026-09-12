@@ -20,6 +20,7 @@
 //!   across days — not within-shape temporal drift;
 //! - axis 2 (episode) = FNV-1a bucket of the shape text mod `K_BUCKET`
 //!   (deterministic, rule-agnostic spreading).
+//!
 //! Cell = `ln(1 + success_count + fail_count)` per (rule, day, bucket),
 //! aggregated across stores. Rows filtered: `tier == Withdrawn` excluded
 //! (Issue 021 semantics respected — Certified + Heuristic kept),
@@ -187,7 +188,7 @@ fn fnv1a64(s: &str) -> u64 {
 /// Mirror one repo's `.heal/trajectories.kv` + `.heal/key` into a temp
 /// dir and open the MIRROR (never the original — sibling `.heal` trees are
 /// read-only to this session; opening a LocalKvStore may replay/compact).
-fn open_mirrored(repo_root: &PathBuf, mirror_base: &std::path::Path) -> Option<(TrajStore, String)> {
+fn open_mirrored(repo_root: &std::path::Path, mirror_base: &std::path::Path) -> Option<(TrajStore, String)> {
     let heal = repo_root.join(".heal");
     let kv_dir = heal.join("trajectories.kv");
     if !kv_dir.is_dir() {
@@ -391,9 +392,7 @@ fn main() {
         }
         for di in 0..t {
             let base = (ri * t + di) * k;
-            for bi in 0..k {
-                scratch[base + bi] = 0.0;
-            }
+            scratch[base..base + k].fill(0.0);
         }
         let shares_wo = katgpt_core::slice_tca::covariability_shares(&scratch, shape, R_PRIMARY);
         delta_time[ri] = shares_full[1] - shares_wo[1];
@@ -402,9 +401,7 @@ fn main() {
         // restore
         for di in 0..t {
             let base = (ri * t + di) * k;
-            for bi in 0..k {
-                scratch[base + bi] = data[base + bi];
-            }
+            scratch[base..base + k].copy_from_slice(&data[base..base + k]);
         }
         let _ = rule;
     }
@@ -492,17 +489,13 @@ fn main() {
                 }
                 for di in 0..t {
                     let base = (ri * t + di) * k;
-                    for bi in 0..k {
-                        scratch2[base + bi] = 0.0;
-                    }
+                    scratch2[base..base + k].fill(0.0);
                 }
                 let wo = katgpt_core::slice_tca::covariability_shares(&scratch2, shape, r_probe);
                 probe.push((label, full[1] - wo[1]));
                 for di in 0..t {
                     let base = (ri * t + di) * k;
-                    for bi in 0..k {
-                        scratch2[base + bi] = data[base + bi];
-                    }
+                    scratch2[base..base + k].copy_from_slice(&data[base..base + k]);
                 }
             }
         }
