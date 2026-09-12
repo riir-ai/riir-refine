@@ -31,10 +31,10 @@ the confused-pair set stayed fixed. Do not re-derive it as a positive.
 Mechanism: the paper's premise is smooth multi-exemplar class manifolds; the
 fixtures give 1 exemplar/rule — rename ORBITS, combinatorially thin and
 entangled under PCA-3D at any sane k. The manifold assumption fails on this
-corpus exactly as the Issue-757 follow-up feared. A corpus-scale boundary,
-not a detector defect (Bench 717 holds at its designed regime). Reopen
+corpus exactly as the katgpt-rs Issue 757 follow-up feared. A corpus-scale boundary,
+not a detector defect (katgpt-rs Bench 717 holds at its designed regime). Reopen
 trigger: a real-repo mined span set (≥ hundreds of REAL spans/rule). The
-`linking_fold_detector` stays opt-in with no consumer; the Research 391
+`linking_fold_detector` stays opt-in with no consumer; the katgpt-rs Research 391
 deferred guides stay deferred — their unblocker needs a different consumer
 class. Reproduce: `cargo run --release --features linking_confusion_poc
 --example linking_confusion_poc`.
@@ -5144,7 +5144,7 @@ the free `ooo_score`/`cross_ooo` kernels compose into a hand-built
 `BankAudit` for `greedy_curate`; `audit_bank_into`'s uniform top-K does not
 apply).
 
-**Metric evolution (the Bench 758 metric-granularity law, observed live):**
+**Metric evolution (the katgpt-rs Bench 758 metric-granularity law, observed live):**
 plain TF-cosine over `RustOpBigramTokenizer` tokens was the control and was
 REJECTED — it let the generic scaffold swamp the rare op signatures on
 micro-span rules and pinned three pairs at exactly 0.500 (the tie
