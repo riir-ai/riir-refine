@@ -14,6 +14,7 @@
 | [`build_commands.md`](build_commands.md) | CI guard + GOAT benches + feature combos |
 | [`numbering_discipline.md`](numbering_discipline.md) | Monotonic numbers — never reused |
 | [`foo_end_to_end.md`](foo_end_to_end.md) | Proposal 011 §8 onboarding walkthrough — install → login → heal → `pay --request` / `faucet --request` / `wetrun`, with each step marked runnable-now or blocked-and-why |
+| [`node_tiers.md`](node_tiers.md) | The install tier spec (Ultra/Max/Pro/Lite — Proposal 013): one place to compare what a rig can run, per-tier cost/earn, and honest shipped/designed/blocked status |
 
 ## See also
 
