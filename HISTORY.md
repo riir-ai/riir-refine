@@ -9,6 +9,39 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Plan 125 — config-audit class C2: the self-referential config struct detector (2026-09-12)
+
+The post-mining intake's top open class, consumed at the idle window (the
+mining queue itself had NOTHING staged — B143 consumed the last PERF-SEARCH
+row; this was the queue's correct next unit). Extends the Plan-124
+`--config-audit` instrument with the C2 sub-shape: a whole struct whose
+every Default-impl field has zero EXTERNAL reads — reads confined to its
+own validate-shaped (`bool`/`Result`-returning) methods and test context.
+Classes A/B require zero reads, so the internally-read orphan (the
+PlasmaConfig shape) was invisible to them.
+
+**The landing's own bug, caught by the probe:** syn 2 impl methods are
+`syn::ImplItem::Fn` — the `visit_item_fn` visitor hook NEVER fires inside
+impl blocks, so the validate-shape context (and with it the whole own-impl
+tally) was silently empty and the C2-positive fixture read as live. The
+temporary tally-probe printed `field_reads_in_impl: {}` over a fixture with
+a validate() method — the fix is `visit_impl_item_fn` (same logic, shared
+`sig_returns_validate_shape`). The lesson generalizes: any per-impl-item
+context in a syn visitor needs the impl-item hook, not the item hook.
+
+**First-contact yield (507 real files):** 1 verified TP / 0 FP —
+riir-games `PetAiConfig`, the whole-struct orphan behind the C2 class:
+extracted (riir-ai Issue 589's "thread them through" arc) for a consumer
+constructor pattern that never materialized (zero `PetAiConfig` references
+in riir-mmorpg-examples), `melee_reach` 0 reads anywhere, the other six
+fields read only by the `> 0.0` sanity test. Same precision profile as
+Plan 124's A (1 TP / 511 files). The struct stays (deletion is the owning
+lane's call — the report is suggest-only); the finding is the record.
+
+**C1 stays open** (orphaned-by-optimization needs git HISTORY — a reader
+that vanished — a review-time/sweep-time heuristic, not a per-compile
+scan; the intake row carries the shape).
+
 ## Issue 91 T1.5 — the per-attempt ring: `--fix-compile` attempt sequences to `.heal/fixseq/` (2026-09-12)
 
 The instrumentation prerequisite both remaining rustc_errors-side tasks

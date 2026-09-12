@@ -26,6 +26,29 @@
 //! all against computed decay curves — a behavioral suite, not fake
 //! coverage).
 //!
+//! **Class C2 — `self-referential-config-struct`** (Plan 125; intake class C
+//! sub-shape C2, the riir-ai Issue-888 T18 escalation; measured once:
+//! riir-games `PlasmaConfig`, deleted at riir-ai `dbb939b26`): a struct with
+//! a hand-written `impl Default` whose EVERY candidate field has zero
+//! EXTERNAL reads — reads are confined to (a) test context (`#[cfg(test)]`
+//! mods, `#[test]`/`#[bench]` fns, `tests/`/`benches/` files, file-level
+//! `#![cfg(test)]`) and (b) the struct's own validate-shaped methods
+//! (`bool`/`Result`-returning — `validate()`, `is_ok()`; a
+//! `fmt::Result`-returning trait impl reads the same way). Classes A/B
+//! require zero reads, so an internally-read, externally-orphaned config
+//! struct is invisible to them; `dead_code` cannot see it either (`pub` =
+//! assumed used). Also catches the never-plumbed literal default (zero reads
+//! anywhere, literal init — A needs a const, B needs an assert).
+//!
+//! C2 read attribution: a read inside `impl X` where X ≠ T (another type's
+//! method consuming the config) is EXTERNAL — it keeps T live. A read inside
+//! `impl T` is internal ONLY when the enclosing method is validate-shaped;
+//! any other return type (accessor `fn a(&self) -> f32 { self.a }`, builders)
+//! is FLOW-OUT and counts as external — the value leaves the struct through
+//! the method, so the field is honored. C2 is per-STRUCT and may co-fire
+//! with per-field A/B on an all-inert struct; the row aggregates them (the
+//! whole struct is a deletion candidate, not just the one knob).
+//!
 //! ## What the detector is NOT (honest limits)
 //!
 //! - NOT a lint engine — the value is the report + citations; consumers
@@ -63,6 +86,13 @@
 //! array types.
 //!
 //! Class B: zero reads, ≥1 assert touch (class A takes precedence when both).
+//!
+//! Class C2: for every candidate field f of struct T,
+//! `reads_total(f) − reads_tests(f) − reads_in_impl(T, f) == 0` — all reads
+//! test-confined or T-own-validate-confined. Name-matching masking (a
+//! same-named field on another struct read externally hides T's orphan) is a
+//! FALSE NEGATIVE, same direction as A/B; never a false positive from
+//! name-matching.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -108,6 +138,25 @@ pub struct AssertOnly {
     pub assert_interactions: usize,
 }
 
+/// One field's read breakdown inside a class-C2 finding.
+#[derive(Debug, Clone)]
+pub struct SelfRefField {
+    pub field_name: String,
+    pub total_reads: usize,
+    pub test_reads: usize,
+    pub self_impl_reads: usize,
+}
+
+/// A class-C2 finding: the whole struct's candidate fields have zero
+/// external reads (test + own-validate-impl confined).
+#[derive(Debug, Clone)]
+pub struct SelfReferentialConfig {
+    pub struct_name: String,
+    /// `file:line` of the FIRST candidate field's Default-impl init.
+    pub origin: String,
+    pub fields: Vec<SelfRefField>,
+}
+
 /// The audit result (data only — rendering is [`ConfigAuditReport::render`]).
 #[derive(Debug, Default)]
 pub struct ConfigAuditReport {
@@ -115,6 +164,7 @@ pub struct ConfigAuditReport {
     pub candidates: usize,
     pub inert_knobs: Vec<InertKnob>,
     pub assert_only: Vec<AssertOnly>,
+    pub self_referential: Vec<SelfReferentialConfig>,
 }
 
 /// Class-B comparator context: field name → the default representations it
@@ -158,11 +208,15 @@ pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
 
     // Pass 2: tally interactions across the whole set.
     let mut ix = InteractionIndex::default();
-    for (_name, file) in &files {
+    for (name, file) in &files {
         let mut v = InteractionVisitor {
             ix: &mut ix,
             suppress_const: false,
             defaults_by_field: &defaults_by_field,
+            file_is_test: file_is_test_path(name) || attrs_cfg_test(&file.attrs),
+            test_depth: 0,
+            impl_stack: Vec::new(),
+            validate_depth: 0,
         };
         v.visit_file(file);
     }
@@ -261,7 +315,56 @@ fn classify(
             });
         }
     }
+    classify_self_referential(candidates, ix, &mut report);
     report
+}
+
+/// Class C2: group candidates per struct (insertion order) and fire when
+/// every field's reads are test-confined or own-validate-impl-confined —
+/// `external = total − tests − in_impl(T)` clamped at 0.
+fn classify_self_referential(
+    candidates: &[FieldCandidate],
+    ix: &InteractionIndex,
+    report: &mut ConfigAuditReport,
+) {
+    let mut seen: Vec<String> = Vec::new();
+    for cand in candidates {
+        if seen.contains(&cand.struct_name) {
+            continue;
+        }
+        seen.push(cand.struct_name.clone());
+        let mut fields: Vec<SelfRefField> = Vec::new();
+        let mut all_confined = true;
+        for f in candidates.iter().filter(|c| c.struct_name == cand.struct_name) {
+            let total = ix.field_reads.get(&f.field_name).copied().unwrap_or(0);
+            let tests = ix
+                .field_reads_tests
+                .get(&f.field_name)
+                .copied()
+                .unwrap_or(0);
+            let own = ix
+                .field_reads_in_impl
+                .get(&(f.field_name.clone(), f.struct_name.clone()))
+                .copied()
+                .unwrap_or(0);
+            if total.saturating_sub(tests).saturating_sub(own) > 0 {
+                all_confined = false;
+            }
+            fields.push(SelfRefField {
+                field_name: f.field_name.clone(),
+                total_reads: total,
+                test_reads: tests,
+                self_impl_reads: own,
+            });
+        }
+        if all_confined {
+            report.self_referential.push(SelfReferentialConfig {
+                struct_name: cand.struct_name.clone(),
+                origin: cand.origin.clone(),
+                fields,
+            });
+        }
+    }
 }
 
 /// Cross-file interaction tallies (pass-2 output).
@@ -269,6 +372,11 @@ fn classify(
 struct InteractionIndex {
     /// Field name → read touches.
     field_reads: BTreeMap<String, usize>,
+    /// Field name → read touches inside TEST context.
+    field_reads_tests: BTreeMap<String, usize>,
+    /// (field name, impl self-type) → read touches inside validate-shaped
+    /// methods of that type's own impls (class C2's confinement tally).
+    field_reads_in_impl: BTreeMap<(String, String), usize>,
     /// Field name → assert-macro touches.
     field_asserts: BTreeMap<String, usize>,
     /// Const path AS READ (full string) → count.
@@ -367,21 +475,156 @@ impl<'ast> Visit<'ast> for StructLitVisitor<'_> {
 
 /// Pass 2: tally interactions. `suppress_const` is set inside `impl Default`
 /// subtrees — the default's own const RHS is not an external consumer.
-/// `defaults_by_field` carries the class-B comparator context.
+/// `defaults_by_field` carries the class-B comparator context. The C2
+/// context (test / impl / validate-shaped method) reclassifies each READ
+/// touch without touching the A/B `field_reads` semantics.
 struct InteractionVisitor<'a> {
     ix: &'a mut InteractionIndex,
     suppress_const: bool,
     defaults_by_field: &'a DefaultsByField,
+    /// File-level test heuristic (`tests/`/`benches/` path or `#![cfg(test)]`).
+    file_is_test: bool,
+    /// Depth inside `#[cfg(test)]` mods / `#[test]`-like fns.
+    test_depth: usize,
+    /// Self-type names of the enclosing impl blocks (innermost last).
+    impl_stack: Vec<String>,
+    /// Depth inside validate-shaped (`bool`/`Result`-returning) methods.
+    validate_depth: usize,
+}
+
+/// One field-read touch, attributed for class C2: the A/B total always
+/// increments; the test / own-impl tallies only inside their contexts.
+/// `internal_impl` is `Some(T)` when the read sits in a validate-shaped
+/// method of `impl T` (test context takes precedence).
+fn tally_field_read(
+    ix: &mut InteractionIndex,
+    name: &str,
+    in_test: bool,
+    internal_impl: Option<&str>,
+) {
+    *ix.field_reads.entry(name.to_string()).or_insert(0) += 1;
+    if in_test {
+        *ix.field_reads_tests.entry(name.to_string()).or_insert(0) += 1;
+    } else if let Some(ty) = internal_impl {
+        *ix
+            .field_reads_in_impl
+            .entry((name.to_string(), ty.to_string()))
+            .or_insert(0) += 1;
+    }
+}
+
+/// `#[cfg(test)]`-style attribute (path `cfg`, tokens containing `test` and
+/// not `not` — `cfg(not(test))` is production-only, not test).
+fn attr_is_cfg_test(attr: &syn::Attribute) -> bool {
+    if let syn::Meta::List(list) = &attr.meta {
+        let is_cfg = list
+            .path
+            .segments
+            .last()
+            .is_some_and(|s| s.ident == "cfg");
+        if is_cfg {
+            let tok = list.tokens.to_string();
+            return tok.contains("test") && !tok.contains("not");
+        }
+    }
+    false
+}
+
+/// `#[test]` / `#[bench]` / `#[tokio::test]`-shaped attribute (any attr
+/// whose LAST path segment is `test` or `bench`).
+fn attr_is_test_fn(attr: &syn::Attribute) -> bool {
+    attr.path()
+        .segments
+        .last()
+        .is_some_and(|s| s.ident == "test" || s.ident == "bench")
+}
+
+fn attrs_cfg_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(attr_is_cfg_test)
+}
+
+/// Cargo-layout heuristic: a file under `tests/` or `benches/` is test
+/// context regardless of its items.
+fn file_is_test_path(name: &str) -> bool {
+    name.contains("/tests/")
+        || name.contains("/benches/")
+        || name.starts_with("tests/")
+        || name.starts_with("benches/")
+}
+
+impl InteractionVisitor<'_> {
+    /// The C2 attribution of the current position (test context wins over
+    /// own-impl; own-impl requires a validate-shaped method frame). Returns
+    /// OWNED data — callers pair it with a mutable `ix` borrow.
+    fn read_ctx(&self) -> (bool, Option<String>) {
+        let in_test = self.file_is_test || self.test_depth > 0;
+        let internal_impl = if in_test {
+            None
+        } else if self.validate_depth > 0 {
+            self.impl_stack.last().cloned()
+        } else {
+            None
+        };
+        (in_test, internal_impl)
+    }
+
+    fn enter_fn_ctx(&mut self, enter_test: bool, validate_shaped: bool) {
+        if enter_test {
+            self.test_depth += 1;
+        } else if validate_shaped && !self.impl_stack.is_empty() {
+            self.validate_depth += 1;
+        }
+    }
+
+    fn exit_fn_ctx(&mut self, enter_test: bool, validate_shaped: bool) {
+        if enter_test {
+            self.test_depth -= 1;
+        } else if validate_shaped && !self.impl_stack.is_empty() {
+            self.validate_depth -= 1;
+        }
+    }
 }
 
 impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        let enter_test = attrs_cfg_test(&item.attrs);
+        if enter_test {
+            self.test_depth += 1;
+        }
+        syn::visit::visit_item_mod(self, item);
+        if enter_test {
+            self.test_depth -= 1;
+        }
+    }
+
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        let enter_test = item.attrs.iter().any(attr_is_test_fn);
+        let validate_shaped = !enter_test && sig_returns_validate_shape(&item.sig);
+        self.enter_fn_ctx(enter_test, validate_shaped);
+        syn::visit::visit_item_fn(self, item);
+        self.exit_fn_ctx(enter_test, validate_shaped);
+    }
+
+    /// Methods are `syn::ImplItem::Fn` in syn 2 — `visit_item_fn` never fires
+    /// inside impl blocks, so the validate-shape context needs this hook too
+    /// (the C2 probe caught the empty `field_reads_in_impl`).
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        let enter_test = item.attrs.iter().any(attr_is_test_fn);
+        let validate_shaped = !enter_test && sig_returns_validate_shape(&item.sig);
+        self.enter_fn_ctx(enter_test, validate_shaped);
+        syn::visit::visit_impl_item_fn(self, item);
+        self.exit_fn_ctx(enter_test, validate_shaped);
+    }
+
     fn visit_item_impl(&mut self, impl_block: &'ast syn::ItemImpl) {
         let is_default = is_default_impl(impl_block);
         let prev = self.suppress_const;
         if is_default {
             self.suppress_const = true;
         }
+        self.impl_stack.push(type_name(&impl_block.self_ty));
         syn::visit::visit_item_impl(self, impl_block);
+        self.impl_stack.pop();
         self.suppress_const = prev;
     }
 
@@ -403,15 +646,19 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
 
     fn visit_expr_field(&mut self, f: &'ast syn::ExprField) {
         if let Some(name) = field_member_name(&f.member) {
-            *self.ix.field_reads.entry(name).or_insert(0) += 1;
+            let (in_test, internal_impl) = self.read_ctx();
+            let ix = &mut *self.ix;
+            tally_field_read(ix, &name, in_test, internal_impl.as_deref());
         }
         syn::visit::visit_expr_field(self, f);
     }
 
     fn visit_pat_struct(&mut self, pat: &'ast syn::PatStruct) {
+        let (in_test, internal_impl) = self.read_ctx();
+        let ix = &mut *self.ix;
         for pf in &pat.fields {
             if let Some(name) = field_member_name(&pf.member) {
-                *self.ix.field_reads.entry(name).or_insert(0) += 1;
+                tally_field_read(ix, &name, in_test, internal_impl.as_deref());
             }
         }
         syn::visit::visit_pat_struct(self, pat);
@@ -444,6 +691,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
         );
         let is_ne = name.ends_with("_ne");
         let suppress_const = self.suppress_const;
+        let (in_test, internal_impl) = self.read_ctx();
         let defaults = self.defaults_by_field;
         let ix = &mut *self.ix;
         let mut sink = |touch: TokenTouch| match touch {
@@ -454,7 +702,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
             } => {
                 if !is_assert {
                     // A field reference inside any other macro is a read.
-                    *ix.field_reads.entry(ident).or_insert(0) += 1;
+                    tally_field_read(ix, &ident, in_test, internal_impl.as_deref());
                     return;
                 }
                 // Assert family: default-equality (per the intake spec —
@@ -485,7 +733,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
                 if is_default_eq {
                     *ix.field_asserts.entry(ident).or_insert(0) += 1;
                 } else {
-                    *ix.field_reads.entry(ident).or_insert(0) += 1;
+                    tally_field_read(ix, &ident, in_test, internal_impl.as_deref());
                 }
             }
             TokenTouch::Const(ident) => {
@@ -662,6 +910,28 @@ fn type_name(ty: &syn::Type) -> String {
     String::new()
 }
 
+/// Validate-shaped signature output: `bool` or a `Result` (incl.
+/// `fmt::Result`) — reads inside such methods of `impl T` are T-internal
+/// (checks that consume the value without exposing it). Any other return
+/// type (accessors, builders, `Default::default`) is FLOW-OUT — the value
+/// leaves through the method, so the read stays external. Shared by free
+/// fns (`ItemFn`) and methods (`ImplItemMethod`).
+fn sig_returns_validate_shape(sig: &syn::Signature) -> bool {
+    let syn::ReturnType::Type(_, ty) = &sig.output else {
+        return false;
+    };
+    let syn::Type::Path(tp) = ty.as_ref() else {
+        return false;
+    };
+    let last = tp
+        .path
+        .segments
+        .last()
+        .map(|s| s.ident.to_string())
+        .unwrap_or_default();
+    last == "bool" || last == "Result"
+}
+
 impl ConfigAuditReport {
     /// Render the human report (what `--config-audit` prints).
     #[must_use]
@@ -669,11 +939,12 @@ impl ConfigAuditReport {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B]",
+            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B], {} self-referential config struct(s) [C2]",
             self.files_scanned,
             self.candidates,
             self.inert_knobs.len(),
-            self.assert_only.len()
+            self.assert_only.len(),
+            self.self_referential.len()
         );
         for k in &self.inert_knobs {
             let _ = writeln!(
@@ -709,6 +980,26 @@ impl ConfigAuditReport {
             let _ = writeln!(
                 out,
                 "      fix: replace the default-equality assert with a behavioral one"
+            );
+        }
+        for s in &self.self_referential {
+            let _ = writeln!(
+                out,
+                "  [C2] {} — {} ({} Default-impl field(s)) has ZERO external reads",
+                s.origin,
+                s.struct_name,
+                s.fields.len()
+            );
+            for f in &s.fields {
+                let _ = writeln!(
+                    out,
+                    "      .{} — {} read(s): {} test, {} own-validate-impl",
+                    f.field_name, f.total_reads, f.test_reads, f.self_impl_reads
+                );
+            }
+            let _ = writeln!(
+                out,
+                "      fix: delete the struct, or plumb a real consumer (reads inside other types' impls / accessors keep it live)"
             );
         }
         let _ = writeln!(
@@ -991,4 +1282,145 @@ mod t {
         );
         assert_eq!(r.assert_only.len(), 1, "assert!(!c.off) with default false is tautological");
     }
+
+    // ── Class C2 — the self-referential config struct (Plan 125) ──
+
+    #[test]
+    fn self_referential_validate_plus_tests_fires_c2() {
+        // The PlasmaConfig shape: own validate() reads + test reads, nothing
+        // external. Classes A/B are blind here (reads > 0).
+        let r = one(
+            r"
+pub struct P { pub a: f32, pub b: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5, b: 0.25 } } }
+impl P {
+    pub fn validate(&self) -> bool { self.a > self.b }
 }
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn smoke() { let p = P::default(); assert!(p.a > p.b); }
+}
+",
+        );
+        assert_eq!(r.self_referential.len(), 1, "confined reads fire C2");
+        assert_eq!(r.self_referential[0].struct_name, "P");
+        assert_eq!(r.self_referential[0].fields.len(), 2);
+        assert!(r.render().contains("[C2]"));
+    }
+
+    #[test]
+    fn never_plumbed_literal_default_fires_c2() {
+        // Zero reads anywhere, literal init — A needs a const, B needs an
+        // assert; only C2 sees the dead struct.
+        let r = one(
+            r"
+pub struct Dead { pub x: u32 }
+impl Default for Dead { fn default() -> Self { Self { x: 3 } } }
+pub fn make() -> Dead { Dead::default() }
+",
+        );
+        assert_eq!(r.self_referential.len(), 1);
+        assert!(r.inert_knobs.is_empty() && r.assert_only.is_empty());
+    }
+
+    #[test]
+    fn external_read_suppresses_c2() {
+        let r = one(
+            r"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
+impl P { pub fn validate(&self) -> bool { self.a > 0.0 } }
+pub fn consume(c: &P) -> f32 { c.a * 2.0 }
+",
+        );
+        assert!(r.self_referential.is_empty(), "one external read keeps the struct live");
+    }
+
+    #[test]
+    fn other_types_impl_reads_are_external() {
+        // A read inside impl Engine (bool-returning, validate-SHAPED even) is
+        // an EXTERNAL consumer of P — the impl-type check precedes the
+        // method-shape check.
+        let r = one(
+            r"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
+pub struct Engine { pub p: P }
+impl Engine {
+    fn enabled(&self) -> bool { self.p.a > 0.0 }
+}
+",
+        );
+        assert!(r.self_referential.is_empty(), "impl Engine reading .a is external for P");
+    }
+
+    #[test]
+    fn accessor_method_is_flow_out_not_internal() {
+        // `fn a(&self) -> f32 { self.a }` exposes the value — the field IS
+        // honored through the accessor; only validate-shaped returns confine.
+        let r = one(
+            r"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
+impl P { pub fn a(&self) -> f32 { self.a } }
+",
+        );
+        assert!(r.self_referential.is_empty(), "accessor return = flow-out = external");
+    }
+
+    #[test]
+    fn external_destructuring_suppresses_c2() {
+        let r = one(
+            r"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
+impl P { pub fn validate(&self) -> bool { self.a > 0.0 } }
+pub fn take(c: &P) -> f32 { let P { a, .. } = c; a }
+",
+        );
+        assert!(r.self_referential.is_empty(), "external destructuring reads the fields");
+    }
+
+    #[test]
+    fn same_field_name_masks_c2_false_negative_direction() {
+        // Name-matching: an unrelated struct's same-named field read
+        // externally suppresses T's finding — the documented under-reporting
+        // direction (never a false positive).
+        let r = one(
+            r"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
+pub struct Other { pub a: f32 }
+impl Default for Other { fn default() -> Self { Self { a: 1.0 } } }
+pub fn consume(o: &Other) -> f32 { o.a }
+",
+        );
+        assert!(r.self_referential.is_empty(), "name-masking = false negative, pinned");
+    }
+
+    #[test]
+    fn test_file_path_is_test_context() {
+        // A read in a tests/-path file does not keep the struct live.
+        let r = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                r"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
+"
+                .to_string(),
+            ),
+            (
+                "tests/p_integration.rs".to_string(),
+                r"use mycrate::P;
+#[test]
+fn t() { let p = P::default(); assert!(p.a > 0.0); }"
+                    .to_string(),
+            ),
+        ]);
+        assert_eq!(r.self_referential.len(), 1, "tests/-file reads are test-context");
+    }
+}
+

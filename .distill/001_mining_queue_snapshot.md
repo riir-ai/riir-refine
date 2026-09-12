@@ -1012,9 +1012,22 @@
   and suggest a **behavioral** assertion instead — the catching test is always behavioral
   ("at f=0.5 `bytes_total()` is ~half the f=1.0 value"; "`target_modules=[Q,V]` yields 2
   adapters, not 6"). Same family as the Plan-014 fake-coverage concern this file tracks.
-- **2026-09-08 (M3, riir-ai Issue 888 T15/T16/T18 follow-up) — OPEN class C:
+- **2026-09-08 (M3, riir-ai Issue 888 T15/T16/T18 follow-up) — class C
+  HALF-DONE 2026-09-12 (C2 landed via Plan 125; C1 remains):
   `config-path-orphaned-by-refactor-or-never-plumbed` (two sub-shapes, one detector
   family).**
+
+  **C2 — DONE 2026-09-12 (Plan 125, `--config-audit` class C):** landed in the
+  same instrument as A/B (per-struct aggregation over the Default-impl candidates;
+  external = total − test-context − own-validate-impl, per field, ALL fields must be
+  confined). Precision guards found while landing: impl methods are
+  `syn::ImplItem::Fn` — `visit_item_fn` never fires inside impls, so the
+  validate-shape context needed its own visitor hook (the probe caught the empty
+  own-impl tally); accessor/builder returns count as FLOW-OUT (external), only
+  `bool`/`Result` returns confine; reads inside OTHER types' impls keep the struct
+  live. Validated 507 files: 1 verified TP (riir-games `PetAiConfig` — whole-struct
+  orphan, the extracted-for-a-consumer shape whose consumer never materialized;
+  `melee_reach` 0 reads anywhere), 0 FP (self-scan clean). 23 fixture tests.
 
   **C1 — orphaned-by-optimization** (the T17 watch, filed per its mandate): a perf
   refactor replaces a config-fed path with a compile-time table/match and copies the
