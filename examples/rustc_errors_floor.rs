@@ -350,9 +350,62 @@ fn ordering_ab_section() {
         println!("  SKIP — cargo not on PATH.");
         return;
     }
-    let generated = generate_corpus();
-    let (cases, n) = template_covered(MUTANT_CASES, &generated);
-    println!("  template-covered stratum: {n} cases");
+    // `--multi K` composes K single-mutation cases into ONE scaffold (Bench
+    // 088; the composition is `corpus_gen::compose_multi`, shared with the
+    // Issue 91 T2 prevalence runner's power lever). The stock corpus makes
+    // exactly ONE apply→recheck decision per run, and a WITHIN-run posterior
+    // needs >= 2 — so the K=1 lane can only ever report a green zero about
+    // itself. K >= 2 is the lane that can actually adjudicate the gain axis.
+    let multi: usize = std::env::args()
+        .position(|a| a == "--multi")
+        .and_then(|i| std::env::args().nth(i + 1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1);
+    // `--strided` draws the K members by stride rather than from a
+    // contiguous chunk, so one scaffold carries K different FAMILIES. Bench
+    // 088 measured why it matters: `generate_corpus()` emits families
+    // contiguously, so the chunked form puts a WIDTH-1 strategy menu in
+    // front of the ordering seam and every ordering policy is the identity
+    // on it no matter how deep the run goes.
+    let strided = std::env::args().any(|a| a == "--strided");
+    let generated = match (multi > 1, strided) {
+        (true, true) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi_strided(
+            &generate_corpus(),
+            multi,
+        ),
+        (true, false) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi(
+            &generate_corpus(),
+            multi,
+        ),
+        (false, _) => generate_corpus(),
+    };
+    let (cases, n) = match multi > 1 {
+        // Composed scaffolds carry several codes at once; the stratum filter
+        // (which keys on a single declared code) would drop most of them, so
+        // the MULTI lane takes the composed set whole.
+        true => {
+            let v: Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>> = generated
+                .iter()
+                .map(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated)
+                .collect();
+            let n = v.len();
+            (v, n)
+        }
+        false => template_covered(MUTANT_CASES, &generated),
+    };
+    println!(
+        "  corpus: {} — {n} cases",
+        match multi > 1 {
+            true => format!(
+                "MULTI-{multi} ({}, {multi} simultaneous errors per scaffold)",
+                match strided {
+                    true => "STRIDED — k distinct families per scaffold",
+                    false => "chunked — usually k variants of ONE family",
+                }
+            ),
+            false => "template-covered stratum (stock, 1 error per scaffold)".to_string(),
+        }
+    );
 
     // Fresh store for a self-contained measurement.
     let root = std::env::temp_dir().join(format!("riir_floor_ab_{}", std::process::id()));
@@ -423,23 +476,45 @@ fn ordering_ab_section() {
         },
     );
 
+    // HEADROOM instrument (Issue 093 T2 / Bench 088). `attempts` is the
+    // ring length — the number of apply→recheck DECISIONS a run actually
+    // made. An ordering only matters from decision 1, and a WITHIN-run
+    // posterior only from decision 2, so `multi-attempt runs == 0` means
+    // this corpus cannot measure ANY stateful ordering, independent of any
+    // arm's quality. Printed next to every arm so a saturated corpus can
+    // never read as "no difference" (Bench 045 §G6/G7(b) asserted the
+    // saturation from `iterations`; this prints the decision count that
+    // makes it mechanical).
     let arm_stats = |label: &str, fixer: &DriverFixer| {
         let (_, reports) = harness.measure_driver(fixer, &cases).expect(label);
         let mut total_iters = 0usize;
         let mut total_reverts = 0usize;
+        let mut total_attempts = 0usize;
+        let mut multi_attempt_runs = 0usize;
         let mut fixed_clean = 0usize;
+        let mut clean_by_case: Vec<(String, bool)> = Vec::new();
         for (name, rep) in &reports {
             total_iters += rep.iterations;
             total_reverts += rep.reverted.len();
+            total_attempts += rep.attempts.len();
+            if rep.attempts.len() > 1 {
+                multi_attempt_runs += 1;
+            }
             if rep.clean {
                 fixed_clean += 1;
             }
-            let _ = name;
+            clean_by_case.push((name.clone(), rep.clean));
         }
         println!(
-            "  {label:<20} clean {fixed_clean}/{n}  iterations {total_iters}  reverts {total_reverts}"
+            "  {label:<22} clean {fixed_clean}/{n}  iterations {total_iters}  reverts {total_reverts}  attempts {total_attempts}  multi-attempt runs {multi_attempt_runs}"
         );
-        (fixed_clean, total_iters, total_reverts)
+        (
+            fixed_clean,
+            total_iters,
+            total_reverts,
+            clean_by_case,
+            multi_attempt_runs,
+        )
     };
 
     let store_arc = Arc::new(store);
@@ -454,6 +529,137 @@ fn ordering_ab_section() {
     let static_arm = arm_stats("static (min-delta)", &DriverFixer::new());
     let flat_arm = arm_stats("flat counters", &flat_fixer);
     let shape_arm = arm_stats("shape-conditional", &shape_fixer);
+
+    // ── Issue 093 T2's policy at THIS harness (Bench 088). The landed
+    // wiring is gated by tests/nonergodic_driver_ab.rs (mechanism + a
+    // 2-scaffold e2e); this is the G6/G7 corpus lane the issue originally
+    // designated, at n = 126. Two arms, because they answer different
+    // questions: `shared` keeps ONE policy across the corpus (learning
+    // across RUNS — evidence the deployed CLI never has) and `per-run`
+    // rebuilds it per case (the deployed shape: one `new()` per
+    // invocation, one driver run). ──
+    #[cfg(feature = "nonergodic_driver")]
+    {
+        use riir_clippy::domains::rustc_errors::nonergodic_order::NonergodicOrdering;
+        use std::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
+
+        let shared = Arc::new(NonergodicOrdering::new(Some(Arc::clone(&store_arc))));
+        let shared_fixer = DriverFixer::new()
+            .with_ordering(shared.ordering())
+            .with_observer(shared.observer())
+            .with_revive(shared.revive());
+        let neo_shared_arm = arm_stats("nonergodic shared", &shared_fixer);
+        let snap = shared.snapshot();
+        println!(
+            "    shared policy snapshot: menu_len {} t_observed {} committed {:?} store_stale {}",
+            snap.menu_len, snap.t_observed, snap.committed, snap.store_stale
+        );
+
+        let per_run_arm = {
+            let ticks = Arc::new(AtomicUsize::new(0));
+            // MENU-WIDTH instrument: the policy freezes its menu (the set of
+            // DISTINCT strategy_ids among the candidates) at the first
+            // ordering call. A menu of width 1 leaves the score constant
+            // across candidates, so the incumbent min-delta tiebreak decides
+            // everything — the seam has no choice to make, for ANY policy.
+            let mut menu_hist: std::collections::BTreeMap<usize, usize> =
+                std::collections::BTreeMap::new();
+            let mut t_observed_total = 0usize;
+            let mut total_iters = 0usize;
+            let mut total_reverts = 0usize;
+            let mut total_attempts = 0usize;
+            let mut multi_attempt_runs = 0usize;
+            let mut fixed_clean = 0usize;
+            let mut clean_by_case: Vec<(String, bool)> = Vec::new();
+            for i in 0..cases.len() {
+                let pol = Arc::new(NonergodicOrdering::new(Some(Arc::clone(&store_arc))));
+                // LIVENESS sentinel: an arm whose observer never fires is
+                // INERT, and an inert arm reads exactly like "no difference".
+                let inner = pol.observer();
+                let tk = Arc::clone(&ticks);
+                let counting: riir_clippy::domains::rustc_errors::driver::ObserverFn =
+                    Arc::new(move |rec| {
+                        tk.fetch_add(1, AtomOrd::Relaxed);
+                        inner(rec);
+                    });
+                let fixer = DriverFixer::new()
+                    .with_ordering(pol.ordering())
+                    .with_observer(counting)
+                    .with_revive(pol.revive());
+                let (_, reports) = harness
+                    .measure_driver(&fixer, &cases[i..=i])
+                    .expect("nonergodic per-run");
+                for (name, rep) in &reports {
+                    total_iters += rep.iterations;
+                    total_reverts += rep.reverted.len();
+                    total_attempts += rep.attempts.len();
+                    if rep.attempts.len() > 1 {
+                        multi_attempt_runs += 1;
+                    }
+                    if rep.clean {
+                        fixed_clean += 1;
+                    }
+                    clean_by_case.push((name.clone(), rep.clean));
+                }
+                let sn = pol.snapshot();
+                *menu_hist.entry(sn.menu_len).or_insert(0) += 1;
+                t_observed_total += sn.t_observed;
+            }
+            let label = "nonergodic per-run";
+            println!(
+                "  {label:<22} clean {fixed_clean}/{n}  iterations {total_iters}  reverts {total_reverts}  attempts {total_attempts}  multi-attempt runs {multi_attempt_runs}"
+            );
+            println!(
+                "    observer ticks fired: {} (0 ⇒ the arm is INERT — the policy never saw evidence)",
+                ticks.load(AtomOrd::Relaxed)
+            );
+            println!(
+                "    frozen menu width histogram {menu_hist:?}  (width 1 ⇒ score constant ⇒ ordering is the incumbent tiebreak, identically)  t_observed total {t_observed_total}"
+            );
+            (
+                fixed_clean,
+                total_iters,
+                total_reverts,
+                clean_by_case,
+                multi_attempt_runs,
+            )
+        };
+
+        // Paired per-case discordants (McNemar's b/c). b = c = 0 means
+        // UNDEFINED, not "not significant" — there is no discordant pair
+        // to test.
+        let discord = |a: &[(String, bool)], b: &[(String, bool)], la: &str, lb: &str| {
+            let bm: std::collections::HashMap<&str, bool> =
+                b.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+            let (mut aw, mut al) = (0usize, 0usize);
+            for (k, va) in a {
+                match bm.get(k.as_str()) {
+                    Some(vb) if *va && !*vb => aw += 1,
+                    Some(vb) if !*va && *vb => al += 1,
+                    _ => {}
+                }
+            }
+            println!("    discord {la} vs {lb}: {aw} wins / {al} losses");
+        };
+        discord(&neo_shared_arm.3, &shape_arm.3, "nonergodic shared", "shape");
+        discord(&per_run_arm.3, &shape_arm.3, "nonergodic per-run", "shape");
+        discord(&per_run_arm.3, &static_arm.3, "nonergodic per-run", "static");
+
+        let multi = static_arm.4 + shape_arm.4 + neo_shared_arm.4 + per_run_arm.4;
+        println!(
+            "\n  T2 GAIN AXIS: clean per-run {}/{n} vs shape {}/{n} vs static {}/{n}; reverts {} / {} / {}",
+            per_run_arm.0, shape_arm.0, static_arm.0, per_run_arm.2, shape_arm.2, static_arm.2
+        );
+        println!(
+            "  HEADROOM PREDICATE (Issue 093 T4 reopen trigger): multi-attempt runs across all arms = {multi} — {}",
+            match multi {
+                0 => "ZERO ⇒ this corpus cannot measure ANY stateful ordering; the gain axis is UNMEASURABLE here, NOT null-by-refutation",
+                _ => "NON-ZERO ⇒ headroom exists; the gain axis is measurable on this corpus",
+            }
+        );
+    }
+    #[cfg(not(feature = "nonergodic_driver"))]
+    println!("  (nonergodic arms: build with --features nonergodic_driver)");
 
     println!(
         "\n  verdict: shape-conditional reverts {} vs static {} — {}",

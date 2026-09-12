@@ -357,6 +357,8 @@ impl CompileFixer for NullFixer {
 #[derive(Default)]
 pub struct DriverFixer {
     ordering: Option<super::driver::OrderingFn>,
+    observer: Option<super::driver::ObserverFn>,
+    revive: Option<super::driver::ReviveFn>,
 }
 
 impl DriverFixer {
@@ -375,6 +377,24 @@ impl DriverFixer {
         self
     }
 
+    /// Install the per-attempt observer (Issue 093 T2's `with_observer`
+    /// seam) — the A/B arms that install a STATEFUL ordering need its
+    /// feedback channel, or the policy orders from a belief that never
+    /// learns and reads as "no difference".
+    #[must_use]
+    pub fn with_observer(mut self, f: super::driver::ObserverFn) -> Self {
+        self.observer = Some(f);
+        self
+    }
+
+    /// Install the tried-candidate revive policy (Issue 093 T2's
+    /// `with_revive` seam). Unset = the shipped never-revive behavior.
+    #[must_use]
+    pub fn with_revive(mut self, f: super::driver::ReviveFn) -> Self {
+        self.revive = Some(f);
+        self
+    }
+
     /// Run the driver and RETURN its report (the verbose path the G2
     /// latency + G6/G7 A/B measurements consume — per-iteration timings,
     /// candidate try-order evidence, misses).
@@ -390,6 +410,12 @@ impl DriverFixer {
         let mut driver = super::driver::CompileDriver::isolated();
         if let Some(f) = &self.ordering {
             driver = driver.with_ordering(f.clone());
+        }
+        if let Some(f) = &self.observer {
+            driver = driver.with_observer(f.clone());
+        }
+        if let Some(f) = &self.revive {
+            driver = driver.with_revive(f.clone());
         }
         Ok(driver.run(&[lib], &super::playbooks::Playbooks::production(), true))
     }

@@ -83,6 +83,92 @@ pub fn generate_corpus() -> Vec<GeneratedCase> {
     out
 }
 
+/// Compose `k` single-mutation cases into ONE scaffold, each body wrapped in
+/// its own `pub mod cN` — so a run carries `k` SIMULTANEOUS errors instead of
+/// one (Issue 91 T2 / Bench 087's "power lever", lifted here so more than one
+/// harness can use it).
+///
+/// Why it exists: [`generate_corpus`] is one-mutation-per-scaffold, so the
+/// `--fix-compile` driver makes exactly ONE apply→recheck decision per run.
+/// Every within-run property — a stateful ordering's feedback (Issue 093 T2),
+/// an oscillation flip (Issue 91 T2), the revive policy — needs ≥2 decisions,
+/// and is therefore unreachable BY CONSTRUCTION on the stock corpus. A zero
+/// measured there is a fact about the corpus, not about the mechanism.
+///
+/// `k <= 1` returns the input unchanged (cloned). The composed case inherits
+/// `chunk[0]`'s `expect_code` — the harness's mutant-validity check only asks
+/// that the declared code is AMONG the pre-fix diagnostics, which holds.
+#[must_use]
+pub fn compose_multi(cases: &[GeneratedCase], k: usize) -> Vec<GeneratedCase> {
+    if k <= 1 {
+        return cases.to_vec();
+    }
+    cases
+        .chunks(k)
+        .enumerate()
+        .map(|(g, chunk)| {
+            let wrap = |pick: fn(&GeneratedCase) -> &str| -> String {
+                use std::fmt::Write as _;
+                let mut out = String::new();
+                for (i, c) in chunk.iter().enumerate() {
+                    let body = pick(c).replace('\n', "\n    ");
+                    // Infallible: writing into a String never errors.
+                    let _ = write!(out, "pub mod c{i} {{\n    {body}\n}}\n");
+                }
+                out
+            };
+            GeneratedCase {
+                name: format!("multi{k}_{g:03}"),
+                expect_code: chunk[0].expect_code,
+                kind: MutatorKind::NarrowScope,
+                seed: wrap(|c| c.seed.as_str()),
+                broken: wrap(|c| c.broken.as_str()),
+            }
+        })
+        .collect()
+}
+
+/// Compose like [`compose_multi`], but draw the `k` members by STRIDE
+/// instead of from a contiguous chunk — so one scaffold carries `k`
+/// different mutation FAMILIES rather than `k` variants of one.
+///
+/// Why both exist (Bench 088's measurement): [`generate_corpus`] emits
+/// families contiguously, so a chunked group of 5 is usually five variants
+/// of the SAME template — the driver's candidate menu for that scaffold then
+/// has ONE distinct `strategy_id`, and any per-strategy ordering policy is
+/// the identity on it regardless of how many attempts the run makes. The
+/// strided form is the only one that puts a genuinely WIDE menu in front of
+/// the ordering seam, which is what an ordering A/B needs in order to be
+/// able to measure anything at all.
+#[must_use]
+pub fn compose_multi_strided(cases: &[GeneratedCase], k: usize) -> Vec<GeneratedCase> {
+    if k <= 1 || cases.len() < k {
+        return cases.to_vec();
+    }
+    let groups = cases.len() / k;
+    (0..groups)
+        .map(|g| {
+            let members: Vec<&GeneratedCase> = (0..k).map(|i| &cases[i * groups + g]).collect();
+            let wrap = |pick: fn(&GeneratedCase) -> &str| -> String {
+                use std::fmt::Write as _;
+                let mut out = String::new();
+                for (i, c) in members.iter().enumerate() {
+                    let body = pick(c).replace('\n', "\n    ");
+                    let _ = write!(out, "pub mod c{i} {{\n    {body}\n}}\n");
+                }
+                out
+            };
+            GeneratedCase {
+                name: format!("strided{k}_{g:03}"),
+                expect_code: members[0].expect_code,
+                kind: MutatorKind::NarrowScope,
+                seed: wrap(|c| c.seed.as_str()),
+                broken: wrap(|c| c.broken.as_str()),
+            }
+        })
+        .collect()
+}
+
 fn gt_module(body: &str) -> String {
     format!(
         "\n#[cfg(test)]\nmod ground_truth {{\n    #[test]\n    fn behavior() {{\n        {body}\n    }}\n}}\n"
