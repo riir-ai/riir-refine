@@ -9,6 +9,36 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 097 resolved — linking↔confusion PoC: NO-GO, the fusion idea retired as measured-refuted (2026-09-12)
+
+The katgpt-rs Issue 757 follow-up gate ("no plan until a PoC on the
+oracle-labeled fixtures exists") ran as `examples/linking_confusion_poc.rs`
+behind `linking_confusion_poc` (the `gw_corpus` defend-wrong pattern):
+93 rule clouds over the 101-span fixture canon (M=32 salted rename variants,
+n=33/cloud, 8-D ModellessEmbedder), 2,158 within-domain pairs, 3,333
+retrieval queries at 86.3% top-1 self rate (the confusion ground truth:
+9 pairs pooled, 4 base-canon).
+
+**Both config classes refute.** At the paper's config (k=8) the instrument
+degenerates: k/n ≈ 0.24 vs the paper's ≤ 0.004 regime, 99.9–100% linked, |link|
+up to 51 — zero binary discrimination. At the sensitivity control (k=3, k/n ≈
+0.09) linking gains a 55.6% base rate and shows ANTI-enrichment (confusion mass
+×0.48 pooled on linked vs unlinked; Fisher p=1.0 both arms). **The Spearman
+trap is named in the record**: ρ reads 0.90/0.60 across the arms — invalid
+under 99.6% ties at zero confusion, and it moved with the tie structure while
+the confused-pair set stayed fixed. Do not re-derive it as a positive.
+
+Mechanism: the paper's premise is smooth multi-exemplar class manifolds; the
+fixtures give 1 exemplar/rule — rename ORBITS, combinatorially thin and
+entangled under PCA-3D at any sane k. The manifold assumption fails on this
+corpus exactly as the Issue-757 follow-up feared. A corpus-scale boundary,
+not a detector defect (Bench 717 holds at its designed regime). Reopen
+trigger: a real-repo mined span set (≥ hundreds of REAL spans/rule). The
+`linking_fold_detector` stays opt-in with no consumer; the Research 391
+deferred guides stay deferred — their unblocker needs a different consumer
+class. Reproduce: `cargo run --release --features linking_confusion_poc
+--example linking_confusion_poc`.
+
 ## Orphan-report serde boundary — the Issue 934 follow-on repair (2026-09-12, `d2e39d1f`)
 
 The first consumer-repo landing produced the instrument's first measured

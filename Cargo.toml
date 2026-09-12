@@ -204,6 +204,18 @@ tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_
 # (R135/Bench-047 doctrine — no wiring until the PoC verdict).
 gw_corpus = ["katgpt-core/gw_alignment", "clippy_lints", "rust_perf"]
 
+# Issue 097: linking↔retrieval-confusion PoC — does topological linking
+# (PCA-3D, katgpt-core's Issue-757-tuned detector) between two rules'
+# span-embedding clouds predict retrieval top-1 confusion between those
+# rules? The Ren & Lim CIFAR-10 analogue (linking ↔ confusion, r≈0.48)
+# translated to the healer surface. Gates examples/linking_confusion_poc.rs
+# — the defend-wrong harness (rename-orbit clouds over the oracle-labeled
+# fixtures, Fisher + Spearman per domain, verdict banner). Measurement-only,
+# no heal-path, no router; opt-in per the gw_corpus precedent. GO unblocks
+# the Research 391 deferred guides (a runtime consumer for the detector);
+# NO-GO retires the fusion idea with the orbit-manifold caveat on record.
+linking_confusion_poc = ["katgpt-core/linking_fold_detector", "latent_retrieval", "clippy_lints", "rust_perf"]
+
 # Issue 093 T1: per-run strategy-posterior PoC — NonergodicFilter
 # (katgpt-rs Plan 592, opt-in) over strategy/error-class generators vs the
 # SHIPPED static shape-conditional BetaPosterior ordering (the real
@@ -494,6 +506,11 @@ required-features = ["rust_perf_bench"]
 [[example]]
 name = "gw_corpus_poc"
 required-features = ["gw_corpus"]
+
+# Issue 097 — the linking↔confusion defend-wrong PoC (measurement-only).
+[[example]]
+name = "linking_confusion_poc"
+required-features = ["linking_confusion_poc"]
 
 [[example]]
 name = "nonergodic_driver_poc"
