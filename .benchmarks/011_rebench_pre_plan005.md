@@ -12,7 +12,7 @@ compare the "after" against.
   from Bench 010 (2026-08-12) but that reference is STALE.** The upstream inference
   stack (`riir-ai/crates/riir-gpu`) has 20+ commits since 2026-08-11 including:
   - `28317ac8b` — zero-copy RAW-Metal matmul2d prefill (Issue 663 T5, **1.21× measured**, landed 2026-08-14 09:55)
-  - `8512cd711` — speculative decoding substrate for Metal decode (Issue 665 T1-T6, **1.21× at 88% acceptance**, landed 2026-08-14 13:06 — hours ago)
+  - `8512cd711` — speculative decoding substrate for Metal decode (riir-ai Issue 665 T1-T6, **1.21× at 88% acceptance**, landed 2026-08-14 13:06 — hours ago)
   - `56595bbaf`, `5a67e96f1`, `a4b5785e1` — bind group cache + dispatch profiling + decode breakdown
   - `46a2eca60` — cuda_graphs_forward promoted to DEFAULT-ON
   - `b12a692be`, `5cce1807a` — chunked conv1d into prefill
@@ -42,7 +42,7 @@ compare the "after" against.
 ² p50, `self_evolve` mode, seed fixture. ³ From Bench 010 (2026-08-12). 
 ⁴ From Bench 009 (2026-08-12; Bonsai quality on these prompts).
 ⁵ **STALE — see retraction above.** Bench 010's GPU numbers predate the batched
-   Metal prefill (Issue 663, +1.21×) + speculative decode (Issue 665, +1.21× at
+   Metal prefill (Issue 663, +1.21×) + speculative decode (riir-ai Issue 665, +1.21× at
    88% acceptance) + multiple GPU perf commits. The Arm A/C latency ratio is
    directionally correct (modelless is millions of × faster) but the exact
    number is not trustworthy. A fresh GPU re-bench is REQUIRED before any
@@ -188,15 +188,15 @@ just using the API that was already there.
    the zerocopy path needs to be revalidated against the full forward, not
    just the isolated kernel. ZEROCOPY=1 env var forces it on for A/B
    re-investigation. Filed in riir-ai as a follow-up to Issue 663.
-2. **`speculative_decode` (Issue 665)** — the feature is compiled in but the
+2. **`speculative_decode` (riir-ai Issue 665)** — the feature is compiled in but the
    harness still uses the sequential decode loop. Wiring
-   `forward_speculative_verify` is the next harness update. The Issue 665
+   `forward_speculative_verify` is the next harness update. The riir-ai Issue 665
    benchmark measured +1.21× at α=0.88 (thermal-throttled lower bound).
    **UPDATE (2026-08-14, session 3 — WIRED, honest NEGATIVE):** commit
    `c5660dc` added the `SPECULATIVE=1` arm (n-gram, K=2) to this harness.
    Result on clippy prompts: **α = 0.19–0.22** (natural-language `<think>`
    reasoning) — far below the α≥0.58 breakeven; decode **3.3–4.4× SLOWER**
-   than sequential. Issue 665's +1.21× (repetitive text) does NOT
+   than sequential. riir-ai Issue 665's +1.21× (repetitive text) does NOT
    reproduce on this workload — **NET-NEGATIVE for clippy fix
    generation**. G1 (bit-identical emitted text vs sequential) PASSES
    after fixing the bench_665 off-by-one verify bug (argmax index vs
@@ -290,7 +290,7 @@ for throughput benches. File `.issues/` if a fresh GPU re-bench is needed.
 1. **~~The GPU arms are referenced, not fresh.~~** **RETRACTED.** Bench 010's
    GPU numbers are STALE — the upstream inference stack (`riir-gpu` in riir-ai)
    has 20+ commits since 2026-08-11 including batched Metal prefill (Issue 663,
-   +1.21×) + speculative decode (Issue 665, +1.21× at 88% acceptance). The
+   +1.21×) + speculative decode (riir-ai Issue 665, +1.21× at 88% acceptance). The
    GPU arms MUST be re-bench with updated harness features before any Plan 005
    phase claims a GPU-side improvement. See §"GPU arms re-bench plan" above.
 2. **The modelless arm is fresh but under load.** Load 5.84–15.46 during

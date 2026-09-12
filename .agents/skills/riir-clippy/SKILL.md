@@ -187,7 +187,7 @@ skill points agents there). Per sweep:
   on 2026-09-04); rebase non-interactive only.
 - **Numbering**: read `.highwater`, +1, AND re-scan the folder at WRITE
   time — concurrent sessions dual-allocated 675 AND 677 in one night.
-- **Queue-item dual-allocation (Issue 665, 2026-08-17)**: two idle sessions
+- **Queue-item dual-allocation (katgpt-rs Issue 665, 2026-08-17)**: two idle sessions
   can pick the SAME queue-1 issue within minutes. Before writing any code,
   `git status` + `ls -lat` the target crate for uncommitted hunks / fresh
   mtimes that match your chosen issue (a feature line, a module gate, a new
