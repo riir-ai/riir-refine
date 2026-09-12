@@ -319,8 +319,10 @@ mis-attribution; the single-target law prevents this by construction).
 Gen-8 admission is SHAPE non-vacuity (`n_shaped ≥ 1`), deliberately NOT the
 M5 heal_rate comparison — every v8 target clears by construction, so the
 plain gate would refuse the generation for measuring exactly what it exists
-to measure. First live run (row #98, 2026-09-12): 4/4 shaped, **shaped_rate
-50.0% vs heal_rate 100.0%**, created 5 lints across 4 atoms, half_counts
+to measure. First live run (row #97, 2026-09-12 — the citation read #98 until a
+2026-09-12 static re-read of `score_history.jsonl` corrected it; #98 is the
+later gen-1 v1 rerun, the one carrying the first `rule_outcomes`): 4/4
+shaped, **shaped_rate 50.0% vs heal_rate 100.0%**, created 5 lints across 4 atoms, half_counts
 `manual_map`×3; the run report prints the per-atom shaped table with
 drift-check against `V8_CREATED`.
 
@@ -514,6 +516,82 @@ No guard-layer count moves: the guard's lanes (5b default, 5c all-features)
 always satisfy the new gates.
 
 Issue file removed per the noise-reduction rule; this section is the record.
+
+## Issue 085 — the `dist` domain: the promotion-evidence narrative (2026-09-09 → 2026-09-10)
+
+Moved out of the issue header 2026-09-12 (noise-reduction rule): the issue
+keeps a crisp status + the single remaining gate; the changelog lives here.
+
+**Phase 1 landed 2026-09-09** (`79dcf9b`) — the 6th retrieval domain, a
+hand-written section-aware `Cargo.toml` scanner (no `syn`, no `toml` crate),
+suggest-only (`FIXABLE_DIST = []`), opt-in feature `dist`. Premise: this
+tool's own shipped binary rode plain `--release` through v0.1.4 (11.35 MiB
+stripped) where the knob set measures 4.34 MiB (-61%) — found by the OWNER,
+not by any agent session. Initially parked NO-GO in the post-mining intake
+(`.distill/001_mining_queue_snapshot.md`, 2026-09-09, kept and marked
+SUPERSEDED); the owner's pushback corrected the reasoning — the "no hermetic
+oracle" blocker was wrong by the repo's own `rust_perf` precedent (fixes
+verify by `cargo test` re-run; the GAIN is proven ONCE at class level).
+
+**2026-09-10 (zero-contention diagnosis)** — both build blockers named in
+the T-list were REPAIRED at HEAD: (1) the E0631 `v5_is_removal_rule`
+signature mismatch was `ce74bac`'s healer `redundant_closure` point-free
+rewrite of a load-bearing `&String→&str` coercion, compiled to nothing at
+default features (`#[cfg(feature = "score_bench")]`) — restored to the
+closure form by Batch 140 `d2d2388`; (2) the Batch 138/139 kernel_verify
+`.parses` all-features conflict was fixed by `91493a1` (cfg-adaptive
+`verdict_passes` accessor in `corpus/tests.rs`).
+
+**2026-09-10 (promotion evidence — Bench 082)** — both owed items ran at
+zero contention, isolated `CARGO_TARGET_DIR=/tmp/plan085`, binary built
+`--features score_bench,dist,kat_service`. (1) Score-bench **dist-ON run
+#92: FLAT** — byte-identical to the dist-off tail (heal 96.2 / created 1.9 /
+parse 100 / decline 100 / edits 64 / vocab 38; OOD axis bit-identical,
+artifact `faa021c8…`); `FIXABLE_DIST = []` keeps the proposer vocabulary and
+the OOD statistic unmoved by construction — the FLAT is mechanical, not
+lucky. (2) Condition-(4) consumer scans (`--suggest --domain dist`, zero
+writes): true positives on `riir-game-sdk/crates/riir-asset-converter` (3
+cites, 2 explicit bins) and `riir-deployer/crates/riir-deployer` (3 cites, 6
+bins); negative controls HELD on `katgpt-rs`, `riir-viewbridge`, this repo.
+Two static-cite disagreements exposed the scanner's blind spots: `riir-gm-tool`
+a MISSED true positive (bin autodiscovered from `src/main.rs`, no `[[bin]]`
+section — **B1**) and `riir-chain/crates/riir-chaind` FIRED 3 cites where a
+negative was expected (a member with `[[bin]]` cannot see the root's
+strip+thin+1 — **B2**).
+
+**2026-09-10 (B1 + B2 landed — `759e209d`, Bench 082 §6 addendum)** — both
+blind spots CLOSED in `src/domains/dist/context.rs`: `DistContext::derive`
+(one bounded ancestor walk, ≤32 levels, resolved once per manifest) exposing
+`autodiscovered_bin` (B1: `src/main.rs` or directly-nested `src/bin/*.rs`,
+gated on `[package]` via the shared `ships_bin` helper) and
+`root_profile_knobs` (B2: strip/lto/panic presence from the nearest
+`[workspace]` ancestor, consumed by the shared `effective_knobs`
+self-or-root resolver); `member-profile-ignored` UNCHANGED; the panic rule
+keeps its daemon caveat. Corpus/routing bytes UNTOUCHED (detector triggers
+only) → no score-bench re-run owed. Scan table re-run (same repos, suggest
+lane, zero writes, `/tmp/plan085b`): gm-tool 0 → 3 (B1 closed); chaind 3 → 1
+(rules 1+2 silent; the panic cite honest); deployer member 3 → 2; viewbridge
+xtask 0 → 1 (NEW marginal — B1 exposes the real bin target, recorded
+honestly); every stable negative held at 0. `dist_gates` 7 → **13/13
+green**; clippy `--features dist --all-targets` clean on all touched files.
+Incidental repair: `heal.rs`'s `dist_scan_context` (deleted) carried a stray
+stacked `#[cfg(feature = "docker")]` — it only compiled when BOTH features
+were on. Honest caveats (Bench 082 §6.4, now also on the domain doc page):
+`autobins = false` unread, `src/bin/<dir>/main.rs` + out-of-dir `[[bin]]
+path` still invisible, knobs name-agnostic, a member's own knobs still
+satisfy rules 1–3.
+
+**Pre-staged cites (2026-09-10 static pass, since CONFIRMED/CORRECTED by the
+scanner)** — the static manifest read predicted `riir-game-sdk` first (root
+declares NO `[profile.release]`, ships two real bin crates) and
+`riir-deployer` as the weaker cite; the real scan confirmed both, MISSED
+gm-tool (B1) and over-fired on chaind (B2). Recorded because it is the
+precedent: a static manifest read is not the tool's verdict.
+
+**Post-Phase-1 corpus growth:** Batch 143 added a 5th rule,
+`large-api-dependency-mostly-unused-hint` (BuildTime family,
+`-Zhint-mostly-unused` measure-first advice) — the issue's Phase-1 table
+listed 4 until the 2026-09-12 status-closure pass folded it in.
 
 ## The domain swap — the client half + the config surface, post-flip state (2026-09-10, riir-dapps Plans 023+024)
 

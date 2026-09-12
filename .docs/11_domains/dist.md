@@ -1,9 +1,11 @@
 # `dist` — shipped-artifact build-config healing (6th retrieval domain)
 
-> Phase 1 landed 2026-09-09 (Issue 085). Opt-in feature `dist`, default-off —
-> promotion follows the `rust_perf` precedent and needs the issue's GOAT gate
-> (suggest precision + score-bench FLAT at the canonical state + a real
-> consumer cite).
+> Phase 1 landed 2026-09-09 (Issue 085); the B1/B2 context extensions landed
+> 2026-09-10 (`759e209d`). Opt-in feature `dist`, default-off. All four GOAT
+> conditions PASS (suggest precision + score-bench FLAT at the canonical
+> state + the router re-pin + real consumer cites — Bench 082 + §6
+> addendum); the ONLY remaining promotion gate is **owner pull evidence**,
+> per the `rust_perf` precedent.
 
 ## What it is
 
@@ -48,6 +50,51 @@ never emit, enforced by `tests/dist_gates.rs`:
   ALWAYS a separate `[profile.dist]` + `--profile dist`.
 - **`strip-in-dev-profile`** — stripped dev symbols break debuggers for zero
   shipped-byte gain.
+
+## Context derivation — B1/B2 (`759e209d`, Bench 082 §6)
+
+The first real consumer scan exposed two blind spots in the section-only
+scanner, both closed by [`context.rs`](../../src/domains/dist/context.rs)'s
+`DistContext::derive(manifest_path)` — ONE bounded ancestor walk (≤32
+levels), resolved once per manifest:
+
+- **B1 `autodiscovered_bin`** — cargo discovers bins from `src/main.rs` and
+  directly-nested `src/bin/*.rs` with no `[[bin]]` section at all (gated on
+  `[package]`, the shared `ships_bin` helper). Missed a real true positive
+  (`riir-gm-tool`) before this landed.
+- **B2 `root_profile_knobs`** — a workspace MEMBER cannot carry effective
+  profile knobs; the strip/lto/panic presence of the nearest `[workspace]`
+  ancestor is read and consumed by the shared `effective_knobs`
+  self-or-root resolver. Eliminated two false cites on `riir-chaind`.
+
+`member-profile-ignored` is UNCHANGED by both; the panic rule keeps its
+daemon caveat.
+
+### Honest caveats — where the scanner still disagrees with cargo
+
+The B1 class is NARROWED, not provably closed. Verbatim from Bench 082 §6.4
+(kept here so a reader of the domain never has to find the bench):
+
+- **`autobins = false` is not read** — a manifest opting out of
+  autodiscovery beside a present `src/main.rs` still fires.
+- **Deeper bin shapes are not derived** — `src/bin/<dir>/main.rs` targets
+  and `[[bin]]` sections whose `path` points OUTSIDE the manifest's
+  directory are invisible to the tree check. (The converse is safe: the
+  check can never invent a bin cargo would not build — it requires
+  `[package]`.)
+- **Knobs are name-agnostic** — a root carrying `strip` under
+  `[profile.dist]` satisfies the strip rule even though a plain
+  `cargo build --release` does not take that profile. Key presence in ANY
+  profile is the deliberate Phase-1 semantic; per-name matching is the
+  honest next narrowing if the owner wants it.
+- **A member's own knobs still satisfy rules 1–3** even though a root build
+  ignores them — the union trades that gap for not double-citing, and
+  `member-profile-ignored` fires simultaneously to move the block.
+- **`exclude`d members** still inherit `under_workspace_root` (and now root
+  knobs) from the nearest-ancestor walk — a hedged Phase-1 inaccuracy,
+  unchanged.
+- **Per-manifest, not per-bin** — a crate with N bins gets 3 citations, not
+  3N (pre-existing design).
 
 ## The oracle question, answered by precedent
 
