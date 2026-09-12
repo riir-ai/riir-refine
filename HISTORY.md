@@ -4784,3 +4784,60 @@ on the real corpus via the G6/G7 floor A/B harness.
 
 Full record: `.benchmarks/084_nonergodic_driver_poc.md`. Research note 166 §B
 verdict updated.
+
+## 2026-09-12 — Issue 094: trajectory covariability-class mining PoC, measured and closed (defend-wrong NEGATIVE)
+
+The Research-309 consumer hypothesis — the sliceTCA drift-class share per
+rule predicts which corpus rules needed re-mining (proposer revision/guard
+after landing) — ran its defend-wrong PoC and lost to the activity
+confound. The failure is the STORE SCHEMA's, mostly, and that distinction
+is recorded below.
+
+**Instrument:** `examples/tca_covariability_poc.rs` behind the existing
+`latent_retrieval` feature (no new feature key — `slice_tca` is default-on
+in katgpt-core since Plan 596 / Bench 714, so no forwarding needed).
+Stores read via `/tmp` MIRRORS only (sibling `.heal` trees are read-only to
+a session; the mirror guarantees zero writes upstream). Ground truth = the
+2026-09-12 re-mined(33)/stable(27) label snapshot dug from
+`.distill/001` §Post-mining intake P1–P19 mapped to proposer-fix commits
+(clippy lane snake_case keys, rust_perf kebab — the store's exact
+spellings; dogfood commits and the mechanical b83230ee emitter migration
+excluded from labels).
+
+**Protocol:** tensor X[rule, day, shape-bucket] over the 10 store-bearing
+repos — 12,557 rows → 4,496 cells after filters (rustc_errors `:` keys,
+Withdrawn tier, 8,060 no-timestamp game-sdk rows). Axes: [35 rules] ×
+[18 days] × [32 FNV-1a buckets]; cell = ln(1 + success + fail) mass.
+Classifier path only (`covariability_shares`, 3 SVDs per probe — the
+issue's "may suffice" arm). Per-rule score: leave-one-rule-out
+ΔEVR_time. Eval: exact Mann-Whitney AUC over labeled rules carrying mass
+(30 of 60; 23 re-mined, 7 stable), pre-registered PASS rule = beat every
+baseline.
+
+**Result:** AUC(S_tca, r=4) = 0.497 — chance (robustness: r=2 → 0.438,
+r=8 → 0.469). Baselines: total log-mass 0.689 (best — the activity
+confound: rules that fire get revised), fail-share 0.559, day-entropy
+0.099 (stable rules spread MORE evenly — the inverse of the naive drift
+expectation), majority 0.5. Global covariability shares saturate
+(entity 0.990 / time 0.994 / episode 0.985): one hot rule
+(`uninlined_format_args`, log-mass 1879 of ~2900) dominates every
+unfolding's top-R spectrum, so per-rule LOO deltas are scale-driven, not
+class-driven. FAIL per the pre-registered rule.
+
+**Mechanism (honest bounds):** the store keeps CUMULATIVE counters per
+(rule, shape) with only the LAST verdict's timestamp — the session axis
+collapses to "day of last fire", so time-slicing measures shape-churn-day-
+clustering, not within-shape drift; 30/60 labels carry zero mass
+(survivorship: quiet stable rules are absent from the store, and the
+stable rules that DO fire look like re-mined ones). The drift hypothesis
+is NOT refuted for event-level data — it is untestable at this schema.
+Reopen triggers: (a) per-event trajectory rows persisted store-side (the
+fixseq ring is the precedent shape) giving a true session axis; (b)
+balanced per-rule outcome labels (score-bench `rule_outcomes` rows are the
+per-rule precedent).
+
+Full numbers: the harness output (this commit's run) + the issue file's
+git history. Issue 094 closed (the FAIL branch of its own task 4).
+Research 309's consumer-surface line got a status delta (healer surface:
+measured negative; neuron-db Plan 329 unaffected — different data,
+event-level telemetry is its design center).
