@@ -39,3 +39,13 @@ The wiring is **inert-by-measurement-lane and complete**: every decision-content
 ## En route fix (pre-existing, Windows-only)
 
 `orphan_report::GitCli::new` compared canonicalized scan paths (`\\?\C:\…` verbatim on Windows) against git's `C:/…` root — every pathspec dropped, the whole history leg blind; `real_git_e2e_orphan_lifecycle` failed 3/3 deterministic on this box (it landed green from macOS where canonicalize adds no prefix). Fixed by canonicalizing the root for the comparison only. Lib suite 1247/0 on Windows restored.
+
+## Follow-on: the gain axis MEASURED at three corpus widths — [Bench 088](088_nonergodic_ordering_headroom_predicate.md)
+
+This bench reported the gain axis NULL from a 2-scaffold e2e plus a citation of Bench 045. Bench 088 runs the lane Issue 093 designated (`examples/rustc_errors_floor.rs --only ab`) with this policy installed as two arms — **shared-handle** and **per-run** — at three corpus widths, and separates *the corpus cannot measure* from *the corpus measured, and the answer is parity or worse*:
+
+- **K=1 (n=126): UNMEASURABLE.** 1.00 apply→recheck decisions per run, menu width 1 in 105/126 runs — reproduces Bench 045 §G6/G7(b); every discordant 0/0 (McNemar UNDEFINED, `b+c=0`).
+- **MULTI-5 chunked (n=40): PARITY, instrument ADMISSIBLE.** 20 depth-5 runs per arm and the flat-counters CONTROL MOVES (+16 iterations, +20 reverts) — a bad ordering IS visible — while nonergodic ties min-delta and shape-conditional exactly (20/40 · 104 · 0).
+- **MULTI-5 STRIDED (n=40): menus width 3–4, every run multi-attempt — and the SHARED-handle arm REGRESSES**, 135 iterations / 15 reverts vs 120 / 0 for every other arm including plain min-delta. The per-run arm (the deployed shape) is at exact parity. Resolved rate is floored at 0/40 for all arms, so correctness cannot discriminate on that lane.
+
+**This bench's verdict stands — no promotion — but its evidential standing changes:** on the one lane where the ordering seam genuinely has a choice, the policy ties at best and loses 12.5% of the iteration budget at worst. Two concrete carry-overs: **never ship a long-lived `NonergodicOrdering` handle** (Lane 3 measures its cost), and note that a DEPTH lever (§3's chunked MULTI) is not a WIDTH lever — `corpus_gen::compose_multi_strided` is.
