@@ -4997,3 +4997,60 @@ git history. Issue 094 closed (the FAIL branch of its own task 4).
 riir-neuron-db Research 309's consumer-surface line got a status delta (healer surface:
 measured negative; neuron-db Plan 329 unaffected — different data,
 event-level telemetry is its design center).
+
+## 2026-09-12 — Issue 093 T2: the nonergodic driver wiring LANDED (gain-null on no-surface) + the orphan-report Windows blind-leg fix
+
+**T2 landed** ([Bench 085](.benchmarks/085_nonergodic_driver_wiring.md)): the
+PoC's winning per-run strategy posterior is wired at the production seam —
+opt-in feature `nonergodic_driver` (NOT in the release set; the release
+feature-set build verified untouched). Three pieces: (1) **driver seams**
+(ungated, generic): `CompileDriver::with_observer` (fires at all five
+attempt-outcome sites with the `AttemptRecord` ring record — the in-process
+twin of the `.heal/fixseq/` dump, Issue 91 T1.5's one-instrument-two-consumers
+design paying off) + `with_revive` (consulted for tried candidates in the
+retain; unset = the shipped never-revive behavior — default-lane semantics
+byte-identical, lib 1247/0 + integration 6+6+4+4). (2) **the policy**
+(`src/domains/rustc_errors/nonergodic_order.rs`): a rank-rotation component
+family — the honest, weaker port the PoC's bound #1 demanded (real rustc
+regimes are latent; the family captures "which strategy wins here" without
+semantic structure). Menu frozen at first ordering call; base ranking
+store-seeded or incumbent; component k favors base rank k; two-state sticky
+inner chain; token = menu_idx·3+outcome; arm-D λ=t/(t+1) composition with
+the stale gate (committed non-base majority after ≥2 obs → store term
+drops — the "lying store paid 3.5pp" defense); context-scoped one-shot
+revive (span-hash + file-diagnostic-set moved AND commit moved AND gate
+≥0.35). (3) **CLI install**: `--fix-compile` replaces the static
+shape-conditional ordering when armed (kill-switch
+`RIIR_HEAL_NONERGODIC=0|false|off`).
+
+**Gates 6/6** (`tests/nonergodic_driver_ab.rs`, required-features gated):
+mechanism — determinism, the learning flip (T6.7 flip-test class), revive
+negatives + **flip-window-existence grid** (fired at [(0,2),(0,3),(0,4),
+(1,4)] of the (kept,no-progress) grid — the PoC's narrow revive window
+confirmed on real token arithmetic; precise-cell asserts deliberately
+avoided, the constants' business ≠ the contract), stale gate; e2e (real
+cargo, equal budget) — no-regression (both arms clean, remaining 0,
+identical applied) + determinism (two fresh runs, identical attempt
+sequences).
+
+**The honest verdict: GAIN-NULL ON NO-SURFACE.** Both arms are
+first-try-perfect on every real scaffold (0 wasted attempts) — the Bench
+045 T6.7(b) class; the playbook menus are shape-gated (≈one strategy per
+diagnostic), so ordering choice is site-order, and site-order only wastes
+attempts on fix-interaction chains, which no available surface exhibits.
+The family-error test — T2's whole point — moves to the **reopen trigger**:
+the fixseq ring's first runs with ≥2 revert-class attempts become the A/B
+e2e corpus (both orderings, equal budget). T3's negative clause NOT fired
+(a no-surface null is not a measured negative). Issue 093 stays open as the
+watch record.
+
+**En route (pre-existing, Windows-only):** `orphan_report::GitCli::new`
+compared canonicalized scan paths against git's root WITHOUT canonicalizing
+the root — on Windows `canonicalize()` yields the verbatim `\?\C:\…` form
+while `rev-parse --show-toplevel` returns `C:/…`, every pathspec dropped,
+the whole history leg blind; `real_git_e2e_orphan_lifecycle` failed 3/3
+deterministic on this box (it landed green from macOS, where canonicalize
+adds no prefix — the L132 symlink comment shows the class was half-seen).
+Fixed: canonicalize the root for the comparison only. This is the
+"validated-on-one-OS" lesson again — the sibling-session's 1247/0 was true
+on macOS and silently false on Windows.

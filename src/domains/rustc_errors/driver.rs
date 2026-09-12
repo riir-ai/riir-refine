@@ -277,8 +277,9 @@ fn order_candidates(cands: &mut [FixCandidate]) {
 /// Identity of a tried candidate — retries across iterations must not
 /// re-apply the same failed move at the same site. Includes every edit
 /// (primary + extras) so two strategies differing only in their extra
-/// edits stay distinct.
-type TriedKey = (
+/// edits stay distinct. `pub(crate)` so the Issue-093 revive policy can
+/// key its suppression records identically.
+pub(crate) type TriedKey = (
     PathBuf,
     String,
     usize,
@@ -287,7 +288,7 @@ type TriedKey = (
     Vec<((usize, usize), String)>,
 );
 
-fn tried_key(c: &FixCandidate) -> TriedKey {
+pub(crate) fn tried_key(c: &FixCandidate) -> TriedKey {
     (
         c.file.clone(),
         c.strategy_id.clone(),
@@ -304,6 +305,18 @@ fn tried_key(c: &FixCandidate) -> TriedKey {
 /// The T4.2 ordering-hook signature (see [`CompileDriver::with_ordering`]).
 pub type OrderingFn = std::sync::Arc<dyn Fn(&mut [FixCandidate]) + Send + Sync>;
 
+/// The per-attempt observer signature (Issue 093 T2): called once per
+/// completed attempt with the ring record (code, strategy, outcome, errors
+/// before→after) — the in-process feed the per-run strategy posterior
+/// consumes (the offline twin is the `.heal/fixseq/` ring dump).
+pub type ObserverFn = std::sync::Arc<dyn Fn(&AttemptRecord) + Send + Sync>;
+
+/// The tried-candidate revive signature (Issue 093 T2): consulted for a
+/// candidate already in the `tried` set; `true` re-admits it for one more
+/// attempt. The default policy (no hook) never revives — suppression is
+/// permanent, the shipped behavior.
+pub type ReviveFn = std::sync::Arc<dyn Fn(&FixCandidate) -> bool + Send + Sync>;
+
 /// The bounded fix-compile loop driver (Plan 019 Phase 1).
 pub struct CompileDriver {
     runner: CheckRunner,
@@ -314,6 +327,12 @@ pub struct CompileDriver {
     /// the CLI over a [`crate::traj_store::TrajStore`], `latent_retrieval`
     /// builds). The closure composes its own tiebreak.
     ordering: Option<OrderingFn>,
+    /// Optional per-attempt observer (Issue 093 T2) — see [`ObserverFn`].
+    observer: Option<ObserverFn>,
+    /// Optional tried-candidate revive policy (Issue 093 T2) — see
+    /// [`ReviveFn`]. When unset, the retain below drops every tried
+    /// candidate unconditionally (the shipped never-revive behavior).
+    revive: Option<ReviveFn>,
 }
 
 impl Default for CompileDriver {
@@ -330,6 +349,8 @@ impl CompileDriver {
             runner: CheckRunner::new(),
             max_iters: 5,
             ordering: None,
+            observer: None,
+            revive: None,
         }
     }
 
@@ -341,6 +362,8 @@ impl CompileDriver {
             runner: CheckRunner::isolated(),
             max_iters: 5,
             ordering: None,
+            observer: None,
+            revive: None,
         }
     }
 
@@ -359,6 +382,33 @@ impl CompileDriver {
     pub fn with_ordering(mut self, f: OrderingFn) -> Self {
         self.ordering = Some(f);
         self
+    }
+
+    /// Install the per-attempt observer (Issue 093 T2 — see [`ObserverFn`]).
+    /// Called after EVERY attempt outcome site (kept / no-progress /
+    /// io×2 / span-drift), in try order, with the ring record.
+    #[must_use]
+    pub fn with_observer(mut self, f: ObserverFn) -> Self {
+        self.observer = Some(f);
+        self
+    }
+
+    /// Install the tried-candidate revive policy (Issue 093 T2 — see
+    /// [`ReviveFn`]). A `true` verdict re-admits a tried candidate into
+    /// an iteration's candidate list; the driver re-inserts it into the
+    /// `tried` set on failure exactly as before, so the policy owns
+    /// one-shot semantics.
+    #[must_use]
+    pub fn with_revive(mut self, f: ReviveFn) -> Self {
+        self.revive = Some(f);
+        self
+    }
+
+    /// Fire the observer on the ring's newest record, if armed.
+    fn observe(&self, report: &FixCompileReport) {
+        if let (Some(o), Some(rec)) = (&self.observer, report.attempts.last()) {
+            o(rec);
+        }
     }
 
     /// Extra cargo args for every check (`--verify-args` passthrough).
@@ -449,7 +499,14 @@ impl CompileDriver {
                 Some(f) => f(&mut candidates),
                 None => order_candidates(&mut candidates),
             }
-            candidates.retain(|c| !tried.contains(&tried_key(c)));
+            // Issue 093 T2: a revive policy may re-admit a TRIED candidate
+            // (context-scoped, one-shot by the policy's own bookkeeping);
+            // the default (no hook) keeps the shipped never-revive retain.
+            let revive = self.revive.clone();
+            candidates.retain(|c| {
+                !tried.contains(&tried_key(c))
+                    || revive.as_ref().is_some_and(|r| r(c))
+            });
             let Some(best) = candidates.first().cloned() else {
                 break; // no untried candidates left — stop (misses recorded)
             };
@@ -478,6 +535,7 @@ impl CompileDriver {
                     semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
+                self.observe(&report);
                 continue;
             };
             let shape = original
@@ -511,6 +569,7 @@ impl CompileDriver {
                     semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
+                self.observe(&report);
                 continue;
             };
             if std::fs::write(&best.file, &applied_text).is_err() {
@@ -533,6 +592,7 @@ impl CompileDriver {
                     semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
+                self.observe(&report);
                 continue;
             }
 
@@ -567,6 +627,7 @@ impl CompileDriver {
                     semantic_note: best.semantic_note,
                 });
                 diags = new_diags;
+                self.observe(&report);
                 if diags.is_empty() {
                     report.clean = true;
                     report
@@ -596,6 +657,7 @@ impl CompileDriver {
                     semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
+                self.observe(&report);
             }
             report
                 .iter_ms

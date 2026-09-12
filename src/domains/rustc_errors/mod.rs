@@ -17,6 +17,11 @@
 //!   six proposers) + [`playbooks::borrowck`] (Phase 3 — E0502/E0499/
 //!   E0505; E0596/E0382/E0507/E0373 ship NO template by the measured
 //!   floor, Bench 041).
+//! - [`nonergodic_order`] (opt-in `nonergodic_driver`, Issue 093 T2) — the
+//!   per-run strategy-posterior ordering + context-scoped revive at the
+//!   [`driver::CompileDriver`] seam. Pulls the trajectory store for the
+//!   composed arm — the opt-in's deliberate `latent_retrieval`
+//!   implication, outside the default no-retrieval rule above.
 //!
 //! **Exact-keyed, so no retrieval.** The diagnostic carries the error code —
 //! nothing here needs latent lookup, which is why the `rustc_errors` feature
@@ -31,5 +36,7 @@ pub mod driver;
 pub mod evolve;
 pub mod floor;
 pub mod gp_ordering;
+#[cfg(feature = "nonergodic_driver")]
+pub mod nonergodic_order;
 pub mod playbooks;
 pub mod probe;

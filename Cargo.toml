@@ -225,6 +225,16 @@ linking_confusion_poc = ["katgpt-core/linking_fold_detector", "latent_retrieval"
 # wiring until the PoC verdict). Opt-in, measurement-only.
 nonergodic_poc = ["dep:katgpt-micro-belief", "rustc_errors", "latent_retrieval"]
 
+# Issue 093 T2: the per-run strategy-posterior DRIVER wiring — the PoC's
+# winning arm C/D at the CompileDriver ordering seam (T4.2) + the
+# Issue-91-T1.5 attempt-ring observer + the context-scoped revive policy.
+# Opt-in, measurement-lane: the release feature set does NOT carry it; the
+# A/B harness (tests/nonergodic_driver_ab.rs) + a bespoke binary build
+# exercise it. `latent_retrieval` is the composed arm's deliberate
+# implication (store-seeded ranking + score blend) — the default
+# rustc_errors path stays retrieval-free (Plan 019 T0.3).
+nonergodic_driver = ["dep:katgpt-micro-belief", "rustc_errors", "latent_retrieval"]
+
 # Plan 019 T0.3: the retrieval-free apply→check→revert substrate shared by
 # `fix_verify` (the `--fix --verify` batch gate) and the `rustc_errors`
 # `--fix-compile` driver (Phase 1). Owns the cargo-check subprocess, the
@@ -515,6 +525,13 @@ required-features = ["linking_confusion_poc"]
 [[example]]
 name = "nonergodic_driver_poc"
 required-features = ["nonergodic_poc"]
+
+# Issue 093 T2 — the driver-wiring A/B + mechanism gates (opt-in lane,
+# never in default runs): mechanism (no cargo) + e2e no-regression at equal
+# budget + headroom disclosure.
+[[test]]
+name = "nonergodic_driver_ab"
+required-features = ["nonergodic_driver"]
 
 [[example]]
 name = "clippy_verify_demo"

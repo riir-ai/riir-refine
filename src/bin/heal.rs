@@ -6399,6 +6399,25 @@ fn main() {
             traj_warnings.clear();
         }
         let mut driver = CompileDriver::isolated().with_max_iters(args.max_iters);
+        // Issue 093 T2 (opt-in `nonergodic_driver` builds): the per-run
+        // strategy-posterior ordering REPLACES the static shape-conditional
+        // one when armed (feature on + `RIIR_HEAL_NONERGODIC` not killed) —
+        // the store, when present, seeds the base ranking and composes the
+        // arm-D blend with the stale-detection gate. Installed BEFORE the
+        // static block so `with_ordering` here wins.
+        #[cfg(feature = "nonergodic_driver")]
+        if riir_clippy::domains::rustc_errors::nonergodic_order::armed_by_env() {
+            let policy = std::sync::Arc::new(
+                riir_clippy::domains::rustc_errors::nonergodic_order::NonergodicOrdering::new(
+                    traj_store.clone(),
+                ),
+            );
+            driver = driver
+                .with_ordering(policy.ordering())
+                .with_observer(policy.observer())
+                .with_revive(policy.revive());
+            eprintln!("fix-compile: nonergodic ordering armed (Issue 093 T2)");
+        }
         #[cfg(feature = "latent_retrieval")]
         if let Some(store) = traj_store.clone() {
             driver = driver.with_ordering(std::sync::Arc::new(move |cands| {
