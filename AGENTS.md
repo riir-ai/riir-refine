@@ -77,7 +77,7 @@ Target set: `scripts/swept_repos.txt` (derived from the BOUNDARY.md workspace, g
 
 ## Why this is a separate repo (not in riir-ai)
 
-Borrows the **drafter+pruner+corpus pattern** from `riir-games-quest/quest_grammar` but has **zero game-domain coupling**: no dep on `riir-games*` / `riir-game-sdk` / any game crate from ANY feature combination; no `riir-chain` dep (`riir-neuron-db` only transitive, via `riir-rag` under `latent_retrieval`); default build's only public dep is `katgpt-core` (ConstraintPruner trait + ternary SIMD matvec + `pick_domain`, Plan 558); two opt-in feature arms consume non-game sibling substrates (`ternary_inference` → `riir-engine` + `riir-gpu`, `latent_retrieval` → `riir-rag`); the `TernaryDraftModel` pattern is reimplemented locally (~200 LOC). riir-ai is for game runtime + engine, not developer tools.
+Borrows the **drafter+pruner+corpus pattern** from `riir-games-quest/quest_grammar` but has **zero game-domain coupling**: no dep on `riir-games*` / `riir-game-sdk` / any game crate from ANY feature combination; no `riir-chain` dep (`riir-neuron-db` only transitive, via `riir-rag` under `latent_retrieval`); default build's only public dep is `katgpt-core` (ConstraintPruner trait + ternary SIMD matvec + `pick_domain`, katgpt-rs Plan 558); two opt-in feature arms consume non-game sibling substrates (`ternary_inference` → `riir-engine` + `riir-gpu`, `latent_retrieval` → `riir-rag`); the `TernaryDraftModel` pattern is reimplemented locally (~200 LOC). riir-ai is for game runtime + engine, not developer tools.
 
 ### Plan 001 multi-domain architecture (2026-08-13)
 

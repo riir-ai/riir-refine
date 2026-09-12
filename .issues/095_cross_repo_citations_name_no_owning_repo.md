@@ -1,6 +1,6 @@
 # Issue 095 — cross-repo citations that name no OWNING repo (36 rows)
 
-**Status:** OPEN — record filed 2026-09-12 by the katgpt-rs `citation_drift_sweep.py` corpus run (katgpt-rs Issue 751 / Issue 752). No prose in this repo was edited: the repair is this repo's call, row by row.
+**Status:** RESOLVED 2026-09-12 — 36 -> 2 CROSS over 861 citations (the walk grew by 6 mid-repair; 3 rows a sibling session appended during the session were repaired too, so 39 rows were read for 36 filed). The 2 survivors are enumerated below, not assumed.
 
 ## The finding class
 
@@ -121,3 +121,56 @@ Workspace standing at filing (2026-09-12, a dated SNAPSHOT and not a checksum �
 - [ ] T3 — read and repair the crate-hint + plain rows; record any row judged a sweep false positive HERE, with the reason (that is the data that lowers the 16%)
 - [ ] T4 — re-run the sweep; this repo's CROSS count should fall to the FP residue, and the residue must be enumerated, not assumed
 
+
+
+---
+
+## Resolution (2026-09-12)
+
+31 line-edits, 24 adjudications settled, 2 rows left open with their reason.
+
+| owner | cited | evidence |
+|---|---|---|
+| **riir-ai** | Issues 468/615/641/686/697/698/699/700/701/734, Plan 548, Benches 641/805 | the `riir-gpu production-kernel rules` batch block is a mining log of riir-ai's OWN kernel clusters — `cudarc_kernels/`, `weaver_gpu/`, `hypernet/meta_lora.rs`, `maxsim/`, `spectralquant.rs` — and each cited issue is riir-ai's review of that exact cluster (`Issue 468 — weaver_gpu per-depth sync overhead` against a line reading "the Issue 468 P0 `probs_offset` write-shift"; `Issue 701 — hypernet/ second half` against "B47×Issue 701 H-C") |
+| **katgpt-rs** | Plans 436/558/596, Benches 572/714, Research 484/527, Issue 669 | `Plan 436 — Weaver GPU Port via CubeCL`; `Issue 669 — FeatureHasher::hash_value OOB read (silent UB in release, SIGABRT in debug)` against a line reading "test_phase1_state_interference **ABORTED** pre-heal"; `Plan 558` is single-owner and the line quotes `katgpt_core::variable_rank_domain_expert::pick_domain` |
+| **riir-train** | Issues 402/424/513, Plans 336/339 | `Issue 424 — GPU batched LoRA training diverges at real Gemma-2-2B scale` against "the Issue 424 gradient-divergence fix"; `Plan 339 — Dion3 Row-Selection Muon … on the 4090 Dense Path` against "Sibling Plan 339/340 files excluded (`kimi_k3_train.rs` …)"; `Plan 336 — Code LLM RLVR: Clippy Healing L4 LoRA via GRPO` |
+| **riir-neuron-db** | Issue 603, Research 309 | `Issue 603` was settled by HASH, not by title: the line cites "a sibling commit (`7d19917`, Issue 603)", and `7d19917` exists in riir-neuron-db and nowhere else — `feat(603): file scan_prefix scaling issue`. `Research 309 — sliceTCA — Covariability-Class-Routed Memory Consolidation`, against a line whose next clause reads "neuron-db Plan 329 unaffected" |
+
+### The two rows left OPEN — the number does not resolve anywhere
+
+HISTORY.md:1950 and :2848 both read "Parallel-session collision on the SAME
+unit (**Issue 665** class …)". Two repos allocate a 665 and **neither is that
+class**:
+
+- katgpt-rs `.issues/665_freedom_guided_best_of_k_poc.md` — best-of-K selection
+- riir-ai `.issues/665_speculative_decoding_metal_decode.md` — Metal decode
+
+Both files were read in full at their last commit; neither contains
+"collision", "parallel session", "same unit" or "yielded". katgpt-rs's
+HISTORY.md uses the identical label (`Issue-665 class`, hyphenated, which is
+why its own gate never flagged it), so the class name propagated between
+documents without either one ever pointing at a referent.
+
+That makes this a **wrong number**, not a wrong repo — the shape riir-chain's
+`Bench 853` turned out to have, except that one had a recoverable referent
+(`riir-ai Issue 853`) and this one does not. Inventing a plausible repo name
+here would produce exactly the ⛔MISATTRIBUTED defect this issue exists to
+remove, so the rows stay bare and the ceiling is pinned at **2**, not 0.
+**This needs the author.**
+
+### Three rows that were never filed
+
+The walk grew 855 -> 861 citations mid-session (a concurrent session appended
+the sliceTCA / Research-309 narrative). `Plan 596`, `Bench 714` and
+`Research 309` were repaired in the same pass. Worth recording as the
+mechanism the pin file warns about: an exact-ratchet ceiling reds on honest new
+prose, and re-measuring after the repair — not before — is what catches it.
+
+### Not repaired, and not a defect
+
+The 9 IN-LOCAL-RANGE rows are at or under this repo's own top allocation and
+stay UNDECIDED by construction. The ceiling holds at 9.
+
+Re-measured: `riir-clippy  cross=2  in_local_range=9  orphan=0` over 861
+citations. Ceiling re-pinned in katgpt-rs `scripts/citation_drift_floors.txt`
+to `513 2 9 0`.
