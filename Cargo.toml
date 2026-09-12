@@ -577,6 +577,14 @@ required-features = ["kernel_heal"]
 name = "rustc_errors_floor"
 required-features = ["rustc_errors"]
 
+# Issue 91 T2: fix-loop flip PREVALENCE over the T1.5 per-attempt ring.
+# SLOW + SYNTHETIC corpus (the driver is real; the compile errors are
+# injected — no organic --fix-compile corpus exists, see the example's doc).
+#   cargo run --release --example fixseq_prevalence --features rustc_errors
+[[example]]
+name = "fixseq_prevalence"
+required-features = ["rustc_errors"]
+
 # Issue 025 T6: the WGSL/cube git-history mining harness (default+experimental
 # patterns; the diff adjudicates). Same gating as wgsl_scan_smoke — the
 # scanner lives behind kernel_heal.
