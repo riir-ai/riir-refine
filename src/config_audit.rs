@@ -164,6 +164,11 @@ pub struct ConfigAuditReport {
     pub candidates: usize,
     pub inert_knobs: Vec<InertKnob>,
     pub assert_only: Vec<AssertOnly>,
+    /// The Issue-030-class intake downgrade: class-B rows whose FIELD doc
+    /// carries a deliberate-write-only marker. Weak severity, never hidden
+    /// (the detector cannot verify the doc's claim — the `[wire-const]`
+    /// precedent: downgrade-not-suppress).
+    pub documented_write_only: Vec<AssertOnly>,
     pub self_referential: Vec<SelfReferentialConfig>,
 }
 
@@ -198,7 +203,8 @@ type DefaultsByField = BTreeMap<String, Vec<(Option<String>, Option<String>)>>;
 #[must_use]
 pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
     let (candidates, ix, files) = scan_core(sources);
-    classify(&candidates, &ix, files.len())
+    let field_docs = collect_field_docs(&files);
+    classify(&candidates, &ix, &field_docs, files.len())
 }
 
 /// Fields whose reads are all test- or own-impl-confined (the C1 candidate
@@ -369,6 +375,61 @@ struct SerdeStructMarker<'a> {
     skip_ser_fields: &'a mut BTreeMap<String, BTreeSet<String>>,
 }
 
+/// Field-level doc index — (struct name, field name) → concatenated field
+/// doc text. The class-B downgrade evidence (Issue-030-class intake): a
+/// deliberate-write-only marker counts only on the FIELD doc; the struct's
+/// own doc speaks for the whole type, not for one write-only member.
+type FieldDocs = BTreeMap<(String, String), String>;
+
+fn collect_field_docs(files: &[(String, syn::File)]) -> FieldDocs {
+    let mut out = FieldDocs::new();
+    for (_name, file) in files {
+        let mut v = FieldDocVisitor { out: &mut out };
+        v.visit_file(file);
+    }
+    out
+}
+
+struct FieldDocVisitor<'a> {
+    out: &'a mut FieldDocs,
+}
+
+impl Visit<'_> for FieldDocVisitor<'_> {
+    fn visit_item_struct(&mut self, item: &syn::ItemStruct) {
+        for f in &item.fields {
+            let Some(fname) = &f.ident else { continue };
+            let mut doc = String::new();
+            for a in &f.attrs {
+                if a.path().is_ident("doc") {
+                    if let syn::Meta::NameValue(nv) = &a.meta {
+                        doc.push_str(&nv.value.to_token_stream().to_string());
+                    }
+                }
+            }
+            if !doc.is_empty() {
+                self.out
+                    .entry((item.ident.to_string(), fname.to_string()))
+                    .or_default()
+                    .push_str(&doc);
+            }
+        }
+        syn::visit::visit_item_struct(self, item);
+    }
+}
+
+/// The deliberate-write-only marker vocabulary (case-insensitive): the
+/// canonical token, the Issue-142 wording ("deliberate, not dead
+/// payload"), and the Issue-147 wording ("deliberate forward surface" /
+/// "GOAT-gate territory" — the adjudication the redirect field doc now
+/// carries). Matched on the field doc only, reported at weak severity.
+fn is_deliberate_write_only_marker(doc: &str) -> bool {
+    let d = doc.to_lowercase();
+    d.contains("documented-write-only")
+        || d.contains("deliberate")
+        || d.contains("forward surface")
+        || d.contains("goat-gate territory")
+}
+
 impl Visit<'_> for SerdeStructMarker<'_> {
     fn visit_item_struct(&mut self, item: &syn::ItemStruct) {
         let derives_deserialize = item.attrs.iter().any(|a| {
@@ -496,6 +557,7 @@ fn dedup_candidates(candidates: &mut Vec<FieldCandidate>) {
 fn classify(
     candidates: &[FieldCandidate],
     ix: &InteractionIndex,
+    field_docs: &FieldDocs,
     files_scanned: usize,
 ) -> ConfigAuditReport {
     let mut report = ConfigAuditReport {
@@ -521,10 +583,21 @@ fn classify(
             }
         }
         if asserts > 0 {
-            report.assert_only.push(AssertOnly {
+            let row = AssertOnly {
                 candidate: cand.clone(),
                 assert_interactions: asserts,
-            });
+            };
+            let marked = field_docs
+                .get(&(cand.struct_name.clone(), cand.field_name.clone()))
+                .is_some_and(|d| is_deliberate_write_only_marker(d));
+            if marked {
+                // DOWNGRADE-not-suppress (the [wire-const] precedent): the
+                // row stays visible at annotation severity because the
+                // detector cannot verify the doc's deliberateness claim.
+                report.documented_write_only.push(row);
+            } else {
+                report.assert_only.push(row);
+            }
         }
     }
     classify_self_referential(candidates, ix, &mut report);
@@ -1151,11 +1224,12 @@ impl ConfigAuditReport {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B], {} self-referential config struct(s) [C2]",
+            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B], {} documented-write-only (annotation), {} self-referential config struct(s) [C2]",
             self.files_scanned,
             self.candidates,
             self.inert_knobs.len(),
             self.assert_only.len(),
+            self.documented_write_only.len(),
             self.self_referential.len()
         );
         for k in &self.inert_knobs {
@@ -1192,6 +1266,16 @@ impl ConfigAuditReport {
             let _ = writeln!(
                 out,
                 "      fix: replace the default-equality assert with a behavioral one"
+            );
+        }
+        for b in &self.documented_write_only {
+            let _ = writeln!(
+                out,
+                "  [documented-write-only] {} — {}.{} only ever asserted ({} assert touch(es), 0 reads) but the FIELD doc carries a deliberate-write-only marker (weak severity — the doc's claim is not verified; if it is NOT deliberate, drop the marker wording)",
+                b.candidate.origin,
+                b.candidate.struct_name,
+                b.candidate.field_name,
+                b.assert_interactions
             );
         }
         for s in &self.self_referential {
@@ -1325,6 +1409,124 @@ mod t {
         assert_eq!(r.assert_only.len(), 1, "assert-only field fires class B");
         assert_eq!(r.assert_only[0].candidate.field_name, "sc");
         assert!(r.render().contains("[B]"));
+    }
+
+    /// The Issue-030-class intake downgrade: a class-B row whose FIELD doc
+    /// carries a deliberate-write-only marker reports at the weak
+    /// `[documented-write-only]` annotation instead (downgrade-not-suppress,
+    /// the `[wire-const]` precedent — still visible, never counted as [B]).
+    #[test]
+    fn documented_write_only_marker_downgrades_class_b() {
+        let r = one(
+            r#"
+pub struct GuardVerdict {
+    /// Deliberate, not dead payload — the layout pin counts this field.
+    pub redirect: Option<u8>,
+}
+impl Default for GuardVerdict {
+    fn default() -> Self { Self { redirect: None } }
+}
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn pin() { let v = GuardVerdict::default(); assert_eq!(v.redirect, None); }
+}
+"#,
+        );
+        assert!(r.assert_only.is_empty(), "marked row downgrades out of [B]");
+        assert_eq!(r.documented_write_only.len(), 1);
+        let rendered = r.render();
+        assert!(rendered.contains("[documented-write-only]"));
+        assert!(rendered.contains("0 assert-only field(s) [B]"), "header [B] count is zero");
+    }
+
+    /// The Issue-147 field-doc wording ("GOAT-gate territory") — the
+    /// vocabulary the canonical specimen's field doc carries TODAY.
+    #[test]
+    fn goat_gate_territory_wording_downgrades() {
+        let r = one(
+            r#"
+pub struct V {
+    /// Phase-6 GOAT-gate territory — the channel is live and pinned.
+    pub redirect: Option<u8>,
+}
+impl Default for V { fn default() -> Self { Self { redirect: None } } }
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn pin() { let v = V::default(); assert_eq!(v.redirect, None); }
+}
+"#,
+        );
+        assert!(r.assert_only.is_empty());
+        assert_eq!(r.documented_write_only.len(), 1, "the Issue-147 wording downgrades");
+    }
+
+    #[test]
+    fn canonical_token_downgrades() {
+        let r = one(
+            r#"
+pub struct V {
+    /// documented-write-only: pinned wire surface.
+    pub f: bool,
+}
+impl Default for V { fn default() -> Self { Self { f: true } } }
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn pin() { let v = V::default(); assert!(v.f); }
+}
+"#,
+        );
+        assert!(r.assert_only.is_empty());
+        assert_eq!(r.documented_write_only.len(), 1);
+    }
+
+    /// The marker counts only on the FIELD doc — a struct-level doc speaks
+    /// for the whole type, not for one write-only member.
+    #[test]
+    fn struct_doc_marker_does_not_downgrade_field() {
+        let r = one(
+            r#"
+/// Deliberate forward surface struct.
+pub struct V { pub f: bool }
+impl Default for V { fn default() -> Self { Self { f: true } } }
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn pin() { let v = V::default(); assert!(v.f); }
+}
+"#,
+        );
+        assert_eq!(r.assert_only.len(), 1, "struct doc does not speak for one field");
+        assert!(r.documented_write_only.is_empty());
+    }
+
+    /// A doc WITHOUT any marker vocabulary is just documentation — the row
+    /// stays a class-B finding.
+    #[test]
+    fn plain_doc_stays_class_b() {
+        let r = one(
+            r#"
+pub struct V {
+    /// The redirect authority index.
+    pub f: bool,
+}
+impl Default for V { fn default() -> Self { Self { f: true } } }
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn pin() { let v = V::default(); assert!(v.f); }
+}
+"#,
+        );
+        assert_eq!(r.assert_only.len(), 1, "unmarked doc stays [B]");
+        assert!(r.documented_write_only.is_empty());
     }
 
     #[test]
