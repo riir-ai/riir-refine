@@ -34,6 +34,11 @@ is hereby formally adjudicated. Intake row filed for the detector UX
 candidate: explicit-path invocations should print the UNSCANNED sibling
 roots that exist (instrument-alive hint, never auto-expand).
 
+**Same-session landing:** the hint shipped as `src/scope_hint.rs`
+(`e743c155`) — canonicalize-first (the relative-`src` empty-path trap was
+caught by the live probe), partial-widening-only trigger, wired after both
+report call sites; live-verified on both instruments.
+
 ## `cargo heal --version` exit-2 regression — found by the global-binary rebuild, closed by merging the two hand-mirrored flag lists (2026-09-13, `ad31a04a`)
 
 Rebuilding the global `cargo-heal` from HEAD (the staleness caveat — the
