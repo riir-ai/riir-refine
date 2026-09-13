@@ -40,7 +40,9 @@ use std::path::{Path, PathBuf};
 use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
 use riir_clippy::draft::span_source::collect_source_files;
-use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
+use riir_clippy::draft::{
+    parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
+};
 use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::EvolveRecorder;
 
@@ -2815,7 +2817,7 @@ fn usage() -> ! {
 USAGE:
     cargo heal                                        <- DRY RUN: review what would be fixed (no edits)
     cargo heal --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
-    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker|dist>] [--top-k <N>] <path>...
+    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker|dist>] [--top-k <N>] [--clippy-json <path>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --mine                                 <- what mining is + policy + how to earn KAT
     cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
@@ -3037,6 +3039,14 @@ USAGE:
                     (unencrypted only) instead of generating one.
 {}{}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
+    --clippy-json <path>  Feed real clippy findings into --suggest / the dry
+                    run / the --fix review pass: `cargo clippy
+                    --message-format=json > f.json`, then pass f.json here.
+                    Spans at real diagnostics are force-included AHEAD of
+                    similarity ranking (marked [oracle]); lints with no
+                    corpus rule are marked [no corpus rule] (a live gap
+                    signal); feed-covered spans without a diagnostic are
+                    marked [heuristic]. Never spawns clippy itself.
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
@@ -3123,6 +3133,14 @@ struct Args {
     /// it encodes). Dry runs always report the fmt plan.
     no_fmt: bool,
     domain: Option<DomainId>,
+    /// `--clippy-json <path>` (2026-09-13 retrieval-miss intake): feed a
+    /// real `cargo clippy --message-format=json` stream into the suggest
+    /// pass — spans at real diagnostics are force-included AHEAD of
+    /// similarity ranking (`[oracle]`), lints with no corpus rule surface
+    /// as a gap signal (`[no corpus rule]`), and feed-covered spans with
+    /// no diagnostic are marked `[heuristic]`. Augments `--suggest` /
+    /// the bare dry run / the `--fix` review pass; never spawns clippy.
+    clippy_json: Option<String>,
     top_k: usize,
     verify: bool,
     /// `--no-verify`: opt out of the compile gate that --fix now defaults
@@ -3305,6 +3323,7 @@ fn parse_args() -> Args {
         quiet: false,
         no_fmt: false,
         domain: None,
+        clippy_json: None,
         top_k: 3,
         verify: false,
         no_verify: false,
@@ -3417,6 +3436,13 @@ fn parse_args() -> Args {
                     eprintln!("--limit expects a number, got {value:?}");
                     usage();
                 }));
+            }
+            "--clippy-json" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--clippy-json requires a value (a clippy JSON stream path)");
+                    usage();
+                };
+                args.clippy_json = Some(value);
             }
             "--generation" => {
                 let Some(value) = it.next() else {
@@ -3911,12 +3937,43 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
-fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: Option<DomainId>) {
+fn print_suggestion(
+    s: &SpanSuggestion,
+    matcher: &LatentMatcher,
+    domain_filter: Option<DomainId>,
+    feed_present: bool,
+) {
     let routed = s.routed_domain.label();
+    let anchored = !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty();
+    let mark = if anchored {
+        " [oracle]"
+    } else if feed_present && s.heuristic_only {
+        " [heuristic]"
+    } else {
+        ""
+    };
     println!(
-        "{}:{}-{} (routed: {routed})",
+        "{}:{}-{} (routed: {routed}){mark}",
         s.path, s.start_line, s.end_line
     );
+    // Oracle-anchored rules first: these are KNOWN findings — force-included
+    // ahead of similarity ranking (the 2026-09-13 intake's miss mechanism
+    // cannot eat them).
+    for (domain, lint) in &s.anchored_rules {
+        if domain_filter.is_some_and(|want| want != *domain) {
+            continue;
+        }
+        let info = matcher.rule_book(lint);
+        let fixed = info.map_or("?", |i| snippet_head(&i.fixed_code));
+        println!(
+            "  [{:<6}] {:<32} oracle finding  →  {fixed}",
+            domain.label(),
+            lint
+        );
+    }
+    for lint in &s.anchored_missing {
+        println!("  [oracle] {:<32} NO CORPUS RULE (gap signal)", lint);
+    }
     for (domain, rules) in &s.by_domain {
         if domain_filter.is_some_and(|want| want != *domain) {
             continue;
@@ -6939,6 +6996,32 @@ fn main() {
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
     let mut n_fixed_files = 0usize;
+    // ── the clippy-fed oracle anchors (2026-09-13 retrieval-miss intake):
+    // a real clippy JSON stream force-includes its diagnostic spans/rules
+    // AHEAD of similarity ranking — the top-N gate must never eat a span
+    // real clippy flagged. Loaded once; anchors are matched per file.
+    let clippy_feed: Option<Vec<ClippyDiagnostic>> = args.clippy_json.as_ref().map(|path| {
+        match std::fs::read_to_string(path) {
+            Ok(text) => {
+                let diags = parse_clippy_feed(&text);
+                if diags.is_empty() {
+                    eprintln!(
+                        "clippy feed: parsed 0 diagnostics from {path} — every span will be marked heuristic"
+                    );
+                }
+                diags
+            }
+            Err(e) => {
+                // A requested oracle that cannot be read is a hard error:
+                // silently falling back to ranking-only would re-create the
+                // confident miss this flag exists to prevent.
+                eprintln!("clippy feed: cannot read {path}: {e}");
+                std::process::exit(2);
+            }
+        }
+    });
+    let mut n_oracle_spans = 0usize;
+    let mut n_anchored_missing = 0usize;
     let mut n_fixed_edits = 0usize;
     // P12: re-proposal suppression. Default-on; the kill-switch re-enables
     // unconditional re-proposal (force retry of previously-reverted edits).
@@ -7366,13 +7449,37 @@ fn main() {
         // source — suggestions reference the user's current file; the fix
         // review above is the change record.
         if args.suggest || (args.fix && !args.quiet) {
-            for s in matcher.suggest_file(&src, &display, args.top_k) {
+            // Feed-file matching is tail-based (component boundary): clippy
+            // prints workspace-relative paths, scan paths are whatever the
+            // caller typed (clippy_feed::paths_ref_match).
+            let file_anchors: Vec<ClippyDiagnostic> = clippy_feed
+                .as_ref()
+                .map(|feed| {
+                    feed.iter()
+                        .filter(|d| paths_ref_match(&d.file, &display))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            let suggestions = if clippy_feed.is_some() {
+                matcher.suggest_file_anchored(&src, &display, args.top_k, &file_anchors)
+            } else {
+                matcher.suggest_file(&src, &display, args.top_k)
+            };
+            for s in suggestions {
                 n_chunks += 1;
-                if s.all_rules().is_empty() {
+                if s.all_rules().is_empty()
+                    && s.anchored_rules.is_empty()
+                    && s.anchored_missing.is_empty()
+                {
                     continue;
                 }
+                if !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty() {
+                    n_oracle_spans += 1;
+                    n_anchored_missing += s.anchored_missing.len();
+                }
                 n_suggestions += 1;
-                print_suggestion(&s, &matcher, args.domain);
+                print_suggestion(&s, &matcher, args.domain, clippy_feed.is_some());
             }
         }
 
@@ -7936,9 +8043,17 @@ fn main() {
     } else {
         "suggestions"
     };
+    let oracle_note = if clippy_feed.is_some() {
+        format!(
+            " · {} oracle-anchored · {} no-corpus-rule",
+            n_oracle_spans, n_anchored_missing
+        )
+    } else {
+        String::new()
+    };
     println!(
         "\nscanned {} {file_pl} · {} {span_pl} · {} with {sugg_pl} (top-{} per \
-         domain){mode}{non_syn_note}{fmt_note}",
+         domain){mode}{non_syn_note}{fmt_note}{oracle_note}",
         files.len(),
         n_chunks,
         n_suggestions,

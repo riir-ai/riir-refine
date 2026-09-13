@@ -16,6 +16,7 @@ use riir_rag::Chunker;
 
 use crate::domain::{HealDomain, HealEntry};
 
+use super::clippy_feed::ClippyDiagnostic;
 use super::corpus_index::{RuleIndex, ScoredRule};
 use super::domain_router::{DomainId, DomainRouter, RoutingEmbedding, SpectralOrder};
 
@@ -39,6 +40,22 @@ pub struct SpanSuggestion {
     /// Per-enabled-domain ranked rules (best first), one entry per domain
     /// that has an index.
     pub by_domain: Vec<(DomainId, Vec<ScoredRule>)>,
+    /// Oracle-anchored rules (the clippy-fed mode, 2026-09-13 intake):
+    /// rules KNOWN to fire at this span — real clippy found them —
+    /// force-included ahead of similarity ranking so the top-N gate
+    /// cannot eat a true positive. `(domain, rule_id)` pairs, domain from
+    /// the rule book. Empty on the plain (feed-less) path.
+    pub anchored_rules: Vec<(DomainId, String)>,
+    /// Oracle lint names at this span with NO corpus rule in this build —
+    /// a live corpus-gap signal, surfaced instead of swallowed (the
+    /// mining intake's input).
+    pub anchored_missing: Vec<String>,
+    /// True only when an oracle feed covered this file and NO diagnostic
+    /// fell inside this span: every ranked rule below is then
+    /// heuristic-only (similarity without an oracle signal — the intake's
+    /// false-positive datum). False when no feed covered the file (the
+    /// plain path claims nothing either way) and on anchored spans.
+    pub heuristic_only: bool,
 }
 
 impl SpanSuggestion {
@@ -527,6 +544,44 @@ impl LatentMatcher {
     /// (see [`Self::suggest_span`]); the router verdict annotates each span.
     /// Takes `&mut self` — the G4 scratch is reused across every span.
     pub fn suggest_file(&mut self, src: &str, path: &str, top_k: usize) -> Vec<SpanSuggestion> {
+        self.suggest_file_inner(src, path, top_k, None)
+    }
+
+    /// [`Self::suggest_file`] with oracle anchoring (the clippy-fed mode,
+    /// 2026-09-13 retrieval-miss intake): every anchor's lint is
+    /// force-included on the span containing its line — the rule book
+    /// decides `anchored_rules` (rule exists, domain known) vs
+    /// `anchored_missing` (gap signal) — and every span of the file with
+    /// no anchor is marked `heuristic_only`. Ranking itself is untouched:
+    /// anchoring is additive recall, never a re-ranker.
+    ///
+    /// Anchors in CHUNK GAPS get a synthesized line-span: the [`AstChunker`]
+    /// span quirk (measured 2026-09-13: a chunk's end is scanned from the
+    /// NORMALIZED signature length, which runs past the source `{`, so a
+    /// fn's chunk can end at its first body `;` — `area` chunks 1-2, not
+    /// 1-3 — leaving fn tails uncovered) means a real diagnostic can fall
+    /// in NO chunk; an oracle finding is never dropped for a coverage
+    /// gap. Synthetic spans carry no retrieval (`by_domain` empty) — the
+    /// oracle IS the signal.
+    pub fn suggest_file_anchored(
+        &mut self,
+        src: &str,
+        path: &str,
+        top_k: usize,
+        anchors: &[ClippyDiagnostic],
+    ) -> Vec<SpanSuggestion> {
+        self.suggest_file_inner(src, path, top_k, Some(anchors))
+    }
+
+    /// The shared file walk. `anchors` (when `Some`) carries this file's
+    /// real clippy findings; `None` is the plain feed-less path.
+    fn suggest_file_inner(
+        &mut self,
+        src: &str,
+        path: &str,
+        top_k: usize,
+        anchors: Option<&[ClippyDiagnostic]>,
+    ) -> Vec<SpanSuggestion> {
         let chunker = AstChunker;
         let chunks = chunker.chunk(src, path);
         let mut out = Vec::with_capacity(chunks.len());
@@ -538,9 +593,72 @@ impl LatentMatcher {
                 end_line: chunk.source.end_line,
                 routed_domain,
                 by_domain,
+                anchored_rules: Vec::new(),
+                anchored_missing: Vec::new(),
+                heuristic_only: false,
             });
         }
+        let Some(anchors) = anchors else {
+            return out;
+        };
+        for anchor in anchors {
+            // Chunks are disjoint + file-ordered, so the first containing
+            // span is THE span; `position` over a linear scan is honest at
+            // file scale (hundreds of chunks, not a hot path).
+            if let Some(span) = out
+                .iter_mut()
+                .find(|s| anchor.line >= s.start_line && anchor.line <= s.end_line)
+            {
+                push_anchor(span, &self.rule_book, anchor);
+            } else {
+                // The diagnostic falls in a CHUNK GAP (the AstChunker quirk
+                // documented on `suggest_file_anchored`): synthesize a
+                // line-span carrying the anchor, inserted in line order.
+                let mut synthetic = SpanSuggestion {
+                    path: path.to_string(),
+                    start_line: anchor.line,
+                    end_line: anchor.line,
+                    // A clippy-fed anchor is a clippy-domain finding by
+                    // construction; the [oracle] marker carries the truth.
+                    routed_domain: DomainId::Clippy,
+                    by_domain: Vec::new(),
+                    anchored_rules: Vec::new(),
+                    anchored_missing: Vec::new(),
+                    heuristic_only: false,
+                };
+                push_anchor(&mut synthetic, &self.rule_book, anchor);
+                let pos = out
+                    .iter()
+                    .position(|s| s.start_line > anchor.line)
+                    .unwrap_or(out.len());
+                out.insert(pos, synthetic);
+            }
+        }
+        for span in &mut out {
+            span.heuristic_only = span.anchored_rules.is_empty() && span.anchored_missing.is_empty();
+        }
         out
+    }
+}
+
+/// Attach one anchor's lint to a span: rule-book hit → `anchored_rules`
+/// (domain from the book), miss → `anchored_missing` (the corpus-gap
+/// signal). Same-lint duplicates anchor once.
+fn push_anchor(
+    span: &mut SpanSuggestion,
+    rule_book: &std::collections::HashMap<String, RuleInfo>,
+    anchor: &ClippyDiagnostic,
+) {
+    if let Some(info) = rule_book.get(&anchor.lint) {
+        if !span
+            .anchored_rules
+            .iter()
+            .any(|(_, id)| *id == anchor.lint)
+        {
+            span.anchored_rules.push((info.domain, anchor.lint.clone()));
+        }
+    } else if !span.anchored_missing.contains(&anchor.lint) {
+        span.anchored_missing.push(anchor.lint.clone());
     }
 }
 
@@ -706,5 +824,126 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             })
             .expect("some chunk must surface needless_return via the clippy list");
         assert_eq!(ret.start_line, 1);
+    }
+
+    // ── the clippy-fed anchored mode (2026-09-13 retrieval-miss intake) ──
+
+    fn anchor(file: &str, line: usize, lint: &str) -> super::super::clippy_feed::ClippyDiagnostic {
+        super::super::clippy_feed::ClippyDiagnostic {
+            file: file.to_string(),
+            line,
+            lint: lint.to_string(),
+        }
+    }
+
+    #[test]
+    fn anchored_feed_force_includes_the_rule_at_its_line() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
+            "sample.rs",
+            2,
+            "needless_return",
+        )]);
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line <= 2 && s.end_line >= 2)
+            .expect("a chunk covers line 2");
+        assert!(
+            span.anchored_rules
+                .iter()
+                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"),
+            "the oracle finding is force-included regardless of its ranked position"
+        );
+        assert!(!span.heuristic_only, "the anchored span is not heuristic");
+        // The FP datum: a feed-covered file's un-flagged chunks are marked.
+        assert!(
+            sugg.iter().any(|s| s.heuristic_only),
+            "some other chunk carries the heuristic_only marker"
+        );
+    }
+
+    #[test]
+    fn anchored_missing_lints_surface_as_gap_signal() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
+            "sample.rs",
+            2,
+            "definitely_not_a_corpus_rule",
+        )]);
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line <= 2 && s.end_line >= 2)
+            .expect("a chunk covers line 2");
+        assert_eq!(span.anchored_missing, vec!["definitely_not_a_corpus_rule".to_string()]);
+        assert!(span.anchored_rules.is_empty());
+        assert!(!span.heuristic_only, "a gap signal is still an oracle hit");
+    }
+
+    #[test]
+    fn plain_suggest_file_leaves_anchor_fields_default() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file(SAMPLE, "sample.rs", 3);
+        assert!(!sugg.is_empty());
+        for s in &sugg {
+            assert!(s.anchored_rules.is_empty());
+            assert!(s.anchored_missing.is_empty());
+            assert!(!s.heuristic_only, "the plain path claims nothing");
+        }
+    }
+
+    #[test]
+    fn duplicate_anchor_lints_in_one_chunk_dedup() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        // Lines 6+7 sit inside the `find_user` chunk under BOTH the
+        // current chunker span quirk (chunk 5-10, measured 2026-09-13)
+        // and a hypothetical fixed spanner (5-11).
+        let sugg = m.suggest_file_anchored(
+            SAMPLE,
+            "sample.rs",
+            3,
+            &[
+                anchor("sample.rs", 6, "needless_return"),
+                anchor("sample.rs", 7, "needless_return"),
+            ],
+        );
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line <= 6 && s.end_line >= 7)
+            .expect("a chunk covers both lines");
+        assert_eq!(span.anchored_rules.len(), 1, "same lint anchors once");
+    }
+
+    #[test]
+    fn gap_anchor_gets_a_synthesized_line_span() {
+        // Line 4 (the blank line between the fns) is covered by NO chunk
+        // under the current chunker quirk NOR under fixed spans — a pure
+        // gap. The oracle finding must still surface: a synthesized
+        // line-span carrying the anchor, inserted in line order.
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
+            "sample.rs",
+            4,
+            "needless_return",
+        )]);
+        let pos = sugg
+            .iter()
+            .position(|s| s.start_line == 4 && s.end_line == 4)
+            .expect("synthesized line-span at the gap");
+        let span = &sugg[pos];
+        assert!(span
+            .anchored_rules
+            .iter()
+            .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"));
+        assert!(span.by_domain.is_empty(), "no retrieval on a synthetic span");
+        assert!(!span.heuristic_only);
+        // Line-order insertion: every earlier span starts before 4, every
+        // later one starts after 4.
+        for (i, s) in sugg.iter().enumerate() {
+            if i < pos {
+                assert!(s.start_line <= 4);
+            } else if i > pos {
+                assert!(s.start_line > 4);
+            }
+        }
     }
 }

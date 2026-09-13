@@ -18,6 +18,10 @@
 //!   retrieved top-k (rule instantiation, not text similarity).
 //! - [`domain_router`] — T1.4: centroid `MoE` routing across enabled domains.
 //! - [`latent_matcher`] — T1.3 + T1.5: the composed file/span → rules pipeline.
+//! - [`clippy_feed`] — the 2026-09-13 retrieval-miss intake: a real-clippy
+//!   `--message-format=json` stream parsed into diagnostic anchors that
+//!   force-include their spans/rules AHEAD of similarity ranking (the
+//!   clippy-fed mode).
 //! - [`retrieval_eval`] — Issue 017: scaled precision eval (≥100 labeled
 //!   spans, top-1/3/5 recall per domain, regression-gate floors) that
 //!   re-measures on every corpus batch.
@@ -28,6 +32,7 @@
 
 #[cfg(feature = "clippy_verify")]
 pub mod clippy_oracle;
+pub mod clippy_feed;
 pub mod corpus_index;
 pub mod domain_router;
 pub mod eval_fixtures_clippy;
@@ -54,6 +59,7 @@ pub mod tpr_t4a_withheld;
 pub mod tpr_t6a_counterfactual;
 pub mod withheld_pair_ood;
 
+pub use clippy_feed::{parse_clippy_feed, paths_ref_match, ClippyDiagnostic};
 #[cfg(feature = "clippy_verify")]
 pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};

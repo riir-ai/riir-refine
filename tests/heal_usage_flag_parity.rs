@@ -29,6 +29,10 @@ const NOT_HEAL_FLAGS: &[&str] = &[
     // `--features <set>` in the usage text refers to CARGO's flag (the
     // "needs --features kat_service" hints), never a flag heal parses.
     "--features",
+    // Same class: the `--clippy-json` recipe quotes cargo CLIPPY's own
+    // `--message-format=json` invocation verbatim — it is the exact
+    // command the user must run, not a flag heal's parser ever sees.
+    "--message-format",
 ];
 
 fn heal_source() -> String {
