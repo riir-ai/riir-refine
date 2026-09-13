@@ -13,7 +13,7 @@
 //! ```text
 //! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1 · cum 15,080,719 tok)
 //!      grant     ⣿…⣄⣿⣿⣿  84.92 KAT left · 15.08 of 100 burned
-//!      sync      ✓ current — ledger matches · mint settles hourly · mint ↗
+//!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
 //!
 //! - The bar is a Braille fuel gauge: filled cells are the REMAINING grant
@@ -47,13 +47,17 @@ const GREEN: &str = "\x1b[32m";
 const AMBER: &str = "\x1b[33m";
 const RED: &str = "\x1b[31m";
 
-/// The `mint ↗` page for the account (OSC-8 hyperlink when colored).
+/// The `leaderboard ↗` page for the account (OSC-8 hyperlink when
+/// colored). The mint page is per-RECEIPT (`/mint/<32-hex receipt id>` —
+/// keyed by the receipt's own `[u8; 16]` id, not the account), so the
+/// account-scoped human surface is the leaderboard, where the row key is
+/// the pseudonym (see [`leaderboard_pseudonym`]).
 pub enum SyncState<'a> {
     /// The tail push was accepted (or there was nothing new to push): the
     /// on-disk ack watermark covers the local cumulative burn.
     Current {
-        /// The account's mint page.
-        mint_url: &'a str,
+        /// The leaderboard page.
+        ledger_url: &'a str,
     },
     /// The push failed (or never happened for this delta): whole-KAT
     /// gaps beyond the sub-KAT wire sliver are stacked, git-style. The
@@ -65,8 +69,8 @@ pub enum SyncState<'a> {
         micro_kat: u64,
         /// Mining batches queued in the outbox (0 = none).
         queued_batches: u32,
-        /// The account's mint page.
-        mint_url: &'a str,
+        /// The leaderboard page.
+        ledger_url: &'a str,
     },
     /// No account on this machine — nothing ever leaves it.
     LoggedOut,
@@ -93,6 +97,10 @@ pub struct KatFooter<'a> {
     pub meter_version: u32,
     /// The charge version stamp (`ChargeState::charge_version`).
     pub charge_version: u32,
+    /// The client account id (64-hex, BLAKE3(pubkey)) — the leaderboard
+    /// row hint derives from its ledger-width prefix. `None` when logged
+    /// out (no hint renders).
+    pub account_hex: Option<&'a str>,
     /// The sync line's state.
     pub sync: SyncState<'a>,
 }
@@ -143,15 +151,20 @@ impl KatFooter<'_> {
 
     fn render_sync(&self, color: bool) -> String {
         let gutter = "     sync      ";
+        let you = self
+            .account_hex
+            .and_then(leaderboard_pseudonym)
+            .map(|p| format!(" (you: {p})"))
+            .unwrap_or_default();
         match &self.sync {
-            SyncState::Current { mint_url } => format!(
+            SyncState::Current { ledger_url } => format!(
                 "{gutter}✓ current — ledger matches · mint settles hourly · {}",
-                link("mint ↗", mint_url, color)
+                link("leaderboard ↗", ledger_url, color) + &you
             ),
             SyncState::Unsynced {
                 micro_kat,
                 queued_batches,
-                mint_url,
+                ledger_url,
             } => {
                 let queued = if *queued_batches == 0 {
                     String::new()
@@ -162,7 +175,7 @@ impl KatFooter<'_> {
                     "{gutter}⚠ {} KAT unsynced (burn){queued}\n               pushing again next \
                      run · or `cargo heal sync` · {}",
                     fmt_kat_display(*micro_kat),
-                    link("mint ↗", mint_url, color)
+                    link("leaderboard ↗", ledger_url, color) + &you
                 )
             }
             SyncState::LoggedOut => format!(
@@ -307,8 +320,21 @@ pub fn braille_bar(remaining_frac: f64, width: usize, color: bool) -> String {
     }
 }
 
-/// OSC-8 hyperlink when colored (label `mint ↗`); plain dim `label url`.
-/// An empty URL renders nothing (the logged-out state has no page).
+/// The leaderboard row key for an account — the exact server projection
+/// (dapps `routes::pseudonym`): first 4 + last 4 hex of the LEDGER-WIDTH
+/// id with an ellipsis between (`c79c…5345`). The client's account id is
+/// the full 64-hex BLAKE3(pubkey); the ledger id is its first 32 hex
+/// (`account_for_pubkey` = `blake3(pubkey)[..16]` — "the client's own
+/// display id truncated to the ledger width"). `None` when the id is
+/// shorter than the ledger width (never hint a wrong row).
+#[must_use]
+pub fn leaderboard_pseudonym(account_hex: &str) -> Option<String> {
+    let h = account_hex.get(..32)?; // ledger width; None under it — never hint a wrong row
+    Some(format!("{}…{}", &h[..4], &h[h.len() - 4..]))
+}
+
+/// OSC-8 hyperlink when colored (label `leaderboard ↗`); plain dim `label
+/// url`. An empty URL renders nothing (the logged-out state has no page).
 fn link(label: &str, url: &str, color: bool) -> String {
     if url.is_empty() {
         return String::new();
@@ -332,7 +358,8 @@ fn paint_dim(s: &str, color: bool) -> String {
 mod tests {
     use super::*;
 
-    const MINT: &str = "https://devnet.ai.gist.rs/mint/d32b39858a6f246f6096854640f5f6ec";
+    const BOARD: &str = "https://devnet.ai.gist.rs/leaderboard";
+    const ACCT: &str = "c79c93b8615af9cc25968be2d0595345d1f03790910a2605d853f93af6192fd6";
 
     fn footer_left(left_micro: u64) -> KatFooter<'static> {
         KatFooter {
@@ -344,7 +371,8 @@ mod tests {
             rate_micro_per_mtok: 1_000_000,
             meter_version: 1,
             charge_version: 1,
-            sync: SyncState::Current { mint_url: MINT },
+            account_hex: Some(ACCT),
+            sync: SyncState::Current { ledger_url: BOARD },
         }
     }
 
@@ -412,12 +440,37 @@ mod tests {
     }
 
     #[test]
-    fn color_mode_hyperlinks_the_mint_label_plain_mode_spells_it() {
+    fn color_mode_hyperlinks_the_board_label_plain_mode_spells_it() {
         let colored = footer_left(84_919_281).render(true);
         assert!(colored.contains("\x1b]8;;"), "no OSC-8 link: {colored:?}");
+        assert!(colored.contains("(you: c79c…5345)"), "row hint missing");
         let plain = footer_left(84_919_281).render(false);
-        assert!(plain.contains(MINT), "plain mode must spell the URL");
+        assert!(plain.contains(BOARD), "plain mode must spell the URL");
         assert!(!plain.contains('\x1b'), "plain mode must be escape-free");
+    }
+
+    #[test]
+    fn pseudonym_mirrors_the_server_projection() {
+        // dapps routes::pseudonym over the ledger-width (first-32-hex) id:
+        // first 4 + last 4 with an ellipsis.
+        assert_eq!(
+            leaderboard_pseudonym(ACCT).as_deref(),
+            Some("c79c…5345")
+        );
+        assert_eq!(leaderboard_pseudonym("c79c93b8"), None);
+        assert_eq!(leaderboard_pseudonym(""), None);
+    }
+
+    #[test]
+    fn logged_out_renders_neither_link_nor_hint() {
+        let out = KatFooter {
+            account_hex: None,
+            sync: SyncState::LoggedOut,
+            ..footer_left(84_919_281)
+        }
+        .render(false);
+        assert!(!out.contains(BOARD));
+        assert!(!out.contains("you:"));
     }
 
     #[test]
@@ -426,7 +479,7 @@ mod tests {
             sync: SyncState::Unsynced {
                 micro_kat: 17_600,
                 queued_batches: 1,
-                mint_url: MINT,
+                ledger_url: BOARD,
             },
             ..footer_left(84_919_281)
         }
@@ -467,7 +520,7 @@ mod tests {
             sync: SyncState::Unsynced {
                 micro_kat: 17_600,
                 queued_batches: 1,
-                mint_url: MINT,
+                ledger_url: BOARD,
             },
             ..footer_left(84_919_281)
         };
@@ -486,12 +539,12 @@ mod tests {
     fn footer_carries_no_currency_figure() {
         for state in [
             SyncState::Current {
-                mint_url: MINT,
+                ledger_url: BOARD,
             },
             SyncState::Unsynced {
                 micro_kat: 1,
                 queued_batches: 0,
-                mint_url: MINT,
+                ledger_url: BOARD,
             },
             SyncState::LoggedOut,
             SyncState::Unknown,

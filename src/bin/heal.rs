@@ -3974,8 +3974,7 @@ fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
     for (domain, rules) in &sections {
         known.extend(rules.iter().map(String::as_str));
         let rows = riir_clippy::frontier_report::domain_queue(rules, &outcomes);
-        let section =
-            riir_clippy::frontier_report::render_domain_queue(domain, &rows, rules.len());
+        let section = riir_clippy::frontier_report::render_domain_queue(domain, &rows, rules.len());
         print_report_capped(&section, limit);
     }
 
@@ -4432,9 +4431,9 @@ fn finish_score_bench(
             std::path::Path::new(riir_clippy::frontier_report::SNAPSHOTS_JSONL),
         ) {
             Ok(outcome) => println!("frontier snapshot (089 T4 bench tail): {outcome}"),
-            Err(e) => eprintln!(
-                "frontier snapshot: bench-tail append failed (bench unaffected): {e}"
-            ),
+            Err(e) => {
+                eprintln!("frontier snapshot: bench-tail append failed (bench unaffected): {e}")
+            }
         }
     }
     #[cfg(not(feature = "latent_retrieval"))]
@@ -5043,11 +5042,7 @@ fn print_v8_shaped_table(
         };
         println!(
             "  {:<26} {:<13} verdict {:>4.1}  created {:?}{}",
-            f.id,
-            class,
-            verdict,
-            created,
-            drift_note
+            f.id, class, verdict, created, drift_note
         );
     }
     println!("per creation class (shaped / ran):");
@@ -6006,7 +6001,9 @@ fn main() {
                             .map(|text| {
                                 text.lines()
                                     .filter(|l| !l.trim().is_empty())
-                                    .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                                    .filter_map(|l| {
+                                        serde_json::from_str::<serde_json::Value>(l).ok()
+                                    })
                                     .filter(|v| {
                                         v.get("generation").and_then(|g| g.as_u64()) == Some(8)
                                     })
@@ -6034,9 +6031,9 @@ fn main() {
                     // x-axis must be monotone: a new row means "a new
                     // generation EXISTS", the boundary the correlation
                     // samples.
-                    let generation_frontier = runs.as_ref().map_or(0, |rs| {
-                        rs.iter().map(|r| r.generation).max().unwrap_or(0)
-                    });
+                    let generation_frontier = runs
+                        .as_ref()
+                        .map_or(0, |rs| rs.iter().map(|r| r.generation).max().unwrap_or(0));
                     let snap = riir_clippy::frontier_report::snapshot_from(
                         &summary,
                         &feed_rows,
@@ -6064,7 +6061,10 @@ fn main() {
                     }
                 }
                 Err(e) => {
-                    eprintln!("frontier-report: kv store at {} unreadable: {e}", kv.display());
+                    eprintln!(
+                        "frontier-report: kv store at {} unreadable: {e}",
+                        kv.display()
+                    );
                     std::process::exit(1);
                 }
             }
@@ -8081,18 +8081,18 @@ fn main() {
             &riir_clippy::kat_account::KatAccount::default_dir(),
         )
         .ok();
-        // The mint URL needs an account; the no-transport build never
-        // renders a link (Unknown/LoggedOut carry none), so it is computed
-        // only where it is read.
+        // The leaderboard link needs no account in the URL (the row key is
+        // the pseudonym); the no-transport build never renders a link
+        // (Unknown/LoggedOut carry none), so the URL is computed only where
+        // it is read.
         #[cfg(feature = "kat_transport")]
-        let mint_url = account
+        let ledger_url = account
             .as_ref()
-            .map(|a| {
+            .map(|_| {
                 format!(
-                    "{}/mint/{}",
+                    "{}/leaderboard",
                     riir_clippy::kat_lease_client::service_url_for_command()
-                        .trim_end_matches('/'),
-                    a.state().account_id
+                        .trim_end_matches('/')
                 )
             })
             .unwrap_or_default();
@@ -8114,13 +8114,13 @@ fn main() {
             let pushable_wire = c.state().charged_kat / wire;
             if pushable_wire <= ack.burn_kat_total {
                 riir_clippy::kat_footer::SyncState::Current {
-                    mint_url: &mint_url,
+                    ledger_url: &ledger_url,
                 }
             } else {
                 riir_clippy::kat_footer::SyncState::Unsynced {
                     micro_kat: (pushable_wire - ack.burn_kat_total).saturating_mul(wire),
                     queued_batches: 0,
-                    mint_url: &mint_url,
+                    ledger_url: &ledger_url,
                 }
             }
         };
@@ -8139,6 +8139,7 @@ fn main() {
             rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_KAT_PER_MILLION_TOKENS,
             meter_version: m.state().version,
             charge_version: c.state().charge_version,
+            account_hex: account.as_ref().map(|a| a.state().account_id.as_str()),
             sync,
         };
         println!(
@@ -8930,7 +8931,10 @@ mod mode_flag_tests {
             ("--config-audit", Box::new(|m| m.config_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),
-            ("--dump-trajectories", Box::new(|m| m.dump_trajectories = true)),
+            (
+                "--dump-trajectories",
+                Box::new(|m| m.dump_trajectories = true),
+            ),
         ];
         for (label, set) in cases {
             let mut m = Args::default();
