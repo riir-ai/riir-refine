@@ -1,7 +1,7 @@
 # Bench 085 — Issue 093 T2: the nonergodic driver wiring (ordering seam + observer + revive), mechanism gates + e2e no-regression
 
 **Status:** LANDED 2026-09-12 — wiring + gates GREEN; the GAIN axis is an honest NULL on every real surface available (the Bench 045 first-try-perfect class), with the family-error question now testable and the reopen trigger recorded.
-**Issue:** [093](../.issues/093_nonergodic_per_run_strategy_posterior.md) T2 · **PoC:** [Bench 084](084_nonergodic_driver_poc.md) · **Kernel:** katgpt-rs Plan 592 `NonergodicFilter<K,D>`
+**Issue:** `093` T2 · **PoC:** [Bench 084](084_nonergodic_driver_poc.md) · **Kernel:** katgpt-rs Plan 592 `NonergodicFilter<K,D>`
 **Feature:** `nonergodic_driver` (opt-in; NOT in the release set) · **Tests:** `tests/nonergodic_driver_ab.rs` (6/6, required-features gated)
 
 ## What landed

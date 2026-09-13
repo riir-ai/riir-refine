@@ -197,7 +197,7 @@ adjudicated here rather than deferred:
    strategies (ones that can fail a recheck) creates a wasted-attempt population,
    and §5's "nothing to reclaim" argument dies with it. Re-run this bench.
    **A second route to the same trigger, filed 2026-09-12 as
-   [Issue 099](../.issues/099_interacting_error_corpus.md): an INTERACTING-error
+   `Issue 099`: an INTERACTING-error
    corpus.** Every corpus this bench ran on is built from independent
    single-mutation cases — `compose_multi` concatenates members that cannot
    affect each other — so a fix can never re-break anything, which is a

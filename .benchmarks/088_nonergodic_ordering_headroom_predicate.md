@@ -4,7 +4,7 @@
 
 **Date:** 2026-09-12 · **Box:** Apple M3 Max (macOS 25.6.0), shared (load 9–21 across the runs) · **Toolchain:** rustc 1.98.1 (48a229cea 2026-09-01), pinned by `rust-toolchain.toml` · **Profile:** `--release`.
 
-> **Wiring + mechanism gates:** [Bench 085](085_nonergodic_driver_wiring.md) · **PoC:** [Bench 084](084_nonergodic_driver_poc.md) · **The prior null on the K=1 corpus:** [Bench 045](045_fix_compile_goat_corpus212.md) §G6/G7(b) · **The depth lever this bench reuses:** [Bench 087](087_fixseq_flip_prevalence.md) §3 (Issue 91 T2) · **Issue:** [093](../.issues/093_nonergodic_per_run_strategy_posterior.md).
+> **Wiring + mechanism gates:** [Bench 085](085_nonergodic_driver_wiring.md) · **PoC:** [Bench 084](084_nonergodic_driver_poc.md) · **The prior null on the K=1 corpus:** [Bench 045](045_fix_compile_goat_corpus212.md) §G6/G7(b) · **The depth lever this bench reuses:** [Bench 087](087_fixseq_flip_prevalence.md) §3 (Issue 91 T2) · **Issue:** `093`.
 
 ## What this bench adds (no new policy — it consumes the landed one)
 

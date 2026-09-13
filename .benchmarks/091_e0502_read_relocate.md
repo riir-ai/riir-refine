@@ -11,7 +11,7 @@ dead before landing: the E0499 swap can never keep on cold F3.
 
 **Date:** 2026-09-13 · **Box:** 4090 RTX box "shikuwa" (Windows 11, i7-13700K), cargo quiet (no sibling compute) · **Toolchain:** rustc 1.98.1 (48a229cea 2026-09-01) · **Profile:** `--release`.
 
-> **Issue:** [101](../.issues/101_e0502_read_relocate.md) · **Predecessors:** [Bench 090](090_e0614_unmasking_trade.md) (the F3 residual + the honest-revert repair this builds on) · **Gate instrument:** `examples/interacting_gate.rs`.
+> **Issue:** `101` · **Predecessors:** [Bench 090](090_e0614_unmasking_trade.md) (the F3 residual + the honest-revert repair this builds on) · **Gate instrument:** `examples/interacting_gate.rs`.
 
 ## The measured premise correction (design 1 → design 2, both probed)
 

@@ -12,7 +12,7 @@ restored byte-exact; and the corpus gained its first runs with flip POWER
 
 **Date:** 2026-09-13 · **Box:** 4090 RTX box "shikuwa" (Windows 11, i7-13700K), cargo quiet (no sibling compute) · **Toolchain:** rustc 1.98.1 (48a229cea 2026-09-01) · **Profile:** `--release`.
 
-> **Issue:** [100](../.issues/100_e0614_unmasking_trade.md) · **Predecessor:** [Bench 089](089_interacting_error_corpus.md) (the E0614 stall + the T4 regression this bench repairs) · **Gate instrument:** `examples/interacting_gate.rs`.
+> **Issue:** `100` · **Predecessor:** [Bench 089](089_interacting_error_corpus.md) (the E0614 stall + the T4 regression this bench repairs) · **Gate instrument:** `examples/interacting_gate.rs`.
 
 ## The premise correction (measured, not derived)
 

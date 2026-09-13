@@ -4,7 +4,7 @@
 
 **Date:** 2026-09-13 · **Box:** 4090 RTX box "shikuwa" (Windows 11, i7-13700K), cargo quiet (no sibling compute) · **Toolchain:** rustc 1.98.1 (48a229cea 2026-09-01) · **Profile:** `--release`.
 
-> **Issue:** [099](../.issues/099_interacting_error_corpus.md) · **Predecessors:** [Bench 087](087_fixseq_flip_prevalence.md) (the 0/230 flip/revert zero this corpus exists to unstick) · [Bench 088](088_nonergodic_ordering_headroom_predicate.md) (the null-gain ordering A/B) · **Gate instrument:** `examples/interacting_gate.rs`.
+> **Issue:** `099` · **Predecessors:** [Bench 087](087_fixseq_flip_prevalence.md) (the 0/230 flip/revert zero this corpus exists to unstick) · [Bench 088](088_nonergodic_ordering_headroom_predicate.md) (the null-gain ordering A/B) · **Gate instrument:** `examples/interacting_gate.rs`.
 
 ## What landed (T1 + T2 + T5)
 
