@@ -93,6 +93,7 @@ pub fn interacting_pairs() -> Vec<InteractingCase> {
     e0502_e0499_head_first_copy(&mut out);
     e0502_e0499_head_first_string(&mut out);
     e0502_e0499_mid_read(&mut out);
+    e0614_e0499_stale_star(&mut out);
     out
 }
 
@@ -257,6 +258,64 @@ fn e0502_e0499_mid_read(out: &mut Vec<InteractingCase>) {
             wrap(&a_broken_b_broken, "*head + v[0]"),
             wrap(&a_broken_b_fixed, "*head + v[0]"),
             wrap(&a_fixed_b_broken, "head + v[0]"),
+        );
+    }
+}
+
+/// F4 — the stale-star stratum (Issue 100): member A's mutation puts a deref
+/// star on a BY-VALUE binding's use (`head` → `*head`), the organic E0614;
+/// member B is the alias pair (E0499). Measured interaction (rustc 1.98.1,
+/// Issue 100's probes): the E0614 BLOCKS borrowck entirely — the broken pair
+/// reports exactly the one E0614; B's E0499 exists only once the star is
+/// removed. This is the family `e0614-deref-at-use` + the lexicographic keep
+/// rule exist to resolve: star-removal is a KEEP at equal count (masking
+/// 1→0 — the unmasking trade), then the swap finishes in one more keep.
+fn e0614_e0499_stale_star(out: &mut Vec<InteractingCase>) {
+    const TABLE: [(&str, &str, &str, &str); 12] = [
+        ("i32", "2i32, 3, 5", "7i32", "11i32"),
+        ("i32", "13i32, 17", "19i32", "23i32"),
+        ("i32", "1i32, 1", "2i32", "3i32"),
+        ("u8", "3u8, 5, 7", "11u8", "13u8"),
+        ("u8", "17u8", "19u8", "23u8"),
+        ("u64", "2u64, 4, 6", "8u64", "10u64"),
+        ("i16", "4i16, 6, 8", "10i16", "12i16"),
+        ("i16", "20i16", "30i16", "40i16"),
+        ("u32", "6u32, 8, 10", "12u32", "14u32"),
+        ("u32", "20u32, 22", "24u32", "26u32"),
+        ("i64", "3i64", "4i64", "5i64"),
+        ("i64", "1i64, 3, 5, 7", "9i64", "11i64"),
+    ];
+    for (i, (ty, init, x, y)) in TABLE.iter().enumerate() {
+        // Same ground truth as F1: pushes APPEND, so v[0] stays the first
+        // element and r = head + v[0] = 2 * first.
+        let first = init.split(',').next().unwrap_or_default().trim();
+        let gt = gt_module(&format!(
+            "let mut v = vec![{init}];\n        let r = super::probe(&mut v);\n        assert_eq!(r, 2 * {first});\n        assert_eq!(v.len(), {});",
+            init.split(',').count() + 2
+        ));
+        // A's segments: the binding is by-value in EVERY variant — the
+        // mutation is the stale star at the USE (byte-identical in `broken`
+        // and `a_only`, the shared-segment invariant).
+        let a_binding = "let head = v[0];";
+        let use_fixed = "head + v[0]";
+        let use_broken = "*head + v[0]";
+        let b_fixed = format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
+        let b_broken = format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
+        let wrap = |usex: &str, pair: &str| {
+            format!(
+                "pub fn probe(v: &mut Vec<{ty}>) -> {ty} {{\n    {a_binding}\n    {pair}\n    {usex}\n}}\n{gt}"
+            )
+        };
+        push_case(
+            out,
+            format!("ix_f4_e0614_e0499_star_{i:02}_{ty}"),
+            "E0614",
+            "E0499",
+            MutatorKind::AddDerefStar,
+            wrap(use_fixed, &b_fixed),
+            wrap(use_broken, &b_broken),
+            wrap(use_broken, &b_fixed),
+            wrap(use_fixed, &b_broken),
         );
     }
 }

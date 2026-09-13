@@ -11,6 +11,19 @@
 //! the driver observer), and the context-scoped revive policy — composed
 //! behind the opt-in `nonergodic_driver` feature.
 //!
+//! ## Measured verdict (Issue 093 closed 2026-09-13)
+//!
+//! The PoC win did not transfer to production surfaces: no gain on any
+//! real corpus ([Bench 088](../../../.benchmarks/088_nonergodic_ordering_headroom_predicate.md)
+//! — K=1 unmeasurable, chunked/strided parity, shared-handle regression)
+//! and on the interacting corpus every learned ordering REGRESSED
+//! ([Bench 089](../../../.benchmarks/089_interacting_error_corpus.md))
+//! until the keep SIGNAL was fixed — Issue 100's lexicographic keep rule
+//! repaired 10/34 to 34/46 parity for ALL arms
+//! ([Bench 090](../../../.benchmarks/090_e0614_unmasking_trade.md)).
+//! Static min-delta stays shipped; this module stays opt-in, out of the
+//! release set. Reopen triggers: Research 166 §B.
+//!
 //! ## The component family (the honest port)
 //!
 //! The `PoC`'s components were the world's own regime generators

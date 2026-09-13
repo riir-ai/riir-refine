@@ -9,6 +9,69 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## Issue 101 resolved — the E0502 read-relocate: F3 cleared, interacting corpus 100%, the first ordering IMPROVEMENT (2026-09-13, `32b19a1b`+ / Bench 091; hashes post-rebase on `5042af31`)
+
+The Bench-090 residual (F3's 12 stalls) cleared by **`e0502-read-relocate`** — the hoist-to-first-use template (delete the borrowed decl line, re-insert the by-value form immediately before the binding's FIRST USE by syn ident-boundary scan, drop the stars — rustc's own documented E0502 fix shape; min-delta's third rung; oracle arbitrates non-Copy + still-conflicting regions). **The shipped design is the second one**: design 1 (relocate-after-conflict's-last-use, keyed on the diag's `mutable borrow later used here` anchor) was MEASURED DEAD before landing — the T3 re-run showed the E0499 swap reverting at 2→2 on cold F3 (head's borrow spans to the tail, so the swap surfaces a SECOND E0502 at b's decl), making the targeted post-swap state unreachable; the `max_iters` 5→8 bump that dead path justified was REVERTED (the hoist needs 4 attempts, under the stock 5). **T3:** interacting corpus fix rate **100%** (F3 ring: deref-removal REV, clone-out REV, read-relocate KEEP(2→1), swap KEEP(1→0); invariant HOLDS ×116; depth {2:34, 4:12}). **T4 A/B — the first IMPROVEMENT verdict on this corpus**: every arm 46/46, shape-conditional + nonergodic-per-run at **10 reverts vs static's 24** (102 vs 116 iterations) — the completed feedback loop (Issue 100's honest reverts feed the counters; the learned arms skip the doomed rungs). The gain axis is WASTED ATTEMPTS, not resolved rate — clean stayed 46/46 on every arm, so the Issue-093 negative verdict (no learned ordering moves the resolved rate) STANDS; this refines its floor note (Bench 090's flat 34/46 parity) with a same-clean fewer-attempt axis. Floor: driver **66.7%** (E0502 row 33/38/0, unfixed 12→0; uncontested 139/139), **G1 172/172**, G2 p50 129ms (p99 323 — the F3 depth-4 tail, honest). F3 heals DIVERGED-from-seed (hoisted order ≠ seed; behaviorally equal, G1-verified) — "100%" is fix-rate, not seed-text-identity. `static` stays the shipped ordering (T4.2 promotion needs owner pull evidence, the 085 discipline). Second `FRONTIER_LANDINGS` row landed under the ledger ratchet. Issue file removed per the noise-reduction rule; this section + [Bench 091](../.benchmarks/091_e0502_read_relocate.md) are the record.
+
+## Issue 089 T4 hardening — the bench-tail frontier snapshot: generation boundaries record themselves (2026-09-13, `11c1799d`; the 7 lane runs + snapshot row #2 recorded the pre-rebase build sha `b17c2dd8` — identical diff, the rebase only moved the base)
+
+The T4 evidence clock had a fragile half: a band-mass snapshot existed only
+when somebody ran `--frontier-report` AT a generation boundary — but
+boundaries are created by score-bench runs, and lanes interleave (v1 reruns
+after v8 landings). A boundary nobody reports at is a boundary the
+band-mass ↔ next-generation-yield correlation never samples. The fix is
+mechanical: `finish_score_bench` (the ONE tail every generation lane runs —
+clippy 1/2/3/6/7/8, compile 4, perf 5) now calls
+`frontier_report::append_snapshot_at_frontier` right after its history
+append + store dual-write, so the just-recorded run IS in `score_runs` and
+a newly admitted generation raises the frontier in the same breath.
+
+- Same committed file (`.benchmarks/frontier_snapshots.jsonl`), same
+  state-change dedup, same FRONTIER-generation semantics as the report
+  path — two writers, one law, no drift.
+- `NoStore` / `EmptyPopulation` are SKIPS, never fabricated green-zero rows
+  (the report law); best-effort — one console line, never a bench failure.
+  A bench build without `latent_retrieval` prints the loud skip.
+- 3 lib tests (latent_retrieval-gated): the skip laws + the
+  append→dedup→generation-raise sequence (verdict seeding split from run
+  seeding so the gen-9 boundary lands with an IDENTICAL band — the exact
+  boundary-capture case).
+- **Live validation, same session (7 lane runs at `b17c2dd8`):** the v1
+  lane appended snapshot row #2 (gen-8, sha `b17c2dd8`, band-mass 5.6% —
+  identical to row #1's metrics: the sha axis moved, the band did not);
+  the six further lane runs each printed `unchanged — not appended`.
+  Rows ≥ generations, exactly as designed.
+- **T8 accumulation rode along** (rows #99-105): 8 rows now carry
+  `rule_outcomes` across 7 generations (1/3/4/5/6/7/8). The gen-3 lane is
+  the attribution-densest (36 rules); gen-4/5 carry the field with EMPTY
+  attribution (composite fixtures — the skip is loud); gen-2 contributed
+  NO row — the admission gate REFUSED its first append (heal_rate 1.0 ≥
+  v1's 0.9623: the healer outgrew the v2 k-ladder; honest refusal, by
+  design). The α grid-fit still waits on future generations.
+
+Issue 089 remains OPEN on accumulation only: T4's ≥3 FUTURE generation
+boundaries now self-record the moment generations 9+ land; T8's replay
+corpus grows by one row per bench run. The gate stays unwired until the
+evidence exists (report-first law).
+
+## Issue 093 resolved — per-run strategy posterior: PoC win real, wired policy NO GAIN anywhere, ordering closed NEGATIVE on evidence (2026-09-13, `0fec5257`+`8993ec51`+`27e8ffcf`+`b08ef85d` / Benches 084+085+088+089+090)
+
+Closed by the clause this issue pre-wrote in T4: "if the resolved rate still cannot move there [on 099's corpus], the ordering question is answered negative … and THIS issue closes on evidence rather than on a missing instrument." The rate DID move — downward for every learned arm, then back to parity when the keep SIGNAL was fixed — which answers it on evidence all the same.
+
+- **T1 (`0fec5257` / [Bench 084](.benchmarks/084_nonergodic_driver_poc.md)):** the per-run `NonergodicFilter` beat static min-delta AND the shipped shape-conditional ordering on the toy multi-error world (resolved 41.7% vs 35.2/36.7, McNemar p<1e-4; stale-store immune; ±20% misspec-robust; revive net-positive when context-scoped). Real — and never reproduced on a real corpus.
+- **T2 (`8993ec51` / [Bench 085](.benchmarks/085_nonergodic_driver_wiring.md)):** production wiring landed green (driver `with_observer`/`with_revive` seams, `nonergodic_driver` opt-in, 6/6 mechanism+e2e gates) with an honest gain-NULL — no real surface with revert dynamics existed yet.
+- **T4 (`27e8ffcf`+`b08ef85d` / [Bench 088](.benchmarks/088_nonergodic_ordering_headroom_predicate.md)):** three corpus widths — K=1 UNMEASURABLE, MULTI-5 chunked PARITY on an admissible instrument (the flat-counters control moves; nonergodic ties min-delta), MULTI-5 strided per-run PARITY with the shared-handle arm REGRESSING (135 iterations / 15 reverts vs 120 / 0). No gain on any surface; owed items (2)+(3) filed as Issue 099.
+- **099 T4 ([Bench 089](.benchmarks/089_interacting_error_corpus.md)):** the interacting corpus delivered the movable resolved rate — and every learned ordering REGRESSED clean 22/34→10/34 vs static min-delta (discord 0W/12L): per-attempt keep counters cannot distinguish a keep that enables the next fix from a keep that strands the run at a typeck-masked E0614. "The per-attempt keep signal is not a run-outcome signal on interacting corpora."
+- **Issue 100 ([Bench 090](.benchmarks/090_e0614_unmasking_trade.md)):** the lexicographic keep rule `(masking, count)` repaired the regression to 34/46 PARITY for every arm — the win was the SIGNAL fix, not any ordering. With honest counters, no learned arm beats static min-delta on any corpus, independent or interacting.
+
+**Final verdict:** the PoC's regime-identification advantage does not survive real playbooks (flat menus) and honest keep signals. Static min-delta stays shipped; `nonergodic_driver`/`nonergodic_poc` stay opt-in, out of the release set. Standing corollary (Bench 088 lane 3): never ship a long-lived `NonergodicOrdering` handle. T3's clause is executed in substance by this closure (negative verdict + reopen triggers → [Research 166 §B](.research/166_healer_kernel_fusion_re_research.md)): **reopen on** store densification per R135/Bench-047 · the organic `.heal/fixseq/` ring surface (still zero rings across 33 repos) accumulating runs with ≥2 revert-class attempts — replay the Bench 085 family-error A/B · any post-keep-fix corpus where the resolved rate moves between orderings AT ALL (Bench 090's flat 34/46 parity is the current floor).
+
+Issue file removed per the noise-reduction rule; this section + Research 166 §B + the five benches are the record.
+
+## Issue 100 resolved — the unmasking trade: E0614 playbook + lexicographic keep rule, the T4 regression REPAIRED (2026-09-13, `65b9ff11`+ / Bench 090; hashes post-rebase on `ae9da3d6`)
+
+The Bench-089 follow-up lead landed as the measured PAIR it had to be: **the playbook alone was inert** (probed before any code — the star-removal trades 1 error for 1 unmasked error, and the count-only keep rule reverts at 1→1), so the load-bearing half is the **lexicographic keep measure** `(masking, count)`: keep iff it strictly decreases lex. `MASKING_STAGE_CODES = ["E0614"]` (`diag.rs`, probe-measured membership — every future member needs its own masking transcript; a taxonomy guess would silently re-rank every keep). The `e0614-deref-at-use` playbook deletes the stale star when the primary span text is exactly `*ident` (`**x`/`*x.f`/`*f(x)` stay misses); the evolve-ledger ratchet reded until the `FRONTIER_LANDINGS` row landed in the same commit (its first row — the gate working as designed). **F4** (`ix_f4_e0614_e0499_star_*` ×12, `AddDerefStar`): broken = E0614 only (typeck masks borrowck); heals via `KEEP(1->1),m1->0` + swap — **the first legal equal-count keep in the driver's history**; gate **46/46 ADMITTED**. **F3's clone-out strand-keep is now an honest revert** (`REV(2->1),m0->1`), the run reaches the swap (also reverts), and the file is left byte-identical to the broken original — plus the corpus's first 3-attempt runs, so the flip instrument's power statement changed from 0 to 12 runs. **T4 A/B: the Bench-089 learned-arms regression (10/34) is REPAIRED — every arm 34/46** (clone-out's counters now carry the F1/F3 reverts, so no ordering prefers it on Copy strata); parity is the honest verdict — no learned win, static stays shipped. Floor: N 246→**258**, driver 60.2→**62.0%** (numerator 148→160), **G1 160/160**, G2 p50 129ms; G-floor 43.5→41.5% is numerator-stable dilution (the harness fixer cannot fix E0614 — the driver-only shape). `AttemptRecord.masking` extends the fixseq ring (`#[serde(default)]`; pre-100 rings read (0,0) consistently — every old keep had a strict count decrease at masking 0); the `fixseq_prevalence` invariant checker is lex-aware with 3 new canaries. F3 remains honestly unfixed (the E0502-on-indexed-clone residual needs a head-read REORDER no playbook ships — named lead, not scheduled). Issue file removed per the noise-reduction rule; this section + [Bench 090](../.benchmarks/090_e0614_unmasking_trade.md) are the record.
+
 ## Issue 099 resolved — the interacting-error corpus: gate 34/34, first non-zero reverts, learned orderings REGRESS clean 22→10 (2026-09-13, `a384acc1`+ / Bench 089)
 
 All five tasks landed. **T1+T2:** `src/domains/rustc_errors/corpus_interacting.rs` ships 34 shared-binding E0502×E0499 pairs in 3 families (F1 Copy head-first / F2 String / F3 mid-read), every case a structural 2×2 composed from SHARED segment tables (hand-copied variants drift — the design probe caught a variable-name drift reading as fake interaction); `examples/interacting_gate.rs` admits on two tiers (SET: pair multiset ≠ sum-of-singles keyed (code, line-TEXT); LADDER: playbook candidate menus for B across A's states) — **34/34 ADMITTED**, exit-1 on committed drift. **T3 (Bench 089):** depth {2:34}, flips 0 with power 0 (honest), invariant HOLDS ×68, **reverts 12 — the first non-zero revert rate on the stock driver** (every F3 deref-removal: the by-value `v[0]` re-fires E0502 as an instant borrow vs the live first `&mut`). **T4 (Bench 089):** the resolved rate MOVES — **every learned ordering regresses clean 22/34 → 10/34** (flat / shape-conditional / nonergodic shared+per-run; 0 reverts each vs static's 12; discord 0W/12L; HEADROOM 64≠0). Mechanism (state probes recorded in the bench): clone-out scores 22k/0f in per-attempt counters (F2 correct + F3 strand-keeps) so counter-driven orderings prefer it — but on the Copy strata it strands the run at an E0614 whose typeck error MASKS the remaining E0499 entirely. **The per-attempt keep signal is not a run-outcome signal on interacting corpora.** En route: the A/B auto-verdict compared reverts only and printed IMPROVEMENT over this regression — now requires clean ≥ static AND reverts ≤ static. **T5:** the 34 pairs joined the floor list (N 212→246; spot test +18 families; full-corpus integrity 246/246; floor re-pin G-floor 43.5% / driver 60.2% / **G1 semantics 148/148** / G2 p50 128ms). **Measured negative:** the issue's own mechanism 2 (E0505×E0597 repair-class collision) is exactly additive on rustc 1.93/1.98 — dropped per its decision criteria, recorded in module docs. Follow-up lead (post-mining intake, out of scope by the issue's non-goals): an E0614 deref-at-use playbook would unstrand F1/F3's clone-out paths. Issue file removed per the noise-reduction rule; this section + [Bench 089](../.benchmarks/089_interacting_error_corpus.md) are the record.

@@ -69,17 +69,30 @@ pub struct AttemptRecord {
     /// The loop outcome at this attempt.
     pub outcome: AttemptOutcome,
     /// Coded-error count before → after the attempt (equal on every revert
-    /// path; strictly decreasing on `Kept`).
+    /// path except a masking-increasing one; strictly decreasing on `Kept`
+    /// unless masking decreased — see `masking`).
     pub errors: (usize, usize),
+    /// Masking-stage count before → after (Issue 100): diagnostics whose
+    /// code is in [`super::diag::MASKING_STAGE_CODES`]. The keep rule is the
+    /// LEXICOGRAPHIC decrease of `(masking, count)` — a keep at equal count
+    /// is legal exactly when masking dropped (the unmasking trade: a typeck
+    /// error resolved, revealing the borrowck errors it was blocking).
+    /// `#[serde(default)]` so pre-Issue-100 rings deserialize as (0, 0) —
+    /// consistent, because under the old rule every `Kept` had a strict
+    /// count decrease at masking 0.
+    #[serde(default)]
+    pub masking: (usize, usize),
 }
 
 /// The loop outcome of one [`AttemptRecord`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum AttemptOutcome {
-    /// Applied and kept — the coded-error count strictly decreased.
+    /// Applied and kept — `(masking, count)` strictly decreased
+    /// lexicographically (Issue 100; before it: the count alone).
     Kept = 0,
-    /// Reverted: no progress (count did not decrease, or the span drifted).
+    /// Reverted: no progress (the lex pair did not decrease, or the span
+    /// drifted).
     RevertedNoProgress = 1,
     /// Reverted: i/o (the file could not be read or written).
     RevertedIo = 2,
@@ -236,7 +249,10 @@ pub struct FixCompileReport {
 
 impl FixCompileReport {
     /// Append one attempt to the ring (seq = current length — the push
-    /// order IS the try order).
+    /// order IS the try order). 8 params: the record's own transition pair
+    /// (`errors` + `masking`) stays inline rather than behind a one-use
+    /// struct (same call as `push_case`'s allow upstream).
+    #[allow(clippy::too_many_arguments)]
     fn push_attempt(
         &mut self,
         code: &str,
@@ -245,6 +261,7 @@ impl FixCompileReport {
         strategy_id: &str,
         outcome: AttemptOutcome,
         errors: (usize, usize),
+        masking: (usize, usize),
     ) {
         let seq = self.attempts.len();
         self.attempts.push(AttemptRecord {
@@ -254,6 +271,7 @@ impl FixCompileReport {
             strategy_id: strategy_id.to_string(),
             outcome,
             errors,
+            masking,
         });
     }
 }
@@ -513,6 +531,7 @@ impl CompileDriver {
 
             report.iterations += 1;
             let before_errors = diags.len();
+            let before_masking = masking_count(&diags);
 
             // Apply: splice + write.
             let Ok(original) = std::fs::read_to_string(&best.file) else {
@@ -523,6 +542,7 @@ impl CompileDriver {
                     &best.strategy_id,
                     AttemptOutcome::RevertedIo,
                     (before_errors, before_errors),
+                    (before_masking, before_masking),
                 );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
@@ -557,6 +577,7 @@ impl CompileDriver {
                     &best.strategy_id,
                     AttemptOutcome::RevertedNoProgress,
                     (before_errors, before_errors),
+                    (before_masking, before_masking),
                 );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
@@ -580,6 +601,7 @@ impl CompileDriver {
                     &best.strategy_id,
                     AttemptOutcome::RevertedIo,
                     (before_errors, before_errors),
+                    (before_masking, before_masking),
                 );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
@@ -607,21 +629,33 @@ impl CompileDriver {
                 Ok(d) => d,
             };
 
-            if new_diags.len() < before_errors {
+            // Issue 100 — the keep rule is the LEXICOGRAPHIC strict decrease
+            // of (masking-stage count, total count). A count decrease that
+            // INCREASES masking is a revert (the measured clone-out strand:
+            // trading two borrowck errors for one typeck error that blocks
+            // borrowck is regress, not progress); an equal-count trade that
+            // DROPS masking is a keep (the unmasking trade: a typeck error
+            // resolved, revealing the fixable borrowck errors it masked).
+            // Well-founded on ℕ× ℕ — the termination argument survives.
+            let after_errors = new_diags.len();
+            let after_masking = masking_count(&new_diags);
+            let kept = (after_masking, after_errors) < (before_masking, before_errors);
+            if kept {
                 report.push_attempt(
                     &best.code,
                     &best.file,
                     best.line,
                     &best.strategy_id,
                     AttemptOutcome::Kept,
-                    (before_errors, new_diags.len()),
+                    (before_errors, after_errors),
+                    (before_masking, after_masking),
                 );
                 report.applied.push(AppliedRecord {
                     file: best.file.clone(),
                     line: best.line,
                     code: best.code.clone(),
                     strategy_id: best.strategy_id.clone(),
-                    errors: (before_errors, new_diags.len()),
+                    errors: (before_errors, after_errors),
                     shape,
                     fix: best.replacement.clone(),
                     semantic_note: best.semantic_note,
@@ -644,7 +678,8 @@ impl CompileDriver {
                     best.line,
                     &best.strategy_id,
                     AttemptOutcome::RevertedNoProgress,
-                    (before_errors, new_diags.len()),
+                    (before_errors, after_errors),
+                    (before_masking, after_masking),
                 );
                 report.reverted.push(RevertedRecord {
                     file: best.file.clone(),
@@ -695,6 +730,13 @@ impl CompileDriver {
 struct ResolvedDiag {
     diag: RustcErrorDiag,
     pkg: PathBuf,
+}
+
+/// Count diagnostics whose code sits at a masking stage
+/// ([`crate::domains::rustc_errors::diag::MASKING_STAGE_CODES`]) — the
+/// primary term of the keep rule's lexicographic measure (Issue 100).
+fn masking_count(diags: &[ResolvedDiag]) -> usize {
+    diags.iter().filter(|d| d.diag.is_masking()).count()
 }
 
 /// Resolve a diagnostic's primary span to an absolute path, read the
@@ -835,11 +877,21 @@ mod tests {
             strategy_id: "e0507-move-out".to_string(),
             outcome: AttemptOutcome::RevertedNoProgress,
             errors: (4, 4),
+            masking: (1, 1),
         };
         let line = serde_json::to_string(&r).unwrap();
         let back: AttemptRecord = serde_json::from_str(&line).unwrap();
         assert_eq!(back, r);
         assert_eq!(r.outcome.label(), "reverted:no-progress");
+        // Issue 100 — a PRE-issue-100 ring line (no `masking` field)
+        // deserializes as (0, 0): the old rule's keeps all had a strict
+        // count decrease at masking 0, so the default read is consistent,
+        // never a misclassification.
+        let old =
+            r#"{"seq":0,"code":"E0502","span_hash":"x","strategy_id":"s","outcome":"Kept","errors":[2,1]}"#;
+        let legacy: AttemptRecord = serde_json::from_str(old).unwrap();
+        assert_eq!(legacy.masking, (0, 0));
+        assert_eq!(legacy.errors, (2, 1));
     }
 
     #[test]
