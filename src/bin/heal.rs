@@ -6144,6 +6144,10 @@ fn main() {
         if !hint.is_empty() {
             println!("{hint}");
         }
+        let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
+        if !cross.is_empty() {
+            println!("{cross}");
+        }
         return;
     }
 
@@ -6169,6 +6173,10 @@ fn main() {
         let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
         if !hint.is_empty() {
             println!("{hint}");
+        }
+        let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
+        if !cross.is_empty() {
+            println!("{cross}");
         }
         if report.blind.is_some() {
             std::process::exit(1);

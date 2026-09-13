@@ -290,6 +290,7 @@ pub mod frontier_report;
 pub mod config_audit;
 pub mod orphan_report;
 pub mod scope_hint;
+pub mod downstream_hint;
 
 // The KAT run footer (2026-09-13 redesign): the glanceable 3-line billing
 // readout that replaced the two `summary_line()` walls in bin/heal.rs —

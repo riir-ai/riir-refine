@@ -8,6 +8,74 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## P14 post-mining intake — the cross-repo consumer-surface hint landed: the FP-class #3 open candidate closes (2026-09-14)
+
+The FP-class #3 row's last open candidate (family (b) probed dormant
+2026-09-14; the cross-repo half was "the bigger measured share and has NO
+instrument surface yet"). The 943 scoped-scan class measured 44% FP on a
+NON-LEAF scan, and 4-of-7 FPs were **cross-repo production reads** — fields
+DEFINED in the scanned repo, READ in a downstream sibling that imports its
+crates (`SftWarmupConfig` dying at riir-train-gpu `pipeline.rs` while living
+in riir-ai). Neither a wider intra-repo scope nor the existing scope hint
+can see that blind half: the 943 pass was FULL-scope.
+
+**Instrument: `src/downstream_hint.rs`** — after `--config-audit` /
+`--orphan-report`, a one-line cross-repo hint naming every sibling repo ON
+DISK whose manifests path-dep into the scanned repo, with the count of
+DISTINCT dep-target crates (deduped across member manifests; dev-deps count
+— the FP class includes test readers). Never widens the scan (the
+scope_hint law); fires whenever ≥1 consumer exists, INCLUDING full `.`
+scans (the difference from scope_hint's partial-widening gate — this blind
+spot is not operator-made).
+
+**Design decisions, both probe-forced:**
+
+1. **Measured-graph discovery, NOT the BOUNDARY.md tables the intake
+   row originally proposed.** `path = "..."` values in the sibling's
+   manifests, canonicalized and prefix-matched against the scanned repo
+   root (identifier-guarded textual scanner — no toml dep, the dist-domain
+   hand-written-scanner precedent). Prose drifts (boundary-guard exists for
+   that); manifests cannot. On-disk only — a partial-clone box names its
+   subset, and "on disk" is in the message for that reason.
+2. **Root + workspace-member manifests, NEVER a recursive tree walk.**
+   The first shell probe (`find` over all sibling trees for Cargo.toml)
+   TIMED OUT at 120s on this 24-dir Windows box (`zed`, `vendor`…).
+   Discovery reads the sibling root Cargo.toml + declared `members` globs
+   (multi-line array parsing included) + conventional `crates/*` /
+   `examples/*` / `benches/*` probes — direct file opens, ~50 ms for the
+   whole box.
+
+The scanned repo root is the TOPMOST Cargo.toml-holding ancestor of the
+first target (the workspace, not the nearest crate — a scan of `crates/x`
+must name consumers of ANY crate in the repo, since reads of `crates/x`'s
+types can sit in a sibling that deps a different crate). Repos only (a
+`.git` FILE counts — linked worktrees are real read surfaces).
+
+**Two test-fixture lessons worth keeping:** (1) the member-manifest
+dep-path level count — from `repoB/crates/b`, `../../repoA` resolves to
+`repoB/repoA` (two levels up is repoB, not the parent); members need
+`../../../repoA`. Four fixtures had it wrong and the code was right — the
+debug probe (canonicalize returning `Err(NotFound)` on `repoB\repoA`)
+settled attribution in one run. (2) the topmost walk OVERSHOOTS a fake repo
+nested inside a real repo tree (a fake under `target/` claims the REAL
+repo as root) — correct behavior for the nested-repo shape, so the
+relative-path test places its fake directly under the workspace root
+(cwd's parent — same volume, no Cargo.toml above the fake).
+
+**Validation:** 15 module tests (consumer naming, leaf silence, third-repo
+and internal deps excluded, declared-member + conventional-member
+discovery, dev-dep counting, dedupe, topmost walk, worktree `.git` file,
+relative target, live-shape `src` leaf silence, scanner shapes, multi-line
+members); lib 1385/1385; clippy clean on the module. Live probes through
+the real binary: `--config-audit ../katgpt-rs` → **12 sibling repos**
+(riir-ai 20 crates, riir-train 12, riir-auth 9, riir-dapps 9, riir-kat 9,
+riir-chain 3, +6 more) — matching the independent shell-probe ground
+truth exactly; `--config-audit .` on the leaf → silent; `--config-audit
+src` (relative, from the scanned repo's CWD) → both hints fire;
+`--config-audit ../riir-ai` → names **riir-train (10 crates) first** — the
+exact 943 specimen consumer; `--orphan-report` on a fake → the hint prints
+even on the blind-history-leg refusal path.
+
 ## P13 post-mining intake — the FP-class #3 refinement (a) landed: trait-impl reads are external, and the probe surfaced the payload-Result class (2026-09-14)
 
 The first consumption of the FP-class #3 row (the 772/546/943 harvest).
