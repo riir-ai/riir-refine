@@ -35,7 +35,7 @@ candidate: explicit-path invocations should print the UNSCANNED sibling
 roots that exist (instrument-alive hint, never auto-expand).
 
 **Same-session landing:** the hint shipped as `src/scope_hint.rs`
-(`e743c155`) — canonicalize-first (the relative-`src` empty-path trap was
+(`d4e87f54`) — canonicalize-first (the relative-`src` empty-path trap was
 caught by the live probe), partial-widening-only trigger, wired after both
 report call sites; live-verified on both instruments.
 
