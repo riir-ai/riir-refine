@@ -153,7 +153,7 @@ pub enum RerankMode {
 /// casualty one further position — first-found at depth **17** (measured
 /// by the guard's discovery sweep, now first-class diagnostics) — so 17
 /// is the measured minimum and 20 the ladder-rung pin with slack 3.
-/// The pool_depth_rescue_guard re-firing on the next vec-shaped corpus
+/// The `pool_depth_rescue_guard` re-firing on the next vec-shaped corpus
 /// entry is the designed prompt to re-measure, not a defect.
 pub const RERANK_POOL: usize = 20;
 

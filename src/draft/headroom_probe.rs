@@ -53,7 +53,7 @@ use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, Ow
 pub const HEADROOM_DEPTHS: [usize; 5] = [8, 12, 16, 20, 24];
 
 /// Index of the production depth within [`HEADROOM_DEPTHS`].
-/// 12 → 16 at the P10 re-pin (2026-09-13, RERANK_POOL 12 → 16 after the
+/// 12 → 16 at the P10 re-pin (2026-09-13, `RERANK_POOL` 12 → 16 after the
 /// corpus +2 crowded the Issue-024 casualty from raw rank 9 to 15); 16 → 20
 /// at the P11 re-pin (same day — the `format_collect` corpus entry crowded
 /// the casualty one further position, first-found at depth 17); the array
