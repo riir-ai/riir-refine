@@ -47,7 +47,8 @@ there) — fixed platform-portable `all(any(unix, windows), ..)` in
 `bbea191e`, all-features lib now 2243/0. Class (b) (cfg-union dead_code)
 STANDS documented out of syntax-corpus scope — feature-lattice
 reasoning, the `cfg_row_implication` audit-family neighbor; zero
-recurrences to date.
+recurrences at landing (recurrence #2 landed same-day: ai `43cbd655d`,
+the platform-axis BridgeFns variant — noted in the intake row).
 
 ## The physician-heal-thyself self-audit — config-audit + orphan-report over riir-clippy itself at FULL scope (2026-09-14)
 
