@@ -9,6 +9,42 @@
 > so they remain valid.
 # HISTORY.md — riir-clippy
 
+## P10 post-mining intake — the 089-T3 corpus-gap pair landed, and the probe inverted the intake's own description (2026-09-13)
+
+The 2026-09-12 intake row (post-mining class: lints the mechanical fixer
+needed BY HAND while it healed around them on `src/bin/heal.rs`) consumed
+as a corpus pass: `filter_map_bool_then` + `vec_init_then_push`, corpus
+**49 → 51**, both **VERIFY-tier**. The probe (temp crate, rustc 1.98.1,
+JSON + `--fix` applicability) corrected the intake's premise before
+anything landed — the probe-first law doing its job on our OWN intake
+notes: the intake described `filter_map_bool_then` as a "filter+map split"
+lint; the probe showed the reverse — it fires on `bool::then` INSIDE
+`filter_map` (`.filter_map(|x| p(x).then(|| b(x)))`), on-by-default, with
+the `.filter(|&x| p).map(|x| b)` split as clippy's own machine-applicable
+FIX (byte-matched by the proposer against the applied `--fix` output).
+Probed trigger surface: any predicate shape (bare flags, method calls),
+block `then` bodies, chained adapters fire; `then_some`, non-Copy items
+(the `|&x|` pattern binds Copy only), `move`/`mut` bindings silent. That
+Copy corner is why it lands VERIFY: E0507 is CHECK-visible so the compile
+gate backs the syn-blind half (the manual_is_multiple_of E0689 lesson
+checked and NOT applicable). `vec_init_then_push`: on-by-default,
+help-only in real clippy (`--fix` applied 0/3 even on the plain shape —
+probed), fires on `Vec::new()` AND `vec![]`, with annotation, AND on
+attributed pushes — the cfg-gate divergence documented at landing: our
+proposer REFUSES attributed pushes (a `vec![]` literal cannot carry cfg'd
+elements; comment-guarded `allow` stays the correct fix for that shape —
+the `domain_corpus_sections` precedent in `src/bin/heal.rs`) and every
+parse-visible later mutable use (any method call on `v`, assignment /
+compound-assign targets, `&mut`-subtree mentions), interior comments.
+25 proposer unit tests; both corpus fixtures fire/silent-verified against
+REAL clippy. Count surfaces: `corpus_size` pin 49→51,
+`all_lints_fire_and_parse` 48→50, excluded-from-FIXABLE +2, AGENTS
+51/38/10, `.docs/02_corpus/seed_corpus.md` completed in the same commit
+(the header was stale at 40 and the Batch 91 + P7 sections were missing —
+pre-existing drift repaired alongside, the doc-sync rule). Snapshot row
+marked DONE with the probe correction; the wire-FP #2 parent ticked
+`[x]` (landed `a34b39be` — the stale-checkbox half of this unit).
+
 ## Issue 101 resolved — the E0502 read-relocate: F3 cleared, interacting corpus 100%, the first ordering IMPROVEMENT (2026-09-13, `32b19a1b`+ / Bench 091; hashes post-rebase on `5042af31`)
 
 The Bench-090 residual (F3's 12 stalls) cleared by **`e0502-read-relocate`** — the hoist-to-first-use template (delete the borrowed decl line, re-insert the by-value form immediately before the binding's FIRST USE by syn ident-boundary scan, drop the stars — rustc's own documented E0502 fix shape; min-delta's third rung; oracle arbitrates non-Copy + still-conflicting regions). **The shipped design is the second one**: design 1 (relocate-after-conflict's-last-use, keyed on the diag's `mutable borrow later used here` anchor) was MEASURED DEAD before landing — the T3 re-run showed the E0499 swap reverting at 2→2 on cold F3 (head's borrow spans to the tail, so the swap surfaces a SECOND E0502 at b's decl), making the targeted post-swap state unreachable; the `max_iters` 5→8 bump that dead path justified was REVERTED (the hoist needs 4 attempts, under the stock 5). **T3:** interacting corpus fix rate **100%** (F3 ring: deref-removal REV, clone-out REV, read-relocate KEEP(2→1), swap KEEP(1→0); invariant HOLDS ×116; depth {2:34, 4:12}). **T4 A/B — the first IMPROVEMENT verdict on this corpus**: every arm 46/46, shape-conditional + nonergodic-per-run at **10 reverts vs static's 24** (102 vs 116 iterations) — the completed feedback loop (Issue 100's honest reverts feed the counters; the learned arms skip the doomed rungs). The gain axis is WASTED ATTEMPTS, not resolved rate — clean stayed 46/46 on every arm, so the Issue-093 negative verdict (no learned ordering moves the resolved rate) STANDS; this refines its floor note (Bench 090's flat 34/46 parity) with a same-clean fewer-attempt axis. Floor: driver **66.7%** (E0502 row 33/38/0, unfixed 12→0; uncontested 139/139), **G1 172/172**, G2 p50 129ms (p99 323 — the F3 depth-4 tail, honest). F3 heals DIVERGED-from-seed (hoisted order ≠ seed; behaviorally equal, G1-verified) — "100%" is fix-rate, not seed-text-identity. `static` stays the shipped ordering (T4.2 promotion needs owner pull evidence, the 085 discipline). Second `FRONTIER_LANDINGS` row landed under the ledger ratchet. Issue file removed per the noise-reduction rule; this section + [Bench 091](../.benchmarks/091_e0502_read_relocate.md) are the record.

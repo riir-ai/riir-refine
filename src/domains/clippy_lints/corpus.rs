@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 49 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 51 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 33
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -26,7 +26,10 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 /// provability — see `.benchmarks/021`; the Batch 89 pair from the Plan
 /// 049 T0.1 real-code fired histogram, Bench 061) + the 2 Batch 90
 /// fired-histogram pedantic rows + the 4 Batch 91 clippy-1.98 new-lint
-/// rows (P9 intake, all four suggestion-only in real clippy).
+/// rows (P9 intake, all four suggestion-only in real clippy) + the 2
+/// P10 post-mining intake rows (2026-09-13, the 089-T3 usage artifact —
+/// both probe-verified on-by-default in clippy 1.98, the pair the
+/// mechanical fixer needed by hand on `src/bin/heal.rs`).
 // 49-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
@@ -416,10 +419,29 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // 1.98.1 and real clippy is MSRV-aware (it never fires on an
             // older declared rust-version), so the suggest path is
             // inherently safe; the module doc carries the note.
-            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}"
-                .to_string(),
-            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(chunk));\n    }\n    out\n}"
-                .to_string(),
+            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}".to_string(),
+            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(chunk));\n    }\n    out\n}".to_string(),
+        },
+        // ── P10 post-mining intake (2026-09-13, the 089-T3 usage artifact) ──
+        // Both probe-verified on-by-default in clippy 1.98 (probe crate,
+        // 2026-09-13). filter_map_bool_then: MachineApplicable in real
+        // clippy but the emitted `|&x|` binds only Copy items (String
+        // items silent — probed) → VERIFY tier (E0507 is check-visible).
+        // vec_init_then_push: help-only in real clippy (--fix applied 0/3
+        // even on the plain shape — probed); the proposer's parse-visible
+        // guards (later-mutable-use refusal, attributed/cfg'd push refusal)
+        // narrow the MaybeIncorrect class → VERIFY tier.
+        ClippyFixEntry {
+            lint_name: "filter_map_bool_then".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn kept(xs: Vec<i32>) -> Vec<i32> {\n    xs.into_iter().filter_map(|x| (x > 0).then(|| x * 2)).collect()\n}".to_string(),
+            fixed_code: "fn kept(xs: Vec<i32>) -> Vec<i32> {\n    xs.into_iter().filter(|&x| (x > 0)).map(|x| x * 2).collect()\n}".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "vec_init_then_push".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn build() -> Vec<u8> {\n    let mut v = Vec::new();\n    v.push(1);\n    v.push(2);\n    v\n}".to_string(),
+            fixed_code: "fn build() -> Vec<u8> {\n    let v = vec![1, 2];\n    v\n}".to_string(),
         },
     ])
 }
@@ -493,14 +515,15 @@ mod tests {
     }
 
     /// Corpus size pin: 10 seed, 31 expansion/post-mining, 2 Batch 89,
-    /// 2 Batch 90, and 4 Batch 91 (the clippy-1.98 new-lint batch) = 49.
+    /// 2 Batch 90, 4 Batch 91, and the 2 P10 post-mining intake rows
+    /// (2026-09-13) = 51.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_49() {
+    fn corpus_size_is_51() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 49);
+        assert_eq!(corpus.entries.len(), 51);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

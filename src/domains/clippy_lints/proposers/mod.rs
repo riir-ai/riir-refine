@@ -129,8 +129,9 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`' match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 49 lints ship today (10 seed +
-//! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row); future lints drop in by extending the
+//! structural, a row in [`FIXABLE_LINTS`]). 51 lints ship today (10 seed +
+//! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
+//! Batch 89/90/91 rows + the P10 post-mining intake pair); future lints drop in by extending the
 //! match.
 
 pub mod byte_char_slices;
@@ -140,6 +141,7 @@ pub mod collapsible_if;
 pub mod comparison_to_empty;
 pub mod deref_addrof;
 pub mod double_parens;
+pub mod filter_map_bool_then;
 pub mod filter_next;
 pub mod helpers;
 pub mod identity_op;
@@ -181,6 +183,7 @@ pub mod unused_unit;
 pub mod use_self;
 pub mod useless_conversion;
 pub mod useless_format;
+pub mod vec_init_then_push;
 pub mod while_let_on_iterator;
 pub mod wildcard_in_or_patterns;
 
@@ -346,6 +349,24 @@ pub const VERIFY_LINTS: &[&str] = &[
     // MSRV-aware so the suggest path is inherently safe — documented in the
     // module doc).
     "chunks_exact_to_as_chunks",
+    // P10 post-mining intake (2026-09-13, the 089-T3 usage artifact — the
+    // healer needed both by hand on `src/bin/heal.rs`). VERIFY: real
+    // clippy's suggestion is MachineApplicable but the emitted `|&x|`
+    // filter pattern binds only COPY items (String items are silent in real
+    // clippy — probed); syn cannot see the item type, so a non-Copy site is
+    // an E0507 the check-level compile gate reverts (the E0507 class is
+    // check-visible, unlike E0689 — see the manual_is_multiple_of lesson).
+    "filter_map_bool_then",
+    // P10 post-mining intake (2026-09-13): `let mut v = Vec::new();
+    // v.push(a); v.push(b);` → `let v = vec![a, b];`. VERIFY: real clippy's
+    // suggestion is help-only (MaybeIncorrect — `--fix` applied 0/3 even on
+    // the plain shape, probed 2026-09-13) because later mutable uses make
+    // dropping `mut` an E0384; this proposer refuses every parse-visible
+    // later use (any method call on `v`, assignment targets, `&mut`) and
+    // refuses attributed/cfg'd pushes outright (a `vec![]` literal cannot
+    // carry cfg'd elements — the documented divergence; the correct fix for
+    // that shape is a comment-guarded allow).
+    "vec_init_then_push",
     // Batch 89 (fired-histogram expansion): `suboptimal_flops` — the
     // receiver's type is invisible to syn (a custom `powf`/`log` would
     // make the rewrite semantic; the `single_char_pattern` precedent).
@@ -395,7 +416,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 49 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 51 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -457,6 +478,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "manual_slice_fill" => manual_slice_fill::collect_edits(source, file),
         "manual_checked_ops" => manual_checked_ops::collect_edits(source, file),
         "chunks_exact_to_as_chunks" => chunks_exact_to_as_chunks::collect_edits(source, file),
+        // ── P10 post-mining intake (2026-09-13, the 089-T3 usage artifact) ──
+        "filter_map_bool_then" => filter_map_bool_then::collect_edits(source, file),
+        "vec_init_then_push" => vec_init_then_push::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -500,6 +524,10 @@ mod tests {
             // (missing_const_for_fn was proposed then KILLED — see the
             // VERIFY_LINTS note.)
             "suboptimal_flops",
+            // P10 post-mining intake: Copy-item binding (E0507) + the
+            // later-mutable-use corner (E0384) — VERIFY-tier only.
+            "filter_map_bool_then",
+            "vec_init_then_push",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
@@ -514,7 +542,7 @@ mod tests {
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 48-row fixture table — length is the point.
+    /// 50-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -774,6 +802,17 @@ impl S {
                 "chunks_exact_to_as_chunks",
                 "fn ids(bytes: &[u8]) -> Vec<u32> { let mut out = Vec::new(); for chunk in bytes.chunks_exact(4) { out.push(u32::from_le_bytes(chunk.try_into().unwrap())); } out }",
                 "bytes.as_chunks::<4>().0",
+            ),
+            // ── P10 post-mining intake (2026-09-13, the 089-T3 usage artifact) ──
+            (
+                "filter_map_bool_then",
+                "fn kept(xs: Vec<i32>) -> Vec<i32> { xs.into_iter().filter_map(|x| (x > 0).then(|| x * 2)).collect() }",
+                "filter(|&x| (x > 0)).map(|x| x * 2)",
+            ),
+            (
+                "vec_init_then_push",
+                "fn build() -> Vec<u8> { let mut v = Vec::new(); v.push(1); v.push(2); v }",
+                "let v = vec![1, 2];",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

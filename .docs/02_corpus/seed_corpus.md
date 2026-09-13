@@ -1,9 +1,12 @@
 # Seed corpus — built-in lint examples
 
-`build_seed_corpus()` returns a `ClippyCorpus` with 40 entries: the 10
+`build_seed_corpus()` returns a `ClippyCorpus` with 51 entries: the 10
 seed lints (style, complexity, perf, nursery groups) + the 30 Issue 016
 structural-expansion lints (frequency-ranked selection — see
-[`.benchmarks/021`](../../.benchmarks/021_clippy_structural_expansion_goat.md)).
+[`.benchmarks/021`](../../.benchmarks/021_clippy_structural_expansion_goat.md))
++ the P7 post-mining verify row (`manual_is_multiple_of`, 2026-08-29) +
+2 Batch 89 + 2 Batch 90 + 4 Batch 91 + the 2 P10 post-mining intake rows
+(2026-09-13).
 
 ## The 10 seed entries
 
@@ -101,6 +104,37 @@ rewrite output (`match x { Some(v) => v, None => 0 }` in statement position)
 re-enters `single_match_else`'s Issue-029-T3 std-ctor territory → fixpoint
 ping-pong with our own FIXABLE proposer. No corpus entry. Record: `.plans/051`
 + the `FIXABLE_LINTS` note.
+
+## The 4 Batch 91 entries (2026-09-05)
+
+The P9 clippy-1.98 new-lint batch — populations measured workspace-wide by
+the 1.98.1 re-gate sweep. All four suggestion-only in real clippy
+(MaybeIncorrect / Unspecified — `--fix` applied 0/17 on the dao run), which
+is why the proposers exist:
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `byte_char_slices` | style | fix | `[b'S', b'H', ..]` → `*b"SH.."` (bit-identical; every element a byte literal, non-empty) |
+| `manual_slice_fill` | style | fix | `for v in &mut p { *v = val; }` → `p.fill(val)` (pure-value gate; `&mut place` iterable form only — `iter_mut()` silent in real clippy) |
+| `manual_checked_ops` | complexity | verify | `if n == 0 { v } else { total / n }` → `total.checked_div(n).unwrap_or(v)` (unsigned-only in real clippy; provably-signed divisors refused) |
+| `chunks_exact_to_as_chunks` | style | verify | `bytes.chunks_exact(4)` → `bytes.as_chunks::<4>().0` (chunk type `&[u8]` → `&[u8; 4]`; MSRV 1.88 floor) |
+
+## The 2 P10 post-mining intake entries (2026-09-13)
+
+The 089-T3 usage artifact — both lints needed by hand on `src/bin/heal.rs`
+while the mechanical fixer healed around them; both probe-verified
+on-by-default in clippy 1.98 (probe crate, 2026-09-13):
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `filter_map_bool_then` | complexity | verify | `filter_map(\|x\| p(x).then(\|\| b(x)))` → `filter(\|&x\| p(x)).map(\|x\| b(x))` — MachineApplicable in real clippy but the `\|&x\|` pattern binds only Copy items (String items silent — probed); E0507 is check-visible so the verify gate backs it |
+| `vec_init_then_push` | style | verify | `let mut v = Vec::new(); v.push(a); v.push(b);` → `let v = vec![a, b];` — help-only in real clippy (`--fix` applied 0/3 even on the plain shape, probed); refuses attributed/cfg'd pushes (a `vec![]` literal cannot carry cfg'd elements — the documented divergence; comment-guarded `allow` is the correct fix for that shape) and every parse-visible later mutable use |
+
+Probe note (the intake's premise corrected by the probe, the
+probe-first-law working): the intake described `filter_map_bool_then` as a
+"filter+map split" lint — the probe showed the reverse: it fires on
+`bool::then` INSIDE `filter_map`, and the split `.filter(pred).map(f)` is
+the FIX. The `.filter(p).map(f)` forms in `src/bin/heal.rs` never fired.
 
 The full per-lint fixture tables live in
 [`corpus.rs`](../../src/domains/clippy_lints/corpus.rs) + the per-lint

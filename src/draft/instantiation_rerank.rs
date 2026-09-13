@@ -138,11 +138,20 @@ pub enum RerankMode {
 /// that bound: under cross-domain co-presence (`needless_return` merged
 /// with `vec-with-capacity`, both orders) loop-shaped clippy rules crowd
 /// the correct rule to raw similarity rank **9** — one position past the
-/// pool of 8, evicting it before the re-ranker ever sees it (the 8.3pp
-/// switch-cost signal). 12 restores the rescue with margin; deeper pools
+/// pool of 8, evicting it before the re-ranker ever saw it (the 8.3pp
+/// switch-cost signal). 12 restored the rescue with margin; deeper pools
 /// only add visitor walks, never new promotions (a structural proposer
 /// that does not match stays `false` at any depth).
-pub const RERANK_POOL: usize = 12;
+///
+/// Re-pinned 12 → 16 (2026-09-13, the P10 post-mining intake): the two new
+/// corpus entries (`vec_init_then_push` — textually the same vec-push
+/// family as the casualty's perf half — and `filter_map_bool_then`, raw
+/// ranks ~15 and ~12 on the casualty span) crowded the casualty from raw
+/// rank 9 to **15** (measured: absent at k=14, retrieved + canonical rank 0
+/// at k=16, both spans, both orders). 16 is the measured minimum, slack 1 —
+/// the pool_depth_rescue_guard re-firing on the next vec-shaped corpus
+/// entry is the designed prompt to re-measure, not a defect.
+pub const RERANK_POOL: usize = 16;
 
 /// Does `rule_id`'s proposer visitor actually match `file`?
 ///

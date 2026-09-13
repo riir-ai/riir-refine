@@ -85,8 +85,12 @@ pub const REACHABLE: &[(&str, &str)] = &[
         "pub fn f() { let s = String::from(\"hi\"); let s2 = s.clone(); drop(s2); }",
     ),
     (
-        "vec_init_then_push",
-        "pub fn f() -> Vec<i32> { let mut v = Vec::new(); v.push(1); v.push(2); v }",
+        // Re-picked 2026-09-13 (the P10 intake made `vec_init_then_push` a
+        // corpus entry, breaking this list's off-corpus premise — the assert's
+        // own designed response: "the fixture must be re-picked"). Same vec
+        // family, still off-corpus, real clippy lint.
+        "clear_with_drain",
+        "pub fn f(v: &mut Vec<i32>) { v.drain(..); }",
     ),
     (
         "manual_strip",
