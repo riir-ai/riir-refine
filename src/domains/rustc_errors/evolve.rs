@@ -450,7 +450,7 @@ pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[
     FrontierLanding {
         // The issue-file commit that scoped it (informational; era keys on
         // unix_secs — the same convention as the row above).
-        commit: "48c2224b",
+        commit: "963da3c9",
         unix_secs: 1_789_276_000,
         code: "E0502",
         strategy: "e0502-read-relocate",
