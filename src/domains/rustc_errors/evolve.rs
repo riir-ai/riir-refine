@@ -713,7 +713,10 @@ mod tests {
         assert!(warns.is_empty(), "{warns:?}");
         let path = path.expect("run file written");
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        assert!(name.starts_with("run-") && name.ends_with(".jsonl"), "{name}");
+        // Case-sensitive ON PURPOSE: this asserts dump_fixseq's OWN on-disk
+        // name round-trip (lowercase `.jsonl` is what the writer emits).
+        assert!(name.starts_with("run-"), "{name}");
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("jsonl"), "{name}");
 
         // The ORDERED sequence round-trips, line per attempt.
         let body = std::fs::read_to_string(&path).unwrap();

@@ -949,6 +949,9 @@ mod tests {
     /// covering every class + the excluded/clean/unattributed edges.
     #[test]
     fn stratify_splits_classes_and_orders_canonically() {
+        // Exact f32 equality on heal_rate is a pin (0.0 / 0.5 / 1.0 are the
+        // contract values); the near-equality asserts use 1e-6.
+        #![allow(clippy::float_cmp)]
         let fixtures = vec![
             BenchFixture {
                 id: "repo-a",
@@ -983,30 +986,41 @@ mod tests {
             FixtureOutcome {
                 id: id.to_string(),
                 ran,
-                vocab_before: before.iter().map(|s| s.to_string()).collect(),
+                vocab_before: before
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
                 all_before: BTreeSet::new(),
                 all_after: BTreeSet::new(),
-                vocab_persist: persist.iter().map(|s| s.to_string()).collect(),
-                created: created.iter().map(|s| s.to_string()).collect(),
+                vocab_persist: persist
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
+                created: created
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
                 edits: 0,
                 passes: 0,
                 parses: true,
                 drifted: false,
             }
         };
-        let mut score = BenchScore::default();
-        score.outcomes = vec![
-            // repo-a: 2 findings, 1 resolved, 1 created.
-            mk("repo-a", true, &["a", "b"], &["b"], &["new"]),
-            // repo-b: CLEAN (0 findings, ran).
-            mk("repo-b", true, &[], &[], &[]),
-            // authored-a: 1 finding, resolved.
-            mk("authored-a", true, &["a"], &[], &[]),
-            // construction-a: EXCLUDED (ran=false — counts nowhere).
-            mk("construction-a", false, &["a"], &["a"], &[]),
-            // An outcome with no fixture (a defensive-count case → other).
-            mk("orphan", true, &["z"], &["z"], &[]),
-        ];
+        let score = BenchScore {
+            outcomes: vec![
+                // repo-a: 2 findings, 1 resolved, 1 created.
+                mk("repo-a", true, &["a", "b"], &["b"], &["new"]),
+                // repo-b: CLEAN (0 findings, ran).
+                mk("repo-b", true, &[], &[], &[]),
+                // authored-a: 1 finding, resolved.
+                mk("authored-a", true, &["a"], &[], &[]),
+                // construction-a: EXCLUDED (ran=false — counts nowhere).
+                mk("construction-a", false, &["a"], &["a"], &[]),
+                // An outcome with no fixture (a defensive-count case → other).
+                mk("orphan", true, &["z"], &["z"], &[]),
+            ],
+            ..BenchScore::default()
+        };
         let strata = stratify(&fixtures, &score);
         let labels: Vec<&str> = strata.iter().map(|s| s.class.as_str()).collect();
         // Canonical order; construction omitted (0 ran).

@@ -1320,6 +1320,9 @@ mod tests {
 
     #[test]
     fn provenance_summary_orders_prices_and_shares() {
+        // Exact f32 equality IS the contract here — the class prices (1.0 /
+        // ε / 0.0) and their weighted counts are the pin, not approximations.
+        #![allow(clippy::float_cmp)]
         let rows = provenance_summary(&pair_counts_fixture());
         // Canonical order first (organic, construction), unknown tail asc.
         let order: Vec<&str> = rows.iter().map(|r| r.provenance.as_str()).collect();

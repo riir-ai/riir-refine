@@ -1120,10 +1120,10 @@ pub fn make() -> BehaviorConfig { BehaviorConfig { alarm_radius: 15.0 } }
 
     /// The delegation.rs shape: `let tx = DelegateTx { … };` then
     /// `serde_json::to_vec(&tx)` in the SAME fn — the field value is a
-    /// variable/call (delegator_pubkey from keypair) → CLEARED.
+    /// variable/call (`delegator_pubkey` from keypair) → CLEARED.
     #[test]
     fn wire_literal_in_serde_fn_is_cleared() {
-        let src = r#"
+        let src = r"
 #[derive(serde::Serialize)]
 pub struct DelegateTx {
     pub delegator_pubkey: String,
@@ -1136,7 +1136,7 @@ pub fn build(keypair: &Keypair, amount: u64) -> Vec<u8> {
     };
     serde_json::to_vec(&tx).unwrap()
 }
-"#;
+";
         let wire = wire_of(src);
         assert!(
             wire.cleared
@@ -1146,7 +1146,7 @@ pub fn build(keypair: &Keypair, amount: u64) -> Vec<u8> {
         assert!(wire.wire_const.is_empty(), "no constant-valued field here");
     }
 
-    /// The dao-soak main() shape: the literal and the serialize call FAR
+    /// The dao-soak `main()` shape: the literal and the serialize call FAR
     /// APART inside one big fn — fn scope, not adjacency.
     #[test]
     fn wire_serde_call_far_apart_in_same_fn_clears() {
@@ -1175,13 +1175,13 @@ fn decide() -> Verdict { Verdict::default() }
         );
     }
 
-    /// The payload_json shape (the wrapping clause): the INNER type has NO
+    /// The `payload_json` shape (the wrapping clause): the INNER type has NO
     /// direct literal in any serde fn (its literals live only in builders /
     /// tests) — it is consumed transitively via a `Vec<T>` field of a
     /// wrapper that IS literal-constructed in a serde fn.
     #[test]
     fn wire_vec_wrapped_type_cleared_transitively() {
-        let src = r#"
+        let src = r"
 #[derive(serde::Serialize)]
 pub struct ReportTarget {
     pub manifest_hash: String,
@@ -1198,7 +1198,7 @@ pub fn probe_target() -> ReportTarget {
     ReportTarget { manifest_hash: compute_manifest_hash() }
 }
 fn compute_manifest_hash() -> String { String::new() }
-"#;
+";
         let wire = wire_of(src);
         assert!(
             wire.cleared
@@ -1207,7 +1207,7 @@ fn compute_manifest_hash() -> String { String::new() }
         );
     }
 
-    /// The provenance_verified shape (the 1/8 measured swallow, kept
+    /// The `provenance_verified` shape (the 1/8 measured swallow, kept
     /// VISIBLE): wire-consumed but HARDCODED at its only construction site —
     /// `[wire-const]`, never cleared.
     #[test]
@@ -1253,7 +1253,7 @@ pub fn main() {
     /// conservative gap).
     #[test]
     fn wire_literal_in_plain_fn_stays_flagged() {
-        let src = r#"
+        let src = r"
 #[derive(serde::Serialize)]
 pub struct PlainStruct {
     pub knob: f32,
@@ -1261,7 +1261,7 @@ pub struct PlainStruct {
 pub fn build() -> PlainStruct {
     PlainStruct { knob: 1.5 }
 }
-"#;
+";
         let wire = wire_of(src);
         assert!(wire.cleared.is_empty(), "no serde call → no wire evidence");
         assert!(wire.wire_const.is_empty());
@@ -1271,7 +1271,7 @@ pub fn build() -> PlainStruct {
     /// receiver can be seeing the variable value; the 7/8 measured class).
     #[test]
     fn wire_mixed_const_and_variable_sites_clear() {
-        let src = r#"
+        let src = r"
 #[derive(serde::Serialize)]
 pub struct Tx {
     pub gas_budget: u64,
@@ -1283,7 +1283,7 @@ pub fn emit(gas: u64) -> Vec<u8> {
 pub fn fallback() -> Tx {
     Tx { gas_budget: 5 }
 }
-"#;
+";
         let wire = wire_of(src);
         assert!(
             wire.cleared

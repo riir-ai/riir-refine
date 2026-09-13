@@ -623,6 +623,9 @@ mod tests {
 
     #[test]
     fn t1_sim_matrix_symmetric_with_unit_diagonal() {
+        // Exact f32 equality IS the contract here — the unit diagonal (1.0)
+        // and bit-identical symmetry are the pins, not approximations.
+        #![allow(clippy::float_cmp)]
         let pool = vec![
             span("t", "a", "lint_a", "pub fn a(x: u32) -> u32 { return x * 1; }"),
             span("t", "b", "lint_b", "pub fn b(s: &str) -> String { format!(\"{}\", s) }"),
@@ -640,8 +643,10 @@ mod tests {
             }
         }
         // The two distinct-shape spans share the ubiquitous scaffold only —
-        // IDF zeroes it, so their similarity stays low.
-        assert!(sim[0 * n + 1] < 0.5, "distinct spans read {} ", sim[0 * n + 1]);
+        // IDF zeroes it, so their similarity stays low. (i, j) keeps the
+        // row×col index notation without the literal `0 * n` erasing-op.
+        let (i, j) = (0usize, 1);
+        assert!(sim[i * n + j] < 0.5, "distinct spans read {} ", sim[i * n + j]);
     }
 
     #[test]
@@ -651,6 +656,8 @@ mod tests {
         // rides ONLY the unique identifiers: exactly 0.0 despite ~90%
         // textual identity. The IDF design law, pinned (the tokenizer module's
         // "ubiquitous runs earn near-zero IDF and contribute nothing").
+        // Exact 0.0 is the pin — float_cmp is precise BY CONSTRUCTION here.
+        #![allow(clippy::float_cmp)]
         let pool = vec![
             span("t", "a", "l1", "fn a(x: u32) -> u32 { x * 1 }"),
             span("t", "b", "l1", "fn b(x: u32) -> u32 { x * 1 }"),
@@ -671,11 +678,11 @@ mod tests {
         let mut sim2 = Vec::new();
         token_cosine_sim_into(&pool2, &mut sim2);
         assert!(
-            (sim2[0 * 3 + 1] - 1.0).abs() < 1e-5,
+            (sim2[1] - 1.0).abs() < 1e-5,
             "identical text → 1.0 within f32 epsilon, got {}",
-            sim2[0 * 3 + 1]
+            sim2[1]
         );
-        assert!(sim2[0 * 3 + 2] < 0.5, "distinct shapes stay apart");
+        assert!(sim2[2] < 0.5, "distinct shapes stay apart");
     }
 
     #[test]
@@ -684,7 +691,9 @@ mod tests {
         // (real corpus shape). Rule DUP: the SAME code under a second label
         // — the planted absorption (Chanin: merged latents fire on
         // indistinguishable inputs; identical MEI sets → cross exactly 0.0).
-        // Rule C: a distinct shape family.
+        // Rule C: a distinct shape family. Exact 0.0 cross/min-cross are the
+        // pins — float_cmp is precise BY CONSTRUCTION here.
+        #![allow(clippy::float_cmp)]
         let a_codes = [
             "fn scale(v: u32) -> u32 { v * 1 }",
             "fn bump(v: u32) -> u32 { v + 0 }",

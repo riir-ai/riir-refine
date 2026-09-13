@@ -297,9 +297,11 @@ mod fence_tests {
         // Issue 089 T5: organic churn = 1.0, construction/synthetic = ε,
         // anything else = 0.0 (fail-closed — an unrecognized tag is priced
         // out entirely, and rate_pairs fences it out of rating outright).
+        // Exact f32 equality IS the contract here — the prices are the pin.
+        #![allow(clippy::float_cmp)]
         assert_eq!(provenance_weight(PROVENANCE_ORGANIC), 1.0);
         assert_eq!(provenance_weight(PROVENANCE), SYNTHETIC_PAIR_WEIGHT);
-        assert!(SYNTHETIC_PAIR_WEIGHT > 0.0 && SYNTHETIC_PAIR_WEIGHT < 1.0);
+        const { assert!(SYNTHETIC_PAIR_WEIGHT > 0.0 && SYNTHETIC_PAIR_WEIGHT < 1.0) };
         assert_eq!(provenance_weight(""), 0.0);
         assert_eq!(provenance_weight("Organic"), 0.0, "case-sensitive on purpose");
         assert_eq!(provenance_weight("injected"), 0.0);
