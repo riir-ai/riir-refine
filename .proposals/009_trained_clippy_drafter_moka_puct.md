@@ -462,3 +462,59 @@ roadmap); Plan 394 only shortens the path IF the corpus band ever clears 2pp and
 capability gate is re-run. The one live takeaway for THIS repo: modelless extraction #1
 (one-cumsum segmented reduction) has `AstChunker`-stream + oracle-metric consumers with no
 dependency on any training lane.
+
+## Addendum — 2026-09-13: the fly-connectome wave as external evidence on this proposal's architecture (re-plan priorities UNCHANGED)
+
+Source: the awesome-fly landscape dig (3 subagents; 10 repos cloned at pinned SHAs + 44
+README-swept; full record in [riir-ai Research 379](../../riir-ai/.research/379_fly_connectome_fixed_wiring_reservoir.md)
+§10). The wave ran this proposal's exact architecture — frozen substrate + tiny trained
+readout — a dozen times independently, mostly with exemplary controls. What it says here:
+
+1. **External corroboration of the F1 kill (four independent negatives of the same shape).**
+   In every controlled instance, the substrate-advantage-over-cheap-features claim FAILED:
+   FLM's parameter-matched direct-input control (no graph) slightly **beat** the
+   278k-param adapter over the 25.6M-edge connectome; neuroterrarium's 20-shuffled-graphs
+   null (full ≈ shuffled; no-recurrence slightly better, disjoint train/val/test);
+   neurocraft's trained readout **95.66×/403.70× worse** than a matched direct controller;
+   fly-craftax's DN rates "indistinguishable from any noisy interoceptive feature vector".
+   Same shape as pool@16 = 100% locally: a learned prior over features that already contain
+   the answer adds nothing. Re-plan step 1 stands with external support.
+2. **The surviving branch is the modelless-substrate branch** — external validation of
+   re-plan step 3: the wave's clean positives came from building the substrate, not the head
+   (flyjump's circuit is anatomy-selected; flyhard 0/100→100/100 came from the embodiment
+   interface). And doomfly's six in-substrate plasticity versions ALL failed their
+   predeclared gates (causal-but-harmful memory; shuffled-timing learned the same harmful
+   change) — freeze-the-corpus, train-at-most-a-bounded-head is the empirically surviving
+   split, matching the 0/60-vs-draft-and-verify reframing.
+3. **Mandatory controls for any future trained-prior gate (the import list):**
+   - **direct-feature control** (FLM): matched head over cheap features (rule frequency,
+     lint density, file shape) — without it, a "corpus as substrate" claim is unfounded;
+   - **exact-disconnect silencing** (FLM zero-init bias-free adapter ⇒ bit-identical base,
+     unit-tested; flyjump silenced 99→0): untrained/silenced prior MUST degenerate to
+     corpus-only behavior bit-identically — externally validates opt-in-dark + G1
+     never-wrong;
+   - **null ladder** (openfly's 4 trading controls incl. shuffled-label; FlyDoom's
+     ER-matched + Maslov–Sneppen degree-preserving + weight-shuffle): shuffle rule↔span
+     labels before believing any trained-prior gain;
+   - **full-gate keep criterion stays** (fly-craftax's PPO head became "a clock with a small
+     drive-dependent jitter", farmed self-generated `wake_up` achievements while scoring
+     well, open-loop alternation beat it on survival): externally validates the LGTM guard
+     (warning gone + no new warnings + compile + tests — never "warning cleared" alone).
+4. **Settle-refiner stop-rule datapoints** (the 09-05 addendum's lane): flyjump's champion
+   landed at generation 32/80 (the other 48 added nothing); fly-craftax's return plateaued
+   at update ~40/150 ("the remaining 110 updates lowered entropy without raising return").
+   The useful signal arrives in the first fraction of any fitting budget — patience/early-stop
+   belongs in that POC harness from day one.
+5. **PUCT half: still zero external instances.** No project in the wave runs search over
+   the substrate (MCTS/PUCT/beam — zero in 44+ repos). Phase 3 remains the in-house moka
+   lineage bet exactly as §F5 narrowed it; the wave neither supports nor refutes it.
+6. **Tonic-feature guard** (doomfly's constant lamina bias drove actions under black input,
+   black beat live vision 3:1; fly-craftax's floors ended up setting the gain): normalize/
+   floor features so constant channels (language, file length) cannot dominate a prior.
+
+**Verdict: evidence addendum only.** The 2026-08-29 re-plan and the 09-05/09-11 addenda
+priorities are UNCHANGED (stop rule still fired; reopen trigger still corpus-side). If the
+corpus band ever clears and a trained-prior gate runs, §3's controls list is the import.
+Pinned SHAs: FLM `7251a89` · fly-craftax `2fe4145` · flyjump `c08c86b` · FlyDoom `a9d9dba`
+· AxonWeave `106d00e` · connectome_interpreter `d212f86` · RuVector `8667f1f` (the only
+MIT-derivable Rust LIF kernel).
