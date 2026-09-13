@@ -1,0 +1,32 @@
+# Issue 102 — Corpus lifecycle management (Library Drift adoption: fade retirement + active-set cap + paired A/B instrument)
+
+**Status:** OPEN — T1 report-first scoping only; all wiring gated on the same accumulation clock as Issue 089 T4/T8 (per-rule `rule_outcomes` rows: 8 rows / 7 generations as of 2026-09-13). Nothing demotes, caps, or deletes until the fade report proves predictive on ≥3 future generations (report-first law, R135/Bench 047).
+
+Distill source: arXiv:2609.11873 §3.5/§6 (RSI survey — the L4 Library Drift finding + lifecycle requirements) adopting Library Drift (arXiv:2605.19576) over our corpus; HDSO (arXiv:2606.22330) for the paired instrument. Full reasoning + prior art: [Research 167](../.research/167_RSI_Survey_Autonomy_Ladder_Positioning.md). Scope split from [Issue 089](089_frontier_band_healer_curriculum.md): **089 owns ADMISSION (what enters: band, LCB, saturation candidates); this issue owns the other lifecycle half (what stays active: fade, cap, the demotion execution mechanism, the causal instrument).**
+
+## Why now (the measured drift cost, pre-GOAT)
+
+- Library Drift's failure mode is already measurable in our shape, before any task-score signal: ~70% of binary .text is corpus tables (cargo bloat, the `dist` promotion's 11.9→4.5 MB measurement); the mining-time dedup grep grows per batch; the `latent_retrieval` fan-out dilutes as near-duplicate rules accumulate (kernel_opt alone: 607).
+- The paper's counter-finding is a gate, not a suggestion: **over-aggressive retirement measured WORSE than unguided libraries** — hence report-first, membership floor, cap binds only on measured degradation.
+
+## Tasks
+
+- [ ] T1 (P0) — Report-first fade detection: extend `--frontier-report` with a contribution-fade section — per-rule recent-generation contribution from the `rule_outcomes` rows (retrieval-exposure join: fires vs resolved vs persist across generation rows); fade candidate = retrieval-exposed ∧ zero resolution across ≥N generation rows, with N a floor not a vibe. Refuses green-zero (population floor + empty-is-loud, the frontier-report precedent). **BLOCKED on accumulation only** — needs the per-rule rows to span ≥3 generations past 2026-09-13 (the 089 T4/T8 clock; every bench row appends automatically).
+- [ ] T2 (P1) — Demotion execution mechanism (shared with 089's candidate lists): an ACTIVE-set marker honored by the retrieval fan-out — demoted rules exit fan-out, the entry is KEPT forever (089 Caution 2 law: deletion is never a lifecycle op), auto re-admit on the first fresh unresolved span the rule could serve (Research 165 rule 3 verbatim). Lands once here; 089 T4's `p̂=1` saturation arm and T1's fade arm both consume it.
+- [ ] T3 (P2) — Active-set cap per domain, contribution-ranked: a new rule competes with the lowest-contribution active rule at admission; the loser moves to the inactive set (same never-delete law). Binds ONLY when T1's report shows fade-driven degradation on that domain — off by default (the aggressive-retirement warning encoded as a default).
+- [ ] T4 (P2) — Paired control/treatment bench lane (HDSO instrument): for retire/re-admit decisions the observational counters aren't causal — an interventional lane runs the same fixtures with the rule disabled vs enabled, paired verdict per fixture. Priced per decision, not per bench run; feeds T2/T3 verdicts.
+- [ ] T5 (P3) — Meta-rule formalization: the corpus authoring discipline (dedup grep, batch records, the distinct-from-neighbor rows every kernel rule carries) written as the explicit meta-rule guide consulted at mining time — Library Drift's "meta-skill" (how future rules get authored), mostly formalizing what `.distill/001` + the distill skill already practice.
+
+## GOAT gate
+
+- **G1:** retrieval fan-out size ↓ (per domain) and/or corpus-table binary cost ↓ at **flat binary heal rate** (the 165 rule-3 gate).
+- **G2:** fade-report precision — a planted faded rule is detected (self-test, the `--prove-fires` precedent) and saturated-but-healthy rules are NOT flagged as fade (saturation is 089's arm; fade ≠ saturation is the classifier's core assertion).
+- **G3 (no-regression):** corpus membership floor — no entry deleted, existing count pins unchanged, score-bench history append-only.
+- **G4:** bounded cost — pure arithmetic over existing feeds (trajectory store + `rule_outcomes` rows); zero new stores, zero GPU; T4's paired lane priced per invocation.
+
+## Cautions
+
+1. Do not wire anything before T1's report proves fade predicts on ≥3 future generations — the R135/Bench-047 law (selection sophistication at real sparsity measured ≤0.04pp) applies unchanged to retirement.
+2. Default-on domains first: the drift hazard binds on `clippy_lints` + `rust_perf` (live fan-out in every heal run); `kernel_opt` (607) is opt-in/Phase-gated — its cap is lower priority than its dedup grep.
+3. Cross-issue hygiene: if 089 T4 lands its saturation-demotion wiring first, T2 here consumes it rather than re-landing; the split is admission-vs-lifecycle, not a race.
+4. The trajectory store holds cumulative counters — per-generation fade needs the `rule_outcomes` rows (bench-time, generation-tagged), NOT store deltas (the same class as 089 T2's historical-band-mass blocker).
