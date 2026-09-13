@@ -555,14 +555,15 @@ impl LatentMatcher {
     /// no anchor is marked `heuristic_only`. Ranking itself is untouched:
     /// anchoring is additive recall, never a re-ranker.
     ///
-    /// Anchors in CHUNK GAPS get a synthesized line-span: the [`AstChunker`]
-    /// span quirk (measured 2026-09-13: a chunk's end is scanned from the
-    /// NORMALIZED signature length, which runs past the source `{`, so a
-    /// fn's chunk can end at its first body `;` — `area` chunks 1-2, not
-    /// 1-3 — leaving fn tails uncovered) means a real diagnostic can fall
-    /// in NO chunk; an oracle finding is never dropped for a coverage
-    /// gap. Synthetic spans carry no retrieval (`by_domain` empty) — the
-    /// oracle IS the signal.
+    /// Anchors in CHUNK GAPS get a synthesized line-span: not every line
+    /// sits inside an item chunk (blank separators, module-level spans,
+    /// macro-generated regions), so a real diagnostic can fall in NO chunk;
+    /// an oracle finding is never dropped for a coverage gap. (The
+    /// 2026-09-13 fn-tail gap — chunk ends scanned from the NORMALIZED
+    /// signature length — was measured here and fixed at the substrate,
+    /// riir-rag Issue 942; gap synthesis remains correct behavior for the
+    /// legitimate gap classes.) Synthetic spans carry no retrieval
+    /// (`by_domain` empty) — the oracle IS the signal.
     pub fn suggest_file_anchored(
         &mut self,
         src: &str,
@@ -611,9 +612,10 @@ impl LatentMatcher {
             {
                 push_anchor(span, &self.rule_book, anchor);
             } else {
-                // The diagnostic falls in a CHUNK GAP (the AstChunker quirk
-                // documented on `suggest_file_anchored`): synthesize a
-                // line-span carrying the anchor, inserted in line order.
+                // The diagnostic falls in a CHUNK GAP (a legitimately
+                // unchunked line — see `suggest_file_anchored`):
+                // synthesize a line-span carrying the anchor, inserted in
+                // line order.
                 let mut synthetic = SpanSuggestion {
                     path: path.to_string(),
                     start_line: anchor.line,
@@ -894,9 +896,9 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     #[test]
     fn duplicate_anchor_lints_in_one_chunk_dedup() {
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
-        // Lines 6+7 sit inside the `find_user` chunk under BOTH the
-        // current chunker span quirk (chunk 5-10, measured 2026-09-13)
-        // and a hypothetical fixed spanner (5-11).
+        // Lines 6+7 sit inside the `find_user` chunk (5-12 under the
+        // fixed substrate spans, riir-rag Issue 942 — they also sat
+        // inside the pre-fix truncated 5-10 chunk).
         let sugg = m.suggest_file_anchored(
             SAMPLE,
             "sample.rs",
@@ -916,9 +918,11 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     #[test]
     fn gap_anchor_gets_a_synthesized_line_span() {
         // Line 4 (the blank line between the fns) is covered by NO chunk
-        // under the current chunker quirk NOR under fixed spans — a pure
-        // gap. The oracle finding must still surface: a synthesized
-        // line-span carrying the anchor, inserted in line order.
+        // — a blank separator is never item-spanned, so it is a pure gap
+        // under the fixed substrate spans too (the fn-tail quirk class
+        // itself was fixed at the substrate, riir-rag Issue 942). The
+        // oracle finding must still surface: a synthesized line-span
+        // carrying the anchor, inserted in line order.
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
         let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
             "sample.rs",
