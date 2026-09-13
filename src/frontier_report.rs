@@ -749,8 +749,13 @@ pub fn render_shaped_half_rows(rows: &[ShapedHalfRow]) -> String {
 // `--frontier-report` run appends the just-measured band-mass to a
 // COMMITTED append-only jsonl (the score-history law: the committed file
 // is the projection), deduped by state change — an unchanged store at the
-// same generation appends nothing. The report-first law is unchanged:
-// the file gates nothing; it makes the evidence exist.
+// same generation appends nothing. Since the bench-tail hardening
+// (2026-09-13) every score-bench run appends the same snapshot at its tail
+// (see [`append_snapshot_at_frontier`]) — a generation boundary is created
+// by a bench run, so the boundary's snapshot is taken by the same run; a
+// boundary nobody reports at is a boundary the correlation never samples.
+// The report-first law is unchanged: the file gates nothing; it makes the
+// evidence exist.
 
 /// The committed append-only snapshot log (relative to the report's cwd).
 pub const SNAPSHOTS_JSONL: &str = ".benchmarks/frontier_snapshots.jsonl";
@@ -884,6 +889,112 @@ pub fn append_snapshot(path: &std::path::Path, snap: &FrontierSnapshot) -> std::
     line.push('\n');
     f.write_all(line.as_bytes())?;
     Ok(true)
+}
+
+/// The outcome of a [`append_snapshot_at_frontier`] call — one console line
+/// for the caller, never an exit-code change (the report-first law: the
+/// snapshot is instrumentation; it must never fail the run that records it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SnapshotOutcome {
+    /// A row was appended (first row, or state changed — the store moved or
+    /// the generation frontier rose).
+    Appended {
+        /// The generation frontier the new row carries.
+        generation: u8,
+    },
+    /// The last row already carries the same measured state — deduped,
+    /// nothing appended.
+    Unchanged {
+        /// The unchanged generation frontier.
+        generation: u8,
+    },
+    /// No trajectory store at the root — nothing to measure (the snapshot
+    /// is skipped, never fabricated).
+    NoStore,
+    /// The store exists but carries zero learn rows — a band-mass row over
+    /// an empty population would be a green zero (the report law); skipped.
+    EmptyPopulation,
+}
+
+impl std::fmt::Display for SnapshotOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Appended { generation } => {
+                write!(f, "appended (generation {generation}) — the boundary is recorded")
+            }
+            Self::Unchanged { generation } => write!(
+                f,
+                "unchanged since the last row (generation {generation}) — not appended"
+            ),
+            Self::NoStore => write!(
+                f,
+                "no trajectory store at the root — skipped (run any --fix in this repo to create it)"
+            ),
+            Self::EmptyPopulation => write!(
+                f,
+                "store carries zero learn rows — skipped (never a green zero row)"
+            ),
+        }
+    }
+}
+
+/// Issue 089 T4 hardening — the score-bench tail's automatic boundary
+/// snapshot.
+///
+/// T4's GO evidence needs a band-mass snapshot AT every generation
+/// boundary, but boundaries are created by score-bench runs: a mechanism
+/// where the snapshot exists only if somebody separately remembers to run
+/// `--frontier-report` at the right moment loses boundaries to interleaved
+/// lanes (v1 reruns after v8 landings). The bench tail calls this right
+/// after its history append + store dual-write, so the just-recorded run IS
+/// in `score_runs` and a newly admitted generation raises the frontier in
+/// the same breath — a boundary can no longer be missed.
+///
+/// Same semantics as the report path: the caller passes the cwd-relative
+/// [`SNAPSHOTS_JSONL`] (deliberately NOT `root`-relative, so both writers
+/// share one file when `RIIR_HEAL_TRAJ_ROOT` points elsewhere),
+/// state-change dedup, the FRONTIER generation (max ever run, not the
+/// latest lane). Zero learn rows and a missing store are skips, never
+/// fabricated rows. The file still gates nothing (report-first law).
+///
+/// # Errors
+///
+/// Store open failure or snapshot-file filesystem errors — returned for
+/// one console line; never a panic, never a bench-run failure.
+#[cfg(feature = "latent_retrieval")]
+pub fn append_snapshot_at_frontier(
+    root: &std::path::Path,
+    snapshots_path: &std::path::Path,
+) -> std::io::Result<SnapshotOutcome> {
+    let kv = root.join(".heal").join("trajectories.kv");
+    if !kv.exists() {
+        return Ok(SnapshotOutcome::NoStore);
+    }
+    let (store, _bad) =
+        crate::traj_store::TrajStore::open(root).map_err(std::io::Error::other)?;
+    let entries: Vec<(String, u32, u32)> = store
+        .learn_rows()
+        .into_iter()
+        .map(|row| (row.lint_key, row.successes, row.fails))
+        .collect();
+    let summary = summarize(&entries);
+    if summary.population == 0 {
+        return Ok(SnapshotOutcome::EmptyPopulation);
+    }
+    let feeds = provenance_yield_split(&entries);
+    let generation = store
+        .score_runs()
+        .unwrap_or_default()
+        .iter()
+        .map(|r| r.generation)
+        .max()
+        .unwrap_or(0);
+    let snap = snapshot_from(&summary, &feeds, generation, git_sha(), local_iso_timestamp());
+    if append_snapshot(snapshots_path, &snap)? {
+        Ok(SnapshotOutcome::Appended { generation })
+    } else {
+        Ok(SnapshotOutcome::Unchanged { generation })
+    }
 }
 
 /// Best-effort short git sha of the current repo (empty outside a repo).
@@ -1413,6 +1524,133 @@ mod tests {
         // A malformed trailing line never blocks the append (loud skip).
         std::fs::write(&path, "not json\n").unwrap();
         assert!(append_snapshot(&path, &a).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── Issue 089 T4 hardening: the bench-tail boundary snapshot ────────
+
+    /// Seed a store the way the bench tail finds one: two learn rules
+    /// (`band_rule` 1/1 → p̂=0.5, in-band; `sat_rule` 3/0 → p̂=1, above) +
+    /// score runs at the given generations. Verdicts and runs seed
+    /// SEPARATELY so a test can raise the generation frontier without
+    /// moving the band (the exact boundary-capture case).
+    #[cfg(feature = "latent_retrieval")]
+    fn seed_bench_tail_verdicts(root: &std::path::Path) {
+        let (store, _) = crate::traj_store::TrajStore::open(root).expect("store opens");
+        store
+            .record("band_rule", "shape-a", "fix-a", true, true, "run-1")
+            .expect("record success");
+        store
+            .record("band_rule", "shape-a", "fix-a", false, false, "run-2")
+            .expect("record fail");
+        for run in ["run-1", "run-2", "run-3"] {
+            store
+                .record("sat_rule", "shape-b", "fix-b", true, true, run)
+                .expect("record saturated success");
+        }
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    fn seed_bench_tail_runs(root: &std::path::Path, generations: &[u8]) {
+        let (store, _) = crate::traj_store::TrajStore::open(root).expect("store opens");
+        for (i, g) in generations.iter().enumerate() {
+            store
+                .record_score_run(&crate::traj_store::ScoreRunRow {
+                    ts: format!("2026-09-13T00:00:{i:02}"),
+                    sha: String::new(),
+                    n_ran: 1,
+                    n_healable: 1,
+                    n_clean: 0,
+                    heal_rate: 1.0,
+                    created_rate: 0.0,
+                    parse_safety: 1.0,
+                    decline_correctness: 1.0,
+                    edits_total: 1,
+                    vocab_size: 1,
+                    generation: *g,
+                    recorded_unix: 1_800_000_000 + i as u64,
+                })
+                .expect("record score run");
+        }
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    fn bench_tail_tmp(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "frontier_bench_tail_{name}_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    #[test]
+    fn bench_tail_snapshot_missing_store_is_a_skip_not_a_fabricated_row() {
+        let dir = bench_tail_tmp("nostore");
+        let out = append_snapshot_at_frontier(&dir, &dir.join("snap.jsonl")).unwrap();
+        assert_eq!(out, SnapshotOutcome::NoStore);
+        assert!(!dir.join("snap.jsonl").exists(), "no row without a store");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    #[test]
+    fn bench_tail_snapshot_zero_learn_rows_is_a_skip_not_a_green_zero_row() {
+        let dir = bench_tail_tmp("empty");
+        // Opening creates the store — but no verdicts means no learn rows.
+        let _ = crate::traj_store::TrajStore::open(&dir).expect("open creates the store");
+        let out = append_snapshot_at_frontier(&dir, &dir.join("snap.jsonl")).unwrap();
+        assert_eq!(out, SnapshotOutcome::EmptyPopulation);
+        assert!(!dir.join("snap.jsonl").exists(), "no row over an empty population");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    #[test]
+    fn bench_tail_snapshot_appends_dedups_and_raises_with_the_generation_frontier() {
+        let dir = bench_tail_tmp("frontier");
+        seed_bench_tail_verdicts(&dir);
+        seed_bench_tail_runs(&dir, &[1, 8]);
+        let path = dir.join("snap.jsonl");
+
+        // First call: appended, at the FRONTIER (8), not the latest lane (1).
+        let first = append_snapshot_at_frontier(&dir, &path).unwrap();
+        assert_eq!(first, SnapshotOutcome::Appended { generation: 8 });
+        let text = std::fs::read_to_string(&path).unwrap();
+        let snap: FrontierSnapshot =
+            serde_json::from_str(text.lines().next().unwrap()).unwrap();
+        assert_eq!(snap.generation, 8);
+        assert_eq!(snap.population, 2);
+        assert_eq!(snap.seen, 2);
+        assert_eq!(snap.band_count, 1); // band_rule p̂=0.5, sat_rule above
+        let rows = text.lines().filter(|l| !l.trim().is_empty()).count();
+        assert_eq!(rows, 1);
+
+        // Same store, same generation → deduped (the lane-interleaving case:
+        // a v1 rerun after the v8 boundary appends nothing).
+        let second = append_snapshot_at_frontier(&dir, &path).unwrap();
+        assert_eq!(second, SnapshotOutcome::Unchanged { generation: 8 });
+        let rows = std::fs::read_to_string(&path)
+                       .unwrap()
+                       .lines()
+                       .filter(|l| !l.trim().is_empty())
+                       .count();
+        assert_eq!(rows, 1, "no second row for an unchanged boundary");
+
+        // A NEW generation lands in the store → a new row at the new
+        // frontier EVEN with an identical band (verdicts untouched — only
+        // the score run was added): the boundary-capture law this helper
+        // exists for.
+        seed_bench_tail_runs(&dir, &[1, 8, 9]);
+        let third = append_snapshot_at_frontier(&dir, &path).unwrap();
+        assert_eq!(third, SnapshotOutcome::Appended { generation: 9 });
+        let text = std::fs::read_to_string(&path).unwrap();
+        let last: FrontierSnapshot =
+            serde_json::from_str(text.lines().rev().next().unwrap()).unwrap();
+        assert_eq!(last.generation, 9);
+        assert_eq!(last.band_count, snap.band_count, "same band, new boundary");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

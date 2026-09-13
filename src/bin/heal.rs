@@ -4413,6 +4413,34 @@ fn finish_score_bench(
     // Best-effort (never fails the bench run).
     #[cfg(feature = "latent_retrieval")]
     sb::report::record_store_best_effort(&rec);
+    // Issue 089 T4 hardening — the bench tail's automatic frontier snapshot:
+    // a generation boundary is created HERE (the row above just landed in
+    // the store), so the T4 evidence clock takes its band-mass snapshot HERE
+    // too. The manual `--frontier-report` dependency was the fragile half —
+    // a boundary nobody reports at is a boundary the band-mass ↔
+    // next-generation-yield correlation never samples. Same committed file,
+    // same state-change dedup, same frontier-generation semantics as the
+    // report path; best-effort — one console line, never a bench failure.
+    #[cfg(feature = "latent_retrieval")]
+    {
+        let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::current_dir())
+            .unwrap_or_default();
+        match riir_clippy::frontier_report::append_snapshot_at_frontier(
+            &root,
+            std::path::Path::new(riir_clippy::frontier_report::SNAPSHOTS_JSONL),
+        ) {
+            Ok(outcome) => println!("frontier snapshot (089 T4 bench tail): {outcome}"),
+            Err(e) => eprintln!(
+                "frontier snapshot: bench-tail append failed (bench unaffected): {e}"
+            ),
+        }
+    }
+    #[cfg(not(feature = "latent_retrieval"))]
+    eprintln!(
+        "frontier snapshot: skipped — this bench build lacks latent_retrieval (the store backend); the T4 boundary snapshot is NOT recorded"
+    );
     let history = sb::report::load_history(jsonl);
     // Per-generation SVG curves (M5): v1 → score_history.svg, v2 → _v2.svg,
     // v3 → _v3.svg, v4 → _v4.svg.
