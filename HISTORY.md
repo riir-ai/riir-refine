@@ -8,6 +8,34 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## `cargo heal --version` exit-2 regression — found by the global-binary rebuild, closed by merging the two hand-mirrored flag lists (2026-09-13, `ad31a04a`)
+
+Rebuilding the global `cargo-heal` from HEAD (the staleness caveat — the
+shipped binary was a Sep-10 build predating `--clippy-json`) surfaced a
+live CLI regression: the fresh binary refused `--version` / `-V` with
+"no paths given" + usage, exit 2, while the stale Sep-10 build printed
+the version. Mechanism (git archaeology): the 2026-09-12 --misses fix
+(`2cf731c0`) completed `is_bare_posture` with `!args.version` but the
+paths guard — a SECOND hand-mirrored list inside `parse_args` — kept
+its missing row; pre-09-12 `--version` had worked only because the bare
+default accidentally armed `suggest` + `paths=["."]` under it, which
+that fix correctly removed. Broken window: 2026-09-12 → 2026-09-13
+(the documented contract — "--version prints and exits, any build,
+ungated" — was right all along; the code was wrong).
+
+Root-cause repair, not a row-add: both lists now consume ONE shared
+`standalone_mode()` predicate (bare posture = no primary mode ∧ no
+standalone mode; paths guard = the same predicate), so the mirror-drift
+class the `standalone_modes_are_never_bare` pin warned about is
+structurally closed — a future standalone mode adds ONE row in ONE
+place. The pin test asserts BOTH consumers per mode. The global binary
+was rebuilt from clean HEAD with the release feature set
+(`default,latent_retrieval,kat_service,kat_transport,fix_verify`,
+in-tree + isolated `CARGO_TARGET_DIR` — a /tmp worktree breaks the
+`../riir-ai/vendor` patch paths, measured) and copied over both
+`target/release/cargo-heal.exe` and `~/.cargo/bin/cargo-heal.exe`;
+`--version` verified exit 0 e2e.
+
 ## The `--corpus-json` lane retired (2026-09-13, riir-dapps Plan 026)
 
 `gen_dashboard.py`'s `--corpus-json` flag + `write_corpus_growth_json` are
