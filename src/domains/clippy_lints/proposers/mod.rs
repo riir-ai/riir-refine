@@ -128,10 +128,11 @@
 //! ## Scope
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
-//! module + a row in `collect_rule_edits`' match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 51 lints ship today (10 seed +
+//! module + a row in `collect_rule_edits`'s match (and, when detection is
+//! structural, a row in [`FIXABLE_LINTS`]). 53 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
-//! Batch 89/90/91 rows + the P10 post-mining intake pair); future lints drop in by extending the
+//! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
+//! the P12 nursery receiver rule); future lints drop in by extending the
 //! match.
 
 pub mod byte_char_slices;
@@ -162,6 +163,7 @@ pub mod needless_bool_assign;
 pub mod needless_borrow;
 pub mod needless_lifetimes;
 pub mod needless_match;
+pub mod needless_pass_by_ref_mut;
 pub mod needless_range_loop;
 pub mod needless_return;
 pub mod question_mark;
@@ -390,6 +392,18 @@ pub const VERIFY_LINTS: &[&str] = &[
     // healer's marginal value was near zero. Corpus entry withheld too
     // (the corpus-lockstep gate forbids entries without proposers).
     "suboptimal_flops",
+    // P12 post-mining intake (2026-09-14, the 2026-09-09 nursery-gap usage
+    // artifact — ~80 findings in one riir-ai sweep): `&mut self` → `&self`
+    // on non-`pub` inherent-impl methods with read-only bodies (+ the
+    // same-file `let mut` caller cascade). VERIFY: the lint is nursery /
+    // default-`allow` (it only appears under an explicit `-W` stream —
+    // the `--clippy-json` oracle lane), real clippy's suggestion is
+    // applicability `Unspecified` (`--fix` applied 0 — probed), and body
+    // "never mutates self" is approximated parse-only (std-`&self`
+    // allowlist + same-file unique-&self resolution) where clippy is
+    // type-aware — every wrong fire is an E0596/E0384 check-visible
+    // compile error the gate reverts.
+    "needless_pass_by_ref_mut",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -494,6 +508,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "vec_init_then_push" => vec_init_then_push::collect_edits(source, file),
         // ── P11 post-mining intake (2026-09-13, the Bench-088 usage artifact) ──
         "format_collect" => format_collect::collect_edits(source, file),
+        // ── P12 post-mining intake (2026-09-14, the 2026-09-09 nursery-gap row) ──
+        "needless_pass_by_ref_mut" => needless_pass_by_ref_mut::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -544,6 +560,9 @@ mod tests {
             // P11 post-mining intake: help-only suggestion + the two-span
             // import insertion — VERIFY-tier only.
             "format_collect",
+            // P12 post-mining intake: nursery default-allow + parse-only body
+            // analysis — VERIFY-tier only.
+            "needless_pass_by_ref_mut",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
@@ -835,6 +854,12 @@ impl S {
                 "vec_init_then_push",
                 "fn build() -> Vec<u8> { let mut v = Vec::new(); v.push(1); v.push(2); v }",
                 "let v = vec![1, 2];",
+            ),
+            // ── P12 post-mining intake (2026-09-14, the 2026-09-09 nursery-gap row) ──
+            (
+                "needless_pass_by_ref_mut",
+                "struct C { v: u32 }\nimpl C {\n    fn peek(&mut self) -> u32 { self.v }\n    fn demo() -> u32 { let mut c = C { v: 1 }; c.peek() }\n}\n",
+                "fn peek(&self)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

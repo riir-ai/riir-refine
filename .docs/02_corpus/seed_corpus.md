@@ -1,13 +1,15 @@
 # Seed corpus — built-in lint examples
 
-`build_seed_corpus()` returns a `ClippyCorpus` with 51 entries: the 10
+`build_seed_corpus()` returns a `ClippyCorpus` with 53 entries: the 10
 seed lints (style, complexity, perf, nursery groups) + the 30 Issue 016
 structural-expansion lints (frequency-ranked selection — see
 [`.benchmarks/021`](../../.benchmarks/021_clippy_structural_expansion_goat.md))
 + the P7 post-mining verify row (`manual_is_multiple_of`, 2026-08-29) +
 2 Batch 89 + 2 Batch 90 + 4 Batch 91 + the 2 P10 post-mining intake rows
 + the P11 post-mining intake row
-(2026-09-13).
+(2026-09-13) + the 1 P12 post-mining intake row (2026-09-14,
+`needless_pass_by_ref_mut` — nursery/default-`allow`, VERIFY-tier, the
+first receiver+cascade rule).
 
 ## The 10 seed entries
 
@@ -141,6 +143,12 @@ The full per-lint fixture tables live in
 [`corpus.rs`](../../src/domains/clippy_lints/corpus.rs) + the per-lint
 proposer test modules under
 [`proposers/`](../../src/domains/clippy_lints/proposers/).
+
+## The 1 P12 post-mining intake entry (2026-09-14)
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `needless_pass_by_ref_mut` | nursery | verify | `&mut self` → `&self` on non-`pub` inherent-impl methods with read-only bodies (probed: `pub` silent, `pub(crate)` fires, trait impls silent; suggestion applicability `Unspecified`) + the same-file `let mut` caller cascade (every mention of the binding in its fn is a receiver of a fixed method — the narrow provable shape; left-overs ride rustc's machine-applicable `unused_mut`). Body analysis is parse-only where clippy is type-aware: std-`&self` allowlist + same-file unique-`&self` resolution; wrong fires are E0596/E0384 check-visible — the verify gate reverts them. Consumed via the `--clippy-json` oracle lane (the lint is default-`allow`). |
 
 ## The 1 P11 post-mining intake entry (2026-09-13)
 

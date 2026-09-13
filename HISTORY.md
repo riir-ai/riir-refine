@@ -8,6 +8,100 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## P12 post-mining intake — `needless_pass_by_ref_mut` lands: the 2026-09-09 nursery-gap row closes, probe-corrected twice (2026-09-14)
+
+The last open clippy_lints intake candidate (the ~80-finding riir-ai sweep
+row). Corpus 52 → 53, VERIFY-tier 11 → 12 (38 `--fix` / 12 `--verify` /
+3 self_evolve-only).
+
+**The probe (`.raw/pbrm_probe`, clippy 0.1.98 / 48a229ceae, deleted after
+the landing) corrected the intake row TWICE before anything landed** (the
+P10/P11/P12 pattern, 4th consecutive):
+
+1. **The real firing surface is narrower than the row implied**: `pub`
+   methods are SILENT (clippy's exported-API guard — the round-1 probe fired
+   only the ONE private method among five read-only candidates), `pub(crate)`
+   FIRES, trait-impl methods are SILENT (an impl cannot relax its trait's
+   receiver), and private FREE fns with `&mut` params fire too (out of scope
+   v1 — receiver-only, the documented divergence). The proposer mirrors the
+   visibility line exactly (private + `pub(crate)` only, inherent impls
+   only).
+2. **The "must emit BOTH halves or the fix does not verify" premise was
+   factually wrong at the gate level**: the fix_verify gate is errors-only
+   ("Warnings do not fail the check", `fix_verify.rs` header) — a
+   definition-site fix VERIFIES fine (the caller-side `unused_mut` cascade
+   is a warning). AND real clippy's own suggestion is definition-site-ONLY
+   (applicability `Unspecified` — `cargo clippy --fix` applied 0 edits,
+   probed): the cascade was never part of the lint's fix; it is rustc's
+   separate machine-applicable `unused_mut` pass. The cascade still matters
+   for `-D warnings` consumer CIs (a left-over `unused_mut` is a new
+   warning attributable to our edit), so the proposer emits it anyway — but
+   as a NARROW provable shape, not a gate requirement.
+
+**The proposer** (`src/domains/clippy_lints/proposers/needless_pass_by_ref_mut.rs`):
+
+- **Definition half**: `&mut self` → `&self` (node-span replacement,
+  byte-clean) on eligible methods — non-`pub` inherent-impl methods, plain
+  `&mut self` receiver (syn 2 carries the mut in `Receiver::mutability`,
+  NOT the reference tuple — the first-implementation bug the unit tests
+  caught), plain fn (no attrs/async/const/unsafe/abi/variadic).
+- **Body analysis** (parse-only approximation of clippy's type-aware
+  "never uses `self` mutably"): refuse on assignment/compound-assign LHS
+  rooted at `self`, `&mut` operands mentioning `self` anywhere, macros
+  whose tokens mention `self` (`write!(self.buf, ..)` — macro bodies are
+  invisible), bare-`self` paths outside allowed positions, and self-rooted
+  method calls UNLESS the callee is on the std-`&self` allowlist (16
+  entries — the `needless_borrow` receiver-whitelist precedent) or resolves
+  to exactly ONE same-file `&self` declaration (a `&mut` callee this pass
+  fixes becomes visible to callers NEXT fixpoint pass — the 4-pass
+  composition, not intra-pass cleverness). A custom type overriding
+  `len(&mut self)` is the documented divergence — E0596, revertable by the
+  compile gate (the tier argument: every wrong fire on BOTH halves is a
+  check-visible compile error).
+- **Cascade half**: drop `mut` from `let mut x` when EVERY mention of the
+  binding inside its enclosing fn (locals are fn-scoped — the fn range is
+  the complete use set) is the receiver of a call to a method this pass
+  fixed, the method name is declared exactly once in the file (no
+  cross-type ambiguity), and no same-name re-let shadows it. Any other use
+  shape — assignment, `&mut`, field write, an unfixed method call, a
+  by-value pass, a macro — leaves the `mut` alone (the left-over is
+  rustc's machine-applicable `unused_mut`, never a break).
+
+**Tier**: VERIFY (`VERIFY_LINTS`) — the lint is nursery/default-`allow` (a
+default-flags verify compiles the rule to a no-op — the lint-flavored
+cfg-gate lesson), consumed via the `--clippy-json` oracle lane. Live-fired
+end-to-end through the real binary: `-W clippy::needless-pass-by-ref-mut`
+JSON feed → `--suggest --clippy-json` surfaces `[oracle] needless_pass_by_ref_mut
+oracle finding` at the real span, footer `0 no-corpus-rule`, fixture
+top-ranked at 319.46. (Operational note en route: the run initially printed
+`NO CORPUS RULE` — the kat corpus LEASE (epoch 2958, `.heal/corpus-lease`)
+REPLACES the compiled-in corpus at runtime, and the leased epoch predates
+the entry; the gap signal was honest for that config. Bypassing the lease
+showed the compiled-in truth. The rule reaches leased users at the next
+service-side corpus sync.)
+
+**Real-clippy fixture validation** (the P10/P11 discipline): buggy fires
+under `-W` at exactly the `read` method; fixed is clean; DEFAULT-level
+output carries ZERO real diagnostics (the cascade half verified — no
+left-over `unused_mut`).
+
+**Gates**: 19 proposer unit tests (fire/silent per probe shape: pub silent,
+`pub(crate)` fires, trait impl silent, transitive-`&mut`-callee silent,
+shared-callee fires, allowlisted chain fires, ambiguous callee silent,
+macro/self-arg/async silent; cascade fire + 3 refusals) + corpus
+`corpus_size_is_53` + `all_buggy_codes_fire_their_lint` + fixture-table row
++ `fixable_lints_exclude_type_blind_rules` row. lib 1404/1404 (was 1385),
+latent 1539/1539, all-features 2282/2282, clippy `-D warnings --all-targets`
+clean. Score-bench FLAT at the pinned 96.2/1.9/100/100 (64 edits) — the
+frozen v1 fixture set is unperturbed.
+
+**Rider**: `src/downstream_hint.rs` — the previous session's committed
+test code carried two clippy findings invisible to a `--lib`-only clippy
+run (an unused `b` binding at L329; a `&format!(..)` needless borrow at
+L352 — both test-only, both fixed here; the session's "clippy clean" claim
+was made with `cargo clippy --lib` which does not lint `cfg(test)` code —
+the box's `--all-targets` discipline for test-bearing files).
+
 ## P14 post-mining intake — the cross-repo consumer-surface hint landed: the FP-class #3 open candidate closes (2026-09-14)
 
 The FP-class #3 row's last open candidate (family (b) probed dormant

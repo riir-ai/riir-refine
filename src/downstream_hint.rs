@@ -326,7 +326,9 @@ mod tests {
     fn consumer_repo_named_with_unique_crate_count() {
         let parent = fake_parent("consumer");
         let a = fake_repo(&parent, "repoA", PKG);
-        let b = fake_repo(
+        // repoB only needs to EXIST as the consumer (side effect); the
+        // scan root is repoA's src.
+        fake_repo(
             &parent,
             "repoB",
             &format!("{PKG}\n[dependencies]\nx = {{ path = \"../repoA\" }}\n"),
@@ -347,7 +349,7 @@ mod tests {
         fs::create_dir_all(&plain).unwrap();
         fs::write(
             plain.join("Cargo.toml"),
-            &format!("{PKG}\n[dependencies]\nx = {{ path = \"../repoA\" }}\n"),
+            format!("{PKG}\n[dependencies]\nx = {{ path = \"../repoA\" }}\n"),
         )
         .unwrap();
         assert_eq!(downstream_consumers_hint(&[a.join("src")]), "");

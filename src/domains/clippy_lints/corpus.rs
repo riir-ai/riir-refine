@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 52 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 53 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 33
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -32,8 +32,11 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 /// mechanical fixer needed by hand on `src/bin/heal.rs`) + the 1 P11
 /// post-mining intake row (2026-09-13, the Bench-088 usage artifact —
 /// `format_collect`, the first two-span clippy rule: fold rewrite + the
-/// anonymous `use std::fmt::Write as _;` insertion).
-// 49-entry data table, not logic — length is the point.
+/// anonymous `use std::fmt::Write as _;` insertion) + the 1 P12
+/// post-mining intake row (2026-09-14, the 2026-09-09 nursery-gap row —
+/// `needless_pass_by_ref_mut`, the first receiver+cascade rule:
+/// `&mut self` → `&self` + the same-file `let mut` caller strip).
+// 53-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -459,6 +462,19 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn render(xs: &[u32]) -> String {\n    xs.iter().map(|x| format!(\"{}\", x)).collect::<String>()\n}".to_string(),
             fixed_code: "use std::fmt::Write as _;\nfn render(xs: &[u32]) -> String {\n    xs.iter().fold(String::new(), |mut out, x| { let _ = write!(out, \"{}\", x); out })\n}".to_string(),
         },
+        // ── P12 post-mining intake (2026-09-14, the 2026-09-09 nursery-gap row) ──
+        ClippyFixEntry {
+            lint_name: "needless_pass_by_ref_mut".to_string(),
+            lint_group: "nursery".to_string(),
+            // NURSERY / default-`allow` — fires only under an explicit -W
+            // stream (probe-verified 2026-09-14, clippy 0.1.98: private +
+            // pub(crate) methods fire, `pub` is silent, trait impls silent,
+            // suggestion applicability Unspecified). The fixture carries
+            // BOTH halves: the receiver fix + the same-file `let mut`
+            // caller cascade.
+            buggy_code: "struct Probe { hits: u32 }\nimpl Probe {\n    fn read(&mut self) -> u32 {\n        self.hits\n    }\n    fn run() -> u32 {\n        let mut p = Probe { hits: 1 };\n        p.read()\n    }\n}".to_string(),
+            fixed_code: "struct Probe { hits: u32 }\nimpl Probe {\n    fn read(&self) -> u32 {\n        self.hits\n    }\n    fn run() -> u32 {\n        let p = Probe { hits: 1 };\n        p.read()\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -531,15 +547,17 @@ mod tests {
     }
 
     /// Corpus size pin: 10 seed, 31 expansion/post-mining, 2 Batch 89,
-    /// 2 Batch 90, 4 Batch 91, the 2 P10 post-mining intake rows, and the
-    /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13) = 52.
+    /// 2 Batch 90, 4 Batch 91, the 2 P10 post-mining intake rows, the
+    /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13), and
+    /// the 1 P12 post-mining intake row (`needless_pass_by_ref_mut`,
+    /// 2026-09-14) = 53.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_52() {
+    fn corpus_size_is_53() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 52);
+        assert_eq!(corpus.entries.len(), 53);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires
