@@ -43,6 +43,10 @@ use std::io::IsTerminal as _;
 
 const RESET: &str = "\x1b[0m";
 const DIM: &str = "\x1b[2m";
+/// The bar's burned-through track: dim + 256-color gray 240 — the bare
+/// `2m` attribute renders too close to the fill on some terminals, and
+/// `38;5;240` alone ignores themes; together they dim clearly everywhere.
+const TRACK_DIM: &str = "\x1b[2m\x1b[38;5;240m";
 const GREEN: &str = "\x1b[32m";
 const AMBER: &str = "\x1b[33m";
 const RED: &str = "\x1b[31m";
@@ -307,7 +311,7 @@ pub fn braille_bar(remaining_frac: f64, width: usize, color: bool) -> String {
             out.push_str(RESET);
         }
         if n_empty > 0 {
-            out.push_str(DIM);
+            out.push_str(TRACK_DIM);
             for _ in 0..n_empty {
                 out.push('\u{28FF}');
             }
@@ -427,7 +431,7 @@ mod tests {
     fn colored_bar_carries_dim_track_and_tone() {
         let bar = braille_bar(0.8492, 24, true);
         assert!(bar.contains(GREEN), "green tone missing: {bar:?}");
-        assert!(bar.contains(DIM), "dim track missing: {bar:?}");
+        assert!(bar.contains(TRACK_DIM), "dim gray-240 track missing: {bar:?}");
         // The dim tail is full blocks, never the dotted track.
         assert!(!bar.contains('\u{28C0}'));
     }
