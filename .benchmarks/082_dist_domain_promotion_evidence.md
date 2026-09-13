@@ -1,6 +1,6 @@
 # Bench 082: `dist` domain promotion evidence — score-bench dist-ON + real-consumer scans (Issue 085)
 
-**Status:** RECORD — score-bench dist-ON run #92 **FLAT** (condition 2 PASS) + condition-(4) scan table landed with true positives confirmed and two scanner blind spots documented; Issue 085 promotion evidence COMPLETE, default-on stays OWNER-DECIDED (recommendation: stay opt-in until the two evidence gaps land).
+**Status:** RECORD — score-bench dist-ON run #92 **FLAT** (condition 2 PASS) + condition-(4) scan table landed with true positives confirmed and two scanner blind spots documented; Issue 085 promotion evidence COMPLETE, default-on stayed OWNER-DECIDED at bench time (recommendation: stay opt-in until the two evidence gaps land — **post-promotion update 2026-09-13: the gaps closed same-day §6, the owner pull arrived (the Issue-085 fix directive), and `dist` is DEFAULT-ON since 2026-09-13**).
 **ADDENDUM 2026-09-10 — B1 + B2 LANDED, scan table re-run:** both blind spots closed in `src/domains/dist/` (see §6); the scan table re-run at the same feature set. gm-tool now cited 3 (B1 closed); chaind down 3 → 1 (rules 1+2 silent, panic honest); deployer member down 3 → 2 (root strip satisfies rule 1); one NEW legitimate citation surfaced (viewbridge xtask panic — B1 exposing a previously-invisible bin); all negative controls held. The corpus/routing is UNCHANGED — only detector triggers widened — so no score-bench re-run is owed (FIXABLE_DIST stays [], vocab + OOD cannot move, the same mechanism as run #92's FLAT). Details: §6 below.
 
 ## What this is
@@ -74,7 +74,7 @@ No code was changed for this bench — both findings are recorded as the promoti
 
 ## 5. Recommendation
 
-**Stay opt-in.** The suggest tier earns trust on fixtures, own manifest, and the two clean true-positive repos — but a default-on domain that fires 3 wrong citations on `riir-chaind` and misses `riir-gm-tool` would teach operators to ignore it within a week. B1 + B2 are small, `DistContext`-shaped scanner extensions; land them, re-run this scan table, and re-present for the owner's default-on decision (which also still needs the owner pull evidence the issue names).
+**Stay opt-in.** *(Pre-B1/B2 recommendation, kept as the record — post-promotion update 2026-09-13: B1 + B2 landed same-day (`759e209d`, §6 below — gm-tool 0 → 3, chaind 3 → 1), the rescan closed both gaps, and the owner pull arrived with the Issue-085 fix directive; `dist` is DEFAULT-ON since 2026-09-13.)* The suggest tier earns trust on fixtures, own manifest, and the two clean true-positive repos — but a default-on domain that fires 3 wrong citations on `riir-chaind` and misses `riir-gm-tool` would teach operators to ignore it within a week. B1 + B2 are small, `DistContext`-shaped scanner extensions; land them, re-run this scan table, and re-present for the owner's default-on decision (which also still needs the owner pull evidence the issue names).
 
 > **2026-09-10: B1 + B2 landed same day — §6 is the re-run.** The recommendation above is now UNBLOCKED of its scanner conditions; the remaining gate is owner pull evidence only.
 
@@ -125,6 +125,9 @@ The corpus (`FIXABLE_DIST = []`, suggest-only entries byte-identical) and the ro
 ### 6.5 Remaining gate for default-on
 
 Owner pull evidence only (the issue's §Promotion path, condition on adoption). Scanner conditions 1–4 are all green at this tree; the two evidence gaps §5 named are closed by this addendum.
+
+**Resolved 2026-09-13:** owner pull received (the Issue-085 fix directive);
+`dist` promoted DEFAULT-ON — record in `HISTORY.md` §Issue 085. The `#[cfg(feature = "dist")]` gates are retained; `--no-default-features` is the tested flag-OFF path.
 
 ## Run + environment
 

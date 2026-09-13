@@ -693,6 +693,37 @@ precedent: a static manifest read is not the tool's verdict.
 `-Zhint-mostly-unused` measure-first advice) — the issue's Phase-1 table
 listed 4 until the 2026-09-12 status-closure pass folded it in.
 
+**PROMOTED DEFAULT-ON 2026-09-13** (Issue 085 closed + issue file removed
+per the noise-reduction rule) — the owner pull arrived as the Issue-085 fix
+directive; all four GOAT conditions were already PASS (Bench 082 + §6
+addendum; B1/B2 closed `759e209d`). `dist` joined `default` in Cargo.toml;
+the `#[cfg(feature = "dist")]` gates are retained (`--no-default-features`
+is the tested flag-OFF path, the riir-dapps Plan-020 precedent). Gates run
+at the promotion: `dist_gates` **13/13 at PLAIN default features** (no
+`--features dist` — the promotion's own non-vacuity proof), default lib
+**1292/0**, `--no-default-features` check clean, router-annotation floor
+re-measured per the convention — canonical `default + latent_retrieval` =
+**74/101 (73.3%)** vs floor 69 (the pinned dist-on arm, unchanged),
+`kernel_heal + latent_retrieval` = **92/131 (70.2%)** — identical to its
+dist-off twin (delta 0; the inherited floor 87 was already the right pin,
+no re-pin owed; recorded in the floor fn's comment). Doc surfaces walked in
+the same commit (the feature-gate-audit 5-surface discipline): Cargo.toml
+feature comment, `src/domains/mod.rs` doc list, `src/lib.rs` header list +
+re-export comments, `src/bin/heal.rs` help (which also carried TWO stale
+claims — "docker needs --features docker" and "--fix-compile needs
+--features rustc_errors", both false since 2026-08-28/29), root README
+(domain table "Three domains ship" + missing dist row + docker's missing
+default mark; feature-matrix dist row), `.docs/11_domains/README.md`
+feature table (docker row was stale "off"), `.docs/11_domains/dist.md`
+header + the dead issue link, AGENTS.md (Role bullet + feature row), Bench
+082 (three in-place post-promotion annotations per the append-only
+correction rule), and the `.distill/001` Batch-142 rider note. The release
+feature set (`default + latent_retrieval + kat_service + kat_transport +
+fix_verify`) picks up `dist` via `default` — zero new deps, so no
+THIRD_PARTY_LICENSES or standalone-dep-set change; the release binary gains
+the suggest-only dist scanner at negligible size (well under the 6.5 MiB
+binary_size_gate ceiling).
+
 ## The domain swap — the client half + the config surface, post-flip state (2026-09-10, riir-dapps Plans 023+024)
 
 The riir-dapps-side record carries the server half (the export/import move,

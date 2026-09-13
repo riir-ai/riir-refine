@@ -3044,14 +3044,14 @@ USAGE:
                     the dist feature, `Cargo.toml` manifests join the walk
                     (Issue 085 — suggest-only build-config advice).
 
-Domains are feature-gated: clippy + perf are default-on; kernel needs
---features kernel_heal, sec needs --features sec, docker needs --features
-docker (Dockerfiles are matched by NAME — `Dockerfile`, `<n>.Dockerfile`,
-`Dockerfile.<n>`; `docker_verify` adds the hadolint agreement oracle), dist
-needs --features dist (Cargo.toml manifests are matched by NAME; suggest-only,
-Issue 085).
+Domains are feature-gated: clippy + perf + docker + rustc_errors + dist are
+default-on (docker: Dockerfiles are matched by NAME — `Dockerfile`,
+`<n>.Dockerfile`, `Dockerfile.<n>`; `docker_verify` adds the hadolint
+agreement oracle. dist: Cargo.toml manifests are matched by NAME;
+suggest-only, Issue 085); kernel needs --features kernel_heal, sec needs
+--features sec.
 Requesting a domain whose feature is off is an error (T2.4 gating). --verify needs --features fix_verify.
---fix-compile needs --features rustc_errors.",
+--fix-compile ships default-on (rustc_errors).",
         FIXABLE_RULES.len(),
         FIXABLE_RULES.join(", "),
         FIXABLE_LINTS.len(),

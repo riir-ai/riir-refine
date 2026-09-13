@@ -29,10 +29,15 @@
 //!
 //! ## Multi-domain (Plan 001)
 //!
-//! The framework is domain-pluggable behind [`HealDomain`]. Three domains ship:
+//! The framework is domain-pluggable behind [`HealDomain`]. The shipped
+//! domain set (Plan 001 + Plans 018/030/019/085):
 //! - **`clippy_lints`** (default-on) — `clippy::*` lint healing (the original domain)
 //! - **`rust_perf`** (default-on, Phase 2) — `rust-optimize` perf healing (promoted 2026-08-13 after Bench 013 GOAT)
 //! - **`kernel_heal`** (opt-in, Phase 3) — GPU kernel optimization healing (absorbs `Proposal 012`; 4090 `LoRA` deferred)
+//! - **`sec`** (opt-in, Plan 018) — security-pattern bounded fixes
+//! - **`docker`** (default-on since 2026-08-28, Plan 030) — Dockerfile healing, the first no-`syn` scanner
+//! - **`rustc_errors`** (default-on since 2026-08-29, Plan 019) — `--fix-compile` compile-error repair (driver-shaped, inert until invoked)
+//! - **`dist`** (default-on since 2026-09-13, Issue 085) — Cargo.toml build-config advice (suggest-only)
 //!
 //! Cross-domain auto-routing ships behind the `latent_retrieval` feature
 //! (Plan 005): real-file span-level `--suggest` via the riir-rag latent
@@ -395,7 +400,7 @@ pub use domains::sec::{count_unsafe, SecDomain, SecFamily, SecRule, SecVerdict, 
 #[cfg(feature = "sec")]
 pub use domains::sec::corpus::build_sec_seed_corpus;
 
-// ── docker domain re-exports (behind `docker` feature, opt-in) ────────────
+// ── docker domain re-exports (behind `docker` feature, default since 2026-08-28) ────────────
 #[cfg(feature = "docker")]
 pub use domains::docker::{
     refuses as docker_refusals, DockerDomain, DockerFamily, DockerRule, DockerVerdict,
@@ -406,7 +411,7 @@ pub use domains::docker::{
 #[cfg(feature = "docker")]
 pub use domains::docker::corpus::build_docker_seed_corpus;
 
-// ── dist domain re-exports (behind `dist` feature, opt-in) ─────────────────
+// ── dist domain re-exports (behind `dist` feature, default since 2026-09-13) ─────────────────
 #[cfg(feature = "dist")]
 pub use domains::dist::{
     refuses as dist_refusals, DistContext, DistDomain, DistFamily, DistRule, DistVerdict,

@@ -1,11 +1,11 @@
 # `dist` — shipped-artifact build-config healing (6th retrieval domain)
 
 > Phase 1 landed 2026-09-09 (Issue 085); the B1/B2 context extensions landed
-> 2026-09-10 (`759e209d`). Opt-in feature `dist`, default-off. All four GOAT
-> conditions PASS (suggest precision + score-bench FLAT at the canonical
-> state + the router re-pin + real consumer cites — Bench 082 + §6
-> addendum); the ONLY remaining promotion gate is **owner pull evidence**,
-> per the `rust_perf` precedent.
+> 2026-09-10 (`759e209d`). **DEFAULT-ON since 2026-09-13** (Issue 085 closed
+> — owner pull). All four GOAT conditions PASS (suggest precision +
+> score-bench FLAT at the canonical state + the router re-pin + real consumer
+> cites — Bench 082 + §6 addendum). `--no-default-features` is the tested
+> flag-OFF path; the `#[cfg(feature = "dist")]` gates are retained.
 
 ## What it is
 
@@ -115,6 +115,6 @@ rule requires `[[bin]]`), and Phase 1 never WRITES a manifest (the bounded
 
 ## See also
 
-- [`.issues/085_dist_healing_domain.md`](../../.issues/085_dist_healing_domain.md) — the issue + GOAT gate
+- [`HISTORY.md`](../../HISTORY.md) §Issue 085 — the issue record + GOAT gate (issue file removed at closure)
 - [`docker.md`](docker.md) — the scanner + ScanContext precedent this domain follows
 - [`scripts/binary_size_gate.sh`](../../scripts/binary_size_gate.sh) — the release-lane ceiling that complements this domain

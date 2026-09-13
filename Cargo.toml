@@ -131,12 +131,13 @@ log = "0.4"
 ed25519-dalek = "2"
 
 [features]
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors"]
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist"]
 
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
 # (promoted to default-on 2026-08-13 after the perf-bench Pareto validator
 # GOAT gate passed — Bench 013 G1+G5). Phase 3 adds `kernel_heal`.
+# `dist` joined default 2026-09-13 (Issue 085 promotion — see its comment).
 clippy_lints = []
 
 # Phase 2: rust performance healing domain (rust-optimize skill checklist
@@ -448,10 +449,14 @@ docker_buildcheck = ["docker", "docker_verify"]
 # this tool's own shipping set (2026-09-09) — found by the OWNER after v0.1.4
 # shipped on plain --release; the domain fires at dev time on every scanned
 # manifest, which the release-lane size gate cannot. SUGGEST-ONLY in Phase 1
-# (no --fix writes to manifests). Opt-in until the issue's GOAT gate passes:
-# suggest precision fixtures + score-bench FLAT + router floor re-measured +
-# a real consumer cite. ZERO new deps: the section-aware line scanner is the
-# second hand-written one after docker (no toml crate, no regex).
+# (no --fix writes to manifests). DEFAULT-ON since 2026-09-13 (Issue 085
+# closed): all four GOAT conditions PASS — precision fixtures + score-bench
+# #92 FLAT + router floor re-pinned (74/101 measured at default+dist) + real
+# consumer cites (Bench 082 + its §6 addendum, B1/B2 closed `759e209d`) —
+# and the owner pull arrived (the Issue-085 fix directive, 2026-09-13).
+# `--no-default-features` is the tested flag-OFF path. ZERO new deps: the
+# section-aware line scanner is the second hand-written one after docker
+# (no toml crate, no regex).
 #
 # NOT a general TOML linter; NEVER advice that edits [profile.release]
 # directly ([profile.bench] inherits release — that edit poisons criterion

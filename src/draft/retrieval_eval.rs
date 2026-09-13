@@ -1280,9 +1280,16 @@ mod tests {
             // 73/101 (72.3%) — +1 span, the SAME docker-precedent mechanism
             // (a TOML off-vocabulary centroid absorbs fewer generic Rust
             // spans). Floor = measured − 5 per the Plan-030 convention.
-            // Every other dist-on combo is not gated anywhere and inherits
-            // its dist-off twin's floor until one becomes a gated state
-            // (then it gets its own measured pin, never a silent inherit).
+            //
+            // POST-PROMOTION 2026-09-13: `dist` joined `default`, so every
+            // default-bearing lane is now the dist-on state — the dist-off
+            // twins are reachable only via --no-default-features + explicit
+            // features (states that mostly no longer build, see the
+            // no-docker arms above). Re-measured at the promotion: canonical
+            // `default + latent_retrieval` = 74/101 (73.3%, the pinned arm,
+            // floor 69 held); `kernel_heal + latent_retrieval` = 92/131
+            // (70.2%) — IDENTICAL to its dist-off twin (delta 0; the floor
+            // 87 it inherited was already the right pin). No re-pin owed.
             let dist_on = cfg!(feature = "dist");
             match (
                 cfg!(feature = "kernel_heal"),

@@ -5,18 +5,19 @@
 //! - `rust_perf` (default since 2026-08-13, Phase 2) — `rust-optimize` perf
 //!   healing (promoted after Bench 013 GOAT G1+G5 PASS)
 //! - `kernel_heal` (opt-in, Phase 3) — GPU kernel optimization healing
-//! - `docker` (opt-in, Plan 030) — Dockerfile bounded-fix healing +
-//!   retrieval; the only domain with no `syn` (a hand-written stanza
-//!   scanner) and the only one whose oracle is an external binary
+//! - `docker` (default since 2026-08-28, Plan 030) — Dockerfile bounded-fix
+//!   healing + retrieval; the only domain with no `syn` (a hand-written
+//!   stanza scanner) and the only one whose oracle is an external binary
 //!   (hadolint, when on PATH)
-//! - `rustc_errors` (opt-in, Plan 019) — rustc compile-error repair keyed
-//!   by error code: the E0597 + borrowck (E0502/E0499/E0505) playbook
-//!   families behind the `--fix-compile` driver, plus the premise probe
-//!   and the `cargo fix` floor that bound the territory.
-//! - `dist` (opt-in, Issue 085) — shipped-artifact build-config advice:
-//!   release-profile size knobs + the workspace-member profile trap, over
-//!   name-matched `Cargo.toml` manifests. Suggest-only in Phase 1; the
-//!   second no-`syn` scanner after docker.
+//! - `rustc_errors` (default since 2026-08-29, Plan 019) — rustc
+//!   compile-error repair keyed by error code: the E0597 + borrowck
+//!   (E0502/E0499/E0505) playbook families behind the `--fix-compile`
+//!   driver, plus the premise probe and the `cargo fix` floor that bound
+//!   the territory. Driver-shaped: inert until invoked.
+//! - `dist` (default since 2026-09-13, Issue 085) — shipped-artifact
+//!   build-config advice: release-profile size knobs + the workspace-member
+//!   profile trap, over name-matched `Cargo.toml` manifests. Suggest-only in
+//!   Phase 1; the second no-`syn` scanner after docker.
 
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;
