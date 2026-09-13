@@ -8,6 +8,47 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## P12 post-mining intake — `useless_conversion` shape 2 (the `.into_iter()` call-arg drop): the probe re-keyed the lint, the extension rode the existing type-blind tier (2026-09-14, `ab2dab1a`)
+
+The 09-13 corpus-coverage intake's class (a) — real clippy fired on
+`preupload_all(projections.into_iter())` (riir-ai `624f24958`) and the
+healer was silent — consumed as a proposer extension, NOT a new rule.
+**The probe inverted the intake's own key** (the P10 precedent, again on
+our own notes): the intake called it "the `useless_into_iter` class";
+the probe crate (clippy 1.98, JSON + human output) showed the fn-arg
+shape fires as **`useless_conversion`** ("explicit call to `.into_iter()`
+in function argument accepting `IntoIterator`", machine-applicable `v`
+replacement) — `useless_into_iter` is the FOR-LOOP shape (pedantic; the
+probe's loop-site control stayed silent at default level). Both controls
+held: the `Iterator`-bound callee stayed silent (the precondition is
+clippy's typeck, invisible to a parse-only proposer) and the chained
+`v.into_iter().map(..)` stayed silent (not a direct argument). The
+existing `useless_conversion` proposer (the let-into shape, one of the
+document four TYPE-BLIND proposers) gained **shape 2**: a DIRECT call
+argument that is exactly `<expr>.into_iter()` (no turbofish, no args) is
+replaced by its receiver's original text — `ExprCall` + `ExprMethodCall`
+args both (the specimen is a method-call arg). Tier UNCHANGED: excluded
+from `FIXABLE_LINTS` and `VERIFY_LINTS` (the P11 needless_borrow
+precedent — shape-split tiers fragment retrieval vocabulary); every
+wrong drop is a COMPILE error (the callee wanted `Iterator`/`T`), never a
+silent behavior change; the `sink_iter` over-match is pinned by an
+honest-limitation fixture (`arg_shape_overmatch_on_iterator_param_is_
+type_blind`). No new corpus entry (52 unchanged — one exemplar per lint;
+the fix mechanism is the proposer). Validation: module 10/10 (6 new
+fixtures incl. the exact specimen shape), default lib 1365/1365, clippy
+clean; the **fed-oracle lane** (`--clippy-json` + `--suggest` on the
+probe) surfaces `[oracle] useless_conversion` at the prior-miss span —
+the exact shape that printed `[no corpus rule]` before; score-bench
+FLAT (96.2/1.9/100/100, 64 edits, row appended at 91281f50 + frontier
+snapshot). **En route: the P20 cfg-audit test was Windows-red at
+all-features** (the sibling's fixture gate `all(unix, feature = "a")`
+compiles to nothing on Windows; the audit's undecidable mark is CORRECT
+there) — fixed platform-portable `all(any(unix, windows), ..)` in
+`bbea191e`, all-features lib now 2243/0. Class (b) (cfg-union dead_code)
+STANDS documented out of syntax-corpus scope — feature-lattice
+reasoning, the `cfg_row_implication` audit-family neighbor; zero
+recurrences to date.
+
 ## The physician-heal-thyself self-audit — config-audit + orphan-report over riir-clippy itself at FULL scope (2026-09-14)
 
 The 2026-09-13 14-repo consumer sweep excluded this repo as sibling-hot;
