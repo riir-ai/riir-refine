@@ -6140,6 +6140,10 @@ fn main() {
         };
         let report = riir_clippy::config_audit::audit_paths(&targets);
         print!("{}", report.render());
+        let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
+        if !hint.is_empty() {
+            println!("{hint}");
+        }
         return;
     }
 
@@ -6162,6 +6166,10 @@ fn main() {
             &riir_clippy::orphan_report::DEFAULT_PROBE_DEPTHS,
         );
         print!("{}", report.render());
+        let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
+        if !hint.is_empty() {
+            println!("{hint}");
+        }
         if report.blind.is_some() {
             std::process::exit(1);
         }
