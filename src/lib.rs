@@ -285,6 +285,14 @@ pub mod frontier_report;
 pub mod config_audit;
 pub mod orphan_report;
 
+// The KAT run footer (2026-09-13 redesign): the glanceable 3-line billing
+// readout that replaced the two `summary_line()` walls in bin/heal.rs —
+// reading-rounded numbers, a Braille fuel-gauge over the grant projection,
+// a state-aware sync line. Pure presentation over ledger primitives, so
+// lib tests (incl. the visual `-- --nocapture` print) run at default
+// features; the canonical 6-decimal shapes stay in riir-kat's `render_kat`.
+pub mod kat_footer;
+
 // Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 // history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)
 // against real-`cargo clippy` ground truth on frozen fixtures mined from

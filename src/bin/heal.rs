@@ -7897,21 +7897,30 @@ fn main() {
             );
         }
     }
+    // 2026-09-13 footer redesign: plural-aware `files`/`spans` beats the
+    // parenthesized `file(s), span(s)` hedge; the KAT detail that used to
+    // ride the two summary_line walls moved to the kat_footer block at the
+    // end of the run (after the pushes, so the sync line is post-truth).
+    let file_pl = if files.len() == 1 { "file" } else { "files" };
+    let span_pl = if n_chunks == 1 { "span" } else { "spans" };
+    let sugg_pl = if n_suggestions == 1 {
+        "suggestion"
+    } else {
+        "suggestions"
+    };
     println!(
-        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}{}{}",
+        "\nscanned {} {file_pl} · {} {span_pl} · {} with {sugg_pl} (top-{} per \
+         domain){mode}{non_syn_note}{fmt_note}",
         files.len(),
         n_chunks,
         n_suggestions,
-        args.top_k,
-        mode,
-        non_syn_note,
-        fmt_note
+        args.top_k
     );
 
-    // KAT meter (T0.5): persist the session's burn + one summary line.
-    // Save failure is a lost bookkeeping event, never a failed heal — warn
-    // + continue (the recorder precedent). No `$` figures here (caveats
-    // #12/#15): tokens only; pricing is server-side with an as-of date.
+    // KAT meter (T0.5): persist the session's burn. Save failure is a lost
+    // bookkeeping event, never a failed heal — warn + continue (the
+    // recorder precedent). The session summary now renders in the
+    // kat_footer block at the end of the run.
     #[cfg(feature = "kat_service")]
     if let Some(m) = &kat_meter {
         if let Err(e) = m.save() {
@@ -7920,13 +7929,12 @@ fn main() {
                 m.path().display()
             );
         }
-        println!("{}", m.summary_line());
     }
 
     // KAT charge (T0.6, Plan 024): settle the session's uncharged tokens at
-    // the per-unit rate, persist, one summary line. Same accounting-only
-    // posture (G9d — the balance is a local projection; the server ledger
-    // reconciles at sync), same no-`$` rule (caveats #12/#15).
+    // the per-unit rate and persist. Same accounting-only posture (G9d —
+    // the balance is a local projection; the server ledger is the
+    // authority); the figures render in the kat_footer block below.
     #[cfg(feature = "kat_service")]
     if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_mut()) {
         c.settle(m.state());
@@ -7936,7 +7944,6 @@ fn main() {
                 c.path().display()
             );
         }
-        println!("{}", c.summary_line());
         let remaining = c.balance_projection();
         let kat = |micro: u64| {
             riir_clippy::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
@@ -8031,6 +8038,85 @@ fn main() {
             c.state().meter_watermark_tokens,
         );
         print_burn_sync(&outcome);
+    }
+
+    // The redesigned KAT footer (2026-09-13): one glanceable block —
+    // numbers rounded for reading, a Braille fuel-gauge over the grant,
+    // a state-aware sync line — replacing the two `summary_line()` walls.
+    // Prints LAST, after the pushes, so the sync line states post-push
+    // truth. Current ⇔ every pushable whole KAT is acked (the burn wire
+    // truncates to whole KAT, so the sub-KAT sliver rides until the next
+    // crossing — by design, not a stuck delta).
+    #[cfg(feature = "kat_service")]
+    if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_ref()) {
+        let account = riir_clippy::kat_account::KatAccount::load(
+            &riir_clippy::kat_account::KatAccount::default_dir(),
+        )
+        .ok();
+        // The mint URL needs an account; the no-transport build never
+        // renders a link (Unknown/LoggedOut carry none), so it is computed
+        // only where it is read.
+        #[cfg(feature = "kat_transport")]
+        let mint_url = account
+            .as_ref()
+            .map(|a| {
+                format!(
+                    "{}/mint/{}",
+                    riir_clippy::kat_lease_client::service_url_for_command()
+                        .trim_end_matches('/'),
+                    a.state().account_id
+                )
+            })
+            .unwrap_or_default();
+        #[cfg(feature = "kat_transport")]
+        let sync = if account.is_none() {
+            riir_clippy::kat_footer::SyncState::LoggedOut
+        } else {
+            let root = resolve_heal_root(&args.paths);
+            let ack_path = root
+                .join(".heal")
+                .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
+            let (ack, _) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+            // The burn wire is whole-KAT granular (wire_kat_total truncates),
+            // so the sub-KAT sliver of `charged` is BY DESIGN unacked until
+            // the next whole-KAT crossing — it is not a stuck delta. Current
+            // means: every pushable whole KAT is acked. A real stack (offline
+            // pushes) leaves whole-KAT gaps beyond the sliver.
+            let wire = riir_clippy::kat_burn_client::WIRE_PER_CHARGE_UNITS;
+            let pushable_wire = c.state().charged_kat / wire;
+            if pushable_wire <= ack.burn_kat_total {
+                riir_clippy::kat_footer::SyncState::Current {
+                    mint_url: &mint_url,
+                }
+            } else {
+                riir_clippy::kat_footer::SyncState::Unsynced {
+                    micro_kat: (pushable_wire - ack.burn_kat_total).saturating_mul(wire),
+                    queued_batches: 0,
+                    mint_url: &mint_url,
+                }
+            }
+        };
+        #[cfg(not(feature = "kat_transport"))]
+        let sync = if account.is_none() {
+            riir_clippy::kat_footer::SyncState::LoggedOut
+        } else {
+            riir_clippy::kat_footer::SyncState::Unknown
+        };
+        let footer = riir_clippy::kat_footer::KatFooter {
+            run_tokens: m.session_tokens(),
+            run_micro_kat: c.session_kat(),
+            cum_tokens: m.state().cumulative_tokens,
+            cum_micro_kat: c.state().charged_kat,
+            grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_KAT,
+            rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_KAT_PER_MILLION_TOKENS,
+            meter_version: m.state().version,
+            charge_version: c.state().charge_version,
+            sync,
+        };
+        println!(
+            "{}",
+            footer.render(riir_clippy::kat_footer::footer_color_enabled())
+        );
     }
 }
 

@@ -1,0 +1,507 @@
+//! The KAT run footer — the human readout of a heal run's billing.
+//!
+//! Pure presentation over primitives: numbers arrive as micro-KAT / token
+//! counts (canonical units owned by the sibling `riir-kat` leaf, rendered
+//! canonically by `render_kat`'s 6-decimal protocol shape — the form
+//! riir-dao/riir-dapps pin cross-repo). This module never touches those; it
+//! renders the same facts for the terminal, where trailing `.000000`s and a
+//! twice-stated disclaimer were wall-of-text noise (the 2026-09-13
+//! redesign discussion).
+//!
+//! Shape (spec v2 + the dim-track Braille amendments):
+//!
+//! ```text
+//! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1 · cum 15,080,719 tok)
+//!      grant     ⣿…⣄⣿⣿⣿  84.92 KAT left · 15.08 of 100 burned
+//!      sync      ✓ current — ledger matches · mint settles hourly · mint ↗
+//! ```
+//!
+//! - The bar is a Braille fuel gauge: filled cells are the REMAINING grant
+//!   (bright, threshold-colored), the burned-through tail is dim full
+//!   blocks, and the partial cell fills bottom-up (`⠐ ⣀ ⣄ ⣤ ⣦ ⣶ ⣷ ⣿`)
+//!   so the bottom edge stays continuous — a liquid level, appropriate for
+//!   a tank. 24 cells × 8 dots = 192 steps. Plain (piped/`NO_COLOR`) builds
+//!   fall back to the dotted `⣀` track.
+//! - Numbers round for reading and round AS A PAIR: `left = grant −
+//!   burned` is computed after rounding, so the caption always sums.
+//! - The sync line is state-aware. The old static "accounting only,
+//!   reconciles at sync" disclaimer was true in neither direction: it
+//!   printed "local only" even when the tail push had just been accepted,
+//!   and said nothing when the delta was actually stuck.
+//! - `Unknown` (a `kat_service`-only dev build with no transport) renders
+//!   the classic honest one-liner.
+//!
+//! Every figure the ledger needs stays canonical: exact micro-KAT lives in
+//! the charge ledger + burn ack and surfaces via `render_kat` in `sync` /
+//! `account` output. This footer is a readout, which is what its sync line
+//! says.
+
+/// Bar width in cells. 24 × 8 dots = 192 steps ≈ 0.52% per dot.
+pub const BAR_WIDTH: usize = 24;
+
+use std::io::IsTerminal as _;
+
+const RESET: &str = "\x1b[0m";
+const DIM: &str = "\x1b[2m";
+const GREEN: &str = "\x1b[32m";
+const AMBER: &str = "\x1b[33m";
+const RED: &str = "\x1b[31m";
+
+/// The `mint ↗` page for the account (OSC-8 hyperlink when colored).
+pub enum SyncState<'a> {
+    /// The tail push was accepted (or there was nothing new to push): the
+    /// on-disk ack watermark covers the local cumulative burn.
+    Current {
+        /// The account's mint page.
+        mint_url: &'a str,
+    },
+    /// The push failed (or never happened for this delta): whole-KAT
+    /// gaps beyond the sub-KAT wire sliver are stacked, git-style. The
+    /// amount is the pushable floor minus the ack watermark (micro-KAT,
+    /// whole-KAT multiples only — the wire truncates, so the sliver is
+    /// never a stuck delta).
+    Unsynced {
+        /// The stacked delta, micro-KAT.
+        micro_kat: u64,
+        /// Mining batches queued in the outbox (0 = none).
+        queued_batches: u32,
+        /// The account's mint page.
+        mint_url: &'a str,
+    },
+    /// No account on this machine — nothing ever leaves it.
+    LoggedOut,
+    /// No transport in this build (a `kat_service`-only dev build): the
+    /// push cannot run here, so no state claim is made.
+    Unknown,
+}
+
+/// The footer's inputs, all ledger primitives (micro-KAT / tokens).
+pub struct KatFooter<'a> {
+    /// Code word tokens billed this run.
+    pub run_tokens: u64,
+    /// KAT burned this run, micro-KAT.
+    pub run_micro_kat: u64,
+    /// Cumulative tokens across all sessions on this machine.
+    pub cum_tokens: u64,
+    /// Cumulative burn, micro-KAT (the charge ledger's `charged_kat`).
+    pub cum_micro_kat: u64,
+    /// The grant projection, micro-KAT.
+    pub grant_micro_kat: u64,
+    /// The v-rate, micro-KAT per million tokens.
+    pub rate_micro_per_mtok: u64,
+    /// The meter version stamp (`MeterState::version`).
+    pub meter_version: u32,
+    /// The charge version stamp (`ChargeState::charge_version`).
+    pub charge_version: u32,
+    /// The sync line's state.
+    pub sync: SyncState<'a>,
+}
+
+impl KatFooter<'_> {
+    /// Render the footer (3 lines; the `Unsynced` sync state adds a 4th).
+    /// No trailing newline. `color` gates all ANSI escapes; plain output is
+    /// byte-stable for pipes and `NO_COLOR`.
+    #[must_use]
+    pub fn render(&self, color: bool) -> String {
+        let grant_disp_micro = round_kat_2dp(self.grant_micro_kat);
+        let burned_micro = round_kat_2dp(self.cum_micro_kat);
+        let left_micro = grant_disp_micro.saturating_sub(burned_micro);
+        // Grant-scale micro values (≤ 10^14) sit far inside f64's
+        // exact-integer range — this division is lossless at every real
+        // ledger size.
+        #[allow(clippy::cast_precision_loss)]
+        let frac = if self.grant_micro_kat == 0 {
+            0.0
+        } else {
+            left_micro as f64 / self.grant_micro_kat as f64
+        };
+
+        let line1 = format!(
+            "kat  this run  {} tok → {} KAT{}",
+            fmt_tokens(self.run_tokens),
+            fmt_kat_display(self.run_micro_kat),
+            paint_dim(
+                &format!(
+                    "   ({} KAT / 1M tokens · meter v{} · charge v{} · cum {} tok)",
+                    fmt_kat_display(self.rate_micro_per_mtok),
+                    self.meter_version,
+                    self.charge_version,
+                    fmt_tokens(self.cum_tokens)
+                ),
+                color
+            )
+        );
+        let line2 = format!(
+            "     grant     {}  {} KAT left · {} of {} burned",
+            braille_bar(frac, BAR_WIDTH, color),
+            fmt_kat_display(left_micro),
+            fmt_kat_display(burned_micro),
+            fmt_kat_display(grant_disp_micro),
+        );
+        format!("{line1}\n{line2}\n{}", self.render_sync(color))
+    }
+
+    fn render_sync(&self, color: bool) -> String {
+        let gutter = "     sync      ";
+        match &self.sync {
+            SyncState::Current { mint_url } => format!(
+                "{gutter}✓ current — ledger matches · mint settles hourly · {}",
+                link("mint ↗", mint_url, color)
+            ),
+            SyncState::Unsynced {
+                micro_kat,
+                queued_batches,
+                mint_url,
+            } => {
+                let queued = if *queued_batches == 0 {
+                    String::new()
+                } else {
+                    format!(" · {queued_batches} mining batch(es) queued")
+                };
+                format!(
+                    "{gutter}⚠ {} KAT unsynced (burn){queued}\n               pushing again next \
+                     run · or `cargo heal sync` · {}",
+                    fmt_kat_display(*micro_kat),
+                    link("mint ↗", mint_url, color)
+                )
+            }
+            SyncState::LoggedOut => format!(
+                "{gutter}local only — not logged in · nothing pushed (`cargo heal login`)"
+            ),
+            SyncState::Unknown => format!(
+                "{gutter}local accounting only — the server ledger reconciles at sync"
+            ),
+        }
+    }
+}
+
+/// Whether the footer should colorize: `RIIR_HEAL_FOOTER_COLOR` forces on
+/// (`1`/`true`) or off (`0`/`false`); else `NO_COLOR` (set + non-empty)
+/// disables; else stdout being a TTY decides.
+#[must_use]
+pub fn footer_color_enabled() -> bool {
+    if let Ok(v) = std::env::var("RIIR_HEAL_FOOTER_COLOR") {
+        if v == "1" || v.eq_ignore_ascii_case("true") {
+            return true;
+        }
+        if v == "0" || v.eq_ignore_ascii_case("false") {
+            return false;
+        }
+    }
+    if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
+        return false;
+    }
+    std::io::stdout().is_terminal()
+}
+
+/// Thousands-separated token count (`15080719` → `15,080,719`).
+#[must_use]
+pub fn fmt_tokens(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    let bytes = s.as_bytes();
+    for (i, b) in bytes.iter().copied().enumerate() {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(char::from(b));
+    }
+    out
+}
+
+/// Reading-friendly KAT amount, never the 6-decimal protocol shape: ≥ 1
+/// KAT renders at 2 decimals, below 1 at 4, trailing zeros trimmed
+/// (`100_000_000` → `100`, `15_080_719` → `15.08`, `8_791` → `0.0088`).
+#[must_use]
+pub fn fmt_kat_display(micro: u64) -> String {
+    // Display math on bounded values: micro-KAT ≤ ~10^14 sits inside f64's
+    // exact-integer range — the cast is lossless at every real ledger size.
+    #[allow(clippy::cast_precision_loss)]
+    let kat = micro as f64 / 1e6;
+    let s = if kat >= 1.0 {
+        format!("{kat:.2}")
+    } else {
+        format!("{kat:.4}")
+    };
+    let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+    if trimmed.is_empty() {
+        "0".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Round micro-KAT to 2 KAT decimals (the caption's display grid), so the
+/// paired `grant − burned = left` identity survives rounding.
+#[must_use]
+fn round_kat_2dp(micro: u64) -> u64 {
+    let q = micro / 10_000;
+    let r = micro % 10_000;
+    (q + u64::from(r >= 5_000)).saturating_mul(10_000)
+}
+
+/// Bottom-up partial-cell ladder, 1–7 dots (8 is the full block): fills the
+/// bottom row first, then upward — `⠐ ⣀ ⣄ ⣤ ⣦ ⣶ ⣷`, then `⣿`.
+const LADDER_MASKS: [u8; 7] = [0x40, 0xC0, 0xC4, 0xE4, 0xE6, 0xF6, 0xF7];
+
+fn ladder_char(dots: usize) -> char {
+    let mask = LADDER_MASKS[dots.clamp(1, 7) - 1];
+    char::from_u32(0x2800 + u32::from(mask)).unwrap_or('\u{28FF}')
+}
+
+/// The Braille fuel gauge. Colored: the remaining fraction renders as
+/// bright `⣿` cells (threshold-colored: green ≥ 25%, amber ≥ 10%, red
+/// below) + one bottom-up partial cell, then dim full blocks to the end —
+/// one continuous solid slab. Plain: the same fill over the dotted `⣀`
+/// track (the pre-dim fallback).
+#[must_use]
+pub fn braille_bar(remaining_frac: f64, width: usize, color: bool) -> String {
+    let width = width.max(1);
+    let frac = remaining_frac.clamp(0.0, 1.0);
+    let total = width.saturating_mul(8);
+    // Display math on bounded values: frac ∈ [0,1] × total dots rounds
+    // inside usize; total ≤ width×8 « 2^52. The casts are intentional.
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    let filled = (frac * total as f64).round() as usize;
+    let n_colored = filled.div_ceil(8).min(width);
+    let tone = if frac >= 0.25 {
+        GREEN
+    } else if frac >= 0.10 {
+        AMBER
+    } else {
+        RED
+    };
+
+    let mut filled_cells = String::with_capacity(n_colored * 3);
+    for cell in 0..n_colored {
+        let dots = filled.saturating_sub(cell * 8).min(8);
+        filled_cells.push(if dots >= 8 {
+            '\u{28FF}'
+        } else {
+            ladder_char(dots)
+        });
+    }
+    let n_empty = width - n_colored;
+    if color {
+        let mut out = String::with_capacity(width * 4 + 2 * RESET.len() + 8);
+        if !filled_cells.is_empty() {
+            out.push_str(tone);
+            out.push_str(&filled_cells);
+            out.push_str(RESET);
+        }
+        if n_empty > 0 {
+            out.push_str(DIM);
+            for _ in 0..n_empty {
+                out.push('\u{28FF}');
+            }
+            out.push_str(RESET);
+        }
+        out
+    } else {
+        filled_cells.push_str(&"\u{28C0}".repeat(n_empty));
+        filled_cells
+    }
+}
+
+/// OSC-8 hyperlink when colored (label `mint ↗`); plain dim `label url`.
+/// An empty URL renders nothing (the logged-out state has no page).
+fn link(label: &str, url: &str, color: bool) -> String {
+    if url.is_empty() {
+        return String::new();
+    }
+    if color {
+        format!("\x1b]8;;{url}\x07{label}\x1b]8;;\x07")
+    } else {
+        paint_dim(&format!("{label} {url}"), false)
+    }
+}
+
+fn paint_dim(s: &str, color: bool) -> String {
+    if color {
+        format!("{DIM}{s}{RESET}")
+    } else {
+        s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MINT: &str = "https://devnet.ai.gist.rs/mint/d32b39858a6f246f6096854640f5f6ec";
+
+    fn footer_left(left_micro: u64) -> KatFooter<'static> {
+        KatFooter {
+            run_tokens: 8_791,
+            run_micro_kat: 8_791,
+            cum_tokens: 15_080_719,
+            cum_micro_kat: 100_000_000 - left_micro,
+            grant_micro_kat: 100_000_000,
+            rate_micro_per_mtok: 1_000_000,
+            meter_version: 1,
+            charge_version: 1,
+            sync: SyncState::Current { mint_url: MINT },
+        }
+    }
+
+    #[test]
+    fn kat_display_trims_the_protocol_zeros() {
+        assert_eq!(fmt_kat_display(100_000_000), "100");
+        assert_eq!(fmt_kat_display(15_080_719), "15.08");
+        assert_eq!(fmt_kat_display(84_919_281), "84.92");
+        assert_eq!(fmt_kat_display(8_791), "0.0088");
+        assert_eq!(fmt_kat_display(500_000), "0.5");
+        assert_eq!(fmt_kat_display(0), "0");
+    }
+
+    #[test]
+    fn tokens_get_thousands_separators() {
+        assert_eq!(fmt_tokens(8_791), "8,791");
+        assert_eq!(fmt_tokens(15_080_719), "15,080,719");
+        assert_eq!(fmt_tokens(999), "999");
+        assert_eq!(fmt_tokens(0), "0");
+    }
+
+    #[test]
+    fn caption_rounds_as_a_pair() {
+        let out = footer_left(84_919_281).render(false);
+        assert!(
+            out.contains("84.92 KAT left · 15.08 of 100 burned"),
+            "paired caption missing: {out}"
+        );
+    }
+
+    #[test]
+    fn plain_bar_is_width_cells_with_dotted_track() {
+        let bar = braille_bar(0.8492, 24, false);
+        assert_eq!(bar.chars().count(), 24);
+        // 163/192 dots: 20 full cells + a 3-dot partial + 3 track cells.
+        assert_eq!(bar.matches('\u{28FF}').count(), 20);
+        assert_eq!(bar.matches('\u{28C0}').count(), 3);
+        assert_eq!(bar.matches(ladder_char(3)).count(), 1);
+    }
+
+    #[test]
+    fn bar_extremes_hold() {
+        let full = braille_bar(1.0, 24, false);
+        assert_eq!(full.matches('\u{28FF}').count(), 24);
+        assert_eq!(full.matches('\u{28C0}').count(), 0);
+        let empty = braille_bar(0.0, 24, false);
+        assert_eq!(empty.matches('\u{28C0}').count(), 24);
+        assert_eq!(empty.matches('\u{28FF}').count(), 0);
+    }
+
+    #[test]
+    fn colored_bar_carries_dim_track_and_tone() {
+        let bar = braille_bar(0.8492, 24, true);
+        assert!(bar.contains(GREEN), "green tone missing: {bar:?}");
+        assert!(bar.contains(DIM), "dim track missing: {bar:?}");
+        // The dim tail is full blocks, never the dotted track.
+        assert!(!bar.contains('\u{28C0}'));
+    }
+
+    #[test]
+    fn low_levels_flip_the_tone() {
+        assert!(braille_bar(0.20, 4, true).contains(AMBER));
+        assert!(braille_bar(0.05, 4, true).contains(RED));
+        assert!(braille_bar(0.60, 4, true).contains(GREEN));
+    }
+
+    #[test]
+    fn color_mode_hyperlinks_the_mint_label_plain_mode_spells_it() {
+        let colored = footer_left(84_919_281).render(true);
+        assert!(colored.contains("\x1b]8;;"), "no OSC-8 link: {colored:?}");
+        let plain = footer_left(84_919_281).render(false);
+        assert!(plain.contains(MINT), "plain mode must spell the URL");
+        assert!(!plain.contains('\x1b'), "plain mode must be escape-free");
+    }
+
+    #[test]
+    fn sync_states_render_their_story() {
+        let unsynced = KatFooter {
+            sync: SyncState::Unsynced {
+                micro_kat: 17_600,
+                queued_batches: 1,
+                mint_url: MINT,
+            },
+            ..footer_left(84_919_281)
+        }
+        .render(false);
+        assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 mining batch(es) queued"));
+        assert!(unsynced.contains("or `cargo heal sync`"));
+
+        let logged_out = KatFooter {
+            sync: SyncState::LoggedOut,
+            ..footer_left(84_919_281)
+        }
+        .render(false);
+        assert!(logged_out.contains("local only — not logged in"));
+
+        let unknown = KatFooter {
+            sync: SyncState::Unknown,
+            ..footer_left(84_919_281)
+        }
+        .render(false);
+        assert!(unknown.contains("reconciles at sync"));
+    }
+
+    /// The visual proof — run with `-- --nocapture` to SEE the footer at
+    /// every grant level and sync state, colored + plain.
+    #[test]
+    fn visual_print_every_state() {
+        for (name, left) in [
+            ("green 84.92%", 84_919_281_u64),
+            ("amber 15.08%", 15_080_000),
+            ("red 9.02%", 9_020_000),
+            ("empty 0%", 0),
+        ] {
+            println!("── {name} ──");
+            println!("{}", footer_left(left).render(true));
+        }
+        println!("── unsynced (plain) ──");
+        let unsynced = KatFooter {
+            sync: SyncState::Unsynced {
+                micro_kat: 17_600,
+                queued_batches: 1,
+                mint_url: MINT,
+            },
+            ..footer_left(84_919_281)
+        };
+        println!("{}", unsynced.render(false));
+        println!("── logged out (plain) ──");
+        let out = KatFooter {
+            sync: SyncState::LoggedOut,
+            ..footer_left(84_919_281)
+        };
+        println!("{}", out.render(false));
+    }
+
+    /// Parity with the meter's no-`$` pin (caveats #12/#15): a pricing
+    /// figure must never render beside KAT accounting.
+    #[test]
+    fn footer_carries_no_currency_figure() {
+        for state in [
+            SyncState::Current {
+                mint_url: MINT,
+            },
+            SyncState::Unsynced {
+                micro_kat: 1,
+                queued_batches: 0,
+                mint_url: MINT,
+            },
+            SyncState::LoggedOut,
+            SyncState::Unknown,
+        ] {
+            let out = KatFooter {
+                sync: state,
+                ..footer_left(84_919_281)
+            }
+            .render(true);
+            assert!(!out.contains('$'), "currency figure leaked: {out}");
+        }
+    }
+}
