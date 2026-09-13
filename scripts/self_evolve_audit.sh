@@ -45,6 +45,7 @@ bin_age_fmt() {
 MEMORY="${RIIR_HEAL_MEMORY:-$HOME/.cache/riir-clippy/memory.json}"
 HISTORY="$HEAL_REPO/.benchmarks/score_history.jsonl"
 INTAKE="$HEAL_REPO/.distill/001_mining_queue_snapshot.md"
+INTAKE_HISTORY="$HEAL_REPO/.research/108_mining_queue_snapshot_history.md"
 ADOPTION_DATE="2026-08-24T00:00:00"
 REPOS="katgpt-rs riir-ai riir-train riir-neuron-db riir-chain riir-clippy riir-game-sdk riir-mmorpg-examples riir-viewbridge riir-dapps"
 
@@ -382,8 +383,8 @@ fi
 echo ""
 echo "── 3. Post-mining intake (mining report progress) ──"
 if [ -f "$INTAKE" ]; then
-  run_py - "$INTAKE" <<'EOF'
-import re, sys
+  run_py - "$INTAKE" "$INTAKE_HISTORY" <<'EOF'
+import re, sys, os
 # E5's gate text: ">=1 post-mining intake class closed end-to-end: intake
 # [x] + proposer-change commit + fixture + score-bench delta". A bare tick
 # count is NOT that judge: P5's tick is Issue 037's own T2 (outcome-verdict
@@ -397,6 +398,14 @@ if len(parts) != 2:
     print("  intake section header missing — cannot parse P-items")
     raise SystemExit(0)
 body = parts[1]
+# 2026-09-13 fold: closed P-item records moved VERBATIM to the history note
+# (.research/108, "Folded 2026-09-13" onward) so the snapshot stays under its
+# ~400-line budget — parse them there too, else done/open counts silently
+# collapse to zero the first fold and E5 reads "no class closed yet" over a
+# corpus of landed closures. Counts are stable across the fold by design.
+hist_note = sys.argv[2] if len(sys.argv) > 2 else ''
+if hist_note and os.path.exists(hist_note):
+    body += '\n' + open(hist_note, encoding='utf-8', errors='replace').read()
 items = re.split(r'\n(?=- \[.\] P\d)', body)
 ticked, open_n, qualifying = [], 0, []
 for it in items:
