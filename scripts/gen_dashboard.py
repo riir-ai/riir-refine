@@ -2145,41 +2145,13 @@ def build_data(sweep: bool) -> dict:
     return data
 
 
-def write_corpus_growth_json(out: Path, days: int = 120) -> None:
-    """Emit the front-page corpus snapshot (riir-dapps Plan 019) and exit.
-
-    Same mining as the dashboard's corpus card (load_corpus_history — git
-    backfill + the Warm-tier store's recorded rows + today), plus the HEAD
-    working-tree counts per domain. The consumer is kat-service's committed
-    `src/corpus_growth.json`, include_str!'d into the ai.gist.rs front
-    page — refresh = re-run this flag + redeploy the worker.
-    """
-    series = load_corpus_history(days)
-    domains = [
-        {"name": name, "count": _count_working_tree(path, needle)}
-        for name, path, needle in CORPUS_DOMAINS
-    ]
-    payload = {
-        "as_of": date.today().isoformat(),
-        "domains": domains,
-        "days": series,
-    }
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, separators=(",", ":")) + "\n")
-    log(f"corpus growth json: {out} ({len(series)} day(s), "
-        + " ".join(f"{d['name']}={d['count']}" for d in domains) + ")")
-
-
 def main() -> int:
     sweep = "--sweep" in sys.argv
-    if "--corpus-json" in sys.argv:
-        # A consumer-facing projection of the corpus series ONLY — no CF
-        # calls, no ledger reads, exits before build_data. riir-dapps Plan
-        # 019: the ai.gist.rs front page embeds this as a committed
-        # snapshot and renders it server-side.
-        out = Path(sys.argv[sys.argv.index("--corpus-json") + 1])
-        write_corpus_growth_json(out)
-        return 0
+    # (The `--corpus-json` front-page snapshot lane was REMOVED 2026-09-13 —
+    # riir-dapps Plan 026 made the ai.gist.rs corpus card chain-native: the
+    # mining DO's own rows aggregated by the crank's corpus-view leg. The
+    # committed-JSON refresh step died with the consumer; the dashboard's
+    # LOCAL corpus card still uses load_corpus_history below.)
     if "--settle" in sys.argv:
         # BEFORE build_data: the freshly generated dashboard must show the
         # post-settlement state, not one run behind.

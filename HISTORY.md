@@ -7,7 +7,18 @@
 > historical record. Numbering stays monotonic — issue/plan/bench/batch
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
-# HISTORY.md — riir-clippy
+
+## The `--corpus-json` lane retired (2026-09-13, riir-dapps Plan 026)
+
+`gen_dashboard.py`'s `--corpus-json` flag + `write_corpus_growth_json` are
+deleted — the ai.gist.rs front page's corpus card went chain-native
+(riir-dapps Plan 026: the mining DO's own queue rows aggregated by the
+crank's corpus-view leg; the committed-snapshot refresh step died with
+the consumer). The LOCAL dashboard's own corpus card still uses
+`load_corpus_history` + `_count_working_tree` — only the consumer-facing
+export lane is gone. The Phase-2 follow-up (sync payload v3 carrying
+`domain`, goldens dual-pinned both sides, v2/v3 mixed-fleet window) is
+filed as [Issue 103](.issues/103_sync_payload_v3_domain_field.md).
 
 ## P11 post-mining intake — `format_collect` (the first two-span clippy rule) + the `needless_borrow` receiver-shape extension (2026-09-13)
 
