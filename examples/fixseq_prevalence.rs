@@ -207,6 +207,12 @@ fn main() {
     // every run is <=1 attempt deep and a flip (>=3 attempts) is unreachable
     // BY CONSTRUCTION — a zero there measures the corpus, not the driver.
     let multi: usize = flag("--multi").and_then(|s| s.parse().ok()).unwrap_or(1);
+    // `--interacting` (Issue 099 T3): the shared-binding INTERACTING pair
+    // corpus — members whose diagnostics depend on each other's repair, the
+    // one shape where a fix can re-break something (the Bench 087 §6 reopen
+    // trigger's missing instrument). Mutually exclusive with `--multi`
+    // (each interacting case is already a composed pair).
+    let interacting = args.iter().any(|a| a == "--interacting");
 
     let generated = generate_corpus();
     let composed: Vec<(String, &'static str, String, String)> = match multi > 1 {
@@ -236,31 +242,53 @@ fn main() {
     };
 
     let mut cases: Vec<HarnessCase<'_>> = Vec::new();
-    match multi > 1 {
-        true => cases.extend(composed.iter().map(|(name, code, seed, broken)| HarnessCase {
-            name: name.as_str(),
-            expect_code: code,
-            kind: MutatorKind::NarrowScope,
-            seed: seed.as_str(),
-            broken: broken.clone(),
-        })),
-        false => {
-            for c in MUTANT_CASES {
-                match HarnessCase::committed(c) {
-                    Ok(h) => cases.push(h),
-                    Err(e) => eprintln!("corpus integrity: {e}"),
+    if interacting {
+        let leaked: Vec<riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase> =
+            riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs()
+                .iter()
+                .map(riir_clippy::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
+                .collect();
+        // 'static: one-shot measurement binary; leaking keeps the borrowed
+        // form simple (the floor example's floor_case_list precedent).
+        cases.extend(
+            leaked
+                .into_iter()
+                .map(|g| HarnessCase::generated(Box::leak(Box::new(g)))),
+        );
+    } else {
+        match multi > 1 {
+            true => cases.extend(composed.iter().map(|(name, code, seed, broken)| HarnessCase {
+                name: name.as_str(),
+                expect_code: code,
+                kind: MutatorKind::NarrowScope,
+                seed: seed.as_str(),
+                broken: broken.clone(),
+            })),
+            false => {
+                for c in MUTANT_CASES {
+                    match HarnessCase::committed(c) {
+                        Ok(h) => cases.push(h),
+                        Err(e) => eprintln!("corpus integrity: {e}"),
+                    }
                 }
+                cases.extend(generated.iter().map(HarnessCase::generated));
             }
-            cases.extend(generated.iter().map(HarnessCase::generated));
         }
     }
     cases.truncate(limit);
 
     println!("=== Issue 91 T2 — fix-loop flip prevalence (SYNTHETIC corpus) ===");
-    println!("mode: {}", match multi > 1 {
-        true => format!("MULTI — {multi} mutations composed per scaffold"),
-        false => "SINGLE — the stock one-mutation-per-scaffold corpus".to_string(),
-    });
+    println!(
+        "mode: {}",
+        if interacting {
+            "INTERACTING — shared-binding pairs (Issue 099 T3, admissibility-gated)".to_string()
+        } else {
+            match multi > 1 {
+                true => format!("MULTI — {multi} mutations composed per scaffold"),
+                false => "SINGLE — the stock one-mutation-per-scaffold corpus".to_string(),
+            }
+        }
+    );
     println!("cases: {}", cases.len());
 
     let harness = FloorHarness::new();

@@ -1,6 +1,7 @@
 # Issue 099 — An INTERACTING-error corpus for the fix-compile floor harness
 
 **Status:** OPEN — filed 2026-09-12 from the convergence of three measurements that all bottomed out on the same missing instrument (Bench 087 §6, Bench 088, Issue 093 T4). Design here; implementation is one `corpus_gen` family + one flag. No new dep, no new store.
+**2026-09-13:** T1+T2 LANDED (34 interacting pairs, 3 families, gate 34/34 ADMITTED) — plus one measured negative: the issue's own mechanism 2 (E0505×E0597 repair-class collision) probed NON-interacting on rustc 1.93.0 (exactly additive diagnostics; the clone-at-move repair moves neither the E0597's spans, labels, nor suggestions) and is dropped per the decision criteria — recorded in the module docs and in [`corpus_interacting.rs`](../src/domains/rustc_errors/corpus_interacting.rs).
 
 ## Premise — three open threads, one missing corpus
 
@@ -48,23 +49,31 @@ below is designed to refuse a corpus that only looks coupled.
 
 ## Tasks
 
-- [ ] **T1 — the admissibility gate, FIRST.** Before any measurement is
-      reported off this corpus, prove the members actually interact: for each
-      case, check that repairing member A changes member B's diagnostic set vs
-      repairing B alone (a 2×2: fix-A-then-check-B vs check-B-cold). A case
-      whose 2×2 is identical is NOT interacting and must be dropped from the
-      family, loudly, with a count. **This gate is the deliverable** — an
-      "interacting" corpus that turns out independent would silently restore
-      the exact blind spot the issue exists to remove, and would do it while
-      wearing the name of the fix. (Precedent: Bench 087's own `--multi` gave
-      depth but width-1 menus — a lever that looked like the missing one and
-      was not; Bench 088 §"a depth lever is not a width lever".)
-- [ ] **T2 — `corpus_gen::interacting_pairs()`** behind the existing
-      `rustc_errors` feature: the two mechanisms above, table-driven like the
-      current families (explicit per-row values — the E0502 comment already
-      records why derived indices panic the ground-truth test). Every case
-      keeps a ground-truth `#[cfg(test)]` module, same as every other family,
-      so the G1 semantics pass covers it.
+- [x] **T1 — the admissibility gate, FIRST.** LANDED 2026-09-13 as
+      `examples/interacting_gate.rs`: the structural 2×2 (seed/broken/
+      a_only/b_only composed from SHARED segment tables — a hand-copied
+      variant set drifts, the probe pass caught exactly that), two tiers
+      (SET: pair multiset ≠ sum of singles, keyed (code, line-TEXT) so
+      segment-length shifts cannot fake a diff; LADDER: the production
+      playbooks' (strategy_id, replacement, trigger-text) menu for member
+      B compared between A-broken/A-fixed — mechanism 2's claim measured at
+      the seam the driver consumes). Validity floor: seed clean, a_only
+      declares code_a, b_only declares code_b. Exit 1 on any committed
+      non-interacting case (rustc-drift tripwire). First run: **34/34
+      ADMITTED in 14.2s** (all three families pass on the SET tier; the
+      probe pass that designed them is recorded in the module docs — the
+      m2 E0505×E0597 shape measured additive and was never committed).
+- [x] **T2 — `corpus_gen::interacting_pairs()`** LANDED 2026-09-13 as
+      [`corpus_interacting.rs`](../src/domains/rustc_errors/corpus_interacting.rs)
+      (three families, table-driven, ground-truth test in every variant,
+      7 cheap structural tests — determinism, unique names, brace balance,
+      pairwise-distinct variants, the shared-segment composition invariant):
+      F1 `ix_f1_e0502_e0499_copy` (12 rows, Copy stratum — deref-removal
+      applies), F2 `ix_f2_e0502_e0499_string` (10 rows, String stratum —
+      clone-out only), F3 `ix_f3_e0502_e0499_mid` (12 rows, mid-read shape —
+      the strongest masking: B's diagnostic CODE depends on A's state, and
+      repairing B first re-hangs an E0502 on B's moved decl = the
+      engineered no-progress-revert shape).
 - [ ] **T3 — re-run Bench 087 over it** (Issue 91 reopen trigger 1 + 2's
       cousin): flip prevalence, revert rate, depth histogram. A non-zero revert
       rate here does NOT reopen T2's verdict by itself — the verdict was

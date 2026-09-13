@@ -577,6 +577,11 @@ required-features = ["kernel_heal"]
 name = "rustc_errors_floor"
 required-features = ["rustc_errors"]
 
+# Issue 099 T1: the interacting-corpus admissibility gate (2x2 set + ladder tiers).
+[[example]]
+name = "interacting_gate"
+required-features = ["rustc_errors"]
+
 # Issue 91 T2: fix-loop flip PREVALENCE over the T1.5 per-attempt ring.
 # SLOW + SYNTHETIC corpus (the driver is real; the compile errors are
 # injected — no organic --fix-compile corpus exists, see the example's doc).

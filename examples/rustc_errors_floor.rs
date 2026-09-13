@@ -368,18 +368,31 @@ fn ordering_ab_section() {
     // front of the ordering seam and every ordering policy is the identity
     // on it no matter how deep the run goes.
     let strided = std::env::args().any(|a| a == "--strided");
-    let generated = match (multi > 1, strided) {
-        (true, true) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi_strided(
-            &generate_corpus(),
-            multi,
-        ),
-        (true, false) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi(
-            &generate_corpus(),
-            multi,
-        ),
-        (false, _) => generate_corpus(),
+    // `--interacting` (Issue 099 T4) swaps the corpus for the INTERACTING
+    // pair family: both members' errors share one binding, so repairing
+    // one changes the other's diagnostics — the corpus where a candidate
+    // ORDER (and a revert) can be load-bearing. Mutually exclusive with
+    // `--multi` by construction (the interacting cases ARE composed).
+    let interacting = std::env::args().any(|a| a == "--interacting");
+    let generated = if interacting {
+        riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs()
+            .iter()
+            .map(riir_clippy::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
+            .collect::<Vec<_>>()
+    } else {
+        match (multi > 1, strided) {
+            (true, true) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi_strided(
+                &generate_corpus(),
+                multi,
+            ),
+            (true, false) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi(
+                &generate_corpus(),
+                multi,
+            ),
+            (false, _) => generate_corpus(),
+        }
     };
-    let (cases, n) = match multi > 1 {
+    let (cases, n) = match multi > 1 || interacting {
         // Composed scaffolds carry several codes at once; the stratum filter
         // (which keys on a single declared code) would drop most of them, so
         // the MULTI lane takes the composed set whole.
@@ -395,15 +408,19 @@ fn ordering_ab_section() {
     };
     println!(
         "  corpus: {} — {n} cases",
-        match multi > 1 {
-            true => format!(
-                "MULTI-{multi} ({}, {multi} simultaneous errors per scaffold)",
-                match strided {
-                    true => "STRIDED — k distinct families per scaffold",
-                    false => "chunked — usually k variants of ONE family",
-                }
-            ),
-            false => "template-covered stratum (stock, 1 error per scaffold)".to_string(),
+        if interacting {
+            "INTERACTING pairs (Issue 099; shared-binding members, admissibility-gated)".to_string()
+        } else {
+            match multi > 1 {
+                true => format!(
+                    "MULTI-{multi} ({}, {multi} simultaneous errors per scaffold)",
+                    match strided {
+                        true => "STRIDED — k distinct families per scaffold",
+                        false => "chunked — usually k variants of ONE family",
+                    }
+                ),
+                false => "template-covered stratum (stock, 1 error per scaffold)".to_string(),
+            }
         }
     );
 

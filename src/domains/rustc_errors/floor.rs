@@ -750,6 +750,21 @@ impl FloorHarness {
         })
     }
 
+    /// Scaffold `name` with `source` and return its error diagnostics,
+    /// deduped by site exactly as the driver sees them. The Issue-099
+    /// admissibility gate's primitive: gate verdicts and measurement states
+    /// can never diverge by construction — same scaffold, same check, same
+    /// dedupe as every measurement arm.
+    ///
+    /// # Errors
+    ///
+    /// cargo unspawnable / scaffold unwritable.
+    pub fn check_source(&self, name: &str, source: &str) -> Result<Vec<super::diag::RustcErrorDiag>, String> {
+        let dir = self.scaffold(name, source)?;
+        let out = run_cargo(&self.cargo_bin, &dir, &["check", "--message-format=json"])?;
+        Ok(super::diag::dedupe_by_site(&super::diag::parse_error_diags(&out)))
+    }
+
     /// Run `cargo test` in a scaffold dir (the G1 semantics pass — every
     /// generated seed carries a ground-truth behavior test, so a fix that
     /// compiles but changes behavior FAILS here, which textual

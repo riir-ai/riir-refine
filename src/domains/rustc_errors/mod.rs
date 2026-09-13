@@ -31,6 +31,7 @@
 
 pub mod composite;
 pub mod corpus_gen;
+pub mod corpus_interacting;
 pub mod diag;
 pub mod driver;
 pub mod evolve;
