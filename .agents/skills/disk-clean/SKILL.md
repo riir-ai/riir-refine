@@ -25,7 +25,7 @@ df -h /                                             # internal disk state
 df -h /Volumes/SDXC1TB 2>/dev/null                  # SD card (may be unmounted)
 du -sh /Users/katopz/git/*/target 2>/dev/null | sort -rh            # build caches (~1 TB when dirty)
 du -sh /Users/katopz/git/*/target/debug/incremental 2>/dev/null | sort -rh  # the safest slice
-du -sh /Users/katopz/git/riir-train/data /Users/katopz/git/katgpt-rs/data 2>/dev/null  # models
+du -sh /Users/katopz/git/*/data 2>/dev/null | sort -rh            # model/GGUF dirs (only repos that have one answer)
 du -sh ~/.cargo/registry ~/.cargo/git ~/.rustup 2>/dev/null
 du -sh /Volumes/SDXC1TB/* /Volumes/SDXC1TB/git/* 2>/dev/null | sort -rh | head -20
 ```
