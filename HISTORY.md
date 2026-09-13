@@ -8,7 +8,39 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
-## P12 post-mining intake — `useless_conversion` shape 2 (the `.into_iter()` call-arg drop): the probe re-keyed the lint, the extension rode the existing type-blind tier (2026-09-14, `ab2dab1a`)
+## P13 post-mining intake — the FP-class #3 refinement (a) landed: trait-impl reads are external, and the probe surfaced the payload-Result class (2026-09-14)
+
+The first consumption of the FP-class #3 row (the 772/546/943 harvest).
+Probe-first: the CURRENT detector run over katgpt-rs HEAD reproduced the
+772 trio EXACTLY (`ColinearityBatchGate` / `RuleBasedVerifier` /
+`EntropyConflictDetector` — 3 C2 rows, all hand-verified FPs). Fix 1 —
+**trait-impl externality**: `InteractionVisitor` gains an `impl_is_trait`
+stack parallel to `impl_stack`; the innermost trait impl suppresses the
+own-impl tally regardless of method shape (the impl'd trait IS the
+external contract — any generic/dyn caller dispatches through it).
+Re-probe: katgpt-rs 3→0 C2, zero collateral. The riir-train cross-check
+then refused to close: `SchurSolver` STILL fired — **the probe corrected
+the intake's own attribution (the P10/P12 pattern, third time)**: its
+reads are NOT trait-impl reads but INHERENT `solve_*` methods returning
+`Result<Array1<f32>, SchurError>` — the last-segment `Result` heuristic
+read COMPUTATION as a check. Fix 2 — **payload-Result flow-out**:
+`sig_returns_validate_shape` splits `Result` by payload (`Result<(), E>`
+= unit check, confining; `Result<Payload, E>` = the field influence
+leaves through the return type — flow-out; undecidable payloads read
+conservative-check). Re-probe: riir-train 1→0 (SchurSolver cleared;
+`OpenEndedMetrics` already cleared by fix 1 — its reads are
+Display-impl). 5 new fixture tests (Display-impl external, trait-
+validate external, payload-Result flow-out, unit-Result confining pin,
+inherent-only pin); config_audit 33/33; lib 1370/1370; all-features
+2248/0; clippy clean (6 mechanical self-findings fixed — doc backticks
++ unnecessary raw-string hashes, one of them introduced by my own edit
+converting a pre-existing fixture to r#"…"#). The module + AGENTS C2
+docs carry both rules. Remaining OPEN in the row: family (b) (wire-
+schema `[wire-const]` weak severity) + the cross-repo consumer-surface
+candidate + the struct-doc exemption shape (943's HlaKarcConfig.delay_k
+class) — probe-first applies to each.
+
+## P12 post-mining intake — `useless_conversion` shape 2 (the `.into_iter()` call-arg drop): the probe re-keyed the lint, the extension rode the existing type-blind tier (2026-09-14, `115a9185`)
 
 The 09-13 corpus-coverage intake's class (a) — real clippy fired on
 `preupload_all(projections.into_iter())` (riir-ai `624f24958`) and the

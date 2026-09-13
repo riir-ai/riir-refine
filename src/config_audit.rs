@@ -32,9 +32,19 @@
 //! a hand-written `impl Default` whose EVERY candidate field has zero
 //! EXTERNAL reads — reads are confined to (a) test context (`#[cfg(test)]`
 //! mods, `#[test]`/`#[bench]` fns, `tests/`/`benches/` files, file-level
-//! `#![cfg(test)]`) and (b) the struct's own validate-shaped methods
-//! (`bool`/`Result`-returning — `validate()`, `is_ok()`; a
-//! `fmt::Result`-returning trait impl reads the same way). Classes A/B
+//! `#![cfg(test)]`) and (b) the struct's own INHERENT validate-shaped
+//! methods — `bool`-returning or UNIT-`Result<(), E>`-returning checks
+//! (`validate()`, `is_ok()`); a PAYLOAD `Result<T, E>` carries the
+//! fields' influence out through the return type (the `SchurSolver` class:
+//! `solve(..) -> Result<Array1<f32>, E>` reads tolerance knobs to
+//! PRODUCE the answer — flow-out, riir-train 546's hand-verified FP). Reads
+//! inside `impl Trait for T` are EXTERNAL regardless of return shape —
+//! the impl'd trait IS the external contract: any generic/dyn caller
+//! dispatches through it (`Display`/`Debug` formatting, solver/verifier
+//! traits). The FP-class #3 refinement (2026-09-14): measured on
+//! katgpt-rs 772's three C2 FPs (`ColinearityBatchGate`/
+//! `RuleBasedVerifier`/`EntropyConflictDetector` — all probe-reproduced
+//! pre-fix) + riir-train 546's `SchurSolver`/`OpenEndedMetrics`. Classes A/B
 //! require zero reads, so an internally-read, externally-orphaned config
 //! struct is invisible to them; `dead_code` cannot see it either (`pub` =
 //! assumed used). Also catches the never-plumbed literal default (zero reads
@@ -42,10 +52,12 @@
 //!
 //! C2 read attribution: a read inside `impl X` where X ≠ T (another type's
 //! method consuming the config) is EXTERNAL — it keeps T live. A read inside
-//! `impl T` is internal ONLY when the enclosing method is validate-shaped;
-//! any other return type (accessor `fn a(&self) -> f32 { self.a }`, builders)
-//! is FLOW-OUT and counts as external — the value leaves the struct through
-//! the method, so the field is honored. C2 is per-STRUCT and may co-fire
+//! an INHERENT `impl T` is internal ONLY when the enclosing method is
+//! validate-shaped; any other return type (accessor `fn a(&self) -> f32 {
+//! self.a }`, builders) is FLOW-OUT and counts as external — the value
+//! leaves the struct through the method, so the field is honored. A read
+//! inside `impl Trait for T` is ALWAYS external (dispatchable through the
+//! trait — the FP-class #3 refinement). C2 is per-STRUCT and may co-fire
 //! with per-field A/B on an all-inert struct; the row aggregates them (the
 //! whole struct is a deletion candidate, not just the one knob).
 //!
@@ -340,6 +352,7 @@ fn scan_core(
             file_is_test: file_is_test_path(name) || attrs_cfg_test(&file.attrs),
             test_depth: 0,
             impl_stack: Vec::new(),
+            impl_is_trait: Vec::new(),
             validate_depth: 0,
         };
         v.visit_file(file);
@@ -773,6 +786,10 @@ struct InteractionVisitor<'a> {
     test_depth: usize,
     /// Self-type names of the enclosing impl blocks (innermost last).
     impl_stack: Vec<String>,
+    /// Whether each enclosing impl block is a TRAIT impl (`impl Trait for
+    /// T`), parallel to `impl_stack` (innermost last). Trait-impl reads are
+    /// external — dispatchable through the trait (FP-class #3).
+    impl_is_trait: Vec<bool>,
     /// Depth inside validate-shaped (`bool`/`Result`-returning) methods.
     validate_depth: usize,
 }
@@ -839,13 +856,16 @@ fn file_is_test_path(name: &str) -> bool {
 
 impl InteractionVisitor<'_> {
     /// The C2 attribution of the current position (test context wins over
-    /// own-impl; own-impl requires a validate-shaped method frame). Returns
-    /// OWNED data — callers pair it with a mutable `ix` borrow.
+    /// own-impl; own-impl requires a validate-shaped method frame INSIDE an
+    /// INHERENT impl — a trait impl's reads are dispatchable through the
+    /// trait, hence external). Returns OWNED data — callers pair it with a
+    /// mutable `ix` borrow.
     fn read_ctx(&self) -> (bool, Option<String>) {
         let in_test = self.file_is_test || self.test_depth > 0;
+        let innermost_is_trait = self.impl_is_trait.last().is_some_and(|b| *b);
         let internal_impl = if in_test {
             None
-        } else if self.validate_depth > 0 {
+        } else if self.validate_depth > 0 && !innermost_is_trait {
             self.impl_stack.last().cloned()
         } else {
             None
@@ -908,8 +928,10 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
             self.suppress_const = true;
         }
         self.impl_stack.push(type_name(&impl_block.self_ty));
+        self.impl_is_trait.push(impl_block.trait_.is_some());
         syn::visit::visit_item_impl(self, impl_block);
         self.impl_stack.pop();
+        self.impl_is_trait.pop();
         self.suppress_const = prev;
     }
 
@@ -1201,6 +1223,15 @@ fn type_name(ty: &syn::Type) -> String {
 /// type (accessors, builders, `Default::default`) is FLOW-OUT — the value
 /// leaves through the method, so the read stays external. Shared by free
 /// fns (`ItemFn`) and methods (`ImplItemMethod`).
+///
+/// `Result` is split by PAYLOAD (the `SchurSolver` class, riir-train 546's
+/// hand-verified FP): `Result<(), E>` is a check (unit payload — nothing
+/// derived from the fields can leave); `Result<Payload, E>` is COMPUTATION
+/// — the payload carries the fields' influence out through the return
+/// type (a solver's `solve(..) -> Result<Array1<f32>, E>` reads its
+/// tolerance knobs to PRODUCE the answer). Bare undecidable `Result`
+/// (non-angle-bracketed, or a non-type first arg) reads conservatively as
+/// a check (validate-shaped) — the quiet direction.
 fn sig_returns_validate_shape(sig: &syn::Signature) -> bool {
     let syn::ReturnType::Type(_, ty) = &sig.output else {
         return false;
@@ -1208,13 +1239,27 @@ fn sig_returns_validate_shape(sig: &syn::Signature) -> bool {
     let syn::Type::Path(tp) = ty.as_ref() else {
         return false;
     };
-    let last = tp
-        .path
-        .segments
-        .last()
-        .map(|s| s.ident.to_string())
-        .unwrap_or_default();
-    last == "bool" || last == "Result"
+    let Some(seg) = tp.path.segments.last() else {
+        return false;
+    };
+    match seg.ident.to_string().as_str() {
+        "bool" => true,
+        "Result" => result_payload_is_unit(seg),
+        _ => false,
+    }
+}
+
+/// The `Result` payload test: `Result<(), E>` (empty-tuple Ok type) is a
+/// unit check; any other payload type flows the field influence out.
+fn result_payload_is_unit(seg: &syn::PathSegment) -> bool {
+    let syn::PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return true; // undecidable payload — conservative (check)
+    };
+    match args.args.first() {
+        Some(syn::GenericArgument::Type(syn::Type::Tuple(t))) => t.elems.is_empty(),
+        Some(syn::GenericArgument::Type(_)) => false, // real payload — flow-out
+        _ => true, // undecidable — conservative (check)
+    }
 }
 
 impl ConfigAuditReport {
@@ -1768,6 +1813,122 @@ impl Engine {
 ",
         );
         assert!(r.self_referential.is_empty(), "impl Engine reading .a is external for P");
+    }
+
+    #[test]
+    fn trait_impl_reads_are_external_no_c2() {
+        // FP-class #3 (2026-09-14): reads inside `impl Display for X` are
+        // externally dispatchable — the impl'd trait IS the external
+        // contract. Pre-fix these counted as validate-shaped internal reads
+        // (`fmt::Result`'s last path segment is `Result`) and fired C2 —
+        // the katgpt-rs 772 three-FP class, probe-reproduced at HEAD
+        // (ColinearityBatchGate / RuleBasedVerifier / EntropyConflictDetector).
+        let r = one(
+            r#"
+pub struct Gate { pub threshold: f32 }
+impl Default for Gate { fn default() -> Self { Self { threshold: 0.5 } } }
+impl core::fmt::Display for Gate {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.threshold)
+    }
+}
+"#,
+        );
+        assert!(
+            r.self_referential.is_empty(),
+            "Display-impl reads are dispatchable, not self-referential: {:?}",
+            r.self_referential
+        );
+    }
+
+    #[test]
+    fn trait_impl_validate_shaped_reads_are_external() {
+        // The RuleBasedVerifier/SchurSolver shape: a custom TRAIT's
+        // bool-returning method reading the config's fields — validate-
+        // shaped, but a trait impl: any generic/dyn caller dispatches
+        // through it, so the reads are external.
+        let r = one(
+            r"
+pub trait Verifier { fn accepts(&self) -> bool; }
+pub struct RuleBased { pub limit: u32 }
+impl Default for RuleBased { fn default() -> Self { Self { limit: 8 } } }
+impl Verifier for RuleBased {
+    fn accepts(&self) -> bool { self.limit > 0 }
+}
+",
+        );
+        assert!(
+            r.self_referential.is_empty(),
+            "trait-impl validate-shaped reads are dispatchable: {:?}",
+            r.self_referential
+        );
+    }
+
+    #[test]
+    fn payload_result_reads_are_flow_out_no_c2() {
+        // The SchurSolver class (riir-train 546's hand-verified FP): an
+        // inherent method returning a PAYLOAD Result — the payload carries
+        // the fields' influence out through the return type. Pre-fix the
+        // last-segment "Result" heuristic read these as validate-shaped
+        // internal checks and fired C2.
+        let r = one(
+            r#"
+pub struct Solver { pub eps_reg: f32 }
+impl Default for Solver { fn default() -> Self { Self { eps_reg: 1e-8 } } }
+impl Solver {
+    pub fn solve(&self, n: usize) -> Result<Vec<f32>, String> {
+        if self.eps_reg > 0.0 { Ok(vec![0.0; n]) } else { Err("bad".into()) }
+    }
+}
+"#,
+        );
+        assert!(
+            r.self_referential.is_empty(),
+            "payload-Result reads flow the value out: {:?}",
+            r.self_referential
+        );
+    }
+
+    #[test]
+    fn unit_result_reads_still_confine_c2() {
+        // The boundary pin: `Result<(), E>` is a CHECK (unit payload —
+        // nothing derived from the fields can leave) and stays
+        // validate-shaped internal. The canonical C2 shape keeps firing.
+        let r = one(
+            r#"
+pub struct Chk { pub tol: f32 }
+impl Default for Chk { fn default() -> Self { Self { tol: 0.5 } } }
+impl Chk {
+    pub fn check(&self) -> Result<(), String> {
+        if self.tol < 0.0 { Err("neg".into()) } else { Ok(()) }
+    }
+}
+"#,
+        );
+        assert_eq!(r.self_referential.len(), 1, "unit-Result checks stay internal");
+    }
+
+    #[test]
+    fn inherent_validate_still_fires_alongside_trait_impl() {
+        // The boundary discipline: an INHERENT validate() keeps counting as
+        // internal when it is the ONLY confinement left (the C2 canonical
+        // shape unchanged by the refinement).
+        let r = one(
+            r"
+pub struct P { pub a: f32, pub b: f32 }
+impl Default for P { fn default() -> Self { Self { a: 0.5, b: 0.25 } } }
+impl P {
+    pub fn validate(&self) -> bool { self.a > self.b }
+}
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn smoke() { let p = P::default(); assert!(p.a > p.b); }
+}
+",
+        );
+        assert_eq!(r.self_referential.len(), 1, "inherent-only confinement still fires C2");
     }
 
     #[test]
