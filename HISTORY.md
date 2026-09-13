@@ -13,6 +13,47 @@
 
 The Bench-090 residual (F3's 12 stalls) cleared by **`e0502-read-relocate`** — the hoist-to-first-use template (delete the borrowed decl line, re-insert the by-value form immediately before the binding's FIRST USE by syn ident-boundary scan, drop the stars — rustc's own documented E0502 fix shape; min-delta's third rung; oracle arbitrates non-Copy + still-conflicting regions). **The shipped design is the second one**: design 1 (relocate-after-conflict's-last-use, keyed on the diag's `mutable borrow later used here` anchor) was MEASURED DEAD before landing — the T3 re-run showed the E0499 swap reverting at 2→2 on cold F3 (head's borrow spans to the tail, so the swap surfaces a SECOND E0502 at b's decl), making the targeted post-swap state unreachable; the `max_iters` 5→8 bump that dead path justified was REVERTED (the hoist needs 4 attempts, under the stock 5). **T3:** interacting corpus fix rate **100%** (F3 ring: deref-removal REV, clone-out REV, read-relocate KEEP(2→1), swap KEEP(1→0); invariant HOLDS ×116; depth {2:34, 4:12}). **T4 A/B — the first IMPROVEMENT verdict on this corpus**: every arm 46/46, shape-conditional + nonergodic-per-run at **10 reverts vs static's 24** (102 vs 116 iterations) — the completed feedback loop (Issue 100's honest reverts feed the counters; the learned arms skip the doomed rungs). The gain axis is WASTED ATTEMPTS, not resolved rate — clean stayed 46/46 on every arm, so the Issue-093 negative verdict (no learned ordering moves the resolved rate) STANDS; this refines its floor note (Bench 090's flat 34/46 parity) with a same-clean fewer-attempt axis. Floor: driver **66.7%** (E0502 row 33/38/0, unfixed 12→0; uncontested 139/139), **G1 172/172**, G2 p50 129ms (p99 323 — the F3 depth-4 tail, honest). F3 heals DIVERGED-from-seed (hoisted order ≠ seed; behaviorally equal, G1-verified) — "100%" is fix-rate, not seed-text-identity. `static` stays the shipped ordering (T4.2 promotion needs owner pull evidence, the 085 discipline). Second `FRONTIER_LANDINGS` row landed under the ledger ratchet. Issue file removed per the noise-reduction rule; this section + [Bench 091](../.benchmarks/091_e0502_read_relocate.md) are the record.
 
+## Issue 089 T4 hardening — the bench-tail frontier snapshot: generation boundaries record themselves (2026-09-13, `11c1799d`; the 7 lane runs + snapshot row #2 recorded the pre-rebase build sha `b17c2dd8` — identical diff, the rebase only moved the base)
+
+The T4 evidence clock had a fragile half: a band-mass snapshot existed only
+when somebody ran `--frontier-report` AT a generation boundary — but
+boundaries are created by score-bench runs, and lanes interleave (v1 reruns
+after v8 landings). A boundary nobody reports at is a boundary the
+band-mass ↔ next-generation-yield correlation never samples. The fix is
+mechanical: `finish_score_bench` (the ONE tail every generation lane runs —
+clippy 1/2/3/6/7/8, compile 4, perf 5) now calls
+`frontier_report::append_snapshot_at_frontier` right after its history
+append + store dual-write, so the just-recorded run IS in `score_runs` and
+a newly admitted generation raises the frontier in the same breath.
+
+- Same committed file (`.benchmarks/frontier_snapshots.jsonl`), same
+  state-change dedup, same FRONTIER-generation semantics as the report
+  path — two writers, one law, no drift.
+- `NoStore` / `EmptyPopulation` are SKIPS, never fabricated green-zero rows
+  (the report law); best-effort — one console line, never a bench failure.
+  A bench build without `latent_retrieval` prints the loud skip.
+- 3 lib tests (latent_retrieval-gated): the skip laws + the
+  append→dedup→generation-raise sequence (verdict seeding split from run
+  seeding so the gen-9 boundary lands with an IDENTICAL band — the exact
+  boundary-capture case).
+- **Live validation, same session (7 lane runs at `b17c2dd8`):** the v1
+  lane appended snapshot row #2 (gen-8, sha `b17c2dd8`, band-mass 5.6% —
+  identical to row #1's metrics: the sha axis moved, the band did not);
+  the six further lane runs each printed `unchanged — not appended`.
+  Rows ≥ generations, exactly as designed.
+- **T8 accumulation rode along** (rows #99-105): 8 rows now carry
+  `rule_outcomes` across 7 generations (1/3/4/5/6/7/8). The gen-3 lane is
+  the attribution-densest (36 rules); gen-4/5 carry the field with EMPTY
+  attribution (composite fixtures — the skip is loud); gen-2 contributed
+  NO row — the admission gate REFUSED its first append (heal_rate 1.0 ≥
+  v1's 0.9623: the healer outgrew the v2 k-ladder; honest refusal, by
+  design). The α grid-fit still waits on future generations.
+
+Issue 089 remains OPEN on accumulation only: T4's ≥3 FUTURE generation
+boundaries now self-record the moment generations 9+ land; T8's replay
+corpus grows by one row per bench run. The gate stays unwired until the
+evidence exists (report-first law).
+
 ## Issue 093 resolved — per-run strategy posterior: PoC win real, wired policy NO GAIN anywhere, ordering closed NEGATIVE on evidence (2026-09-13, `0fec5257`+`8993ec51`+`27e8ffcf`+`b08ef85d` / Benches 084+085+088+089+090)
 
 Closed by the clause this issue pre-wrote in T4: "if the resolved rate still cannot move there [on 099's corpus], the ordering question is answered negative … and THIS issue closes on evidence rather than on a missing instrument." The rate DID move — downward for every learned arm, then back to parity when the keep SIGNAL was fixed — which answers it on evidence all the same.

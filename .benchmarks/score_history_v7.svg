@@ -20,57 +20,63 @@
 <text x="412.2" y="40" font-size="11" fill="#424242">decline_correct 100%</text>
 <line x1="300.4" y1="36" x2="314.4" y2="36" stroke="#2e7d32" stroke-width="3"/>
 <text x="300.4" y="40" font-size="11" fill="#424242">heal_rate 88%</text>
-<path d="M 64.0 121.2 L 175.4 121.2 L 286.9 121.2 L 398.3 93.5 L 509.7 93.5 L 621.1 93.5 L 732.6 93.5 L 844.0 93.5" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 64.0 121.2 L 161.5 121.2 L 259.0 121.2 L 356.5 93.5 L 454.0 93.5 L 551.5 93.5 L 649.0 93.5 L 746.5 93.5 L 844.0 93.5" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="121.2" r="3" fill="#2e7d32"/>
-<circle cx="175.4" cy="121.2" r="3" fill="#2e7d32"/>
-<circle cx="286.9" cy="121.2" r="3" fill="#2e7d32"/>
-<circle cx="398.3" cy="93.5" r="3" fill="#2e7d32"/>
-<circle cx="509.7" cy="93.5" r="3" fill="#2e7d32"/>
-<circle cx="621.1" cy="93.5" r="3" fill="#2e7d32"/>
-<circle cx="732.6" cy="93.5" r="3" fill="#2e7d32"/>
+<circle cx="161.5" cy="121.2" r="3" fill="#2e7d32"/>
+<circle cx="259.0" cy="121.2" r="3" fill="#2e7d32"/>
+<circle cx="356.5" cy="93.5" r="3" fill="#2e7d32"/>
+<circle cx="454.0" cy="93.5" r="3" fill="#2e7d32"/>
+<circle cx="551.5" cy="93.5" r="3" fill="#2e7d32"/>
+<circle cx="649.0" cy="93.5" r="3" fill="#2e7d32"/>
+<circle cx="746.5" cy="93.5" r="3" fill="#2e7d32"/>
 <circle cx="844.0" cy="93.5" r="3" fill="#2e7d32"/>
-<path d="M 64.0 56.0 L 175.4 56.0 L 286.9 56.0 L 398.3 56.0 L 509.7 56.0 L 621.1 56.0 L 732.6 56.0 L 844.0 56.0" fill="none" stroke="#1565c0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 64.0 56.0 L 161.5 56.0 L 259.0 56.0 L 356.5 56.0 L 454.0 56.0 L 551.5 56.0 L 649.0 56.0 L 746.5 56.0 L 844.0 56.0" fill="none" stroke="#1565c0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="175.4" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="286.9" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="398.3" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="509.7" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="621.1" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="732.6" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="161.5" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="259.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="356.5" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="454.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="551.5" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="649.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="746.5" cy="56.0" r="3" fill="#1565c0"/>
 <circle cx="844.0" cy="56.0" r="3" fill="#1565c0"/>
-<path d="M 64.0 76.0 L 175.4 76.0 L 286.9 76.0 L 398.3 56.0 L 509.7 56.0 L 621.1 56.0 L 732.6 56.0 L 844.0 56.0" fill="none" stroke="#6a1b9a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 64.0 76.0 L 161.5 76.0 L 259.0 76.0 L 356.5 56.0 L 454.0 56.0 L 551.5 56.0 L 649.0 56.0 L 746.5 56.0 L 844.0 56.0" fill="none" stroke="#6a1b9a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="76.0" r="3" fill="#6a1b9a"/>
-<circle cx="175.4" cy="76.0" r="3" fill="#6a1b9a"/>
-<circle cx="286.9" cy="76.0" r="3" fill="#6a1b9a"/>
-<circle cx="398.3" cy="56.0" r="3" fill="#6a1b9a"/>
-<circle cx="509.7" cy="56.0" r="3" fill="#6a1b9a"/>
-<circle cx="621.1" cy="56.0" r="3" fill="#6a1b9a"/>
-<circle cx="732.6" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="161.5" cy="76.0" r="3" fill="#6a1b9a"/>
+<circle cx="259.0" cy="76.0" r="3" fill="#6a1b9a"/>
+<circle cx="356.5" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="454.0" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="551.5" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="649.0" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="746.5" cy="56.0" r="3" fill="#6a1b9a"/>
 <circle cx="844.0" cy="56.0" r="3" fill="#6a1b9a"/>
-<path d="M 64.0 316.9 L 175.4 316.9 L 286.9 316.9 L 398.3 318.5 L 509.7 318.5 L 621.1 318.5 L 732.6 318.5 L 844.0 318.5" fill="none" stroke="#c62828" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 64.0 316.9 L 161.5 316.9 L 259.0 316.9 L 356.5 318.5 L 454.0 318.5 L 551.5 318.5 L 649.0 318.5 L 746.5 318.5 L 844.0 318.5" fill="none" stroke="#c62828" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="316.9" r="3" fill="#c62828"/>
-<circle cx="175.4" cy="316.9" r="3" fill="#c62828"/>
-<circle cx="286.9" cy="316.9" r="3" fill="#c62828"/>
-<circle cx="398.3" cy="318.5" r="3" fill="#c62828"/>
-<circle cx="509.7" cy="318.5" r="3" fill="#c62828"/>
-<circle cx="621.1" cy="318.5" r="3" fill="#c62828"/>
-<circle cx="732.6" cy="318.5" r="3" fill="#c62828"/>
+<circle cx="161.5" cy="316.9" r="3" fill="#c62828"/>
+<circle cx="259.0" cy="316.9" r="3" fill="#c62828"/>
+<circle cx="356.5" cy="318.5" r="3" fill="#c62828"/>
+<circle cx="454.0" cy="318.5" r="3" fill="#c62828"/>
+<circle cx="551.5" cy="318.5" r="3" fill="#c62828"/>
+<circle cx="649.0" cy="318.5" r="3" fill="#c62828"/>
+<circle cx="746.5" cy="318.5" r="3" fill="#c62828"/>
 <circle cx="844.0" cy="318.5" r="3" fill="#c62828"/>
 <text x="64.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
 <text x="64.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">15d5c502</text>
-<text x="175.4" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="175.4" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">15d5c502</text>
-<text x="286.9" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="286.9" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">15d5c502</text>
-<text x="398.3" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="398.3" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">95021f5</text>
-<text x="509.7" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="509.7" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">95021f5</text>
-<text x="621.1" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="621.1" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">52c2425</text>
-<text x="732.6" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="732.6" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">52c2425</text>
-<text x="844.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
-<text x="844.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">52c2425</text>
+<text x="161.5" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="161.5" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">15d5c502</text>
+<text x="259.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="259.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">15d5c502</text>
+<text x="356.5" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="356.5" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">95021f5</text>
+<text x="454.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="454.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">95021f5</text>
+<text x="551.5" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="551.5" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">52c2425</text>
+<text x="649.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="649.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">52c2425</text>
+<text x="746.5" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
+<text x="746.5" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">52c2425</text>
+<text x="844.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-13</text>
+<text x="844.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">b17c2dd8</text>
 <text x="64" y="392.0" font-size="10" fill="#9e9e9e">fixtures: 16 healable + 0 clean | vocab 38 lints | edits 37</text>
 </svg>
