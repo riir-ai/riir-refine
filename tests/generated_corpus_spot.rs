@@ -1,6 +1,7 @@
 //! Plan 019 T6.1 — family-level spot integrity for the generated corpus.
 //!
-//! The full-corpus integrity run (null arm over all N≥212) is the
+//! The full-corpus integrity run (null arm over all N≥246: 12 anchors +
+//! 200 generated + 34 interacting pairs) is the
 //! measurement session's job (the example prints + the bench records it);
 //! this test keeps the ROUTINE suite fast while still catching a generator
 //! family that stops producing its declared code (a template typo, a
@@ -14,6 +15,7 @@
 #![cfg(feature = "rustc_errors")]
 
 use riir_clippy::domains::rustc_errors::corpus_gen::generate_corpus;
+use riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs;
 use riir_clippy::domains::rustc_errors::floor::{FixVerdict, FloorHarness, NullFixer};
 
 /// One case per (family, sub-family) prefix — the first of each.
@@ -42,7 +44,16 @@ fn every_generated_family_produces_its_declared_code() {
         let Some(c) = corpus.iter().find(|c| c.name.starts_with(p)) else {
             panic!("generated corpus is missing family {p}");
         };
-        picked.push(c);
+        picked.push(c.clone());
+    }
+    // The interacting families generate from their own module (Issue 099);
+    // the spot contract is the same — the broken half declares code_a.
+    let ix = interacting_pairs();
+    for p in ["ix_f1_", "ix_f2_", "ix_f3_"] {
+        let Some(c) = ix.iter().find(|c| c.name.starts_with(p)) else {
+            panic!("interacting corpus is missing family {p}");
+        };
+        picked.push(c.as_generated());
     }
 
     let harness = FloorHarness::new();
@@ -52,7 +63,7 @@ fn every_generated_family_produces_its_declared_code() {
     }
     let cases: Vec<_> = picked
         .iter()
-        .map(|c| riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(c))
+        .map(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated)
         .collect();
     let report = harness
         .measure_cases(&NullFixer, &cases)
@@ -78,11 +89,12 @@ fn every_generated_family_produces_its_declared_code() {
 /// CI-when-wanted.
 #[test]
 fn full_corpus_declared_codes_hold() {
+    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
+
     if std::env::var("RIIR_FULL_CORPUS_INTEGRITY").ok().as_deref() != Some("1") {
         eprintln!("SKIP: set RIIR_FULL_CORPUS_INTEGRITY=1 to run the full-corpus gate");
         return;
     }
-    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
     let harness = FloorHarness::new();
     if !harness.is_available() {
         eprintln!("SKIP: cargo not on PATH");
@@ -96,6 +108,13 @@ fn full_corpus_declared_codes_hold() {
     for g in &corpus {
         cases.push(HarnessCase::generated(g));
     }
+    // Issue 099 T5: the interacting pairs ride the full-corpus gate with
+    // everything else (mutant declares code_a; seeds verified below).
+    let interacting: Vec<_> = interacting_pairs()
+        .iter()
+        .map(|ix| HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))))
+        .collect();
+    cases.extend(interacting);
     let report = harness
         .measure_cases(&NullFixer, &cases)
         .expect("harness ran");

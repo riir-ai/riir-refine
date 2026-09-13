@@ -213,6 +213,10 @@ fn main() {
     // trigger's missing instrument). Mutually exclusive with `--multi`
     // (each interacting case is already a composed pair).
     let interacting = args.iter().any(|a| a == "--interacting");
+    // `--runs` prints every run's attempt ring (seq/code/strategy/outcome/
+    // error-count transition) — the per-case structure behind the depth
+    // histogram (Issue 099 T3).
+    let show_runs = args.iter().any(|a| a == "--runs");
 
     let generated = generate_corpus();
     let composed: Vec<(String, &'static str, String, String)> = match multi > 1 {
@@ -321,6 +325,35 @@ fn main() {
         depth_hist[a.len().min(7)] += 1;
         if !a.is_empty() {
             runs_with_attempts += 1;
+        }
+        if show_runs {
+            // Per-run ring: the attempt sequence with strategy + outcome +
+            // the error-count transition — the structure the aggregate
+            // histogram hides (Issue 099 T3: which strategy reverted where).
+            let ring: Vec<String> = a
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}:{}{}({}->{})",
+                        r.code,
+                        r.strategy_id,
+                        match r.outcome {
+                            AttemptOutcome::Kept => "=KEEP",
+                            AttemptOutcome::RevertedNoProgress => "=REV",
+                            AttemptOutcome::RevertedIo => "=IO",
+                        },
+                        r.errors.0,
+                        r.errors.1
+                    )
+                })
+                .collect();
+            println!(
+                "  run {:<34} clean={} clean_flag={} [{}]",
+                name,
+                rep.clean as u8,
+                rep.clean as u8,
+                ring.join(" ")
+            );
         }
         let f = flips(a);
         total.code += f.code;

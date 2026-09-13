@@ -78,7 +78,9 @@ fn main() {
 }
 
 fn case_count() -> usize {
-    MUTANT_CASES.len() + generate_corpus().len()
+    MUTANT_CASES.len()
+        + generate_corpus().len()
+        + riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs().len()
 }
 
 fn rustc_version() -> String {
@@ -679,13 +681,24 @@ fn ordering_ab_section() {
     println!("  (nonergodic arms: build with --features nonergodic_driver)");
 
     println!(
-        "\n  verdict: shape-conditional reverts {} vs static {} — {}",
+        "\n  verdict: shape-conditional vs static — clean {} vs {}, reverts {} vs {} — {}",
+        shape_arm.0,
+        static_arm.0,
         shape_arm.2,
         static_arm.2,
-        match shape_arm.2.cmp(&static_arm.2) {
-            std::cmp::Ordering::Less => "IMPROVEMENT (T4.2 earns its keep)",
-            std::cmp::Ordering::Equal => "no difference on this corpus",
-            std::cmp::Ordering::Greater => "WORSE (record honest negative; keep static)",
+        match (shape_arm.0.cmp(&static_arm.0), shape_arm.2.cmp(&static_arm.2)) {
+            // Improvement must hold BOTH axes: Issue 099 T4 measured a
+            // corpus where the learned arm reverts less but cleans 12 FEWER
+            // cases (keeps that strand the run unfixable) — a reverts-only
+            // verdict printed "IMPROVEMENT" over a regression.
+            (std::cmp::Ordering::Greater, _) | (std::cmp::Ordering::Equal, std::cmp::Ordering::Less) => {
+                "IMPROVEMENT (T4.2 earns its keep)"
+            }
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) => "no difference on this corpus",
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Greater)
+            | (std::cmp::Ordering::Less, _) => {
+                "WORSE (record honest negative; keep static)"
+            }
         }
     );
     let _ = flat_arm;
@@ -700,6 +713,8 @@ fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCa
     // 'static: committed cases are 'static consts; generated cases leak
     // their Strings once per process (the measurement is a one-shot binary
     // — Box::leak keeps the borrow simple without rebuilding per section).
+    // Issue 099 T5: the interacting pairs join the stock floor list (the
+    // admissibility gate passed 34/34 first — `examples/interacting_gate.rs`).
     use riir_clippy::domains::rustc_errors::floor::HarnessCase;
     let mut cases: Vec<HarnessCase<'static>> = MUTANT_CASES
         .iter()
@@ -707,6 +722,9 @@ fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCa
         .collect();
     for g in generate_corpus() {
         cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
+    }
+    for ix in riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs() {
+        cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
     }
     cases
 }
