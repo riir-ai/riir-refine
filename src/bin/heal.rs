@@ -8133,7 +8133,6 @@ fn main() {
         let footer = riir_clippy::kat_footer::KatFooter {
             run_tokens: m.session_tokens(),
             run_micro_kat: c.session_kat(),
-            cum_tokens: m.state().cumulative_tokens,
             cum_micro_kat: c.state().charged_kat,
             grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_KAT,
             rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_KAT_PER_MILLION_TOKENS,

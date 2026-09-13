@@ -11,7 +11,7 @@
 //! Shape (spec v2 + the dim-track Braille amendments):
 //!
 //! ```text
-//! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1 · cum 15,080,719 tok)
+//! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1)
 //!      grant     ⣿…⣄⣿⣿⣿  84.92 KAT left · 15.08 of 100 burned
 //!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
@@ -89,8 +89,6 @@ pub struct KatFooter<'a> {
     pub run_tokens: u64,
     /// KAT burned this run, micro-KAT.
     pub run_micro_kat: u64,
-    /// Cumulative tokens across all sessions on this machine.
-    pub cum_tokens: u64,
     /// Cumulative burn, micro-KAT (the charge ledger's `charged_kat`).
     pub cum_micro_kat: u64,
     /// The grant projection, micro-KAT.
@@ -134,11 +132,10 @@ impl KatFooter<'_> {
             fmt_kat_display(self.run_micro_kat),
             paint_dim(
                 &format!(
-                    "   ({} KAT / 1M tokens · meter v{} · charge v{} · cum {} tok)",
+                    "   ({} KAT / 1M tokens · meter v{} · charge v{})",
                     fmt_kat_display(self.rate_micro_per_mtok),
                     self.meter_version,
-                    self.charge_version,
-                    fmt_tokens(self.cum_tokens)
+                    self.charge_version
                 ),
                 color
             )
@@ -369,7 +366,6 @@ mod tests {
         KatFooter {
             run_tokens: 8_791,
             run_micro_kat: 8_791,
-            cum_tokens: 15_080_719,
             cum_micro_kat: 100_000_000 - left_micro,
             grant_micro_kat: 100_000_000,
             rate_micro_per_mtok: 1_000_000,
