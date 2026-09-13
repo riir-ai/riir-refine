@@ -441,7 +441,7 @@ pub const WIRED_STRATEGIES: &[(&str, &str)] = &[
 /// the issue-file commit that scoped it — informational, the era attribution
 /// keys on `unix_secs`).
 pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[FrontierLanding {
-    commit: "e7432ab1",
+    commit: "8ca7f68c",
     unix_secs: 1_789_268_622,
     code: "E0614",
     strategy: "e0614-deref-at-use",
