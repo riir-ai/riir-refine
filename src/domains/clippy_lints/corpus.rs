@@ -532,7 +532,7 @@ mod tests {
 
     /// Corpus size pin: 10 seed, 31 expansion/post-mining, 2 Batch 89,
     /// 2 Batch 90, 4 Batch 91, the 2 P10 post-mining intake rows, and the
-    /// 1 P11 post-mining intake row (format_collect, 2026-09-13) = 52.
+    /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13) = 52.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
