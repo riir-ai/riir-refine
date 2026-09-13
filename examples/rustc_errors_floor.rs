@@ -206,6 +206,7 @@ fn driver_section() {
     };
     print_report(&report);
     print_integrity(&report);
+    dump_diverged(&cases, &report);
 
     // G1 semantics pass: every repaired case's scaffold holds the final
     // source; run its ground-truth behavior test.
@@ -708,6 +709,66 @@ fn ordering_ab_section() {
 }
 
 // ── shared helpers ────────────────────────────────────────────────────
+
+/// `--dump-diverged K`: print up to K diverged repairs PER ERROR CODE as a
+/// seed-vs-final pair.
+///
+/// [`FloorOutcome::diverged_source`] has been captured on every diverged case
+/// since the harness shipped and read by nothing — its own doc calls it "the
+/// review artifact", and no reviewer could see it. A 100%-divergence row
+/// (E0597 42/42, E0499 26/26) is ambiguous between a repair-QUALITY defect
+/// and a metric artifact (`normalized` is whitespace-collapse, so a leftover
+/// empty block or a reordered-but-equivalent program reads as diverged), and
+/// the two are only separable by looking. Off by default (0) — this prints
+/// whole source files.
+fn dump_diverged(cases: &[riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>], report: &FloorReport) {
+    let k: usize = std::env::args()
+        .position(|a| a == "--dump-diverged")
+        .and_then(|i| std::env::args().nth(i + 1))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    if k == 0 {
+        return;
+    }
+    let seeds: std::collections::HashMap<&str, &str> =
+        cases.iter().map(|c| (c.name, c.seed)).collect();
+    println!("\n  --dump-diverged {k}: the review artifact, per code\n");
+    let mut shown: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for o in &report.outcomes {
+        if o.verdict != FixVerdict::Diverged {
+            continue;
+        }
+        let n = shown.entry(o.expect_code).or_insert(0);
+        if *n >= k {
+            continue;
+        }
+        *n += 1;
+        let Some(final_source) = o.diverged_source.as_deref() else {
+            continue;
+        };
+        let Some(seed) = seeds.get(o.name.as_str()).copied() else {
+            continue;
+        };
+        // The ground-truth test module is identical in both halves by
+        // construction — drop it so the diff is the repair, not the fixture.
+        let cut = |s: &str| -> String {
+            match s.find("#[cfg(test)]") {
+                Some(i) => s[..i].trim_end().to_string(),
+                None => s.trim_end().to_string(),
+            }
+        };
+        println!("  ── {} [{}] ──", o.name, o.expect_code);
+        println!("    seed:\n{}", indent(&cut(seed)));
+        println!("    final:\n{}", indent(&cut(final_source)));
+    }
+}
+
+fn indent(s: &str) -> String {
+    s.lines()
+        .map(|l| format!("      {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>> {
     // 'static: committed cases are 'static consts; generated cases leak
