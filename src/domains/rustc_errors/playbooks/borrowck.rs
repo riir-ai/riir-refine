@@ -36,7 +36,9 @@
 //! - **E0502**: deref-removal first (two deletions — the min-delta pair,
 //!   correct where the element is `Copy`), then clone-out (`&e` →
 //!   `e.clone()`, works for owned-element borrows whose uses are method
-//!   calls). The oracle arbitrates: deref-removal on a non-`Copy` element
+//!   calls), then read-relocate (the mid-read reorder — the immutable-later
+//!   shape only, anchored on the borrow + the conflicting mutable's last
+//!   use). The oracle arbitrates: deref-removal on a non-`Copy` element
 //!   trades E0502 for E0507 → no progress → revert → clone-out applies.
 //! - **E0499**: swap the second borrow's declaration with the first
 //!   borrow's intervening last use — the NLL fix (the first borrow now
@@ -313,6 +315,167 @@ impl CompileProposer for E0502CloneOut {
     }
 }
 
+// ── E0502 template C — read-relocate (the hoist-to-first-use) ─────────
+
+/// `let head = &v[0]; …conflicting borrows…; *head` → hoist the read to
+/// JUST BEFORE its first use, by value: delete the decl statement,
+/// re-insert `let head = v[0];` immediately before the first statement that
+/// references the binding, drop each `*` star. On the mid-read shape (F3:
+/// the read sits inside the conflicting borrows' live region but its first
+/// USE is after they all end) this is exactly rustc's own documented fix
+/// shape — declare just before first use — and it clears the E0502 while the
+/// E0499 remains for the swap to finish (KEEP 2→1, then swap KEEP 1→0).
+///
+/// Anchors: the diagnostic's OWN `immutable borrow occurs here` label locates
+/// the ref-local; the first-use statement is found in the SOURCE (syn stmt
+/// ranges + an ident-boundary scan — the same machinery as the star
+/// collector). Min-delta ordering makes this the THIRD rung (deref-removal,
+/// clone-out first), so it fires only where they revert or stay silent.
+///
+/// Guards, all load-bearing (the family discipline: a guard that cannot hold
+/// locally makes the template SILENT — rustc drift degrades to misses, never
+/// wrong edits):
+///
+/// - The first-use statement must come strictly AFTER the decl statement
+///   (else there is nothing to hoist past).
+/// - Decl and first-use statements single-line, comment-free (the E0499
+///   template's splice guards).
+/// - Correct where the element is `Copy`; for non-`Copy` the oracle rejects
+///   the by-value re-insert (E0507/E0508 move-out) → revert → clone-out
+///   remains that stratum's repair. A first use still INSIDE a conflicting
+///   borrow region re-fires E0502 → revert (the same oracle arbitration
+///   deref-removal already relies on).
+pub struct E0502ReadRelocate;
+
+impl CompileProposer for E0502ReadRelocate {
+    fn name(&self) -> &'static str {
+        "e0502-read-relocate"
+    }
+
+    fn code(&self) -> &'static str {
+        "E0502"
+    }
+
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
+        if diag.code != self.code() {
+            return Vec::new();
+        }
+        let Some(borrow) = anchor(diag, |l| l.contains("immutable borrow occurs here")) else {
+            return Vec::new();
+        };
+        let Some(rl) = ref_locals(source)
+            .into_iter()
+            .find(|rl| rl.init.contains(&borrow.byte_start))
+        else {
+            return Vec::new();
+        };
+        let stmts = stmt_ranges(source);
+        let Some(decl) = stmt_containing(&stmts, rl.init.start) else {
+            return Vec::new();
+        };
+        // The FIRST statement after the decl that references the binding —
+        // the hoist target. Found by ident-boundary scan of the stmt text
+        // (a plain `contains` would match `head2`).
+        let Some(first_use) = stmts
+            .iter()
+            .filter(|s| s.start > decl.end)
+            .find(|s| {
+                source
+                    .get(s.start..s.end)
+                    .is_some_and(|t| contains_ident(t, &rl.name))
+            })
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let Some(decl_text) = source.get(decl.start..decl.end) else {
+            return Vec::new();
+        };
+        let Some(use_text) = source.get(first_use.start..first_use.end) else {
+            return Vec::new();
+        };
+        if decl_text.contains('\n')
+            || use_text.contains('\n')
+            || decl_text.contains("//")
+            || use_text.contains("//")
+            || decl_text.contains("/*")
+            || use_text.contains("/*")
+        {
+            return Vec::new();
+        }
+        // The by-value place text: `&place` → `place` (the clone-out slice).
+        let Some(place) = source.get(rl.amp.end..rl.init.end) else {
+            return Vec::new();
+        };
+        // Full-line deletion of the decl (indent + stmt + newline); the
+        // re-insert lands on its own line immediately before the first-use
+        // statement, mirroring that line's indentation.
+        let del_line_start = source[..decl.start].rfind('\n').map_or(0, |i| i + 1);
+        let mut del_end = decl.end;
+        if source[del_end..].starts_with('\n') {
+            del_end += 1;
+        }
+        let use_line_start = source[..first_use.start].rfind('\n').map_or(0, |i| i + 1);
+        let Some(use_indent) = source.get(use_line_start..first_use.start) else {
+            return Vec::new();
+        };
+        // The use stmt must START ITS OWN LINE (indent-only prefix) — an
+        // insertion into mid-line code is a splice we refuse.
+        if !use_indent.trim().is_empty() {
+            return Vec::new();
+        }
+        let insert = format!("{indent}let {name} = {place};\n", indent = use_indent, name = rl.name);
+        let mut extras: Vec<SpanEdit> = Vec::with_capacity(1 + 1);
+        extras.push(SpanEdit {
+            byte_span: (use_line_start, use_line_start),
+            replacement: insert,
+        });
+        for s in deref_stars_of(source, &rl.name) {
+            extras.push(SpanEdit {
+                byte_span: (s.start, s.end),
+                replacement: String::new(),
+            });
+        }
+        vec![FixCandidate {
+            strategy_id: self.name().to_string(),
+            code: diag.code.clone(),
+            file: file.to_path_buf(),
+            line: borrow.line_start,
+            byte_span: (del_line_start, del_end),
+            replacement: String::new(),
+            shape: String::new(),
+            semantic_note: Some(
+                "hoists the read to just before its first use — the value read \
+                 differs if the statements crossed mutated the indexed place",
+            ),
+            extra_edits: extras,
+        }]
+    }
+}
+
+/// Ident-boundary containment: `text` mentions the identifier `name` as a
+/// standalone token (not as a substring of a longer identifier).
+fn contains_ident(text: &str, name: &str) -> bool {
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut word = String::new();
+    for c in text.chars().chain(std::iter::once(' ')) {
+        if is_ident(c) {
+            word.push(c);
+        } else {
+            if word == name {
+                return true;
+            }
+            word.clear();
+        }
+    }
+    false
+}
+
 // ── E0499 — swap the second borrow decl with the first's last use ─────
 
 /// `let a = &mut *v; let b = &mut *v; a.push(1); b.push(2);` →
@@ -458,6 +621,7 @@ pub fn family() -> Playbooks {
     Playbooks::empty()
         .with(Box::new(E0502DerefRemoval))
         .with(Box::new(E0502CloneOut))
+        .with(Box::new(E0502ReadRelocate))
         .with(Box::new(E0499SwapSecondDecl))
         .with(Box::new(E0505CloneAtMove))
 }
@@ -645,6 +809,77 @@ mod tests {
         assert!(propose_all(&E0502CloneOut, src, &diag).is_empty());
     }
 
+    // ── E0502 read-relocate (Issue 101 — hoist to first use) ──────────
+
+    /// The COLD F3 state (the measured firing surface): the read sits inside
+    /// the conflicting borrows' live region; its first USE (the tail) is
+    /// after they all end. The hoist clears the E0502 (KEEP 2→1); the E0499
+    /// remains for the swap (KEEP 1→0) — clean in 4 attempts.
+    const RELOCATE_COLD: &str = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let head = &v[0];\n    let b = &mut *v;\n    a.push(4i32);\n    b.push(5i32);\n    *head + v[0]\n}\n";
+
+    const RELOCATE_COLD_HOISTED: &str = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let b = &mut *v;\n    a.push(4i32);\n    b.push(5i32);\n    let head = v[0];\n    head + v[0]\n}\n";
+
+    fn relocate_diag(code: &str, src: &str) -> RustcErrorDiag {
+        diag_for(
+            code,
+            src,
+            "&v[0]",
+            &[
+                ("mutable borrow occurs here", "&mut *v"),
+                ("mutable borrow later used here", "a.push(4i32)"),
+                ("immutable borrow occurs here", "&v[0]"),
+            ],
+        )
+    }
+
+    #[test]
+    fn read_relocate_hoists_the_decl_to_its_first_use() {
+        let diag = relocate_diag("E0502", RELOCATE_COLD);
+        let out = propose_all(&E0502ReadRelocate, RELOCATE_COLD, &diag);
+        assert_eq!(out.len(), 1, "must fire on the cold mid-read shape");
+        let c = &out[0];
+        assert_eq!(c.strategy_id, "e0502-read-relocate");
+        // Full-line delete + by-value insert before the first use + star
+        // deletion = 3 edits, atomic.
+        assert_eq!(c.extra_edits.len(), 2, "insert + one star");
+        assert!(c.semantic_note.is_some(), "relocation is semantics-named");
+        assert_eq!(apply(RELOCATE_COLD, c), RELOCATE_COLD_HOISTED);
+    }
+
+    /// The POST-SWAP state fires too — the hoist lands before the tail,
+    /// after every borrow region (diverged-from-seed but compiling; the
+    /// oracle + G1 arbitrate).
+    #[test]
+    fn read_relocate_fires_on_the_post_swap_state() {
+        let post_swap = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let head = &v[0];\n    a.push(4i32);\n    let b = &mut *v;\n    b.push(5i32);\n    *head + v[0]\n}\n";
+        let diag = relocate_diag("E0502", post_swap);
+        let out = propose_all(&E0502ReadRelocate, post_swap, &diag);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            apply(post_swap, &out[0]),
+            "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    a.push(4i32);\n    let b = &mut *v;\n    b.push(5i32);\n    let head = v[0];\n    head + v[0]\n}\n"
+        );
+    }
+
+    #[test]
+    fn read_relocate_is_silent_without_a_later_use_or_anchor() {
+        // No use of the binding after the decl — nothing to hoist past.
+        let no_use = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let head = &v[0];\n    a.push(4i32);\n    v[0]\n}\n";
+        let diag = relocate_diag("E0502", no_use);
+        assert!(propose_all(&E0502ReadRelocate, no_use, &diag).is_empty());
+        // Only a LONGER-IDENT mention later (`head2`) — the ident-boundary
+        // scan must not treat it as a use of `head`.
+        let longer_ident = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let head = &v[0];\n    let head2 = v[1];\n    a.push(4i32);\n    head2 + v[0]\n}\n";
+        let d2 = relocate_diag("E0502", longer_ident);
+        assert!(propose_all(&E0502ReadRelocate, longer_ident, &d2).is_empty());
+        // Wrong code.
+        let d3 = relocate_diag("E0499", RELOCATE_COLD);
+        assert!(propose_all(&E0502ReadRelocate, RELOCATE_COLD, &d3).is_empty());
+        // No `immutable borrow occurs here` anchor (the E0505 shape).
+        let d4 = diag_for("E0502", RELOCATE_COLD, "&v[0]", &[]);
+        assert!(propose_all(&E0502ReadRelocate, RELOCATE_COLD, &d4).is_empty());
+    }
+
     // ── E0499 swap ────────────────────────────────────────────────────
 
     /// The corpus mutant `e0499_flatten_borrow_scope`.
@@ -791,14 +1026,15 @@ mod tests {
         // No replacement in this family may extend a lifetime by leaking
         // (`Box::leak`/`mem::forget`) — the wrong-but-compiling class the
         // plan excludes by design.
-        let srcs = [E0502_COPY_SRC, E0499_SRC, E0505_SRC];
+        let srcs = [E0502_COPY_SRC, RELOCATE_COLD, E0499_SRC, E0505_SRC];
         let diags = [
             e0502_diag("E0502", E0502_COPY_SRC),
+            relocate_diag("E0502", RELOCATE_COLD),
             e0499_diag(),
             diag_for("E0505", E0505_SRC, "let w = v;", &[]),
         ];
         let pb = family();
-        assert_eq!(pb.len(), 4);
+        assert_eq!(pb.len(), 5);
         for (src, diag) in srcs.iter().zip(&diags) {
             for c in pb.propose(diag, Path::new("/x/src/lib.rs"), src) {
                 for text in std::iter::once(&c.replacement)

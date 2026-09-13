@@ -440,12 +440,22 @@ pub const WIRED_STRATEGIES: &[(&str, &str)] = &[
 /// 100's `e0614-deref-at-use` (the unmasking-trade playbook; `commit` cites
 /// the issue-file commit that scoped it — informational, the era attribution
 /// keys on `unix_secs`).
-pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[FrontierLanding {
-    commit: "8ca7f68c",
-    unix_secs: 1_789_268_622,
-    code: "E0614",
-    strategy: "e0614-deref-at-use",
-}];
+pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[
+    FrontierLanding {
+        commit: "8ca7f68c",
+        unix_secs: 1_789_268_622,
+        code: "E0614",
+        strategy: "e0614-deref-at-use",
+    },
+    FrontierLanding {
+        // The issue-file commit that scoped it (informational; era keys on
+        // unix_secs — the same convention as the row above).
+        commit: "48c2224b",
+        unix_secs: 1_789_276_000,
+        code: "E0502",
+        strategy: "e0502-read-relocate",
+    },
+];
 
 /// Which authoring era a playbook strategy belongs to. `Unrecorded` is a
 /// ledger bug (a registry strategy no table accounts for) — it prints
