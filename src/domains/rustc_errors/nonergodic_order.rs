@@ -13,7 +13,7 @@
 //!
 //! ## Measured verdict (Issue 093 closed 2026-09-13)
 //!
-//! The PoC win did not transfer to production surfaces: no gain on any
+//! The `PoC` win did not transfer to production surfaces: no gain on any
 //! real corpus ([Bench 088](../../../.benchmarks/088_nonergodic_ordering_headroom_predicate.md)
 //! — K=1 unmeasurable, chunked/strided parity, shared-handle regression)
 //! and on the interacting corpus every learned ordering REGRESSED

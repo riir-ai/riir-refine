@@ -1651,7 +1651,7 @@ mod tests {
         assert_eq!(third, SnapshotOutcome::Appended { generation: 9 });
         let text = std::fs::read_to_string(&path).unwrap();
         let last: FrontierSnapshot =
-            serde_json::from_str(text.lines().rev().next().unwrap()).unwrap();
+            serde_json::from_str(text.lines().next_back().unwrap()).unwrap();
         assert_eq!(last.generation, 9);
         assert_eq!(last.band_count, snap.band_count, "same band, new boundary");
         let _ = std::fs::remove_dir_all(&dir);
