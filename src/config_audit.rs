@@ -1418,7 +1418,7 @@ mod t {
     #[test]
     fn documented_write_only_marker_downgrades_class_b() {
         let r = one(
-            r#"
+            r"
 pub struct GuardVerdict {
     /// Deliberate, not dead payload — the layout pin counts this field.
     pub redirect: Option<u8>,
@@ -1432,7 +1432,7 @@ mod t {
     #[test]
     fn pin() { let v = GuardVerdict::default(); assert_eq!(v.redirect, None); }
 }
-"#,
+",
         );
         assert!(r.assert_only.is_empty(), "marked row downgrades out of [B]");
         assert_eq!(r.documented_write_only.len(), 1);
@@ -1446,7 +1446,7 @@ mod t {
     #[test]
     fn goat_gate_territory_wording_downgrades() {
         let r = one(
-            r#"
+            r"
 pub struct V {
     /// Phase-6 GOAT-gate territory — the channel is live and pinned.
     pub redirect: Option<u8>,
@@ -1458,7 +1458,7 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert_eq!(v.redirect, None); }
 }
-"#,
+",
         );
         assert!(r.assert_only.is_empty());
         assert_eq!(r.documented_write_only.len(), 1, "the Issue-147 wording downgrades");
@@ -1467,7 +1467,7 @@ mod t {
     #[test]
     fn canonical_token_downgrades() {
         let r = one(
-            r#"
+            r"
 pub struct V {
     /// documented-write-only: pinned wire surface.
     pub f: bool,
@@ -1479,7 +1479,7 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert!(v.f); }
 }
-"#,
+",
         );
         assert!(r.assert_only.is_empty());
         assert_eq!(r.documented_write_only.len(), 1);
@@ -1490,7 +1490,7 @@ mod t {
     #[test]
     fn struct_doc_marker_does_not_downgrade_field() {
         let r = one(
-            r#"
+            r"
 /// Deliberate forward surface struct.
 pub struct V { pub f: bool }
 impl Default for V { fn default() -> Self { Self { f: true } } }
@@ -1500,7 +1500,7 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert!(v.f); }
 }
-"#,
+",
         );
         assert_eq!(r.assert_only.len(), 1, "struct doc does not speak for one field");
         assert!(r.documented_write_only.is_empty());
@@ -1511,7 +1511,7 @@ mod t {
     #[test]
     fn plain_doc_stays_class_b() {
         let r = one(
-            r#"
+            r"
 pub struct V {
     /// The redirect authority index.
     pub f: bool,
@@ -1523,7 +1523,7 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert!(v.f); }
 }
-"#,
+",
         );
         assert_eq!(r.assert_only.len(), 1, "unmarked doc stays [B]");
         assert!(r.documented_write_only.is_empty());
