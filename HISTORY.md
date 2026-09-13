@@ -8,6 +8,32 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## The physician-heal-thyself self-audit — config-audit + orphan-report over riir-clippy itself at FULL scope (2026-09-14)
+
+The 2026-09-13 14-repo consumer sweep excluded this repo as sibling-hot;
+this session (the box quiet, tree clean) closed the gap. **config-audit:
+clean** at both scopes (242 src-only / 358 full-tree files, 34 candidates,
+0 [A] inert, 0 [B] assert-only, 0 [C2]). **orphan-report at FULL scope
+(src+examples+tests+benches): 14 stillborn, ALL adjudicated benign — 0
+actionable TPs.** Classes: 4 audit-journal payload (`AuditRecord.base/trial_
+{created,resolved}` — archival records, serialized into the promotion audit
+trail); 4 mining-corpus documentation (`DistRule`/`DockerRule`
+concept+trigger — corpus-as-data, the train-546 out-of-scope precedent);
+6 persisted-artifact schema/provenance (`PavManifest.{bok_k,generator,
+judge}`, `PavPair.span_id`, `PairRowDoc.span_shape_hash`,
+`PromotedEntry.promoted_seq` — Serialize+Deserialize roundtrip fields;
+schema stability + downstream consumers). 0 orphaned [C1], 0 wire-const.
+
+**The scope lesson (live specimen):** the src-only invocation reported 15
+stillborn — the 15th, `PavDataConfig.ground_truth`, was a SCAN-SCOPE FP:
+the field IS read (`examples/pav_data_curate.rs:166`, `if cfg.ground_truth
+{ ground_truth(&mut dataset.pairs) }`) and the grounding pass IS implemented
+(`pav_data/mod.rs:527`) — the reader simply lived outside the scanned set.
+Plan 126's validation note ("self-scan: 15 stillborn / 0 wire — plausible")
+is hereby formally adjudicated. Intake row filed for the detector UX
+candidate: explicit-path invocations should print the UNSCANNED sibling
+roots that exist (instrument-alive hint, never auto-expand).
+
 ## `cargo heal --version` exit-2 regression — found by the global-binary rebuild, closed by merging the two hand-mirrored flag lists (2026-09-13, `ad31a04a`)
 
 Rebuilding the global `cargo-heal` from HEAD (the staleness caveat — the
