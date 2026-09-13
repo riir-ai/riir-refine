@@ -515,9 +515,21 @@ pub fn manifest_has_dep(manifest_text: &str, dep: &str) -> bool {
 /// yields 0 (silent) or a spurious warning — never a wrong gate.
 #[must_use]
 pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
+    let (defaults, keys) = manifest_feature_names(manifest_text);
+    keys.into_iter()
+        .filter(|k| !defaults.iter().any(|d| d == k))
+        .count()
+}
+
+/// The cfg-audit half of the same scan: the package's `default` feature
+/// list + every declared feature key (the feature-set constructor below
+/// consumes both; `manifest_nondefault_feature_count` is the count-shaped
+/// consumer of the same parse).
+#[must_use]
+pub fn manifest_feature_names(manifest_text: &str) -> (Vec<String>, Vec<String>) {
     let mut in_features = false;
     let mut default_deps: Vec<String> = Vec::new();
-    let mut keys: Vec<&str> = Vec::new();
+    let mut keys: Vec<String> = Vec::new();
     // `default = [\n "a",\n "b",\n]` spans lines — accumulate the value
     // until the next key or section.
     let mut pending_default: Option<String> = None;
@@ -548,7 +560,7 @@ pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
             if key == "default" {
                 pending_default = Some(value.to_string());
             } else {
-                keys.push(key);
+                keys.push(key.to_string());
             }
         } else if let Some(pd) = pending_default.as_mut() {
             pd.push(' ');
@@ -556,9 +568,686 @@ pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
         }
     }
     finalize_default(&mut pending_default, &mut default_deps);
-    keys.into_iter()
-        .filter(|k| !default_deps.iter().any(|d| d == k))
-        .count()
+    (default_deps, keys)
+}
+
+// ── the post-heal cfg audit (the 2026-09-10 intake) ─────────────────────
+//
+// The `--verify` gate compiles at the INVOCATION's feature state, so an
+// edit inside a `#[cfg(feature = …)]` region can be reported "verified"
+// without ever having been compiled. Two recorded casualties: the E0631
+// point-free filter closure behind `score_bench` (2026-09-09, `ce74bac` —
+// verified green at default features, broke the feature build for 3 days)
+// and the `pvp_karma` load-bearing `mut` dropped under a partial feature
+// set (P13 — `--verify-args` was PASSED and the coarse Issue-031-H3
+// warning correctly stayed silent; the set simply lacked that one
+// feature). The verifier is the only honest place for this guard: the
+// proposers are typeless (syn), so coercion/liveness-load-bearing
+// rewrites are undecidable there.
+//
+// The audit is REPORT-ONLY (a mark, never a revert): it names each kept
+// edit whose enclosing cfg context the baseline provably did not compile,
+// plus the exact `--verify-args` re-run that would cover it.
+
+/// The enabled-feature set the verify gate compiled with.
+#[derive(Debug, Clone, Default)]
+pub struct FeatureSet {
+    /// `--all-features` was passed — every declared feature is on.
+    pub all_on: bool,
+    /// Explicitly enabled feature names (crate defaults + parsed
+    /// `--features` entries that name THIS crate's features).
+    pub names: std::collections::HashSet<String>,
+}
+
+impl FeatureSet {
+    #[must_use]
+    pub fn contains(&self, feature: &str) -> bool {
+        self.all_on || self.names.contains(feature)
+    }
+}
+
+/// Assemble the enabled set the gate compiled with: the manifest's default
+/// features (unless `--no-default-features`) + every `--features` entry
+/// naming one of the manifest's own features (dep-prefixed `a/b` and
+/// `a?/b` forms name OTHER crates' features — ignored). `--all-features`
+/// switches `all_on`, which short-circuits every feature atom to enabled.
+#[must_use]
+pub fn feature_set_from_args(
+    manifest_text: &str,
+    verify_args: Option<&str>,
+) -> FeatureSet {
+    let (defaults, keys) = manifest_feature_names(manifest_text);
+    let mut set = FeatureSet::default();
+    let Some(args) = verify_args else {
+        set.names.extend(defaults);
+        return set;
+    };
+    let tokens: Vec<&str> = args.split_whitespace().collect();
+    if tokens.contains(&"--all-features") {
+        set.all_on = true;
+        set.names.extend(defaults);
+        set.names.extend(keys);
+        return set;
+    }
+    if !tokens.contains(&"--no-default-features") {
+        set.names.extend(defaults);
+    }
+    let mut requested: Vec<String> = Vec::new();
+    let mut iter = tokens.iter().peekable();
+    while let Some(t) = iter.next() {
+        let value = if let Some(rest) = t.strip_prefix("--features=") {
+            Some(rest.to_string())
+        } else if *t == "--features" {
+            iter.next().map(|v| (*v).to_string())
+        } else {
+            None
+        };
+        if let Some(v) = value {
+            requested.extend(
+                v.split([',', ' ', '\t'])
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string),
+            );
+        }
+    }
+    for r in requested {
+        if keys.contains(&r) {
+            set.names.insert(r);
+        }
+    }
+    set
+}
+
+/// One cfg predicate, restricted to what the audit can evaluate.
+#[derive(Debug, Clone, PartialEq)]
+enum CfgAtom {
+    Feature(String),
+    /// `test` — the gate runs `cargo check --all-targets`, which compiles
+    /// the test targets, so `#[cfg(test)]` code IS verified.
+    Test,
+    /// A host predicate the healer can settle from its own build
+    /// (the gate compiles for the host it runs on).
+    Host(String, Option<String>),
+    /// Anything else (doc, version, compiler, unknown keys…) — undecidable.
+    Other,
+}
+
+#[derive(Debug, Clone)]
+enum CfgExpr {
+    Atom(CfgAtom),
+    Not(Box<CfgExpr>),
+    All(Vec<CfgExpr>),
+    Any(Vec<CfgExpr>),
+}
+
+impl CfgExpr {
+    /// The raw source text (for the report's "undecidable" column).
+    fn render(&self) -> String {
+        match self {
+            Self::Atom(CfgAtom::Feature(f)) => format!("feature = \"{f}\""),
+            Self::Atom(CfgAtom::Test) => "test".to_string(),
+            Self::Atom(CfgAtom::Host(k, Some(v))) => format!("{k} = \"{v}\""),
+            Self::Atom(CfgAtom::Host(k, None)) => k.clone(),
+            Self::Atom(CfgAtom::Other) => "<opaque>".to_string(),
+            Self::Not(inner) => format!("not({})", inner.render()),
+            Self::All(parts) => {
+                format!("all({})", parts.iter().map(Self::render).collect::<Vec<_>>().join(", "))
+            }
+            Self::Any(parts) => {
+                format!("any({})", parts.iter().map(Self::render).collect::<Vec<_>>().join(", "))
+            }
+        }
+    }
+
+    /// Every `feature = "…"` name mentioned (for the not-enabled column).
+    fn feature_names(&self, out: &mut Vec<String>) {
+        match self {
+            Self::Atom(CfgAtom::Feature(f)) => {
+                if !out.contains(f) {
+                    out.push(f.clone());
+                }
+            }
+            Self::Not(inner) => inner.feature_names(out),
+            Self::All(parts) | Self::Any(parts) => {
+                for p in parts {
+                    p.feature_names(out);
+                }
+            }
+            Self::Atom(_) => {}
+        }
+    }
+}
+
+/// Three-valued evaluation: `True` = provably compiled by the gate,
+/// `False` = provably compiled to NOTHING, `Unknown` = undecidable from
+/// the manifest + args alone.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Tv {
+    True,
+    False,
+    Unknown,
+}
+
+fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
+    match expr {
+        CfgExpr::Atom(CfgAtom::Feature(f)) => {
+            if set.contains(f) {
+                Tv::True
+            } else {
+                Tv::False
+            }
+        }
+        CfgExpr::Atom(CfgAtom::Test) => Tv::True,
+        CfgExpr::Atom(CfgAtom::Host(key, want)) => {
+            // Settled from the healer's OWN build: the verify gate compiles
+            // for the host it runs on, so the healer's cfg truth IS the
+            // gate's cfg truth for these atoms.
+            let truth: Option<bool> = match (key.as_str(), want.as_deref()) {
+                ("target_os", Some(v)) => Some(std::env::consts::OS == v),
+                ("target_arch", Some(v)) => Some(std::env::consts::ARCH == v),
+                ("target_pointer_width", Some(v)) => {
+                    Some((std::mem::size_of::<usize>() * 8).to_string() == v)
+                }
+                ("target_family", Some(v)) => Some(std::env::consts::FAMILY == v),
+                ("unix", None) => Some(std::cfg!(unix)),
+                ("windows", None) => Some(std::cfg!(windows)),
+                _ => None,
+            };
+            match truth {
+                Some(true) => Tv::True,
+                Some(false) => Tv::False,
+                None => Tv::Unknown,
+            }
+        }
+        CfgExpr::Atom(CfgAtom::Other) => Tv::Unknown,
+        CfgExpr::Not(inner) => match eval_cfg(inner, set) {
+            Tv::True => Tv::False,
+            Tv::False => Tv::True,
+            Tv::Unknown => Tv::Unknown,
+        },
+        CfgExpr::All(parts) => {
+            let mut any_unknown = false;
+            for p in parts {
+                match eval_cfg(p, set) {
+                    Tv::False => return Tv::False,
+                    Tv::Unknown => any_unknown = true,
+                    Tv::True => {}
+                }
+            }
+            if any_unknown {
+                Tv::Unknown
+            } else {
+                Tv::True
+            }
+        }
+        CfgExpr::Any(parts) => {
+            let mut any_unknown = false;
+            for p in parts {
+                match eval_cfg(p, set) {
+                    Tv::True => return Tv::True,
+                    Tv::Unknown => any_unknown = true,
+                    Tv::False => {}
+                }
+            }
+            if any_unknown {
+                Tv::Unknown
+            } else {
+                Tv::False
+            }
+        }
+    }
+}
+
+/// Parse `#[cfg(<meta>)]` attribute tokens into a [`CfgExpr`]. `cfg_attr`
+/// never gates compilation of the item itself and is skipped.
+fn cfg_expr_from_attr(attr: &syn::Attribute) -> Option<CfgExpr> {
+    let syn::Meta::List(list) = &attr.meta else {
+        return None;
+    };
+    if !list.path.is_ident("cfg") {
+        return None;
+    }
+    let parsed: syn::punctuated::Punctuated<syn::Meta, syn::Token![,]> = list
+        .parse_args_with(syn::punctuated::Punctuated::parse_terminated)
+        .ok()?;
+    let mut exprs: Vec<CfgExpr> = Vec::new();
+    for meta in &parsed {
+        exprs.push(cfg_expr_from_meta(meta)?);
+    }
+    match exprs.len() {
+        0 => None,
+        1 => Some(exprs.pop().expect("len checked")),
+        // `#[cfg(a)] #[cfg(b)]` on one item ANDs; a comma-separated list in
+        // ONE cfg is not valid rustc, but ANDing is the conservative read.
+        _ => Some(CfgExpr::All(exprs)),
+    }
+}
+
+fn cfg_expr_from_meta(meta: &syn::Meta) -> Option<CfgExpr> {
+    match meta {
+        syn::Meta::Path(p) => {
+            let ident = p.segments.last()?.ident.to_string();
+            let atom = match ident.as_str() {
+                "test" => CfgAtom::Test,
+                "unix" | "windows" => CfgAtom::Host(ident, None),
+                _ => CfgAtom::Other,
+            };
+            Some(CfgExpr::Atom(atom))
+        }
+        syn::Meta::List(list) => {
+            let inner: syn::punctuated::Punctuated<syn::Meta, syn::Token![,]> = list
+                .parse_args_with(syn::punctuated::Punctuated::parse_terminated)
+                .ok()?;
+            let mut parts: Vec<CfgExpr> = Vec::new();
+            for m in &inner {
+                parts.push(cfg_expr_from_meta(m)?);
+            }
+            if list.path.is_ident("all") {
+                Some(CfgExpr::All(parts))
+            } else if list.path.is_ident("any") {
+                Some(CfgExpr::Any(parts))
+            } else if list.path.is_ident("not") {
+                let mut it = parts.into_iter();
+                let first = it.next()?;
+                Some(CfgExpr::Not(Box::new(first)))
+            } else {
+                Some(CfgExpr::Atom(CfgAtom::Other))
+            }
+        }
+        syn::Meta::NameValue(nv) => {
+            let key = nv.path.segments.last()?.ident.to_string();
+            let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) = &nv.value
+            else {
+                return Some(CfgExpr::Atom(CfgAtom::Other));
+            };
+            match key.as_str() {
+                "feature" => Some(CfgExpr::Atom(CfgAtom::Feature(s.value()))),
+                "target_os" | "target_arch" | "target_pointer_width" | "target_family" => {
+                    Some(CfgExpr::Atom(CfgAtom::Host(key, Some(s.value()))))
+                }
+                _ => Some(CfgExpr::Atom(CfgAtom::Other)),
+            }
+        }
+    }
+}
+
+/// One cfg-gated region in the fixed source: a line range + its predicate.
+struct CfgRegion {
+    start_line: usize,
+    end_line: usize,
+    expr: CfgExpr,
+}
+
+/// Fold one node's cfg attrs into a single predicate (multiple attrs AND,
+/// matching rustc's semantics for `#[cfg(a)] #[cfg(b)]`).
+fn conjoin(mut exprs: Vec<CfgExpr>) -> CfgExpr {
+    match exprs.len() {
+        0 => CfgExpr::Atom(CfgAtom::Other),
+        1 => exprs.pop().expect("len checked"),
+        _ => CfgExpr::All(exprs),
+    }
+}
+
+fn span_lines<S: syn::spanned::Spanned>(node: &S) -> Option<(usize, usize)> {
+    let span = node.span();
+    let start = span.start();
+    let end = span.end();
+    // proc_macro2 fallback spans are 1-based lines; a degenerate
+    // 0-column/0-line fallback (unparseable spans) is refused.
+    if start.line == 0 || end.line == 0 {
+        return None;
+    }
+    Some((start.line, end.line))
+}
+
+/// Attributes of an `Item`/`ImplItem`/`TraitItem`/`Stmt` without matching
+/// every variant by hand (syn 2 exposes attrs as FIELDS on the variants;
+/// these small match shims are the honest accessors).
+fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
+    match item {
+        syn::Item::Const(i) => &i.attrs,
+        syn::Item::Enum(i) => &i.attrs,
+        syn::Item::ExternCrate(i) => &i.attrs,
+        syn::Item::Fn(i) => &i.attrs,
+        syn::Item::ForeignMod(i) => &i.attrs,
+        syn::Item::Impl(i) => &i.attrs,
+        syn::Item::Macro(i) => &i.attrs,
+        syn::Item::Mod(i) => &i.attrs,
+        syn::Item::Static(i) => &i.attrs,
+        syn::Item::Struct(i) => &i.attrs,
+        syn::Item::Trait(i) => &i.attrs,
+        syn::Item::TraitAlias(i) => &i.attrs,
+        syn::Item::Type(i) => &i.attrs,
+        syn::Item::Union(i) => &i.attrs,
+        syn::Item::Use(i) => &i.attrs,
+        // syn's item enums are #[non_exhaustive]; Verbatim and any future
+        // variant carry no attrs we can reach this way.
+        _ => &[],
+    }
+}
+
+fn impl_item_attrs(ii: &syn::ImplItem) -> &[syn::Attribute] {
+    match ii {
+        syn::ImplItem::Const(i) => &i.attrs,
+        syn::ImplItem::Fn(i) => &i.attrs,
+        syn::ImplItem::Macro(i) => &i.attrs,
+        syn::ImplItem::Type(i) => &i.attrs,
+        _ => &[],
+    }
+}
+
+fn trait_item_attrs(ti: &syn::TraitItem) -> &[syn::Attribute] {
+    match ti {
+        syn::TraitItem::Const(i) => &i.attrs,
+        syn::TraitItem::Fn(i) => &i.attrs,
+        syn::TraitItem::Macro(i) => &i.attrs,
+        syn::TraitItem::Type(i) => &i.attrs,
+        _ => &[],
+    }
+}
+
+fn stmt_attrs(stmt: &syn::Stmt) -> &[syn::Attribute] {
+    match stmt {
+        syn::Stmt::Local(i) => &i.attrs,
+        syn::Stmt::Item(i) => item_attrs(i),
+        syn::Stmt::Expr(_, _) => &[],
+        syn::Stmt::Macro(i) => &i.attrs,
+    }
+}
+
+fn item_cfg_regions(item: &syn::Item, out: &mut Vec<CfgRegion>) {
+    let exprs: Vec<CfgExpr> = item_attrs(item)
+        .iter()
+        .filter_map(cfg_expr_from_attr)
+        .collect();
+    if let (Some((start, end)), false) = (span_lines(item), exprs.is_empty()) {
+        out.push(CfgRegion {
+            start_line: start,
+            end_line: end,
+            expr: conjoin(exprs),
+        });
+    }
+    match item {
+        syn::Item::Mod(syn::ItemMod {
+            content: Some((_, items)),
+            ..
+        }) => {
+            for inner in items {
+                item_cfg_regions(inner, out);
+            }
+        }
+        syn::Item::Impl(syn::ItemImpl { items, .. }) => {
+            for ii in items {
+                let inner_exprs: Vec<CfgExpr> = impl_item_attrs(ii)
+                    .iter()
+                    .filter_map(cfg_expr_from_attr)
+                    .collect();
+                if let (Some((s, e)), false) = (span_lines(ii), inner_exprs.is_empty()) {
+                    out.push(CfgRegion {
+                        start_line: s,
+                        end_line: e,
+                        expr: conjoin(inner_exprs),
+                    });
+                }
+                if let syn::ImplItem::Fn(f) = ii {
+                    stmt_cfg_regions(&f.block.stmts, out);
+                }
+            }
+        }
+        syn::Item::Trait(syn::ItemTrait { items, .. }) => {
+            for ti in items {
+                let inner_exprs: Vec<CfgExpr> = trait_item_attrs(ti)
+                    .iter()
+                    .filter_map(cfg_expr_from_attr)
+                    .collect();
+                if let (Some((s, e)), false) = (span_lines(ti), inner_exprs.is_empty()) {
+                    out.push(CfgRegion {
+                        start_line: s,
+                        end_line: e,
+                        expr: conjoin(inner_exprs),
+                    });
+                }
+                if let syn::TraitItem::Fn(syn::TraitItemFn {
+                    default: Some(block),
+                    ..
+                }) = ti
+                {
+                    stmt_cfg_regions(&block.stmts, out);
+                }
+            }
+        }
+        syn::Item::Fn(f) => stmt_cfg_regions(&f.block.stmts, out),
+        _ => {}
+    }
+}
+
+/// Statement-position cfg regions (the P13 `pvp_karma` class: a cfg'd
+/// block inside a fn body re-assigning a binding the edit touched). v1
+/// covers item-level gates, fn/impl/trait item bodies, statement-position
+/// `#[cfg]` blocks/lets, and cfg'd match arms; attributes on inner
+/// non-statement expressions and struct fields are out of scope.
+fn stmt_cfg_regions(stmts: &[syn::Stmt], out: &mut Vec<CfgRegion>) {
+    for stmt in stmts {
+        let exprs: Vec<CfgExpr> = stmt_attrs(stmt)
+            .iter()
+            .filter_map(cfg_expr_from_attr)
+            .collect();
+        if let (Some((s, e)), false) = (span_lines(stmt), exprs.is_empty()) {
+            out.push(CfgRegion {
+                start_line: s,
+                end_line: e,
+                expr: conjoin(exprs),
+            });
+        }
+        match stmt {
+            syn::Stmt::Item(inner) => item_cfg_regions(inner, out),
+            syn::Stmt::Expr(e, _) => {
+                // A cfg'd statement-position block (`#[cfg(x)] { … }`, the
+                // P13 pvp_karma shape) carries its attrs on the ExprBlock
+                // itself, not on the Stmt — catch it here, then recurse.
+                if let syn::Expr::Block(be) = e {
+                    let block_exprs: Vec<CfgExpr> =
+                        be.attrs.iter().filter_map(cfg_expr_from_attr).collect();
+                    if let (Some((s, e2)), false) = (span_lines(stmt), block_exprs.is_empty()) {
+                        out.push(CfgRegion {
+                            start_line: s,
+                            end_line: e2,
+                            expr: conjoin(block_exprs),
+                        });
+                    }
+                }
+                expr_cfg_regions(e, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn expr_cfg_regions(expr: &syn::Expr, out: &mut Vec<CfgRegion>) {
+    match expr {
+        syn::Expr::Block(syn::ExprBlock { block, .. })
+        | syn::Expr::Unsafe(syn::ExprUnsafe { block, .. })
+        | syn::Expr::Const(syn::ExprConst { block, .. }) => {
+            stmt_cfg_regions(&block.stmts, out);
+        }
+        syn::Expr::If(syn::ExprIf {
+            then_branch,
+            else_branch,
+            ..
+        }) => {
+            stmt_cfg_regions(&then_branch.stmts, out);
+            if let Some((_, els)) = else_branch {
+                expr_cfg_regions(els, out);
+            }
+        }
+        syn::Expr::Match(syn::ExprMatch { arms, .. }) => {
+            for arm in arms {
+                let exprs: Vec<CfgExpr> =
+                    arm.attrs.iter().filter_map(cfg_expr_from_attr).collect();
+                if let (Some((s, e)), false) = (span_lines(arm), exprs.is_empty()) {
+                    out.push(CfgRegion {
+                        start_line: s,
+                        end_line: e,
+                        expr: conjoin(exprs),
+                    });
+                }
+                expr_cfg_regions(&arm.body, out);
+            }
+        }
+        syn::Expr::Loop(syn::ExprLoop { body, .. }) => stmt_cfg_regions(&body.stmts, out),
+        _ => {}
+    }
+}
+
+/// A kept edit the baseline provably did not compile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CfgUnverified {
+    pub path: PathBuf,
+    pub line: usize,
+    pub rule_id: String,
+    /// Feature atoms in the enclosing gates that are NOT enabled — the
+    /// re-run suggestion names exactly these.
+    pub not_enabled: Vec<String>,
+    /// Raw gate text for regions that could not be settled (undecidable
+    /// atoms, or a gate that is OFF for a non-additive reason such as
+    /// `not(feature = …)` with the feature ON).
+    pub undecidable: Vec<String>,
+}
+
+/// Audit a batch of file edits against the feature set the verify gate
+/// compiled with. Pure syn pass over the FIXED content — no cargo, no I/O
+/// (the caller owns manifest reading; line numbers are the
+/// [`EditAtLine::final_line`]s, consistent with `FileEditSet::fixed`).
+///
+/// Divergences (documented, conservative direction — an unmarked edit is
+/// always provably compiled):
+/// - `#[cfg] mod foo;` gating a whole child FILE is invisible to a
+///   per-file parse (the audit sees only files it is handed);
+/// - same-line siblings behind different gates conjoin (over-marking);
+/// - `#[cfg_attr(...)]`, struct-field gates, and cfg on inner non-statement
+///   expressions are out of scope.
+#[must_use]
+pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgUnverified> {
+    let mut marks: Vec<CfgUnverified> = Vec::new();
+    for f in files {
+        let Ok(parsed) = syn::parse_file(&f.fixed) else {
+            continue; // the verifier already guarantees parseability
+        };
+        let mut regions: Vec<CfgRegion> = Vec::new();
+        for item in &parsed.items {
+            item_cfg_regions(item, &mut regions);
+        }
+        if regions.is_empty() {
+            continue;
+        }
+        for e in &f.edits {
+            let mut not_enabled: Vec<String> = Vec::new();
+            let mut undecidable: Vec<String> = Vec::new();
+            for r in &regions {
+                if e.final_line < r.start_line || e.final_line > r.end_line {
+                    continue;
+                }
+                if eval_cfg(&r.expr, set) == Tv::True {
+                    continue;
+                }
+                let mut features: Vec<String> = Vec::new();
+                r.expr.feature_names(&mut features);
+                let missing: Vec<String> = features
+                    .iter()
+                    .filter(|f| !set.contains(f.as_str()))
+                    .cloned()
+                    .collect();
+                if missing.is_empty() {
+                    // Off for a non-additive reason (`not(feature)` with the
+                    // feature on, or an undecidable atom) — --features
+                    // cannot fix it; report the raw gate.
+                    undecidable.push(r.expr.render());
+                } else {
+                    for m in missing {
+                        if !not_enabled.contains(&m) {
+                            not_enabled.push(m);
+                        }
+                    }
+                    if eval_cfg(&r.expr, set) == Tv::Unknown {
+                        undecidable.push(r.expr.render());
+                    }
+                }
+            }
+            if !not_enabled.is_empty() || !undecidable.is_empty() {
+                not_enabled.sort();
+                undecidable.sort();
+                marks.push(CfgUnverified {
+                    path: f.path.clone(),
+                    line: e.final_line,
+                    rule_id: e.rule_id.clone(),
+                    not_enabled,
+                    undecidable,
+                });
+            }
+        }
+    }
+    marks
+}
+
+/// Render the audit tail for the report (one line per mark + the re-run
+/// suggestion). Testable render: the bin prints this verbatim.
+#[must_use]
+pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    if marks.is_empty() {
+        return out;
+    }
+    let _ = writeln!(
+        out,
+        "verify: cfg audit — {} kept edit(s) behind cfg gate(s) this baseline did NOT compile:",
+        marks.len()
+    );
+    for m in marks {
+        let mut reasons: Vec<String> = Vec::new();
+        if !m.not_enabled.is_empty() {
+            reasons.push(format!(
+                "#[cfg(feature = …)] not enabled: {}",
+                m.not_enabled.join(", ")
+            ));
+        }
+        for u in &m.undecidable {
+            reasons.push(format!("gate not settleable: cfg({u})"));
+        }
+        let _ = writeln!(
+            out,
+            "  {}:{} [{}] — {}",
+            m.path.display(),
+            m.line, m.rule_id, reasons.join("; ")
+        );
+    }
+    let missing: Vec<String> = {
+        let mut all: Vec<String> = marks.iter().flat_map(|m| m.not_enabled.clone()).collect();
+        all.sort();
+        all.dedup();
+        all
+    };
+    if missing.is_empty() {
+        let _ = writeln!(
+            out,
+            "  (no --features re-run covers these — verify the listed gates manually)"
+        );
+    } else {
+        let features = missing.join(",");
+        let suggested = match verify_args {
+            Some(a) if !a.trim().is_empty() => format!("{a} --features {features}"),
+            _ => format!("--features {features}"),
+        };
+        let _ = writeln!(
+            out,
+            "  re-run for full coverage: cargo heal --fix --write --verify --verify-args \"{suggested}\""
+        );
+    }
+    out
 }
 
 // ── rustc JSON parsing ────────────────────────────────────────────────────
@@ -1121,5 +1810,253 @@ mod tests {
         // No oracle verdict (not built / unrunnable / non-clippy rule) →
         // rustc-only Heuristic outcome-success.
         assert_eq!(kept_edit_verdict(None), (true, false));
+    }
+
+    // ── the post-heal cfg audit (2026-09-10 intake) ─────────────────────
+
+    fn fset(names: &[&str]) -> FeatureSet {
+        FeatureSet {
+            all_on: false,
+            names: names.iter().map(|n| (*n).to_string()).collect(),
+        }
+    }
+
+    fn expr_of(src: &str) -> CfgExpr {
+        let file = syn::parse_file(src).expect("parses");
+        let item = &file.items[0];
+        let attr = item_attrs(item)
+            .iter()
+            .find(|a| a.path().is_ident("cfg"))
+            .expect("item carries a cfg attr");
+        cfg_expr_from_attr(attr).expect("cfg parses")
+    }
+
+    fn batch(fixed: &str, edits: &[(&str, usize)]) -> FileEditSet {
+        FileEditSet {
+            path: PathBuf::from("src/probe.rs"),
+            original: fixed.to_string(),
+            fixed: fixed.to_string(),
+            edits: edits
+                .iter()
+                .map(|(rule, line)| EditAtLine {
+                    rule_id: (*rule).to_string(),
+                    final_line: *line,
+                    replacement: String::new(),
+                    restore: String::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn cfg_eval_feature_gates() {
+        let set = fset(&["a"]);
+        // Feature atoms: on → True, off → False.
+        assert_eq!(
+            eval_cfg(&expr_of("#[cfg(feature = \"a\")] fn f() {}"), &set),
+            Tv::True
+        );
+        assert_eq!(
+            eval_cfg(&expr_of("#[cfg(feature = \"b\")] fn f() {}"), &set),
+            Tv::False
+        );
+        // all_on short-circuits every feature atom to True.
+        let all = FeatureSet {
+            all_on: true,
+            names: Default::default(),
+        };
+        assert_eq!(
+            eval_cfg(&expr_of("#[cfg(feature = \"b\")] fn f() {}"), &all),
+            Tv::True
+        );
+    }
+
+    #[test]
+    fn cfg_eval_nested_not_all_any() {
+        let set = fset(&["a"]);
+        // not(feature) inverts: a ON → provably NOT compiled.
+        assert_eq!(
+            eval_cfg(
+                &expr_of("#[cfg(not(feature = \"a\"))] fn f() {}"),
+                &set
+            ),
+            Tv::False
+        );
+        // any(one_off, unknown_key) → Unknown (an unknown atom could make
+        // it true; a False alone cannot).
+        assert_eq!(
+            eval_cfg(
+                &expr_of("#[cfg(any(feature = \"b\", doc))] fn f() {}"),
+                &set
+            ),
+            Tv::Unknown
+        );
+        // all(feature_on, unknown) → Unknown; all(feature_off, unknown) → False.
+        assert_eq!(
+            eval_cfg(
+                &expr_of("#[cfg(all(feature = \"a\", doc))] fn f() {}"),
+                &set
+            ),
+            Tv::Unknown
+        );
+        assert_eq!(
+            eval_cfg(
+                &expr_of("#[cfg(all(feature = \"b\", doc))] fn f() {}"),
+                &set
+            ),
+            Tv::False
+        );
+    }
+
+    #[test]
+    fn cfg_eval_test_and_host_atoms() {
+        let set = fset(&[]);
+        // --all-targets compiles #[cfg(test)] → verified.
+        assert_eq!(eval_cfg(&expr_of("#[cfg(test)] fn f() {}"), &set), Tv::True);
+        // The healer settles host atoms from its own build; the gate
+        // compiles for the host it runs on.
+        let host_os = std::env::consts::OS;
+        let src = format!("#[cfg(target_os = \"{host_os}\")] fn f() {{}}");
+        assert_eq!(eval_cfg(&expr_of(&src), &set), Tv::True);
+        let wrong = if host_os == "macos" { "linux" } else { "macos" };
+        let src = format!("#[cfg(target_os = \"{wrong}\")] fn f() {{}}");
+        assert_eq!(eval_cfg(&expr_of(&src), &set), Tv::False);
+        // Bare unix/windows: settled by cfg!.
+        let unix_tv = eval_cfg(&expr_of("#[cfg(unix)] fn f() {}"), &set);
+        assert_eq!(unix_tv, if std::cfg!(unix) { Tv::True } else { Tv::False });
+    }
+
+    #[test]
+    fn manifest_feature_names_lists_defaults_and_keys() {
+        let manifest = "\n[features]\ndefault = [\"a\",\n \"b\"]\na = []\nb = []\nc = []\n";
+        let (defaults, keys) = manifest_feature_names(manifest);
+        assert_eq!(defaults, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(keys, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        // The count consumer keeps its Issue-031-H3 shape.
+        assert_eq!(manifest_nondefault_feature_count(manifest), 1);
+    }
+
+    #[test]
+    fn feature_set_from_args_matrix() {
+        let manifest = "[features]\ndefault = [\"a\"]\na = []\nb = []\nc = []\n";
+        // No args → defaults only.
+        let set = feature_set_from_args(manifest, None);
+        assert!(set.contains("a") && !set.contains("b"));
+        // --features b,c (space form + comma form) → added; foreign names
+        // (dep paths, unlisted names) ignored.
+        let set = feature_set_from_args(manifest, Some("--features b,c somedep/x"));
+        assert!(set.contains("a") && set.contains("b") && set.contains("c"));
+        assert!(!set.contains("somedep/x"));
+        // --features=b form.
+        let set = feature_set_from_args(manifest, Some("--features=b"));
+        assert!(set.contains("b"));
+        // --no-default-features drops defaults but keeps explicit requests.
+        let set = feature_set_from_args(manifest, Some("--no-default-features --features b"));
+        assert!(!set.contains("a") && set.contains("b"));
+        // --all-features → everything on.
+        let set = feature_set_from_args(manifest, Some("--all-features"));
+        assert!(set.all_on && set.contains("b") && set.contains("c"));
+    }
+
+    #[test]
+    fn cfg_audit_marks_gated_edits_only() {
+        // The E0631 casualty shape: a fix landing inside a feature-gated
+        // fn reports as "verified" while the gate never compiled it.
+        let fixed = "pub fn keep(r: &String) -> bool { r.starts_with('v') }\n\n#[cfg(feature = \"score_bench\")]\npub fn pick(rules: &[String]) -> Vec<String> {\n    rules.iter().filter(|r| keep(r)).cloned().collect()\n}\n";
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits(
+            &[batch(fixed, &[("needless_return", 2), ("needless_return", 5)])],
+            &set,
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].line, 5);
+        assert_eq!(marks[0].not_enabled, vec!["score_bench".to_string()]);
+        assert!(marks[0].undecidable.is_empty());
+        // The render names the edit + the exact re-run.
+        let rendered = render_cfg_audit(&marks, None);
+        assert!(rendered.contains("src/probe.rs:5 [needless_return]"));
+        assert!(rendered.contains("#[cfg(feature = …)] not enabled: score_bench"));
+        assert!(
+            rendered
+                .contains("--verify-args \"--features score_bench\""),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn cfg_audit_test_and_enabled_gates_stay_unmarked() {
+        let fixed = "#[cfg(test)]\nmod tests {\n    #[cfg(feature = \"a\")]
+    fn inner() -> u32 { 1 }
+}\n\n#[cfg(all(unix, feature = \"a\"))]\npub fn host_gated() -> u32 { 2 }
+";
+        let set = fset(&["a"]);
+        // Edits at lines inside #[cfg(test)] and an enabled gate: no marks.
+        let marks = cfg_unverified_edits(
+            &[batch(fixed, &[("needless_return", 4), ("needless_return", 8)])],
+            &set,
+        );
+        assert!(marks.is_empty(), "{marks:?}");
+    }
+
+    #[test]
+    fn cfg_audit_stmt_block_gate_pvp_karma_shape() {
+        // The P13 casualty shape: a cfg'd BLOCK inside a fn body — the
+        // region a plain item-level walk cannot see.
+        let fixed = "pub fn boot() -> u32 {\n    let mut slots = 0;\n    #[cfg(feature = \"pvp_karma\")]\n    {\n        slots = 1;\n    }\n    slots\n}\n";
+        let set = fset(&["seal_sextet"]);
+        let marks = cfg_unverified_edits(
+            &[batch(fixed, &[("unused_mut", 2), ("needless_return", 8)])],
+            &set,
+        );
+        // The edit on the `let mut` line (line 2) sits inside the fn but
+        // OUTSIDE the cfg'd block → unmarked; an edit INSIDE the block
+        // region would be. Here only a line inside 3..=6 would mark — line 2
+        // must NOT (it is above the block) — pinning the span boundary.
+        assert!(marks.is_empty(), "{marks:?}");
+        let marks = cfg_unverified_edits(
+            &[batch(fixed, &[("identity_op", 5)])],
+            &set,
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].not_enabled, vec!["pvp_karma".to_string()]);
+    }
+
+    #[test]
+    fn cfg_audit_not_gate_with_feature_on_is_not_features_addable() {
+        // cfg(not(feature = "a")) with a ENABLED: provably not compiled, but
+        // NO --features re-run can cover it — the report must say so.
+        let fixed = "#[cfg(not(feature = \"a\"))]\npub fn off() -> u32 { 1 }\n";
+        let set = fset(&["a"]);
+        let marks = cfg_unverified_edits(&[batch(fixed, &[("needless_return", 2)])], &set);
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert!(marks[0].not_enabled.is_empty());
+        assert_eq!(
+            marks[0].undecidable,
+            vec!["not(feature = \"a\")".to_string()]
+        );
+        let rendered = render_cfg_audit(&marks, None);
+        assert!(rendered.contains("no --features re-run covers these"));
+    }
+
+    #[test]
+    fn cfg_audit_partial_verify_args_marks_the_missing_feature() {
+        // The pvp_karma scenario: --verify-args passed a partial set; the
+        // coarse warning is correctly silent (args present) — the audit is
+        // the only honest signal left.
+        let fixed = "#[cfg(feature = \"seal_sextet\")]\npub fn a() -> u32 { 1 }\n\n#[cfg(feature = \"pvp_karma\")]\npub fn b() -> u32 { 2 }\n";
+        let manifest = "[features]\ndefault = []\nseal_sextet = []\npvp_karma = []\n";
+        let set = feature_set_from_args(manifest, Some("--features seal_sextet"));
+        let marks = cfg_unverified_edits(
+            &[batch(fixed, &[("needless_return", 2), ("needless_return", 5)])],
+            &set,
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].line, 5);
+        // The suggested re-run APPENDS to the existing args.
+        let rendered = render_cfg_audit(&marks, Some("--features seal_sextet"));
+        assert!(
+            rendered.contains("--verify-args \"--features seal_sextet --features pvp_karma\""),
+            "{rendered}"
+        );
     }
 }

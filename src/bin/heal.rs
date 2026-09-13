@@ -7671,6 +7671,58 @@ fn main() {
             })
             .collect();
 
+        // ── the post-heal cfg audit (2026-09-10 intake, two recorded
+        // casualties: the E0631 point-free closure behind `score_bench`
+        // 2026-09-09 + the P13 `pvp_karma` mut under a partial --verify-args
+        // set). The compile gate ran at THIS invocation's feature state, so
+        // kept edits inside cfg-gated regions it did not compile carry a
+        // FALSE "verified" claim. Per-edit honesty, report-only: name each
+        // such edit + the exact re-run that would cover it. This ALSO fires
+        // when --verify-args passed a partial set — the case the coarse
+        // Issue-031-H3 warning correctly stays silent on.
+        {
+            let mut marks: Vec<riir_clippy::fix_verify::CfgUnverified> = Vec::new();
+            let mut sets: std::collections::HashMap<PathBuf, riir_clippy::fix_verify::FeatureSet> =
+                std::collections::HashMap::new();
+            for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
+                if *whole {
+                    continue;
+                }
+                let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
+                    continue;
+                };
+                if !sets.contains_key(&pkg) {
+                    let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
+                        continue;
+                    };
+                    sets.insert(
+                        pkg.clone(),
+                        riir_clippy::fix_verify::feature_set_from_args(
+                            &text,
+                            args.verify_args.as_deref(),
+                        ),
+                    );
+                }
+                let Some(set) = sets.get(&pkg) else {
+                    continue;
+                };
+                marks.extend(
+                    riir_clippy::fix_verify::cfg_unverified_edits(
+                        std::slice::from_ref(b),
+                        set,
+                    )
+                    .into_iter()
+                    .filter(|m| !reverted_lines.contains(&m.line)),
+                );
+            }
+            if !marks.is_empty() {
+                eprint!(
+                    "{}",
+                    riir_clippy::fix_verify::render_cfg_audit(&marks, args.verify_args.as_deref())
+                );
+            }
+        }
+
         // ── 037-T2: the lint-resolution oracle (clippy_verify builds). For
         // kept edits whose rule is one of OUR clippy lints, one
         // `cargo clippy -- -W clippy::<lint>…` per owning package (same
