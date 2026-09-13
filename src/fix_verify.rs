@@ -588,6 +588,17 @@ pub fn manifest_feature_names(manifest_text: &str) -> (Vec<String>, Vec<String>)
 // The audit is REPORT-ONLY (a mark, never a revert): it names each kept
 // edit whose enclosing cfg context the baseline provably did not compile,
 // plus the exact `--verify-args` re-run that would cover it.
+//
+// The binding-association half (P13's literal shape, 2026-09-14): an edit
+// on a `let` declaring a binding that is ASSIGNED, compound-assigned,
+// `&mut`-borrowed, or method-called inside a cfg'd region the baseline
+// did not compile is marked too — the `unused_mut` casualty class, where
+// the edit sits OUTSIDE the gate and only the load-bearing USAGE lives
+// inside it. Association is name-based (v1): single-ident `let` pats only
+// (tuple/struct pats and fn params out of scope), method-call receivers
+// count as mutations (syn cannot see &self vs &mut self — over-marking,
+// conservative), mutations inside macro bodies are invisible, and
+// shadowed same-name bindings may over-mark.
 
 /// The enabled-feature set the verify gate compiled with.
 #[derive(Debug, Clone, Default)]
@@ -1103,6 +1114,134 @@ fn expr_cfg_regions(expr: &syn::Expr, out: &mut Vec<CfgRegion>) {
     }
 }
 
+/// The features missing (and gates undecidable) for ONE region under the
+/// gate's feature set — `None` when the baseline provably compiled the
+/// region (`Tv::True`). Shared by the span path and the binding path.
+fn region_gap(r: &CfgRegion, set: &FeatureSet) -> Option<(Vec<String>, Vec<String>)> {
+    if eval_cfg(&r.expr, set) == Tv::True {
+        return None;
+    }
+    let mut features: Vec<String> = Vec::new();
+    r.expr.feature_names(&mut features);
+    let missing: Vec<String> = features
+        .iter()
+        .filter(|f| !set.contains(f.as_str()))
+        .cloned()
+        .collect();
+    if missing.is_empty() {
+        // Off for a non-additive reason (`not(feature)` with the feature
+        // on, or an undecidable atom) — --features cannot fix it; report
+        // the raw gate.
+        Some((Vec::new(), vec![r.expr.render()]))
+    } else {
+        let und = if eval_cfg(&r.expr, set) == Tv::Unknown {
+            vec![r.expr.render()]
+        } else {
+            Vec::new()
+        };
+        Some((missing, und))
+    }
+}
+
+/// A plain single-segment path expression (`slots`), not `a::b`, not a
+/// field (`self.x`) — the shape a local-binding mutation must have.
+fn path_ident(expr: &syn::Expr) -> Option<String> {
+    if let syn::Expr::Path(syn::ExprPath { path, .. }) = expr {
+        if path.segments.len() == 1 && path.leading_colon.is_none() {
+            let seg = &path.segments[0];
+            if seg.arguments.is_none() {
+                return Some(seg.ident.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Name-and-line scan for the binding-association path: where each
+/// single-ident `let` lives, and where each mutability-requiring use of
+/// an identifier occurs. Line-keyed so region membership is decided by
+/// the SAME spans the span path uses.
+struct BindingScan {
+    /// `(ident, start_line, end_line)` of every single-ident `let`.
+    lets: Vec<(String, usize, usize)>,
+    /// `(ident, line)` of every assignment / compound assignment /
+    /// `&mut` borrow / method-call receiver on a plain identifier.
+    mutations: Vec<(String, usize)>,
+}
+
+impl BindingScan {
+    fn of(file: &syn::File) -> Self {
+        let mut scan = BindingScan {
+            lets: Vec::new(),
+            mutations: Vec::new(),
+        };
+        syn::visit::visit_file(&mut scan, file);
+        scan
+    }
+}
+
+impl<'ast> syn::visit::Visit<'ast> for BindingScan {
+    fn visit_expr_assign(&mut self, i: &'ast syn::ExprAssign) {
+        if let (Some(id), Some((l, _))) = (path_ident(&i.left), span_lines(i.left.as_ref())) {
+            self.mutations.push((id, l));
+        }
+        syn::visit::visit_expr_assign(self, i);
+    }
+
+    fn visit_expr_binary(&mut self, i: &'ast syn::ExprBinary) {
+        let is_assign_op = matches!(
+            i.op,
+            syn::BinOp::AddAssign(_)
+                | syn::BinOp::SubAssign(_)
+                | syn::BinOp::MulAssign(_)
+                | syn::BinOp::DivAssign(_)
+                | syn::BinOp::RemAssign(_)
+                | syn::BinOp::BitXorAssign(_)
+                | syn::BinOp::BitAndAssign(_)
+                | syn::BinOp::BitOrAssign(_)
+                | syn::BinOp::ShlAssign(_)
+                | syn::BinOp::ShrAssign(_)
+        );
+        if is_assign_op {
+            if let (Some(id), Some((l, _))) = (path_ident(&i.left), span_lines(i.left.as_ref())) {
+                self.mutations.push((id, l));
+            }
+        }
+        syn::visit::visit_expr_binary(self, i);
+    }
+
+    fn visit_expr_reference(&mut self, i: &'ast syn::ExprReference) {
+        // `&mut x` — syn 2 models a reference as its own expr kind, not a
+        // unary op; `mutability` carries the `mut` token.
+        if i.mutability.is_some() {
+            if let (Some(id), Some((l, _))) = (path_ident(&i.expr), span_lines(i.expr.as_ref())) {
+                self.mutations.push((id, l));
+            }
+        }
+        syn::visit::visit_expr_reference(self, i);
+    }
+
+    fn visit_expr_method_call(&mut self, i: &'ast syn::ExprMethodCall) {
+        // syn cannot see &self vs &mut self — treat every plain-ident
+        // receiver as mutability-requiring (over-marking, conservative).
+        if let (Some(id), Some((l, _))) =
+            (path_ident(&i.receiver), span_lines(i.receiver.as_ref()))
+        {
+            self.mutations.push((id, l));
+        }
+        syn::visit::visit_expr_method_call(self, i);
+    }
+
+    fn visit_local(&mut self, i: &'ast syn::Local) {
+        if let syn::Pat::Ident(pi) = &i.pat {
+            if let Some((s, e)) = span_lines(&i.pat) {
+                self.lets.push((pi.ident.to_string(), s, e));
+            }
+        }
+        syn::visit::visit_local(self, i);
+    }
+}
+
 /// A kept edit the baseline provably did not compile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CfgUnverified {
@@ -1116,6 +1255,10 @@ pub struct CfgUnverified {
     /// atoms, or a gate that is OFF for a non-additive reason such as
     /// `not(feature = …)` with the feature ON).
     pub undecidable: Vec<String>,
+    /// The local binding whose mutation evidence lives behind a gate the
+    /// baseline did not compile (the binding-association path; `None` for
+    /// direct span marks).
+    pub binding: Option<String>,
 }
 
 /// Audit a batch of file edits against the feature set the verify gate
@@ -1123,13 +1266,19 @@ pub struct CfgUnverified {
 /// (the caller owns manifest reading; line numbers are the
 /// [`EditAtLine::final_line`]s, consistent with `FileEditSet::fixed`).
 ///
-/// Divergences (documented, conservative direction — an unmarked edit is
-/// always provably compiled):
+/// Divergences (documented, conservative direction — an unmarked edit
+/// never has mutability evidence behind a gate this baseline skipped):
 /// - `#[cfg] mod foo;` gating a whole child FILE is invisible to a
 ///   per-file parse (the audit sees only files it is handed);
 /// - same-line siblings behind different gates conjoin (over-marking);
 /// - `#[cfg_attr(...)]`, struct-field gates, and cfg on inner non-statement
-///   expressions are out of scope.
+///   expressions are out of scope;
+/// - binding association is NAME-based, single-ident `let`s only: tuple /
+///   struct-pattern lets and fn PARAMS are not associated (v1),
+///   method-call receivers count as mutations without &self/&mut-self
+///   visibility, mutations inside macro bodies are invisible, and
+///   shadowed same-name bindings may over-mark — every miss is in the
+///   mark direction, never in the silent direction.
 #[must_use]
 pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgUnverified> {
     let mut marks: Vec<CfgUnverified> = Vec::new();
@@ -1144,36 +1293,59 @@ pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgU
         if regions.is_empty() {
             continue;
         }
+        let scan = BindingScan::of(&parsed);
         for e in &f.edits {
             let mut not_enabled: Vec<String> = Vec::new();
             let mut undecidable: Vec<String> = Vec::new();
+            let mut binding: Option<String> = None;
             for r in &regions {
                 if e.final_line < r.start_line || e.final_line > r.end_line {
                     continue;
                 }
-                if eval_cfg(&r.expr, set) == Tv::True {
-                    continue;
-                }
-                let mut features: Vec<String> = Vec::new();
-                r.expr.feature_names(&mut features);
-                let missing: Vec<String> = features
-                    .iter()
-                    .filter(|f| !set.contains(f.as_str()))
-                    .cloned()
-                    .collect();
-                if missing.is_empty() {
-                    // Off for a non-additive reason (`not(feature)` with the
-                    // feature on, or an undecidable atom) — --features
-                    // cannot fix it; report the raw gate.
-                    undecidable.push(r.expr.render());
-                } else {
+                if let Some((missing, und)) = region_gap(r, set) {
                     for m in missing {
                         if !not_enabled.contains(&m) {
                             not_enabled.push(m);
                         }
                     }
-                    if eval_cfg(&r.expr, set) == Tv::Unknown {
-                        undecidable.push(r.expr.render());
+                    for u in und {
+                        if !undecidable.contains(&u) {
+                            undecidable.push(u);
+                        }
+                    }
+                }
+            }
+            // The P13 binding path: the edit rewrites a `let` whose
+            // binding is mutated inside an uncovered region — the
+            // `unused_mut` casualty shape, where the edit sits outside
+            // the gate and only the load-bearing usage lives inside it.
+            for (ident, ls, le) in &scan.lets {
+                if e.final_line < *ls || e.final_line > *le {
+                    continue;
+                }
+                for (m_ident, m_line) in &scan.mutations {
+                    if m_ident != ident || *m_line == e.final_line {
+                        continue;
+                    }
+                    for r in &regions {
+                        if *m_line < r.start_line || *m_line > r.end_line {
+                            continue;
+                        }
+                        if let Some((missing, und)) = region_gap(r, set) {
+                            for m in missing {
+                                if !not_enabled.contains(&m) {
+                                    not_enabled.push(m);
+                                }
+                            }
+                            for u in und {
+                                if !undecidable.contains(&u) {
+                                    undecidable.push(u);
+                                }
+                            }
+                            if binding.is_none() {
+                                binding = Some(ident.clone());
+                            }
+                        }
                     }
                 }
             }
@@ -1186,6 +1358,7 @@ pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgU
                     rule_id: e.rule_id.clone(),
                     not_enabled,
                     undecidable,
+                    binding,
                 });
             }
         }
@@ -1209,6 +1382,11 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
     );
     for m in marks {
         let mut reasons: Vec<String> = Vec::new();
+        if let Some(b) = &m.binding {
+            reasons.push(format!(
+                "binding `{b}` is assigned/mutated inside a gate this baseline did not compile"
+            ));
+        }
         if !m.not_enabled.is_empty() {
             reasons.push(format!(
                 "#[cfg(feature = …)] not enabled: {}",
@@ -2004,21 +2182,88 @@ mod tests {
         // region a plain item-level walk cannot see.
         let fixed = "pub fn boot() -> u32 {\n    let mut slots = 0;\n    #[cfg(feature = \"pvp_karma\")]\n    {\n        slots = 1;\n    }\n    slots\n}\n";
         let set = fset(&["seal_sextet"]);
+        // The edit on the `let mut` line (line 2) — the P13 incident's
+        // EXACT edit (an unused_mut heal dropping the load-bearing
+        // `mut`): the binding's re-assignment lives inside the uncovered
+        // region, so the edit marks via BINDING ASSOCIATION. v1 pinned
+        // this line unmarked ("line 2 must NOT — it is above the block
+        // — pinning the span boundary"); v2 moves that boundary to
+        // answer the P13 intake row's literal question. Line 8 (the
+        // fn's closing brace) stays unmarked — not a `let`, not a use.
         let marks = cfg_unverified_edits(
             &[batch(fixed, &[("unused_mut", 2), ("needless_return", 8)])],
             &set,
         );
-        // The edit on the `let mut` line (line 2) sits inside the fn but
-        // OUTSIDE the cfg'd block → unmarked; an edit INSIDE the block
-        // region would be. Here only a line inside 3..=6 would mark — line 2
-        // must NOT (it is above the block) — pinning the span boundary.
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].line, 2);
+        assert_eq!(marks[0].not_enabled, vec!["pvp_karma".to_string()]);
+        assert_eq!(marks[0].binding.as_deref(), Some("slots"));
+        // An edit on the trailing read (line 7) — not a `let`, not
+        // inside the region — stays unmarked: the binding path is
+        // bounded to declaration edits.
+        let marks = cfg_unverified_edits(&[batch(fixed, &[("identity_op", 7)])], &set);
         assert!(marks.is_empty(), "{marks:?}");
-        let marks = cfg_unverified_edits(
-            &[batch(fixed, &[("identity_op", 5)])],
-            &set,
-        );
+        // An edit INSIDE the block region (line 5) marks via span.
+        let marks = cfg_unverified_edits(&[batch(fixed, &[("identity_op", 5)])], &set);
         assert_eq!(marks.len(), 1, "{marks:?}");
         assert_eq!(marks[0].not_enabled, vec!["pvp_karma".to_string()]);
+        assert!(marks[0].binding.is_none());
+    }
+
+    #[test]
+    fn cfg_audit_binding_method_call_and_mut_borrow() {
+        // vec-push receiver + &mut borrow inside uncovered regions both
+        // make an edit on the binding's `let` unverified — the
+        // mutability evidence lives behind the gate.
+        let fixed = "pub fn f(v: &mut Vec<u8>) {\n    let mut tokens = vec![0u8];\n    let mut total = 0u32;\n    #[cfg(feature = \"quest\")]\n    {\n        tokens.push(1);\n    }\n    #[cfg(feature = \"karma\")]\n    {\n        let r = &mut total;\n    }\n    let _ = (v, total);\n}\n";
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits(
+            &[batch(fixed, &[("unused_mut", 2), ("unused_mut", 3)])],
+            &set,
+        );
+        assert_eq!(marks.len(), 2, "{marks:?}");
+        assert_eq!(marks[0].line, 2);
+        assert_eq!(marks[0].not_enabled, vec!["quest".to_string()]);
+        assert_eq!(marks[0].binding.as_deref(), Some("tokens"));
+        assert_eq!(marks[1].line, 3);
+        assert_eq!(marks[1].not_enabled, vec!["karma".to_string()]);
+        assert_eq!(marks[1].binding.as_deref(), Some("total"));
+        let rendered = render_cfg_audit(&marks, None);
+        assert!(rendered.contains("binding `tokens`"), "{rendered}");
+        assert!(rendered.contains("--features karma,quest"), "{rendered}");
+    }
+
+    #[test]
+    fn cfg_audit_binding_under_enabled_feature_is_clean() {
+        // Mutation behind an ENABLED gate — the baseline compiled the
+        // evidence; the declaration edit stays unmarked.
+        let fixed = "pub fn f() -> u32 {\n    let mut x = 0;\n    #[cfg(feature = \"on\")]\n    {\n        x = 1;\n    }\n    x\n}\n";
+        let set = fset(&["on"]);
+        let marks = cfg_unverified_edits(&[batch(fixed, &[("unused_mut", 2)])], &set);
+        assert!(marks.is_empty(), "{marks:?}");
+    }
+
+    #[test]
+    fn cfg_audit_binding_mutation_outside_any_region_is_clean() {
+        // Same mutation shape with NO gate at all — the baseline compiled
+        // the re-assignment; removing `mut` would have failed the gate.
+        let fixed = "pub fn f() -> u32 {\n    let mut x = 0;\n    x = 1;\n    x\n}\n";
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits(&[batch(fixed, &[("unused_mut", 2)])], &set);
+        assert!(marks.is_empty(), "{marks:?}");
+    }
+
+    #[test]
+    fn cfg_audit_binding_shadowed_name_overmarks_documented() {
+        // Name-based association (v1 divergence): the mutated `x` is a
+        // DIFFERENT binding than the outer `let mut x`, but the audit
+        // marks the outer declaration edit — the conservative direction
+        // (a mark asks for a re-run; it never blocks).
+        let fixed = "pub fn f() -> u32 {\n    let mut x = 0;\n    #[cfg(feature = \"q\")]\n    {\n        let mut x = 1;\n        x = 2;\n    }\n    x\n}\n";
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits(&[batch(fixed, &[("unused_mut", 2)])], &set);
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].binding.as_deref(), Some("x"));
     }
 
     #[test]
