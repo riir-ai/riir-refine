@@ -25,13 +25,17 @@
 //! aliasing-divergence, where `cargo fix` rewrites the borrow site and we
 //! clone at the move site, matching the known inverse). E0596/E0382/E0507/
 //! E0373 ship NO template by measurement (Bench 041: `cargo fix` scores
-//! 100% matched there — no headroom).
+//! 100% matched there — no headroom). **Issue 100 ships [`e0614`]** — the
+//! typeck-stage deref-of-non-pointer, whose fix is the unmasking trade the
+//! driver's lexicographic keep rule exists to rank.
 
 pub mod borrowck;
 pub mod e0597;
+pub mod e0614;
 
 pub use borrowck::family as borrowck_family;
 pub use e0597::family;
+pub use e0614::E0614DerefAtUse;
 
 use std::path::{Path, PathBuf};
 
@@ -202,14 +206,16 @@ impl Playbooks {
     }
 
     /// The production registry (Phase 2's E0597 family + Phase 3's borrowck
-    /// family — E0502/E0499/E0505). What `--fix-compile` runs with.
+    /// family — E0502/E0499/E0505 — + Issue 100's E0614 deref-at-use, the
+    /// unmasking half of the lexicographic keep rule). What `--fix-compile`
+    /// runs with.
     #[must_use]
     pub fn production() -> Self {
         let mut pb = self::e0597::family();
         for p in self::borrowck::family().into_entries() {
             pb = pb.with(p);
         }
-        pb
+        pb.with(Box::new(E0614DerefAtUse))
     }
 
     /// The registered playbooks, as boxed entries (used by

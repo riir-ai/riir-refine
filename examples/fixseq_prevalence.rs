@@ -29,9 +29,11 @@
 //!    runs are 1-2 attempts deep has no POWER to show one. Reported so the
 //!    zero cannot be read as stronger than it is.
 //! 3. **The loop invariant** (the two-sided half) — every `Kept` attempt must
-//!    STRICTLY decrease the coded-error count, and every reverted attempt
-//!    must leave it unchanged. If that holds on every record, the run's
-//!    state carries a well-founded measure `(error_count DOWN, |tried| UP)`
+//!    STRICTLY decrease `(masking, coded-error count)` LEXICOGRAPHICALLY
+//!    (Issue 100: an equal-count keep is legal exactly when the masking-stage
+//!    count dropped — the unmasking trade), and every reverted attempt must
+//!    leave the pair not-decreased. If that holds on every record, the run's
+//!    state carries a well-founded measure `(lex pair DOWN, |tried| UP)`
 //!    and a revisit is structurally impossible: the zero in (1) is then a
 //!    consequence, not a sample.
 
@@ -77,19 +79,25 @@ fn flips(attempts: &[AttemptRecord]) -> Flips {
 }
 
 /// The invariant probe. Returns the violations found (empty = holds).
+///
+/// Issue 100 — the keep rule is the LEXICOGRAPHIC strict decrease of
+/// `(masking, count)`: a `Kept` at equal count is legal exactly when the
+/// masking count dropped (the unmasking trade), and a `Reverted` despite a
+/// count decrease is legal exactly when masking rose (the strand-keep the
+/// old count-only rule scored as progress).
 fn invariant_violations(name: &str, attempts: &[AttemptRecord]) -> Vec<String> {
+    let lex = |a: &AttemptRecord| (a.masking.1, a.errors.1) < (a.masking.0, a.errors.0);
     let mut v = Vec::new();
     for a in attempts {
-        let (before, after) = a.errors;
         match a.outcome {
-            AttemptOutcome::Kept if after >= before => v.push(format!(
-                "{name} seq={}: KEPT without strict decrease ({before} -> {after})",
-                a.seq
+            AttemptOutcome::Kept if !lex(a) => v.push(format!(
+                "{name} seq={}: KEPT without strict lex decrease ({}m,{} -> {}m,{})",
+                a.seq, a.masking.0, a.errors.0, a.masking.1, a.errors.1
             )),
-            AttemptOutcome::RevertedNoProgress | AttemptOutcome::RevertedIo if after < before => {
+            AttemptOutcome::RevertedNoProgress | AttemptOutcome::RevertedIo if lex(a) => {
                 v.push(format!(
-                    "{name} seq={}: REVERTED after a decrease ({before} -> {after})",
-                    a.seq
+                    "{name} seq={}: REVERTED despite a lex decrease ({}m,{} -> {}m,{})",
+                    a.seq, a.masking.0, a.errors.0, a.masking.1, a.errors.1
                 ));
             }
             _ => {}
@@ -126,6 +134,7 @@ fn self_check() {
         strategy_id: "s".to_string(),
         outcome: AttemptOutcome::Kept,
         errors: (2, 1),
+        masking: (0, 0),
     };
     // A -> B -> A at one span: exactly one recurrence on all three keys.
     let flip = [
@@ -175,15 +184,65 @@ fn self_check() {
         strategy_id: "s".into(),
         outcome: AttemptOutcome::Kept,
         errors: (1, 1),
+        masking: (0, 0),
     }];
     assert_eq!(
         invariant_violations("canary", &bad).len(),
         1,
         "canary: a Kept without strict decrease must be reported"
     );
+    // Issue 100 canaries — the lex reading's two new legal shapes and its
+    // new violation. (1) The UNMASKING KEEP: equal count, masking dropped —
+    // legal, must NOT be reported. (2) The STRAND REVERT: count decreased
+    // but masking rose — a legal revert, must NOT be reported (the old
+    // count-only checker would have flagged it). (3) A revert despite a
+    // real lex decrease — still a violation, must be reported.
+    let unmask_keep = [AttemptRecord {
+        seq: 0,
+        code: "E0614".into(),
+        span_hash: "aa".into(),
+        strategy_id: "s".into(),
+        outcome: AttemptOutcome::Kept,
+        errors: (1, 1),
+        masking: (1, 0),
+    }];
+    assert_eq!(
+        invariant_violations("canary", &unmask_keep).len(),
+        0,
+        "canary: the unmasking keep (equal count, masking down) is LEGAL"
+    );
+    let strand_revert = [AttemptRecord {
+        seq: 0,
+        code: "E0502".into(),
+        span_hash: "aa".into(),
+        strategy_id: "s".into(),
+        outcome: AttemptOutcome::RevertedNoProgress,
+        errors: (2, 1),
+        masking: (0, 1),
+    }];
+    assert_eq!(
+        invariant_violations("canary", &strand_revert).len(),
+        0,
+        "canary: the strand revert (count down, masking up) is LEGAL"
+    );
+    let reverted_progress = [AttemptRecord {
+        seq: 0,
+        code: "E0614".into(),
+        span_hash: "aa".into(),
+        strategy_id: "s".into(),
+        outcome: AttemptOutcome::RevertedNoProgress,
+        errors: (1, 0),
+        masking: (1, 0),
+    }];
+    assert_eq!(
+        invariant_violations("canary", &reverted_progress).len(),
+        1,
+        "canary: a revert despite a lex decrease must be reported"
+    );
     println!(
         "instrument canary: PASS — A->B->A scores code=1/pair=1, aa->bb->aa scores span=1/pair=1, \
-         A->B->C and A->A score 0, a non-decreasing Kept is reported."
+         A->B->C and A->A score 0, a non-decreasing Kept is reported; the lex keep/revert \
+         shapes (unmasking keep, strand revert) are classified correctly."
     );
 }
 
@@ -328,13 +387,15 @@ fn main() {
         }
         if show_runs {
             // Per-run ring: the attempt sequence with strategy + outcome +
-            // the error-count transition — the structure the aggregate
-            // histogram hides (Issue 099 T3: which strategy reverted where).
+            // the error-count transition (masking delta appended when
+            // nonzero — the Issue 100 unmasking keeps read as `1->1,m1->0`)
+            // — the structure the aggregate histogram hides (Issue 099 T3:
+            // which strategy reverted where).
             let ring: Vec<String> = a
                 .iter()
                 .map(|r| {
                     format!(
-                        "{}:{}{}({}->{})",
+                        "{}:{}{}({}->{}){}",
                         r.code,
                         r.strategy_id,
                         match r.outcome {
@@ -343,7 +404,12 @@ fn main() {
                             AttemptOutcome::RevertedIo => "=IO",
                         },
                         r.errors.0,
-                        r.errors.1
+                        r.errors.1,
+                        if r.masking == (0, 0) {
+                            String::new()
+                        } else {
+                            format!(",m{}->{}", r.masking.0, r.masking.1)
+                        }
                     )
                 })
                 .collect();
@@ -415,10 +481,12 @@ fn main() {
     println!("\n-- loop invariant (the two-sided half) --");
     match violations.is_empty() {
         true => println!(
-            "HOLDS over all {total_attempts} attempts: Kept => strict error-count decrease; \
-             reverted => count unchanged; no cross-attempt discontinuity.\n\
-             => (error_count DOWN, |tried| UP) is a well-founded measure; a state revisit \
-             within one run is structurally impossible."
+            "HOLDS over all {total_attempts} attempts: Kept => strict LEX decrease of \
+             (masking, error_count) [equal-count keeps legal exactly when masking \
+             dropped — Issue 100]; reverted => lex pair not decreased; no \
+             cross-attempt count discontinuity.\n\
+             => (masking DOWN-lex, error_count DOWN-lex, |tried| UP) is a well-founded \
+             measure; a state revisit within one run is structurally impossible."
         ),
         false => {
             println!("VIOLATED ({} findings):", violations.len());

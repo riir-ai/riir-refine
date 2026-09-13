@@ -83,6 +83,7 @@ fn attempt(file: &str, line: usize, code: &str, strategy_id: &str, outcome: Atte
         strategy_id: strategy_id.to_string(),
         outcome,
         errors: (2, if outcome == AttemptOutcome::Kept { 1 } else { 2 }),
+        masking: (0, 0),
     }
 }
 

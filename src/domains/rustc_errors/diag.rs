@@ -144,6 +144,34 @@ impl RustcErrorDiag {
             self.primary.as_ref().map_or(0, |p| p.1),
         )
     }
+
+    /// Is this diagnostic's code emitted at a stage that BLOCKS all later
+    /// compiler stages? See [`MASKING_STAGE_CODES`].
+    #[must_use]
+    pub fn is_masking(&self) -> bool {
+        is_masking_code(&self.code)
+    }
+}
+
+/// Codes emitted at a compiler stage whose failure BLOCKS every later stage:
+/// while any of these is present, the later stages' diagnostics do not exist
+/// yet — fixing one can REVEAL new errors (unmasking), so the driver's keep
+/// rule ranks them ahead of the raw count (Issue 100).
+///
+/// Membership is MEASURED, never assumed — each member cites the probe that
+/// justified it. A taxonomy guess here would silently re-rank every keep.
+///
+/// - `E0614` (deref of a non-pointer, typeck): measured 2026-09-13 on rustc
+///   1.98.1 — `let head = v[0]; … *head` over a broken alias pair reports
+///   EXACTLY the E0614; the co-present E0499 appears only after the star is
+///   removed (typeck failure blocks borrowck entirely). Bench 089's F1/F3
+///   clone-out rows are the same mechanism healer-side.
+pub const MASKING_STAGE_CODES: &[&str] = &["E0614"];
+
+/// Membership test for [`MASKING_STAGE_CODES`].
+#[must_use]
+pub fn is_masking_code(code: &str) -> bool {
+    MASKING_STAGE_CODES.contains(&code)
 }
 
 /// Collapse diagnostics that share a [`RustcErrorDiag::site_key`] — the
@@ -494,5 +522,25 @@ mod tests {
         let diags = dedupe_by_site(&parse_error_diags(&identical));
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].suggestions.len(), 1);
+    }
+
+    /// Issue 100 — the masking-stage membership set is the keep rule's
+    /// primary term; it must contain EXACTLY the measured members and the
+    /// borrowck family must NOT be in it (borrowck is the masked stage, not
+    /// the masking one).
+    #[test]
+    fn masking_stage_codes_carry_exactly_the_measured_members() {
+        assert_eq!(MASKING_STAGE_CODES, &["E0614"]);
+        assert!(is_masking_code("E0614"));
+        for not_masking in ["E0499", "E0502", "E0505", "E0596", "E0597", "E0507"] {
+            assert!(!is_masking_code(not_masking));
+        }
+        let e0499 = parse_error_diags(E0499_LINE);
+        assert!(!e0499[0].is_masking());
+        let e0614 = parse_error_diags(
+            r#"{"reason":"compiler-message","message":{"level":"error","message":"type `i32` cannot be dereferenced","code":{"code":"E0614"},"spans":[{"file_name":"src/lib.rs","line_start":7,"is_primary":true,"byte_start":100,"byte_end":105,"label":"can't be dereferenced"}],"children":[]}}"#,
+        );
+        assert_eq!(e0614.len(), 1);
+        assert!(e0614[0].is_masking());
     }
 }

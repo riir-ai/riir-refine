@@ -49,7 +49,7 @@ fn every_generated_family_produces_its_declared_code() {
     // The interacting families generate from their own module (Issue 099);
     // the spot contract is the same — the broken half declares code_a.
     let ix = interacting_pairs();
-    for p in ["ix_f1_", "ix_f2_", "ix_f3_"] {
+    for p in ["ix_f1_", "ix_f2_", "ix_f3_", "ix_f4_"] {
         let Some(c) = ix.iter().find(|c| c.name.starts_with(p)) else {
             panic!("interacting corpus is missing family {p}");
         };

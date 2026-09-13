@@ -59,6 +59,9 @@ pub enum MutatorKind {
     DropMoveKeyword,
     /// Bind by reference where the seed bound by value.
     AddBorrow,
+    /// Dereference at a use site where the seed read by value (the stale
+    /// star — Issue 100's F4 stratum).
+    AddDerefStar,
     /// Remove a scope that was keeping a borrow short.
     FlattenScope,
     /// Move a binding's declaration into an inner scope.
@@ -73,6 +76,7 @@ impl MutatorKind {
             Self::DropCloneCall => "drop-clone-call",
             Self::DropMoveKeyword => "drop-move-keyword",
             Self::AddBorrow => "add-borrow",
+            Self::AddDerefStar => "add-deref-star",
             Self::FlattenScope => "flatten-scope",
             Self::NarrowScope => "narrow-scope",
         }

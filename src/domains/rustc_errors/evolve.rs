@@ -436,8 +436,16 @@ pub const WIRED_STRATEGIES: &[(&str, &str)] = &[
 
 /// Post-wiring authored templates, one row per landing. EMPTY at the wiring
 /// commit — the frontier era has no conversions to attribute yet, which is
-/// the honest starting state of the G8 measurement.
-pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[];
+/// the honest starting state of the G8 measurement. First landing: Issue
+/// 100's `e0614-deref-at-use` (the unmasking-trade playbook; `commit` cites
+/// the issue-file commit that scoped it — informational, the era attribution
+/// keys on `unix_secs`).
+pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[FrontierLanding {
+    commit: "e7432ab1",
+    unix_secs: 1_789_268_622,
+    code: "E0614",
+    strategy: "e0614-deref-at-use",
+}];
 
 /// Which authoring era a playbook strategy belongs to. `Unrecorded` is a
 /// ledger bug (a registry strategy no table accounts for) — it prints
@@ -679,6 +687,7 @@ mod tests {
                 strategy_id: "e0502-deref-removal".to_string(),
                 outcome: AttemptOutcome::Kept,
                 errors: (3, 2),
+                masking: (0, 0),
             },
             AttemptRecord {
                 seq: 1,
@@ -687,6 +696,7 @@ mod tests {
                 strategy_id: "e0507-move-out".to_string(),
                 outcome: AttemptOutcome::RevertedNoProgress,
                 errors: (2, 2),
+                masking: (0, 0),
             },
         ];
         let (path, warns) = dump_fixseq(&root, &attempts);
