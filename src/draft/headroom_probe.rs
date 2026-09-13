@@ -14,7 +14,7 @@
 //! 1. did the **production** selector choose the correct rule (recall@1,
 //!    pool depth [`RERANK_POOL`])?
 //! 2. was a correct candidate **anywhere** in a pool of depth K
-//!    ([`HEADROOM_DEPTHS`] = 8 / 12 / 16 / 20)?
+//!    ([`HEADROOM_DEPTHS`] = 8 / 12 / 16 / 20 / 24)?
 //!
 //! `recall@K − recall@1` is the recoverable band. Misses split into
 //! [`MissKind::Selection`] (correct rule in the pool, not chosen — a selector
@@ -29,10 +29,10 @@
 //!
 //! Pool depth is a real configuration knob, not a read-off: the matcher
 //! retrieves `max(top_k, RERANK_POOL)` candidates and re-ranks *the pool*, so
-//! a depth-20 probe can promote a rule that the depth-16 production path never
+//! a depth-24 probe can promote a rule that the depth-20 production path never
 //! saw. Each depth is therefore measured by its own query rather than by
 //! slicing one deep list — which is also why `recall@8` can exceed nothing and
-//! `recall@20` is not automatically ≥ `recall@16`.
+//! `recall@24` is not automatically ≥ `recall@20`.
 //!
 //! The second surface (real-`cargo clippy` ground truth over the multi-lint
 //! composite spans) lives in `tests/uncontaminated_g1.rs`, next to the oracle
@@ -50,17 +50,19 @@ use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, Ow
 
 /// Candidate-pool depths probed, ascending. `RERANK_POOL` (the production
 /// depth) must be one of them — it is the recall@1 reference point.
-pub const HEADROOM_DEPTHS: [usize; 4] = [8, 12, 16, 20];
+pub const HEADROOM_DEPTHS: [usize; 5] = [8, 12, 16, 20, 24];
 
 /// Index of the production depth within [`HEADROOM_DEPTHS`].
 /// 12 → 16 at the P10 re-pin (2026-09-13, RERANK_POOL 12 → 16 after the
-/// corpus +2 crowded the Issue-024 casualty from raw rank 9 to 15); the
-/// array gained a 20 rung so the recoverable band (recall@deepest −
+/// corpus +2 crowded the Issue-024 casualty from raw rank 9 to 15); 16 → 20
+/// at the P11 re-pin (same day — the `format_collect` corpus entry crowded
+/// the casualty one further position, first-found at depth 17); the array
+/// gained a 24 rung each time so the recoverable band (recall@deepest −
 /// recall@1) keeps a rung ABOVE production — the probe's whole reason
 /// to exist. Keeping production at the array's deep end would zero the
 /// band by construction, which reads as "no headroom" and is actually
 /// "no deeper probe".
-pub const PROD_DEPTH_IDX: usize = 2;
+pub const PROD_DEPTH_IDX: usize = 3;
 
 /// Plan 017 T1.2 stop bar: below this many percentage points of
 /// `recall@deepest − recall@1`, the band is noise and no selector is built.

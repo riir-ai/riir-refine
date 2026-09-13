@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 51 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 52 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 33
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -29,7 +29,10 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 /// rows (P9 intake, all four suggestion-only in real clippy) + the 2
 /// P10 post-mining intake rows (2026-09-13, the 089-T3 usage artifact —
 /// both probe-verified on-by-default in clippy 1.98, the pair the
-/// mechanical fixer needed by hand on `src/bin/heal.rs`).
+/// mechanical fixer needed by hand on `src/bin/heal.rs`) + the 1 P11
+/// post-mining intake row (2026-09-13, the Bench-088 usage artifact —
+/// `format_collect`, the first two-span clippy rule: fold rewrite + the
+/// anonymous `use std::fmt::Write as _;` insertion).
 // 49-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
@@ -99,8 +102,10 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "needless_borrow".to_string(),
             lint_group: "nursery".to_string(),
-            buggy_code: "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(&x) }".to_string(),
-            fixed_code: "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(x) }".to_string(),
+            // Both shapes (P11 receiver extension, 2026-09-13): the free-fn
+            // arg strip + the whitelisted method-receiver strip.
+            buggy_code: "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(&x) }\nfn recv(v: Vec<u8>) -> usize { let n = (&v).as_slice().len(); n }".to_string(),
+            fixed_code: "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(x) }\nfn recv(v: Vec<u8>) -> usize { let n = v.as_slice().len(); n }".to_string(),
         },
         // ── Issue 016: structural expansion (30 lints) ────────────────────
         ClippyFixEntry {
@@ -443,6 +448,17 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn build() -> Vec<u8> {\n    let mut v = Vec::new();\n    v.push(1);\n    v.push(2);\n    v\n}".to_string(),
             fixed_code: "fn build() -> Vec<u8> {\n    let v = vec![1, 2];\n    v\n}".to_string(),
         },
+        // ── P11 post-mining intake (2026-09-13, the Bench-088 usage artifact) ──
+        ClippyFixEntry {
+            lint_name: "format_collect".to_string(),
+            lint_group: "pedantic".to_string(),
+            // The first TWO-span clippy rule: the fold rewrite + the
+            // anonymous `use std::fmt::Write as _;` insertion (skipped when
+            // the trait is already in scope). fixed_code is byte-shaped
+            // like the proposer's output (single-line fold).
+            buggy_code: "fn render(xs: &[u32]) -> String {\n    xs.iter().map(|x| format!(\"{}\", x)).collect::<String>()\n}".to_string(),
+            fixed_code: "use std::fmt::Write as _;\nfn render(xs: &[u32]) -> String {\n    xs.iter().fold(String::new(), |mut out, x| { let _ = write!(out, \"{}\", x); out })\n}".to_string(),
+        },
     ])
 }
 
@@ -515,15 +531,15 @@ mod tests {
     }
 
     /// Corpus size pin: 10 seed, 31 expansion/post-mining, 2 Batch 89,
-    /// 2 Batch 90, 4 Batch 91, and the 2 P10 post-mining intake rows
-    /// (2026-09-13) = 51.
+    /// 2 Batch 90, 4 Batch 91, the 2 P10 post-mining intake rows, and the
+    /// 1 P11 post-mining intake row (format_collect, 2026-09-13) = 52.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_51() {
+    fn corpus_size_is_52() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 51);
+        assert_eq!(corpus.entries.len(), 52);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

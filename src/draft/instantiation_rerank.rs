@@ -148,10 +148,14 @@ pub enum RerankMode {
 /// family as the casualty's perf half — and `filter_map_bool_then`, raw
 /// ranks ~15 and ~12 on the casualty span) crowded the casualty from raw
 /// rank 9 to **15** (measured: absent at k=14, retrieved + canonical rank 0
-/// at k=16, both spans, both orders). 16 is the measured minimum, slack 1 —
-/// the pool_depth_rescue_guard re-firing on the next vec-shaped corpus
+/// at k=16, both spans, both orders). Re-pinned 16 → 20 (2026-09-13, the
+/// P11 post-mining intake): the `format_collect` corpus entry crowded the
+/// casualty one further position — first-found at depth **17** (measured
+/// by the guard's discovery sweep, now first-class diagnostics) — so 17
+/// is the measured minimum and 20 the ladder-rung pin with slack 3.
+/// The pool_depth_rescue_guard re-firing on the next vec-shaped corpus
 /// entry is the designed prompt to re-measure, not a defect.
-pub const RERANK_POOL: usize = 16;
+pub const RERANK_POOL: usize = 20;
 
 /// Does `rule_id`'s proposer visitor actually match `file`?
 ///

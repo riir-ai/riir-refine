@@ -6,6 +6,7 @@ structural-expansion lints (frequency-ranked selection — see
 [`.benchmarks/021`](../../.benchmarks/021_clippy_structural_expansion_goat.md))
 + the P7 post-mining verify row (`manual_is_multiple_of`, 2026-08-29) +
 2 Batch 89 + 2 Batch 90 + 4 Batch 91 + the 2 P10 post-mining intake rows
++ the P11 post-mining intake row
 (2026-09-13).
 
 ## The 10 seed entries
@@ -140,6 +141,35 @@ The full per-lint fixture tables live in
 [`corpus.rs`](../../src/domains/clippy_lints/corpus.rs) + the per-lint
 proposer test modules under
 [`proposers/`](../../src/domains/clippy_lints/proposers/).
+
+## The 1 P11 post-mining intake entry (2026-09-13)
+
+The Bench-088 usage artifact (`format_collect` fixed by hand on
+`corpus_gen::compose_multi` after `--fix --write --verify` applied 0 edits
+— the rule did not exist):
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `format_collect` | pedantic | verify | `.map(\|x\| format!(..)).collect::<String>()` → `.fold(String::new(), \|mut out, x\| { let _ = write!(out, ..); out })` + a `use std::fmt::Write as _;` insertion (skipped when the trait is already imported) — the FIRST two-span clippy rule; help-only in real clippy (probed — no machine-applicable suggestion); the anonymous `as _` import cannot collide (E0252) and cannot be ambiguous (`String` implements `io::Write` nowhere in std — probed E0599) |
+
+Same day, the intake's OTHER row — the `needless_borrow` method-receiver
+shape gap — landed as a proposer EXTENSION (no new corpus entry): `(&x).m()`
+→ `x.m()` for m in {as_slice, as_mut_slice, len, iter, as_ptr}, full
+borrow-peel (clippy's own `(&&v)` → `v` suggestion, probed),
+mutability-agnostic, postfix-safe base only. Real clippy fires BROADER
+(`(&v).to_vec()` too — probed); the whitelist keeps the strip parse-only
+decidable. Tier unchanged (self_evolve-only): the free-fn shape's
+over-match on every necessary `f(&local)` borrow is the documented
+BY-DESIGN exclusion from the structural set — shape-split tiers would
+need pseudo-lint names that fragment the retrieval vocabulary and break
+the oracle's name matching.
+
+Fallout repaired (the corpus +1 re-fired `pool_depth_rescue_guard`, the
+designed prompt): the Issue-024 casualty's raw rank moved 15 → 16
+(first-found depth 17, measured by the guard's discovery sweep — now
+first-class diagnostics that print BEFORE the assert); `RERANK_POOL`
+16 → 20, `HEADROOM_DEPTHS` gained a 24 rung, `PROD_DEPTH_IDX` 2 → 3
+(production keeps a rung above it).
 
 ## Honesty caveat
 

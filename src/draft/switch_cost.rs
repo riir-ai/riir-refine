@@ -496,6 +496,25 @@ mod tests {
             if span.clippy_lint != "needless_return" {
                 continue;
             }
+            // Discovery sweep FIRST (a re-fire must PRINT the measured
+            // depth before the assert can abort the test — P11 re-fire
+            // 2026-09-13 needed exactly this number to size the bump).
+            let mut deep = None;
+            for k in PROBE..=48usize {
+                let (_, by_domain) = matcher.suggest_span(&span.code, k);
+                let rank_here = by_domain
+                    .iter()
+                    .find(|(d, _)| *d == DomainId::Clippy)
+                    .and_then(|(_, rules)| {
+                        crate::draft::retrieval_eval::canonical_rank(rules)
+                            .iter()
+                            .position(|r| r.rule_id == span.clippy_lint)
+                    });
+                if rank_here.is_some() {
+                    deep = Some((k, rank_here));
+                    break;
+                }
+            }
             // The eval condition that failed pre-mitigation.
             let (_, by_domain) = matcher.suggest_span(&span.code, PROBE);
             let rank = by_domain
@@ -510,29 +529,19 @@ mod tests {
                 rank,
                 Some(0),
                 "{}: the measured casualty must be rescued at eval probe depth {PROBE} \
-                 (raw rank 9; pool floor {RERANK_POOL}) — if this fires, retrieval crowding \
-                 has pushed the casualty past RERANK_POOL again",
-                span.tag
+                 (pre-P11 raw rank 9; pool floor {RERANK_POOL}; first-found at depth {:?}) \
+                 — if this fires, retrieval crowding has pushed the casualty past \
+                 RERANK_POOL again",
+                span.tag,
+                deep.map(|(k, _)| k)
             );
             println!(
                 "{}: rescued at rank {rank:?} (eval probe {PROBE}, pool floor {RERANK_POOL})",
                 span.tag
             );
-            // Discovery sweep for FUTURE casualties at other depths.
-            let mut deep = None;
-            for k in RERANK_POOL..=40usize {
-                let (_, by_domain) = matcher.suggest_span(&span.code, k);
-                if by_domain
-                    .iter()
-                    .any(|(_, rules)| rules.iter().any(|r| r.rule_id == span.clippy_lint))
-                {
-                    deep = Some(k);
-                    break;
-                }
-            }
             if deep.is_none() {
                 println!(
-                    "{}: NOT found at any pool depth up to 40 — buried beyond the corpus retrieval horizon",
+                    "{}: NOT found at any pool depth up to 48 — buried beyond the corpus retrieval horizon",
                     span.tag
                 );
             }

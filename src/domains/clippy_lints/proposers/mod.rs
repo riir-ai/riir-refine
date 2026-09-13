@@ -143,6 +143,7 @@ pub mod deref_addrof;
 pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
+pub mod format_collect;
 pub mod helpers;
 pub mod identity_op;
 pub mod items_after_statements;
@@ -359,14 +360,24 @@ pub const VERIFY_LINTS: &[&str] = &[
     "filter_map_bool_then",
     // P10 post-mining intake (2026-09-13): `let mut v = Vec::new();
     // v.push(a); v.push(b);` → `let v = vec![a, b];`. VERIFY: real clippy's
-    // suggestion is help-only (MaybeIncorrect — `--fix` applied 0/3 even on
-    // the plain shape, probed 2026-09-13) because later mutable uses make
+    // suggestion is help-only (MaybeIncorrect — `--fix` applied 0/3 even on the
+    // plain shape, probed 2026-09-13) because later mutable uses make
     // dropping `mut` an E0384; this proposer refuses every parse-visible
     // later use (any method call on `v`, assignment targets, `&mut`) and
     // refuses attributed/cfg'd pushes outright (a `vec![]` literal cannot
     // carry cfg'd elements — the documented divergence; the correct fix for
     // that shape is a comment-guarded allow).
     "vec_init_then_push",
+    // P11 post-mining intake (2026-09-13, the Bench-088 usage artifact):
+    // `.map(|x| format!(..)).collect::<String>()` → `fold` + `write!`.
+    // VERIFY: real clippy's suggestion is help-only (no machine-applicable
+    // replacement — probed), and this is the FIRST two-span clippy rule
+    // (the fold rewrite + a `use std::fmt::Write as _;` insertion, skipped
+    // when the trait is already imported) — the import rides the per-edit
+    // revert (insertion restore = ""). The anonymous `as _` form cannot
+    // collide (E0252) and cannot be ambiguous (`String` implements
+    // io::Write nowhere in std — probed E0599 on write_all).
+    "format_collect",
     // Batch 89 (fired-histogram expansion): `suboptimal_flops` — the
     // receiver's type is invisible to syn (a custom `powf`/`log` would
     // make the rewrite semantic; the `single_char_pattern` precedent).
@@ -481,6 +492,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── P10 post-mining intake (2026-09-13, the 089-T3 usage artifact) ──
         "filter_map_bool_then" => filter_map_bool_then::collect_edits(source, file),
         "vec_init_then_push" => vec_init_then_push::collect_edits(source, file),
+        // ── P11 post-mining intake (2026-09-13, the Bench-088 usage artifact) ──
+        "format_collect" => format_collect::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -528,6 +541,9 @@ mod tests {
             // later-mutable-use corner (E0384) — VERIFY-tier only.
             "filter_map_bool_then",
             "vec_init_then_push",
+            // P11 post-mining intake: help-only suggestion + the two-span
+            // import insertion — VERIFY-tier only.
+            "format_collect",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
@@ -574,8 +590,14 @@ mod tests {
             ),
             (
                 "needless_borrow",
-                "fn show(s: &str) {}\nfn go(s: &str) { show(&s) }",
+                "fn show(s: &str) {}\nfn go(s: &str) { show(&s) }\nfn recv(v: Vec<u8>) -> usize { let n = (&v).as_slice().len(); n }",
                 "show(s)",
+            ),
+            // P11 post-mining intake (2026-09-13): the fold+import rule.
+            (
+                "format_collect",
+                "fn render(xs: &[u32]) -> String { xs.iter().map(|x| format!(\"{}\", x)).collect::<String>() }",
+                ".fold(String::new()",
             ),
             (
                 "unnecessary_mut_passed",
