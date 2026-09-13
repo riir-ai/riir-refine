@@ -3724,27 +3724,10 @@ fn parse_args() -> Args {
         usage();
     }
     if args.paths.is_empty()
-        && args.command.is_none()
         && !args.suggest
         && !args.fix
         && !args.fix_compile
-        && !args.score_bench
-        && !args.score_report
-        && !args.dump_trajectories
-        && !args.memory_stats
-        && !args.mine
-        && !args.unmine
-        && !args.refill
-        && !args.misses
-        && !args.misses_report
-        && !args.recompute_elo
-        && !args.collapse_report
-        && !args.corpus_stats
-        && !args.import_series
-        && !args.frontier_report
-        && !args.config_audit
-        && !args.orphan_report
-        && args.candidates_path.is_none()
+        && !standalone_mode(&args)
     {
         eprintln!("no paths given");
         usage();
@@ -3758,33 +3741,43 @@ fn parse_args() -> Args {
 
 /// The just-works `bare` posture: NO mode flag, NO standalone command, NO
 /// KAT command — the exact set that defaults to a dry-run suggest over `.`.
-/// Mirrors the standalone-mode list the paths guard keeps; a standalone
-/// mode missing here silently breaks that mode's own guard (the --misses
-/// regression: bare set `suggest=true` under it, its strict standalone
-/// check refused, exit 2 from 2026-09-08 until the list was completed).
+/// Mirrors the paths guard via the shared [`standalone_mode`] predicate;
+/// the two hand-mirrored lists drifted exactly as the --misses regression
+/// predicted (see [`standalone_mode`] for the --version casualty).
 fn is_bare_posture(args: &Args) -> bool {
-    !args.suggest
-        && !args.fix
-        && !args.fix_compile
-        && !args.dump_trajectories
-        && !args.refill
-        && !args.score_bench
-        && !args.score_report
-        && !args.memory_stats
-        && !args.mine
-        && !args.unmine
-        && !args.version
-        && !args.misses
-        && !args.misses_report
-        && !args.recompute_elo
-        && !args.collapse_report
-        && !args.corpus_stats
-        && !args.import_series
-        && !args.frontier_report
-        && !args.config_audit
-        && !args.orphan_report
-        && args.candidates_path.is_none()
-        && args.command.is_none()
+    !args.suggest && !args.fix && !args.fix_compile && !standalone_mode(args)
+}
+
+/// Every standalone early-return mode — the flags that need NO scan paths
+/// (`--version` answers before anything else; `--misses` prints queues; the
+/// KAT commands own their arg shapes). ONE source of truth consumed by BOTH
+/// the bare posture and the paths guard: before this predicate the two
+/// hand-mirrored lists drifted — the 2026-09-12 --misses fix completed
+/// `is_bare_posture` with `!args.version` while the paths guard kept its
+/// missing row, and `cargo heal --version` went exit-2 ("no paths given")
+/// from that day until the shared predicate landed (it had worked before
+/// only because the pre-09-12 bare default accidentally armed `suggest` +
+/// `paths=["."]` under it, which the --misses fix correctly removed).
+fn standalone_mode(args: &Args) -> bool {
+    args.dump_trajectories
+        || args.refill
+        || args.score_bench
+        || args.score_report
+        || args.memory_stats
+        || args.mine
+        || args.unmine
+        || args.version
+        || args.misses
+        || args.misses_report
+        || args.recompute_elo
+        || args.collapse_report
+        || args.corpus_stats
+        || args.import_series
+        || args.frontier_report
+        || args.config_audit
+        || args.orphan_report
+        || args.candidates_path.is_some()
+        || args.command.is_some()
 }
 
 /// Plan 019 T1.5: the mode-flag validation matrix, extracted so every
@@ -9019,14 +9012,19 @@ mod mode_flag_tests {
 
     /// The --misses regression pin: the 2026-09-08 just-works bare default
     /// fired under EVERY standalone mode (only the four primary modes were
-    /// excluded), setting `suggest=true` — and `--misses`'s strict
-    /// standalone guard then refused it, so `cargo heal --misses` exited 2
-    /// from 09-08 until the exclusion list was completed. Every standalone
-    /// mode must stay out of the bare posture; every new standalone mode
-    /// adds a row here in the same commit.
+    /// excluded), setting `suggest=true` — and `--misses`'s strict standalone
+    /// guard then refused it, so `cargo heal --misses` exited 2 from 09-08
+    /// until the exclusion list was completed. Every standalone mode must
+    /// stay out of the bare posture AND count as standalone for the paths
+    /// guard — the 2026-09-12 --misses fix completed `is_bare_posture`
+    /// (adding `!version`) but not the paths guard, so `cargo heal
+    /// --version` went exit-2 ("no paths given") from 09-12 until the two
+    /// lists were merged into the shared `standalone_mode` predicate; every
+    /// new standalone mode adds a row here in the same commit.
     #[test]
     fn standalone_modes_are_never_bare() {
         use super::is_bare_posture as bare;
+        use super::standalone_mode;
         type ModeSetter = Box<dyn Fn(&mut Args)>;
         let cases: Vec<(&str, ModeSetter)> = vec![
             ("--misses", Box::new(|m| m.misses = true)),
@@ -9037,6 +9035,7 @@ mod mode_flag_tests {
             ("--mine", Box::new(|m| m.mine = true)),
             ("--unmine", Box::new(|m| m.unmine = true)),
             ("--version", Box::new(|m| m.version = true)),
+            ("-V", Box::new(|m| m.version = true)),
             ("--recompute-elo", Box::new(|m| m.recompute_elo = true)),
             ("--collapse-report", Box::new(|m| m.collapse_report = true)),
             ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),
@@ -9054,9 +9053,14 @@ mod mode_flag_tests {
             let mut m = Args::default();
             set(&mut m);
             assert!(!bare(&m), "{label} must not take the bare suggest default");
+            assert!(
+                standalone_mode(&m),
+                "{label} must pass the paths guard (no paths required)"
+            );
         }
         // The bare posture itself still fires for a no-flag invocation.
         assert!(bare(&Args::default()));
+        assert!(!standalone_mode(&Args::default()));
         // And the primary modes still count as modes.
         assert!(!bare(&a(true, false, false, false)), "--suggest");
         assert!(!bare(&a(false, true, false, false)), "--fix");
