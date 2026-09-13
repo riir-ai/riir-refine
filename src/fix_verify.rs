@@ -2163,9 +2163,16 @@ mod tests {
 
     #[test]
     fn cfg_audit_test_and_enabled_gates_stay_unmarked() {
+        // The host-gate term must be TRUE on every host this test runs on — a bare
+        // `all(unix, ..)` compiles the region to nothing on Windows and the
+        // (correct) undecidable mark fails the test there (the "a platform
+        // is part of the claim" class; caught on the 4090 box, 2026-09-14,
+        // all-features lib run). `any(unix, windows)` keeps the intent — a
+        // host-conjunct gate with the feature enabled stays unmarked — true
+        // on BOTH hosts, and exercises the evaluator any() arm for free.
         let fixed = "#[cfg(test)]\nmod tests {\n    #[cfg(feature = \"a\")]
     fn inner() -> u32 { 1 }
-}\n\n#[cfg(all(unix, feature = \"a\"))]\npub fn host_gated() -> u32 { 2 }
+}\n\n#[cfg(all(any(unix, windows), feature = \"a\"))]\npub fn host_gated() -> u32 { 2 }
 ";
         let set = fset(&["a"]);
         // Edits at lines inside #[cfg(test)] and an enabled gate: no marks.
