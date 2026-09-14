@@ -239,17 +239,38 @@ pub fn donor_for(rule: &str, co: &BTreeMap<(String, String), usize>) -> Option<S
     best.map(|(_, d)| d.to_string())
 }
 
-/// Target schedule: top-N by (solo resolved DESC, rule ASC), then
+/// The per-rule FINDINGS-presence count: Σ ran healable fixtures where the
+/// rule is in `vocab_before` — the schedule's ranking axis. The T8
+/// `rule_outcomes` read attributes SINGLE-TARGET fixtures only, and the v1
+/// set is multi-target-dominated (first full run: 4 solo rows on 35
+/// fixtures) — ranking by solo heal rate cannot fill a top-20 there, yet
+/// multi-target fixtures are exactly where composed necessity lives (the
+/// `needless_return` Δ=−17 is nearly all multi-target findings). Presence
+/// counts every at-risk finding; the solo columns stay the T8 read.
+#[must_use]
+pub fn presence_counts(score: &BenchScore) -> BTreeMap<String, usize> {
+    let mut presence: BTreeMap<String, usize> = BTreeMap::new();
+    for o in &score.outcomes {
+        if !o.ran {
+            continue;
+        }
+        for lint in &o.vocab_before {
+            *presence.entry(lint.clone()).or_insert(0) += 1;
+        }
+    }
+    presence
+}
+
+/// Target schedule: top-N by (findings presence DESC, rule ASC), then
 /// `random` stride picks from the remaining present rules. Deterministic
 /// by construction — stride sampling, never RNG (the replay law).
 #[must_use]
-pub fn select_targets(read: &RuleOutcomeRead, top: usize, random: usize) -> Vec<String> {
-    let mut present: Vec<(usize, &str)> = read
-        .rows
+pub fn select_targets(presence: &BTreeMap<String, usize>, top: usize, random: usize) -> Vec<String> {
+    let mut present: Vec<(usize, &str)> = presence
         .iter()
-        .map(|r| (r.resolved, r.rule.as_str()))
+        .map(|(rule, count)| (*count, rule.as_str()))
         .collect();
-    // resolved DESC, rule ASC — the deterministic total order.
+    // presence DESC, rule ASC — the deterministic total order.
     present.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
     let mut targets: Vec<String> = present
         .iter()
@@ -275,17 +296,20 @@ pub fn select_targets(read: &RuleOutcomeRead, top: usize, random: usize) -> Vec<
 }
 
 /// The per-rule verdict from the disabled arm (the CVRR question: is the
-/// component USED by the composition?).
+/// component USED by the composition?). Δ is the evidence axis and comes
+/// FIRST: a multi-target-only rule has no solo row (the T8 attribution
+/// law) yet a nonzero Δ is measured composition use — "NO-EVIDENCE" is
+/// only honest when nothing moved AND nothing was ever attributed.
 #[must_use]
 pub fn disabled_verdict(is_noop: bool, solo_resolved: usize, delta_resolved: i64) -> &'static str {
     if is_noop {
         "NO-OP-CONTROL"
+    } else if delta_resolved != 0 {
+        "LOAD-BEARING"
     } else if solo_resolved == 0 {
         "NO-EVIDENCE"
-    } else if delta_resolved == 0 {
-        "DECORATIVE"
     } else {
-        "LOAD-BEARING"
+        "DECORATIVE"
     }
 }
 
@@ -424,13 +448,16 @@ pub fn run_necessity(
     let baseline_totals = totals(&baseline);
     let base_print = fingerprint(&baseline);
 
-    // 3. The per-rule solo read + the co-occurrence feed (both from the
-    //    SAME baseline run — one measurement, two reads).
+    // 3. The per-rule solo read + the co-occurrence feed + the presence
+    //    ranking (all from the SAME baseline run — one measurement, three
+    //    reads).
     let solo = rule_outcomes(&baseline);
     let co = co_occurrence(&baseline);
+    let presence = presence_counts(&baseline);
 
-    // 4. Target schedule (deterministic) + arms.
-    let targets = select_targets(&solo, cfg.top, cfg.random);
+    // 4. Target schedule (deterministic; presence-ranked — the multi-target
+    //    fixtures carry the composition question).
+    let targets = select_targets(&presence, cfg.top, cfg.random);
     let (mut rows, arms_run, swap_arms_skipped) =
         run_target_arms(oracle, &fixtures, &before_cache, &targets, &solo, &co, &baseline);
 
@@ -756,26 +783,17 @@ mod tests {
     }
 
     /// Stride sampling: deterministic, in-range, distinct, and clamped to
-    /// the remaining population.
+    /// the remaining population. Presence-ranked (the schedule axis).
     #[test]
     fn stride_selection_is_deterministic_and_distinct() {
-        let mut read = RuleOutcomeRead::default();
+        let mut presence: BTreeMap<String, usize> = BTreeMap::new();
         for name in ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"] {
-            read.rows.push(crate::score_bench::RuleOutcome {
-                rule: name.to_string(),
-                fixtures: 1,
-                resolved: 5,
-                persist: 0,
-                broken: 0,
-                created: 0,
-                edits: 1,
-                shaped: 0,
-            });
+            presence.insert(name.to_string(), 5);
         }
-        let a = select_targets(&read, 3, 4);
-        let b = select_targets(&read, 3, 4);
+        let a = select_targets(&presence, 3, 4);
+        let b = select_targets(&presence, 3, 4);
         assert_eq!(a, b, "deterministic");
-        assert_eq!(&a[..3], &["r1", "r10", "r2"], "top-3 by (resolved, name)");
+        assert_eq!(&a[..3], &["r1", "r10", "r2"], "top-3 by (presence, name)");
         assert_eq!(a.len(), 7, "3 top + 4 stride");
         let stride = &a[3..];
         let mut sorted = stride.to_vec();
@@ -783,18 +801,37 @@ mod tests {
         sorted.dedup();
         assert_eq!(sorted.len(), stride.len(), "stride picks distinct");
         // Over-asked random clamps to the remaining population.
-        let c = select_targets(&read, 3, 99);
+        let c = select_targets(&presence, 3, 99);
         assert_eq!(c.len(), 3 + 7, "clamped to the remainder");
     }
 
-    /// The disabled-arm verdict ladder.
+    /// The disabled-arm verdict ladder — Δ first (a multi-target-only rule
+    /// with a nonzero Δ is LOAD-BEARING even without a solo row).
     #[test]
     fn verdict_ladder() {
         assert_eq!(disabled_verdict(true, 5, 0), "NO-OP-CONTROL");
-        assert_eq!(disabled_verdict(false, 0, 0), "NO-EVIDENCE");
-        assert_eq!(disabled_verdict(false, 5, 0), "DECORATIVE");
         assert_eq!(disabled_verdict(false, 5, -2), "LOAD-BEARING");
-        assert_eq!(disabled_verdict(false, 5, 1), "LOAD-BEARING");
+        assert_eq!(disabled_verdict(false, 0, 1), "LOAD-BEARING");
+        assert_eq!(disabled_verdict(false, 5, 0), "DECORATIVE");
+        assert_eq!(disabled_verdict(false, 0, 0), "NO-EVIDENCE");
+    }
+
+    /// Presence counts every at-risk finding across ran fixtures
+    /// (multi-target included — the schedule's ranking axis).
+    #[test]
+    fn presence_counts_include_multi_target_fixtures() {
+        let score = score_of(vec![
+            outcome("f1", &["a", "b"], &[], 2),
+            outcome("f2", &["a", "b"], &[], 1),
+            outcome("f3", &["b", "c"], &[], 1),
+            outcome("f4", &["a"], &["a"], 1),
+            outcome("f5", &[], &[], 0),
+        ]);
+        let presence = presence_counts(&score);
+        assert_eq!(presence.get("a"), Some(&3));
+        assert_eq!(presence.get("b"), Some(&3));
+        assert_eq!(presence.get("c"), Some(&1));
+        assert!(!presence.contains_key("f5-lint"));
     }
 
     /// Co-occurrence counts unordered co-present pairs once per fixture.

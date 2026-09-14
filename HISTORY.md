@@ -6403,3 +6403,43 @@ only appear through the swapped slot — and unknown-name inertness); bin
 (8-fixture then 20-fixture) with canaries green both times. The first six
 JSONL rows are the T2 smoke validation record (fixtures field = 8/20
 distinguishes them from future T3 rows at 37).
+
+### 2026-09-15 addendum — Issue 108 T3+T4: the full measurement, the schedule amendment, and the honest negative
+
+T3 ran same-day (the oracle's stub-crate runs are ~1 call/s — the full
+37-arm pass took ~3 minutes, not the estimated hour; the "measurement-heavy"
+deferral evaporated on contact). Two harness amendments landed mid-T3,
+both discovered by the first full run:
+
+1. **Presence-ranked schedule.** The issue's "top-20 by heal rate" cannot
+   fill on the v1 set: the T8 `rule_outcomes` read attributes
+   single-target fixtures only, and the set is multi-target-dominated
+   (4 solo rows on 35 ran fixtures). Ranking by solo heal rate schedules
+   4 rules and misses exactly where composed necessity lives. The
+   amendment: rank by findings PRESENCE (Σ fixtures where the rule is in
+   `vocab_before`) — every at-risk finding counted, multi-target
+   included; solo columns stay the T8 read.
+2. **Verdict ladder Δ-first.** The first ladder checked `solo_resolved == 0`
+   before Δ — a multi-target-only rule with a nonzero Δ would have read
+   "NO-EVIDENCE". Reordered: Δ != 0 → LOAD-BEARING unconditionally (13 of
+   the 18 rows would have been mislabeled — including `identity_op`,
+   solo=0, Δdisabled=−6).
+
+**The measurement ([Bench 092](.benchmarks/092_component_necessity_flip_rate.md)):**
+18 targets, 36 arms + baseline + planted no-op; canaries green both sides
+(the no-op arm's per-fixture fingerprint byte-identical to baseline —
+cross-arm determinism proven). **18/18 LOAD-BEARING, zero decoratives.**
+The three findings: (1) no dead weight among the busiest rules — the
+decorative class exists in theory but not in this population (name-presence
+scoring: a finding survives unless SOMETHING dissolves its shape, and no
+two FIXABLE proposers claim overlapping territory on this set); (2) solo
+rate massively understates composed importance (`needless_return` solo=1
+vs Δ=−17; `identity_op` has NO solo row at all — per-rule pruning off the
+T8 read alone would misrank both); (3) Δswap ≈ Δdis everywhere —
+co-occurrence donors are shape-DISJOINT (rules co-fire on the same file,
+not the same span), so a real donor-flip study wants Issue 098's cross-OOO
+absorption pairs as the donor pool, not co-occurrence argmax.
+
+Demote/repair decisions: NONE warranted (empty decorative list). Issue 108
+RESOLVED and removed per the noise rule; Bench 092 + this entry are the
+record.
