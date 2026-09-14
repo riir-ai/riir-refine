@@ -97,14 +97,24 @@ vessel/stake/endorsement machinery maturing. Say "our trainers" until then.
 | "consensus nolimit / lite consensus 100%" | Consensus participation is staked + all-or-nothing per record; a lite node **witnesses/verifies roots** (vote 0), it never confirms | riir-ai `node_tiers.md` System 2/3 |
 | "fix nolimit" | Meter + USD cap + rate limits bind every tier; the never-wrong verify contract holds everywhere | P005 window gates; `llm_spend.rs` |
 
-## Consumer mirror (ai.gist.rs) — deferred
+## Consumer mirror (ai.gist.rs) — SHIPPED on devnet 2026-09-14 (worker `c3c792b1`)
 
-The chooser page on ai.gist.rs (rig → tier → install command) is
-**capabilities-only** copy: hardware floors, what runs where, honest status.
-No earnings promises beyond settleable classes; no local-LLM claims; the
-leak-gated lanes stay unadvertised until their sign-offs land. Ships with the
-Proposal-013 Phase 2 dapps plan. The public dist README
-(`gist-rs/cargo-heal`) carries the same table, source-free per Proposal 003.
+The chooser rides the leaderboard page (the www-host `GET /` + `/leaderboard`
+renderer — one page, both URLs): the four-tab section (radio-CSS, no JS)
+with per-tier install + incentive + honest status, a **tier chip on every
+contributor row** (every mining account today IS the Pro class), and the
+**operator-lanes strip** (drain/fixer *live — ours, settles through miner
+rows* · trainer *designed* · replay *designed, P015*). Capabilities-only
+copy per the P013 law: no earnings promise beyond what settles (Max's
+replay lane states "does not settle yet"; Ultra names "ours only"), no
+consumer-fixer advertising. The machine JSON stays the PINNED shape
+(HTML-only, test-pinned). The public dist README
+(`gist-rs/cargo-heal`) carries the same table, source-free per Proposal 003
+(still pending). Deploy note: the first widening against a LIVE deployment
+shipped with it — the 176→180 config-row append now MIGRATES in place
+(segment-checked: shared prefix + appended field at default + feature
+blocks unchanged; anything else stays the loud mismatch) instead of
+500ing the ledger DO (riir-dapps `373b754`).
 
 **Game-launch reuse:** when the game ships its node choice, this same
 artifact shape (preset table over role/identity/hardware axes + honest status
