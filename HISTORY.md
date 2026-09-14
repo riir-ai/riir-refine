@@ -6630,3 +6630,36 @@ is PRE-BROKEN at the dep graph (getrandom 0.4.3 `wasm_js` + `libloading`
 has no wasm32 arm) and the `browser` feature has zero consumers — filed
 upstream as riir-ai `.issues/958` (retire-or-fix, owner call). The v2
 instrument gaps are intake row P24.
+
+### v2, same day — P24 (a)+(c) consumed (the fold + the prune)
+
+The intake row's two crisp items landed the same day. **(a) The
+file-level `#![cfg]` fold is ONE move**: seed each file's root walk ctx
+with `guaranteed_from_attrs(&parsed.attrs)` (+ `attrs_cfg_test` for the
+test flag). Because decls are recorded with the ctx's atoms and uses
+tally with them too, the single seed fixes BOTH blindness directions by
+construction. Re-measured on the landing's own evidence: the 4 file-gate
+FP rows gone; **6 reverse-direction rows surfaced** — the class the v1
+walk structurally could not see (ungated `mod.rs` decls whose only
+callers sit in the file-gated exec modules: the `prefill_ane_zc_*`
+readers, the `set_prefill_ane_*` bench setters, `ane_dispatch_count`,
+riir-poc's `dump_class_methods`). All adjudicated (zero downstream
+consumers, atoms uniformly `all(macos, aarch64)`) and fixed in a riir-ai
+follow-up commit, together with the orphan tail the compiler surfaced
+(2 `*_ENV` OnceLocks, the `AtomicU64` import — the off-platform leg
+finding its own next layer, exactly the oracle dynamic the method note
+predicted). One adjudication caveat worth keeping: riir-poc's
+`dump_class_methods` was a NAME-GLOBAL CONFLATION (its 2 counted uses
+were `BridgeKernel::dump_class_methods` in file-gated bridge.rs, a
+different impl fn); the gate is still honest — the ane_t0 fn is objc FFI
+that cannot link off-macOS — but the row's evidence was about the name,
+not the item. **(c) The walk prune needed a second rule**: `.wt/` turned
+out to be SYMLINKS to sibling repo roots, not worktrees — the
+`.git`-is-a-file rule alone did not fire (`is_dir()` follows symlinks).
+The walker now skips symlinked children AND `.git`-file children (scan
+root never tested); seal-game-editor's scan went 5812 → 255 files with
+its own source clean. Gates: 23 fixtures (3 new), lib 1485/1485, clippy
+0. **Still open in P24: (b)** parent-side `#[cfg] mod x;` resolution
+(the 6 seal/mmorpg FP rows — needs module-path resolution) and **(d)**
+inline `{name}` format captures (SWEEP_COUNTS still flagged in riir-ai,
+now the workspace's only standing row of that class).

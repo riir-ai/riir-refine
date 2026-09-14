@@ -540,6 +540,20 @@ fn collect_rust_files(p: &Path, out: &mut Vec<PathBuf>) {
             if matches!(name, "target" | ".git" | "node_modules") {
                 continue;
             }
+            // A NESTED foreign checkout is not this repo's scan surface:
+            // (1) a symlinked directory (seal-game-editor/.wt/riir-ai — an
+            // alias to a sibling repo root; the first platform-audit
+            // workspace sweep duplicated riir-ai's findings under the
+            // editor's scan this way, P24 (c)); (2) a dir whose `.git` is
+            // a FILE — a git worktree or submodule. Both belong to THAT
+            // repo's own scan. The scan ROOT is never tested, so scanning
+            // a worktree/symlink path directly still works.
+            if c.is_symlink() {
+                continue;
+            }
+            if c.is_dir() && c.join(".git").is_file() {
+                continue;
+            }
             collect_rust_files(&c, out);
         }
     } else if p.extension().is_some_and(|e| e == "rs") {

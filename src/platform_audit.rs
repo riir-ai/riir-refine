@@ -35,12 +35,16 @@
 //!   times are skipped as ambiguous rather than guessed (counted in the
 //!   footer). Adjudicate rows against the listed atoms, same as every
 //!   sibling audit (config-audit / orphan-report).
-//! * **File-level `#[cfg] mod x;` gates are invisible** — the child file
-//!   is scanned as its own root, so both D and U under-approximate. A
-//!   whole-file gate makes the finding MORE true (the item is dead
-//!   wherever the file is), never less; a missed gate on the DECL side
-//!   can only suppress a flag (safe direction). Same divergence class the
-//!   `fix_verify` cfg-audit documents.
+//! * **Module-DECLARATION gates (`#[cfg] mod x;` in the parent) are
+//!   invisible** — the child file is scanned as its own root. A gate on
+//!   the USE side then under-approximates (misses); on the DECL side it
+//!   can suppress a flag. **File-level `#![cfg]` INNER attrs ARE folded**
+//!   (P24 (a), 2026-09-15): the file's atoms seed the root context for
+//!   both decls and uses — the first workspace sweep measured 5 FP rows
+//!   (decls in `#![cfg(all(macos, aarch64))]` files read ungated) and 1
+//!   rustc-proven miss (file-gated uses read UNGATED) from this one
+//!   blindness, in both directions. The parent-side `mod x;` row remains
+//!   open (P24 (b)).
 //! * **Macro token streams are not descended** (the P13 lesson) — a use
 //!   inside `assert!(..)`, `println!` or any macro body is invisible.
 //!   The dangerous direction: a macro-only UNGATED use breaks the
@@ -167,9 +171,18 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
             report.files_unparsed += 1;
             continue;
         };
+        // File-level `#![cfg]` INNER attrs gate the whole file (the
+        // ane_prefill bank/exec/exec_zc/headroom shape — the P24 (a) fold).
+        // Seeding the root context fixes BOTH directions at once: decls
+        // recorded under it inherit the gate into their atoms (a gated
+        // file's items are not platform-dead — they do not even exist
+        // elsewhere), and uses inside it carry the gate into their evidence
+        // (a file-gated use is NOT an ungated use — the note_ane_dispatch
+        // miss). `#![cfg(test)]` at file level is test context, same as an
+        // item-level one.
         let ctx = Ctx {
-            atoms: AtomSet::new(),
-            in_test: false,
+            atoms: guaranteed_from_attrs(&parsed.attrs),
+            in_test: attrs_cfg_test(&parsed.attrs),
         };
         walk_items(
             &parsed.items,
@@ -655,10 +668,11 @@ impl PlatformAuditReport {
         let _ = writeln!(
             out,
             "divergences: uses are name-global last-segment matches — adjudicate \
-             rows against the listed atoms; file-level `#[cfg] mod x;` gates \
-             invisible (both sides under-approximate); macro token streams not \
+             rows against the listed atoms; file-level `#![cfg]` inner attrs folded \
+             into the root context (P24 (a)) but parent-side `#[cfg] mod x;` gates \
+             remain invisible (both sides under-approximate); macro token streams not \
              descended (a macro-only ungated use suppresses a flag — a miss, not \
-             an FP); fn-local items walk under the outer context; not() proves \
+             an FP; inline `{{name}}` format captures are that shape too); fn-local items walk under the outer context; not() proves \
              no platform; any() arms intersect; feature atoms dropped (the \
              cfg-audit family owns that class); types (struct/enum/trait) not \
              tracked; [pub] rows may serve crate-external consumers the scan \
@@ -1051,5 +1065,91 @@ fn a() -> u32 { constants::POOL }
             missing_of(&report, "POOL"),
             one_atom("target_os", "windows")
         );
+    }
+
+    /// P24 (a), DECL side: a `#![cfg]`-gated file's items are NOT
+    /// platform-dead — the whole file compiles away elsewhere, so the
+    /// first workspace sweep's 5 FP rows (the ane_prefill bank/exec/
+    /// exec_zc/headroom shape) must go silent once the file gate folds
+    /// into the decl's atoms.
+    #[test]
+    fn file_gate_shelters_whole_file_decls() {
+        let report = one(
+            r#"
+#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
+
+pub const DEFAULT_MAX_ANE_BYTES: u64 = 13_000_000_000;
+
+pub fn ane_stage_dump() -> String {
+    format!("{}", DEFAULT_MAX_ANE_BYTES)
+}
+"#,
+        );
+        assert!(
+            report.findings.is_empty(),
+            "a whole-file gate covers the decl AND its uses: {:?}",
+            report.findings
+        );
+    }
+
+    /// P24 (a), USE side (the rustc-proven miss): uses inside a
+    /// `#![cfg]`-gated file are NOT ungated — an ungated decl in another
+    /// file whose every use lives in file-gated modules must flag with
+    /// the FILE's atoms (the note_ane_dispatch specimen).
+    #[test]
+    fn file_gate_on_use_side_flags_cross_file_row() {
+        let report = audit_sources(&[
+            (
+                "mod.rs".to_string(),
+                "pub(crate) fn note_ane_dispatch() { COUNT.fetch_add(1, Ordering::Relaxed); }"
+                    .to_string(),
+            ),
+            (
+                "exec.rs".to_string(),
+                r#"#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub fn arm() { super::note_ane_dispatch(); }
+"#
+                    .to_string(),
+            ),
+        ]);
+        let missing = missing_of(&report, "note_ane_dispatch");
+        let mut both = one_atom("target_os", "macos");
+        both.insert(Atom {
+            key: "target_arch".to_string(),
+            value: "aarch64".to_string(),
+        });
+        assert_eq!(
+            missing, both,
+            "a file-gated use is a gated use — the decl must flag with BOTH file atoms"
+        );
+    }
+
+    /// P24 (a) test leg: `#![cfg(all(test, target_arch = "aarch64"))]` at
+    /// file level is BOTH a platform gate (the atoms fold) and test
+    /// context (the row marks test-only).
+    #[test]
+    fn file_cfg_test_marks_test_only() {
+        let report = audit_sources(&[
+            (
+                "lib.rs".to_string(),
+                "pub fn dump() -> String { String::new() }".to_string(),
+            ),
+            (
+                "probe.rs".to_string(),
+                "#![cfg(all(test, target_arch = \"aarch64\"))]\nmod t { #[test] fn a() { super::super::dump(); } }"
+                    .to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "dump"),
+            one_atom("target_arch", "aarch64"),
+            "the file gate's platform atoms fold into the use context"
+        );
+        let row = report
+            .findings
+            .iter()
+            .find(|f| f.name == "dump")
+            .expect("row present");
+        assert!(row.test_only, "#![cfg(test)] file marks its uses test-only");
     }
 }
