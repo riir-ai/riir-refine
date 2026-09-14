@@ -1,6 +1,6 @@
 # Proposal 013 — Consumer-facing install tier spec (Ultra / Max / Pro / Lite)
 
-Status: **draft**
+Status: **shipped Phase 1 (spec doc + corrections ledger, `c246e61f`, 2026-09-12); Phases 2–4 open** (Phase 2 consumer mirror gated on leak/copy gates; Phase 3 replay reward class undesigned; Phase 4 game-launch)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 005 §"Node-tier additions" × riir-ai `node_tiers.md` (the 4-system topology map) × `l4_fallback.md` §5 (the serving-lane decision) × Issue 051 `LlmRouter` (the groq-first API lane)
