@@ -444,9 +444,16 @@ riir-ai checkout advancing** (the sibling's lane; re-run `git pull --ff-only` th
 target). riir-game-sdk is double-blocked (its own behind-7 + Cargo.lock WIP);
 seal-online-remaster still waits on its E0310 test fix.
 
-**Issue 104 triaged:** RETRACTED false alarm (the file is its own post-mortem — `git
-ls-remote` lists ref TIPS, not ancestry; `merge-base --is-ancestor` is the one-command
-test). No action, nothing to repair.
+**Issue 104 triaged:** RETRACTED false alarm — the file is removed per the
+noise-reduction rule; the durable lesson lives HERE. The two method errors
+that manufactured the incident: (1) `git ls-remote` lists ref TIPS, not
+ancestry — a commit absent from ls-remote output is merely a non-tip
+ANCESTOR, not gone; (2) GitHub events `before`/`after` are old-tip →
+new-tip (FORWARD motion) — once anchored on a rewind hypothesis, an
+unfamiliar `after` sha read as "older" without ever running `git log` on
+it, and every subsequent observation felt like confirmation. The
+one-command test that settles any "history loss" allegation:
+`git merge-base --is-ancestor <sha> origin/<branch> && echo INTACT`.
 
 **Healer HEAD binary staged** for the next sweep: `E:/git2/healer-target/release/cargo-heal.exe`
 (built 09:35 from a clean worktree at `0917820d`; `--version` green). The 23:50 global
