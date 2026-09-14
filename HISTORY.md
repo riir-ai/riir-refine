@@ -6403,7 +6403,8 @@ divergence-class remainder). Whole-workspace `--all-targets` check clean; a
 workspace-wide `cargo test` build still dies on the pre-existing bevy rlib
 link issue (untouched crates; per-crate runs are the lane's convention).
 
-Issue 150 removed per the noise rule; the plan file carries the closure.
+seal-game-editor Issue 150 removed per the noise rule; the plan file carries
+the closure.
 
 ## 2026-09-15 — Issue 108 T1+T2: the component-necessity flip-rate harness (CVRR at the dispatch seam)
 
