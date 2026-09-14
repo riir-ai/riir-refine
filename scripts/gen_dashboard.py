@@ -280,7 +280,7 @@ def store_series() -> dict | None:
         try:
             proc = subprocess.run(
                 [str(HEAL_BIN), "--corpus-stats", "--json"],
-                capture_output=True, text=True, timeout=60, env=env,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, env=env,
             )
         except subprocess.TimeoutExpired:
             log("corpus-stats timeout — jsonl fallback for corpus/score series")
@@ -360,16 +360,16 @@ def _count_in_rev(rev: str, path: str, needle: str) -> int:
     import subprocess
     if path.endswith(".rs"):
         r = subprocess.run(["git", "show", f"{rev}:{path}"],
-                           capture_output=True, text=True, cwd=REPO_ROOT)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
         return r.stdout.count(needle) if r.returncode == 0 else 0
     # A directory: enumerate its .rs files at that rev (renames/splits safe).
     ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev, path],
-                        capture_output=True, text=True, cwd=REPO_ROOT)
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
     n = 0
     for f in ls.stdout.splitlines():
         if f.endswith(".rs") and not f.endswith("mod.rs"):
             r = subprocess.run(["git", "show", f"{rev}:{f}"],
-                               capture_output=True, text=True, cwd=REPO_ROOT)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO_ROOT)
             if r.returncode == 0:
                 n += r.stdout.count(needle)
     return n
@@ -395,7 +395,7 @@ def load_corpus_history(days: int = 35) -> list[dict]:
     paths = [p for _, p, _ in CORPUS_DOMAINS]
     git_log = subprocess.run(
         ["git", "log", f"--since={since}", "--format=%H %cs", "--", *paths],
-        capture_output=True, text=True, cwd=REPO_ROOT,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO_ROOT,
     )
     revs = [tuple(l.split()) for l in git_log.stdout.splitlines() if l.strip()]
     revs.reverse()  # oldest first
@@ -499,7 +499,7 @@ def collect_trajectories() -> list[dict]:
         try:
             proc = subprocess.run(
                 [str(HEAL_BIN), "--dump-trajectories"],
-                capture_output=True, text=True, timeout=60, env=env,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, env=env,
             )
         except subprocess.TimeoutExpired:
             log(f"{repo}: trajectory dump timeout")
@@ -551,7 +551,7 @@ def collect_git_cadence(days: int = 30) -> list[dict]:
         try:
             proc = subprocess.run(
                 ["git", "-C", str(d), "log", f"--since={since}", "--pretty=%s"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
             )
             subjects = [s for s in proc.stdout.splitlines() if s.strip()]
         except subprocess.TimeoutExpired:
@@ -1137,7 +1137,7 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
             t0 = time.monotonic()
             proc = subprocess.run(
                 [str(HEAL_BIN), "--fix", target],
-                capture_output=True, text=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=max(COVERAGE_MIN_PER_REPO_S, int(remaining)),
             )
         except subprocess.TimeoutExpired:

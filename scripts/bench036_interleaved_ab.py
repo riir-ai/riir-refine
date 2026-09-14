@@ -93,7 +93,7 @@ GPU_CONSUMER_MARKERS = (
 def gpu_consumers(exclude_pids: set[int]) -> list[str]:
     """Return command lines of sibling GPU compute consumers, if any."""
     out = subprocess.run(
-        ["ps", "-Ao", "pid,command"], capture_output=True, text=True, check=True
+        ["ps", "-Ao", "pid,command"], capture_output=True, text=True, encoding="utf-8", errors="replace", check=True
     ).stdout.splitlines()
     hits = []
     for line in out[1:]:
@@ -227,6 +227,10 @@ def run_arm_a(port: int, n_predict: int, n_cases: int, tag: str) -> dict:
         check=True,
         cwd=REPO,
         stdout=subprocess.DEVNULL,
+        # The child is one of our own scripts and prints non-ASCII; without
+        # this its stdout encoder is the system locale and the write raises
+        # before a byte reaches us (katgpt-rs Issue 778).
+        env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
     )
     return json.loads(out.read_text())["aggregate"]
 
