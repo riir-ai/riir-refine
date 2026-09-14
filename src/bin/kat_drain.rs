@@ -6,9 +6,11 @@
 //! ```text
 //! TrajStore miss backlog → dedup + priority → modelless pre-pass
 //!   → redaction gate (every span, own-repo origin; all-blocked = exit 4)
-//!   → one-call smoke (~50-120 n) → LLM (groq-first free tier → CF fallback
-//!      via `LlmRouter`; the USD cap guards the CF leg inside generate —
-//!      Issue 051: the free tier absorbs the window before any neuron burns)
+//!   → one-call smoke (~50-120 n) → LLM (free-tier ladder groq → infron →
+//!      CF fallback via `LlmRouter`; the USD cap guards the CF leg inside
+//!      generate — Issue 051: the free tier absorbs the window before any
+//!      neuron burns; Issue 106: infron is the second free leg between
+//!      them)
 //!   → strict-keep verify (score_case: clippy oracle + contract + behavioural
 //!      vetoes — the fixer_regate machinery, reused not rewritten)
 //!   → Certified trajectories + the transparency ledger row
@@ -64,12 +66,15 @@
 //! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --preflight
 //!
 //! # the daily window — needs AT LEAST ONE provider armed:
-//! #   GROQ_API_KEY                  → the free leg (~25-40 fix-pairs of
+//! #   GROQ_API_KEY                  → the fast free leg (~25-40 fix-pairs of
 //! #                                    free allocation at realistic sizes)
+//! #   INFRON_API_KEY                → the slow free leg (llm.onerouter.pro,
+//! #                                    ~33 tok/s, qwen3.8-27b:free — Issue
+//! #                                    106; catches groq's 429s before CF)
 //! #   CF_API_TOKEN + CF_ACCOUNT_ID  → the metered fallback (USD-capped)
 //! # Both armed is the intended daily shape (free tier absorbs the window,
-//! # CF catches the overflow). Groq-only runs too: an exhausted free tier
-//! # then ends the window cleanly (`free-tier exhausted`), and zero neurons
+//! # CF catches the overflow). Free-only runs too: exhausted free legs
+//! # then end the window cleanly (`free-tier exhausted`), and zero neurons
 //! # can burn. Neither armed → a loud refusal naming both vars.
 //! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --limit 25
 //! ```
@@ -387,26 +392,30 @@ fn classify_error(msg: &str) -> AttemptPlan {
 /// Load-bearing for ledger attribution. The row's `model` field is the CF
 /// PRICING BASIS — it prices `usd_avoided` and is resolved even when the CF
 /// leg was never armed (Issue 051 T9) — so it is NOT a claim that CF served
-/// anything. Without this field a groq-only window is indistinguishable from
+/// anything. Without this field a free-only window is indistinguishable from
 /// a CF window that happened to cost $0, and the dashboard credits the CF
 /// model with samples it never touched: the `glm-4.7-flash 0` mis-render the
 /// owner hand-reconciled in `7bdb710`, which T9 turned from an anomaly into a
 /// ROUTINE row shape.
 ///
-/// A CF-served SMOKE counts as CF usage even when groq served every span —
-/// those neurons are real and must not be attributed to the free tier.
+/// A CF-served SMOKE counts as CF usage even when a free leg served every
+/// span — those neurons are real and must not be attributed to the free
+/// tier.
 fn served_by(
     groq_served: bool,
+    infron_served: bool,
     cf_tokens: u64,
     smoke_neurons: f64,
     server_neurons: f64,
 ) -> &'static str {
     let cf_used = cf_tokens > 0 || smoke_neurons > 0.0 || server_neurons > 0.0;
-    match (groq_served, cf_used) {
-        (true, true) => "mixed",
-        (true, false) => "groq",
-        (false, true) => "cloudflare",
-        (false, false) => "none",
+    match (groq_served, infron_served, cf_used) {
+        (true, false, false) => "groq",
+        (false, true, false) => "infron",
+        (true, true, false) => "groq+infron",
+        (false, false, true) => "cloudflare",
+        (_, _, true) => "mixed",
+        (false, false, false) => "none",
     }
 }
 
@@ -453,6 +462,13 @@ fn run_preflight(args: &Args) -> ! {
         }
     );
     println!(
+        "  infron (free)    : {}",
+        match llm.infron_model() {
+            Some(m) => format!("ARMED   model {m}"),
+            None => "unarmed (INFRON_API_KEY unset)".to_string(),
+        }
+    );
+    println!(
         "  cloudflare (paid): {}",
         if llm.cf_armed() {
             format!("ARMED   model {}", llm.model_id())
@@ -467,10 +483,10 @@ fn run_preflight(args: &Args) -> ! {
     if let Some(cf) = llm.cf() {
         println!("  cf spend         : {}", cf.spend_summary());
     }
-    if !llm.groq_enabled() {
+    if !llm.groq_enabled() && !llm.infron_enabled() {
         println!(
-            "\n  free leg unarmed → NO probe sent (a CF probe would burn unledgered \
-             neurons).\n  Export GROQ_API_KEY to exercise the ladder for free."
+            "\n  free legs unarmed → NO probe sent (a CF probe would burn unledgered \
+             neurons).\n  Export GROQ_API_KEY or INFRON_API_KEY to exercise the ladder for free."
         );
         std::process::exit(0);
     }
@@ -485,10 +501,10 @@ fn run_preflight(args: &Args) -> ! {
                 g.latency_ms,
             );
             if llm.cf_armed() {
-                println!("  verdict: ladder READY (free tier absorbs, CF catches overflow)");
+                println!("  verdict: ladder READY (free tiers absorb, CF catches overflow)");
             } else {
                 println!(
-                    "  verdict: ladder READY (groq-ONLY — an exhausted free tier will end the \
+                    "  verdict: ladder READY (free-ONLY — exhausted free legs will end the \
                      window cleanly; zero neurons can burn)"
                 );
             }
@@ -693,9 +709,10 @@ fn main() {
         return;
     }
 
-    // ── The LLM window (Issue 051: groq-first ladder — the free tier
+    // ── The LLM window (Issue 051: the free-first ladder — the free tier
     // absorbs the window; CF remains the metered fallback its USD cap
-    // guards). GROQ_API_KEY absent → pure CF, byte-identical to pre-051.
+    // guards. Issue 106: infron is the second free leg BETWEEN them). A
+    // free-leg key absent → the ladder just starts lower, byte-identical.
     let mut llm = match LlmRouter::from_env(args.model.as_deref()) {
         Ok(r) => r,
         Err(e) => {
@@ -703,18 +720,27 @@ fn main() {
             std::process::exit(3);
         }
     };
-    match (llm.groq_enabled(), llm.cf_armed()) {
+    let free_armed = llm.groq_enabled() || llm.infron_enabled();
+    let free_models = format!(
+        "{}{}",
+        llm.groq_model().unwrap_or("-"),
+        llm.infron_model()
+            .map_or_else(String::new, |m| format!(" + infron {m}"))
+    );
+    match (free_armed, llm.cf_armed()) {
         (true, true) => eprintln!(
-            "[drain] groq-first armed (model {}, free tier absorbs the window; CF fallback \
-             stays cap-guarded)",
-            llm.groq_model().unwrap_or("?")
+            "[drain] free-first ladder armed ({}; CF fallback stays cap-guarded)",
+            free_models
         ),
         (true, false) => eprintln!(
-            "[drain] groq-ONLY window (model {}, no CF fallback armed) — an exhausted free \
-             tier ends the window cleanly; zero neurons can burn",
-            llm.groq_model().unwrap_or("?")
+            "[drain] free-ONLY window ({}; no CF fallback armed) — exhausted free legs \
+             end the window cleanly; zero neurons can burn",
+            free_models
         ),
-        (false, _) => eprintln!("[drain] groq not armed (GROQ_API_KEY unset) — pure CF window"),
+        (false, _) => eprintln!(
+            "[drain] free legs not armed (GROQ_API_KEY / INFRON_API_KEY unset) — pure CF \
+             window"
+        ),
     }
     let (price_in, price_out) = riir_clippy::llm_spend::price_for(llm.model_id())
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
@@ -733,10 +759,10 @@ fn main() {
             "[drain] smoke OK (via {}, {}ms{}; window opens)",
             g.provider.as_str(),
             g.latency_ms,
-            if g.provider == Provider::Groq {
-                String::new()
-            } else {
+            if g.provider == Provider::Cloudflare {
                 format!(", {:.1} neurons", g.neurons)
+            } else {
+                String::new()
             }
         ),
         Err(e) => {
@@ -923,7 +949,7 @@ fn main() {
             u.neurons / 1000.0 * 0.011
         );
     }
-    let gstats = llm.stats.clone();
+    let gstats = llm.groq_stats.clone();
     if gstats.ok > 0 {
         println!(
             "  groq absorbed {} call(s), {}+{} tok (est ${:.5} of CF avoided; rate-limited {})",
@@ -939,11 +965,27 @@ fn main() {
             gstats.rate_limited,
         );
     }
+    let istats = llm.infron_stats.clone();
+    if istats.ok > 0 {
+        println!(
+            "  infron absorbed {} call(s), {}+{} tok (est ${:.5} of CF avoided; rate-limited {})",
+            istats.ok,
+            istats.prompt_tokens,
+            istats.completion_tokens,
+            riir_clippy::groq::router::avoided_usd(
+                istats.prompt_tokens,
+                istats.completion_tokens,
+                price_in,
+                price_out
+            ),
+            istats.rate_limited,
+        );
+    }
     match llm.cf() {
         Some(cf) => println!("  {}", cf.spend_summary()),
-        // Groq-only: no paid leg, so no USD spend line to print. The
-        // absorption line above IS the whole cost record for this window.
-        None => println!("  CF fallback not armed — $0.0000 metered spend (groq-only window)"),
+        // Free-only: no paid leg, so no USD spend line to print. The
+        // absorption lines above ARE the whole cost record for this window.
+        None => println!("  CF fallback not armed — $0.0000 metered spend (free-only window)"),
     }
     eprintln!("[drain] store events → {}", store.root.display());
     append_ledger(
@@ -980,7 +1022,7 @@ struct DrainStats {
     declines: usize,
     overflow_declines: usize,
     smoke_neurons: f64,
-    /// Which provider served the smoke ("groq" / "cloudflare" / "none").
+    /// Which provider served the smoke ("groq" / "infron" / "cloudflare" / "none").
     smoke_provider: String,
     smoke_failed: bool,
     stopped_early: bool,
@@ -1005,29 +1047,50 @@ fn append_ledger(
         .map_or(0, |d| d.as_secs());
     let (price_in, price_out) = riir_clippy::llm_spend::price_for(model)
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
-    let gstats = &llm.stats;
-    let avoided = riir_clippy::groq::router::avoided_usd(
+    let gstats = &llm.groq_stats;
+    let istats = &llm.infron_stats;
+    let groq_avoided = riir_clippy::groq::router::avoided_usd(
         gstats.prompt_tokens,
         gstats.completion_tokens,
         price_in,
         price_out,
     );
-    // Issue 051: the free tier's absorption rides `providers.groq` — the
-    // dashboard's card reads it; legacy rows without the key are unaffected.
-    let mut providers =
-        riir_clippy::groq::router::providers_json(gstats, avoided, llm.groq_model());
-    if let Some(reason) = llm.disable_reason() {
+    let infron_avoided = riir_clippy::groq::router::avoided_usd(
+        istats.prompt_tokens,
+        istats.completion_tokens,
+        price_in,
+        price_out,
+    );
+    // Issues 051+106: the free tiers' absorption rides `providers.groq` /
+    // `providers.infron` — the dashboard's card reads these; legacy rows
+    // without the keys are unaffected.
+    let mut providers = riir_clippy::groq::router::providers_json(
+        gstats,
+        llm.groq_model(),
+        groq_avoided,
+        istats,
+        llm.infron_model(),
+        infron_avoided,
+    );
+    if let Some(reason) = llm.groq_disable_reason() {
         providers["groq"]["disabled_reason"] = serde_json::json!(reason);
     }
-    let groq_note = if gstats.ok > 0 {
+    if let Some(reason) = llm.infron_disable_reason() {
+        providers["infron"]["disabled_reason"] = serde_json::json!(reason);
+    }
+    let free_note = if gstats.ok > 0 || istats.ok > 0 {
         format!(
-            "groq-first absorbed {}/{} call(s) +{}+{} tok (est ${:.5} CF avoided)",
-            gstats.ok, gstats.calls, gstats.prompt_tokens, gstats.completion_tokens, avoided
+            "free legs absorbed {}/{} groq + {}/{} infron call(s) (est ${:.5} CF avoided)",
+            gstats.ok,
+            gstats.calls,
+            istats.ok,
+            istats.calls,
+            groq_avoided + infron_avoided
         )
-    } else if gstats.calls > 0 {
-        "groq armed but served nothing this window".to_string()
+    } else if gstats.calls > 0 || istats.calls > 0 {
+        "free legs armed but served nothing this window".to_string()
     } else {
-        "pure CF window (groq not armed)".to_string()
+        "pure CF window (no free leg armed)".to_string()
     };
     // Issue 051 T13 — WHO SERVED this window. Load-bearing for attribution:
     // `model` is the CF PRICING BASIS (it prices `usd_avoided` and is
@@ -1035,6 +1098,7 @@ fn append_ledger(
     // served anything.
     let served_by = served_by(
         gstats.ok > 0,
+        istats.ok > 0,
         summary.prompt_tokens + summary.completion_tokens,
         drain.smoke_neurons,
         server.map_or(0.0, |u| u.neurons),
@@ -1080,7 +1144,7 @@ fn append_ledger(
             "wall_ms": u64::try_from(drain.wall_ms).unwrap_or(u64::MAX),
         },
         "kat": serde_json::Value::Null,
-        "note": format!("kat null until Phase 1 rail; Plan 031 A3 trainer-window drain (never-wrong: keeps are Certified trajectories, rejects never land); {groq_note}"),
+        "note": format!("kat null until Phase 1 rail; Plan 031 A3 trainer-window drain (never-wrong: keeps are Certified trajectories, rejects never land); {free_note}"),
     });
     let mut f = match std::fs::OpenOptions::new()
         .create(true)
@@ -1398,14 +1462,19 @@ mod tests {
     fn served_by_attributes_each_window_shape() {
         // The T9 shape this field exists for: groq did all the work, the CF
         // leg was never even armed.
-        assert_eq!(served_by(true, 0, 0.0, 0.0), "groq");
-        // Pure CF (groq unarmed or served nothing).
-        assert_eq!(served_by(false, 1000, 0.0, 0.0), "cloudflare");
-        assert_eq!(served_by(false, 0, 0.0, 587.36), "cloudflare");
-        // Mixed: the free tier absorbed part, CF caught the rest.
-        assert_eq!(served_by(true, 500, 0.0, 250.0), "mixed");
-        // A failed smoke that never reached either provider.
-        assert_eq!(served_by(false, 0, 0.0, 0.0), "none");
+        assert_eq!(served_by(true, false, 0, 0.0, 0.0), "groq");
+        // The Issue 106 shape: infron absorbed the window (groq down).
+        assert_eq!(served_by(false, true, 0, 0.0, 0.0), "infron");
+        // Both free legs served, no CF.
+        assert_eq!(served_by(true, true, 0, 0.0, 0.0), "groq+infron");
+        // Pure CF (free legs unarmed or served nothing).
+        assert_eq!(served_by(false, false, 1000, 0.0, 0.0), "cloudflare");
+        assert_eq!(served_by(false, false, 0, 0.0, 587.36), "cloudflare");
+        // Mixed: the free tiers absorbed part, CF caught the rest.
+        assert_eq!(served_by(true, false, 500, 0.0, 250.0), "mixed");
+        assert_eq!(served_by(true, true, 500, 0.0, 250.0), "mixed");
+        // A failed smoke that never reached any provider.
+        assert_eq!(served_by(false, false, 0, 0.0, 0.0), "none");
     }
 
     #[test]
@@ -1413,7 +1482,7 @@ mod tests {
         // groq served every SPAN but the smoke landed on CF — those neurons
         // are real. Calling this "groq" would hide metered spend behind the
         // free-tier label, which is the one thing the ledger must never do.
-        assert_eq!(served_by(true, 0, 60.0, 0.0), "mixed");
+        assert_eq!(served_by(true, false, 0, 60.0, 0.0), "mixed");
     }
 
     #[test]

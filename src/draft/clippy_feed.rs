@@ -499,7 +499,7 @@ mod tests {
     // child: method rename + `false, ` deletion, `(` gap preserved).
 
     /// One diagnostic row carrying a suggestion child.
-    fn row_with_suggestion(file: &str, line: u64, lint: &str, parts: &[(u64, u64, &str, &str)]) -> String {
+    fn row_with_suggestion(file: &str, line: u64, lint_id: &str, parts: &[(u64, u64, &str, &str)]) -> String {
         let spans: Vec<String> = parts
             .iter()
             .map(|(bs, be, repl, applic)| {
@@ -509,7 +509,7 @@ mod tests {
             })
             .collect();
         format!(
-            r#"{{"reason": "compiler-message", "message": {{"level": "warning", "code": {{"code": "clippy::{lint}"}}, "spans": [{{"file_name": "{file}", "line_start": {line}, "is_primary": true}}], "children": [{{"level": "help", "message": "for further information", "spans": []}}, {{"level": "help", "message": "use is_some_and instead", "spans": [{}]}}]}}}}"#,
+            r#"{{"reason": "compiler-message", "message": {{"level": "warning", "code": {{"code": "clippy::{lint_id}"}}, "spans": [{{"file_name": "{file}", "line_start": {line}, "is_primary": true}}], "children": [{{"level": "help", "message": "for further information", "spans": []}}, {{"level": "help", "message": "use is_some_and instead", "spans": [{}]}}]}}}}"#,
             spans.join(", ")
         )
     }
@@ -554,9 +554,10 @@ mod tests {
     #[test]
     fn multi_child_suggestion_refused() {
         // Two children each carrying a replacement span (the move class).
-        let stream = format!(
-            r#"{{"reason": "compiler-message", "message": {{"level": "warning", "code": {{"code": "clippy::some_lint"}}, "spans": [{{"file_name": "src/lib.rs", "line_start": 3, "is_primary": true}}], "children": [{{"level": "help", "spans": [{{"file_name": "src/lib.rs", "byte_start": 10, "byte_end": 16, "suggested_replacement": "a", "suggestion_applicability": "MachineApplicable"}}]}}, {{"level": "help", "spans": [{{"file_name": "src/lib.rs", "byte_start": 50, "byte_end": 50, "suggested_replacement": "b", "suggestion_applicability": "MachineApplicable"}}]}}]}}}}"#
-        );
+        // Plain data — single braces, no format! (the {{ }} escapes only
+        // exist for format!, and clippy's useless_format `.to_string()` fix
+        // would otherwise leave them doubled in the literal).
+        let stream = r#"{"reason": "compiler-message", "message": {"level": "warning", "code": {"code": "clippy::some_lint"}, "spans": [{"file_name": "src/lib.rs", "line_start": 3, "is_primary": true}], "children": [{"level": "help", "spans": [{"file_name": "src/lib.rs", "byte_start": 10, "byte_end": 16, "suggested_replacement": "a", "suggestion_applicability": "MachineApplicable"}]}, {"level": "help", "spans": [{"file_name": "src/lib.rs", "byte_start": 50, "byte_end": 50, "suggested_replacement": "b", "suggestion_applicability": "MachineApplicable"}]}]}}"#.to_string();
         let got = parse_clippy_feed(&stream);
         assert_eq!(got.len(), 1);
         assert!(got[0].suggestion.is_none(), "multi-child must refuse");

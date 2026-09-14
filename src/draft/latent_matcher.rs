@@ -830,11 +830,11 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
 
     // ── the clippy-fed anchored mode (2026-09-13 retrieval-miss intake) ──
 
-    fn anchor(file: &str, line: usize, lint: &str) -> super::super::clippy_feed::ClippyDiagnostic {
+    fn anchor(file: &str, line: usize, lint_id: &str) -> super::super::clippy_feed::ClippyDiagnostic {
         super::super::clippy_feed::ClippyDiagnostic {
             file: file.to_string(),
             line,
-            lint: lint.to_string(),
+            lint: lint_id.to_string(),
             suggestion: None,
         }
     }

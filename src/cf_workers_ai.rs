@@ -1109,8 +1109,8 @@ pub struct CfClient {
     /// Perf: the two request paths no longer allocate a header String per
     /// call. Security: the secret occupies ONE heap location for the
     /// client's lifetime instead of being copied into a fresh allocation per
-    /// request and dropped un-zeroed. Mirrors `groq::GroqClient` (Issue 051
-    /// T10) — same defect class, same fix, both legs of the ladder.
+    /// request and dropped un-zeroed. Mirrors `groq::OaiClient` (Issue 051
+    /// T10) — same defect class, same fix, every leg of the ladder.
     auth: String,
     /// The bare token, kept ONLY to scrub it out of server-controlled
     /// strings (see [`CfClient::scrub`]).

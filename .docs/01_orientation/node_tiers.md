@@ -35,9 +35,9 @@ the machinery knows; the tiers are what a human picks.
 |---|---|---|---|---|
 | **What you run** | the `cargo heal` binary, anonymous | `cargo heal login` (account + miner mode) | + `kat_drain` contributor + quorum-replay participant | + full trainer window host (own Container/VPS cron) + vessel corpus host |
 | **Chain identity** | none (no account) | `Player(1)`, stake 0, vote 0 | replay endorsement class *(designed — [Proposal 015](../../.proposals/015_replay_endorsement_reward_class.md); NOT YET SETTLEABLE)* | `Trainer(2)`, stake 1K |
-| **LLM lane** | none — modelless only | API pay-per-fix *(gated — leak sign-off)* | API: groq free leg → CF cap-guarded | API-first (groq → CF); local Bonsai **optional + UNARMED** (reopen bar) |
+| **LLM lane** | none — modelless only | API pay-per-fix *(gated — leak sign-off)* | API: groq → infron free legs → CF cap-guarded | API-first (groq → infron → CF); local Bonsai **optional + UNARMED** (reopen bar) |
 | **Hardware floor** | anything that runs the binary (native desktop + musl Linux) | any desktop | CPU box that fits rustc compile windows (~2–4 vCPU / 4–8 GB; **no GPU**) | GPU rig OR container-capable VPS (`standard-1`-class; R2 cache tier) |
-| **Costs** | nothing — free forever | KAT burn (1 KAT / M code word tokens; 100 KAT login grant) | API costs ride the groq free leg / CF USD cap | stake + GPU/container cost (v1: fleet-funded from USD treasury, G7) |
+| **Costs** | nothing — free forever | KAT burn (1 KAT / M code word tokens; 100 KAT login grant) | API costs ride the groq/infron free legs / CF USD cap | stake + GPU/container cost (v1: fleet-funded from USD treasury, G7) |
 | **Earns** | nothing (outside the economy) | mining: synced data → quorum-proven → KAT | replay/verify rewards *(class NOT YET DESIGNED)* + mining | trainer endorsements + epoch pool share |
 | **Game-tier analog** | Spectator / Satellite | Player | Curator(3) — verify work, CPU-only | Authority — the load-bearing node |
 | **Status today** | ✅ **shipped** | ✅ core shipped (login/meter/sync); fixer half **BLOCKED** (leak) | 🟡 drain bin shipped (`kat_drain`); replay class **designed ([P015](../../.proposals/015_replay_endorsement_reward_class.md)) — settlement pending its Phase 3** | 🟡 designed (P005); launch = **OUR replicas only** (decentralization phase-gated) |
@@ -66,10 +66,10 @@ discipline bind everything.
 ### Max — the no-GPU contributor
 
 Two halves:
-1. **`kat_drain` contributor** — 🟡 shipped (Issue 051): the groq-first
-   `LlmRouter` drain over the unproven queue, redaction-gated, USD-capped.
-   Anyone with API keys can run windows; free-tier absorption measured at
-   $0.0000 metered.
+1. **`kat_drain` contributor** — 🟡 shipped (Issue 051 + Issue 106): the
+   free-first `LlmRouter` drain (groq → infron → CF) over the unproven
+   queue, redaction-gated, USD-capped. Anyone with API keys can run
+   windows; free-tier absorption measured at $0.0000 metered.
 2. **Quorum-replay participant** — 🟡 **designed 2026-09-14 ([Proposal 015](../../.proposals/015_replay_endorsement_reward_class.md))**: leased third-party replays (`fix_verify` + clippy oracle on the verifier's own rig), K=2 verdict-commitment agreement (`verify_no_verdict_split` reuse), a conservative per-row reward split (`replay_cut_bp`, genesis 0 = inert), and a TrueBit-adapted canary discipline against rubber-stamping — the C1→C5 escalation P005 §Mining named, with economics. **Still cannot settle** until P015 Phase 3 (econ-sim arm + owner ratification + a live devnet replay-settled reward): **do not advertise replay earnings until it can settle** stands.
 
 ### Ultra — the trainer node
@@ -78,7 +78,7 @@ The P005 trainer plane: daily trainer window host (deploy-once CF Container,
 cron-start, sleep-after — billing = run window only), vessel discipline
 (corpus packs as `NeuronVessel`s; fuel-gated WASM for third-party-derived
 code), quorum participant, chain `Trainer(2)` stake 1K. LLM lane is
-**API-first** (groq free leg → CF fallback, cap-guarded). Local Bonsai-27B is
+**API-first** (groq → infron free legs → CF fallback, cap-guarded). Local Bonsai-27B is
 **optional and UNARMED**: measured quality-FAIL (Bench 039: WIN 5 / REGRESSION
 4, 2 silently wrong), latency-FAIL (~191 s/fix, Bench 463), RLVR G1 0/60 twice
 (Benches 465/467) — it reopens only per the

@@ -166,8 +166,10 @@ pub mod llm_spend;
 // (OpenAI-compatible REST, reuses the optional ureq dep) + the groq→CF
 // provider ladder (the `router` submodule, additionally gated on
 // `cf_workers_ai` — it composes CfClient as the paid fallback leg).
-// `GROQ_API_KEY` absent → pure-CF behavior, byte-identical to pre-051.
-// See `.issues/051_groq_first_free_tier.md`.
+// GROQ_API_KEY absent → the ladder starts at the next free leg (infron,
+// Issue 106) or pure-CF when no free key is set — byte-identical legacy
+// paths. See `.issues/051_groq_first_free_tier.md` (removed; git history)
+// + `.issues/106_infron_free_leg.md`.
 #[cfg(feature = "groq_first")]
 pub mod groq;
 
