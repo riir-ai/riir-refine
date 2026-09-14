@@ -7,10 +7,17 @@
 //!
 //! ```sh
 //! CARGO_TARGET_DIR=/tmp/kat_seed_printer cargo test -p riir-clippy \
-//!   --test kat_seed_corpus_printer -- --nocapture \
+//!   --features kat_service --test kat_seed_corpus_printer -- --nocapture \
 //!   | sed -n 's/^<<<SEED_CORPUS \(.*\) >>>$/\1/p' > \
 //!   ../riir-dapps/cloudflare/kat-service/src/seed_corpus.json
 //! ```
+//!
+//! (The `--features kat_service` is REQUIRED — the test and
+//! `build_seed_corpus` are feature-gated; without it the test compiles
+//! empty and the redirect truncates the target file. Run from the
+//! riir-clippy checkout whose SIBLING layout resolves — a /tmp worktree
+//! needs ../katgpt-rs, ../riir-kat, ../riir-neuron-db, ../riir-auth,
+//! ../riir-ai symlinked beside it.)
 //!
 //! The JSON is DETERMINISTIC (no timestamp, entries in corpus order, the
 //! builder's own sort by rule_id) — the committed file only moves when the
