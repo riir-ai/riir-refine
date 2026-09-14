@@ -8,6 +8,53 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## The 09-14 morning re-arm pass — sweep blockers narrowed to ONE (riir-ai's stale checkout), healer HEAD binary staged clean-of-sibling-WIP, seal-game-editor #147 closed as the queue-1 unit (2026-09-14)
+
+The handoff's resume items, executed: **riir-viewbridge CLONED** to `E:/git/riir-viewbridge`
+(partial-clone box now 16/20) — which unblocked seal-remake + riir-mmorpg-examples at
+MANIFEST load only to surface the next, now-final blocker: both dep `riir-ai` crates and the
+local checkout is **behind-35 with a sibling session's uncommitted WIP** (Cargo.lock +
+HISTORY + mmorpg files), so `pull --ff-only` refuses and the build dies at `riir-engine`
+with `E0432 katgpt_core::branching::DEFAULT_TAU_SPAWN` — the exact class that blocked
+riir-game-sdk yesterday. Every sweep re-arm is now gated on exactly ONE thing: **the
+riir-ai checkout advancing** (the sibling's lane; re-run `git pull --ff-only` there, then
+`RUSTUP_TOOLCHAIN=1.98.1 cargo clippy --workspace --all-targets --message-format=json` per
+target). riir-game-sdk is double-blocked (its own behind-7 + Cargo.lock WIP);
+seal-online-remaster still waits on its E0310 test fix.
+
+**Issue 104 triaged:** RETRACTED false alarm (the file is its own post-mortem — `git
+ls-remote` lists ref TIPS, not ancestry; `merge-base --is-ancestor` is the one-command
+test). No action, nothing to repair.
+
+**Healer HEAD binary staged** for the next sweep: `E:/git2/healer-target/release/cargo-heal.exe`
+(built 09:35 from a clean worktree at `0917820d`; `--version` green). The 23:50 global
+binary predates `e68f8f2a` (needless_pass_by_ref_mut) + `ab2dab1a` (useless_conversion
+shape 2) — using it would miss both rules' classes. Build discipline measured: **E: is
+exFAT — `mklink /J` fails there** ("Local NTFS volumes required"), so the junction farm +
+worktree live at **`C:\git2`** (NTFS, junctions point across the volume at `E:\git\*`;
+`E:/git2/README.txt` points there). Five junctions, not four: `riir-kat` path-deps
+`../riir-auth` — found by sweeping all sibling manifests for `../` deps, no other gaps.
+The worktree at depth-1 is REQUIRED (sibling-relative path deps); a worktree under `/tmp`
+breaks resolution (`E:/tmp/riir-ai/vendor/...` not found) — the stale `E:/tmp/riir-clippy-wt`
+worktree from the failed attempt is a leftover, prune when convenient.
+
+**Queue-1 unit (issues-first gate): seal-game-editor `.issues/147` CLOSED at `d310c030`**
+(the idle loop's oldest actionable uncontended issue; katgpt-rs 762's only open item is
+owner-gated, 130's fix lives in other repos, 135 is a product decision, 145's remainder
+wants its own ticket). The windowed thumbnail grid now scrolls the pitch it lays out:
+`show_rows` gets the CELL height with `item_spacing` pinned to `GAP` both axes (believed
+pitch == laid-out pitch by construction, any `SPACE_S`; was 98-believed vs 94-laid — dead
+scroll + per-row drift), the height is RESERVED via `allocate_ui_with_layout` (the plan-166
+popup-ratchet fix) with the one window caller composing its own `.min(available_height())`
+ceiling so the `min_height(240)` shrunk-window behaviour is unchanged, and the guard is the
+clip-rect oracle on app-tuned spacing (`test_ctx` + `whole_visible_rows`, mirroring
+`asset_ref`) plus two new guards: bottom-flush under driven wheel scroll, and popup
+grow-back through a real `egui::Area`. egui note for future sweeps: this tree is on
+**egui 0.35** (`Event::MouseWheel` grew a `phase: egui::TouchPhase::Move` field;
+`ctx.style()` → `ctx.style_of(ctx.theme())`). Validation: thumbnail suite green; the
+`bevy_canvas::render_tests` failures are the documented pre-existing GPU-contention flake
+(9 then 3 across identical-code runs); clippy clean on both touched files.
+
 ## The 2026-09-14 Protocol B sweep — 10 repos screened, seal-game-editor healed oracle-fed (the queue-3 unit; first large multi-crate `--clippy-json --fix --write --verify` run) (2026-09-14)
 
 The idle-loop queue fell to item 3 (issues/plans drained per the handoff).
