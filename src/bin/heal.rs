@@ -2717,6 +2717,13 @@ fn print_fix_review(
     print!("{}", format_fix_review(display, edits, fmt_note));
 }
 
+/// The P21 review note for oracle-anchored edits: clippy's own
+/// `MachineApplicable` suggestion, consumed verbatim at the flagged span.
+const ORACLE_NOTE: Option<&str> = Some(
+    "oracle-anchored: clippy's own MachineApplicable suggestion, applied \
+     verbatim at the diagnostic's span (--clippy-json)",
+);
+
 /// Issue 074 T1: the semantic-shift note a `--fix` review line carries for
 /// this rule, if its proposer documents one. Domain dispatch mirrors the
 /// `collect_edits` call sites (feature-gated identically).
@@ -3046,7 +3053,12 @@ USAGE:
                     similarity ranking (marked [oracle]); lints with no
                     corpus rule are marked [no corpus rule] (a live gap
                     signal); feed-covered spans without a diagnostic are
-                    marked [heuristic]. Never spawns clippy itself.
+                    marked [heuristic]. Under --fix, MachineApplicable
+                    suggestion children are consumed VERBATIM as atomic
+                    edits at spans the lane's proposers did not already
+                    cover (P21 — the type-aware close for Unknown
+                    receivers); lints outside the lane's corpus set are
+                    never consumed. Never spawns clippy itself.
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
@@ -7032,6 +7044,8 @@ fn main() {
     let mut n_oracle_spans = 0usize;
     let mut n_anchored_missing = 0usize;
     let mut n_fixed_edits = 0usize;
+    // P21: oracle-anchored edits actually APPLIED in the fix lane.
+    let mut n_oracle_edits = 0usize;
     // P12: re-proposal suppression. Default-on; the kill-switch re-enables
     // unconditional re-proposal (force retry of previously-reverted edits).
     let suppress_reverted = !suppression_disabled();
@@ -7124,6 +7138,12 @@ fn main() {
         let mut pass_splices: Vec<Vec<riir_clippy::edit_emitter::SourceEdit>> = Vec::new();
         // Per-pass INPUT texts (the span-revert restore source).
         let mut pass_texts: Vec<String> = Vec::new();
+        // P21: the (start, end) byte ranges of oracle-anchored edits pushed
+        // at pass 0 — the report-note key (proposer edits never share an
+        // exact span with a kept oracle edit: overlaps are filtered out
+        // before the push).
+        let mut oracle_keys: std::collections::HashSet<(usize, usize)> =
+            std::collections::HashSet::new();
         if args.fix {
             // Issue 031 H2: --domain scopes the fix path. Previously the
             // proposer loops ran BOTH domains unconditionally — `--domain
@@ -7192,12 +7212,55 @@ fn main() {
                     lint_set.extend(VERIFY_LINTS.iter().copied());
                 }
                 if run_clippy {
-                    for lint in lint_set {
+                    // `&lint_set` (pattern-deref): the set is borrowed, not
+                    // moved — the P21 oracle merge below needs it after this
+                    // loop (the lane's corpus-set precondition).
+                    for &lint in &lint_set {
                         edits.extend(
                             riir_clippy::domains::clippy_lints::proposers::collect_edits(
                                 lint, &current, &parsed,
                             ),
                         );
+                    }
+                }
+                // ── P21: oracle-anchored edits — the --clippy-json fix lane.
+                // When a real diagnostic's lint is in THIS lane's set (the
+                // corpus-rule precondition: no suggestion is consumed for a
+                // lint the lane does not carry — that stays the suggest
+                // pass's [no corpus rule] gap signal) and the diagnostic
+                // carries a MachineApplicable suggestion, its parts are
+                // merged into one atomic edit and consumed verbatim.
+                // clippy's suggestion is TYPE-AWARE — the close for the P15
+                // Unknown-receiver residue (`.min()` chains, `File::open`,
+                // `.as_ref()`) our parse-only `receiver_kind` refuses
+                // (E0599-unsafe standalone). Proposer edits WIN on overlap:
+                // an oracle edit inside a proposer's rewrite is stale by
+                // construction (that text was rewritten).
+                if pass == 0 && run_clippy {
+                    if let Some(feed) = &clippy_feed {
+                        let lane = riir_clippy::draft::clippy_feed::oracle_edits(
+                            feed,
+                            &display,
+                            &current,
+                            &lint_set,
+                        );
+                        if lane.dropped > 0 {
+                            eprintln!(
+                                "oracle lane: dropped {} suggestion(s) for {display} \
+                                 (stale offsets or parse-gate refusal — does the feed \
+                                 match the current tree state?)",
+                                lane.dropped
+                            );
+                        }
+                        for oe in lane.edits {
+                            let overlaps = edits.iter().any(|pe| {
+                                riir_clippy::draft::clippy_feed::spans_overlap(&pe.edit, &oe.edit)
+                            });
+                            if !overlaps {
+                                oracle_keys.insert((oe.edit.start, oe.edit.end));
+                                edits.push(oe);
+                            }
+                        }
                     }
                 }
                 #[cfg(feature = "sec")]
@@ -7282,6 +7345,9 @@ fn main() {
                     splices.iter().map(|s| (s.start, s.end)).collect();
                 for re in &edits {
                     if applied.contains(&(re.edit.start, re.edit.end)) {
+                        if oracle_keys.contains(&(re.edit.start, re.edit.end)) {
+                            n_oracle_edits += 1;
+                        }
                         all_edits.push((
                             pass,
                             re.rule_id.clone(),
@@ -7316,7 +7382,11 @@ fn main() {
                     .get(start..end)
                     .map(str::to_string)
                     .unwrap_or_default();
-                let note = rule_context_note(&rule_id);
+                let note = if oracle_keys.contains(&(start, end)) {
+                    ORACLE_NOTE
+                } else {
+                    rule_context_note(&rule_id)
+                };
                 (rule_id, line, replacement, restore, note)
             })
             .collect();
@@ -8105,10 +8175,17 @@ fn main() {
         "suggestions"
     };
     let oracle_note = if clippy_feed.is_some() {
-        format!(
+        let mut s = format!(
             " · {} oracle-anchored · {} no-corpus-rule",
             n_oracle_spans, n_anchored_missing
-        )
+        );
+        // P21: the fix lane's consumed suggestions. Zero in suggest-only
+        // runs stays silent — the count names fix-lane behavior only.
+        if n_oracle_edits > 0 {
+            let ed_pl = if n_oracle_edits == 1 { "edit" } else { "edits" };
+            s.push_str(&format!(" · {n_oracle_edits} oracle {ed_pl} applied"));
+        }
+        s
     } else {
         String::new()
     };

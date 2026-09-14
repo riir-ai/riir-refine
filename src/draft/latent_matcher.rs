@@ -835,6 +835,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             file: file.to_string(),
             line,
             lint: lint.to_string(),
+            suggestion: None,
         }
     }
 

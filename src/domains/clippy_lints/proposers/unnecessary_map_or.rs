@@ -30,10 +30,10 @@
 //! - **Unknown receivers** — a bare local from a foreign call
 //!   (`lookup(k).map_or(false, ..)`) or an unclassified initializer:
 //!   `is_some_and` on a `Result` is a hard E0599 (the `bench_440` class), so
-//!   the type-blind standalone NEVER guesses. The `--clippy-json`
-//!   oracle-anchored lane is the designed close for this class (the
-//!   diagnostic's own suggestion children carry clippy's type-aware
-//!   terminal form).
+//!   the type-blind standalone NEVER guesses. CLOSED (P21, 2026-09-14): in
+//!   `--clippy-json` mode the `--fix` lane consumes the diagnostic's own
+//!   `MachineApplicable` suggestion children verbatim as one atomic edit
+//!   (clippy's suggestion is type-aware — `clippy_feed::oracle_edits`).
 //! - **Result + `true`** — clippy itself is silent; we refuse too
 //!   (`map_or(true, f)` is already terminal for Result).
 //! - **Macro-argument sites outside the format family** — syn cannot

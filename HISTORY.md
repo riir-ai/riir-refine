@@ -8,6 +8,87 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## P21 post-mining intake — the oracle-suggestion-children consumption: the `--clippy-json` fix lane applies clippy's own MachineApplicable suggestions verbatim (the P15 Unknown-receiver residue closed) (2026-09-14)
+
+The P13 row's named open followup ("the knowable route is oracle-fed"),
+executed the day after P15 left it as residue. The shape: our
+`unnecessary_map_or` proposer refuses type-UNKNOWN receivers standalone
+(E0599-unsafe — `is_some_and` on a `Result` is a compile error), but real
+clippy's suggestion at those spans is TYPE-AWARE and exact. In
+`--clippy-json` mode the diagnostic's own suggestion children now close
+that gap IN the healer's pipeline (verify gate, trajectory rows,
+provenance) instead of leaking to `cargo clippy --fix` one-offs.
+
+**Probe-first (`.raw/oracle_probe`, clippy 1.98 — deleted after):** the
+intake's "consume the suggestion verbatim" premise was HALF-wrong — the
+suggestion for `unnecessary_map_or` is NOT a single whole-call replacement.
+It is a TWO-PART suggestion inside ONE child: `map_or` → `is_some_and`
+(bytes 467–473) plus a DELETION of `false, ` (474–481, replacement `""`),
+with the `(` gap byte PRESERVED between them. Three facts that shaped the
+implementation: (1) an empty `""` replacement is a real part (a deletion)
+— only JSON `null` means "not an edit part"; (2) gap bytes between parts
+are kept unchanged BY CONSTRUCTION in rustc multipart suggestions, so a
+merge that copies gap text verbatim is semantics-preserving for every
+well-formed suggestion; (3) child-0 ("for further information") carries
+no spans — only children with replacement spans count.
+
+**The landing (3 pieces):**
+
+1. **`FeedSuggestion` capture** (`src/draft/clippy_feed.rs`) — the first
+   help child's replacement parts, sorted, when EVERY part is
+   `MachineApplicable`, in the primary file, byte-ordered. All-or-nothing
+   refusals: `MaybeIncorrect` grades, multi-CHILD suggestions (the
+   move/insert class — applying half a move is a corrupted file),
+   cross-file parts, overlapping parts. Feed dedup upgraded to
+   key-on-`(file, line, lint)` with a suggestion UPGRADE path (a repeat
+   occurrence upgrades a suggestion-less first row).
+2. **`oracle_edits` — the merge + the gates.** Parts merge into ONE
+   atomic edit (replacement = parts joined with the ORIGINAL gap text
+   preserved verbatim; `map_or(false, ` → `is_some_and(` byte-exact), so
+   the emitter can never partially apply a suggestion. Guards, in order:
+   lint must be in the fix lane's `lint_set` (the corpus-rule
+   precondition — the healer never becomes a generic `cargo clippy
+   --fix` re-run; gap lints stay the suggest lane's `[no corpus rule]`
+   signal); stale-offset/boundary refusal; oracle-vs-oracle overlap
+   (leftmost wins); and a WHOLE-FILE PARSE GATE — the oracle edits alone,
+   spliced into a copy, must leave the file parseable, all-or-nothing.
+   That gate caught its own author mid-landing: the first draft of the
+   zero-width-insertion test fixture inserted `#[inline] ` mid-expression
+   and the gate refused it — the fixture was wrong, not the code.
+3. **The bin wiring** (`src/bin/heal.rs`, pass 0 of the fixpoint loop) —
+   oracle edits join the pass-0 edit set after the proposer collection,
+   PROPOSER EDITS WIN on overlap (an oracle edit inside a proposer's
+   rewrite is stale by construction), review lines carry the
+   `oracle-anchored:` note, the run summary prints `N oracle edits
+   applied`, and drops surface LOUDLY (`oracle lane: dropped N
+   suggestion(s) … does the feed match the current tree state?`).
+   `lint_set` iteration moved to `for &lint in &lint_set` (borrow, not
+   move — the merge needs the set after the loop).
+
+**Live e2e (the probe crate, the real binary, `--fix --verify`):** three
+Unknown receivers — `items.iter().min().map_or(false, ..)` (`.min()` is
+an unlisted Option shape), `File::open(p).map_or(false, ..)` (Result via
+an unlisted bare call), `x.as_ref().map_or(false, ..)` (the documented
+kind-preserving divergence) — all three applied verbatim
+(`is_some_and`/`is_ok_and`/`is_some_and` — clippy's type-aware choice at
+each, which the parse-only proposer could never make), compile-gated (2
+cargo checks, 0 reverts), post-heal real clippy reports 0 findings. The
+STALE-FEED re-run (same feed against the healed file, offsets shifted):
+loud drop of all 3 + the file byte-IDENTICAL — the parse gate refused
+the misaligned splice, zero corruption. **The e2e also exposed a live
+asymmetry worth knowing:** the suggest lane's `[oracle] unnecessary_map_or
+NO CORPUS RULE` comes from the LEASED corpus (its epoch predates P15's
+corpus row) while the fix lane consumes from the compiled-in
+`FIXABLE_LINTS` — the suggest lane's rule book is retrieval truth, the
+fix lane's lint_set is fix truth, and for freshly-landed lints they can
+disagree until the lease refreshes.
+
+**Gates:** clippy_feed 18/18 (13 new); default lib 1441/1441 (unchanged —
+`draft` is latent-gated), latent 1589/1589, all-features 2332/2332,
+clippy clean; score-bench FLAT. Docs: `unnecessary_map_or.rs` divergence
+bullet flipped to CLOSED, `--clippy-json` help + AGENTS bullet extended,
+`.distill` intake row updated.
+
 ## P15 post-mining intake — `unnecessary_map_or` lands: the born-lint closure, the `receiver_kind` substrate extraction + the SAFE-LET extension, and the gen2/gen3 re-freeze (2026-09-14)
 
 The P13 row's named candidate followup, executed same-day: the healer's own
