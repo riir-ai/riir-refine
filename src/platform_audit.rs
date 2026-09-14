@@ -35,21 +35,39 @@
 //!   times are skipped as ambiguous rather than guessed (counted in the
 //!   footer). Adjudicate rows against the listed atoms, same as every
 //!   sibling audit (config-audit / orphan-report).
-//! * **Module-DECLARATION gates (`#[cfg] mod x;` in the parent) are
-//!   invisible** — the child file is scanned as its own root. A gate on
-//!   the USE side then under-approximates (misses); on the DECL side it
-//!   can suppress a flag. **File-level `#![cfg]` INNER attrs ARE folded**
-//!   (P24 (a), 2026-09-15): the file's atoms seed the root context for
-//!   both decls and uses — the first workspace sweep measured 5 FP rows
-//!   (decls in `#![cfg(all(macos, aarch64))]` files read ungated) and 1
-//!   rustc-proven miss (file-gated uses read UNGATED) from this one
-//!   blindness, in both directions. The parent-side `mod x;` row remains
-//!   open (P24 (b)).
+//! * **Module-DECLARATION gates (`#[cfg] mod x;` in the parent) ARE
+//!   folded** (P24 (b), 2026-09-15): each file's unique incoming `mod
+//!   x;` row — resolved by the standard rustc path rules (root files and
+//!   `mod.rs` resolve children in their own directory; other files in a
+//!   directory named after their stem; inline `mod a { mod b; }` nests
+//!   `<base>/a/`) — unions its guaranteed atoms (plus the parent's own,
+//!   transitively) into the child's root context, on both the decl and
+//!   the use side. The first workspace sweep measured 6 FP rows from the
+//!   pre-fold blindness (seal-view `web_link`/`web_mirror`, mmorpg
+//!   `wasm.rs` decls reading ungated). Skipped — the no-fold direction:
+//!   rows carrying `#[path]`, children absent from the scanned set,
+//!   fn-local `mod x;` statements, and files whose incoming rows disagree
+//!   (the lib.rs + main.rs ambiguity). **File-level `#![cfg]` INNER
+//!   attrs are folded too** (P24 (a)): the file's atoms seed the root
+//!   context for both decls and uses — the first workspace sweep
+//!   measured 5 FP rows (decls in `#![cfg(all(macos, aarch64))]` files
+//!   read ungated) and 1 rustc-proven miss (file-gated uses read
+//!   UNGATED) from that one blindness, in both directions.
 //! * **Macro token streams are not descended** (the P13 lesson) — a use
-//!   inside `assert!(..)`, `println!` or any macro body is invisible.
-//!   The dangerous direction: a macro-only UNGATED use breaks the
-//!   intersection silently and suppresses a flag (a miss, not a false
-//!   positive). A macro-only GATED use simply reads as fewer uses.
+//!   inside an arbitrary macro body is invisible. The dangerous
+//!   direction: a macro-only UNGATED use breaks the intersection silently
+//!   and suppresses a flag (a miss, not a false positive). A macro-only
+//!   GATED use simply reads as fewer uses. **Two families ARE arg-scanned
+//!   at the token level — never expanded** (P24 (d), 2026-09-15): the
+//!   format family (`format!`/`println!`/`write!`/`panic!`/tracing/…)
+//!   counts inline `{ident}` captures in its string literals, and both it
+//!   and the `assert*`/`matches` family count ident tokens in their
+//!   EXPRESSION args (args of these macros are ordinary Rust — the v3
+//!   sweep's chaind FPs were native test uses hidden inside `assert_eq!`).
+//!   Unknown macros are not scanned (a braced word in a shader/yaml macro
+//!   is data, not a capture — the miss direction). Overcounting is the
+//!   safe direction (a phantom use can only suppress a flag, never raise
+//!   one).
 //! * **Nested fn-local items** (a const inside a fn body) are not tracked
 //!   as declarations; their uses attribute to the outer item's context —
 //!   statement-level `#[cfg]` inside bodies under-approximates (misses).
@@ -71,9 +89,9 @@
 //!   a use for platform purposes) but mark the row `test-only` when every
 //!   use is test context — the item is then prod-dead outside the atoms.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -132,6 +150,10 @@ pub struct PlatformAuditReport {
     /// rustc's own `dead_code` class on the platform it compiles; pub
     /// zero-use rows are config-audit / orphan-report territory.
     pub no_use_names: usize,
+    /// Files whose root context gained atoms (or test context) from a
+    /// parent-side `#[cfg] mod x;` row (P24 (b)) — the evidence line for
+    /// the fold.
+    pub files_modrow_gated: usize,
     /// Refusal reason (the frontier-report law): empty scan, never a
     /// confident green zero.
     pub blind: Option<String>,
@@ -155,6 +177,30 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
         return report;
     }
 
+    // Phase 1 — parse everything and KEEP the trees: the module lattice
+    // (below) needs every parent file available before any child can be
+    // seeded, so the one-file-at-a-time drop of v1 is gone (memory note:
+    // the walk prune of v2 is what keeps the pathological scans out).
+    let mut parsed_files: Vec<(String, syn::File)> = Vec::with_capacity(sources.len());
+    for (file, src) in sources {
+        match syn::parse_file(src) {
+            Ok(parsed) => parsed_files.push((file.clone(), parsed)),
+            Err(_) => report.files_unparsed += 1,
+        }
+    }
+    if report.files_unparsed == sources.len() {
+        report.blind = Some("every scanned file failed to parse".into());
+        return report;
+    }
+
+    // Phase 2 — the parent-side `#[cfg] mod x;` lattice (P24 (b)): each
+    // file's unique incoming mod row (plus the parent's own inherited
+    // gates, transitively) folds into its root context, exactly like the
+    // file-level `#![cfg]` fold of v2 — both the decl side and the use
+    // side, by construction.
+    let lattice = ModRowLattice::build(&parsed_files);
+    report.files_modrow_gated = lattice.folded_count();
+
     // name → decl records; name → use evidence, split by REFERENCE KIND:
     // code mentions (path occurrences) vs import references. A `use a::C`
     // resolves on every platform the IMPORT compiles, so the import's own
@@ -166,24 +212,18 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
     let mut code_uses: BTreeMap<String, UseEvidence> = BTreeMap::new();
     let mut src_uses: BTreeMap<String, UseEvidence> = BTreeMap::new();
 
-    for (file, src) in sources {
-        let Ok(parsed) = syn::parse_file(src) else {
-            report.files_unparsed += 1;
-            continue;
-        };
+    for (file, parsed) in &parsed_files {
         // File-level `#![cfg]` INNER attrs gate the whole file (the
-        // ane_prefill bank/exec/exec_zc/headroom shape — the P24 (a) fold).
-        // Seeding the root context fixes BOTH directions at once: decls
-        // recorded under it inherit the gate into their atoms (a gated
-        // file's items are not platform-dead — they do not even exist
-        // elsewhere), and uses inside it carry the gate into their evidence
-        // (a file-gated use is NOT an ungated use — the note_ane_dispatch
-        // miss). `#![cfg(test)]` at file level is test context, same as an
-        // item-level one.
-        let ctx = Ctx {
-            atoms: guaranteed_from_attrs(&parsed.attrs),
-            in_test: attrs_cfg_test(&parsed.attrs),
-        };
+        // ane_prefill bank/exec/exec_zc/headroom shape — the P24 (a)
+        // fold), UNIONED with the inherited mod-row gates from the
+        // lattice (P24 (b)). Seeding the root context fixes BOTH
+        // directions at once: decls recorded under it inherit the gate
+        // into their atoms (a gated file's items are not platform-dead —
+        // they do not even exist elsewhere), and uses inside it carry
+        // the gate into their evidence (a file-gated use is NOT an
+        // ungated use — the note_ane_dispatch miss). `#![cfg(test)]` at
+        // file level is test context, same as an item-level one.
+        let ctx = lattice.effective_ctx(file);
         walk_items(
             &parsed.items,
             &ctx,
@@ -192,11 +232,6 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
             &mut src_uses,
             file,
         );
-    }
-
-    if report.files_unparsed == sources.len() {
-        report.blind = Some("every scanned file failed to parse".into());
-        return report;
     }
 
     report.decls_tracked = decls.values().map(Vec::len).sum();
@@ -283,6 +318,269 @@ struct Ctx {
     in_test: bool,
 }
 
+/// One external `mod name;` row as indexed from its declaring file: the
+/// row's own guaranteed atoms (the declaring file's root `#![cfg]` + any
+/// inline-mod nesting + the row's own cfg, all unioned — the LOCAL
+/// guarantee; the parent's inherited gates fold in at resolution time)
+/// and the directory the child resolves against.
+struct ModRowIndexRow {
+    dir: PathBuf,
+    name: String,
+    atoms: AtomSet,
+    in_test: bool,
+    has_path_attr: bool,
+}
+
+/// The incoming edge record: which parent file declares this child, and
+/// the row's local guarantee.
+struct IncomingRow {
+    parent: String,
+    atoms: AtomSet,
+    in_test: bool,
+}
+
+/// The parent-side module-declaration gate lattice (P24 (b), 2026-09-15):
+/// which file is declared by which `mod x;` row, resolved by the standard
+/// rustc path rules, and the effective root context each file walks under
+/// (own `#![cfg]` ∪ the unique incoming row's atoms ∪ the parent's own
+/// effective atoms, transitively).
+///
+/// Resolution rules (rustc 2018):
+/// * root files (`lib.rs` / `main.rs` / `build.rs`, and direct `.rs`
+///   children of `bin` / `tests` / `examples` / `benches` dirs) resolve
+///   children in their own directory;
+/// * `mod.rs` files resolve children in their own directory;
+/// * every other file resolves children in a directory named after its
+///   stem;
+/// * an inline `mod a { mod b; }` nests: `b` resolves against
+///   `<base>/a/`.
+///
+/// Divergences (all in the no-fold / miss direction — never a wrong
+/// fold): rows carrying `#[path]` are skipped (the child lives
+/// elsewhere); children not present in the scanned set are skipped;
+/// children with disagreeing incoming rows are skipped (the ambiguity
+/// law — a crate carries both `lib.rs` and `main.rs` roots and both may
+/// declare the same name); `mod x;` statements inside fn bodies are not
+/// indexed. A wrong root classification can only MIS-resolve a child
+/// into the no-fold direction (the candidate paths then match nothing).
+struct ModRowLattice {
+    effective: HashMap<String, (AtomSet, bool)>,
+    folded: HashSet<String>,
+}
+
+impl ModRowLattice {
+    fn build(parsed_files: &[(String, syn::File)]) -> Self {
+        // Own root context per file (the v2 `#![cfg]` fold's input).
+        let mut own: HashMap<String, (AtomSet, bool)> = HashMap::with_capacity(parsed_files.len());
+        for (file, pf) in parsed_files {
+            own.insert(
+                file.clone(),
+                (
+                    guaranteed_from_attrs(&pf.attrs),
+                    attrs_cfg_test(&pf.attrs),
+                ),
+            );
+        }
+
+        // Index external mod rows and resolve them to child files in the
+        // scanned set.
+        let key_set: HashSet<&str> = parsed_files.iter().map(|(f, _)| f.as_str()).collect();
+        let mut incoming: HashMap<String, Vec<IncomingRow>> = HashMap::new();
+        for (file, pf) in parsed_files {
+            let base = resolution_base(file);
+            let (root_atoms, root_test) = own.get(file).cloned().unwrap_or_default();
+            let mut rows = Vec::new();
+            index_mod_items(&pf.items, &root_atoms, root_test, &base, &mut rows);
+            for row in rows {
+                // `#[path]` rows: the child lives at a nonstandard path —
+                // skipped (the no-fold direction).
+                if row.has_path_attr {
+                    continue;
+                }
+                let candidates = [
+                    row.dir.join(format!("{}.rs", row.name)),
+                    row.dir.join(&row.name).join("mod.rs"),
+                ];
+                for candidate in candidates {
+                    let key = candidate.display().to_string();
+                    if key_set.contains(key.as_str()) {
+                        incoming.entry(key).or_default().push(IncomingRow {
+                            parent: file.clone(),
+                            atoms: row.atoms.clone(),
+                            in_test: row.in_test,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Effective root ctx per file: own ∪ (unique consistent incoming
+        // row ∪ parent effective, transitively). Memoized recursion; the
+        // visiting set is a defensive cycle guard (module edges strictly
+        // deepen in valid Rust, so it never fires on real trees).
+        let mut memo: HashMap<String, (AtomSet, bool)> = HashMap::new();
+        let mut visiting: HashSet<String> = HashSet::new();
+        let mut folded: HashSet<String> = HashSet::new();
+        for (file, _) in parsed_files {
+            effective_root(
+                file,
+                &own,
+                &incoming,
+                &mut memo,
+                &mut visiting,
+                &mut folded,
+            );
+        }
+        Self { effective: memo, folded }
+    }
+
+    /// The context a file's items walk under: its effective root ctx
+    /// (own `#![cfg]` ∪ inherited mod-row gates).
+    fn effective_ctx(&self, file: &str) -> Ctx {
+        let (atoms, in_test) = self
+            .effective
+            .get(file)
+            .cloned()
+            .unwrap_or_default();
+        Ctx { atoms, in_test }
+    }
+
+    fn folded_count(&self) -> usize {
+        self.folded.len()
+    }
+}
+
+/// The recursive half of the lattice: a file's effective root context.
+fn effective_root(
+    file: &str,
+    own: &HashMap<String, (AtomSet, bool)>,
+    incoming: &HashMap<String, Vec<IncomingRow>>,
+    memo: &mut HashMap<String, (AtomSet, bool)>,
+    visiting: &mut HashSet<String>,
+    folded: &mut HashSet<String>,
+) -> (AtomSet, bool) {
+    if let Some(hit) = memo.get(file) {
+        return hit.clone();
+    }
+    let (mut atoms, mut in_test) = own.get(file).cloned().unwrap_or_default();
+    if visiting.insert(file.to_string()) {
+        if let Some(rows) = incoming.get(file) {
+            // Full contribution per row: the parent's own effective atoms
+            // unioned with the row's local guarantee (conjunction of
+            // gates — the child compiles only when BOTH hold).
+            let contributions: Vec<(AtomSet, bool)> = rows
+                .iter()
+                .map(|r| {
+                    let (pa, pt) = effective_root(
+                        &r.parent,
+                        own,
+                        incoming,
+                        memo,
+                        visiting,
+                        folded,
+                    );
+                    let mut a = pa;
+                    a.extend(r.atoms.iter().cloned());
+                    (a, pt || r.in_test)
+                })
+                .collect();
+            // Disagreeing rows = ambiguous parenthood (the lib.rs +
+            // main.rs shape) — skip the fold, keep own only.
+            if let Some(first) = contributions.first() {
+                if contributions.iter().all(|c| c == first) {
+                    if !first.0.is_empty() || first.1 {
+                        folded.insert(file.to_string());
+                    }
+                    atoms.extend(first.0.iter().cloned());
+                    in_test |= first.1;
+                }
+            }
+        }
+        visiting.remove(file);
+        memo.insert(file.to_string(), (atoms.clone(), in_test));
+    }
+    (atoms, in_test)
+}
+
+/// Index a file's external `mod x;` rows with their full nesting context.
+/// `dir` carries the resolution base through inline mod nesting (rustc's
+/// rule: an inline `mod a { mod b; }` resolves b against `<base>/a/`).
+/// Only module-level mods are indexed — `mod x;` inside a fn body is not
+/// walked (the no-fold direction).
+fn index_mod_items(
+    items: &[syn::Item],
+    atoms: &AtomSet,
+    in_test: bool,
+    dir: &Path,
+    out: &mut Vec<ModRowIndexRow>,
+) {
+    for item in items {
+        let item_atoms = guaranteed_from_attrs(item_attrs(item));
+        let mut row_atoms = atoms.clone();
+        row_atoms.extend(item_atoms);
+        let row_test =
+            in_test || attrs_cfg_test(item_attrs(item)) || attrs_test_fn(item_attrs(item));
+        if let syn::Item::Mod(m) = item {
+            match &m.content {
+                Some((_, inner)) => {
+                    let sub = dir.join(m.ident.to_string());
+                    index_mod_items(inner, &row_atoms, row_test, &sub, out);
+                }
+                None => out.push(ModRowIndexRow {
+                    dir: dir.to_path_buf(),
+                    name: m.ident.to_string(),
+                    atoms: row_atoms,
+                    in_test: row_test,
+                    has_path_attr: has_path_attr(&m.attrs),
+                }),
+            }
+        }
+    }
+}
+
+/// Does this attr list carry `#[path = "..."]` (or the bare path form)?
+fn has_path_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|a| match &a.meta {
+        syn::Meta::NameValue(nv) => last_segment(&nv.path).as_deref() == Some("path"),
+        syn::Meta::Path(p) => last_segment(p).as_deref() == Some("path"),
+        syn::Meta::List(_) => false,
+    })
+}
+
+/// Is this file its own crate root? Approximates cargo's autodiscovery:
+/// `lib.rs` / `main.rs` / `build.rs` anywhere, plus the direct `.rs`
+/// children of `bin` / `tests` / `examples` / `benches` directories. A
+/// wrong guess here can only push a child into the no-fold direction
+/// (its candidate paths then match nothing in the scanned set).
+fn is_root_file(file: &str) -> bool {
+    let p = Path::new(file);
+    match p.file_name().and_then(|n| n.to_str()) {
+        Some("lib.rs" | "main.rs" | "build.rs") => true,
+        _ => {
+            matches!(
+                p.parent()
+                    .and_then(|d| d.file_name())
+                    .and_then(|n| n.to_str()),
+                Some("bin" | "tests" | "examples" | "benches")
+            ) && p.extension().is_some_and(|e| e == "rs")
+        }
+    }
+}
+
+/// The directory this file's external `mod name;` rows resolve against.
+fn resolution_base(file: &str) -> PathBuf {
+    let p = Path::new(file);
+    let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if fname == "mod.rs" || is_root_file(file) {
+        p.parent().map(Path::to_path_buf).unwrap_or_default()
+    } else {
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        p.parent()
+            .map(|d| d.join(stem))
+            .unwrap_or_default()
+    }
+}
+
 /// Recursively walk module-level items: record tracked declarations,
 /// recurse inline mods, and collect path uses from everything else.
 fn walk_items(
@@ -306,8 +604,9 @@ fn walk_items(
                 if let Some((_, inner)) = &m.content {
                     walk_items(inner, &ctx2, decls, code_uses, src_uses, file);
                 }
-                // External `mod x;` — the child file is scanned as its own
-                // root; its gate is invisible there (documented).
+                // External `mod x;` — the child file's inherited gate is
+                // resolved by the ModRowLattice (P24 (b)) and folded into
+                // its root ctx when that file is walked.
             }
             syn::Item::Const(c) => {
                 record_decl(
@@ -470,6 +769,30 @@ fn collect_uses(
     }
 }
 
+/// Format-family macros whose string literals carry inline `{name}`
+/// captures (P24 (d)): `println!("{X:?}")` is an ungated use the syn
+/// path walk cannot see. A cheap TOKEN scan of the macro's string
+/// literals — never expansion. Unknown macros are not scanned (a
+/// braced word in a shader/yaml macro is data, not a capture — the miss
+/// direction).
+const FORMAT_MACROS: [&str; 21] = [
+    "format", "format_args", "println", "eprintln", "print", "eprint", "write", "writeln",
+    "panic", "assert", "assert_eq", "assert_ne", "todo", "unreachable", "info", "warn",
+    "error", "debug", "trace", "bail", "ensure",
+];
+
+/// Expression-argument macros whose ARGS are ordinary Rust expressions —
+/// the `assert*` family (the v3-sweep chaind FPs: the native test uses of
+/// `stream_type::SIGNALING` / `BrowserNodeState` sit inside `assert_eq!`
+/// args and were invisible). Ident tokens in these args are real path/call
+/// references; path PREFIXES (`a::` in `a::b`) and macro names (`foo!`)
+/// are skipped so a multi-segment path counts once, on its last segment —
+/// the same rule as `visit_path`.
+const EXPR_ARG_MACROS: [&str; 7] = [
+    "assert", "assert_eq", "assert_ne", "debug_assert", "debug_assert_eq", "debug_assert_ne",
+    "matches",
+];
+
 /// Path-tally visitor: counts occurrences per last path segment.
 struct UseVisitor<'a> {
     found: BTreeMap<String, usize>,
@@ -486,6 +809,116 @@ impl<'ast> Visit<'ast> for UseVisitor<'_> {
         }
         syn::visit::visit_path(self, path);
     }
+
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if let Some(name) = last_segment(&mac.path) {
+            let format_family = FORMAT_MACROS.contains(&name.as_str());
+            let expr_family = EXPR_ARG_MACROS.contains(&name.as_str());
+            if format_family || expr_family {
+                let mut captured = BTreeMap::new();
+                if format_family {
+                    scan_inline_captures(&mac.tokens, &mut captured);
+                }
+                // Both families take expression args (`println!("{}", X)` —
+                // X is a real use too).
+                scan_expr_idents(&mac.tokens, &mut captured);
+                for (name, n) in captured {
+                    if !self.skip.contains(&name) {
+                        *self.found.entry(name).or_insert(0) += n;
+                    }
+                }
+            }
+        }
+        syn::visit::visit_macro(self, mac);
+    }
+}
+
+/// Walk a format-family macro's token tree and count inline `{ident}`
+/// captures inside its string literals (P24 (d)). Doubled `{{` is a
+/// literal brace, not a capture; `{0}`/`{}` positional forms carry no
+/// identifier. Overcounting is the documented safe direction (a phantom
+/// use can only suppress a flag, never raise one).
+fn scan_inline_captures(tokens: &proc_macro2::TokenStream, found: &mut BTreeMap<String, usize>) {
+    use proc_macro2::TokenTree;
+    for t in tokens.clone() {
+        match t {
+            TokenTree::Literal(lit) => {
+                let s = lit.to_string();
+                if s.starts_with('"') || s.starts_with('r') || s.starts_with('b') {
+                    scan_capture_str(&s, found);
+                }
+            }
+            TokenTree::Group(g) => scan_inline_captures(&g.stream(), found),
+            TokenTree::Punct(_) | TokenTree::Ident(_) => {}
+        }
+    }
+}
+
+/// Walk one rendered string literal for `{ident` capture openings.
+fn scan_capture_str(s: &str, found: &mut BTreeMap<String, usize>) {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        // Doubled brace — a literal `{`, not a capture.
+        if bytes.get(i + 1) == Some(&b'{') {
+            i += 2;
+            continue;
+        }
+        let start = i + 1;
+        let mut j = start;
+        while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+            j += 1;
+        }
+        if j > start {
+            let ident = &s[start..j];
+            // Positional `{0}` args and a bare `{_}` are not captures.
+            if !ident.as_bytes()[0].is_ascii_digit() && ident != "_" {
+                *found.entry(ident.to_string()).or_insert(0) += 1;
+            }
+        }
+        i = j.max(i + 1);
+    }
+}
+
+/// Tally ident tokens in an expression-argument macro's args: real path
+/// last-segments and call names. A `::`-followed ident is a path prefix
+/// (the segment after the last `::` counts instead); a `!`-followed ident
+/// is a macro name. Overcounting is the documented safe direction.
+fn scan_expr_idents(tokens: &proc_macro2::TokenStream, found: &mut BTreeMap<String, usize>) {
+    use proc_macro2::TokenTree;
+    let flat: Vec<TokenTree> = flatten_tokens(tokens);
+    let mut i = 0;
+    while i < flat.len() {
+        if let TokenTree::Ident(id) = &flat[i] {
+            let is_path_prefix = matches!(flat.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':');
+            let is_macro_name = matches!(flat.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
+            let s = id.to_string();
+            if !is_path_prefix && !is_macro_name {
+                *found.entry(s).or_insert(0) += 1;
+            }
+        }
+        i += 1;
+    }
+}
+
+/// Flatten a token tree into a linear token vec (macro args nest in
+/// groups; expression idents live at every level).
+fn flatten_tokens(tokens: &proc_macro2::TokenStream) -> Vec<proc_macro2::TokenTree> {
+    use proc_macro2::TokenTree;
+    let mut out = Vec::new();
+    for t in tokens.clone() {
+        match t {
+            TokenTree::Group(g) => {
+                out.extend(flatten_tokens(&g.stream()));
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Guaranteed atoms from an item's `#[cfg(...)]` attributes (multiple
@@ -607,8 +1040,18 @@ impl PlatformAuditReport {
         );
         let _ = writeln!(
             out,
-            "scanned {} file(s) ({} unparsed), {} tracked decl(s) (const/static/fn/use)",
-            self.files_scanned, self.files_unparsed, self.decls_tracked
+            "scanned {} file(s) ({} unparsed), {} tracked decl(s) (const/static/fn/use){}",
+            self.files_scanned,
+            self.files_unparsed,
+            self.decls_tracked,
+            if self.files_modrow_gated > 0 {
+                format!(
+                    ", {} file(s) under parent mod-row gates",
+                    self.files_modrow_gated
+                )
+            } else {
+                String::new()
+            }
         );
         if let Some(reason) = &self.blind {
             let _ = writeln!(out, "\n⛔ REFUSING: {reason} — never a confident green zero.");
@@ -668,15 +1111,21 @@ impl PlatformAuditReport {
         let _ = writeln!(
             out,
             "divergences: uses are name-global last-segment matches — adjudicate \
-             rows against the listed atoms; file-level `#![cfg]` inner attrs folded \
-             into the root context (P24 (a)) but parent-side `#[cfg] mod x;` gates \
-             remain invisible (both sides under-approximate); macro token streams not \
+             rows against the listed atoms; file-level `#![cfg]` inner attrs AND \
+             parent-side `#[cfg] mod x;` declaration gates are folded into the root \
+             context (P24 (a)+(b)) — `#[path]`-carrying mod rows, fn-local `mod x;` \
+             statements, and files with disagreeing incoming rows stay unfolded (the \
+             no-fold direction); macro token streams not \
              descended (a macro-only ungated use suppresses a flag — a miss, not \
-             an FP; inline `{{name}}` format captures are that shape too); fn-local items walk under the outer context; not() proves \
+             an FP) but the format + assert families ARE arg-scanned — inline \
+             `{{name}}` captures in format strings AND ident tokens in expression \
+             args (P24 (d); unknown macros still miss); fn-local items walk under the outer context; not() proves \
              no platform; any() arms intersect; feature atoms dropped (the \
              cfg-audit family owns that class); types (struct/enum/trait) not \
-             tracked; [pub] rows may serve crate-external consumers the scan \
-             cannot see — read the downstream hint."
+             tracked, so a `use` row on a trait name (anyhow's `Context`) may be \
+             method-consumed and same-named types elsewhere can masquerade — \
+             adjudicate `use` rows before acting; [pub] rows may serve \
+             crate-external consumers the scan cannot see — read the downstream hint."
         );
         out
     }
@@ -1151,5 +1600,365 @@ pub fn arm() { super::note_ane_dispatch(); }
             .find(|f| f.name == "dump")
             .expect("row present");
         assert!(row.test_only, "#![cfg(test)] file marks its uses test-only");
+    }
+
+    /// P24 (b), DECL side (the seal-view `web_link` / mmorpg `wasm.rs`
+    /// FP class): a file declared by a parent's gated `mod x;` row
+    /// inherits the row's atoms — its decls are gated, not platform-dead.
+    #[test]
+    fn parent_mod_row_gate_shelters_child_decls() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                r#"#[cfg(all(target_arch = "wasm32", feature = "mesh_visuals"))]
+pub mod web_link;
+"#
+                    .to_string(),
+            ),
+            (
+                "src/web_link.rs".to_string(),
+                "pub fn wire_connect() -> u8 { 7 }".to_string(),
+            ),
+            (
+                "src/main.rs".to_string(),
+                "#[cfg(target_arch = \"wasm32\")] fn boot() { crate::web_link::wire_connect(); }"
+                    .to_string(),
+            ),
+        ]);
+        assert!(
+            report.findings.is_empty(),
+            "the parent's mod-row gate covers the child file's decls: {:?}",
+            report.findings
+        );
+        assert_eq!(
+            report.files_modrow_gated, 1,
+            "exactly web_link.rs gained atoms from its incoming row"
+        );
+    }
+
+    /// Stacked cfg attrs on one mod row (the mmorpg shape:
+    /// `#[cfg(wasm32)]` + `#[cfg(feature)]` on separate lines) fold the
+    /// same way — multiple cfg attrs union.
+    #[test]
+    fn stacked_cfg_attrs_on_mod_row_fold() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(target_arch = \"wasm32\")]
+#[cfg(feature = \"bevy_backend\")]
+pub mod wasm;"
+                    .to_string(),
+            ),
+            (
+                "src/wasm.rs".to_string(),
+                "pub fn run_wasm() -> u8 { 3 }".to_string(),
+            ),
+            (
+                "src/main.rs".to_string(),
+                "#[cfg(target_arch = \"wasm32\")] fn b() { crate::wasm::run_wasm(); }"
+                    .to_string(),
+            ),
+        ]);
+        assert!(
+            report.findings.is_empty(),
+            "stacked cfg attrs on the mod row gate the child file: {:?}",
+            report.findings
+        );
+    }
+
+    /// P24 (b), USE side (the reverse direction): uses inside a
+    /// mod-row-gated file are NOT ungated — an ungated decl elsewhere
+    /// whose every use lives in the gated child must flag with the row's
+    /// atoms.
+    #[test]
+    fn parent_mod_row_gate_on_use_side_flags_cross_file_row() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(target_os = \"macos\")] pub mod ane;".to_string(),
+            ),
+            (
+                "src/ane.rs".to_string(),
+                "pub fn arm() -> u8 { crate::POLL }".to_string(),
+            ),
+            (
+                "src/other.rs".to_string(),
+                "pub const POLL: u8 = 1;".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "POLL"),
+            one_atom("target_os", "macos"),
+            "a use inside a mod-row-gated file carries the row's atoms"
+        );
+    }
+
+    /// Transitivity: a chain of mod rows accumulates gates down the tree
+    /// (grandparent's gate ∪ parent's gate), including the non-root
+    /// `src/a.rs` → `src/a/b.rs` resolution.
+    #[test]
+    fn mod_row_gates_accumulate_down_the_chain() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(unix)] pub mod a;".to_string(),
+            ),
+            (
+                "src/a.rs".to_string(),
+                "#[cfg(target_arch = \"aarch64\")] pub mod b;".to_string(),
+            ),
+            (
+                "src/a/b.rs".to_string(),
+                "pub fn deep() -> u8 { crate::SEED }".to_string(),
+            ),
+            (
+                "src/other.rs".to_string(),
+                "pub const SEED: u8 = 2;".to_string(),
+            ),
+        ]);
+        let mut expect = one_atom("target_family", "unix");
+        expect.insert(Atom {
+            key: "target_arch".to_string(),
+            value: "aarch64".to_string(),
+        });
+        assert_eq!(
+            missing_of(&report, "SEED"),
+            expect,
+            "the child inherits BOTH the grandparent and parent mod-row gates"
+        );
+    }
+
+    /// The `mod.rs` shape: `src/util/mod.rs` declaring `mod win;` resolves
+    /// to `src/util/win.rs` (children in the mod.rs's own directory).
+    #[test]
+    fn mod_rs_parent_resolves_sibling_dir() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "pub mod util;".to_string(),
+            ),
+            (
+                "src/util/mod.rs".to_string(),
+                "#[cfg(windows)] pub mod win;".to_string(),
+            ),
+            (
+                "src/util/win.rs".to_string(),
+                "pub fn w() -> u8 { crate::K }".to_string(),
+            ),
+            (
+                "src/other.rs".to_string(),
+                "pub const K: u8 = 3;".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "K"),
+            one_atom("target_family", "windows"),
+            "`#[cfg(windows)]` on the mod row folds through the mod.rs shape"
+        );
+    }
+
+    /// Inline-mod nesting in the parent: `mod shell { pub mod inner; }`
+    /// resolves the child to `src/shell/inner.rs`, carrying the inline
+    /// mod's cfg into the bargain.
+    #[test]
+    fn inline_mod_nesting_resolves_and_carries_cfg() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(unix)] mod shell { pub mod inner; }".to_string(),
+            ),
+            (
+                "src/shell/inner.rs".to_string(),
+                "pub fn i() -> u8 { crate::K2 }".to_string(),
+            ),
+            (
+                "src/other.rs".to_string(),
+                "pub const K2: u8 = 5;".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "K2"),
+            one_atom("target_family", "unix"),
+            "the inline mod's cfg AND its directory nesting both resolve"
+        );
+    }
+
+    /// Ambiguity law: disagreeing incoming rows (the lib.rs + main.rs
+    /// shape — a crate carries both roots, both may declare the same
+    /// module name) skip the fold; the conservative direction.
+    #[test]
+    fn disagreeing_incoming_rows_skip_the_fold() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(unix)] pub mod dup;".to_string(),
+            ),
+            (
+                "src/main.rs".to_string(),
+                "#[cfg(windows)] pub mod dup;".to_string(),
+            ),
+            ("src/dup.rs".to_string(), "pub fn d() -> u8 { 1 }".to_string()),
+            (
+                "src/user.rs".to_string(),
+                "#[cfg(unix)] fn u() { crate::dup::d(); }".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "d"),
+            one_atom("target_family", "unix"),
+            "ambiguous parenthood leaves the decl ungated — still flaggable"
+        );
+        assert_eq!(
+            report.files_modrow_gated, 0,
+            "the disagreeing edge set folds nothing"
+        );
+    }
+
+    /// `#[path]`-carrying rows are skipped — the child lives at a
+    /// nonstandard path this fold does not resolve (no-fold direction).
+    #[test]
+    fn path_attr_rows_are_skipped() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(unix)] #[path = \"elsewhere.rs\"] pub mod gone;".to_string(),
+            ),
+            ("src/gone.rs".to_string(), "pub fn g() -> u8 { 1 }".to_string()),
+            (
+                "src/user.rs".to_string(),
+                "#[cfg(unix)] fn u() { crate::gone::g(); }".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "g"),
+            one_atom("target_family", "unix"),
+            "a #[path] row leaves the standard-path file unfolded"
+        );
+    }
+
+    /// The test-flag leg: `all(test, arch)` on the mod row marks the
+    /// child's uses test-only AND folds the platform atom.
+    #[test]
+    fn mod_row_test_gate_marks_test_only() {
+        let report = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                "#[cfg(all(test, target_arch = \"aarch64\"))] pub mod foo;".to_string(),
+            ),
+            (
+                "src/foo.rs".to_string(),
+                "pub fn helper() -> u8 { crate::BASE }".to_string(),
+            ),
+            (
+                "src/other.rs".to_string(),
+                "pub const BASE: u8 = 4;".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "BASE"),
+            one_atom("target_arch", "aarch64"),
+            "the mod row's platform atom folds into the use context"
+        );
+        let row = report
+            .findings
+            .iter()
+            .find(|f| f.name == "BASE")
+            .expect("row present");
+        assert!(row.test_only, "#[cfg(test)] on the mod row marks the child's uses test-only");
+    }
+
+    /// The bin-root shape: `src/bin/tool.rs` is its own crate root (a
+    /// direct `.rs` child of a `bin` dir), so its children resolve in
+    /// `src/bin/` — not `src/bin/tool/`.
+    #[test]
+    fn bin_root_children_resolve_in_bin_dir() {
+        let report = audit_sources(&[
+            (
+                "src/bin/tool.rs".to_string(),
+                "#[cfg(unix)] pub mod util;".to_string(),
+            ),
+            (
+                "src/bin/util.rs".to_string(),
+                "pub fn u2() -> u8 { 9 }".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            report.files_modrow_gated, 1,
+            "the bin root's mod row folds into src/bin/util.rs"
+        );
+    }
+
+    /// P24 (d) (the ane_npc_goat SWEEP_COUNTS specimen): the only
+    /// ungated use is an inline `{X:?}` capture inside a format-family
+    /// macro — counted, so the gated uses cannot condemn the decl alone.
+    #[test]
+    fn inline_format_capture_counts_as_ungated_use() {
+        let report = one(
+            r#"
+const SWEEP_COUNTS: [usize; 3] = [10, 100, 1000];
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn sweep() -> usize { SWEEP_COUNTS[0] }
+
+fn main() {
+    println!("Sweep sizes: {SWEEP_COUNTS:?}");
+}
+"#,
+        );
+        assert!(
+            report.findings.is_empty(),
+            "the inline capture is an ungated use: {:?}",
+            report.findings
+        );
+    }
+
+    /// P24 (d) arg-scan leg (the chaind FPs): a native test use inside
+    /// `assert_eq!` args is a real use — it must break an all-wasm32
+    /// intersection, not hide behind the macro.
+    #[test]
+    fn assert_family_args_count_as_uses() {
+        let report = one(
+            r#"
+const SIGNALING: u8 = 0x20;
+
+#[cfg(target_arch = "wasm32")]
+fn wasm_arm() -> u8 { SIGNALING }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn constants() { assert_eq!(super::SIGNALING, 0x20); }
+}
+"#,
+        );
+        assert!(
+            report.findings.is_empty(),
+            "the assert_eq! arg use breaks the all-wasm32 intersection: {:?}",
+            report.findings
+        );
+    }
+
+    /// P24 (d) negative controls, same shape as the specimen but with
+    /// NON-capture braces: doubled `{{X}}` (literal braces), positional
+    /// `{0}`, and a braced word in a NON-format macro — none of them
+    /// count, so the row still flags.
+    #[test]
+    fn non_capture_braces_do_not_count() {
+        let base = r#"
+const X: usize = 1;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn arm() -> usize { X }
+"#;
+        for (label, tail) in [
+            ("doubled brace", "fn m() { println!(\"{{X}} literal\"); }"),
+            ("positional", "fn m() { println!(\"{0}\", 7); }"),
+            ("non-format macro", "fn m() { shader!(\"{X} is data\"); }"),
+        ] {
+            let report = one(&format!("{base}{tail}"));
+            assert!(
+                !missing_of(&report, "X").is_empty(),
+                "{label}: no capture counted — the row must still flag"
+            );
+        }
     }
 }

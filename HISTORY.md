@@ -6663,3 +6663,81 @@ its own source clean. Gates: 23 fixtures (3 new), lib 1485/1485, clippy
 (the 6 seal/mmorpg FP rows — needs module-path resolution) and **(d)**
 inline `{name}` format captures (SWEEP_COUNTS still flagged in riir-ai,
 now the workspace's only standing row of that class).
+
+### v3, same day — P24 (b)+(d) consumed (the mod-row lattice + the macro arg scan) — P24 COMPLETE
+
+The last two intake items landed together; **P24 is now fully consumed.**
+
+**(b) The `ModRowLattice`**: every external `mod x;` row is indexed with
+its full nesting context (the declaring file's root `#![cfg]` ∪ inline
+mod nesting ∪ the row's own cfg), resolved to its child file by the
+standard rustc 2018 path rules (root files — `lib.rs`/`main.rs`/`build.rs`
++ direct `.rs` children of `bin`/`tests`/`examples`/`benches` — and
+`mod.rs` resolve children in their own directory; every other file in a
+directory named after its stem; inline `mod a { mod b; }` nests
+`<base>/a/`), then the child's UNIQUE incoming row folds its atoms (plus
+the parent's own effective atoms, transitively — memoized recursion)
+into the child's root ctx, exactly like the v2 file fold: both the decl
+and the use side, by construction. `audit_sources` restructured into
+parse → lattice → walk phases (all trees stay alive for the lattice —
+the v2 (c) walk prune is what keeps that memory bounded). Divergences,
+all in the no-fold direction: `#[path]`-carrying rows, children absent
+from the scanned set, fn-local `mod x;` statements, and files whose
+incoming rows disagree (the lib.rs + main.rs ambiguity — skip, keep
+own). A wrong root classification can only mis-resolve into the
+no-fold direction.
+
+**(d) The macro arg scan**: the format family
+(`format!`/`println!`/`write!`/`panic!`/tracing/`bail`/`ensure`…)
+counts inline `{ident}` captures in its string literals (doubled `{{`
+and positional `{0}` excluded), and BOTH it and the `assert*`/`matches`
+family count ident tokens in their EXPRESSION args — path prefixes
+(`a::` in `a::b`) and macro names (`foo!`) skipped so a multi-segment
+path counts once on its last segment, the `visit_path` rule. Never
+expansion; overcounting is the documented safe direction (a phantom use
+can only suppress a flag, never raise one). The assert-family leg was
+born from the v3 sweep's own FPs: chaind's `stream_type::SIGNALING` +
+`BrowserNodeState` native test uses sit inside `assert_eq!`/`assert!`
+args and were invisible — the arg scan killed the SIGNALING row
+legitimately (the native test use now breaks the intersection).
+
+**Re-measured workspace sweep (15 repos, the read-only
+seal-online-remaster excluded):**
+
+- **The 6 target FP rows GONE**: seal-remake clean (web_link/web_mirror
+  under `all(wasm32, feature)` mod rows, 3 files folded); mmorpg's
+  3 wasm.rs rows gone (5 files folded, the stacked-cfg-attrs shape —
+  `#[cfg(wasm32)]` + `#[cfg(feature)]` on separate lines — unions, as
+  `guaranteed_from_attrs` always did). riir-ai CLEAN — the SWEEP_COUNTS
+  row (the (d) specimen) gone; 79 files under mod-row gates, 0 rows.
+- **4 TRUE rows surfaced and FIXED in riir-mmorpg-examples** (the fold's
+  reverse direction, the same dynamic as v2's 6): `hero_spawn_for` +
+  `reposition_hero` re-exports in game/mod.rs and the `TickAccumulator`
+  re-export in lib.rs were consumed ONLY by wasm-gated code (wasm.rs,
+  via qualified paths for the first two, via the re-export path for the
+  third) — dead import weight on every native build. Fix: names removed
+  from the re-export blocks + wasm.rs's TickAccumulator use qualified to
+  the substrate path. Compile-verified native AND wasm32.
+- **Standing rows, all adjudicated**: 3 in riir-train (gitignored
+  `data/mining_v3/` rustc-snapshot corpus — name-global masquerade of
+  real NEON intrinsic uses against corpus decls; the trap-audit
+  untracked-vendored-drop class → filed as intake P25: a tracked-only
+  walk for the `read_sources` family); `use Context` ×2 (mmorpg +
+  deployer anyhow trait imports, method-consumed via `.context()` —
+  type-blindness, documented in the footer); `use BrowserNodeState`
+  (chaind — the tests use it only as a path PREFIX
+  (`BrowserNodeState::Disconnected` counts `Disconnected`), the import
+  binds the prefix — the name-global last-segment law); `ACCOUNT_HEADER`
+  (dapps kat-service — pub route const used only by the wasm32 DO host;
+  a wasm-only worker crate's pub surface, benign-by-design, native
+  builds exist for tests only); `ECHO_DAEMON` (self, test-only, known).
+  9 standing rows / 6 documented classes, zero unadjudicated.
+- The dapps `is_admin_path`/`cors_allow_origin` rows that the arg scan
+  KILLED were killed honestly — their native test uses live in
+  `assert!`-family args and are now visible.
+
+Gates: 36 fixtures (13 new: decl-side shelter, stacked attrs, use-side
+flag, transitive chain, mod.rs shape, inline nesting, ambiguity skip,
+#[path] skip, test-flag leg, bin root, inline capture, assert-arg,
+negative controls), lib 1498/1498, clippy 0. `files_modrow_gated` joins
+the report as the fold's evidence line.
