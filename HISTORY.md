@@ -8,6 +8,49 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Issue 106 — the infron free leg (groq → infron → CF ladder) landed (`859dc6de`)
+
+The owner's second free OpenAI-compatible endpoint (llm.onerouter.pro,
+`INFRON_API_KEY`, ~33 tok/s) slots BETWEEN groq and the metered CF
+fallback — a rate-limited groq now degrades to a slow free leg before any
+paid neuron burns. The provider-list shape Proposal 005 anticipated.
+
+- `GroqClient` → `OaiClient` over a static `EndpointConf` (`GROQ_CONF` +
+  `INFRON_CONF`, `qwen/qwen3.8-27b:free` default, `INFRON_MODEL`
+  override) — one generic client, zero duplication; per-leg redaction
+  placeholder + error attribution.
+- Router: `Provider::Infron`, 3-leg `LlmRouter` with the `attempt_free`
+  helper (disjoint-field borrows, `next_after` computed before them);
+  per-leg windowed disable + `FreeTierStats`; overflow on ANY free leg
+  stays surfaced (deterministic — never fall back); `fallbacks_to_cf`
+  counts actual CF reaches only (a groq→infron hop is measured by
+  infron's own `calls`); `free_fallback` on CF rows carries the
+  leg-labeled reason (per-attempt precise, window-level reason when a
+  leg was disabled earlier).
+- `kat_drain`: preflight/arming lines for both free legs, `served_by`
+  grows `"infron"`/`"groq+infron"`, summary + ledger ride
+  `providers.groq` AND `providers.infron` (each with its own
+  `usd_avoided_est` at CF prices).
+- **Live probes (2026-09-14):** wire contract VALID (structured error
+  bodies, `/error/message` parsing, 429 classification). The free pool is
+  account-gated right now — every `:free` model answers `HTTP 429: "Free
+  model requires Team balance greater than $4.999999"` (A/B'd with and
+  without the owner's `provider.service_tier` hint; 4 free models probed).
+  **Activation = top up the onerouter team balance above $5.** Meanwhile
+  the degradation is exactly right: first 429 disables infron for the
+  window (one wasted call, then out of the way); `--preflight` measured
+  groq ARMED + infron ARMED + CF unarmed → probe served via groq
+  (21+2 tok, 0.0 neurons, 391 ms).
+- En route (pre-existing at HEAD, mechanical): `similar_names` line/lint
+  renames in `clippy_feed`/`latent_matcher` test helpers; the
+  `useless_format` fix in `multi_child_suggestion_refused` by UNESCAPING
+  the braces — clippy's `.to_string()` suggestion is WRONG when the
+  literal carries `{{ }}` escapes (`format!` processes them,
+  `.to_string()` doesn't — the JSON went invalid and the test's parse 1 →
+  0). Recorded as post-mining intake P23 (a future corpus addition must
+  treat "no format args" as necessary but NOT sufficient — the literal
+  must also be escape-free).
+
 ## Issue 105 — the journey-credit third axis (PC-ALM dual accumulator) landed (`e58ff9b9`)
 
 The strand-keep poison (Bench 089/090): a KEEP that ends its run at a
