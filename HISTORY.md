@@ -6806,3 +6806,17 @@ binary rebuilt with the release feature set
 (`default + latent_retrieval + kat_service + kat_transport +
 fix_verify`) and verified live (`--platform-audit ../riir-train` →
 git-derived walk, clean).
+
+**The full 15-repo workspace re-sweep under the P25 walk (same day):**
+10 of 15 repos fully CLEAN (katgpt-rs 2427, riir-ai 2897, riir-train
+1131, riir-neuron-db 215, riir-game-sdk 264, riir-dao 23, seal-remake
+58, riir-auth 18, seal-game-editor 255, riir-shader 72); the other 5
+carry exactly ONE row each, every one a previously-adjudicated
+divergence class: `ECHO_DAEMON` (self, test-only, deliberately
+suppressed), `BrowserNodeState` (riir-chain, path-prefix import
+conflation), `ACCOUNT_HEADER` (riir-dapps, wasm-worker pub surface),
+`use Context` ×2 (riir-mmorpg-examples + riir-deployer cloudflare DO
+hosts, anyhow trait method-consumption). **Zero new rows surfaced and
+zero true positives lost** — the gitignored corpus carried only
+masquerades, and no repo's clean verdict depended on a file the walk
+now excludes. The v3 sweep's gitignored-corpus class is closed.
