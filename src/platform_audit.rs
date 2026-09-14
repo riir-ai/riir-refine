@@ -88,6 +88,12 @@
 //! * Uses inside `#[cfg(test)]` / `#[test]` context COUNT (a test use is
 //!   a use for platform purposes) but mark the row `test-only` when every
 //!   use is test context — the item is then prod-dead outside the atoms.
+//! * **The walk is GIT-DERIVED inside repositories** (P25, 2026-09-15):
+//!   `read_sources_walk` excludes GITIGNORED files (tracked +
+//!   untracked-non-ignored only) — the 3 standing riir-train rows of the
+//!   v3 sweep were name-global masquerades against a gitignored
+//!   rustc-snapshot mining corpus no repo owns. Roots outside a repo fall
+//!   back to the v2 filesystem walk; every report prints the walk mode.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
@@ -96,7 +102,7 @@ use std::path::{Path, PathBuf};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
-use crate::config_audit::{attrs_cfg_test, attrs_test_fn, read_sources};
+use crate::config_audit::{attrs_cfg_test, attrs_test_fn, read_sources_walk, WalkMode};
 
 /// cfg predicate keys that carry platform meaning. `feature`, `test`,
 /// `debug_assertions` and friends are deliberately absent — they are not
@@ -140,6 +146,9 @@ pub struct PlatformDeadRow {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlatformAuditReport {
     pub files_scanned: usize,
+    /// How the file set was derived (P25) — git-derived walks exclude
+    /// gitignored corpora (the 3 standing riir-train masquerade rows).
+    pub walk: WalkMode,
     pub files_unparsed: usize,
     pub decls_tracked: usize,
     pub findings: Vec<PlatformDeadRow>,
@@ -162,8 +171,10 @@ pub struct PlatformAuditReport {
 /// Scan `paths` (dirs recursively / files) and classify.
 #[must_use]
 pub fn audit_paths(paths: &[PathBuf]) -> PlatformAuditReport {
-    let sources = read_sources(paths);
-    audit_sources(&sources)
+    let walked = read_sources_walk(paths);
+    let mut report = audit_sources(&walked.sources);
+    report.walk = walked.mode;
+    report
 }
 
 /// The testable core over in-memory `(file, src)` pairs.
@@ -1053,6 +1064,7 @@ impl PlatformAuditReport {
                 String::new()
             }
         );
+        let _ = writeln!(out, "{}", self.walk.note());
         if let Some(reason) = &self.blind {
             let _ = writeln!(out, "\n⛔ REFUSING: {reason} — never a confident green zero.");
             return out;

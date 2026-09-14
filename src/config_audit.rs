@@ -106,10 +106,36 @@
 //! FALSE NEGATIVE, same direction as A/B; never a false positive from
 //! name-matching.
 
+//! ## The walk (P25, 2026-09-15)
+//!
+//! [`read_sources_walk`] — shared by `--config-audit`, `--orphan-report`,
+//! and `--platform-audit` — derives the scanned file set from GIT when the
+//! scan root is inside a repository: `git ls-files --cached --others
+//! --exclude-standard -- '*.rs'` (one subprocess per directory root). That
+//! is tracked + untracked-NON-IGNORED — GITIGNORED files are excluded, the
+//! measured driver being the P24 v3 workspace sweep's 3 standing riir-train
+//! rows: name-global masquerades against `data/mining_v3/files/
+//! rust-lang__rust/*.rs`, a GITIGNORED rustc-snapshot corpus (`git
+//! check-ignore` → `.gitignore:149`) no repo owns — the trap-audit lesson
+//! ("walking the filesystem instead reported 25 findings in a gitignored
+//! vendored drop") hitting this walk. Untracked WIP files STAY in the scan
+//! (the goal is gitignore-exclusion, not tracked-purity — a report that
+//! silently misses fresh files would be a regression), and a TRACKED file
+//! matching a later-added ignore rule stays too (git cannot retroactively
+//! ignore the index). Nested foreign checkouts (worktrees, submodule
+//! gitlinks, untracked nested repos) are naturally excluded — v2's
+//! symlink/`.git`-file walk prune remains only for the fallback. Explicitly
+//! named FILES and entirely-ignored directory ROOTS are scanned anyway
+//! (caller intent wins). Roots outside a repository (fixtures, /tmp probes,
+//! git absent from PATH) fall back to the v2 filesystem walk; the derived
+//! [`WalkMode`] is printed by every consuming report so the distinction is
+//! never silent.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use quote::ToTokens;
 use syn::spanned::Spanned;
@@ -173,6 +199,9 @@ pub struct SelfReferentialConfig {
 #[derive(Debug, Default)]
 pub struct ConfigAuditReport {
     pub files_scanned: usize,
+    /// How the file set was derived (P25) — rendered under the header so
+    /// the git-derived vs filesystem distinction is never silent.
+    pub walk: WalkMode,
     pub candidates: usize,
     pub inert_knobs: Vec<InertKnob>,
     pub assert_only: Vec<AssertOnly>,
@@ -508,24 +537,168 @@ impl<'ast> Visit<'ast> for StructLitCollector<'_> {
 /// Walk `paths` (dirs recursively / files), parse every `.rs`, audit.
 #[must_use]
 pub fn audit_paths(paths: &[PathBuf]) -> ConfigAuditReport {
-    audit_sources(&read_sources(paths))
+    let walked = read_sources_walk(paths);
+    let mut report = audit_sources(&walked.sources);
+    report.walk = walked.mode;
+    report
+}
+
+/// How the scanned file set was derived (P25 — the git-derived walk).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum WalkMode {
+    /// Every directory root resolved inside a git repository; the file set
+    /// came from `git ls-files --cached --others --exclude-standard` —
+    /// GITIGNORED files excluded (the mining-corpus masquerade class),
+    /// untracked non-ignored WIP files kept.
+    Git {
+        roots: usize,
+    },
+    /// No directory root inside a git repository (or git missing from
+    /// PATH, or explicit file arguments only) — plain filesystem walk,
+    /// nothing excluded.
+    #[default]
+    Plain,
+    /// Some roots git-derived, some filesystem-walked.
+    Mixed {
+        git_roots: usize,
+        plain_roots: usize,
+    },
+}
+
+impl WalkMode {
+    /// The one-line render (each consuming audit prints it under its
+    /// population line — the distinction must never be silent).
+    #[must_use]
+    pub fn note(&self) -> String {
+        match *self {
+            Self::Git { roots } => format!(
+                "walk: git-derived ({roots} root(s)) — tracked + untracked-non-ignored; \
+                 GITIGNORED files excluded (P25)"
+            ),
+            Self::Plain => "walk: filesystem (root(s) outside a git repo, git absent, or \
+                 explicit file(s) only) — gitignored files NOT excluded"
+                .to_string(),
+            Self::Mixed {
+                git_roots,
+                plain_roots,
+            } => format!(
+                "walk: mixed — {git_roots} git-derived root(s) (gitignored excluded), \
+                 {plain_roots} filesystem root(s) (not excluded)"
+            ),
+        }
+    }
+}
+
+/// The walked file set + how it was derived.
+pub(crate) struct SourcesWalk {
+    pub sources: Vec<(String, String)>,
+    pub mode: WalkMode,
 }
 
 /// Walk `paths` (dirs recursively / files), read every `.rs` — shared by
-/// [`audit_paths`] and the orphan-report path wrapper (Plan 126).
-pub(crate) fn read_sources(paths: &[PathBuf]) -> Vec<(String, String)> {
+/// `--config-audit`, `--orphan-report`, and `--platform-audit` (P25:
+/// git-derived where the root is inside a repository).
+pub(crate) fn read_sources_walk(paths: &[PathBuf]) -> SourcesWalk {
     let mut rust_files: Vec<PathBuf> = Vec::new();
+    let mut git_roots = 0usize;
+    let mut plain_roots = 0usize;
     for p in paths {
-        collect_rust_files(p, &mut rust_files);
+        if p.is_dir() {
+            match git_derived_rust_files(p) {
+                Some(files) if !files.is_empty() => {
+                    git_roots += 1;
+                    rust_files.extend(files);
+                }
+                Some(_) => {
+                    // In a repo but git names no `.rs` under this root — an
+                    // entirely-ignored directory the caller named on
+                    // purpose: explicit intent wins (the explicitly-named
+                    // FILE rule), fall back to the filesystem walk. A root
+                    // that is empty on disk too counts as neither.
+                    let before = rust_files.len();
+                    collect_rust_files(p, &mut rust_files);
+                    if rust_files.len() > before {
+                        plain_roots += 1;
+                    }
+                }
+                None => {
+                    plain_roots += 1;
+                    collect_rust_files(p, &mut rust_files);
+                }
+            }
+        } else if p.extension().is_some_and(|e| e == "rs") {
+            // Explicit file: caller intent wins, ignored or not.
+            rust_files.push(p.clone());
+        }
     }
-    rust_files
+    rust_files.sort();
+    rust_files.dedup();
+    let mode = match (git_roots, plain_roots) {
+        (g, 0) if g > 0 => WalkMode::Git { roots: g },
+        (0, p) if p > 0 => WalkMode::Plain,
+        (g, p) if g + p > 0 => WalkMode::Mixed { git_roots: g, plain_roots: p },
+        _ => WalkMode::Plain,
+    };
+    let sources = rust_files
         .iter()
         .filter_map(|p| {
             fs::read_to_string(p)
                 .ok()
                 .map(|src| (p.display().to_string(), src))
         })
-        .collect()
+        .collect();
+    SourcesWalk { sources, mode }
+}
+
+/// One `git ls-files` per directory root (P25): repo membership via
+/// `rev-parse --show-toplevel` (works in a repo with unborn HEAD — the
+/// index answers `ls-files` without a single commit), then the
+/// non-ignored set (`--cached --others --exclude-standard`, NUL-separated)
+/// filtered to `*.rs`. `None` when the root is outside a repository or git
+/// cannot answer (missing from PATH, subprocess failure) — the caller
+/// falls back to the filesystem walk.
+fn git_derived_rust_files(dir: &Path) -> Option<Vec<PathBuf>> {
+    let top = git_output(dir, &["rev-parse", "--show-toplevel"])?;
+    if !top.status.success() {
+        return None;
+    }
+    let listed = git_output(
+        dir,
+        &[
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "*.rs",
+        ],
+    )?;
+    if !listed.status.success() {
+        return None;
+    }
+    Some(parse_ls_files_z(&listed.stdout, dir))
+}
+
+/// Pure half of the git walk (unit-testable without a repository):
+/// NUL-separated `ls-files` output → EXISTING files joined onto `base`,
+/// sorted + deduped. Non-existent entries are dropped (staged-then-rm).
+fn parse_ls_files_z(bytes: &[u8], base: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = bytes
+        .split(|b| *b == 0)
+        .filter(|s| !s.is_empty())
+        .map(|s| base.join(String::from_utf8_lossy(s).as_ref()))
+        .filter(|p| p.is_file())
+        .collect();
+    files.sort();
+    files.dedup();
+    files
+}
+
+/// Run `git -C <dir> <args>`, capturing output. `None` when the binary
+/// cannot be spawned.
+fn git_output(dir: &Path, args: &[&str]) -> Option<std::process::Output> {
+    Command::new("git").arg("-C").arg(dir).args(args).output().ok()
 }
 
 fn collect_rust_files(p: &Path, out: &mut Vec<PathBuf>) {
@@ -1296,6 +1469,7 @@ impl ConfigAuditReport {
             self.documented_write_only.len(),
             self.self_referential.len()
         );
+        let _ = writeln!(out, "{}", self.walk.note());
         for k in &self.inert_knobs {
             let _ = writeln!(
                 out,
@@ -2015,5 +2189,186 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
             ),
         ]);
         assert_eq!(r.self_referential.len(), 1, "tests/-file reads are test-context");
+    }
+
+    // ── P25: the git-derived walk ─────────────────────────────────────
+
+    fn tmp_repo(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "cfgaudit_p25_{tag}_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&d)
+                .args(["init", "-q"])
+                .output()
+                .is_ok_and(|o| o.status.success()),
+            "git init (the P25 walk needs a real repository)"
+        );
+        d
+    }
+
+    fn tmp_plain(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "cfgaudit_p25n_{tag}_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn parse_ls_files_z_splits_joins_and_drops_missing() {
+        let base = Path::new("/base");
+        let here = std::env::temp_dir().join("cfgaudit_p25_exists.rs");
+        fs::write(&here, b"x").unwrap();
+        let rel = here
+            .strip_prefix(std::env::temp_dir())
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        // NUL-separated: two nonexistent entries + one real file +
+        // trailing NUL (the real one lives under TMPDIR — a per-terminal
+        // dir under the agent harness, still inside `base`).
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(b"a.rs\0");
+        bytes.extend_from_slice(rel.as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(b"gone.rs\0");
+        bytes.push(0);
+        let got = parse_ls_files_z(&bytes, &std::env::temp_dir());
+        let names: Vec<String> = got.iter().map(|p| p.display().to_string()).collect();
+        assert_eq!(names.len(), 1, "nonexistent dropped, real kept: {names:?}");
+        assert!(names[0].ends_with("cfgaudit_p25_exists.rs"));
+        let _ = fs::remove_file(&here);
+    }
+
+    #[test]
+    fn git_walk_excludes_gitignored_keeps_untracked_and_tracked() {
+        let tmp = tmp_repo("excl");
+        fs::write(tmp.join(".gitignore"), "ignored/\n*.gen.rs\n").unwrap();
+        fs::write(tmp.join("tracked.rs"), "pub fn t() {}").unwrap();
+        fs::write(tmp.join("wip.rs"), "pub fn w() {}").unwrap(); // untracked, not ignored
+        fs::create_dir_all(tmp.join("ignored")).unwrap();
+        fs::write(tmp.join("ignored/x.rs"), "pub fn x() {}").unwrap();
+        fs::write(tmp.join("y.gen.rs"), "pub fn g() {}").unwrap();
+        // tracked-but-later-ignored stays: add BEFORE the ignore rule lands.
+        fs::write(tmp.join("tbi.rs"), "pub fn b() {}").unwrap();
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(&tmp)
+            .args(["add", "tracked.rs", "tbi.rs"])
+            .output()
+            .is_ok_and(|o| o.status.success()));
+        fs::write(tmp.join(".gitignore"), "ignored/\n*.gen.rs\ntbi.rs\n").unwrap();
+        let walk = read_sources_walk(&[tmp.clone()]);
+        assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
+        let joined: String = walk
+            .sources
+            .iter()
+            .map(|(f, _)| format!("\n{f}"))
+            .collect();
+        assert!(joined.contains("tracked.rs"));
+        assert!(joined.contains("wip.rs"), "untracked non-ignored WIP kept");
+        assert!(joined.contains("tbi.rs"), "tracked-but-later-ignored kept");
+        assert!(!joined.contains("ignored/"), "gitignored dir excluded");
+        assert!(!joined.contains("y.gen.rs"), "gitignored glob excluded");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn nested_foreign_repo_is_not_scanned() {
+        let tmp = tmp_repo("nested");
+        fs::write(tmp.join("own.rs"), "pub fn o() {}").unwrap();
+        let nested = tmp.join("nested_repo");
+        fs::create_dir_all(&nested).unwrap();
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(&nested)
+            .args(["init", "-q"])
+            .output()
+            .is_ok_and(|o| o.status.success()));
+        fs::write(nested.join("foreign.rs"), "pub fn f() {}").unwrap();
+        let walk = read_sources_walk(&[tmp.clone()]);
+        assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
+        let joined: String = walk.sources.iter().map(|(f, _)| format!("\n{f}")).collect();
+        assert!(joined.contains("own.rs"));
+        assert!(!joined.contains("foreign.rs"), "nested repo's files not ours");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn subdir_root_limits_to_subdir() {
+        let tmp = tmp_repo("subdir");
+        fs::write(tmp.join("top.rs"), "pub fn t() {}").unwrap();
+        fs::create_dir_all(tmp.join("sub")).unwrap();
+        fs::write(tmp.join("sub/inner.rs"), "pub fn i() {}").unwrap();
+        let walk = read_sources_walk(&[tmp.join("sub")]);
+        assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
+        let joined: String = walk.sources.iter().map(|(f, _)| format!("\n{f}")).collect();
+        assert!(joined.contains("inner.rs"));
+        assert!(!joined.contains("top.rs"), "cwd-limited listing, not repo-wide");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn non_repo_root_falls_back_to_plain_walk() {
+        let tmp = tmp_plain("fallback");
+        fs::write(tmp.join("a.rs"), "pub fn a() {}").unwrap();
+        let walk = read_sources_walk(&[tmp.clone()]);
+        assert_eq!(walk.mode, WalkMode::Plain);
+        assert_eq!(walk.sources.len(), 1);
+        assert!(walk.sources[0].0.ends_with("a.rs"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn explicit_ignored_file_is_scanned_anyway() {
+        let tmp = tmp_repo("explicit");
+        fs::write(tmp.join(".gitignore"), "b.rs\n").unwrap();
+        fs::write(tmp.join("b.rs"), "pub fn b() {}").unwrap();
+        let walk = read_sources_walk(&[tmp.join("b.rs")]);
+        assert_eq!(walk.mode, WalkMode::Plain, "explicit file(s) only — no dir roots");
+        assert_eq!(walk.sources.len(), 1, "caller intent wins over the ignore rule");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn entirely_ignored_dir_root_falls_back_to_intent() {
+        let tmp = tmp_repo("igdir");
+        fs::write(tmp.join(".gitignore"), "corpus/\n").unwrap();
+        fs::create_dir_all(tmp.join("corpus")).unwrap();
+        fs::write(tmp.join("corpus/x.rs"), "pub fn x() {}").unwrap();
+        let walk = read_sources_walk(&[tmp.join("corpus")]);
+        assert_eq!(walk.mode, WalkMode::Plain, "ignored dir named on purpose = intent");
+        assert_eq!(walk.sources.len(), 1);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn repo_and_plain_roots_mix() {
+        let repo = tmp_repo("mix");
+        fs::write(repo.join("r.rs"), "pub fn r() {}").unwrap();
+        let plain = tmp_plain("mix");
+        fs::write(plain.join("p.rs"), "pub fn p() {}").unwrap();
+        let walk = read_sources_walk(&[repo.clone(), plain.clone()]);
+        assert_eq!(
+            walk.mode,
+            WalkMode::Mixed {
+                git_roots: 1,
+                plain_roots: 1
+            }
+        );
+        assert_eq!(walk.sources.len(), 2);
+        let _ = fs::remove_dir_all(&repo);
+        let _ = fs::remove_dir_all(&plain);
     }
 }

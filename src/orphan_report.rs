@@ -85,7 +85,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use crate::config_audit::{FieldCandidate, ZeroReadField, ZeroReadScan};
+use crate::config_audit::{FieldCandidate, WalkMode, ZeroReadField, ZeroReadScan};
 
 /// Default probe depths (commits back from HEAD), clamped to history depth.
 pub const DEFAULT_PROBE_DEPTHS: [usize; 4] = [10, 50, 200, 1000];
@@ -289,6 +289,9 @@ pub struct OrphanRow {
 #[derive(Debug, Default)]
 pub struct OrphanReport {
     pub files_scanned: usize,
+    /// How the file set was derived (P25) — rendered before the blind
+    /// branch so even a refusal shows the walk mode.
+    pub walk: WalkMode,
     pub candidates: usize,
     pub zero_read_fields: usize,
     pub orphaned: Vec<OrphanRow>,
@@ -524,27 +527,33 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
 /// default to [`DEFAULT_PROBE_DEPTHS`].
 #[must_use]
 pub fn report_paths(paths: &[PathBuf], probe_depths: &[usize]) -> OrphanReport {
-    let sources = crate::config_audit::read_sources(paths);
-    if sources.is_empty() {
+    let walked = crate::config_audit::read_sources_walk(paths);
+    if walked.sources.is_empty() {
         return OrphanReport {
             blind: Some("no .rs files parsed under the scanned paths".to_string()),
+            walk: walked.mode,
             ..OrphanReport::default()
         };
     }
-    let scan = crate::config_audit::zero_external_read_fields(&sources);
-    let wire = wire_consumption(&sources);
+    let scan = crate::config_audit::zero_external_read_fields(&walked.sources);
+    let wire = wire_consumption(&walked.sources);
     match GitCli::new(paths) {
         None => OrphanReport {
             files_scanned: scan.files_scanned,
             candidates: scan.candidates,
             zero_read_fields: scan.fields.len(),
+            walk: walked.mode,
             blind: Some(
                 "not a resolvable git repository (or git missing from PATH) — the C1 history leg is unavailable"
                     .to_string(),
             ),
             ..OrphanReport::default()
         },
-        Some(git) => classify_with_probe(&scan, &git, &wire, probe_depths),
+        Some(git) => {
+            let mut report = classify_with_probe(&scan, &git, &wire, probe_depths);
+            report.walk = walked.mode;
+            report
+        }
     }
 }
 
@@ -628,6 +637,9 @@ pub fn classify_with_probe(
         files_scanned: scan.files_scanned,
         candidates: scan.candidates,
         zero_read_fields: scan.fields.len(),
+        // classify_with_probe is the in-memory unit-test entry — the walk
+        // happened elsewhere (the caller stamps the real mode).
+        walk: WalkMode::Plain,
         orphaned,
         stillborn,
         wire_cleared,
@@ -642,6 +654,7 @@ impl OrphanReport {
     #[must_use]
     pub fn render(&self) -> String {
         let mut out = String::new();
+        let _ = writeln!(out, "{}", self.walk.note());
         if let Some(reason) = &self.blind {
             let _ = writeln!(out, "orphan-report: BLIND — {reason}");
             let _ = writeln!(

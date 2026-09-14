@@ -6741,3 +6741,68 @@ flag, transitive chain, mod.rs shape, inline nesting, ambiguity skip,
 #[path] skip, test-flag leg, bin root, inline capture, assert-arg,
 negative controls), lib 1498/1498, clippy 0. `files_modrow_gated` joins
 the report as the fold's evidence line.
+
+### P25, same day — the tracked-only walk for the `read_sources` family (intake P25 consumed)
+
+The 3 standing riir-train rows of the v3 sweep were the trap-audit
+lesson hitting this walk's own front door: name-global masquerades
+against `data/mining_v3/files/rust-lang__rust/*.rs`, a GITIGNORED
+rustc-snapshot corpus (`git check-ignore` → `.gitignore:149`) no repo
+owns. The repair moves the whole file-set derivation, not the
+classifier: `read_sources` (config_audit.rs — shared by
+`--config-audit` / `--orphan-report` / `--platform-audit`) is now
+`read_sources_walk`, deriving the set per directory root from
+`git ls-files -z --cached --others --exclude-standard -- '*.rs'` when
+the root is inside a repository.
+
+**Semantics, chosen over the intake's literal "tracked-only" wording:**
+the goal is gitignore-exclusion, not tracked-purity. `--cached --others
+--exclude-standard` is tracked + untracked-NON-IGNORED — a fresh WIP
+file stays in the scan (a report that silently misses un-added files
+would be a regression the sweep would only notice at the worst moment),
+and a TRACKED file matching a later-added ignore rule stays too (git
+cannot retroactively ignore the index — `tbi.rs` fixture). Nested
+foreign checkouts fall out for free: untracked nested repos list as a
+single directory entry that matches no `*.rs` pathspec, submodule
+gitlinks likewise — v2's symlink/`.git`-file walk prune survives only
+in the fallback. Explicitly named FILES and entirely-ignored directory
+ROOTS are scanned anyway (caller intent wins — the ignored-dir root
+falls back to the filesystem walk for that root, recorded as `Plain`).
+Roots outside a repo (fixtures, /tmp probes, git absent from PATH)
+keep the v2 filesystem walk. Every consuming report now prints a
+`walk:` line (the new `WalkMode`: `Git`/`Plain`/`Mixed` with root
+counts) directly under its population line — before the blind branch,
+so even a refusal shows the walk mode. The distinction is never
+silent.
+
+**Re-measured populations (the intake's CAUTION — all three audits, on
+their own landing evidence):**
+
+| repo | audit | population | verdict |
+|---|---|---|---|
+| riir-train | platform | 4119 → **1131** (the 2988-file corpus out) | the 3 masquerade rows **GONE — clean** |
+| riir-clippy | platform | 372 → 370 (2 `.raw/` corpus files out) | `ECHO_DAEMON` stands (known, test-only) |
+| riir-ai | platform | 2906 → 2897 (9 `.proofs/.lake` .rs out) | **clean** — unchanged |
+| riir-chain | config | 812 → **482** (330 `.container-src/` staged-copy .rs out — the duplicated tree the old walk scanned wholesale) | 0 findings, honest clean |
+| riir-clippy | config | 372 → 370 | 0/0/0/0 — unchanged |
+| riir-clippy | orphan | → 370, 307 candidates | 0 orphaned, 11 stillborn (was 15 at the older recorded population; the drop is the `.raw` corpora + repo evolution) |
+| riir-ai | orphan | → 2897, 2289 candidates | **0 orphaned** — the recorded TP `ReplayVerificationResponse.server_hash` was CONSUMED since (removed with its dead consumer, the Issue-934 comment at `riir-rest/src/trajectory.rs:208` is the tombstone); 70 stillborn = the `_padN` repr(C) padding class + kin, benign-by-design |
+
+Two population surprises worth naming: **riir-chain's `.container-src/`**
+(a 330-file build-staged COPY of the wallet crates) was in every old
+scan — the name-global read greps were running over duplicated trees,
+which can only masquerade-suppress (the safe direction, but the counts
+were fiction); and the riir-ai orphan TP's disappearance is the report
+working, not the instrument degrading — the field died with its
+consumer and the tree moved on.
+
+Gates: 8 new fixtures (`parse_ls_files_z` pure half; git walk excludes
+ignored + keeps untracked + keeps tracked-but-later-ignored; nested
+foreign repo not scanned; subdir root cwd-limited; non-repo root falls
+back to Plain; explicit ignored file scanned anyway; entirely-ignored
+dir root falls back to intent; repo+plain roots mix). Lib **1506/1506**
+(was 1498), clippy 0 on lib + the cargo-heal bin. The global release
+binary rebuilt with the release feature set
+(`default + latent_retrieval + kat_service + kat_transport +
+fix_verify`) and verified live (`--platform-audit ../riir-train` →
+git-derived walk, clean).
