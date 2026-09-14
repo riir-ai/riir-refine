@@ -1,6 +1,6 @@
 # Proposal 015 — Replay endorsement reward class (the Max earn class, C1→C5 economics)
 
-Status: **draft — design filed as the P013 Phase-3 T3.1 deliverable; construction gated on this proposal's acceptance (Phase 1 = riir-dapps ledger surface; Phase 2 = the `cargo heal replay` client; Phase 3 = the econ-sim arm + owner ratification of a non-zero `replay_cut_bp`)**
+Status: **draft — Phase 1 LIBRARY SLICE LANDED 2026-09-14 (riir-dapps `00b6583`: the lease/verdict/agreement/canary lane + the conservative split + G1-a..d/G3 gates green, inert at cut=0; the worker HTTP routes + the G2 µs figure remain — Plan 029 T1.4); Phase 2 = the `cargo heal replay` client; Phase 3 = the econ-sim arm + owner ratification of a non-zero `replay_cut_bp` (owner-gated)**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: [Proposal 013](013_consumer_install_tier_spec.md) T3.1 (the tier that needs the class) × [Proposal 005](005_kat_heal_service_network.md) §Mining (the C1→C5 escalation this economizes) × [Proposal 010](010_kat_yield_ceiling_and_treasury_funded_free_tier.md) (the sub-split + distribution-neutral-at-the-parent discipline) × TrueBit's forced-error incentive ([arXiv:1806.11476](https://arxiv.org/abs/1806.11476), adapted — cited-only) × the SHIPPED `VerdictVector.commitment()` / `verify_no_verdict_split()` / `ProofVerifier` substrate (`riir-dapps/src/kat/mining.rs`)
