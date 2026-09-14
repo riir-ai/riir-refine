@@ -6501,3 +6501,73 @@ absorption pairs as the donor pool, not co-occurrence argmax.
 Demote/repair decisions: NONE warranted (empty decorative list). Issue 108
 RESOLVED and removed per the noise rule; Bench 092 + this entry are the
 record.
+
+## 2026-09-15 — Intake class P22: `--platform-audit`, the platform-dead_code decl-vs-use cfg lattice
+
+The 2026-09-14 P22 intake row recorded the class: items declared
+UNCONDITIONALLY whose every use sits inside a platform-gated context —
+5 specimens across 2 repos in 2 days (katgpt-rs `NEON_U8` fixed
+`ea4c2873`; zed `KEYCHAIN_SERVICE` + 3 more fixed `a4f70e64a7`), ALL
+caught by x86_64/Windows gate runs that no CI lane owns. The class is
+invisible to any single-platform CI matrix: the gate is ON where CI
+compiles, so the use exists there, while every other platform compiles
+the item to dead weight nobody warns about. rustc's `dead_code` cannot
+fire either — one gated use silences it on every platform it compiles.
+
+The intake's verdict held: SYNTAX-CORPUS OUT (detection needs cfg-lattice
+reasoning, not a fix-space) — the home is an audit instrument, not a
+proposer. `cargo heal --platform-audit [PATHS…]` (`src/platform_audit.rs`,
+ungated, syn + std, zero new deps) is that instrument:
+
+- **Lattice**: per tracked module-level decl (`const`/`static`/`fn`/
+  `use`), intersect the platform atoms every use site's cfg GUARANTEES
+  (mod-stack union; multiple cfg attrs AND — union; `any()` arms
+  intersect; `not()` proves no positive platform; `feature` atoms DROP —
+  the cfg-audit family owns that class). An atom in the intersection the
+  declaration's own cfg lacks is the witness: the item is dead on every
+  platform that atom excludes.
+- **The two-map import split** (the landing's own design catch): a
+  `use a::b::C` resolves on every platform the IMPORT compiles, so the
+  import's own path is a real use of the SOURCE const — but it says
+  nothing about the LOCAL binding. An ungated import whose only code
+  mentions are gated is exactly the zed `ProcessStatus` specimen and must
+  stay flaggable. Code mentions and import references therefore tally
+  into separate maps: `use`-decls read only code evidence; value decls
+  read the union. A gated import condemns its source through RENAMES
+  only (`use a::C as D` separates the names); a same-name pair reads as
+  ambiguity and is skipped — the conservative direction, pinned by test.
+- **Contract**: report-first, gates nothing; exit 0 on every real scan,
+  REFUSES exit 1 on an empty/unparsable scan (the frontier-report law);
+  the two scope hints (unscanned roots + downstream consumers) ride the
+  output like config-audit/orphan-report.
+
+Validated against the real historical evidence (git-archive extractions
+— zero writes to the sibling):
+
+- katgpt-pruners @ `ea4c2873^` → **exactly 1 finding = NEON_U8**
+  (simd.rs:27, dead outside `target_arch = "aarch64"`) — 1 TP / 0 FP
+  over 268 files / 5950 decls.
+- katgpt-pruners @ `ea4c2873` (the fix) → 0 findings — the gate on the
+  decl is detected.
+- Self-scan → 1 row (`ECHO_DAEMON`, l4_daemon.rs:273, test-only): a
+  TRUE-in-shape instance the module's own
+  `#![cfg_attr(not(unix), allow(dead_code))]` already acknowledges —
+  the adjudication path working as designed, no fix warranted.
+- riir-chain src → 0 findings / 0 FP (177 files); riir-dao crates → 0
+  (23 files). Refusal + exit-0 contract live-verified on a nonexistent
+  path (exit 1) and a clean scan (exit 0).
+
+Gates: 20 fixture tests (the pre/post-fix specimen pair, `any`/`not`/
+`all` semantics, the two-map import split, rename tracking, ambiguity
+skip, test-only marker, pub marker, empty-scan refusal); lib 1482/1482;
+clippy `-D warnings` clean on lib + the cargo-heal bin; the
+`standalone_modes_are_never_bare` contract test carries the new row.
+Five mechanical clippy findings on the landing (must_use × 2,
+doc_markdown × 3) were healer-first'd — `cargo heal --fix --write
+--verify` took the one in-corpus finding class (`vec-with-capacity` in
+config_audit, the shared-helper exposure); the rest were manual (out of
+corpus, the documented fallback).
+
+The P22 intake row is ticked DONE in the same commit; the 2026-09-14
+OPPONENT WATCH row's checkbox is ticked to match its already-recorded
+content (hygiene — the record was complete, the box simply never moved).

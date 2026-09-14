@@ -278,7 +278,7 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
             .get(&c.struct_name)
             .is_some_and(|fields| fields.contains(&c.field_name))
     });
-    let mut fields = Vec::new();
+    let mut fields = Vec::with_capacity(candidates.len());
     for cand in &candidates {
         let total = ix.field_reads.get(&cand.field_name).copied().unwrap_or(0);
         let tests = ix
@@ -817,7 +817,7 @@ fn tally_field_read(
 
 /// `#[cfg(test)]`-style attribute (path `cfg`, tokens containing `test` and
 /// not `not` — `cfg(not(test))` is production-only, not test).
-fn attr_is_cfg_test(attr: &syn::Attribute) -> bool {
+pub(crate) fn attr_is_cfg_test(attr: &syn::Attribute) -> bool {
     if let syn::Meta::List(list) = &attr.meta {
         let is_cfg = list
             .path
@@ -834,15 +834,20 @@ fn attr_is_cfg_test(attr: &syn::Attribute) -> bool {
 
 /// `#[test]` / `#[bench]` / `#[tokio::test]`-shaped attribute (any attr
 /// whose LAST path segment is `test` or `bench`).
-fn attr_is_test_fn(attr: &syn::Attribute) -> bool {
+pub(crate) fn attr_is_test_fn(attr: &syn::Attribute) -> bool {
     attr.path()
         .segments
         .last()
         .is_some_and(|s| s.ident == "test" || s.ident == "bench")
 }
 
-fn attrs_cfg_test(attrs: &[syn::Attribute]) -> bool {
+pub(crate) fn attrs_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(attr_is_cfg_test)
+}
+
+/// Any `#[test]`-like attribute on the item (shared with `platform_audit`).
+pub(crate) fn attrs_test_fn(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(attr_is_test_fn)
 }
 
 /// Cargo-layout heuristic: a file under `tests/` or `benches/` is test

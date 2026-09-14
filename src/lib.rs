@@ -325,6 +325,10 @@ pub mod span_embed;
 // features. Report-first, gates nothing (the frontier-report law).
 pub mod config_audit;
 pub mod orphan_report;
+// Intake class P22: the platform-dead_code decl-vs-use cfg lattice —
+// items whose every use sits inside a platform gate the declaration
+// lacks (the NEON_U8 class no single-platform CI matrix can see).
+pub mod platform_audit;
 pub mod scope_hint;
 pub mod downstream_hint;
 

@@ -3161,6 +3161,20 @@ USAGE:
                     scan or a missing git history leg (the frontier-report
                     law — never a confident green zero). Run it after commits
                     touching config inits (the review-time post-hoc check).
+    --platform-audit Scan .rs files for platform-dead declarations
+                    (intake class P22 — the NEON_U8 shape): items declared
+                    UNCONDITIONALLY whose every use sits inside a
+                    platform-gated context. Invisible to any single-platform
+                    CI matrix — the gate is ON where CI compiles, so the use
+                    exists there, while every other platform compiles the
+                    item to dead weight nobody warns about. The lattice:
+                    intersect the platform atoms every use site's cfg
+                    guarantees; an atom the declaration's own cfg lacks is
+                    the witness. any() arms intersect, not() proves no
+                    platform, feature atoms drop (the cfg-audit family owns
+                    that class). Report-first; exit 0 on real scans, refuses
+                    exit 1 on an empty one. Reads paths from the CLI
+                    (default `.`).
     --misses       Print the authoring queues in FRONTIER order (Plan 091
                     + Issue 089 T3): the `.heal/misses/` rustc_errors
                     per-CODE queue (dispersion-informative error codes first
@@ -3567,6 +3581,12 @@ struct Args {
     /// knob that cannot be turned), and fields only ever asserted. Pure syn
     /// scan, zero new deps, ungated; always exit 0 (report, not a gate).
     config_audit: bool,
+    /// Intake class P22: `--platform-audit` — the platform-dead_code
+    /// decl-vs-use cfg lattice: declarations whose every use sits inside
+    /// a platform gate the declaration lacks (the NEON_U8 class no
+    /// single-platform CI matrix can see). Pure syn scan, zero new deps,
+    /// ungated; exit 0 on real scans, refuses exit 1 on an empty one.
+    platform_audit: bool,
     /// Plan 126: `--orphan-report` — the class-C1 report (the config knob
     /// orphaned by optimization): Default-impl fields with zero external
     /// reads at HEAD + git-history evidence that a read-shaped occurrence
@@ -3642,6 +3662,7 @@ fn parse_args() -> Args {
         frontier_report: false,
         horizon_report: false,
         config_audit: false,
+        platform_audit: false,
         orphan_report: false,
     };
     // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
@@ -3725,6 +3746,7 @@ fn parse_args() -> Args {
             "--frontier-report" => args.frontier_report = true,
             "--horizon-report" => args.horizon_report = true,
             "--config-audit" => args.config_audit = true,
+            "--platform-audit" => args.platform_audit = true,
             "--orphan-report" => args.orphan_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
@@ -4089,6 +4111,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.frontier_report
         || args.horizon_report
         || args.config_audit
+        || args.platform_audit
         || args.orphan_report
         || args.candidates_path.is_some()
         || args.command.is_some()
@@ -6616,6 +6639,35 @@ fn main() {
             &targets,
             &riir_clippy::orphan_report::DEFAULT_PROBE_DEPTHS,
         );
+        print!("{}", report.render());
+        let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
+        if !hint.is_empty() {
+            println!("{hint}");
+        }
+        let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
+        if !cross.is_empty() {
+            println!("{cross}");
+        }
+        if report.blind.is_some() {
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // ── Intake class P22: --platform-audit — the platform-dead_code lattice
+    // The NEON_U8 class (fixed ea4c2873): items whose every use sits inside
+    // a platform gate the declaration lacks — invisible to any
+    // single-platform CI matrix, caught twice in two days only by x86_64
+    // gate runs no CI lane owns. Pure syn scan, zero new deps, ungated
+    // (report-first, gates nothing — the config-audit law; refuses exit 1
+    // on an empty scan — the frontier-report law).
+    if args.platform_audit {
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        let report = riir_clippy::platform_audit::audit_paths(&targets);
         print!("{}", report.render());
         let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
         if !hint.is_empty() {
@@ -9638,6 +9690,7 @@ mod mode_flag_tests {
             ("--frontier-report", Box::new(|m| m.frontier_report = true)),
             ("--horizon-report", Box::new(|m| m.horizon_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
+            ("--platform-audit", Box::new(|m| m.platform_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),
             (
