@@ -133,6 +133,39 @@ Sweep totals across all 10: 4 CLEAN · 1 healed (61→49, `e2112bce`) ·
 4 blocked with named re-arm conditions · 1 recorded-not-touched
 (riir-shader). Nothing healable remains reachable on this box today.
 
+## P13 post-mining intake — the `chunks_exact_to_as_chunks` CHAIN-ROOT extension lands (the sweep's own product consumed same-day) (2026-09-14)
+
+The 09-14 sweep's biggest intake row executed the day it was filed: real
+clippy fires the lint on iterator-CHAIN roots (`.chunks_exact(4).map(..)`,
+`.all(..)`, `.enumerate()..`), the v1 proposer covered only the direct
+for-loop. The extension: a `visit_expr_method_call` arm firing when a
+call's RECEIVER is the `chunks_exact(N)` call — the ROOT is rewritten,
+every downstream adapter composes unchanged. Non-mut roots insert
+`.0.iter()` (clippy's own chain suggestion, read from the sweep feed's
+suggestion children); the `_mut` twin inserts `.0.iter_mut()` — a MEASURED
+SAFER-than-clippy divergence (clippy literally suggests `.0.iter()` for mut
+chains; probe-verified E0594 on every mutating body, which is why the lint
+is suggestion-only). The for-loop arm is untouched and the two arms are
+disjoint on the legacy shape (exactly one edit, no `.iter()` suffix).
+
+Gates: 8 new unit tests + the corpus entry extended to BOTH shapes (the
+P11 pattern — corpus count stays 53, `corpus_size_is_53` unbroken); lib
+**1412/1412**, latent **1547/1547**, clippy 0 real findings on the write
+set (one B37-class `doc_markdown` + one `cmp_owned` fixed en route);
+score-bench **FLAT 96.2/1.9** (row #111, byte-identical) + the frontier
+snapshot self-wound at the gen-7 boundary. LIVE-FIRE on a discarded
+detached worktree of seal-game-editor@`e2112bce` + the post-heal oracle
+feed: **37 edits proposed / 24 kept — all oracle-Certified (0 persist,
+0 Heuristic), 49 findings → 19** (12 unique sites, fully decomposed:
+5 = single_match_else collateral under per-file atomicity, 1 = zip-arg
+position, 1 = `STRIDE * 3` const-expr size, 1 = the typed-position body
+class (`raw.try_into()` — no `TryFrom<&[u8; 4]>`), 4 = **the NEW documented
+divergence class: MACRO-ARGUMENT chains — `assert!(rgba.chunks_exact(4)
+.all(..))` — syn's visitor does not descend into macro token streams**). The
+production re-heal of seal-game-editor belongs to its owning lane (the
+repo sits on the sibling's branch). Probe crate `.raw/chain_probe` deleted
+after use (the .raw discipline).
+
 ## P12 post-mining intake — `needless_pass_by_ref_mut` lands: the 2026-09-09 nursery-gap row closes, probe-corrected twice (2026-09-14)
 
 The last open clippy_lints intake candidate (the ~80-finding riir-ai sweep

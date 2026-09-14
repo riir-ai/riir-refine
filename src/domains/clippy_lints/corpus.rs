@@ -419,6 +419,11 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "chunks_exact_to_as_chunks".to_string(),
             lint_group: "style".to_string(),
+            // Both shapes (P13 chain-root extension, 2026-09-14): the
+            // direct for-loop + the iterator-chain root
+            // (`.map/.all/.enumerate/...` composes; `.0.iter()` inserted —
+            // clippy's own chain suggestion; the `_mut` twin takes
+            // `.iter_mut()`, SAFER than clippy's literal E0594 suggestion).
             // VERIFY: the chunk changes `&[u8]` → `&[u8; N]` (a body
             // consuming it as `&[u8]` in a typed position is E0599 the
             // compile gate reverts) and a non-const Path size compiles as
@@ -427,8 +432,8 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // 1.98.1 and real clippy is MSRV-aware (it never fires on an
             // older declared rust-version), so the suggest path is
             // inherently safe; the module doc carries the note.
-            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}".to_string(),
-            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(chunk));\n    }\n    out\n}".to_string(),
+            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}\nfn firsts(bytes: &[u8]) -> Vec<u8> {\n    bytes.chunks_exact(4).map(|p| p[0]).collect()\n}".to_string(),
+            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(chunk));\n    }\n    out\n}\nfn firsts(bytes: &[u8]) -> Vec<u8> {\n    bytes.as_chunks::<4>().0.iter().map(|p| p[0]).collect()\n}".to_string(),
         },
         // ── P10 post-mining intake (2026-09-13, the 089-T3 usage artifact) ──
         // Both probe-verified on-by-default in clippy 1.98 (probe crate,

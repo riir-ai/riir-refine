@@ -120,7 +120,7 @@ is why the proposers exist:
 | `byte_char_slices` | style | fix | `[b'S', b'H', ..]` → `*b"SH.."` (bit-identical; every element a byte literal, non-empty) |
 | `manual_slice_fill` | style | fix | `for v in &mut p { *v = val; }` → `p.fill(val)` (pure-value gate; `&mut place` iterable form only — `iter_mut()` silent in real clippy) |
 | `manual_checked_ops` | complexity | verify | `if n == 0 { v } else { total / n }` → `total.checked_div(n).unwrap_or(v)` (unsigned-only in real clippy; provably-signed divisors refused) |
-| `chunks_exact_to_as_chunks` | style | verify | `bytes.chunks_exact(4)` → `bytes.as_chunks::<4>().0` (chunk type `&[u8]` → `&[u8; 4]`; MSRV 1.88 floor) |
+| `chunks_exact_to_as_chunks` | style | verify | for-loop `bytes.chunks_exact(4)` → `bytes.as_chunks::<4>().0`; chain root `bytes.chunks_exact(4).map(..)` → `bytes.as_chunks::<4>().0.iter().map(..)` (P13, 2026-09-14; `_mut` chain takes `.iter_mut()` — SAFER than clippy's literal E0594 suggestion; chunk type `&[u8]` → `&[u8; 4]`; MSRV 1.88 floor; documented divergences: arg-position roots (zip operands), non-literal/path sizes, macro-argument chains — parse-only cannot see inside `assert!(..)` tokens) |
 
 ## The 2 P10 post-mining intake entries (2026-09-13)
 
