@@ -6820,3 +6820,35 @@ hosts, anyhow trait method-consumption). **Zero new rows surfaced and
 zero true positives lost** — the gitignored corpus carried only
 masquerades, and no repo's clean verdict depended on a file the walk
 now excludes. The v3 sweep's gitignored-corpus class is closed.
+
+**The P25-walk orphan/config sweep over the sibling-safe repos (same
+day, the code-smell hunt):** config-audit clean on all 7 scanned
+(katgpt-rs 2427, riir-neuron-db 215, riir-game-sdk 264, riir-dao 23,
+seal-remake 58, riir-mmorpg-examples 69, riir-train 1131). orphan-report:
+- **1 TRUE POSITIVE, fixed** — riir-train
+  `TripleFusionConfig.asft_lambda` (riir-train `4993adce`): the fusion
+  math reads `lambda_asft` (the weight), never the anchor strength;
+  the only reader was the tautological defaults assert; the vanished
+  history occurrence was `RimLossConfig.asft_lambda`, the same-named
+  field the Issue-546 adjudication had already deleted as dead.
+- **4 FPs, adjudicated — a NEW specimen class for the 109 ledger**:
+  riir-mmorpg-examples `DumpEntity.{k,hp,s,h}` — a Serialize-derive
+  wire struct (the `SEAL_DUMP_STATE`/`RIIR_MMORPG_EXAMPLES_DUMP_STATE`
+  debug-dump schema owner, Plan 006) whose ORPHANED verdicts are
+  name-global history masquerades: the pre-refactor game code's `.hp`/
+  `.h`/`.s` reads moved SUBSTRATE-side in the Issue-097 shrink, so the
+  in-repo count dropped while the fields' only real consumer (the
+  JSON dump + the substrate's matching authority-side dump format,
+  `sim_loop.rs` \"matches the player's StateDump layout\") was never a
+  Rust field read at all. The ORPHANED-verdict-on-wire-struct class is
+  the stillborn-clearance gap's sibling: clearance never touches
+  ORPHANED rows by design, and the history leg cannot see serde/JSON
+  consumption. (Also surfaced, deliberately NOT acted on: the dump's
+  field NAMES are confusing — `hp` carries `has_pos`, `h` carries
+  `health` — renaming is a wire break against the substrate's matching
+  dump + pinned fixtures; owner call if ever.)
+- riir-dao carries the known `EpochSummary.provenance_verified`
+  `[wire-const]` (recorded class); neuron-db/game-sdk/seal-remake 0
+  rows; riir-train's 42 stillborn + 6 wire-const rows are the
+  serde-Deserialize-config / Metrics-diagnostics classes — issue 109
+  territory.
