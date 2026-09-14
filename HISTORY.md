@@ -79,6 +79,43 @@ non-const-N shapes (clippy fires, its own suggestion cannot apply).
 Intake rows filed (this commit): the chain-shape extension + born-lint #4.
 Snapshot queue updated. seal-game-editor at `e2112bce` (in sync).
 
+**Deferred-4 follow-up screen (same day, the GPU freed + box time opened;
+completes the 10-repo screen — every repo now has a verdict):**
+
+- **riir-shader — 2 real findings, RECORDED not touched (the lane's design
+  call, code hours old):** both `dead_code` on native, both LIVE on wasm by
+  construction — `AUTOPLAY_XF_ARM_TIMEOUT_SECS` (read only inside
+  `#[cfg(target_arch = "wasm32")]` at ui.rs:483) + `AutoplayPhase::Arming`
+  (constructed only in the wasm arm at ui.rs:469; the match arm head is
+  NOT gated, so cfg-gating the variant would also require gating the arm —
+  allow+comment vs cfg-gate is the owning lane's call, from today's
+  `5a4f242` crossfade work). Rustc lint, outside the healer corpus. The
+  feature-aware-validation class firing in reverse: native-clippy dead ≠
+  dead, the wasm target consumes both.
+- **seal-remake — BLOCKED at manifest load:** workspace member
+  `crates/seal-node` deps `riir-viewbridge-abi` →
+  `E:\git\riir-viewbridge\crates\riir-viewbridge-abi\Cargo.toml` — the
+  repo is ABSENT on this partial-clone box (15 of 20 contract repos).
+  Re-arm: clone riir-viewbridge here (both-boxes sync rule).
+- **riir-mmorpg-examples — BLOCKED the same way:** member
+  `crates/riir-viewbridge-node` → the same missing `riir-viewbridge-abi`
+  manifest (the riir-ai E0432 skew would likely block it next once the
+  viewbridge dep resolves).
+- **seal-online-remaster — BLOCKED pre-lint, pre-existing at HEAD under
+  `--all-targets`:** `E0310` (parameter type `S` may not live long enough)
+  + an E0599 `run_ui` similar-name hint at
+  `crates/seal-core/src/gm_command/sdk_tab.rs:716` — `egui::Context::run`
+  inside the `permission_dropdown_renders_all_variants` TEST; `-p
+  seal-core --lib` compiles clean (test-target-only break; possibly a
+  dep-moved signature, the cross-repo skew class). The sor lane's fix.
+  Partial evidence from the truncated feed: 2 warnings at seal-data-extract
+  (bin), incl. one FOR-LOOP-shape `chunks_exact` at :392 — healer-fixable
+  the moment the build unblocks.
+
+Sweep totals across all 10: 4 CLEAN · 1 healed (61→49, `e2112bce`) ·
+4 blocked with named re-arm conditions · 1 recorded-not-touched
+(riir-shader). Nothing healable remains reachable on this box today.
+
 ## P12 post-mining intake — `needless_pass_by_ref_mut` lands: the 2026-09-09 nursery-gap row closes, probe-corrected twice (2026-09-14)
 
 The last open clippy_lints intake candidate (the ~80-finding riir-ai sweep
