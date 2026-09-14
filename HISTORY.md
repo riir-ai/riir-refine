@@ -6852,3 +6852,17 @@ seal-remake 58, riir-mmorpg-examples 69, riir-train 1131). orphan-report:
   rows; riir-train's 42 stillborn + 6 wire-const rows are the
   serde-Deserialize-config / Metrics-diagnostics classes — issue 109
   territory.
+- **katgpt-rs orphan scan (the public repo, 2427 files): 0 orphaned,
+  15 stillborn → 1 TP fixed** — `ParallaxConfig.zero_init`
+  (katgpt-rs `a11b2dd8`): the forward path DETECTS zero ρ dynamically
+  (`simd_sum_abs_f32 == 0.0` fast path) and never reads the flag; the
+  module's own tests set both arms across 8 literals (fake coverage of
+  an inert dimension). Deleted per the wire-vs-delete protocol (no
+  wiring point — inventing a W_R-zeroing constructor = a never-called
+  API); no external constructors anywhere (all literals in the
+  module's own tests.rs). The other 14 stillborn rows sample-adjudicate
+  to known classes: `_pad` (repr(C) benign), katgpt-deprecated ×4
+  (dead by design), the trace/analytics batch
+  (`AnchorTrace.future_accuracy`, `TrialRecord.base_correct`, …) —
+  Serialize-derive trace structs consumed outside Rust, the issue-109
+  serde-bridge ledger territory.
