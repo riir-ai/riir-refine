@@ -8,6 +8,66 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Plan 127 — P015 Phase 2: the `cargo heal replay` client landed (`4e1983ee`, byte movers riir-kat `a80ec7a`)
+
+The Max tier's earn lane, client half. Server landed as riir-dapps Plan
+029 (inert at cut=0 + unconfigured env); this closes the loop the other
+side: lease → local clippy-oracle replay → signed verdict.
+
+- **riir-kat `a80ec7a`**: `kat_replay_client` — signed body builders +
+  ack parsers + `accept_line` (client tier), `ReplayTransport` +
+  `HttpReplayTransport` + `request_lease`/`submit_verdict` with the 503
+  inert-lane wording (kat_transport). The two-sided signature pins verify
+  against the leaf's own composers; the mock-transport suite pins every
+  accept arm + the error-body forwarding (the refill/burn CLI-test
+  precedent).
+- **The engine** (`src/kat_replay.rs`, clippy_verify + latent_retrieval —
+  the oracle's own gates): `blake3(rustc -vV)` toolchain fingerprint
+  (T2.2; local skew aborts before any compile — a skewed verdict is
+  refused unscored server-side, running it is pure waste), step-0 canary
+  hash check (`blake3(fix)` vs the pinned `fix_hash` → `Tamper`), and
+  **the pinned single-item rate rule** — the determinism law that makes
+  K=2 agreement possible: the rates ride the commitment, so every client
+  computes them identically.
+- **The measured rule change**: the first rule (oracle_resolved =
+  empty intersection of shape/fix lints) DIED on its own real-oracle
+  test — the oracle runs pedantic+nursery, `must_use_candidate` fires on
+  most `pub fn`s, so ambient lints sit in BOTH arms and an
+  empty-intersection rule reads nearly every honest heal as unresolved.
+  The pinned rule is now REMOVED-set evidence: resolved ⇔ shape ∧ fix
+  compile ∧ `lints(shape) \ lints(fix) ≠ ∅`; ambient lints cancel in
+  the diff BY CONSTRUCTION; a clean shape + clean fix reads UNRESOLVED
+  (no evidence, never a vacuous pass); created = `lints(fix) \
+  lints(shape)` prices the gen-8 shaped half-win (healed + created). The
+  lint_key-less wire's honest limit (the diff cannot name WHICH lint was
+  the target) is documented in the lane page; the v2-lease-carries-
+  lint_key refinement is the Phase-3 reopen.
+- **The CLI lane** (`heal.rs`): kill switch `RIIR_HEAL_REPLAY=0` (exit 0)
+  → load-only login (the wetrun signing-command precedent — never
+  silently mint an identity) → consent `OptedOut` refusal (verdicts are
+  contributions to the same economy the push feeds; running the command
+  IS the consent for Unset) → fingerprint → 16-item lease → per-item
+  judge (skip Unmeasurable — a verdict is a claim) → submit → summary;
+  exit 0 iff ≥1 accepted and none failed. Feature posture: the release
+  set has no `clippy_verify`, so the release binary degrades with the
+  exact remedy (the verdict is MEASURED by the real clippy oracle);
+  promoting it into the release set is the Phase-3 owner call that ships
+  with activation (the `nonergodic_driver` bespoke-build precedent).
+- **Live smoke (M3 → devnet)**: the full gate chain runs, the lease dial
+  surfaces the DEPLOYED worker's own refusal (`route not found` — the
+  devnet worker predates the Plan-029 routes; arming is Phase-3/owner).
+  The honest Phase-2 posture: client correct against the wire contract
+  (shared leaf + mock suite), lane inert everywhere until Phase 3.
+- Gates: 1640 lib tests green (`clippy_verify,latent_retrieval`), 236 in
+  riir-kat, clippy clean both repos, default build unaffected (module
+  cfg'd out). The healer dogfooded 9 mechanical edits in the touched
+  files (`cargo heal --fix --write --verify` — `is_ok_and`,
+  `items_after_statements`, `map_unwrap_or`, `uninlined_format_args`).
+- Docs: `.docs/01_orientation/replay_lane.md` (the lane page),
+  node_tiers Max-row cell fix (the stale "class NOT YET DESIGNED" —
+  designed + client shipped, settlement still Phase 3), P015 status +
+  T2.1/T2.2/T2.4 checked, T2.3 half-checked with the owner-gated reason.
+
 ## Issue 106 — the infron free leg (groq → infron → CF ladder) landed (`859dc6de`)
 
 The owner's second free OpenAI-compatible endpoint (llm.onerouter.pro,
