@@ -8,6 +8,34 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## The 09-14 evening queue-1 unit — seal-game-editor issues 088/099/100 closed on verified HEAD evidence, the 088 sqlite_store half fixed (2026-09-14)
+
+The post-handoff re-scan found the repo's oldest OPEN-looking issues were
+already landed — the issue-first gate's "verify before acting" half. 099
+(P1, Save collapses the carrier set to the picker's one value) is fixed at
+HEAD by the carriers `FilterDropdown` + its own dirty flag + `commit_carriers`
+(all-or-none), pinned by `saving_quest_meta_leaves_the_carrier_set_alone`
+("restore the `set_quest_carriers` call in `save_all` and this goes red");
+`giver_npc` no longer exists as a field. 100 (giver picker cannot reach the
+321 non-NPC carriers) is fixed by `load_carrier_options` — relation-driven
+via `store.quest_carriers`, kind-agnostic "load-bearing rather than lazy";
+`RealNpcCatalog` keeps its `kind = 'NPC'` filter legitimately (only consumer
+left is `vocabulary`, where NPC-only is the correct semantics). 088 half
+landed earlier (placement.rs `monster_text` at :952/:1587); the remaining
+half — TWO orphaned doc blocks stacked above `conn_for_example` (a stale
+pet-roster doc whose fn `pet_ids` long ago grew its own newer doc, plus the
+retired `rank_class = 3` NPC doc) — deleted/moved corrected onto the bare
+`load_npcs` at sqlite_store.rs:5999. Validation: `cargo clippy -p
+editor-data --lib` — 7 warnings, all the documented map_render/
+ground_export `chunks_exact` divergence-class remainder, zero new. Three
+issue files removed per the noise rule. Landed as seal-game-editor
+`bbbeac56` (4 files, +2/-214). Also the evening's sync pass: katgpt-rs
+`1f3b910a`, riir-train `f7bc2f78` pulled clean; riir-ai STILL blocked
+(behind 44, sibling WIP grew 3->5 files — their lane); the seal-remake /
+riir-mmorpg sweep re-arms stay gated on it; riir-dapps contested (ref-lock
+race during fetch — a sibling session active there; 088-T5 deploy is theirs
+if claimed).
+
 ## P21 post-mining intake — the oracle-suggestion-children consumption: the `--clippy-json` fix lane applies clippy's own MachineApplicable suggestions verbatim (the P15 Unknown-receiver residue closed) (2026-09-14)
 
 The P13 row's named open followup ("the knowable route is oracle-fed"),
