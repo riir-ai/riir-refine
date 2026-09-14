@@ -8,6 +8,41 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Issue 105 — the journey-credit third axis (PC-ALM dual accumulator) landed (`e58ff9b9`)
+
+The strand-keep poison (Bench 089/090): a KEEP that ends its run at a
+typeck-masked E0614 scored as a full verified success because every selection
+surface consumed the TERMINAL verdict. Research 554's PC-ALM identity named
+the repair — credit = the integral of the residual history plus the terminal
+residual (`λ + ρ·r`), never the terminal alone. Landed as T1–T5 all green:
+
+- `JourneyCredit` over the fixseq ring (u32 stamps, Eq preserved; the dump
+  stamps every row with the run's integral + terminal; pre-105 rings decode
+  neutral). Taint = run ended with masking > 0 — ordinary remaining errors
+  are honest partial progress and never taint.
+- `journey_factor` (new `src/journey.rs`, ungated): discounts success
+  evidence accumulated in tainted journeys — consumed by
+  `shape_conditional_score` (the fix-compile lane's learned ordering) AND
+  `select_best_candidate`'s reliability axis. Failures never discounted.
+  Factor EXACTLY 1.0 with no journey data ⇒ every pre-105 store/memory
+  reads bit-identically (gate-pinned, not asserted).
+- Gate `tests/journey_credit_gate` (3/3): the recorded Bench 089/090 ring
+  populations — tainted key strictly lower at identical counts; clean key
+  bit-identical to legacy; pre-105 decode neutral. A/B lane 46/46 all arms
+  (the 34/46 bar held; the lane's store carries no journey stamps, so it
+  exercises the inert arm — the live surface is real `--fix-compile` runs).
+- Score-bench row #115 @ `e58ff9b9`: FLAT 96.2/1.9 — the clippy lane is
+  untouched by design (the axis only reprices rustc_errors-domain evidence).
+- `--frontier-report` gained the journey section (T4 instrumentation, not
+  scored); both backends (`TrajStore` + memory.json) stamp journeys per kept
+  attempt.
+
+Also this session: the 09-13 evening session's uncommitted 48-file WIP (dead
+~24h, blocking all sync) was parked losslessly into `wip/rescue-0913-evening`
+(`6d54e7d9`) and develop was synced + pushed (the issue-105 filing rebased
+onto the 12-commit backlog); the landed `.riir-clippy-plan085` worktree was
+removed.
+
 ## The 09-14 evening queue-4 hygiene sweep — eleven more seal-game-editor issues closed on code evidence, the numbering-collision defect measured and filed as issue 151 (2026-09-14)
 
 Second and third units of the evening, same repo. The hygiene batch removed
