@@ -79,6 +79,23 @@ non-const-N shapes (clippy fires, its own suggestion cannot apply).
 Intake rows filed (this commit): the chain-shape extension + born-lint #4.
 Snapshot queue updated. seal-game-editor at `e2112bce` (in sync).
 
+**Branch heals (owner request, same session):** `e2e_item` healed at
+`03affc2e` (pushed) — the branch carried **52 ×
+`float_literal_f32_fallback`**, a FUTURE-INCOMPATIBLE lint (rust #154024,
+"will become a hard error") that develop had already fixed in `a6da0d91`
+(`1.0` → `1.0_f32`) after this branch forked; all 27 unique literal sites
+suffixed via a span-driven script (the diagnostic's 1-based columns — note
+the SAME-LINE two-literal trap: fixing the first shifts the second's
+columns, 2 sites needed the followup pass) + the standard heal (85
+verified edits / 30 files, 64 cargo checks) + the same 2 hand-fixes.
+Findings 94 → 33. `bevy` verified **CLEAN — nothing to heal** (their own
+`6aaeeb23` chunks_exact hygiene + the P6 gates kept it clean; the viewport
+code is unconditionally compiled on this branch, so the default-features
+`--all-targets` pass covers it). Merge note for both branches: their
+healed files overlap develop's `e2112bce` set — the transformations are
+identical, so merge conflicts resolve to both-sides-same; trivial but
+expected.
+
 **Deferred-4 follow-up screen (same day, the GPU freed + box time opened;
 completes the 10-repo screen — every repo now has a verdict):**
 
