@@ -1,6 +1,6 @@
 # Proposal 013 — Consumer-facing install tier spec (Ultra / Max / Pro / Lite)
 
-Status: **shipped Phase 1 (spec doc + corrections ledger, `c246e61f`, 2026-09-12); Phases 2–4 open** (Phase 2 consumer mirror gated on leak/copy gates; Phase 3 replay reward class undesigned; Phase 4 game-launch)
+Status: **shipped Phase 1 (spec doc + corrections ledger, `c246e61f`, 2026-09-12); Phases 2–4 open** (Phase 2 consumer mirror gated on leak/copy gates; Phase 3 replay reward class **designed — [Proposal 015](015_replay_endorsement_reward_class.md)**, unimplemented; Phase 4 game-launch)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 005 §"Node-tier additions" × riir-ai `node_tiers.md` (the 4-system topology map) × `l4_fallback.md` §5 (the serving-lane decision) × Issue 051 `LlmRouter` (the groq-first API lane)
@@ -161,7 +161,7 @@ advertises them** — same law as "do not market LLM fixing".
 - [ ] T2.2 gist-rs/cargo-heal README tier section (source-free)
 
 ### Phase 3 — mechanisms the table honestly lacks
-- [ ] T3.1 replay endorsement reward class (design + ledger + G7 sim)
+- [ ] T3.1 replay endorsement reward class (design + ledger + G7 sim) — **design filed: [Proposal 015](015_replay_endorsement_reward_class.md)** (2026-09-14); ledger + sim = P015 Phases 1/3
 - [ ] T3.2 CLI tier presets (config sugar only)
 
 ### Phase 4 — game launch (out of scope here)

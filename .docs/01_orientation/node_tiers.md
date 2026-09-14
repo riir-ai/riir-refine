@@ -34,13 +34,13 @@ the machinery knows; the tiers are what a human picks.
 | | **Lite** | **Pro** | **Max** | **Ultra** |
 |---|---|---|---|---|
 | **What you run** | the `cargo heal` binary, anonymous | `cargo heal login` (account + miner mode) | + `kat_drain` contributor + quorum-replay participant | + full trainer window host (own Container/VPS cron) + vessel corpus host |
-| **Chain identity** | none (no account) | `Player(1)`, stake 0, vote 0 | replay endorsement class *(NOT YET DESIGNED — see status)* | `Trainer(2)`, stake 1K |
+| **Chain identity** | none (no account) | `Player(1)`, stake 0, vote 0 | replay endorsement class *(designed — [Proposal 015](../../.proposals/015_replay_endorsement_reward_class.md); NOT YET SETTLEABLE)* | `Trainer(2)`, stake 1K |
 | **LLM lane** | none — modelless only | API pay-per-fix *(gated — leak sign-off)* | API: groq free leg → CF cap-guarded | API-first (groq → CF); local Bonsai **optional + UNARMED** (reopen bar) |
 | **Hardware floor** | anything that runs the binary (native desktop + musl Linux) | any desktop | CPU box that fits rustc compile windows (~2–4 vCPU / 4–8 GB; **no GPU**) | GPU rig OR container-capable VPS (`standard-1`-class; R2 cache tier) |
 | **Costs** | nothing — free forever | KAT burn (1 KAT / M code word tokens; 100 KAT login grant) | API costs ride the groq free leg / CF USD cap | stake + GPU/container cost (v1: fleet-funded from USD treasury, G7) |
 | **Earns** | nothing (outside the economy) | mining: synced data → quorum-proven → KAT | replay/verify rewards *(class NOT YET DESIGNED)* + mining | trainer endorsements + epoch pool share |
 | **Game-tier analog** | Spectator / Satellite | Player | Curator(3) — verify work, CPU-only | Authority — the load-bearing node |
-| **Status today** | ✅ **shipped** | ✅ core shipped (login/meter/sync); fixer half **BLOCKED** (leak) | 🟡 drain bin shipped (`kat_drain`); replay class **not designed** | 🟡 designed (P005); launch = **OUR replicas only** (decentralization phase-gated) |
+| **Status today** | ✅ **shipped** | ✅ core shipped (login/meter/sync); fixer half **BLOCKED** (leak) | 🟡 drain bin shipped (`kat_drain`); replay class **designed ([P015](../../.proposals/015_replay_endorsement_reward_class.md)) — settlement pending its Phase 3** | 🟡 designed (P005); launch = **OUR replicas only** (decentralization phase-gated) |
 
 ## Tier detail
 
@@ -70,12 +70,7 @@ Two halves:
    `LlmRouter` drain over the unproven queue, redaction-gated, USD-capped.
    Anyone with API keys can run windows; free-tier absorption measured at
    $0.0000 metered.
-2. **Quorum-replay participant** — 🔴 **not designed**: deterministic replay
-   (`fix_verify` + clippy oracle + score-bench fixture) is compile-bound CPU
-   work — no GPU needed — but the **reward class for replay-only participants
-   does not exist** (today endorsements are Trainer(2)-shaped). Designing it
-   (a replay endorsement subclass, Curator-adjacent) is a Proposal-013 phase
-   gate: **do not advertise replay earnings until it can settle.**
+2. **Quorum-replay participant** — 🟡 **designed 2026-09-14 ([Proposal 015](../../.proposals/015_replay_endorsement_reward_class.md))**: leased third-party replays (`fix_verify` + clippy oracle on the verifier's own rig), K=2 verdict-commitment agreement (`verify_no_verdict_split` reuse), a conservative per-row reward split (`replay_cut_bp`, genesis 0 = inert), and a TrueBit-adapted canary discipline against rubber-stamping — the C1→C5 escalation P005 §Mining named, with economics. **Still cannot settle** until P015 Phase 3 (econ-sim arm + owner ratification + a live devnet replay-settled reward): **do not advertise replay earnings until it can settle** stands.
 
 ### Ultra — the trainer node
 
@@ -118,6 +113,7 @@ column) is the pattern — noted, out of scope here.
 ## See also
 
 - [Proposal 013](../../.proposals/013_consumer_install_tier_spec.md) — the argument, corrections, caveats
+- [Proposal 015](../../.proposals/015_replay_endorsement_reward_class.md) — the Max replay earn class (designed; settlement pending Phase 3)
 - [Proposal 005 §"Node-tier additions"](../../.proposals/005_kat_heal_service_network.md) — the role/hat placement rows this packages
 - [riir-ai `node_tiers.md`](../../../riir-ai/.docs/01_orientation/node_tiers.md) — the internal 4-system topology map
 - [`../10_self_evolve/l4_fallback.md`](../10_self_evolve/l4_fallback.md) — the LLM serving-lane decision + reopen bar
