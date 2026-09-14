@@ -8,6 +8,75 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## P15 post-mining intake — `unnecessary_map_or` lands: the born-lint closure, the `receiver_kind` substrate extraction + the SAFE-LET extension, and the gen2/gen3 re-freeze (2026-09-14)
+
+The P13 row's named candidate followup, executed same-day: the healer's own
+`map_unwrap_or` fallback emits `map_or(false, f)` at type-UNKNOWN receivers
+(the always-compiling choice), and real clippy immediately re-flags that
+output as `unnecessary_map_or` — the gen-8 shaped-verdict family's fourth
+measured member. This unit closes the loop.
+
+**Probe-first (`.raw/mapor_probe`, clippy 1.98, deleted after):** the full
+firing envelope — Option+`false`→`is_some_and`, Option+`true`→`is_none_or`
+(`map_or(true,f) ≡ is_none_or(f)` EXACTLY — no negation requirement, the
+plain shape fires), Result+`false`→`is_ok_and`, all MachineApplicable
+method-name suggestions; Result+`true` clippy-SILENT (no `is_err_or` in std
+— `map_or(true,f)` IS terminal there); `map_or_else(|| false, f)` SILENT
+under both `unnecessary_map_or` and `unnecessary_lazy_evaluations` (out of
+clippy's envelope — mirrored). Local-binding receivers (the born-lint
+class) FIRE in real clippy — the gap was ours, not clippy's.
+
+**The landing (3 pieces):**
+
+1. **The `receiver_kind` substrate extraction** — `ReceiverKind` +
+   `classify_receiver` + param/fn-ret classification moved from
+   `map_unwrap_or.rs` to the shared `proposers/receiver_kind.rs` (the
+   DRY-minimal home now that two rules need it). En route fix: `fn_rets` is
+   now a file-wide PRE-PASS (forward calls to later-defined fns classify;
+   the v1 during-visit collection missed every forward reference).
+2. **The SAFE-LET extension** (the substrate's addition, closes the
+   cascade at its SOURCE): `let best = v.iter().find(..); best.map_or(..)`
+   classifies `best` OptionLike. SOUND by construction — a binding
+   qualifies only when the name is bound EXACTLY ONCE in the whole fn (no
+   shadowing let/match/for/closure binding anywhere), never assigned
+   (plain + all 10 compound-assign forms), and not a param name: a Rust
+   binding has one static type, so every bare use refers to the one
+   binding whose type is its initializer's. Benefits BOTH rules
+   (`map_unwrap_or` now emits the terminal form directly at safe-let
+   sites instead of birthing the lint).
+3. **The `unnecessary_map_or` proposer** — fires ONLY on receivers PROVEN
+   Option/Result (params, safe-lets, shape allowlists, same-file fn rets);
+   Unknown REFUSES (the documented divergence — `is_some_and` on a Result
+   is a hard E0599, the bench_440 class; the `--clippy-json` oracle lane is
+   the designed close for the residue). `.as_ref()` chains are a measured
+   divergence: kind-preserving on BOTH Option and Result, unclassifiable
+   from text (pinned by test). FIXABLE tier (39th row). 17 unit tests +
+   11 substrate tests.
+
+**The gen2/gen3 re-freeze (the loudness gate working as designed):**
+adding the atom grew the ladder 38→39 and reshuffled every stride window
+past it — the `freeze_status_holes_are_loud` gates caught the new unlabeled
+specs exactly as built. Both tables regenerated deterministically (labels
+= per-atom expects; windows containing the two bad atoms excluded — the
+one NEW exclusion is the reshuffled
+`gen2-k3-uninlined_format_args+unnecessary_lazy_evaluations+unnecessary_map_or`),
+then **re-verified against real clippy** (v2 e2e 30.6 s: 67 verified / 0
+newly excluded / 0 drift; v3 e2e 23.6 s: 73 verified / 0 newly excluded —
+the new atom fires exactly its own lint, zero new interference). Corpus
+53→54 (count pins updated); FIXABLE 38→39.
+
+**Gates:** lib 1441/1441 (was 1412), latent 1576/1576, all-features
+2319/2319, clippy 0 (14 doc/.capacity findings fixed en route — 2 via
+`cargo heal --fix --write --verify` per the mechanical-first discipline,
+the doc_markdown/doc-indent set manual), score-bench **FLAT 96.2%
+(row #112)** + frontier snapshot appended (gen-7). Readme/AGENTS corpus
+counts repaired (the README's was stale at 49 since P9).
+
+Note on P-numbering: the P-label collided with the config-audit series'
+P14 (downstream-hint landing) — this unit is P15, next free (the ad-hoc
+P-series is per-session and has dual-allocated before; two P12s and two
+P13s already exist in this file).
+
 ## The 09-14 morning re-arm pass — sweep blockers narrowed to ONE (riir-ai's stale checkout), healer HEAD binary staged clean-of-sibling-WIP, seal-game-editor #147 closed as the queue-1 unit (2026-09-14)
 
 The handoff's resume items, executed: **riir-viewbridge CLONED** to `E:/git/riir-viewbridge`

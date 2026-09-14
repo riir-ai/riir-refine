@@ -8,8 +8,9 @@
 //! (the `manual_map` precedent kept these private — with 30 lints the
 //! duplication stopped being trivial).
 
+use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
-use syn::{Expr, ExprLit, Lit, Pat};
+use syn::{Expr, ExprLit, Lit, Macro, Pat};
 
 /// Can `<expr>.method(...)` be appended without changing grouping? Postfix
 /// chains (paths, calls, field/index access, `?`, awaits, literals, macros)
@@ -160,6 +161,23 @@ pub(crate) fn is_none_pat(p: &Pat) -> bool {
 /// without pulling `clippy_lints` into `--no-default-features --features
 /// sec`).
 pub(crate) use crate::edit_emitter::{comment_marker_positions, drops_interior_comment};
+
+/// Parse a format-family macro's post-template arguments into `Expr`s (the
+/// `map_unwrap_or` macro lane, extracted 2026-09-14 when `unnecessary_map_or`
+/// gained the same descent). Non-format macros return an empty vec; named /
+/// non-expression args are skipped (a `println!("{a}", a = 1, ..)` named arg
+/// never aborts scanning of later args).
+pub(crate) fn macro_expr_args(mac: &Macro) -> Vec<Expr> {
+    let Some(args) = super::uninlined_format_args::post_template_expr_args(mac) else {
+        return Vec::new();
+    };
+    args.into_iter()
+        .filter_map(|a| {
+            let stream: TokenStream = a.toks.iter().cloned().collect();
+            syn::parse2::<Expr>(stream).ok()
+        })
+        .collect()
+}
 
 /// Span helper: byte range of any spanned node (kept-fragment input).
 pub(crate) fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {

@@ -40,23 +40,20 @@
 //! stays silent there — SAFER than clippy's own autofix (the array-literal
 //! guard class, second member).
 
-use super::helpers::{byte_range, is_postfix_safe};
-use super::uninlined_format_args::post_template_expr_args;
+use super::helpers::{bool_lit, byte_range, is_postfix_safe, macro_expr_args};
+use super::receiver_kind::{classify_receiver, collect_fn_rets, ReceiverKind, ScopeKinds};
 use super::{edit, src, SourceEdit};
-use proc_macro2::TokenStream;
 use syn::visit::Visit;
-use syn::{
-    Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type,
-};
+use syn::{Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut v = Collector {
         source,
         edits: Vec::new(),
-        param_kinds: Vec::new(),
+        scopes: Vec::new(),
         pinned: std::collections::HashSet::new(),
-        fn_rets: std::collections::HashMap::new(),
+        fn_rets: collect_fn_rets(file),
     };
     v.visit_file(file);
     v.edits
@@ -65,10 +62,14 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 struct Collector<'a> {
     source: &'a str,
     edits: Vec<SourceEdit>,
-    /// Enclosing-fn parameter types (Option/Result classification for
-    /// plain-path receivers of the bool-literal terminal forms). Stack of
-    /// scopes — the Issue 031 H1 enclosing-fn-stack pattern.
-    param_kinds: Vec<std::collections::HashMap<String, ReceiverKind>>,
+    /// Enclosing-fn scope stack (param types + SAFE-LET classifications —
+    /// the shared `receiver_kind` substrate since P15, 2026-09-14; the
+    /// Issue 031 H1 enclosing-fn-stack pattern). Let-initializer
+    /// classification means the born-lint class (`let best = ..find(..);
+    /// best.map(f).unwrap_or(false)`) now reaches the terminal forms
+    /// directly instead of emitting the `map_or` that `unnecessary_map_or`
+    /// re-flags.
+    scopes: Vec<ScopeKinds>,
     /// Byte ranges of `unwrap_or`/`unwrap_or_else` calls whose array-literal
     /// default sits in a COERCION-FORCED position (fn return tail with a
     /// declared `&[T]` return type, or a `let` initializer whose pattern
@@ -78,30 +79,28 @@ struct Collector<'a> {
     /// (probe-verified 2026-08-28 — see the guard in `try_map_or`).
     pinned: std::collections::HashSet<(usize, usize)>,
     /// Same-file fn name → Option/Result classification of its RETURN type
-    /// (a fn whose return type is an `Option`/`Result` path, any arity).
-    /// Lets a BARE-CALL
-    /// receiver (`git_out(..).map(f).unwrap_or(false)` — the build.rs:33
-    /// shape, recurred 2026-09-04) reach the terminal forms instead of the
-    /// always-compiling `map_or` whose output `unnecessary_map_or` re-flags.
+    /// (a fn whose return type is an `Option`/`Result` path, any arity) —
+    /// built by the file-wide PRE-PASS (P15: forward references to later
+    /// fns classify too; the v1 during-visit collection missed them).
     /// Foreign fns are absent → Unknown (conservative, unchanged).
     fn_rets: std::collections::HashMap<String, ReceiverKind>,
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
-        self.param_kinds.push(fn_param_kinds(&f.sig));
-        self.note_fn_ret(&f.sig);
+        self.scopes
+            .push(ScopeKinds::from_fn(&f.sig, &f.block, self.source, &self.fn_rets));
         self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_item_fn(self, f);
-        self.param_kinds.pop();
+        self.scopes.pop();
     }
 
     fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
-        self.param_kinds.push(fn_param_kinds(&f.sig));
-        self.note_fn_ret(&f.sig);
+        self.scopes
+            .push(ScopeKinds::from_fn(&f.sig, &f.block, self.source, &self.fn_rets));
         self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_impl_item_fn(self, f);
-        self.param_kinds.pop();
+        self.scopes.pop();
     }
 
     /// Annotated-let initializer pin: `let q: &[T] = chain.unwrap_or(&[..]);`
@@ -130,7 +129,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         if let Some(replacement) = try_map_or(
             self.source,
             m,
-            self.innermost_params(),
+            self.innermost_scope(),
             Some(&self.fn_rets),
             slice_pinned,
         ) {
@@ -174,37 +173,20 @@ impl Collector<'_> {
     }
 
     fn scan_macro_args(&mut self, mac: &Macro) {
-        let Some(args) = post_template_expr_args(mac) else {
-            return;
-        };
-        let params = self.innermost_params().cloned();
-        for arg in args {
-            let stream: TokenStream = arg.toks.iter().cloned().collect();
-            let Ok(expr) = syn::parse2::<Expr>(stream) else {
-                continue; // named args / non-expression tokens — skip
-            };
+        let scope = self.innermost_scope().cloned();
+        for expr in macro_expr_args(mac) {
             scan_expr_for_matches(
                 self.source,
                 &mut self.edits,
                 &expr,
-                params.as_ref(),
+                scope.as_ref(),
                 Some(&self.fn_rets),
             );
         }
     }
 
-    fn innermost_params(&self) -> Option<&std::collections::HashMap<String, ReceiverKind>> {
-        self.param_kinds.last()
-    }
-
-    /// Record a same-file fn's RETURN-type classification (free + impl fns;
-    /// the last-segment `Option`/`Result` rule shared with `param_type_kind`).
-    fn note_fn_ret(&mut self, sig: &Signature) {
-        if let syn::ReturnType::Type(_, ty) = &sig.output {
-            if let Some(kind) = param_type_kind(ty) {
-                self.fn_rets.insert(sig.ident.to_string(), kind);
-            }
-        }
+    fn innermost_scope(&self) -> Option<&ScopeKinds> {
+        self.scopes.last()
     }
 }
 
@@ -216,19 +198,19 @@ fn scan_expr_for_matches(
     source: &str,
     edits: &mut Vec<SourceEdit>,
     expr: &Expr,
-    params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+    scope: Option<&ScopeKinds>,
     fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
 ) {
     struct Sub<'a> {
         source: &'a str,
         edits: &'a mut Vec<SourceEdit>,
-        params: Option<&'a std::collections::HashMap<String, ReceiverKind>>,
+        scope: Option<&'a ScopeKinds>,
         fn_rets: Option<&'a std::collections::HashMap<String, ReceiverKind>>,
     }
     impl<'ast> Visit<'ast> for Sub<'ast> {
         fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
             syn::visit::visit_expr_method_call(self, m);
-            if let Some(replacement) = try_map_or(self.source, m, self.params, self.fn_rets, false)
+            if let Some(replacement) = try_map_or(self.source, m, self.scope, self.fn_rets, false)
             {
                 self.edits.push(edit(m, replacement));
             }
@@ -237,49 +219,10 @@ fn scan_expr_for_matches(
     let mut sub = Sub {
         source,
         edits,
-        params,
+        scope,
         fn_rets,
     };
     sub.visit_expr(expr);
-}
-
-/// Extract Option/Result classification from a fn signature's parameter
-/// types. Only simple `ident: Type` patterns (incl. `&`-wrapped) are
-/// recorded — complex destructuring patterns are skipped (Unknown).
-fn fn_param_kinds(sig: &syn::Signature) -> std::collections::HashMap<String, ReceiverKind> {
-    let mut out = std::collections::HashMap::new();
-    for arg in &sig.inputs {
-        let syn::FnArg::Typed(pt) = arg else { continue };
-        let syn::Pat::Ident(id) = &*pt.pat else {
-            continue;
-        };
-        let kind = param_type_kind(&pt.ty);
-        if let Some(kind) = kind {
-            out.insert(id.ident.to_string(), kind);
-        }
-    }
-    out
-}
-
-fn param_type_kind(ty: &syn::Type) -> Option<ReceiverKind> {
-    let ty = match ty {
-        syn::Type::Reference(r) => &*r.elem,
-        _ => ty,
-    };
-    let syn::Type::Path(tp) = ty else { return None };
-    // Last path segment: `Option` / `Result` bare or `std::option::Option`.
-    // Generic args are ignored — `Option<T>` is OptionLike for every T.
-    match tp
-        .path
-        .segments
-        .last()
-        .map(|s| s.ident.to_string())
-        .as_deref()
-    {
-        Some("Option") => Some(ReceiverKind::OptionLike),
-        Some("Result") => Some(ReceiverKind::ResultLike),
-        _ => None,
-    }
 }
 
 /// `-> &[T]` / `-> &mut [T]` (paren-wrapped accepted). The coercion-forcing
@@ -316,7 +259,7 @@ fn two(r: std::ops::Range<usize>) -> (usize, usize) {
 fn try_map_or(
     source: &str,
     m: &ExprMethodCall,
-    params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+    scope: Option<&ScopeKinds>,
     fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
     slice_pinned: bool,
 ) -> Option<String> {
@@ -401,7 +344,7 @@ fn try_map_or(
         // default is always a closure here).
         return Some(format!("{recv}.map_or_else({default}, {mapper})"));
     }
-    let bool_default = bool_literal(&m.args[0]);
+    let bool_default = bool_lit(&m.args[0]);
     let mapper_is_bool = closure_body_is_bool(&map.args[0]);
     if let Some(default) = bool_default {
         if mapper_is_bool {
@@ -413,7 +356,7 @@ fn try_map_or(
             // of real clippy's terminal suggestion — the documented
             // SAFER-than-clippy divergence, same class as the type-blind
             // lint demotions).
-            match classify_receiver(&recv, params, fn_rets) {
+            match classify_receiver(&recv, scope, fn_rets) {
                 ReceiverKind::OptionLike => {
                     if default {
                         // clippy chain: `map_or(true, f)` → `is_none_or`
@@ -449,113 +392,6 @@ fn try_map_or(
         }
     }
     Some(format!("{recv}.map_or({default}, {mapper})"))
-}
-
-/// Parse-only receiver classification for the bool-literal terminal forms.
-/// Last-match-wins over the receiver text: a chain like
-/// `env::var(k).ok()` is Option-producing (`.ok()` converts to Option), so
-/// the OUTERMOST (last) known-shape call decides. Evidence-based allowlists:
-/// Option shapes are the dominant `.get(`/`.find(` accessors; Result shapes
-/// are the std APIs seen in production heals (`env::var`, `.parse`).
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum ReceiverKind {
-    OptionLike,
-    ResultLike,
-    Unknown,
-}
-
-fn classify_receiver(
-    recv: &str,
-    params: Option<&std::collections::HashMap<String, ReceiverKind>>,
-    fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
-) -> ReceiverKind {
-    const OPTION_SHAPES: [&str; 7] = [
-        ".get(", ".find(", ".first(", ".last(", ".pop()", ".next()", ".ok()",
-    ];
-    // `.lock(`: std Mutex/RwLock `lock()` → `LockResult` (a Result alias) —
-    // evidence: 6 production sites in one heal sweep (riir-mmorpg-examples
-    // karma/party mirrors, 2026-08-28: `.lock().map(bool-f).unwrap_or(false)`
-    // left `map_or` residue that clippy's type info flagged as `is_ok_and`).
-    const RESULT_SHAPES: [&str; 4] = ["env::var(", ".parse(", ".parse::<", ".lock("];
-    // A plain-path receiver typed by an enclosing fn parameter: the parse
-    // tree's own type annotation is authoritative (`fn f(x: Option<u8>)`).
-    if !recv.contains('.') && !recv.contains('(') {
-        if let Some(kind) = params.and_then(|p| p.get(recv.trim())) {
-            return *kind;
-        }
-        return ReceiverKind::Unknown;
-    }
-    // A BARE-CALL receiver typed by a same-file fn signature
-    // (`git_out(..).map(f).unwrap_or(false)` — the build-script shape:
-    // build.rs:33 recurred 2026-09-04 after the riir-examples 08-19 miss).
-    // The callee ident immediately before the FIRST `(` is looked up in the
-    // same-file fn-return map; method-call receivers (leading `.`) and
-    // foreign callees stay Unknown. Params still outrank this (a same-named
-    // local param is the tighter scope); a shadowing `let` binding would
-    // too in real rustc — out of scope for a parse-only pass, and the
-    // --verify compile gate reverts any E0599 that slips through.
-    if let Some(kind) = bare_call_receiver_kind(recv, fn_rets) {
-        return kind;
-    }
-    let mut best: Option<(usize, ReceiverKind)> = None;
-    for shape in OPTION_SHAPES {
-        if let Some(pos) = rfind_shape(recv, shape) {
-            if best.is_none_or(|(p, _)| pos > p) {
-                best = Some((pos, ReceiverKind::OptionLike));
-            }
-        }
-    }
-    for shape in RESULT_SHAPES {
-        if let Some(pos) = rfind_shape(recv, shape) {
-            if best.is_none_or(|(p, _)| pos > p) {
-                best = Some((pos, ReceiverKind::ResultLike));
-            }
-        }
-    }
-    best.map_or(ReceiverKind::Unknown, |(_, kind)| kind)
-}
-
-/// Classify a receiver of the shape `callee(..)` / `path::callee(..)`: extract
-/// the callee's final ident (scanning back from the first `(` over the
-/// `::`-qualified segments), then look it up in the same-file fn-return map.
-/// None unless the text actually IS a call (an ident chain directly followed
-/// by `(`) — method-call receivers and struct literals stay out of scope.
-fn bare_call_receiver_kind(
-    recv: &str,
-    fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
-) -> Option<ReceiverKind> {
-    let map = fn_rets?;
-    let open = recv.find('(')?;
-    let head = &recv[..open];
-    let head = head.trim_end();
-    if head.is_empty() || head.contains('.') || head.contains('(') {
-        return None;
-    }
-    let callee = head.rsplit("::").next()?.trim();
-    if callee.is_empty() || !callee.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        return None;
-    }
-    map.get(callee).copied()
-}
-
-/// `rfind` for a shape allowlist entry, ALSO matching the turbofish call
-/// form: `.get(` additionally matches `.get::<T>(` — the paren-suffixed
-/// shape with an explicit generic argument (`store.get::<ThinkTimer>(id)`,
-/// live residue in riir-mmorpg-examples projector.rs:287, 2026-08-28: the
-/// plain `.get(` text never matches `.get::<`, so the receiver fell to
-/// Unknown and the terminal `is_some_and` was withheld). The generic text
-/// itself is unmatchable from a fixed allowlist; the prefix + `::<` is the
-/// sound anchor. Positions stay comparable (the prefix starts where the
-/// plain shape starts), so last-match-wins ordering is unaffected.
-fn rfind_shape(recv: &str, shape: &str) -> Option<usize> {
-    if let Some(pos) = recv.rfind(shape) {
-        return Some(pos);
-    }
-    if let Some(prefix) = shape.strip_suffix('(') {
-        let turbofish = format!("{prefix}::<");
-        return recv.rfind(&turbofish);
-    }
-    None
 }
 
 /// True for `&[...]` / `&mut [...]` defaults (recursing through parens).
@@ -607,18 +443,6 @@ fn ty_refs_trait_object(ty: &Type) -> bool {
         Type::Ptr(p) => matches!(&*p.elem, Type::TraitObject(_)),
         Type::Paren(p) => ty_refs_trait_object(&p.elem),
         _ => false,
-    }
-}
-
-/// `Some(false)`/`Some(true)` for a `false`/`true` literal, else `None`.
-fn bool_literal(e: &Expr) -> Option<bool> {
-    match e {
-        Expr::Lit(l) => match &l.lit {
-            syn::Lit::Bool(b) => Some(b.value),
-            _ => None,
-        },
-        Expr::Paren(p) => bool_literal(&p.expr),
-        _ => None,
     }
 }
 

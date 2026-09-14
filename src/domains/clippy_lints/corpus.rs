@@ -18,8 +18,8 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 53 entries:
-/// the 10 seed lints (style, complexity, perf, nursery groups) + the 33
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 54 entries:
+/// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
 /// crates.io study ∩ clippy's `MachineApplicable` axis ∩ parse-only
@@ -35,8 +35,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 /// anonymous `use std::fmt::Write as _;` insertion) + the 1 P12
 /// post-mining intake row (2026-09-14, the 2026-09-09 nursery-gap row —
 /// `needless_pass_by_ref_mut`, the first receiver+cascade rule:
-/// `&mut self` → `&self` + the same-file `let mut` caller strip).
-// 53-entry data table, not logic — length is the point.
+/// `&mut self` → `&self` + the same-file `let mut` caller strip)
+///     + the 1 P15 post-mining intake row (2026-09-14, the born-lint
+///       closure — `unnecessary_map_or`, the healer's own `map_or(false, f)`
+///       fallback output re-flagged by real clippy; fires only on receivers
+///       PROVEN Option/Result by the shared `receiver_kind` substrate).
+// 54-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -224,6 +228,17 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             lint_group: "pedantic".to_string(),
             buggy_code: "fn f(x: Option<u8>) -> u8 { x.map(|v| v + 1).unwrap_or(0) }".to_string(),
             fixed_code: "fn f(x: Option<u8>) -> u8 { x.map_or(0, |v| v + 1) }".to_string(),
+        },
+        // P15 post-mining intake (2026-09-14, the born-lint closure — the
+        // healer's own map_unwrap_or `map_or(false, f)` fallback output is
+        // re-flagged by real clippy as this lint). Probe evidence:
+        // `.raw/mapor_probe`, clippy 1.98 — all terminal suggestions
+        // MachineApplicable.
+        ClippyFixEntry {
+            lint_name: "unnecessary_map_or".to_string(),
+            lint_group: "pedantic".to_string(),
+            buggy_code: "fn f(x: Option<u8>) -> bool { x.map_or(false, |v| v > 1) }".to_string(),
+            fixed_code: "fn f(x: Option<u8>) -> bool { x.is_some_and(|v| v > 1) }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "filter_next".to_string(),
@@ -553,16 +568,17 @@ mod tests {
 
     /// Corpus size pin: 10 seed, 31 expansion/post-mining, 2 Batch 89,
     /// 2 Batch 90, 4 Batch 91, the 2 P10 post-mining intake rows, the
-    /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13), and
-    /// the 1 P12 post-mining intake row (`needless_pass_by_ref_mut`,
-    /// 2026-09-14) = 53.
+    /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13), the
+    /// 1 P12 post-mining intake row (`needless_pass_by_ref_mut`,
+    /// 2026-09-14), and the 1 P15 post-mining intake row
+    /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure) = 54.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_53() {
+    fn corpus_size_is_54() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 53);
+        assert_eq!(corpus.entries.len(), 54);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

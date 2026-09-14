@@ -41,11 +41,12 @@
 //! `--fix` applies edits without a type checker — the L2 pruner only validates
 //! syntax. Rules whose **detection is purely structural** (the pattern match
 //! alone guarantees the rewrite preserves semantics) are `--fix` eligible.
-//! The 38 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
+//! The 39 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
 //! `use_self` + 2 Batch 90, selected
 //! frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
 //! 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
-//! parse-only provability; see `.benchmarks/021`):
+//! parse-only provability; see `.benchmarks/021`; + 2 Batch 91 + 1 P15
+//! `unnecessary_map_or`):
 //!
 //! | Lint | Detection |
 //!|---|---|
@@ -129,11 +130,12 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 53 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 54 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
-//! the P12 nursery receiver rule); future lints drop in by extending the
-//! match.
+//! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
+//! `chunks_exact_to_as_chunks`) + the P15 `unnecessary_map_or` rule); future
+//! lints drop in by extending the match.
 
 pub mod byte_char_slices;
 pub mod chunks_exact_to_as_chunks;
@@ -168,6 +170,7 @@ pub mod needless_range_loop;
 pub mod needless_return;
 pub mod question_mark;
 pub mod range_plus_one;
+pub mod receiver_kind;
 pub mod redundant_closure;
 pub mod redundant_field_names;
 pub mod redundant_pattern_matching;
@@ -179,6 +182,7 @@ pub mod single_match_else;
 pub mod suboptimal_flops;
 pub mod uninlined_format_args;
 pub mod unnecessary_lazy_evaluations;
+pub mod unnecessary_map_or;
 pub mod unnecessary_mut_passed;
 pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
@@ -270,6 +274,20 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // gate (`iter_mut()` is silent in real clippy too), single-assign body.
     // FIXABLE.
     "manual_slice_fill",
+    // ── P15 post-mining intake (2026-09-14, the born-lint closure — the
+    // healer's own `map_unwrap_or` fallback `map_or(false, f)` is re-flagged
+    // by real clippy as this lint; probe `.raw/mapor_probe`, clippy 1.98:
+    // Option+false→`is_some_and`, Option+true→`is_none_or`, Result+false→
+    // `is_ok_and`, all MachineApplicable; Result+true and `map_or_else` are
+    // clippy-SILENT, we mirror). FIXABLE: fires ONLY on receivers PROVEN
+    // Option/Result by the shared `receiver_kind` substrate (fn params,
+    // same-file fn returns incl. forward refs, shape allowlists, and the
+    // P15 safe-let classification — single-binding, never-assigned `let x =
+    // <provable init>`). Unknown receivers REFUSE: the type-blind
+    // standalone pick is a hard E0599 (the bench_440 class) — the
+    // documented divergence; the `--clippy-json` oracle lane is the close.
+    // MSRV floors: `is_some_and`/`is_ok_and` 1.70, `is_none_or` 1.82.
+    "unnecessary_map_or",
     // NOTE — `option_if_let_else` (38 in the fired histogram) was PROBED
     // then REFUTED (Batch 90, see `.plans/051`): nursery-group pure style
     // with zero perf/correctness content, applicability Unspecified, its
@@ -479,6 +497,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "double_parens" => double_parens::collect_edits(source, file),
         "unnecessary_lazy_evaluations" => unnecessary_lazy_evaluations::collect_edits(source, file),
         "map_unwrap_or" => map_unwrap_or::collect_edits(source, file),
+        // ── P15 post-mining intake (2026-09-14, the born-lint closure) ──
+        "unnecessary_map_or" => unnecessary_map_or::collect_edits(source, file),
         "filter_next" => filter_next::collect_edits(source, file),
         "iter_nth_zero" => iter_nth_zero::collect_edits(source, file),
         "manual_unwrap_or" => manual_unwrap_or::collect_edits(source, file),
@@ -571,8 +591,10 @@ mod tests {
         }
         // 6 seed + 27 Issue 016 structural rows + 1 Batch 89 use_self
         // + 2 Batch 90 (items_after_statements + manual_let_else)
-        // + 2 Batch 91 (byte_char_slices + manual_slice_fill).
-        assert_eq!(FIXABLE_LINTS.len(), 38);
+        // + 2 Batch 91 (byte_char_slices + manual_slice_fill)
+        // + 1 P15 unnecessary_map_or (classified-receiver-only terminal
+        // forms — the born-lint closure, 2026-09-14).
+        assert_eq!(FIXABLE_LINTS.len(), 39);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
