@@ -42,6 +42,7 @@ use serde::{Deserialize, Serialize};
 use crate::compile_oracle::{
     owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
 };
+use crate::span_embed::{span_embed as embed_shape, SPAN_EMBED_DIMS};
 
 use super::diag::{dedupe_by_site, parse_error_diags, RustcErrorDiag};
 use super::playbooks::{FixCandidate, Playbooks, SpanEdit};
@@ -94,6 +95,15 @@ pub struct AttemptRecord {
     /// (0 when the run made no attempts, the neutral point).
     #[serde(default)]
     pub terminal_residual: u32,
+    /// Issue 107 T2 — the span-shape embedding at ATTEMPT TIME: hashed
+    /// unigram+bigram bag over the ORIGINAL trigger text (`shape`),
+    /// L2-normalized, ×127 i8-quantized (integer-stamped so the record
+    /// keeps `Eq` — the journey-credit precedent). Captured at write time
+    /// because the site's bytes DRIFT as fixes land and `span_hash` is a
+    /// site ID, not a content hash — offline re-embedding would read
+    /// post-run bytes. `None` on pre-T2 rings.
+    #[serde(default)]
+    pub span_embed: Option<[i8; SPAN_EMBED_DIMS]>,
 }
 
 /// The loop outcome of one [`AttemptRecord`].
@@ -363,9 +373,11 @@ impl FixCompileReport {
         JourneyCredit::from_attempts(&self.attempts)
     }
     /// Append one attempt to the ring (seq = current length — the push
-    /// order IS the try order). 8 params: the record's own transition pair
+    /// order IS the try order). 9 params: the record's own transition pair
     /// (`errors` + `masking`) stays inline rather than behind a one-use
-    /// struct (same call as `push_case`'s allow upstream).
+    /// struct (same call as `push_case`'s allow upstream); `shape_text` is
+    /// the span's ORIGINAL bytes (embedded here, at the one chokepoint
+    /// every attempt path funnels through — Issue 107 T2).
     #[allow(clippy::too_many_arguments)]
     fn push_attempt(
         &mut self,
@@ -373,6 +385,7 @@ impl FixCompileReport {
         file: &Path,
         line: usize,
         strategy_id: &str,
+        shape_text: &str,
         outcome: AttemptOutcome,
         errors: (usize, usize),
         masking: (usize, usize),
@@ -386,6 +399,7 @@ impl FixCompileReport {
             outcome,
             errors,
             masking,
+            span_embed: Some(embed_shape(shape_text)),
             // Run-level Issue-105 values are unknown at push time; the
             // dump stamps them over these zeros.
             journey_residual_sum: 0,
@@ -658,6 +672,7 @@ impl CompileDriver {
                     &best.file,
                     best.line,
                     &best.strategy_id,
+                    &best.shape,
                     AttemptOutcome::RevertedIo,
                     (before_errors, before_errors),
                     (before_masking, before_masking),
@@ -693,6 +708,7 @@ impl CompileDriver {
                     &best.file,
                     best.line,
                     &best.strategy_id,
+                    &shape,
                     AttemptOutcome::RevertedNoProgress,
                     (before_errors, before_errors),
                     (before_masking, before_masking),
@@ -717,6 +733,7 @@ impl CompileDriver {
                     &best.file,
                     best.line,
                     &best.strategy_id,
+                    &shape,
                     AttemptOutcome::RevertedIo,
                     (before_errors, before_errors),
                     (before_masking, before_masking),
@@ -764,6 +781,7 @@ impl CompileDriver {
                     &best.file,
                     best.line,
                     &best.strategy_id,
+                    &shape,
                     AttemptOutcome::Kept,
                     (before_errors, after_errors),
                     (before_masking, after_masking),
@@ -795,6 +813,7 @@ impl CompileDriver {
                     &best.file,
                     best.line,
                     &best.strategy_id,
+                    &shape,
                     AttemptOutcome::RevertedNoProgress,
                     (before_errors, after_errors),
                     (before_masking, after_masking),
@@ -998,6 +1017,9 @@ mod tests {
             masking: (1, 1),
             journey_residual_sum: 0,
             terminal_residual: 0,
+            span_embed: Some(crate::span_embed::span_embed(
+                "pub fn f(v: &String) { let s = v; }",
+            )),
         };
         let line = serde_json::to_string(&r).unwrap();
         let back: AttemptRecord = serde_json::from_str(&line).unwrap();
@@ -1022,6 +1044,21 @@ mod tests {
         assert_eq!(legacy105.terminal_residual, 1);
         assert_eq!(legacy.journey_residual_sum, 0);
         assert_eq!(legacy.terminal_residual, 0);
+        // Issue 107 T2 — every legacy line above (pre-100, pre-105) ALSO
+        // decodes the embedding column as None; a T2 line round-trips the
+        // quantized vector byte-exact.
+        assert_eq!(legacy.span_embed, None);
+        assert_eq!(legacy105.span_embed, None);
+        let t2 = serde_json::to_string(
+            &AttemptRecord {
+                span_embed: Some(r.span_embed.unwrap()),
+                ..r.clone()
+            },
+        )
+        .unwrap();
+        let back2: AttemptRecord = serde_json::from_str(&t2).unwrap();
+        assert!(back2.span_embed.is_some());
+        assert!(t2.contains("\"span_embed\":"), "column serialized: {t2}");
     }
 
     /// Issue 105 (PC-ALM credit, Research 554) — the journey accumulator
@@ -1046,6 +1083,7 @@ mod tests {
                 masking: (1, 0),
                 journey_residual_sum: 0,
                 terminal_residual: 0,
+                span_embed: None,
             },
             AttemptRecord {
                 seq: 1,
@@ -1057,6 +1095,7 @@ mod tests {
                 masking: (0, 0),
                 journey_residual_sum: 0,
                 terminal_residual: 0,
+                span_embed: None,
             },
         ];
         // The PRE-100 F3 strand (Bench 089's recorded poison): the
@@ -1073,6 +1112,7 @@ mod tests {
             masking: (0, 1),
             journey_residual_sum: 0,
             terminal_residual: 0,
+            span_embed: None,
         }];
         // Post-100 F3 (Bench 090's honest shape): everything reverts, the
         // file is byte-identical — no keeps, but the journey still records.
@@ -1086,6 +1126,7 @@ mod tests {
             masking: (0, 1),
             journey_residual_sum: 0,
             terminal_residual: 0,
+            span_embed: None,
         }];
 
         let c_f4 = JourneyCredit::from_attempts(&f4);

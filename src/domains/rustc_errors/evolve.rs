@@ -722,6 +722,11 @@ mod tests {
                 masking: (0, 0),
                 journey_residual_sum: 0,
                 terminal_residual: 0,
+                // Issue 107 T2 — a REAL embedding on the first record so the
+                // dump round-trip pins the column end-to-end.
+                span_embed: Some(crate::span_embed::span_embed(
+                    "let r = v.as_str();",
+                )),
             },
             AttemptRecord {
                 seq: 1,
@@ -733,6 +738,7 @@ mod tests {
                 masking: (0, 0),
                 journey_residual_sum: 0,
                 terminal_residual: 0,
+                span_embed: None,
             },
         ];
         let (path, warns) = dump_fixseq(&root, &attempts);
@@ -750,6 +756,12 @@ mod tests {
         // + errors_after: attempt 0 leaves (0,2)→2, attempt 1 leaves
         // (0,2)→2 ⇒ sum 4, terminal 2).
         let body = std::fs::read_to_string(&path).unwrap();
+        // Issue 107 T2 — the column lands in the dumped jsonl verbatim.
+        assert!(
+            body.lines().next().is_some_and(|l| l.contains("\"span_embed\":")),
+            "first dumped row carries the embedding column: {}",
+            body.lines().next().unwrap_or("")
+        );
         let back: Vec<AttemptRecord> = body
             .lines()
             .filter(|l| !l.trim().is_empty())

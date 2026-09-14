@@ -40,6 +40,7 @@ fn rec(seq: usize, code: &str, strat: &str, outcome: AttemptOutcome, errors: (us
         masking,
         journey_residual_sum: 0,
         terminal_residual: 0,
+        span_embed: None,
     }
 }
 

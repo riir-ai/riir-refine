@@ -8,6 +8,64 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Issue 107 T2 — the span-shape embedding column lands (write-time capture) + the embed arm (`src/span_embed.rs`)
+
+The revival-path column T1 named as the lane's only hope: every fixseq ring
+row now carries a deterministic modelless embedding of the span's
+ATTEMPT-TIME trigger text, and `--horizon-report` grew the arm that reads it.
+
+- **Write-time capture, not offline re-embed** (the `latent-encode-at-capture`
+  rule): the site's bytes DRIFT as fixes land — the ring exists to record a
+  mutating loop — and `span_hash` is a SITE id (blake3 of `file:line`), not a
+  content hash. Re-embedding offline would hash post-run bytes for a pre-fix
+  state; the column lands at the one `push_attempt` chokepoint every attempt
+  path funnels through (kept, no-progress, io, span-drift — all five sites).
+- **The embedding** (`src/span_embed.rs`, ungated — blake3 is an
+  unconditional dep): hashed unigram+bigram bag over tokenized trigger text
+  (ident runs + single-char sigils, whitespace dropped), signed
+  feature-hashing (bucket + sign from independent hash bytes — collisions
+  cancel in expectation, not co-add), L2-normalized, ×127 i8-quantized.
+  Integer-stamped so `AttemptRecord` keeps `Eq` (the Issue-105 u32 precedent);
+  `#[serde(default)] Option<[i8; 32]>` so pre-T2 rings decode as `None`.
+  7 module tests (determinism, whitespace-insensitivity, order sensitivity
+  beyond unigrams, quantization-norm bound, non-ASCII folding).
+- **The consumer** (horizon_report): `ridge_fit` went const-generic
+  (`<const N: usize>` — the 9-native and 41-embed arms share it verbatim),
+  `RingLine` mirrors the column, `auc(embed)` on pooled + family rows,
+  `HORIZON(embed)` verdict line. **Full-coverage discipline**: the arm runs
+  only when EVERY line of every run carries the column — a partial corpus
+  skips LOUD with the coverage count in the header, never silently narrows
+  the sample set beside native rows it would not be comparable with.
+- **Two-sided canaries** (the T1 discipline held): the planted-content
+  revival test — the label at i is the TOKEN CONTENT of line i-1
+  (keep-marker vs revert-marker text) while every native scalar is constant
+  and `kept_j` sees only the label sequence's mild lag-1 autocorrelation →
+  `auc_embed ≥ 0.9` with native `< 0.9`; the identical-embeddings negative
+  control (must not beat the floor); the coverage-skip test
+  (`SKIPPED … 16/20` rendered). Design note from the fixture: KKRR-rotated
+  label patterns (zero lag-1 autocorrelation, position-balanced when
+  pooled) replace alternating ones — an alternating label pattern is
+  perfectly learnable from `kept_j` (the alternation trap, T1's own lesson).
+- **The measurement** (production path: `fixseq_prevalence --interacting
+  --store` → real driver → real dump → real report): 46 cases, 116 attempts,
+  `embed arm: ON (116/116)`. **The column does NOT revive the lane on
+  synthetic corpora either: auc(embed) = 1.000 WITH history floor 1.000 at
+  k=1 — BELOW-FLOOR**, the same sufficient-statistic verdict as T1 — the
+  diverged arms share templates, so span content carries no signal the
+  strategy prior lacks. The revival question now rests on ORGANIC rings,
+  which start accumulating the column at write time from this landing
+  (every future `--fix-compile --write` run).
+- **Drive-by repair surfaced by the new field**: `tests/nonergodic_driver_ab.rs`'s
+  `AttemptRecord` literal predated the Issue-105 journey fields — a latent
+  compile break behind the opt-in `nonergodic_driver` feature (the
+  cfg-gated-target trap), fixed with the fields + a naming comment.
+- Validation: lib 1462/1462 (9 new), `fix_compile` e2e green with
+  embed-equality assertions on both kept + revert paths (the embedding is a
+  pure function of the attempt-time trigger text — byte-reproducible),
+  `journey_credit_gate` 3/3, `nonergodic_driver` compile-checked, clippy
+  clean (lib, bin, tests, examples — plus the healer's 3 mechanical edits
+  and one manual `is_multiple_of` fix in a pre-existing T1 test line).
+
 ## Issue 107 T1 — the fixseq horizon report + the lane-viability verdict (`src/horizon_report.rs`)
 
 Issue 107's first task: is an attempt's outcome linearly decodable from the

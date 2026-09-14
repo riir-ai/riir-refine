@@ -310,6 +310,15 @@ pub mod frontier_report;
 // green zero on empty/blind/single-class populations.
 pub mod horizon_report;
 
+// Issue 107 T2: the span-shape embedding — the producer behind the fixseq
+// ring's embedding column. Hashed unigram+bigram bag over the span's
+// ORIGINAL trigger text, signed, L2-normalized, i8-quantized. Write-time
+// capture (the latent-encode-at-capture rule: the site's bytes drift as
+// fixes land — offline re-embed would read the WRONG bytes). Ungated,
+// zero new deps (blake3 is unconditional); consumed by the driver
+// (rustc_errors, write) and mirrored by horizon_report's RingLine (read).
+pub mod span_embed;
+
 // Plan 124: the config-hygiene audit — intake classes A + B as a report
 // lane (`--config-audit` in bin/heal.rs). Pure syn analysis over the scanned
 // file set, zero new deps, ungated so lib tests cover it at default

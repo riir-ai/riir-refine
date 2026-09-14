@@ -3126,6 +3126,12 @@ USAGE:
                     Laplace prior, LORO) — is an attempt's outcome linearly
                     decodable from the ring state k attempts earlier?
                     horizon ≥ 2 pays (the T3 probe lane's viability bar).
+                    The T2 EMBED ARM (Issue 107 T2) adds an auc(embed)
+                    column — the same ridge over native + span-embedding
+                    features (41 dims; the column the driver stamps at
+                    attempt time since T2) — run only at full column
+                    coverage, skipped loud otherwise with the coverage
+                    count in the header.
                     Reads <path>/.heal/fixseq/run-*.jsonl directly — no
                     store, no domain features, works on every feature build.
                     Report-first, gates nothing; refuses (exit 1) on empty

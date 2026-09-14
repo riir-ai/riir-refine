@@ -84,6 +84,12 @@ fn attempt(file: &str, line: usize, code: &str, strategy_id: &str, outcome: Atte
         outcome,
         errors: (2, if outcome == AttemptOutcome::Kept { 1 } else { 2 }),
         masking: (0, 0),
+        // Journey fields: 0 = absent (the in-memory pre-stamp state) —
+        // and the Issue-105 omission this literal carried was a latent
+        // compile break behind the opt-in feature, surfaced by T2's field.
+        journey_residual_sum: 0,
+        terminal_residual: 0,
+        span_embed: None,
     }
 }
 

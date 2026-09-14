@@ -54,6 +54,8 @@ use std::path::Path;
 use katgpt_core::best_belief_score;
 use serde::Deserialize;
 
+use crate::span_embed::SPAN_EMBED_DIMS;
+
 /// The LCB ε for the header's base-rate bound — the frontier convention
 /// (`FRONTIER_LCB_EPSILON`), 0.05.
 pub const HEADER_LCB_EPSILON: f32 = 0.05;
@@ -103,6 +105,11 @@ pub struct RingLine {
     /// Run-level terminal residual (Issue 105).
     #[serde(default)]
     pub terminal_residual: u32,
+    /// Issue 107 T2 — the span-shape embedding column (quantized hashed
+    /// unigram+bigram bag over the attempt-time trigger text; see
+    /// [`crate::span_embed`]). `None` on pre-T2 rings.
+    #[serde(default)]
+    pub span_embed: Option<[i8; SPAN_EMBED_DIMS]>,
 }
 
 impl RingLine {
@@ -154,7 +161,7 @@ pub fn load_runs(root: &Path) -> (Vec<RunRing>, usize, usize) {
     }
     files.sort();
 
-    let mut runs = Vec::new();
+    let mut runs = Vec::with_capacity(files.len());
     let mut bad = 0;
     for p in &files {
         let Ok(text) = std::fs::read_to_string(p) else {
@@ -188,6 +195,11 @@ pub fn load_runs(root: &Path) -> (Vec<RunRing>, usize, usize) {
 /// Feature count (documented in [`features_at`]).
 pub const N_FEAT: usize = 9;
 
+/// The embed arm's feature count — the 9 ring-native features plus the 32
+/// quantized embedding dims (Issue 107 T2). The arm runs ONLY on rings
+/// where every line carries the column (see [`summarize`]).
+pub const N_FEAT_EMBED: usize = N_FEAT + SPAN_EMBED_DIMS;
+
 /// The strict-lead feature vector from record `a` (position `j` in a run of
 /// `run_len` attempts). Ring-native scalars ONLY — T2's embedding column is
 /// the designed upgrade, not a prerequisite:
@@ -210,15 +222,33 @@ pub fn features_at(a: &RingLine, run_len: usize) -> [f64; N_FEAT] {
     ]
 }
 
+/// The embed arm's strict-lead feature vector — [`features_at`] with the
+/// T2 column appended, decoded to `[-1, 1]`. `None` when the line predates
+/// T2 (no column): the caller's arm-skip discipline, never a zero-fill
+/// (a silently-zeroed block would read as "shapeless span", a lie).
+#[allow(clippy::cast_precision_loss)] // i8 → f64 is exact
+#[must_use]
+pub fn features_at_embed(a: &RingLine, run_len: usize) -> Option<[f64; N_FEAT_EMBED]> {
+    let e = a.span_embed.as_ref()?;
+    let mut x = [0.0_f64; N_FEAT_EMBED];
+    x[..N_FEAT].copy_from_slice(&features_at(a, run_len));
+    for (i, v) in e.iter().enumerate() {
+        x[N_FEAT + i] = f64::from(*v) / 127.0;
+    }
+    Some(x)
+}
+
 /// Closed-form ridge fit `(G + λI)w = h` via Gaussian elimination with
 /// partial pivoting. `G = Σ xxᵀ`, `h = Σ xy`. With λ > 0 the system is
-/// always solvable; returns `None` only on empty input.
+/// always solvable; returns `None` only on empty input. Const-generic over
+/// the feature count — the native arm (9) and the embed arm (41) share this
+/// verbatim (Issue 107 T2).
 #[must_use]
-pub fn ridge_fit(samples: &[([f64; N_FEAT], bool)]) -> Option<[f64; N_FEAT]> {
+pub fn ridge_fit<const N: usize>(samples: &[([f64; N], bool)]) -> Option<[f64; N]> {
     if samples.is_empty() {
         return None;
     }
-    let size = N_FEAT;
+    let size = N;
     // Augmented normal equations: [G + λI | h].
     let mut aug: Vec<Vec<f64>> = vec![vec![0.0; size + 1]; size];
     for (x, y) in samples {
@@ -233,7 +263,7 @@ pub fn ridge_fit(samples: &[([f64; N_FEAT], bool)]) -> Option<[f64; N_FEAT]> {
     for (i, row) in aug.iter_mut().enumerate() {
         row[i] += RIDGE_LAMBDA;
     }
-    // Gaussian elimination with partial pivoting (9×9 — exact enough).
+    // Gaussian elimination with partial pivoting (N×N — exact enough).
     for col in 0..size {
         let pivot = (col..size)
             .max_by(|&r, &s| aug[r][col].abs().total_cmp(&aug[s][col].abs()))?;
@@ -245,8 +275,8 @@ pub fn ridge_fit(samples: &[([f64; N_FEAT], bool)]) -> Option<[f64; N_FEAT]> {
         for v in &mut aug[col][col..=size] {
             *v /= diag;
         }
-        // Cloned pivot row (10 f64) so the row sweep can iterate while
-        // reading it — no split-borrow gymnastics for a 9×9 system.
+        // Cloned pivot row (N+1 f64) so the row sweep can iterate while
+        // reading it — no split-borrow gymnastics.
         let pivot_row: Vec<f64> = aug[col].clone();
         for (ri, row) in aug.iter_mut().enumerate() {
             if ri == col {
@@ -260,7 +290,7 @@ pub fn ridge_fit(samples: &[([f64; N_FEAT], bool)]) -> Option<[f64; N_FEAT]> {
             }
         }
     }
-    let mut weights = [0.0; N_FEAT];
+    let mut weights = [0.0; N];
     for (i, row) in aug.iter().enumerate().take(size) {
         weights[i] = row[size];
     }
@@ -305,9 +335,10 @@ pub fn auc(scores: &[(f64, bool)]) -> Option<f64> {
 // ── The report ──────────────────────────────────────────────────────────────
 
 /// One sample at lead k: features from `i-k`, label at `i`, plus the
-/// target's strategy (the history floor's key).
-struct LeadSample {
-    x: [f64; N_FEAT],
+/// target's strategy (the history floor's key). Const-generic over the
+/// feature count (the native / embed arms instantiate it at 9 / 41).
+struct LeadSample<const N: usize> {
+    x: [f64; N],
     y: bool,
     strategy: String,
 }
@@ -326,9 +357,9 @@ fn laplace_prior(kept: usize, reverted: usize) -> f64 {
 /// history-floor scores) — each entry `(score, label)`, pooled over all
 /// held-out folds. Shared verbatim by the pooled k-rows and the per-family
 /// rows (the DRY extraction the two duplicated blocks asked for).
-fn loro_scores(run_groups: &[Vec<LeadSample>]) -> (Scored, Scored) {
-    let fit = |exclude: usize| -> Option<[f64; N_FEAT]> {
-        let train: Vec<([f64; N_FEAT], bool)> = run_groups
+fn loro_scores<const N: usize>(run_groups: &[Vec<LeadSample<N>>]) -> (Scored, Scored) {
+    let fit = |exclude: usize| -> Option<[f64; N]> {
+        let train: Vec<([f64; N], bool)> = run_groups
             .iter()
             .enumerate()
             .filter(|(gi, _)| *gi != exclude)
@@ -385,6 +416,11 @@ pub struct HorizonRow {
     pub auc_readout: Option<f64>,
     /// LORO history-aggregate (per-strategy Laplace prior) AUC.
     pub auc_history: Option<f64>,
+    /// Issue 107 T2 — the EMBED arm's AUC: the same LORO ridge over
+    /// native + span-embedding features. `None` = single class OR the arm
+    /// was skipped (no column coverage) — disambiguate via
+    /// [`HorizonSummary::embed_arm`], never this field alone.
+    pub auc_embed: Option<f64>,
 }
 
 impl HorizonRow {
@@ -394,6 +430,16 @@ impl HorizonRow {
 
     fn beats(&self) -> bool {
         match (self.measurable(), self.auc_readout, self.auc_history) {
+            (true, Some(a), Some(h)) => a >= (h.max(0.5) + MARGIN),
+            (true, Some(a), None) => a >= 0.5 + MARGIN,
+            _ => false,
+        }
+    }
+
+    /// The embed arm's beats-floor test — same margin discipline over
+    /// [`Self::auc_embed`] (the revival-path verdict, Issue 107 T2).
+    fn beats_embed(&self) -> bool {
+        match (self.measurable(), self.auc_embed, self.auc_history) {
             (true, Some(a), Some(h)) => a >= (h.max(0.5) + MARGIN),
             (true, Some(a), None) => a >= 0.5 + MARGIN,
             _ => false,
@@ -422,6 +468,8 @@ pub struct FamilyRow {
     pub neg: usize,
     pub auc_readout: Option<f64>,
     pub auc_history: Option<f64>,
+    /// Issue 107 T2 — the embed arm's AUC (arm-skip reads as `None`).
+    pub auc_embed: Option<f64>,
 }
 
 /// Why the report refused (the green-zero law) — rendered loud, exit 1.
@@ -476,6 +524,13 @@ pub struct HorizonSummary {
     pub refusal: Option<HorizonRefusal>,
     /// Unparseable lines skipped at load.
     pub bad_lines: usize,
+    /// Issue 107 T2 — attempts carrying the embedding column.
+    pub embed_attempts: usize,
+    /// Issue 107 T2 — whether the embed arm ran. Requires FULL column
+    /// coverage (every line of every run): a partial-corpus arm would score
+    /// a different sample set than the native rows beside it — skipped
+    /// LOUD with the coverage line instead.
+    pub embed_arm: bool,
 }
 
 impl HorizonSummary {
@@ -485,10 +540,28 @@ impl HorizonSummary {
     pub fn horizon(&self) -> usize {
         self.rows.iter().filter(|r| r.beats()).map(|r| r.k).max().unwrap_or(0)
     }
+
+    /// The embed arm's horizon — max measurable k whose native+embedding
+    /// readout beats both floors. `0` when the arm did not run or beat
+    /// nothing (the caller renders which).
+    #[must_use]
+    pub fn horizon_embed(&self) -> usize {
+        self.rows
+            .iter()
+            .filter(|r| r.beats_embed())
+            .map(|r| r.k)
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 /// Compute the whole report over loaded runs. Deterministic: LORO over
 /// runs in load order, `BTreeMap`s for families, no RNG.
+///
+/// # Panics
+/// Panics on an internal invariant break ONLY: an embed-arm sample whose
+/// `span_embed` is `None` after [`HorizonSummary::embed_arm`] verified full
+/// column coverage (unreachable without a data race on the rings).
 #[allow(clippy::too_many_lines)] // one population, one algorithm — the pooled-lead sweep, the refusal ladder, and the family split share state that splitting would thread through every arm
 #[allow(clippy::many_single_char_names)] // the lead-k sample grammar (k lead, i index, x features, y label) — math notation, not names
 #[allow(clippy::cast_precision_loss)] // usize/f32 rate + counter casts — the report's quantities
@@ -498,6 +571,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
     let attempts: usize = runs.iter().map(|r| r.lines.len()).sum();
     let mut kept = 0usize;
     let mut reverted = 0usize;
+    let mut embed_attempts = 0usize;
     let mut depth_hist: BTreeMap<usize, usize> = BTreeMap::new();
     for r in runs {
         *depth_hist.entry(r.lines.len().saturating_sub(1)).or_default() += 1;
@@ -508,6 +582,9 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
                 // load_runs filters these; a direct-call summary still
                 // counts only known labels.
                 None => {}
+            }
+            if l.span_embed.is_some() {
+                embed_attempts += 1;
             }
         }
     }
@@ -538,13 +615,25 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
         return s;
     }
 
+    // Issue 107 T2 — the embed arm runs ONLY at full column coverage (a
+    // partial-corpus arm would score a different sample set than the native
+    // rows beside it; skipped-loud beats silently-narrow).
+    let embed_arm = runs
+        .iter()
+        .all(|r| r.lines.iter().all(|l| l.span_embed.is_some()));
+    s.embed_attempts = embed_attempts;
+    s.embed_arm = embed_arm;
+
     // Samples per lead, per run (LORO needs per-run grouping).
-    let mut per_k: Vec<Vec<Vec<LeadSample>>> = (0..=K_MAX).map(|_| Vec::new()).collect();
+    let mut per_k: Vec<Vec<Vec<LeadSample<N_FEAT>>>> = (0..=K_MAX).map(|_| Vec::new()).collect();
+    let mut per_k_e: Vec<Vec<Vec<LeadSample<N_FEAT_EMBED>>>> =
+        (0..=K_MAX).map(|_| Vec::new()).collect();
     for ring in runs {
         let len = ring.lines.len();
         let kmax = K_MAX.min(len.saturating_sub(1));
         for (k, slot) in per_k.iter_mut().enumerate().take(kmax + 1).skip(1) {
             let mut group = Vec::with_capacity(len - k);
+            let mut group_e = Vec::with_capacity(len - k);
             for i in k..len {
                 let (x, y) = (&ring.lines[i - k], &ring.lines[i]);
                 if let Some(yb) = y.kept() {
@@ -553,10 +642,22 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
                         y: yb,
                         strategy: y.strategy_id.clone(),
                     });
+                    if embed_arm {
+                        // unwrap is total by the embed_arm coverage check.
+                        group_e.push(LeadSample {
+                            x: features_at_embed(x, len)
+                                .expect("embed_arm checked full coverage"),
+                            y: yb,
+                            strategy: y.strategy_id.clone(),
+                        });
+                    }
                 }
             }
             if !group.is_empty() {
                 slot.push(group);
+                if embed_arm {
+                    per_k_e[k].push(group_e);
+                }
             }
         }
     }
@@ -576,6 +677,12 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
         let (readout_scores, hist_scores) = loro_scores(&run_groups);
         let auc_readout = auc(&readout_scores);
         let auc_history = auc(&hist_scores);
+        let auc_embed = if embed_arm {
+            let (emb_scores, _) = loro_scores(&per_k_e[k]);
+            auc(&emb_scores)
+        } else {
+            None
+        };
 
         if pos >= MIN_CLASS && neg >= MIN_CLASS {
             any_auc_defined = any_auc_defined || auc_readout.is_some();
@@ -587,6 +694,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
             neg,
             auc_readout,
             auc_history,
+            auc_embed,
         });
     }
 
@@ -602,13 +710,15 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
     // Family split at k = 1 (decision-relevant lead), grouped PER RUN per
     // code so the LORO fold excludes the whole run — same-run
     // autocorrelation must not train on itself.
-    let mut fam: BTreeMap<String, Vec<Vec<LeadSample>>> = BTreeMap::new();
+    let mut fam: BTreeMap<String, Vec<Vec<LeadSample<N_FEAT>>>> = BTreeMap::new();
+    let mut fam_e: BTreeMap<String, Vec<Vec<LeadSample<N_FEAT_EMBED>>>> = BTreeMap::new();
     for r in runs {
         let m = r.lines.len();
         if m < 2 {
             continue;
         }
-        let mut per_code: BTreeMap<String, Vec<LeadSample>> = BTreeMap::new();
+        let mut per_code: BTreeMap<String, Vec<LeadSample<N_FEAT>>> = BTreeMap::new();
+        let mut per_code_e: BTreeMap<String, Vec<LeadSample<N_FEAT_EMBED>>> = BTreeMap::new();
         for i in 1..m {
             let (x, y) = (&r.lines[i - 1], &r.lines[i]);
             if let Some(yb) = y.kept() {
@@ -617,11 +727,27 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
                     y: yb,
                     strategy: y.strategy_id.clone(),
                 });
+                if embed_arm {
+                    per_code_e
+                        .entry(y.code.clone())
+                        .or_default()
+                        .push(LeadSample {
+                            x: features_at_embed(x, m)
+                                .expect("embed_arm checked full coverage"),
+                            y: yb,
+                            strategy: y.strategy_id.clone(),
+                        });
+                }
             }
         }
         for (code, v) in per_code {
             if !v.is_empty() {
                 fam.entry(code).or_default().push(v);
+            }
+        }
+        for (code, v) in per_code_e {
+            if !v.is_empty() {
+                fam_e.entry(code).or_default().push(v);
             }
         }
     }
@@ -640,6 +766,12 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
             continue;
         }
         let (readout_scores, hist_scores) = loro_scores(&run_groups);
+        let auc_embed = if embed_arm {
+            let (emb_scores, _) = loro_scores(&fam_e[&code]);
+            auc(&emb_scores)
+        } else {
+            None
+        };
         fam_rows.push(FamilyRow {
             code,
             n,
@@ -647,6 +779,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
             neg,
             auc_readout: auc(&readout_scores),
             auc_history: auc(&hist_scores),
+            auc_embed,
         });
     }
     fam_rows.sort_by(|a, b| b.n.cmp(&a.n).then(a.code.cmp(&b.code)));
@@ -656,6 +789,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
 }
 
 /// Render the summary as the `--horizon-report` text (house style).
+#[allow(clippy::too_many_lines)] // one table renderer — the T2 embed column/lines kept inline with their native twins rather than split into fragments reading half a row each
 #[must_use]
 pub fn render(s: &HorizonSummary) -> String {
     let mut out = String::with_capacity(2048);
@@ -684,6 +818,24 @@ pub fn render(s: &HorizonSummary) -> String {
     }
     writeln!(out, "run depth (attempts-1): {h}").unwrap();
 
+    // Issue 107 T2 — the embed arm's coverage state, always visible (the
+    // arm-skip is a measurement about the corpus, not an absence).
+    if s.embed_arm {
+        writeln!(
+            out,
+            "embed arm: ON (span column coverage {}/{} attempts)",
+            s.embed_attempts, s.attempts
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "embed arm: SKIPPED — span column coverage {}/{} attempts (T2 rings required; pre-T2 rows decode as None)",
+            s.embed_attempts, s.attempts
+        )
+        .unwrap();
+    }
+
     if let Some(r) = s.refusal {
         writeln!(out, "⛔ HORIZON REFUSAL — {}", r.label()).unwrap();
         return out;
@@ -692,25 +844,32 @@ pub fn render(s: &HorizonSummary) -> String {
     writeln!(out).unwrap();
     writeln!(
         out,
-        "  k |    n | pos | neg | auc(readout) | floor(0.5) | floor(history) | verdict"
+        "  k |    n | pos | neg | auc(readout) | auc(embed) | floor(0.5) | floor(history) | verdict"
     )
     .unwrap();
-    writeln!(out, "----+------+-----+-----+--------------+------------+----------------+--------").unwrap();
+    writeln!(out, "----+------+-----+-----+--------------+------------+------------+----------------+--------").unwrap();
     for r in &s.rows {
         let ro = r
             .auc_readout
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
+        let em = if s.embed_arm {
+            r.auc_embed
+                .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"))
+        } else {
+            "—".to_string()
+        };
         let hi = r
             .auc_history
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
         writeln!(
             out,
-            " {:>2} | {:>4} | {:>3} | {:>3} | {:>12} | {:>10} | {:>14} | {}",
+            " {:>2} | {:>4} | {:>3} | {:>3} | {:>12} | {:>10} | {:>10} | {:>14} | {}",
             r.k,
             r.n,
             r.pos,
             r.neg,
             ro,
+            em,
             "0.500",
             hi,
             r.verdict()
@@ -731,6 +890,22 @@ pub fn render(s: &HorizonSummary) -> String {
         )
         .unwrap();
     }
+    if s.embed_arm {
+        let hze = s.horizon_embed();
+        if hze > 0 {
+            writeln!(
+                out,
+                "HORIZON(embed) = {hze} (the T2 column's revival path — same bar over native+span features)"
+            )
+            .unwrap();
+        } else {
+            writeln!(
+                out,
+                "HORIZON(embed) = none — the span column did not revive the lane on this corpus either"
+            )
+            .unwrap();
+        }
+    }
 
     if !s.families.is_empty() {
         write!(out, "{}", render_family_table(&s.families, s.thin_families)).unwrap();
@@ -739,7 +914,8 @@ pub fn render(s: &HorizonSummary) -> String {
         out,
         "\nreadout: closed-form ridge over ring-native features at i-k (PROVISIONAL — the T3 \
          OnlineLinearReadout consumption follows katgpt-rs Issue 780); LORO hold-out, \
-         either-polarity; floors: base 0.5 + per-strategy Laplace prior LORO."
+         either-polarity; floors: base 0.5 + per-strategy Laplace prior LORO. embed arm \
+         (T2): the same ridge over native + span-embedding features (41 dims)."
     )
     .unwrap();
     out
@@ -757,21 +933,24 @@ fn render_family_table(families: &[FamilyRow], thin: usize) -> String {
     .unwrap();
     writeln!(
         out,
-        "  code |    n | pos | neg | auc(readout) | auc(history)"
+        "  code |    n | pos | neg | auc(readout) | auc(embed) | auc(history)"
     )
     .unwrap();
-    writeln!(out, "-------+------+-----+-----+--------------+---------------").unwrap();
+    writeln!(out, "-------+------+-----+-----+--------------+------------+-------------").unwrap();
     for f in families {
         let ro = f
             .auc_readout
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
+        let em = f
+            .auc_embed
+            .map_or("—".to_string(), |a| format!("{a:.3}"));
         let hi = f
             .auc_history
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
         writeln!(
             out,
-            " {:>5} | {:>4} | {:>3} | {:>3} | {:>12} | {:>13}",
-            f.code, f.n, f.pos, f.neg, ro, hi
+            " {:>5} | {:>4} | {:>3} | {:>3} | {:>12} | {:>10} | {:>12}",
+            f.code, f.n, f.pos, f.neg, ro, em, hi
         )
         .unwrap();
     }
@@ -804,6 +983,7 @@ mod tests {
             masking: (0, 0),
             journey_residual_sum: 0,
             terminal_residual: 0,
+            span_embed: None,
         }
     }
 
@@ -853,6 +1033,16 @@ mod tests {
         .unwrap();
         assert_eq!(current.kept(), Some(false));
         assert_eq!(current.journey_residual_sum, 7);
+        // Issue 107 T2 — a T2 row carries the quantized column; every
+        // legacy shape decodes it as None.
+        let t2: RingLine = serde_json::from_str(
+            r#"{"seq":2,"code":"E0507","span_hash":"z","strategy_id":"u","outcome":"Kept","errors":[2,1],"masking":[0,0],"span_embed":[0,1,-1,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}"#,
+        )
+        .unwrap();
+        assert_eq!(t2.span_embed.as_ref().map(|v| v.len()), Some(crate::span_embed::SPAN_EMBED_DIMS));
+        assert_eq!(t2.span_embed.unwrap()[3], 64);
+        assert_eq!(pre100.span_embed, None);
+        assert_eq!(current.span_embed, None);
         // Unknown outcome tag — corrupt, never folded.
         let bad: RingLine = serde_json::from_str(
             r#"{"seq":2,"code":"E","span_hash":"z","strategy_id":"u","outcome":"Mystery","errors":[1,1]}"#,
@@ -866,7 +1056,7 @@ mod tests {
     #[test]
     fn ridge_recovers_planted_linear_signal() {
         // y = x[1] > 0.5 — the kept_j feature alone decides.
-        let mut samples = Vec::new();
+        let mut samples = Vec::with_capacity(40);
         for i in 0..40 {
             let mut x = [0.0; N_FEAT];
             x[0] = 1.0;
@@ -875,13 +1065,14 @@ mod tests {
             samples.push((x, x[1] > 0.5));
         }
         let w = ridge_fit(&samples).expect("fit");
-        let mut scored = Vec::new();
+        let mut scored = Vec::with_capacity(samples.len());
         for (x, y) in &samples {
             let s = w.iter().zip(x.iter()).map(|(a, b)| a * b).sum();
             scored.push((s, *y));
         }
         assert!((auc(&scored).unwrap() - 1.0).abs() < 1e-9);
-        assert!(ridge_fit(&[]).is_none());
+        assert!(ridge_fit::<N_FEAT>(&[]).is_none());
+        assert!(ridge_fit::<N_FEAT_EMBED>(&[]).is_none(), "the embed arm's fit shares the empty-input contract");
     }
 
     // ── Refusals ───────────────────────────────────────────────────────────
@@ -988,6 +1179,137 @@ mod tests {
         assert_eq!(s2.horizon(), 0, "no-signal fixture must yield horizon none");
     }
 
+    // ── Issue 107 T2: the embed arm ──────────────────────────────────────
+
+    /// The arm runs ONLY at full column coverage — a partial corpus skips
+    /// LOUD (coverage line), never narrows the sample set silently.
+    #[test]
+    fn embed_arm_requires_full_coverage() {
+        let mk = |r: usize, with_col: bool| {
+            let lines: Vec<RingLine> = (0..4)
+                .map(|i| {
+                    // KKRR rotated: zero lag-1 autocorrelation and balanced
+                    // at every pooled position — kept_j and pos carry
+                    // nothing (the alternation trap's lesson, one test up).
+                    let outcome = if (i + r) % 4 < 2 {
+                        "Kept"
+                    } else {
+                        "RevertedNoProgress"
+                    };
+                    let mut l = line(i, "E0502", "s", outcome, (4, 4));
+                    if with_col {
+                        l.span_embed =
+                            Some(crate::span_embed::span_embed("let v = Vec::new();"));
+                    }
+                    l
+                })
+                .collect();
+            RunRing {
+                source: format!("run-c{r}.jsonl"),
+                lines,
+            }
+        };
+        let mut runs: Vec<RunRing> = (0..4).map(|r| mk(r, true)).collect();
+        runs.push(mk(9, false)); // the pre-T2 straggler
+        let s = summarize(&runs);
+        assert_eq!(s.refusal, None);
+        assert!(!s.embed_arm, "one column-less run must skip the arm");
+        assert_eq!(s.embed_attempts, 16, "16 of 20 attempts carry the column");
+        assert_eq!(s.attempts, 20);
+        assert!(s.rows.iter().all(|r| r.auc_embed.is_none()));
+        assert_eq!(s.horizon_embed(), 0);
+        let text = render(&s);
+        assert!(text.contains("embed arm: SKIPPED"), "loud skip: {text}");
+        assert!(text.contains("16/20"), "coverage in the line: {text}");
+
+        // Full coverage → the arm runs (embeddings here carry no signal —
+        // identical texts — so it must NOT beat the floor: the negative
+        // control for the revival test below).
+        let full: Vec<RunRing> = (0..5).map(|r| mk(r, true)).collect();
+        let s2 = summarize(&full);
+        assert!(s2.embed_arm, "full coverage runs the arm");
+        assert_eq!(s2.embed_attempts, 20);
+        let k1 = s2.rows.iter().find(|row| row.k == 1).expect("k=1 row");
+        assert!(
+            !k1.beats_embed(),
+            "identical embeddings carry no signal — the arm must not beat the floor: {:?}",
+            k1.auc_embed
+        );
+        assert!(render(&s2).contains("embed arm: ON"));
+    }
+
+    /// The revival canary — a span-embedded signal the RING-NATIVE features
+    /// cannot see: the label at i is determined by the TOKEN CONTENT of
+    /// line i-1 (keep-marker vs revert-marker text), while every native
+    /// scalar is constant and the only live native feature (`kept_j`) sees
+    /// the label sequence at one lag — correlated only through the token
+    /// pattern's lag-1 autocorrelation, which the rotation pool keeps mild.
+    /// The embed arm must decode the content signal at lead 1 (≥ 0.9).
+    #[test]
+    fn embed_arm_decodes_planted_span_signal() {
+        let text_k = "fn keep_marker_case() { let val = 1; }";
+        let text_r = "fn revert_marker_case() { let val = 2; }";
+        let emb_k = crate::span_embed::span_embed(text_k);
+        let emb_r = crate::span_embed::span_embed(text_r);
+        assert_ne!(emb_k, emb_r, "fixture texts must embed differently");
+
+        // Token pattern K K R K R R (circular φ ≈ −0.33: the mild negative
+        // lag-1 autocorrelation gives the native arm SOMETHING but far from
+        // separation); each run rotates the pattern so position carries no
+        // pooled signal.
+        let pattern = [true, true, false, true, false, false];
+        let runs: Vec<RunRing> = (0..12)
+            .map(|r| {
+                let lines: Vec<RingLine> = (0..6)
+                    .map(|i| {
+                        let is_k = pattern[(i + r) % pattern.len()];
+                        // Line 0's outcome is the kept_j feature for sample
+                        // i=1 only — held constant so it carries nothing.
+                        let kept_i = if i == 0 {
+                            false
+                        } else {
+                            pattern[(i - 1 + r) % pattern.len()]
+                        };
+                        let outcome = if kept_i {
+                            "Kept"
+                        } else {
+                            "RevertedNoProgress"
+                        };
+                        let mut l = line(i, "E0502", "s", outcome, (4, 4));
+                        l.span_embed = Some(if is_k { emb_k } else { emb_r });
+                        l
+                    })
+                    .collect();
+                RunRing {
+                    source: format!("run-emb{r}.jsonl"),
+                    lines,
+                }
+            })
+            .collect();
+        let s = summarize(&runs);
+        assert_eq!(s.refusal, None);
+        assert!(s.embed_arm, "full coverage");
+        assert_eq!(s.embed_attempts, s.attempts);
+        let k1 = s.rows.iter().find(|row| row.k == 1).expect("k=1 row");
+        assert!(k1.measurable());
+        assert!(
+            k1.auc_embed.is_some_and(|a| a >= 0.9),
+            "the planted span-content signal must decode through the column: {:?}",
+            k1.auc_embed
+        );
+        assert!(
+            k1.auc_readout.is_none_or(|a| a < 0.9),
+            "the native arm must NOT fully see a content-only signal: {:?}",
+            k1.auc_readout
+        );
+        assert!(
+            s.horizon_embed() >= 1,
+            "the revival path must fire at lead 1"
+        );
+        let text = render(&s);
+        assert!(text.contains("auc(embed)"), "column rendered");
+    }
+
     // ── History floor hygiene ──────────────────────────────────────────────
 
     #[test]
@@ -1061,7 +1383,11 @@ mod tests {
         let mk = |r: usize| {
             let lines: Vec<RingLine> = (0..7)
                 .map(|i| {
-                    let outcome = if (i + r) % 3 == 0 { "Kept" } else { "RevertedNoProgress" };
+                    let outcome = if (i + r).is_multiple_of(3) {
+                        "Kept"
+                    } else {
+                        "RevertedNoProgress"
+                    };
                     let (eb, ea) = ((i * 3 + r) % 5 + 1, (i + r) % 3);
                     line(i, &format!("E050{}", r % 3), "strat", outcome, (eb, ea))
                 })

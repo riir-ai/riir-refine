@@ -142,6 +142,18 @@ fn driver_applies_kept_fix_to_clean() {
     assert!(report.error.is_none(), "{:?}", report.error);
     assert_eq!(report.applied.len(), 1, "one kept fix: {report:?}");
     assert!(report.clean, "crate compiles after the fix: {report:?}");
+    // Issue 107 T2 — the ring record carries the span embedding of the
+    // ORIGINAL trigger text, deterministically reproducible from the
+    // pre-fix source (write-time capture).
+    assert_eq!(report.attempts.len(), 1);
+    let embed = report.attempts[0]
+        .span_embed
+        .expect("kept-path attempt carries the embedding column");
+    assert_eq!(
+        embed,
+        riir_clippy::span_embed::span_embed("let v = Vec::new();"),
+        "embedding is a pure function of the attempt-time trigger text"
+    );
     let on_disk = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();
     assert!(on_disk.contains("let mut v = Vec::new();"), "fix persisted");
     assert!(!on_disk.contains("let v = Vec::new();"));
@@ -173,6 +185,11 @@ fn driver_reverts_no_progress_candidate() {
     assert_eq!(report.reverted[0].reason, RevertReason::NoProgress);
     assert_eq!(report.remaining, 1, "the E0596 is still there");
     assert!(!report.clean);
+    // Issue 107 T2 — the revert path embeds the same attempt-time text.
+    assert!(
+        report.attempts[0].span_embed.is_some(),
+        "revert-path attempt carries the embedding column"
+    );
     // Byte-exact restore.
     let on_disk = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();
     assert_eq!(on_disk, broken, "reverted file is byte-identical");
