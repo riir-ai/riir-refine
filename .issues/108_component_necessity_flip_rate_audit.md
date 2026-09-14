@@ -1,10 +1,12 @@
 # Issue 108: Component-necessity flip-rate audit (CVRR Research 555 follow-up)
 
 **Status:** OPEN — T1 seam audit DONE 2026-09-15 (the `heal_fixpoint_with`
-iteration loops; see the T1 audit section). T2–T4 pending (harness +
-measurement + table). Filed 2026-09-15 (deferred from the 2026-09-14 CVRR
-session — blocked then on a sibling mid-batch checkout, filed now that the
-repo pulls clean).
+iteration loops; see the T1 audit section). T2 harness DONE 2026-09-15
+(`--necessity-bench` + `ComponentOverride`/`heal_fixpoint_cfg` + the
+before-verdict cache; smoke e2e validated, both canaries green). T3–T4
+pending (the full measurement pass + the table). Filed 2026-09-15 (deferred
+from the 2026-09-14 CVRR session — blocked then on a sibling mid-batch
+checkout, filed now that the repo pulls clean).
 
 **Lineage:** [katgpt-rs Research 555](../../katgpt-rs/.research/555_CVRR_Latent_Necessity_Strict_Interface.md)
 (CVRR, arXiv:2609.06746 — "informativeness ≠ use") · katgpt-rs Issue 776
@@ -123,8 +125,18 @@ composition — out of 108's scope).
   section above; dispatch fns are total (`_ => Vec::new()`), the fxhashmap
   skip + `candidates` lane are the shipped precedents, corpus/const arrays
   are read-only inputs.**
-- [ ] T2 Flip-rate harness behind a dev feature or bench — reuses the
+- [x] T2 Flip-rate harness behind a dev feature or bench — reuses the
   score-bench runner with per-run component overrides; JSONL out.
+  **Landed 2026-09-15: `ComponentOverride` + `heal_fixpoint_cfg` (the seam,
+  `src/score_bench/mod.rs` — empty override byte-identical, pinned) +
+  `run_bench_overridden` with the cross-arm before-verdict cache +
+  `src/score_bench/necessity.rs` (target schedule, co-occurrence donors,
+  both arms, two-sided canaries, JSONL to
+  `.benchmarks/necessity_history.jsonl`) + the `--necessity-bench
+  [--necessity-top N --necessity-random K --necessity-smoke]` CLI.
+  Smoke e2e (20 fixtures): canaries green; first real finding —
+  `needless_return` solo=1 but Δdisabled=−17 (solo rate massively
+  understates composed importance — the exact CVRR phenomenon).**
 - [ ] T3 Measurement pass on the current corpus (one score-bench generation
   per arm × top-20 rules by heal rate + 5 random + 1 planted no-op).
 - [ ] T4 The table + verdicts in `.benchmarks/`; decorative findings get

@@ -46,6 +46,7 @@
 pub mod cross_ooo;
 pub mod fixtures;
 pub mod generations;
+pub mod necessity;
 pub mod ood;
 pub mod report;
 
@@ -58,6 +59,7 @@ use serde::Serialize;
 use crate::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use crate::domains::rust_perf::proposers::FIXABLE_RULES;
 use crate::draft::clippy_oracle::ClippyOracle;
+use crate::draft::clippy_oracle::OracleVerdict;
 use crate::edit_emitter::apply_edits_traced;
 
 /// One frozen bench fixture: a real code span + its provenance.
@@ -509,6 +511,76 @@ pub fn heal_fixpoint(source: &str) -> (String, usize, usize) {
 /// Empty `candidates` is byte-identical to [`heal_fixpoint`].
 #[must_use]
 pub fn heal_fixpoint_with(source: &str, candidates: &[(&str, &str)]) -> (String, usize, usize) {
+    heal_fixpoint_cfg(source, candidates, &ComponentOverride::default())
+}
+
+// ── Issue 108 T2: the component-necessity intervention seam ──────────────
+
+/// The component-intervention spec at the proposer-dispatch seam (Issue 108
+/// — the CVRR protocol, `arXiv:2609.06746`: "informativeness ≠ use").
+/// Semantics consume the katgpt-rs Issue-776 intervention substrate's
+/// PROTOCOL — see the T1 audit in `.issues/108` for the honest mapping
+/// (the buffer-level operators apply to latent memory; the healer's fix
+/// lane is dispatch-level, so what composes here is the arm semantics +
+/// the verdict-predicate shapes):
+///
+/// - **empty arm** (`perturb_empty`): [`ComponentOverride::disabled`] — the
+///   rule's slot contributes zero edits, exactly an unknown rule
+///   (`_ => Vec::new()` in both domains' dispatch).
+/// - **matched-swap arm** (`perturb_matched_swap`): [`ComponentOverride::swap`]
+///   — the rule's slot redirects to a donor's `collect_edits` on the SAME
+///   source state: a coherent whole-contribution swap. "Matched" =
+///   same-domain donor (dispatched through the same domain's collect fn as
+///   the slot it replaces).
+///
+/// The verdict shapes mirror
+/// `katgpt_core::interpolation_geometry::InterventionReport`: `latent_is_causal`
+/// → a nonzero Δ(resolved-rate) under intervention (load-bearing);
+/// `flips_to_donor` → the outcome vector moves toward the donor arm's.
+/// Both are computed by the necessity harness ([`necessity`]), not here.
+///
+/// Empty override = the untouched composition — byte-identical heal,
+/// pinned by test (the non-vacuity law: the instrument must be a no-op
+/// when it claims nothing).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ComponentOverride {
+    /// Rules whose dispatch slot is EMPTIED: zero edits, no error — the
+    /// unknown-rule path by construction.
+    pub disabled: BTreeSet<String>,
+    /// rule → donor: the rule's dispatch slot redirects to the donor's
+    /// collect fn. The donor's OWN slot is untouched (independent — a swap
+    /// does not also disable the donor).
+    pub swap: BTreeMap<String, String>,
+}
+
+impl ComponentOverride {
+    /// The dispatch id for a rule's slot: `None` = disabled (skip the
+    /// rule), `Some(id)` = the id to dispatch (the rule itself, or its
+    /// swap donor). Unknown names are inert (they simply never match a
+    /// slot), so a planted no-op control cannot panic here.
+    #[must_use]
+    pub fn dispatch<'a>(&'a self, rule: &'a str) -> Option<&'a str> {
+        if self.disabled.contains(rule) {
+            return None;
+        }
+        match self.swap.get(rule) {
+            Some(donor) => Some(donor.as_str()),
+            None => Some(rule),
+        }
+    }
+}
+
+/// [`heal_fixpoint_with`] + the component-intervention lane (Issue 108 T2):
+/// each rule's dispatch consults [`ComponentOverride`] — disabled rules
+/// skip (zero edits), swapped rules dispatch their donor. The candidate
+/// textual lane composes first exactly as in [`heal_fixpoint_with`].
+/// Empty override is byte-identical to [`heal_fixpoint`] (pinned by test).
+#[must_use]
+pub fn heal_fixpoint_cfg(
+    source: &str,
+    candidates: &[(&str, &str)],
+    ovr: &ComponentOverride,
+) -> (String, usize, usize) {
     const MAX_FIX_PASSES: usize = 4;
     let mut current = source.to_string();
     let mut edits_applied = 0usize;
@@ -536,13 +608,21 @@ pub fn heal_fixpoint_with(source: &str, candidates: &[(&str, &str)]) -> (String,
             if *rule == "fxhashmap" {
                 continue;
             }
+            // Issue 108: the intervention seam — `None` skips the rule
+            // (the empty arm), `Some(donor)` swaps the contribution.
+            let Some(dispatch_id) = ovr.dispatch(rule) else {
+                continue;
+            };
             edits.extend(crate::domains::rust_perf::proposers::collect_edits(
-                rule, &current, &parsed,
+                dispatch_id, &current, &parsed,
             ));
         }
         for lint in FIXABLE_LINTS {
+            let Some(dispatch_id) = ovr.dispatch(lint) else {
+                continue;
+            };
             edits.extend(crate::domains::clippy_lints::proposers::collect_edits(
-                lint, &current, &parsed,
+                dispatch_id, &current, &parsed,
             ));
         }
         if edits.is_empty() {
@@ -622,6 +702,44 @@ pub fn run_bench_with(
     fixture_list: &[BenchFixture],
     candidates: &[(&str, &str)],
 ) -> BenchScore {
+    run_bench_inner(
+        oracle,
+        fixture_list,
+        candidates,
+        &ComponentOverride::default(),
+        None,
+    )
+}
+
+/// [`run_bench`] under a component intervention (Issue 108 T2 — the
+/// necessity harness's arm runner): frozen fixtures, frozen BEFORE
+/// verdicts, only the composition changes. The before cache is keyed by
+/// fixture id and MUST be derived from the same fixture list (a miss
+/// falls back to a live derive — correct, just unpaid-for).
+#[allow(clippy::cast_precision_loss)]
+#[must_use]
+pub fn run_bench_overridden(
+    oracle: &ClippyOracle,
+    fixture_list: &[BenchFixture],
+    ovr: &ComponentOverride,
+    before_cache: &BTreeMap<String, OracleVerdict>,
+) -> BenchScore {
+    run_bench_inner(oracle, fixture_list, &[], ovr, Some(before_cache))
+}
+
+/// The shared bench body: the candidate lane (Proposal 005 T2.4) and the
+/// component-intervention lane (Issue 108 T2) compose; the optional
+/// before-cache (Issue 108 T2) lets N intervention arms reuse ONE before
+/// pass — the before verdict is a fixture property (frozen code, no
+/// intervention touches it), so re-deriving it per arm is a pure 2× cost.
+#[allow(clippy::cast_precision_loss)]
+fn run_bench_inner(
+    oracle: &ClippyOracle,
+    fixture_list: &[BenchFixture],
+    candidates: &[(&str, &str)],
+    ovr: &ComponentOverride,
+    before_cache: Option<&BTreeMap<String, OracleVerdict>>,
+) -> BenchScore {
     let vocab = vocabulary();
     let mut score = BenchScore {
         n_total: fixture_list.len(),
@@ -631,7 +749,10 @@ pub fn run_bench_with(
     let mut acc = RunAccum::default();
 
     for fx in fixture_list {
-        let before = oracle.lints_for(&wrap(fx.code));
+        let before: OracleVerdict = match before_cache.and_then(|c| c.get(fx.id)) {
+            Some(cached) => cached.clone(),
+            None => oracle.lints_for(&wrap(fx.code)),
+        };
         if !before.ran {
             eprintln!(
                 "score_bench: EXCLUDED {} — oracle did not run ({})",
@@ -653,7 +774,7 @@ pub fn run_bench_with(
         let vocab_before: BTreeSet<String> = before.lints.intersection(&vocab).cloned().collect();
         let drifted = warn_label_drift(fx, &vocab_before);
 
-        let (healed, edits, passes) = heal_fixpoint_with(fx.code, candidates);
+        let (healed, edits, passes) = heal_fixpoint_cfg(fx.code, candidates, ovr);
         let (after_lints, output_ok, vocab_persist, created) =
             after_verdict(oracle, &healed, &vocab, &vocab_before, &before.lints);
 

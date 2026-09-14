@@ -3052,6 +3052,7 @@ USAGE:
     cargo heal --frontier-report                       (learnability band report, 089 T1+2)
     cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
+    cargo heal --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke]  (Issue 108, score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
     cargo heal account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
@@ -3407,6 +3408,20 @@ struct Args {
     generation: Option<u8>,
     /// `--score-report`: re-render the SVG from the existing history JSONL.
     score_report: bool,
+    /// Issue 108 T2: `--necessity-bench` — the component-necessity
+    /// flip-rate harness (per-rule disable + matched-swap arms over the
+    /// frozen v1 set, real-clippy oracle, two-sided canaries, JSONL out).
+    /// Standalone mode — no paths. Needs `score_bench`.
+    necessity_bench: bool,
+    /// `--necessity-top <N>`: top-N targets by solo resolved (default 20).
+    necessity_top: Option<usize>,
+    /// `--necessity-random <K>`: stride picks from the remaining present
+    /// rules (default 5; deterministic stride sampling, never RNG).
+    necessity_random: Option<usize>,
+    /// `--necessity-smoke`: the bounded e2e — first 20 fixtures, top-3 + 1
+    /// stride + both canaries (validates the instrument itself without the
+    /// full oracle bill).
+    necessity_smoke: bool,
     /// `--memory-stats` (Issue 037 observability): print the one-command
     /// debug summary of the self-evolve store — tier/outcome counts, top
     /// rules, BLAKE3 commitment status, + the E1/E2/E3 loop-state verdict.
@@ -3584,6 +3599,10 @@ fn parse_args() -> Args {
         score_bench: false,
         generation: None,
         score_report: false,
+        necessity_bench: false,
+        necessity_top: None,
+        necessity_random: None,
+        necessity_smoke: false,
         memory_stats: false,
         misses: false,
         misses_limit: None,
@@ -3674,6 +3693,28 @@ fn parse_args() -> Args {
             "--no-verify" => args.no_verify = true,
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
+            "--necessity-bench" => args.necessity_bench = true,
+            "--necessity-smoke" => args.necessity_smoke = true,
+            "--necessity-top" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--necessity-top requires a value (the top-N target count)");
+                    usage();
+                };
+                args.necessity_top = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--necessity-top expects a number, got {value:?}");
+                    usage();
+                }));
+            }
+            "--necessity-random" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--necessity-random requires a value (the stride-pick count)");
+                    usage();
+                };
+                args.necessity_random = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--necessity-random expects a number, got {value:?}");
+                    usage();
+                }));
+            }
             "--memory-stats" => args.memory_stats = true,
             "--frontier-report" => args.frontier_report = true,
             "--horizon-report" => args.horizon_report = true,
@@ -3991,6 +4032,16 @@ fn parse_args() -> Args {
         eprintln!("--generation requires --score-bench");
         usage();
     }
+    if (args.necessity_top.is_some() || args.necessity_random.is_some() || args.necessity_smoke)
+        && !args.necessity_bench
+    {
+        eprintln!("--necessity-top/--necessity-random/--necessity-smoke require --necessity-bench");
+        usage();
+    }
+    if args.necessity_bench && args.score_bench {
+        eprintln!("--necessity-bench and --score-bench are separate runs (one oracle bill each)");
+        usage();
+    }
     args
 }
 
@@ -4018,6 +4069,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.refill
         || args.score_bench
         || args.score_report
+        || args.necessity_bench
         || args.memory_stats
         || args.mine
         || args.unmine
@@ -4454,6 +4506,53 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
         );
     }
     out
+}
+
+/// Issue 108 T2: `--necessity-bench` — the component-necessity flip-rate
+/// harness. Baseline + per-target disable/matched-swap arms over the
+/// frozen v1 fixture set (real-clippy oracle), two-sided canaries, JSONL
+/// to `.benchmarks/necessity_history.jsonl` (isolated from the score
+/// history — trial runs never touch it). Canaries gate the run: a failed
+/// canary invalidates every verdict this run produced (the
+/// audit-instrument law) → exit 1.
+#[cfg(feature = "score_bench")]
+fn run_necessity_bench(top: Option<usize>, random: Option<usize>, smoke: bool) {
+    use riir_clippy::score_bench as sb;
+
+    let oracle = sb::draft_oracle();
+    if !oracle.is_available() {
+        eprintln!("necessity_bench: cargo not on PATH — cannot derive ground truth");
+        std::process::exit(1);
+    }
+    let cfg = if smoke {
+        println!("necessity_bench: SMOKE mode — 20 fixtures, top-3 + 1 stride + both canaries");
+        sb::necessity::NecessityConfig {
+            top: 3,
+            random: 1,
+            fixture_cap: Some(20),
+        }
+    } else {
+        sb::necessity::NecessityConfig {
+            top: top.unwrap_or(20),
+            random: random.unwrap_or(5),
+            fixture_cap: None,
+        }
+    };
+    let fixtures = sb::fixtures::fixtures();
+    let run = sb::necessity::run_necessity(&oracle, &fixtures, &cfg);
+    sb::necessity::print_run(&run);
+    if let Err(e) = sb::necessity::append_rows(
+        std::path::Path::new(sb::necessity::HISTORY_JSONL),
+        &run.rows,
+    ) {
+        eprintln!("necessity history append failed: {e}");
+    }
+    if !run.load_bearing_canary.ok || !run.noop_canary.ok {
+        eprintln!(
+            "necessity_bench: CANARY FAILURE — this run's verdicts are invalid; do not read the table"
+        );
+        std::process::exit(1);
+    }
 }
 
 /// Plan 014: run the clippy-bench, append the score history, re-render the
@@ -5003,7 +5102,7 @@ fn run_score_bench_perf() {
         .into_iter()
         // fn(&str) over String items — the closure adapts (a bare fn path
         // here failed E0631 on this score_bench-only lane, pre-existing).
-        .filter(sb::generations::v5_is_removal_rule)
+        .filter(|r| sb::generations::v5_is_removal_rule(r))
         .collect();
 
     let mut members_total = 0usize;
@@ -6033,6 +6132,20 @@ fn main() {
     #[cfg(not(feature = "score_bench"))]
     if args.score_bench || args.score_report {
         eprintln!("--score-bench / --score-report require a build with --features score_bench");
+        std::process::exit(2);
+    }
+    #[cfg(feature = "score_bench")]
+    if args.necessity_bench {
+        run_necessity_bench(
+            args.necessity_top,
+            args.necessity_random,
+            args.necessity_smoke,
+        );
+        return;
+    }
+    #[cfg(not(feature = "score_bench"))]
+    if args.necessity_bench {
+        eprintln!("--necessity-bench requires a build with --features score_bench");
         std::process::exit(2);
     }
 
@@ -9506,6 +9619,7 @@ mod mode_flag_tests {
             ("--misses --report", Box::new(|m| m.misses_report = true)),
             ("--score-bench", Box::new(|m| m.score_bench = true)),
             ("--score-report", Box::new(|m| m.score_report = true)),
+            ("--necessity-bench", Box::new(|m| m.necessity_bench = true)),
             ("--memory-stats", Box::new(|m| m.memory_stats = true)),
             ("--mine", Box::new(|m| m.mine = true)),
             ("--unmine", Box::new(|m| m.unmine = true)),

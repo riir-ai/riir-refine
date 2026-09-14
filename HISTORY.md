@@ -6346,3 +6346,60 @@ workspace-wide `cargo test` build still dies on the pre-existing bevy rlib
 link issue (untouched crates; per-crate runs are the lane's convention).
 
 Issue 150 removed per the noise rule; the plan file carries the closure.
+
+## 2026-09-15 — Issue 108 T1+T2: the component-necessity flip-rate harness (CVRR at the dispatch seam)
+
+The 2026-09-14 CVRR session's deferred follow-up (blocked then on a sibling
+mid-batch checkout). T1 = the read-only seam audit; T2 = the harness. The
+handoff's "katgpt-rs Issue 776 open" was STALE — 776 is DONE (`be4ff672`,
+2026-09-14): `perturb_empty`/`perturb_matched_swap`/`perturb_norm_matched_noise`
++ the `InterventionReport` verdict shapes all shipped, so T2 consumed them.
+
+**T1 — the seam is `heal_fixpoint_with`'s two rule-iteration loops**
+(`src/score_bench/mod.rs`). Every bench composition path routes through it
+(v1/v2/v3/v6/v7/v8 clippy via `run_bench_with`; v5 perf via
+`run_score_bench_perf` → `heal_fixpoint`). The dispatch fns are already total
+(`_ => Vec::new()` — a filtered rule behaves exactly like an unknown rule);
+the `fxhashmap` dep-gate skip is the shipped single-rule-disable precedent;
+the `candidates` lane is the parameterization precedent; the corpus build is
+a static literal table untouched by construction. Full audit + substrate
+mapping + canary candidates recorded in the issue file.
+
+**T2 — `ComponentOverride` + `heal_fixpoint_cfg` + `--necessity-bench`.**
+The intervention spec (disabled set + swap map) consulted at the dispatch
+seam; `heal_fixpoint_with` now delegates (`heal_fixpoint_cfg` with empty
+override = byte-identical, PINNED by test — the non-vacuity law).
+`run_bench_overridden` threads it through the bench with a cross-arm
+BEFORE-verdict cache (before verdicts are fixture properties; re-deriving
+per arm was a pure 2x oracle cost). `src/score_bench/necessity.rs`: the
+target schedule (top-N by solo resolved DESC/name ASC + deterministic
+STRIDE picks — never RNG, the replay law), co-occurrence donors
+(argmax, ties name-asc), both arms per target, the planted no-op
+(`planted-noop-control` — inert at dispatch; Δ≠0 there = pipeline
+non-determinism), two-sided canaries gating the run's exit code, JSONL to
+`.benchmarks/necessity_history.jsonl` (isolated from score_history — trial
+runs never touch it; no trajectory-store writes, the nonergodic_poc law).
+
+**Smoke e2e (20 fixtures, real clippy oracle): both canaries green**, swap
+arms executed, and the FIRST REAL FINDING landed immediately:
+`needless_return` solo_resolved=1 but Δdisabled=−17 — the solo heal rate
+massively understates composed importance (17 findings across multi-target
+fixtures ride its slot; the per-rule T8 read attributes only single-target
+fixtures). That is the exact "informativeness ≠ use" phenomenon the issue
+was filed to measure. Full T3 pass (top-20 + 5 stride + no-op over all 37
+fixtures ≈ 53 arms ≈ hours of oracle) stays deferred as designed.
+
+Also fixed en route (unblock, pre-existing on clean HEAD — stash
+round-trip proved it): `run_score_bench_perf`'s bare-fn
+`.filter(v5_is_removal_rule)` over String items (E0631 — the site's own
+comment documented the closure fix; the code had the bare fn). The bin had
+not compiled at `score_bench` + required-features before this.
+
+**Validation:** lib 1453/1453 default + 1740/1740 at `score_bench` (10 new
+necessity tests incl. the byte-identity pin, the observable
+swap-redirection proof — both match-rules' own slots disabled, `{ x }` can
+only appear through the swapped slot — and unknown-name inertness); bin
+16/16 at the full feature set; clippy clean lib+bin; live smoke e2e twice
+(8-fixture then 20-fixture) with canaries green both times. The first six
+JSONL rows are the T2 smoke validation record (fixtures field = 8/20
+distinguishes them from future T3 rows at 37).
