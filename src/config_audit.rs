@@ -140,7 +140,7 @@ use std::process::Command;
 use quote::ToTokens;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, Macro};
+use syn::{Expr, Item, Macro};
 
 /// One Default-impl field candidate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,10 +279,13 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
     let files_scanned = files.len();
     let (serde_structs, skip_ser_fields) = collect_serde_config_structs(&files);
     if !serde_structs.is_empty() {
+        let local_crates = scan_local_crate_roots(sources);
         let mut extra: Vec<FieldCandidate> = Vec::new();
         for (name, file) in &files {
+            let scope = FileScope::of(file, &local_crates);
             let mut v = StructLitCollector {
                 serde_structs: &serde_structs,
+                scope: &scope,
                 file: name,
                 out: &mut extra,
             };
@@ -506,8 +509,15 @@ impl Visit<'_> for SerdeStructMarker<'_> {
 /// tables, registry builders). `Self`-typed literals are skipped: outside
 /// an `impl` the type name cannot be resolved, and inside `impl Default`
 /// the scan-core pass already collected them with the impl type resolved.
+///
+/// Issue 109 specimen A: the literal must also pass the per-file scope
+/// check ([`FileScope::literal_is_foreign`]) — a bare `Name { … }` literal
+/// never resolves to a sibling module's same-named struct, so a foreign
+/// literal (bevy's `Node` through `use bevy::prelude::*`) is not evidence
+/// for the local serde struct of the same name.
 struct StructLitCollector<'a> {
     serde_structs: &'a BTreeSet<String>,
+    scope: &'a FileScope,
     file: &'a str,
     out: &'a mut Vec<FieldCandidate>,
 }
@@ -515,7 +525,9 @@ struct StructLitCollector<'a> {
 impl<'ast> Visit<'ast> for StructLitCollector<'_> {
     fn visit_expr_struct(&mut self, lit: &'ast syn::ExprStruct) {
         if let Some(ty) = struct_lit_type(&lit.path) {
-            if self.serde_structs.contains(&ty) {
+            if self.serde_structs.contains(&ty)
+                && !self.scope.literal_is_foreign(&ty)
+            {
                 for fv in &lit.fields {
                     let Some(field) = field_member_name(&fv.member) else {
                         continue;
@@ -532,6 +544,206 @@ impl<'ast> Visit<'ast> for StructLitCollector<'_> {
         }
         syn::visit::visit_expr_struct(self, lit);
     }
+}
+
+/// Per-file name-resolution scope for struct-literal attribution (Issue 109
+/// specimen A): within one Rust file, a bare `Name { … }` literal resolves
+/// ONLY to a type declared in that file, an explicit import, or a glob
+/// import — it NEVER silently resolves to a same-named struct declared in a
+/// sibling module. The serde-literal candidate net (and the orphan-report's
+/// wire pass) match type NAMES file-globally, so a foreign literal
+/// (`bevy_ui::Node` reached through `use bevy::prelude::*`) masquerades as
+/// construction evidence for a local same-named serde struct — the measured
+/// riir-shader FP (4 stillborn rows, zero true findings).
+/// [`FileScope::literal_is_foreign`] is the repair: a provably-foreign
+/// literal is not evidence for or against the local type.
+///
+/// Precedence mirrors rustc name resolution at file granularity: the file's
+/// own top-level declaration wins (shadows globs), then explicit imports
+/// (an in-crate `crate::`/`self::`/`super::` path can be the local struct; a
+/// foreign path cannot), then globs (a foreign glob with no local glob and
+/// no local decl/import means the name is foreign-or-unresolved — never the
+/// sibling module's declaration). Known over-approximations, both
+/// documented: `use` items are collected file-globally regardless of
+/// fn/mod nesting (a fn-local import marks the whole file — the rare
+/// file-local-decl + fn-local-foreign-import mix reads local, the
+/// conservative direction), and glob-imported names are only decidable as
+/// a class, not per-name (a foreign glob alongside a local glob reads
+/// local — the conservative direction).
+#[derive(Debug, Default)]
+pub struct FileScope {
+    /// Type idents declared at file top level (struct/enum/union/type alias).
+    declared: BTreeSet<String>,
+    /// Names explicitly imported via a crate-internal path.
+    local_imports: BTreeSet<String>,
+    /// Names explicitly imported from a path outside the scan's crate set.
+    foreign_imports: BTreeSet<String>,
+    /// A glob from outside the scan's crate set is present
+    /// (`use bevy::prelude::*`).
+    foreign_glob: bool,
+    /// A crate-internal (or workspace-sibling) glob is present
+    /// (`use crate::x::*`, `use editor_core::prelude::*`).
+    local_glob: bool,
+    /// Workspace-sibling crate names (dash-normalized path components of
+    /// the scan set — see [`scan_local_crate_roots`]).
+    local_crates: BTreeSet<String>,
+}
+
+impl FileScope {
+    /// Extract the scope from a parsed file: top-level type declarations
+    /// plus every `use` item in the file (nested ones included — see the
+    /// type-level note on the over-approximation). `local_crates` carries
+    /// the scan's workspace-sibling crate names
+    /// ([`scan_local_crate_roots`]) — a workspace scan sees `use
+    /// editor_core::types::XRow` from a sibling crate whose declaration IS
+    /// in the scanned set, which is LOCAL evidence, not foreign.
+    #[must_use]
+    pub fn of(file: &syn::File, local_crates: &BTreeSet<String>) -> Self {
+        let mut scope = FileScope {
+            local_crates: local_crates.clone(),
+            ..FileScope::default()
+        };
+        for item in &file.items {
+            match item {
+                Item::Struct(i) => {
+                    scope.declared.insert(i.ident.to_string());
+                }
+                Item::Enum(i) => {
+                    scope.declared.insert(i.ident.to_string());
+                }
+                Item::Union(i) => {
+                    scope.declared.insert(i.ident.to_string());
+                }
+                Item::Type(i) => {
+                    scope.declared.insert(i.ident.to_string());
+                }
+                _ => {}
+            }
+        }
+        let mut v = UseScopeVisitor { scope: &mut scope };
+        v.visit_file(file);
+        scope
+    }
+
+    /// Is a bare `Name { … }` literal in this file PROVABLY not the scanned
+    /// set's local same-named struct? (False = local, or unknown — collect,
+    /// the conservative direction.)
+    #[must_use]
+    pub fn literal_is_foreign(&self, name: &str) -> bool {
+        if self.declared.contains(name) || self.local_imports.contains(name) {
+            return false;
+        }
+        if self.foreign_imports.contains(name) {
+            return true;
+        }
+        self.foreign_glob && !self.local_glob
+    }
+}
+
+/// Walks `use` trees accumulating explicit binding names + glob presence,
+/// split by crate-internal vs foreign first path segment.
+struct UseScopeVisitor<'a> {
+    scope: &'a mut FileScope,
+}
+
+impl UseScopeVisitor<'_> {
+    fn walk(&mut self, tree: &syn::UseTree, prefix: &mut Vec<String>) {
+        match tree {
+            syn::UseTree::Path(p) => {
+                prefix.push(p.ident.to_string());
+                self.walk(&p.tree, prefix);
+                prefix.pop();
+            }
+            syn::UseTree::Name(n) => {
+                prefix.push(n.ident.to_string());
+                self.record(prefix);
+                prefix.pop();
+            }
+            syn::UseTree::Rename(r) => {
+                // The BINDING is the rename; the path's first segment (already
+                // in `prefix`) decides foreignness — `r.ident` cannot change it.
+                let binding = r.rename.to_string();
+                self.scope.bind(&binding, prefix);
+            }
+            syn::UseTree::Glob(_) => {
+                // An empty-prefix glob (`use *;`) is not valid Rust — ignore.
+                if let Some(first) = prefix.first() {
+                    if self.scope.is_local_root(first) {
+                        self.scope.local_glob = true;
+                    } else {
+                        self.scope.foreign_glob = true;
+                    }
+                }
+            }
+            syn::UseTree::Group(g) => {
+                for t in &g.items {
+                    self.walk(t, prefix);
+                }
+            }
+        }
+    }
+
+    fn record(&mut self, prefix: &[String]) {
+        let Some((binding, path)) = prefix.split_last() else {
+            return;
+        };
+        self.scope.bind(binding, path);
+    }
+}
+
+impl<'ast> Visit<'ast> for UseScopeVisitor<'_> {
+    fn visit_item_use(&mut self, i: &'ast syn::ItemUse) {
+        let mut prefix = Vec::new();
+        self.walk(&i.tree, &mut prefix);
+    }
+}
+
+impl FileScope {
+    fn bind(&mut self, binding: &str, path: &[String]) {
+        let Some(first) = path.first() else { return };
+        if self.is_local_root(first) {
+            self.local_imports.insert(binding.to_string());
+        } else {
+            self.foreign_imports.insert(binding.to_string());
+        }
+    }
+
+    fn is_local_root(&self, first: &str) -> bool {
+        is_in_crate_segment(first) || self.local_crates.contains(first)
+    }
+}
+
+/// `crate`, `self`, `super` — the self-referential path roots. Everything
+/// else names another crate (or is a 2015-style root that behaves the same
+/// for this purpose: not provably this crate's module tree).
+fn is_in_crate_segment(seg: &str) -> bool {
+    matches!(seg, "crate" | "self" | "super")
+}
+
+/// The scan's workspace-sibling crate-name candidates (Issue 109): every
+/// dash-normalized path component of the scanned sources. A workspace scan
+/// sees `use editor_core::types::XRow` from the sibling whose declaration
+/// sits at `crates/editor-core/…` — IN the scanned set — so treating it as
+/// foreign would suppress every cross-crate row literal (measured: the
+/// seal-game-editor sweep lost 207 candidates and all 26 C1 rows to that
+/// over-suppression before this table existed). Components like `src`,
+/// `crates`, `benches` are harmless — no import roots collide with them in
+/// practice, and over-inclusion is the collect (conservative) direction.
+/// Single-crate scans are safe by construction: a cross-crate import of a
+/// scanned-declared name can only appear in files OUTSIDE the declaring
+/// crate, which such a scan does not carry.
+#[must_use]
+pub fn scan_local_crate_roots(sources: &[(String, String)]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for (name, _) in sources {
+        for comp in name.split(['/', '\\']) {
+            let norm = comp.replace('-', "_");
+            if !norm.is_empty() {
+                out.insert(norm);
+            }
+        }
+    }
+    out
 }
 
 /// Walk `paths` (dirs recursively / files), parse every `.rs`, audit.
@@ -2226,7 +2438,7 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
 
     #[test]
     fn parse_ls_files_z_splits_joins_and_drops_missing() {
-        let base = Path::new("/base");
+        let _base = Path::new("/base");
         let here = std::env::temp_dir().join("cfgaudit_p25_exists.rs");
         fs::write(&here, b"x").unwrap();
         let rel = here

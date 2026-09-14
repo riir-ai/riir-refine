@@ -3161,6 +3161,16 @@ USAGE:
                     scan or a missing git history leg (the frontier-report
                     law — never a confident green zero). Run it after commits
                     touching config inits (the review-time post-hoc check).
+                    Wire-FP defenses (Issue 109): struct literals are
+                    attributed per-file scope — a literal naming a type the
+                    file imports from a foreign path, or reachable only via
+                    a foreign glob with no local decl/import, is foreign
+                    evidence (skipped — never a candidate/clear for the
+                    local same-named struct); generic serde bridges
+                    (Serialize-bounded generic + serde to_* on its value)
+                    mark their call sites' turbofish-named types
+                    bridge-consumed — stillborn rows there count as
+                    bridge-cleared, orphaned rows render wire-dto weak.
     --platform-audit Scan .rs files for platform-dead declarations
                     (intake class P22 — the NEON_U8 shape): items declared
                     UNCONDITIONALLY whose every use sits inside a

@@ -79,13 +79,42 @@
 //! greps); the value classification sees literal sites only (a field never
 //! set at any visible literal is treated as cleared — its value comes from
 //! deserialization or defaults, and the wire IS the consumption).
+//!
+//! # Foreign-literal attribution + generic serde bridges (Issue 109, 2026-09-15)
+//!
+//! Two measured FP classes the 2026-09-15 quiet-repo sweep filed as specimen
+//! evidence:
+//!
+//! * **Foreign literals (specimen A, riir-shader):** a bare `Name { … }`
+//!   literal NEVER resolves to a sibling module's same-named struct — within
+//!   one file it resolves only to that file's declaration, an explicit
+//!   import, or a glob. The wire pass (and the candidate net) match type
+//!   NAMES file-globally, so bevy's `Node { … }` in a file importing
+//!   `use bevy::prelude::*` masqueraded as construction evidence for a local
+//!   serde `Node` (4 stillborn rows, zero true findings) — and, in a serde
+//!   fn, would have FALSELY CLEARED the local struct's rows. The repair:
+//!   [`crate::config_audit::FileScope`] — provably-foreign literals are not
+//!   evidence in either direction (skipped for sites AND wire membership).
+//! * **Generic serde bridges (specimen B, seal-game-editor):**
+//!   `fn row_to_mapping<T: serde::Serialize>(row: &T)` — the bridge fn has
+//!   NO struct literal (the serialized value is the generic param), and its
+//!   callers have NO serde call, so fn-scoped co-occurrence is not merely
+//!   missed, it inapplicable. The concrete consumed types are only nameable
+//!   at the bridge's CALL SITES (`save_t::<CraftRow>(m)`,
+//!   `row_to_mapping(&Repo::<CraftRow>::get(..))` — turbofish). The repair:
+//!   bridge detection (Serialize-bounded param + a serde `to_*` call on it)
+//!   marks the turbofish-named types [`WireConsumption::bridge_types`] —
+//!   stillborn rows there count as bridge-cleared, and ORPHANED rows keep
+//!   their history evidence but render at **wire-dto weak** severity (the
+//!   receiver consumes the serialized field; the in-repo read loss is not
+//!   the death verdict it would be for a local-only struct).
 
 use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use crate::config_audit::{FieldCandidate, WalkMode, ZeroReadField, ZeroReadScan};
+use crate::config_audit::{FieldCandidate, FileScope, WalkMode, ZeroReadField, ZeroReadScan};
 
 /// Default probe depths (commits back from HEAD), clamped to history depth.
 pub const DEFAULT_PROBE_DEPTHS: [usize; 4] = [10, 50, 200, 1000];
@@ -283,6 +312,10 @@ pub struct OrphanRow {
     pub commits: Vec<CommitHit>,
     /// The newest count-change subject matches the optimization vocabulary.
     pub likely_by_optimization: bool,
+    /// The struct is bridge-consumed (a generic serde bridge serializes it
+    /// onward; Issue 109 specimen B) — the in-repo read loss is weak
+    /// evidence while the receiver consumes the serialized field.
+    pub bridge_weak: bool,
 }
 
 /// The report (data only — rendering is [`OrphanReport::render`]).
@@ -303,6 +336,10 @@ pub struct OrphanReport {
     /// Wire-consumed but literal-constant at every construction site —
     /// schema-dead weight, weak severity (never cleared).
     pub wire_const: Vec<ZeroReadField>,
+    /// Stillborn rows on bridge-consumed structs (Issue 109 specimen B:
+    /// generic serde bridge at the call sites) — counted, not listed (the
+    /// same measured-FP posture as `wire_cleared`).
+    pub bridge_cleared: usize,
     /// The probe depths actually resolved (clamped to history depth).
     pub probe_depths: Vec<usize>,
     /// Why the history leg is missing — the caller refuses with exit 1
@@ -341,6 +378,15 @@ pub struct WireConsumption {
     /// the receiver cannot be using; reported at the weak `[wire-const]`
     /// severity, never cleared (the 1/8 measured swallow, kept visible).
     pub wire_const: Vec<(String, String)>,
+    /// Structs whose consumption is a GENERIC SERDE BRIDGE (Issue 109
+    /// specimen B): the bridge fn serializes its `T: Serialize` param, so
+    /// it contains no struct literal and its callers contain no serde call
+    /// — fn-scoped co-occurrence cannot fire by construction. The concrete
+    /// types are the turbofish names at the bridge's call sites
+    /// (`save_t::<CraftRow>(m)`). Stillborn rows on these structs count as
+    /// bridge-cleared; ORPHANED rows keep their evidence but render at
+    /// wire-dto weak severity.
+    pub bridge_types: HashSet<String>,
 }
 
 /// Is this expression a literal constant (the wire-const class)?
@@ -372,17 +418,25 @@ struct SiteEntry {
 
 /// The wire-pass visitor. Walks every file once, tracking (a) whether we are
 /// inside a fn that serializes, (b) the enclosing impl's own type (to resolve
-/// `Self` literals), (c) every struct-literal field assignment.
+/// `Self` literals), (c) every struct-literal field assignment, (d) calls of
+/// generic serde bridges (turbofish type harvest).
 #[derive(Default)]
 struct WireVisitor {
     in_serde_fn: bool,
     impl_ty: Option<String>,
+    /// Per-file name-resolution scope (Issue 109 specimen A) — provably
+    /// foreign literals are not evidence in either direction.
+    scope: FileScope,
     /// Type names literal-constructed inside a serde fn (direct evidence).
     direct_wire_types: HashSet<String>,
     /// (type, field) → per-site const classification, ALL contexts.
     sites: std::collections::HashMap<(String, String), Vec<SiteEntry>>,
     /// Struct-def edges: wrapper struct → inner type of a `Vec<T>`/`Option<T>` field.
     wrap_edges: HashSet<(String, String)>,
+    /// Pass-1 product: generic serde bridge fn names (owned — the set is small).
+    bridge_fns: HashSet<String>,
+    /// Pass-2 accumulation: concrete types named at bridge call sites.
+    bridge_types: HashSet<String>,
 }
 
 impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
@@ -445,6 +499,15 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
         } else {
             last_seg
         };
+        // Issue 109 specimen A: a provably-foreign literal is not evidence
+        // for the scanned set's same-named struct — neither a construction
+        // site (inflates the candidate net's stillborn rows) nor wire-type
+        // membership (a foreign literal inside a serde fn would FALSELY
+        // CLEAR the local struct's rows).
+        if self.scope.literal_is_foreign(&ty) {
+            syn::visit::visit_expr_struct(self, e);
+            return;
+        }
         if self.in_serde_fn {
             self.direct_wire_types.insert(ty.clone());
         }
@@ -461,6 +524,26 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
                 });
         }
         syn::visit::visit_expr_struct(self, e);
+    }
+
+    fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(p) = &*c.func {
+            if p
+                .path
+                .segments
+                .last()
+                .is_some_and(|s| self.bridge_fns.contains(&s.ident.to_string()))
+            {
+                // The call's own turbofish (`save_t::<T>(..)`) plus every
+                // turbofish inside the args (`Repo::<T>::get(..)`) name the
+                // bridge's concrete consumed types.
+                let mut t = TurbofishTypes {
+                    out: &mut self.bridge_types,
+                };
+                syn::visit::visit_expr_call(&mut t, c);
+            }
+        }
+        syn::visit::visit_expr_call(self, c);
     }
 }
 
@@ -483,20 +566,196 @@ fn block_has_serde_call(block: &syn::Block) -> bool {
     f.0
 }
 
+// ── Generic serde bridges (Issue 109 specimen B — module doc above) ──
+
+/// A Serialize-flavored trait bound (`serde::Serialize`, `Serialize` — last
+/// path segment match, the same granularity every name here works at).
+fn is_serialize_bound(b: &syn::TypeParamBound) -> bool {
+    matches!(b, syn::TypeParamBound::Trait(t)
+        if t.path.segments.last().is_some_and(|s| s.ident == "Serialize"))
+}
+
+/// The bridge predicate: ≥1 Serialize-bounded generic param (in the param
+/// list OR a where clause — `save_t`'s bounds live there) whose VALUE is
+/// serialized by a serde `to_*` call. The value link goes through fn params
+/// TYPED over the bounded param (`row: &T`) — the bridge serializes `row`,
+/// not `T`; the param-mention check keeps a fn that serializes an
+/// unrelated CONCRETE value while merely carrying an unused Serialize
+/// param out of the bridge set.
+fn is_generic_serde_bridge(i: &syn::ItemFn) -> bool {
+    let mut ser_params: Vec<String> = i
+        .sig
+        .generics
+        .type_params()
+        .filter(|p| p.bounds.iter().any(is_serialize_bound))
+        .map(|p| p.ident.to_string())
+        .collect();
+    if let Some(w) = &i.sig.generics.where_clause {
+        for pred in &w.predicates {
+            let syn::WherePredicate::Type(pt) = pred else {
+                continue;
+            };
+            if !pt.bounds.iter().any(is_serialize_bound) {
+                continue;
+            }
+            if let syn::Type::Path(tp) = &pt.bounded_ty {
+                if tp.path.segments.len() == 1 {
+                    ser_params.push(tp.path.segments[0].ident.to_string());
+                }
+            }
+        }
+    }
+    if ser_params.is_empty() {
+        return false;
+    }
+    let mut value_names: Vec<String> = Vec::new();
+    for input in &i.sig.inputs {
+        let syn::FnArg::Typed(pt) = input else {
+            continue;
+        };
+        if type_mentions_ident(&pt.ty, &ser_params) {
+            if let syn::Pat::Ident(pi) = &*pt.pat {
+                value_names.push(pi.ident.to_string());
+            }
+        }
+    }
+    if value_names.is_empty() {
+        return false;
+    }
+    block_serializes_param(&i.block, &value_names)
+}
+
+/// Does the block contain a serde `to_*` call whose argument mentions one of
+/// the generic param names?
+fn block_serializes_param(block: &syn::Block, params: &[String]) -> bool {
+    struct F<'a> {
+        params: &'a [String],
+        hit: bool,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for F<'_> {
+        fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+            if let syn::Expr::Path(p) = &*c.func {
+                if is_serde_to_path(&p.path) {
+                    for arg in &c.args {
+                        if expr_mentions_ident(arg, self.params) {
+                            self.hit = true;
+                        }
+                    }
+                }
+            }
+            syn::visit::visit_expr_call(self, c);
+        }
+    }
+    let mut f = F { params, hit: false };
+    syn::visit::visit_block(&mut f, block);
+    f.hit
+}
+
+/// Does the expression mention any of the given names as a bare path
+/// (`row`, `row.clone()`'s receiver — not `other::row`)?
+fn expr_mentions_ident(expr: &syn::Expr, names: &[String]) -> bool {
+    let mut f = NameMentionFinder { names, hit: false };
+    syn::visit::visit_expr(&mut f, expr);
+    f.hit
+}
+
+/// Does the type mention any of the given bare idents (`&T`, `T`, `Vec<T>`)?
+fn type_mentions_ident(ty: &syn::Type, names: &[String]) -> bool {
+    let mut f = NameMentionFinder { names, hit: false };
+    syn::visit::visit_type(&mut f, ty);
+    f.hit
+}
+
+/// The shared bare-ident mention finder (`row` yes, `other::row` no).
+struct NameMentionFinder<'a> {
+    names: &'a [String],
+    hit: bool,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for NameMentionFinder<'_> {
+    fn visit_path(&mut self, p: &'ast syn::Path) {
+        if p.segments.len() == 1
+            && self.names.iter().any(|n| p.segments[0].ident == *n)
+        {
+            self.hit = true;
+        }
+        syn::visit::visit_path(self, p);
+    }
+}
+
+/// Pass-1 visitor: collects the names of GENERIC SERDE BRIDGE fns.
+struct BridgeFinder<'a> {
+    out: &'a mut HashSet<String>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for BridgeFinder<'_> {
+    fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
+        if is_generic_serde_bridge(i) {
+            self.out.insert(i.sig.ident.to_string());
+        }
+        syn::visit::visit_item_fn(self, i);
+    }
+}
+
+/// Collects every BARE type name in generic-argument position inside the
+/// visited expression — the concrete `T`s a bridge call site names
+/// (`save_t::<CraftRow>(m)`, `row_to_mapping(&Repo::<CraftRow>::get(..))`).
+/// Multi-segment paths (`serde::Serialize`) and wrapper heads (`Vec` in
+/// `Vec<CraftRow>`) insert nothing themselves — but their ARGUMENTS still
+/// fire this visitor recursively, so `Vec<CraftRow>` yields `CraftRow` (and
+/// the harmless `Vec`).
+struct TurbofishTypes<'a> {
+    out: &'a mut HashSet<String>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for TurbofishTypes<'_> {
+    fn visit_generic_argument(&mut self, g: &'ast syn::GenericArgument) {
+        if let syn::GenericArgument::Type(syn::Type::Path(tp)) = g {
+            if tp.path.segments.len() == 1 {
+                self.out.insert(tp.path.segments[0].ident.to_string());
+            }
+        }
+        syn::visit::visit_generic_argument(self, g);
+    }
+}
+
 /// Run the wire-consumption analysis over the same source set the scan ran
 /// over. Deterministic (set/iteration order does not affect membership).
+/// Two passes (parse once): pass 1 collects generic serde bridge fn names —
+/// before any literal/call walk, so a bridge defined after its caller in
+/// the file order still marks; pass 2 is the literal walk with per-file
+/// scope resolution plus the bridge call-site turbofish harvest.
 #[must_use]
 pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
-    let mut v = WireVisitor::default();
-    for (_name, src) in sources {
-        if let Ok(file) = syn::parse_file(src) {
-            syn::visit::visit_file(&mut v, &file);
-        }
+    let parsed: Vec<(String, syn::File)> = sources
+        .iter()
+        .filter_map(|(name, src)| {
+            syn::parse_file(src).ok().map(|f| (name.clone(), f))
+        })
+        .collect();
+
+    let mut bridge_fns = HashSet::new();
+    for (_name, file) in &parsed {
+        let mut f = BridgeFinder { out: &mut bridge_fns };
+        syn::visit::visit_file(&mut f, file);
+    }
+
+    let mut v = WireVisitor {
+        bridge_fns,
+        ..WireVisitor::default()
+    };
+    let local_crates = crate::config_audit::scan_local_crate_roots(sources);
+    for (_name, file) in &parsed {
+        v.scope = FileScope::of(file, &local_crates);
+        syn::visit::visit_file(&mut v, file);
     }
 
     // Transitive closure of the wrapping clause: a wire struct's Vec<T>/
     // Option<T> field consumes T; T's own wrapped fields consume further
-    // (fixpoint — the graph is tiny).
+    // (fixpoint — the graph is tiny). Bridge types deliberately do NOT seed
+    // this closure: the per-field const classification (wire-const vs
+    // cleared) is direct-serde-fn evidence only, and a bridge type's
+    // stillborn rows clear at the STRUCT level in the classifier instead.
     let mut wire_types = v.direct_wire_types.clone();
     let mut changed = true;
     while changed {
@@ -508,7 +767,10 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
         }
     }
 
-    let mut out = WireConsumption::default();
+    let mut out = WireConsumption {
+        bridge_types: v.bridge_types,
+        ..WireConsumption::default()
+    };
     for ((ty, field), entries) in &v.sites {
         if !wire_types.contains(ty) {
             continue;
@@ -578,6 +840,7 @@ pub fn classify_with_probe(
     let mut stillborn: Vec<ZeroReadField> = Vec::new();
     let mut wire_const: Vec<ZeroReadField> = Vec::new();
     let mut wire_cleared = 0usize;
+    let mut bridge_cleared = 0usize;
     for field in &scan.fields {
         let name = &field.candidate.field_name;
         let pattern = read_shape_ere(name);
@@ -604,10 +867,13 @@ pub fn classify_with_probe(
             field.candidate.struct_name.clone(),
             field.candidate.field_name.clone(),
         );
+        let bridge = wire.bridge_types.contains(&field.candidate.struct_name);
         if max_other > head_count {
             // ORPHANED rows keep their independent history evidence — the
             // wire pass never clears them (it only repairs the stillborn
-            // class the 8-row probe measured).
+            // class the 8-row probe measured). A bridge-consumed struct's
+            // row keeps the evidence too, at wire-dto weak severity: the
+            // receiver still consumes the serialized field.
             let commits = probe.pickaxe(&pattern, PICKAXE_MAX);
             let likely_by_optimization = commits
                 .first()
@@ -620,12 +886,15 @@ pub fn classify_with_probe(
                 probes,
                 commits,
                 likely_by_optimization,
+                bridge_weak: bridge,
             });
         } else if any_count == 0 {
             if wire.cleared.contains(&wire_key) {
                 wire_cleared += 1;
             } else if wire.wire_const.iter().any(|k| k == &wire_key) {
                 wire_const.push(field.clone());
+            } else if bridge {
+                bridge_cleared += 1;
             } else {
                 stillborn.push(field.clone());
             }
@@ -644,6 +913,7 @@ pub fn classify_with_probe(
         stillborn,
         wire_cleared,
         wire_const,
+        bridge_cleared,
         probe_depths,
         blind: None,
     }
@@ -674,20 +944,28 @@ impl OrphanReport {
                 }
             })
             .collect();
+        let bridge_weak_count = self
+            .orphaned
+            .iter()
+            .filter(|r| r.bridge_weak)
+            .count();
         let silent = self.zero_read_fields
             - self.orphaned.len()
             - self.stillborn.len()
             - self.wire_cleared
-            - self.wire_const.len();
+            - self.wire_const.len()
+            - self.bridge_cleared;
         let _ = writeln!(
             out,
-            "orphan-report: {} file(s) parsed, {} Default-impl field candidate(s), {} zero-external-read field(s): {} orphaned [C1], {} stillborn, {} wire-cleared (serde co-occurrence), {} wire-const, {} silent (no vanished-reader evidence)",
+            "orphan-report: {} file(s) parsed, {} Default-impl field candidate(s), {} zero-external-read field(s): {} orphaned [C1] ({} wire-dto weak), {} stillborn, {} wire-cleared (serde co-occurrence), {} bridge-cleared (generic serde bridge), {} wire-const, {} silent (no vanished-reader evidence)",
             self.files_scanned,
             self.candidates,
             self.zero_read_fields,
             self.orphaned.len(),
+            bridge_weak_count,
             self.stillborn.len(),
             self.wire_cleared,
+            self.bridge_cleared,
             self.wire_const.len(),
             silent
         );
@@ -715,7 +993,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak"
         );
         out
     }
@@ -758,7 +1036,12 @@ fn write_orphan_row(out: &mut String, row: &OrphanRow) {
             );
         }
     }
-    if row.likely_by_optimization {
+    if row.bridge_weak {
+        let _ = writeln!(
+            out,
+            "       verdict: ORPHANED-BY-TIME — wire-dto WEAK (a generic serde bridge serializes this struct onward; the receiver consumes the field over the wire — the in-repo read loss is evidence, not a death verdict)"
+        );
+    } else if row.likely_by_optimization {
         let _ = writeln!(
             out,
             "       verdict: ORPHANED-BY-TIME — newest count-change subject matches the optimization vocabulary → LIKELY-BY-OPTIMIZATION"
@@ -1306,6 +1589,186 @@ pub fn fallback() -> Tx {
         assert!(wire.wire_const.is_empty());
     }
 
+    // ── Issue 109: foreign literals + generic serde bridges ──
+
+    /// Specimen A, wire side: a FOREIGN literal inside a serde fn must not
+    /// mark the scanned set's same-named struct wire-consumed (the false
+    /// CLEAR direction — worse than a noisy row).
+    #[test]
+    fn foreign_literal_in_serde_fn_does_not_mark_wire_type() {
+        let local = r"
+#[derive(serde::Serialize)]
+pub struct Node { pub id: u32 }
+";
+        let other = r"
+use bevy::prelude::*;
+pub fn emit() -> String {
+    let n = Node { flex_direction: FlexDirection::Column };
+    serde_json::to_string(&n).unwrap()
+}
+";
+        let wire = wire_consumption(&[
+            ("crates/graph/src/types.rs".to_string(), local.to_string()),
+            ("crates/showcase/src/ui.rs".to_string(), other.to_string()),
+        ]);
+        assert!(
+            !wire.cleared.contains(&("Node".to_string(), "flex_direction".to_string())),
+            "the foreign literal is not wire evidence for the local Node"
+        );
+        assert!(
+            !wire.cleared.contains(&("Node".to_string(), "id".to_string())),
+            "the local Node itself was never literal-built in a serde fn"
+        );
+    }
+
+    /// Specimen B: the seal-game-editor shape — a generic serde bridge
+    /// (`row_to_mapping<T: serde::Serialize>(row: &T)` serializing the VALUE
+    /// param typed over the bounded param) whose call sites name the
+    /// concrete types by turbofish (`save_t::<CraftRow>(m)` on the call,
+    /// `row_to_mapping(&Repo::<CraftRow>::get(..))` inside the args).
+    #[test]
+    fn generic_serde_bridge_marks_turbofish_types() {
+        let src = r"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CraftRow { pub updated_at: i64 }
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct StoneStepRow { pub updated_at: i64 }
+
+fn row_to_mapping<T: serde::Serialize>(row: &T) -> Option<serde_yaml::Mapping> {
+    match serde_yaml::to_value(row).ok()? {
+        serde_yaml::Value::Mapping(m) => Some(m),
+        _ => None,
+    }
+}
+
+fn emit_t<T>(row: &T) -> String
+where
+    T: serde::de::DeserializeOwned + serde::Serialize,
+{
+    serde_json::to_string(row).unwrap()
+}
+
+pub fn cluster_load(id: i64) -> Option<serde_yaml::Mapping> {
+    let store = open_store();
+    row_to_mapping(&Repo::<CraftRow>::get(&store, id).ok()??)
+}
+pub fn emit_stone(row: &StoneStepRow) -> String {
+    emit_t::<StoneStepRow>(row)
+}
+fn open_store() -> Store { Store }
+struct Store;
+struct Repo<T> { _t: std::marker::PhantomData<T> }
+impl<T> Repo<T> {
+    fn get(_s: &Store, _id: i64) -> Result<T, E> { Err(E) }
+}
+struct E;
+";
+        let wire = wire_of(src);
+        assert!(
+            wire.bridge_types.contains("CraftRow"),
+            "the arg-turbofish type is bridge-consumed ({:?})",
+            wire.bridge_types
+        );
+        assert!(
+            wire.bridge_types.contains("StoneStepRow"),
+            "the call-turbofish type is bridge-consumed (where-clause bound)"
+        );
+    }
+
+    /// A fn that carries a Serialize param but serializes an UNRELATED
+    /// concrete value is NOT a bridge (the param-mention guard).
+    #[test]
+    fn serialize_param_with_unrelated_concrete_target_is_not_a_bridge() {
+        let src = r"
+#[derive(serde::Serialize)]
+pub struct Other { pub seq: u32 }
+pub fn helper<T: serde::Serialize>(_t: &T) -> String {
+    let o = Other { seq: 1 };
+    serde_json::to_string(&o).unwrap()
+}
+pub fn call(x: &Other) -> String { helper::<Other>(x) }
+";
+        let wire = wire_of(src);
+        assert!(
+            !wire.bridge_types.contains("Other"),
+            "an unrelated concrete serialization is not a bridge"
+        );
+    }
+
+    /// End-to-end: a stillborn row on a bridge-consumed struct counts as
+    /// bridge-cleared (counted, not listed — the measured-FP posture of
+    /// `wire_cleared`).
+    #[test]
+    fn bridge_type_stillborn_counts_bridge_cleared() {
+        let src = r"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CraftRow { pub updated_at: i64 }
+fn row_to_mapping<T: serde::Serialize>(row: &T) -> Option<i64> {
+    match serde_yaml::to_value(row).ok()? { _ => None }
+}
+pub fn load(id: i64) -> Option<i64> {
+    let store = open_store();
+    row_to_mapping(&Repo::<CraftRow>::get(&store, id).ok()??)
+}
+pub fn map_row(id: i64) -> CraftRow {
+    CraftRow { updated_at: id }
+}
+fn open_store() -> Store { Store }
+struct Store;
+struct Repo<T> { _t: std::marker::PhantomData<T> }
+impl<T> Repo<T> { fn get(_s: &Store, _id: i64) -> Result<T, E> { Err(E) } }
+struct E;
+";
+        let scan = scan_of(src);
+        assert_eq!(scan.fields.len(), 1, "updated_at is a zero-external-read candidate");
+        let wire = wire_of(src);
+        let fake = FakeHistory::new(&DEPTHS);
+        let report = classify_with_probe(&scan, &fake, &wire, &DEPTHS);
+        assert!(report.stillborn.is_empty(), "bridge-cleared, not stillborn");
+        assert_eq!(report.bridge_cleared, 1);
+        let rendered = report.render();
+        assert!(rendered.contains("1 bridge-cleared"), "{rendered}");
+    }
+
+    /// End-to-end: an ORPHANED row on a bridge-consumed struct keeps its
+    /// history evidence but renders at wire-dto weak severity (the receiver
+    /// consumes the serialized field — the in-repo read loss is evidence,
+    /// not a death verdict).
+    #[test]
+    fn bridge_type_orphaned_row_is_wire_dto_weak() {
+        let src = r"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CraftRow { pub updated_at: i64 }
+fn row_to_mapping<T: serde::Serialize>(row: &T) -> Option<i64> {
+    match serde_yaml::to_value(row).ok()? { _ => None }
+}
+pub fn load(id: i64) -> Option<i64> {
+    let store = open_store();
+    row_to_mapping(&Repo::<CraftRow>::get(&store, id).ok()??)
+}
+pub fn map_row(id: i64) -> CraftRow {
+    CraftRow { updated_at: id }
+}
+fn open_store() -> Store { Store }
+struct Store;
+struct Repo<T> { _t: std::marker::PhantomData<T> }
+impl<T> Repo<T> { fn get(_s: &Store, _id: i64) -> Result<T, E> { Err(E) } }
+struct E;
+";
+        let scan = scan_of(src);
+        let wire = wire_of(src);
+        let fake = FakeHistory::new(&DEPTHS)
+            .count("updated_at", "HEAD", 0)
+            .count("updated_at", "HEAD~50", 2)
+            .commit("updated_at", "refactor: move the form to a generic bridge");
+        let report = classify_with_probe(&scan, &fake, &wire, &DEPTHS);
+        assert_eq!(report.orphaned.len(), 1, "the history evidence stands");
+        assert!(report.orphaned[0].bridge_weak, "the row renders at wire-dto weak");
+        let rendered = report.render();
+        assert!(rendered.contains("1 wire-dto weak"), "{rendered}");
+        assert!(rendered.contains("wire-dto WEAK"), "{rendered}");
+    }
+
     /// End-to-end through the classifier: a wire-cleared field drops out of
     /// stillborn; a wire-const field renders its own weak row. (Ser+De —
     /// the measured family: the candidate net's serde-literal extension
@@ -1364,6 +1827,105 @@ impl Default for Dual {
 ";
         let scan = scan_of(src);
         assert_eq!(scan.fields.len(), 1, "exactly one candidate row");
+    }
+
+    // ── Issue 109 specimen A: per-file foreign-literal attribution ──
+
+    /// The riir-shader shape: a local serde-backed `Node` declared in one
+    /// crate's file, bevy's `Node { … }` literals in another file that
+    /// reaches `bevy_ui::Node` through a FOREIGN GLOB — the file-global name
+    /// match used to count the foreign literal's fields as candidates for
+    /// the local struct (4 stillborn rows, zero true findings).
+    #[test]
+    fn foreign_glob_literal_is_not_a_local_candidate() {
+        let graph = r"
+#[derive(serde::Deserialize)]
+pub struct Node { pub id: u32 }
+";
+        let ui = r"
+use bevy::prelude::*;
+pub fn panel() { let _n = Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0) }; }
+";
+        let scan = crate::config_audit::zero_external_read_fields(&[
+            ("crates/graph/src/types.rs".to_string(), graph.to_string()),
+            ("crates/showcase/src/ui.rs".to_string(), ui.to_string()),
+        ]);
+        assert!(
+            scan.fields
+                .iter()
+                .all(|f| f.candidate.struct_name != "Node"),
+            "foreign-glob literals are not candidates for the local same-named struct"
+        );
+    }
+
+    /// The explicit-import shape: `use bevy_ui::Node;` — provably foreign
+    /// (the path root is neither crate-internal nor a workspace sibling).
+    #[test]
+    fn explicit_foreign_import_literal_is_not_a_candidate() {
+        let graph = r"
+#[derive(serde::Deserialize)]
+pub struct Node { pub id: u32 }
+";
+        let ui = r"
+use bevy_ui::Node;
+pub fn panel() { let _n = Node { position_type: PositionType::Absolute }; }
+";
+        let scan = crate::config_audit::zero_external_read_fields(&[
+            ("crates/graph/src/types.rs".to_string(), graph.to_string()),
+            ("crates/showcase/src/ui.rs".to_string(), ui.to_string()),
+        ]);
+        assert!(
+            scan.fields
+                .iter()
+                .all(|f| f.candidate.struct_name != "Node"),
+            "explicit foreign imports shadow the sibling module's same-named struct"
+        );
+    }
+
+    /// The workspace-sibling shape (the over-suppression the first cut
+    /// measured on seal-game-editor — 207 candidates lost): `use
+    /// editor_core::types::Node;` where the declaration sits at
+    /// `crates/editor-core/…` INSIDE the scanned set. The dash-normalized
+    /// path-component table must read the import as local.
+    #[test]
+    fn workspace_sibling_import_literal_stays_candidate() {
+        let core = r"
+#[derive(serde::Deserialize)]
+pub struct Node { pub id: u32 }
+";
+        let data = r"
+use editor_core::types::Node;
+pub fn row() -> Node { Node { id: 7 } }
+";
+        let scan = crate::config_audit::zero_external_read_fields(&[
+            ("crates/editor-core/src/types.rs".to_string(), core.to_string()),
+            ("crates/editor-data/src/store.rs".to_string(), data.to_string()),
+        ]);
+        assert!(
+            scan.fields
+                .iter()
+                .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id"),
+            "workspace-sibling imports are local evidence"
+        );
+    }
+
+    /// The in-crate import shape stays collected (`use crate::types::Node;`).
+    #[test]
+    fn in_crate_import_literal_stays_candidate() {
+        let src = r"
+use crate::types::Node;
+mod types {
+    #[derive(serde::Deserialize)]
+    pub struct Node { pub id: u32 }
+}
+pub fn row() -> Node { Node { id: 7 } }
+";
+        let scan = scan_of(src);
+        assert!(
+            scan.fields
+                .iter()
+                .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id")
+        );
     }
 
     /// The end-to-end leg over a REAL throwaway git repository: init →

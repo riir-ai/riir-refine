@@ -6866,3 +6866,93 @@ seal-remake 58, riir-mmorpg-examples 69, riir-train 1131). orphan-report:
   (`AnchorTrace.future_accuracy`, `TrialRecord.base_correct`, …) —
   Serialize-derive trace structs consumed outside Rust, the issue-109
   serde-bridge ledger territory.
+
+## 2026-09-15 — Issue 109: the orphan-report FP specimens repaired (foreign-literal attribution + generic serde bridges)
+
+The issue was filed as instrument intake — two FP classes the 2026-09-15
+quiet-repo sweep measured, with candidate repairs sketched. This landing is
+the instrument pass it was filed for.
+
+**(a) Per-file foreign-literal attribution (`config_audit::FileScope`).**
+Within one Rust file, a bare `Name { … }` literal resolves ONLY to a type
+declared in that file, an explicit import, or a glob — never to a
+sibling module's same-named struct. The candidate net (and the wire pass)
+matched type NAMES file-globally, so bevy's `Node { … }` in a file importing
+`use bevy::prelude::*` masqueraded as construction evidence for the LOCAL
+serde `Node` declared in riir-shader-graph — 4 stillborn rows, zero true
+findings — and, in a serde fn, would have FALSELY CLEARED the local
+struct's rows. The repair skips provably-foreign literals in both
+directions (candidate sites AND wire-type membership). Precedence mirrors
+rustc at file granularity: own decl > explicit import > glob; foreign =
+explicit foreign import, or foreign-glob-with-no-local-decl/import.
+
+**The over-suppression the first cut measured before its rescue:** a
+WORKSPACE scan sees `use editor_core::types::XRow` from a sibling crate
+whose declaration IS in the scanned set — syntactically indistinguishable
+from `bevy_ui` without crate-name knowledge. The first cut read those as
+foreign and the editor lost 207 candidates + all 26 C1 rows (for the wrong
+reason — the bridge repair hadn't even fired). The rescue:
+`scan_local_crate_roots` — the scan's dash-normalized path components
+(`crates/editor-core/…` → `editor_core`) read workspace-sibling imports as
+LOCAL. Sound in the single-crate scan posture too: a cross-crate import of
+a scanned-declared name can only appear in files outside the declaring
+crate, which such a scan does not carry.
+
+**(b) Generic serde bridges (`orphan_report` wire pass).**
+`fn row_to_mapping<T: serde::Serialize>(row: &T)` — the bridge fn has NO
+struct literal (the serialized value is the generic param) and its callers
+have NO serde call, so fn-scoped co-occurrence is not merely missed, it is
+INAPPLICABLE. The repair detects bridges (Serialize-bounded param in the
+param list OR a where clause — `save_t`'s shape — plus a serde `to_*` call
+on the VALUE param typed over it; the param-mention guard keeps
+unrelated-concrete serializers out) and harvests the concrete types at
+call sites by turbofish: the call's own `save_t::<CraftRow>(m)` and
+arg-position `row_to_mapping(&Repo::<CraftRow>::get(..))`. Stillborn rows
+on bridge types count as `bridge-cleared` (the measured-FP posture of
+`wire_cleared`); ORPHANED rows keep their history evidence but render
+**wire-dto weak** — the receiver consumes the serialized field, so the
+in-repo read loss is evidence, not a death verdict. Bridge types
+deliberately do NOT seed the wire-const/cleared sites loop: per-field const
+classification stays direct-serde-fn evidence, bridge clearance is
+struct-level in the classifier (the conflation was caught by its own
+fixture before landing — the seeding made a bridge type's plain literal
+site read as `wire-cleared` instead of `bridge-cleared`).
+
+**Real-tree validation.** riir-shader: the 4 specimen rows → 0 stillborn
+(candidates 164 → 154, the 10 foreign-literal candidates left the net; the
+1 silent row unchanged). seal-game-editor: 26 C1 rows → 22 strong + 4
+wire-dto weak — exactly the Cluster B four (`CraftRow`,
+`ComposeTemplateRow`, `StoneStepRow`, `StoneOptCostRow`) via the
+`row_to_mapping`/`save_t` turbofish call sites; `ItemRow`/`DropTierRow`
+stay strong C1 (no detectable bridge on their lane — the editor's own
+issue-157 adjudication owns them; that repo is read-only here). Regression
+canaries exact-match the P25 baselines: self 0 orphaned / 11 stillborn /
+370 files; riir-ai 0/70/2897; katgpt-rs 0/14; riir-dao's pinned
+`[wire-const] EpochSummary.provenance_verified` SURVIVES; riir-chain 0/0.
+
+**Gates.** 9 new fixtures (4 candidate-side: foreign glob, explicit foreign
+import, workspace-sibling rescue, in-crate import; 5 wire-side: the
+foreign-literal-in-serde-fn false-clear negative, the turbofish bridge
+(param list + where clause), the unrelated-concrete negative, and the two
+end-to-end classifier shapes — bridge-cleared stillborn + wire-dto-weak
+orphaned). lib 1515/1515; clippy clean on all touched code (the healer was
+invoked first for the raw-string-hash class — silent, its documented
+divergence; manual for the rest). Landing also fixed a pre-existing dead
+`let base` in the P25 walk test (test-build warning, `_base`).
+
+**The lesson worth keeping (twice in one landing):** the fixture class
+where a raw string opens `r#"` and terminates `";` does not fail to parse —
+it SWALLOWS the following tests into string content until the next real
+`"#`, silently unregistering them and splicing one test's asserts into
+another's thread. Three fixtures cost an hour of phantom debugging
+("compiled but not registered", panic attributed to a test whose source
+has no such assert) before the mechanism was visible. When tests vanish
+from `--list` while their source sits at module level, suspect the raw
+string terminators first.
+
+The third specimen class contributed to the 109 ledger (the previous
+session's DumpEntity `Serialize`-wire-contract rows, consumed by the
+substrate's matching authority dump in ANOTHER repo) is NOT repaired by
+either mechanism — readers outside the scanned set are the documented
+scope limit; the downstream-consumers hint names the repos. Issue 109
+resolved; file removed per the noise-reduction rule.
