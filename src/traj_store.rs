@@ -119,6 +119,18 @@ pub struct TrajRowDoc {
     /// decides whether spans get their own derivation.
     #[serde(default = "default_elo")]
     pub span_elo: f32,
+    /// Issue 105 (PC-ALM credit): the number of runs this key kept an
+    /// attempt in — the journey-evidence denominator. `0` on pre-105 rows
+    /// (the neutral no-data point: [`crate::journey::journey_factor`]
+    /// reads exactly 1.0).
+    #[serde(default)]
+    pub journey_runs: u32,
+    /// Issue 105: Σ over TAINTED runs (the run ended with a masking-stage
+    /// error present) of that run's composite `(α·λ_T + ρ·r_T)·256`,
+    /// fixed-point. `0` = no tainted evidence — the factor is exactly 1.0
+    /// and the row scores bit-identically to pre-105.
+    #[serde(default)]
+    pub journey_taint_sum: u32,
     /// Component-attributed failure class (Issue 047, Recuris E/ρ/W/C
     /// ontology) — the LAST decision-time attribution recorded for this
     /// row's failures. `None` on success-only rows AND on pre-Issue-047
@@ -341,6 +353,10 @@ pub struct TrajNeighbor {
     pub success_count: u32,
     pub fail_count: u32,
     pub tier: EvidenceTier,
+    /// Issue 105: the row's journey evidence, carried for the consumer's
+    /// [`crate::journey::journey_factor`] discount on success credit.
+    pub journey_runs: u32,
+    pub journey_taint_sum: u32,
 }
 
 impl TrajNeighbor {
@@ -580,6 +596,37 @@ impl TrajStore {
         self.learn_step(lint_key, fix, success, run_id)
     }
 
+    /// Issue 105 — record one run's journey credit for a key that kept an
+    /// attempt in that run. `taint_composite_256` is `Some` only for
+    /// TAINTED runs (the run ended with a masking-stage error present —
+    /// `JourneyCredit::tainted()`); clean runs pass `None` and bump the
+    /// journey count alone. Never touches the outcome counters, tiers, or
+    /// the keep rule — the credit is an ORTHOGONAL evidence axis consumed
+    /// at selection time via [`crate::journey::journey_factor`] (the
+    /// `shape_conditional_score` discount).
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn record_journey(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        run_id: &str,
+        taint_composite_256: Option<u32>,
+    ) -> Result<(), String> {
+        let key = Self::row_key(lint_key, shape);
+        let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
+        row.journey_runs = row.journey_runs.saturating_add(1);
+        if let Some(c) = taint_composite_256 {
+            row.journey_taint_sum = row.journey_taint_sum.saturating_add(c);
+        }
+        row.last_run_id = run_id.to_string();
+        row.last_seen_at = now_unix_secs();
+        self.put_row(&key, &row)
+    }
+
     /// Upsert one APPLY event (038-T2: the `record_applied` equivalent —
     /// memory-only in envelope terms). Creates/refreshes the row's text
     /// halves + run attribution WITHOUT bumping any outcome counter: an
@@ -664,6 +711,8 @@ impl TrajStore {
                     elo: default_elo(),
                     span_elo: default_elo(),
                     component: None,
+                    journey_runs: 0,
+                    journey_taint_sum: 0,
                 }
             })
     }
@@ -766,6 +815,21 @@ impl TrajStore {
             .collect()
     }
 
+    /// Issue 105 (T4 instrumentation): every trajectory row that carries
+    /// journey evidence, as `(lint_key, journey_runs, journey_taint_sum)`
+    /// — the `--frontier-report` integral axis feeds on this (report-only,
+    /// never scored).
+    #[must_use]
+    pub fn journey_rows(&self) -> Vec<(String, u32, u32)> {
+        self.kv
+            .scan_prefix(b"traj:")
+            .into_iter()
+            .filter_map(|(_, v)| serde_json::from_slice::<TrajRowDoc>(&v).ok())
+            .filter(|row| row.journey_runs > 0)
+            .map(|row| (row.lint_key, row.journey_runs, row.journey_taint_sum))
+            .collect()
+    }
+
     /// Hybrid retrieval (T4.2's input): BM25 over shape+fix + sigmoid-dot
     /// over the stored 8-D directions, fused; `Withdrawn` rows EXCLUDED
     /// (the T7.4 rule); family-filtered by `lint_prefix` (e.g.
@@ -818,6 +882,8 @@ impl TrajStore {
                 success_count: row.success_count,
                 fail_count: row.fail_count,
                 tier,
+                journey_runs: row.journey_runs,
+                journey_taint_sum: row.journey_taint_sum,
             });
         }
         // Fuse: normalize bm25 by the max hit (unbounded scale), add the
@@ -1625,7 +1691,11 @@ pub fn shape_conditional_score(
         w_sum += w;
         #[allow(clippy::cast_precision_loss)] // trajectory counts are ~10^2
         let (ns, nf) = (n.success_count as f32, n.fail_count as f32);
-        s += w * ns;
+        // Issue 105: successes accumulated inside tainted journeys
+        // carry reduced credit (the strand-keep repair); failures count
+        // in full — taint reprices success evidence only.
+        let jf = crate::journey::journey_factor(n.journey_runs, n.journey_taint_sum);
+        s += w * ns * jf;
         f += w * nf;
     }
     if w_sum == 0.0 {
@@ -2175,6 +2245,8 @@ mod tests {
                 elo: default_elo(),
                 span_elo: default_elo(),
                 component: None,
+                journey_runs: 0,
+                journey_taint_sum: 0,
             })
             .unwrap();
         let report = store.stats_report(0);

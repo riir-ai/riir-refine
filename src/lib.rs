@@ -103,6 +103,10 @@ pub mod evolve;
 pub mod gp_acquisition;
 pub mod memory;
 pub mod recorder;
+// Issue 105: the ungated journey-credit factor (PC-ALM consumption half —
+// the driver accumulator lives in the rustc_errors domain; both selection
+// layers consume this).
+pub mod journey;
 pub mod selection_entropic;
 pub mod selection_tether;
 pub mod self_evolve;

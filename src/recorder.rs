@@ -227,6 +227,28 @@ impl EvolveRecorder {
         self.record_outcome_signal(rule_id, buggy, fixed, success, verified, None);
     }
 
+    /// Issue 105 — record one run's journey credit on the memory bucket
+    /// (the memory.json twin of the traj-store `record_journey`). Called
+    /// AFTER `record_outcome_verified` for every kept attempt; the outcome
+    /// call owns row creation, this only stamps the journey evidence.
+    /// `Some(composite_256)` only for TAINTED runs (the run ended with a
+    /// masking-stage error present); clean runs bump `journey_runs` alone.
+    /// Respects `opted_out` like every other recording path. Never touches
+    /// outcome counters or tiers — the credit is an orthogonal evidence
+    /// axis consumed at selection time via
+    /// [`crate::journey::journey_factor`].
+    pub fn memory_record_journey(
+        &mut self,
+        rule_id: &str,
+        fixed: &str,
+        taint_composite_256: Option<u32>,
+    ) {
+        if self.opted_out {
+            return;
+        }
+        self.memory.record_journey(rule_id, fixed, taint_composite_256);
+    }
+
     /// Record a FAILURE with its decision-time signal (Issue 047): the
     /// component class is derived where the failure is observed — never
     /// reconstructed post-hoc — and tags the trajectory bucket for the

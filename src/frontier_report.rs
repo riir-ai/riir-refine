@@ -763,6 +763,7 @@ pub const SNAPSHOTS_JSONL: &str = ".benchmarks/frontier_snapshots.jsonl";
 /// One band-mass snapshot — the T2 metric frozen at a point in time
 /// (Issue 089 T4's x-axis: band-mass AT a generation boundary, correlated
 /// later against that generation's yield).
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FrontierSnapshot {
     /// UTC ISO-8601 timestamp of the report run.
@@ -791,6 +792,85 @@ pub struct FrontierSnapshot {
     /// in the synthetic feed is a curriculum artifact; T4's gate needs the
     /// split, not just the pooled mass).
     pub feeds: Vec<FeedSnapshot>,
+}
+
+// ── Issue 105 T4: the journey integral axis (INSTRUMENTATION, not scored) ──
+// PC-ALM credit (Research 554): successes accumulated inside tainted
+// journeys (runs that ended at a masking-stage error — the strand-keep
+// poison) carry reduced selection credit via
+// [`crate::journey::journey_factor`]. This section surfaces the per-key
+// evidence so the discount is OBSERVABLE from the store — report-only,
+// never scored, the same standing as the provenance strata.
+
+/// One key's journey-evidence row (rendered, pre-sorted).
+pub struct JourneyRow {
+    /// The trajectory key (`"{code}:{strategy_id}"` or a clippy rule id).
+    pub lint_key: String,
+    /// Runs the key kept an attempt in.
+    pub runs: u32,
+    /// Σ of tainted-run composites (×256 fixed-point).
+    pub taint_sum: u32,
+    /// The discount the selection layers apply (`1.0` = clean/neutral).
+    pub factor: f32,
+}
+
+/// Build the journey section rows: keys with journey evidence, most
+/// discounted first, bounded to `top`.
+#[must_use]
+pub fn journey_summary(rows: &[(String, u32, u32)], top: usize) -> Vec<JourneyRow> {
+    let mut out: Vec<JourneyRow> = rows
+        .iter()
+        .map(|(k, runs, taint)| JourneyRow {
+            lint_key: k.clone(),
+            runs: *runs,
+            taint_sum: *taint,
+            factor: crate::journey::journey_factor(*runs, *taint),
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        a.factor
+            .total_cmp(&b.factor)
+            .then(b.taint_sum.cmp(&a.taint_sum))
+            .then(a.lint_key.cmp(&b.lint_key))
+    });
+    out.truncate(top);
+    out
+}
+
+/// Render the journey section (empty input ⇒ a one-line absent note, the
+/// honest no-evidence state — never a zero table).
+#[must_use]
+pub fn render_journey_section(rows: &[JourneyRow], total_keys: usize) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "## Journey credit (Issue 105, instrumentation — not scored)"
+    );
+    if rows.is_empty() {
+        let _ = writeln!(
+            out,
+            "no journey evidence in the store (no --fix-compile keeps recorded yet)\n"
+        );
+        return out;
+    }
+    let tainted = rows.iter().filter(|r| r.taint_sum > 0).count();
+    let _ = writeln!(
+        out,
+        "{total_keys} key(s) with journey evidence, {tainted} tainted; most-discounted first:\n"
+    );
+    let _ = writeln!(
+        out,
+        "| key | runs | taint×256 | factor |\n|---|---:|---:|---:|"
+    );
+    for r in rows {
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {:.3} |",
+            r.lint_key, r.runs, r.taint_sum, r.factor
+        );
+    }
+    out
 }
 
 /// One feed's band-mass inside a [`FrontierSnapshot`].

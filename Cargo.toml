@@ -539,6 +539,10 @@ required-features = ["nonergodic_poc"]
 # never in default runs): mechanism (no cargo) + e2e no-regression at equal
 # budget + headroom disclosure.
 [[test]]
+name = "journey_credit_gate"
+required-features = ["rustc_errors", "latent_retrieval"]
+
+[[test]]
 name = "nonergodic_driver_ab"
 required-features = ["nonergodic_driver"]
 

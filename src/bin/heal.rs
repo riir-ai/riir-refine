@@ -2509,6 +2509,8 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
             elo: riir_clippy::traj_store::default_elo(),
             span_elo: riir_clippy::traj_store::default_elo(),
             component: t.component,
+            journey_runs: 0,
+            journey_taint_sum: 0,
         };
         if store.import_row(&row).is_ok() {
             imported += 1;
@@ -6083,6 +6085,16 @@ fn main() {
                         "{}",
                         riir_clippy::frontier_report::render_shaped_half_rows(&shaped_rows)
                     );
+                    // Issue 105 T4 — the journey integral axis:
+                    // instrumentation only (never scored). The store scan
+                    // is cheap (traj: prefix) and the section degrades to
+                    // an honest absent-note on a journey-free store.
+                    let jrows_all = store.journey_rows();
+                    let jrows = riir_clippy::frontier_report::journey_summary(&jrows_all, 12);
+                    print!(
+                        "{}",
+                        riir_clippy::frontier_report::render_journey_section(&jrows, jrows_all.len())
+                    );
                     // Issue 089 T4's evidence clock — append the band-mass
                     // snapshot (state-change dedup: an unchanged store at the
                     // same generation frontier appends nothing). Best-effort:
@@ -6602,6 +6614,12 @@ fn main() {
                 #[cfg(feature = "latent_retrieval")]
                 if let Some(store) = &traj_store {
                     use riir_clippy::domains::rustc_errors::evolve::traj_key;
+                    // Issue 105: the run's journey credit, computed once —
+                    // every kept attempt in this run rode the same journey.
+                    // Tainted runs (ended at a masking-stage error) stamp
+                    // their composite; clean runs bump the count alone.
+                    let journey = report.journey();
+                    let taint = journey.tainted().then_some(journey.taint_composite_256());
                     for a in &report.applied {
                         reopen067.note(store, &traj_key(&a.code, &a.strategy_id));
                         if let Err(e) = store.record(
@@ -6613,6 +6631,15 @@ fn main() {
                             &heal_run_id,
                         ) {
                             eprintln!("self-evolve: store record failed: {e}");
+                        }
+                        if let Err(e) = store.record_journey(
+                            &traj_key(&a.code, &a.strategy_id),
+                            &a.shape,
+                            &a.fix,
+                            &heal_run_id,
+                            taint,
+                        ) {
+                            eprintln!("self-evolve: journey record failed: {e}");
                         }
                     }
                     for r in &report.reverted {

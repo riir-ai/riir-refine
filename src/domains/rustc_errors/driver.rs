@@ -82,6 +82,18 @@ pub struct AttemptRecord {
     /// count decrease at masking 0.
     #[serde(default)]
     pub masking: (usize, usize),
+    /// Issue 105 (run-level, stamped at dump time — `0` on in-memory
+    /// records and pre-105 rings): Σ over ALL attempts of
+    /// `masking_after + errors_after` — the integral of the journey's
+    /// residual states, PC-ALM's `λ_T` raw material (α applied by the
+    /// consumer, never baked into the stamp).
+    #[serde(default)]
+    pub journey_residual_sum: u32,
+    /// Issue 105 (run-level, stamped at dump time): the run's terminal
+    /// residual — `masking_after + errors_after` of the LAST attempt
+    /// (0 when the run made no attempts, the neutral point).
+    #[serde(default)]
+    pub terminal_residual: u32,
 }
 
 /// The loop outcome of one [`AttemptRecord`].
@@ -106,6 +118,101 @@ impl AttemptOutcome {
             Self::Kept => "kept",
             Self::RevertedNoProgress => "reverted:no-progress",
             Self::RevertedIo => "reverted:io",
+        }
+    }
+}
+
+/// Issue 105 — the run-level journey credit (PC-ALM's dual accumulator,
+/// katgpt-rs Research 554): credit is the **integral of the residual
+/// history plus the terminal residual**, never the terminal verdict alone.
+/// A keep that ends its run at a typeck-masked E0614 (the "strand-keep",
+/// the Bench 089/090 poison) has a legal per-attempt lexicographic delta
+/// but a large `journey_residual_sum` AND `terminal_residual` — the
+/// journey's error is the credit.
+///
+/// Integer-stamped (u32) so [`AttemptRecord`] keeps `Eq`; α/ρ are applied
+/// by the consumer ([`JourneyCredit::poverty`]), never baked into the
+/// stamp — the sweep discipline stays open.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JourneyCredit {
+    /// `λ_T`'s raw material: `Σ_t r_t` over every attempt, where
+    /// `r_t` = `masking_after + errors_after` (the state each attempt left
+    /// behind — kept or reverted; a revert restores the state, so its
+    /// after-values already read as the restored state).
+    pub journey_residual_sum: u32,
+    /// `r_T`: the last attempt's `masking_after + errors_after` (0 when the
+    /// run made no attempts — the neutral point).
+    pub terminal_residual: u32,
+    /// The last attempt's `masking_after` — the TAINT condition's input:
+    /// a run that ends with a masking-stage error present is the poison
+    /// class, however legal each individual keep was. A run that ends at
+    /// masking 0 with ordinary errors remaining is HONEST partial progress
+    /// (the floor's normal shape) and is never tainted.
+    pub terminal_masking: u32,
+}
+
+/// α — the dual step on the journey integral (PC-ALM's α). 0.25 keeps a
+/// typical 2–4-attempt journey inside sigmoid's responsive band.
+pub const JOURNEY_ALPHA: f32 = 0.25;
+/// ρ — the terminal residual's weight in the composite (PC-ALM's ρ). The
+/// terminal masking state is the poison's defining signal, so it outweighs
+/// any single journey term.
+pub const JOURNEY_RHO: f32 = 2.0;
+
+impl JourneyCredit {
+    /// Fold a run's ordered attempt ring into the credit triple.
+    #[must_use]
+    pub fn from_attempts(attempts: &[AttemptRecord]) -> Self {
+        let mut credit = Self::default();
+        for a in attempts {
+            // Coded-error totals are single-run diagnostics (~10⁰–10¹);
+            // saturating conversion is exact for every real value.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let r = (a.masking.1 + a.errors.1) as u32;
+            credit.journey_residual_sum = credit.journey_residual_sum.saturating_add(r);
+            credit.terminal_residual = r;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let tm = a.masking.1 as u32;
+            credit.terminal_masking = tm;
+        }
+        credit
+    }
+
+    /// The composite poverty `J = sigmoid(α·λ_T + ρ·r_T)` ∈ (0,1).
+    /// 0.5 = neutral (no journey data); →1 = the journey never resolved
+    /// (the strand-keep class). HIGH means the successes this run recorded
+    /// rode an error-heavy journey — down-weight their CREDIT, never the
+    /// keep rule (Issue 100's lexicographic rule stands untouched).
+    #[must_use]
+    pub fn poverty(&self, alpha: f32, rho: f32) -> f32 {
+        // Counts are small (< 2^24); f32 is exact.
+        #[allow(clippy::cast_precision_loss)]
+        let (lam, res) = (self.journey_residual_sum as f32, self.terminal_residual as f32);
+        katgpt_core::sigmoid(alpha * lam + rho * res)
+    }
+
+    /// The taint condition: the run ended with a masking-stage error
+    /// present. Only tainted runs contribute a composite to the per-key
+    /// accumulator — clean runs bump the journey count alone.
+    #[must_use]
+    pub fn tainted(&self) -> bool {
+        self.terminal_masking > 0
+    }
+
+    /// The composite as a ×256 fixed-point u32 (the [`TrajRowDoc`] stamp —
+    /// integer-exact, saturating, decode-stable). Callers invoke this ONLY
+    /// on tainted runs; clean runs stamp nothing.
+    #[must_use]
+    pub fn taint_composite_256(&self) -> u32 {
+        // Counts are small (< 2^24); f32 is exact.
+        #[allow(clippy::cast_precision_loss)]
+        let (lam, res) = (self.journey_residual_sum as f32, self.terminal_residual as f32);
+        let c = JOURNEY_ALPHA * lam + JOURNEY_RHO * res;
+        // Journey magnitudes are small (counts ~10⁰–10¹); ×256 cannot
+        // approach u32::MAX before saturating honestly.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        {
+            (c * 256.0) as u32
         }
     }
 }
@@ -248,6 +355,13 @@ pub struct FixCompileReport {
 }
 
 impl FixCompileReport {
+    /// Issue 105: the run's journey credit, folded from the attempt ring
+    /// on demand (computed, never stored — the ring is the source of
+    /// truth, and the early-return arms of `run` stay untouched).
+    #[must_use]
+    pub fn journey(&self) -> JourneyCredit {
+        JourneyCredit::from_attempts(&self.attempts)
+    }
     /// Append one attempt to the ring (seq = current length — the push
     /// order IS the try order). 8 params: the record's own transition pair
     /// (`errors` + `masking`) stays inline rather than behind a one-use
@@ -272,6 +386,10 @@ impl FixCompileReport {
             outcome,
             errors,
             masking,
+            // Run-level Issue-105 values are unknown at push time; the
+            // dump stamps them over these zeros.
+            journey_residual_sum: 0,
+            terminal_residual: 0,
         });
     }
 }
@@ -878,6 +996,8 @@ mod tests {
             outcome: AttemptOutcome::RevertedNoProgress,
             errors: (4, 4),
             masking: (1, 1),
+            journey_residual_sum: 0,
+            terminal_residual: 0,
         };
         let line = serde_json::to_string(&r).unwrap();
         let back: AttemptRecord = serde_json::from_str(&line).unwrap();
@@ -892,6 +1012,120 @@ mod tests {
         let legacy: AttemptRecord = serde_json::from_str(old).unwrap();
         assert_eq!(legacy.masking, (0, 0));
         assert_eq!(legacy.errors, (2, 1));
+        // Issue 105 — a PRE-105 ring line (no journey fields) decodes as 0
+        // = absent, and a stamped line round-trips the run-level values.
+        let legacy105: AttemptRecord = serde_json::from_str(
+            r#"{"seq":0,"code":"E0502","span_hash":"x","strategy_id":"s","outcome":"Kept","errors":[2,1],"masking":[0,0],"journey_residual_sum":5,"terminal_residual":1}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy105.journey_residual_sum, 5);
+        assert_eq!(legacy105.terminal_residual, 1);
+        assert_eq!(legacy.journey_residual_sum, 0);
+        assert_eq!(legacy.terminal_residual, 0);
+    }
+
+    /// Issue 105 (PC-ALM credit, Research 554) — the journey accumulator
+    /// on the three canonical ring populations the benches recorded:
+    /// the F4 clean unmasking ladder, the pre-100 F3 strand-keep, and the
+    /// post-100 honest all-revert F3. The poison signature: the strand
+    /// ring's poverty EXCEEDS the clean ring's, and only the strand ring
+    /// is tainted.
+    #[test]
+    fn journey_credit_ranks_strand_above_clean() {
+        // F4 (Bench 090, the designed clean shape):
+        //   E0614 KEEP (1→1, m1→0) — the unmasking trade, then
+        //   E0499 KEEP (1→0, m0→0) — the swap finishes. Run ends clean.
+        let f4 = vec![
+            AttemptRecord {
+                seq: 0,
+                code: "E0614".to_string(),
+                span_hash: "f4a".to_string(),
+                strategy_id: "e0614-deref-at-use".to_string(),
+                outcome: AttemptOutcome::Kept,
+                errors: (1, 1),
+                masking: (1, 0),
+                journey_residual_sum: 0,
+                terminal_residual: 0,
+            },
+            AttemptRecord {
+                seq: 1,
+                code: "E0499".to_string(),
+                span_hash: "f4b".to_string(),
+                strategy_id: "e0499-swap-second-decl".to_string(),
+                outcome: AttemptOutcome::Kept,
+                errors: (1, 0),
+                masking: (0, 0),
+                journey_residual_sum: 0,
+                terminal_residual: 0,
+            },
+        ];
+        // The PRE-100 F3 strand (Bench 089's recorded poison): the
+        // count-only rule KEPT the clone-out (2→1) while masking went
+        // 0→1 — the run then ends at the masked E0614 with nothing left
+        // to propose. Every keep in this run rode a poisoned journey.
+        let strand = vec![AttemptRecord {
+            seq: 0,
+            code: "E0502".to_string(),
+            span_hash: "f3".to_string(),
+            strategy_id: "e0502-clone-out".to_string(),
+            outcome: AttemptOutcome::Kept,
+            errors: (2, 1),
+            masking: (0, 1),
+            journey_residual_sum: 0,
+            terminal_residual: 0,
+        }];
+        // Post-100 F3 (Bench 090's honest shape): everything reverts, the
+        // file is byte-identical — no keeps, but the journey still records.
+        let f3_honest = vec![AttemptRecord {
+            seq: 0,
+            code: "E0502".to_string(),
+            span_hash: "f3".to_string(),
+            strategy_id: "e0502-clone-out".to_string(),
+            outcome: AttemptOutcome::RevertedNoProgress,
+            errors: (2, 2),
+            masking: (0, 1),
+            journey_residual_sum: 0,
+            terminal_residual: 0,
+        }];
+
+        let c_f4 = JourneyCredit::from_attempts(&f4);
+        let c_strand = JourneyCredit::from_attempts(&strand);
+        let c_rev = JourneyCredit::from_attempts(&f3_honest);
+        let c_empty = JourneyCredit::default();
+
+        // The clean ladder: integral 1 (states 1 then 0), terminal 0,
+        // UNTAINTED — honest partial progress is never poisoned.
+        assert_eq!(c_f4.journey_residual_sum, 1);
+        assert_eq!(c_f4.terminal_residual, 0);
+        assert!(!c_f4.tainted());
+        // The strand: integral 2, terminal 2, TAINTED — the exact poison.
+        assert_eq!(c_strand.journey_residual_sum, 2);
+        assert_eq!(c_strand.terminal_residual, 2);
+        assert!(c_strand.tainted());
+        // The honest all-revert run records the journey but — crucially —
+        // taint is about the KEEPS' environment; a reverted run still ends
+        // masked, so it reads tainted (its POVERTY is high) — but it
+        // recorded NO successes, so there is nothing to poison downstream.
+        assert!(c_rev.tainted());
+
+        // Poverty ordering: the masked-end runs (strand, honest-revert)
+        // sit far above the clean ladder, and the no-data point is exactly
+        // neutral 0.5. (The honest-revert run can read POORER than the
+        // strand — it left more error behind — but it recorded no
+        // successes, so its poverty never discounts anything downstream.)
+        let p_f4 = c_f4.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
+        let p_strand = c_strand.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
+        let p_rev = c_rev.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
+        let p_empty = c_empty.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
+        assert!(p_strand > p_f4, "strand {p_strand} must exceed clean {p_f4}");
+        assert!(p_rev > p_f4);
+        assert!((p_empty - 0.5).abs() < 1e-6, "no-data neutral is 0.5");
+        assert!(p_f4 > p_empty, "a busy-but-clean journey is honest evidence, above neutral");
+
+        // The ×256 fixed-point composite is stable and only consumed for
+        // tainted runs. (0.25·2 + 2·2)·256 = 1152 exactly.
+        assert_eq!(c_strand.taint_composite_256(), 1152);
+        assert_eq!(c_empty.taint_composite_256(), 0);
     }
 
     #[test]

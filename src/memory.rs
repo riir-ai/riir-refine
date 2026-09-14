@@ -159,6 +159,17 @@ pub struct FixTrajectory {
     /// the tag is failure metadata for the audit, not a state machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub component: Option<crate::component::ComponentClass>,
+    /// Issue 105 (PC-ALM credit): runs this key kept an attempt in (the
+    /// journey-evidence denominator). `0` on pre-105 memories — the
+    /// neutral no-data point ([`crate::journey::journey_factor`] reads
+    /// exactly 1.0).
+    #[serde(default)]
+    pub journey_runs: u32,
+    /// Issue 105: Σ over TAINTED runs of that run's composite
+    /// `(α·λ_T + ρ·r_T)·256` fixed-point. `0` = no tainted evidence —
+    /// bit-identical scoring to pre-105.
+    #[serde(default)]
+    pub journey_taint_sum: u32,
 }
 
 impl FixTrajectory {
@@ -186,6 +197,8 @@ impl FixTrajectory {
             consecutive_fails: 0,
             tier: EvidenceTier::Heuristic,
             component: None,
+            journey_runs: 0,
+            journey_taint_sum: 0,
         }
     }
 
@@ -459,6 +472,35 @@ impl LatentFixMemory {
         // No matching trajectory — caller should have inserted it first.
     }
 
+    /// Issue 105 — record one run's journey credit on the
+    /// (`lint_name`, `fixed_code`) bucket (the memory.json twin of
+    /// [`crate::traj_store::TrajStore::record_journey`]). `Some(composite)`
+    /// only for TAINTED runs; clean runs bump `journey_runs` alone. No-op
+    /// when the bucket is absent (the outcome recording owns row creation
+    /// — same contract as [`tag_component`](Self::tag_component)). Never
+    /// touches outcome counters or tiers: the credit is an orthogonal
+    /// evidence axis consumed at selection time via
+    /// [`crate::journey::journey_factor`].
+    pub fn record_journey(
+        &mut self,
+        lint_name: &str,
+        fixed_code: &str,
+        taint_composite_256: Option<u32>,
+    ) {
+        for t in &mut self.trajectories {
+            if t.lint_name == lint_name && t.fixed_code == fixed_code {
+                t.journey_runs = t.journey_runs.saturating_add(1);
+                if let Some(c) = taint_composite_256 {
+                    t.journey_taint_sum = t.journey_taint_sum.saturating_add(c);
+                }
+                return;
+            }
+        }
+        // No matching trajectory — the outcome recording (which ran first)
+        // owns row creation; a journey without an outcome row is a
+        // bookkeeping anomaly not worth a row.
+    }
+
     /// Retrieve the top-K trajectories for a query, writing their indices +
     /// scores into `out`. Returns the number written (≤ k, ≤ memory size).
     ///
@@ -583,6 +625,17 @@ impl LatentFixMemory {
             .iter()
             .find(|t| t.lint_name == lint_name && t.fixed_code == fixed_code)
             .map_or((0, 0), |t| (t.success_count, t.fail_count))
+    }
+
+    /// Issue 105 — the journey evidence for a (`lint_name`, `fixed_code`)
+    /// pair: `(journey_runs, journey_taint_sum)`. `(0, 0)` when absent =
+    /// exactly-neutral (no journey data ⇒ discount factor 1.0).
+    #[must_use]
+    pub fn journey_for(&self, lint_name: &str, fixed_code: &str) -> (u32, u32) {
+        self.trajectories
+            .iter()
+            .find(|t| t.lint_name == lint_name && t.fixed_code == fixed_code)
+            .map_or((0, 0), |t| (t.journey_runs, t.journey_taint_sum))
     }
 
     /// Look up the success rate for a specific (`lint_name`, `fixed_code`) pair.

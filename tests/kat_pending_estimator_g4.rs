@@ -69,6 +69,8 @@ fn row(lint_key: &str, shape: &str, fix: &str) -> TrajRowDoc {
         elo: 1215.5,
         span_elo: 1188.25,
         component: None,
+        journey_runs: 0,
+        journey_taint_sum: 0,
     }
 }
 

@@ -101,6 +101,12 @@ struct Candidate {
     /// 1.0 — so a single lucky attempt outranks a long reliable history. The
     /// counts preserve the sample size that the rate throws away.
     counts: (u32, u32),
+    /// Issue 105 (PC-ALM credit): the candidate's journey evidence
+    /// `(journey_runs, journey_taint_sum)` — successes accumulated inside
+    /// tainted journeys (runs that ended at a masking-stage error) carry
+    /// reduced credit via [`crate::journey::journey_factor`]. `(0, 0)` =
+    /// no journey data = factor exactly 1.0 (bit-identical legacy).
+    journey: (u32, u32),
 }
 
 /// Weight on the evolution-score axis in candidate selection.
@@ -500,6 +506,16 @@ impl HealPipeline {
             } else {
                 reliability_score(self.selection_mode, cand.counts, cand.success_rate)
             };
+            // Issue 105 T2 — the journey-credit third axis, ORTHOGONAL to
+            // evolution/reliability: successes accumulated inside tainted
+            // journeys (runs that ended at a masking-stage error — the
+            // strand-keep poison) carry reduced credit. Exactly 1.0 with no
+            // journey data, so unseen-rule pools and the whole clippy lane
+            // (which never records journeys) score bit-identically; it
+            // reprices the reliability axis, never the evolution axis, and
+            // never the keep rule itself.
+            let reliability =
+                reliability * crate::journey::journey_factor(cand.journey.0, cand.journey.1);
             let combined = if tether {
                 (1.0 - rho) * evo_score + rho * reliability
             } else {
@@ -853,12 +869,14 @@ impl HealPipeline {
             // selection away from repeatedly-failed drafter picks.
             let success_rate = self.memory.success_rate_for(rule_id, &draft.code);
             let counts = self.memory.counts_for(rule_id, &draft.code);
+            let journey = self.memory.journey_for(rule_id, &draft.code);
             candidates.push(Candidate {
                 code: draft.code,
                 direction: dir,
                 source: HealSource::Drafter,
                 success_rate,
                 counts,
+                journey,
             });
         }
 
@@ -875,6 +893,7 @@ impl HealPipeline {
                     source: HealSource::Memory,
                     success_rate: traj.success_rate(),
                     counts: (traj.success_count, traj.fail_count),
+                    journey: (traj.journey_runs, traj.journey_taint_sum),
                 });
             }
         }

@@ -53,6 +53,12 @@ pub fn traj_key(code: &str, strategy_id: &str) -> String {
 /// (W); an I/O revert means the gate rejected without evaluating the fix
 /// (C — an unnecessary, gate-side revert).
 pub fn record_run(rec: &mut EvolveRecorder, report: &FixCompileReport) {
+    // Issue 105: the run's journey credit, computed once — every kept
+    // attempt in THIS run rode the same journey. `tainted` runs (ended at
+    // a masking-stage error) stamp their composite; clean runs bump the
+    // journey count alone.
+    let journey = report.journey();
+    let taint = journey.tainted().then_some(journey.taint_composite_256());
     for a in &report.applied {
         rec.record_outcome_verified(
             &traj_key(&a.code, &a.strategy_id),
@@ -61,6 +67,7 @@ pub fn record_run(rec: &mut EvolveRecorder, report: &FixCompileReport) {
             true,
             true, // cargo-check-passed = a full-oracle verdict
         );
+        rec.memory_record_journey(&traj_key(&a.code, &a.strategy_id), &a.fix, taint);
     }
     for r in &report.reverted {
         let signal = match r.reason {
@@ -228,8 +235,23 @@ pub fn dump_fixseq(
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
     let path = dir.join(format!("run-{nanos}.jsonl"));
-    let mut body = String::with_capacity(attempts.len() * 128);
-    for a in attempts {
+    // Issue 105: stamp the run-level journey credit onto every row (the
+    // run's λ_T raw integral + terminal residual — the values every row of
+    // THIS run shares). In-memory records carry 0s here; the dumped ring
+    // is where the values become durable (pre-105 rings decode as 0 =
+    // absent, never a replay hazard).
+    let credit = super::driver::JourneyCredit::from_attempts(attempts);
+    let stamped: Vec<super::driver::AttemptRecord> = attempts
+        .iter()
+        .map(|a| {
+            let mut row = a.clone();
+            row.journey_residual_sum = credit.journey_residual_sum;
+            row.terminal_residual = credit.terminal_residual;
+            row
+        })
+        .collect();
+    let mut body = String::with_capacity(attempts.len() * 160);
+    for a in &stamped {
         match serde_json::to_string(a) {
             Ok(line) => {
                 body.push_str(&line);
@@ -698,6 +720,8 @@ mod tests {
                 outcome: AttemptOutcome::Kept,
                 errors: (3, 2),
                 masking: (0, 0),
+                journey_residual_sum: 0,
+                terminal_residual: 0,
             },
             AttemptRecord {
                 seq: 1,
@@ -707,6 +731,8 @@ mod tests {
                 outcome: AttemptOutcome::RevertedNoProgress,
                 errors: (2, 2),
                 masking: (0, 0),
+                journey_residual_sum: 0,
+                terminal_residual: 0,
             },
         ];
         let (path, warns) = dump_fixseq(&root, &attempts);
@@ -718,14 +744,23 @@ mod tests {
         assert!(name.starts_with("run-"), "{name}");
         assert_eq!(path.extension().and_then(|e| e.to_str()), Some("jsonl"), "{name}");
 
-        // The ORDERED sequence round-trips, line per attempt.
+        // The ORDERED sequence round-trips, line per attempt — with the
+        // Issue-105 run-level stamps the dump adds (every row of THIS run
+        // carries the run's integral + terminal residual; r = masking_after
+        // + errors_after: attempt 0 leaves (0,2)→2, attempt 1 leaves
+        // (0,2)→2 ⇒ sum 4, terminal 2).
         let body = std::fs::read_to_string(&path).unwrap();
         let back: Vec<AttemptRecord> = body
             .lines()
             .filter(|l| !l.trim().is_empty())
             .map(|l| serde_json::from_str(l).expect("line parses"))
             .collect();
-        assert_eq!(back, attempts);
+        assert_eq!(back.len(), attempts.len());
+        for (b, a) in back.iter().zip(&attempts) {
+            assert_eq!((b.seq, &b.code, b.outcome, b.errors, b.masking), (a.seq, &a.code, a.outcome, a.errors, a.masking));
+            assert_eq!(b.journey_residual_sum, 4, "run integral stamped");
+            assert_eq!(b.terminal_residual, 2, "terminal residual stamped");
+        }
 
         // The README landed once (idempotent on a second dump).
         let dir = root.join(".heal").join("fixseq");

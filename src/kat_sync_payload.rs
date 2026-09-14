@@ -636,6 +636,8 @@ mod tests {
             elo: 1215.5,
             span_elo: 1188.25,
             component: None,
+            journey_runs: 0,
+            journey_taint_sum: 0,
         }
     }
 
