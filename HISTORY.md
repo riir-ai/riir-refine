@@ -6571,3 +6571,62 @@ corpus, the documented fallback).
 The P22 intake row is ticked DONE in the same commit; the 2026-09-14
 OPPONENT WATCH row's checkbox is ticked to match its already-recorded
 content (hygiene — the record was complete, the box simply never moved).
+
+### The first workspace sweep (2026-09-15, same-day follow-through)
+
+The landing protocol's "never silently leave it unmeasured" tail: the
+instrument had been validated on 4 repos; the remaining workspace was
+unmeasured. Sweep: riir-ai · katgpt-rs · riir-train · seal-remake ·
+riir-mmorpg-examples · riir-game-sdk · riir-neuron-db · seal-game-editor ·
+riir-dapps · riir-deployer · riir-auth · riir-shader (+ riir-chain ·
+riir-dao from the landing) — every root on disk except the read-only
+seal-online-remaster.
+
+**Verdict: 14 rows → 3 TP (21%) / 11 FP — plus 2 same-class rows the
+COMPILER surfaced that the instrument missed.** All five landed in riir-ai
+`721522fdc` (the only repo with findings; every other repo clean):
+
+- TP: `WIDTH_MISMATCH_WARNED` + `ANE_PREFILL_CHANNEL_GRID` +
+  `note_ane_dispatch` (ane_prefill/mod.rs — decls ungated, every use inside
+  `all(macos, aarch64)` code) and the `BrowserGpuError`/`detect_webgpu`
+  re-export (riir-gpu lib.rs — `#[cfg(feature = "browser")]` with zero
+  native consumers; now `all(browser, wasm32)`, matching the Issue-892-T3
+  `new_gpu_context` precedent). Gating the re-exposed the module's items as
+  dead on native → `browser_gpu_init` itself is now wasm32-only too.
+- Compiler-surfaced (the reverse direction, see FP class 2):
+  `note_ane_dispatch` — rustc `dead_code` on the off-platform leg — and the
+  platform-conditional `mut` at `ternary_deltanet_gpu_forward.rs:2944`
+  (`#[allow(unused_mut)]`; removing the `mut` would break the host build).
+- FP classes, measured: **(1) file-level `#![cfg]` inner attrs ×5** —
+  `bank.rs`/`exec.rs`/`exec_zc.rs`/`headroom.rs` each gate their WHOLE module
+  via `#![cfg(all(macos, aarch64))]`; the instrument cannot see inner attrs,
+  so their decls read ungated (`DEFAULT_MAX_ANE_BYTES`, `ane_stage_dump`,
+  `zc_stage_dump`, `two_sided_ceiling` + one more below). **(2) the same
+  blindness in the OTHER direction** — uses inside file-gated modules read
+  as UNGATED, suppressing flags (`note_ane_dispatch` was a MISS, not an FP;
+  rustc proved it). **(3) module-declaration gates ×6** — `#[cfg] mod x;` in
+  the parent (`pub mod wasm;` under wasm32+bevy_backend in mmorpg-examples;
+  `web_link`/`web_mirror` under `all(wasm32, feature)` in seal-view). **(4)
+  inline format args ×1** — `println!("{SWEEP_COUNTS:?}")` is an ungated
+  use the syn walk cannot see → false flag.
+- Walk-scope note: scanning seal-game-editor walked into `.wt/riir-ai` (a
+  sibling's nested git WORKTREE — `.git` is a file there), duplicating
+  riir-ai's rows under the editor's scan. Prune rule for v2: skip
+  subdirectories whose `.git` is a file.
+
+**The method finding (bigger than the FP count): a second-target `cargo
+check` is the cheap oracle complement.** `cargo check -p riir-gpu
+--features ane_prefill --target x86_64-apple-darwin` — 40 s, never links,
+no CI lane owns it — caught BOTH compiler-surfaced rows in the same run
+that proved the three gated decls compile away cleanly. The audit reasons
+about the lattice statically; one off-platform check makes rustc attest
+the same property dynamically, in both directions. They are complements:
+the audit names rows across the whole tree at once, the check proves one
+package's whole cfg state. Pair them.
+
+All three legs validated post-fix (host `ane_prefill`, host `browser`,
+x86_64-apple-darwin `ane_prefill`): zero warnings. The wasm32+browser lane
+is PRE-BROKEN at the dep graph (getrandom 0.4.3 `wasm_js` + `libloading`
+has no wasm32 arm) and the `browser` feature has zero consumers — filed
+upstream as riir-ai `.issues/958` (retire-or-fix, owner call). The v2
+instrument gaps are intake row P24.
