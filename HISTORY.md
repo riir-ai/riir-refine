@@ -5973,3 +5973,47 @@ post-mining queue; manual fixes landed instead.
 
 Issue file removed per the noise rule; this entry + Bench 086 are the
 record.
+
+## 2026-09-14 — Plan 195 executed (seal-game-editor issue 150): the UNIQUE carrier index, its reconcile twin, and the clash report that opens the file
+
+Cross-repo unit, landed on seal-game-editor develop `e25f98a4` (feat
+`89337737` + docs `52eb5a23`, merged from `fix/quest-creature-unique-carrier`
+cut at `561641a1`). The handoff's named next unit, executed in the plan's
+worktree with terminal-only editing (the repo is outside this Zed workspace's
+roots — file tools cannot reach it; anchored Python patchers staged in
+riir-clippy, run once, deleted).
+
+**The three moves, as planned** — (1) the declared `quest_creature.sql` index
+became UNIQUE with the issue's citations; (2) `working_schema::reconcile_indexes`
+— the index twin of `add_missing_columns` on the `column_drift`
+scratch-PRAGMA pattern (`PRAGMA index_list`/`index_info` both sides, never
+parsing the `.sql`; DROP+CREATE the declared statement verbatim from the
+scratch `sqlite_master`); (3) the un-convergeable file opens with its clash
+row instead of a locked door.
+
+**Five amendments the plan could not see** (recorded in its Amendments
+section): the `EDITOR_SCHEMA_SQL` mirror index went UNIQUE too + a
+`EDITOR_SCHEMA_VERSION` 23 bump, because the staging fast path returns before
+`create_beside_legacy_mirror` — the same lockout class the version-stamp doc
+already documents; `drift_split` (refusing vs advisory halves) because the
+plan put the clash row "in the list open_declared shows" while also demanding
+the file open — that list IS the refusal; duplicates are counted BEFORE any
+drop (the plan's DROP-then-let-CREATE-fail detector strands the file
+index-less); the report needed a reader, so `quest_carrier_clashes` + a
+Carriers-control note row landed (with `write_carrier_clash_for_test` behind
+test-support — no public writer can build the state); three fixtures held the
+now-unrepresentable one-creature-two-trees state and were reworked (the
+projection fixture's quest 40 rides on creature 500 — adding a monster row
+perturbed drop counts and renumber expectations in 5 tests; the reuse
+perturbs nothing).
+
+**Validation:** editor-data lib 876/876 + integration 10/10 (4 new tests),
+feat-quest 112/112 (+1), feat-npc 27/27, legacy-import 1073+2, projection
+117/117, editor-core 319+2 (the documented thumb_cache Windows-path baseline,
+byte-identical), clippy clean on touched files (the 7 remaining
+chunks_exact live in untouched map_render/ground_export — the documented
+divergence-class remainder). Whole-workspace `--all-targets` check clean; a
+workspace-wide `cargo test` build still dies on the pre-existing bevy rlib
+link issue (untouched crates; per-crate runs are the lane's convention).
+
+Issue 150 removed per the noise rule; the plan file carries the closure.
