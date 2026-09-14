@@ -1,6 +1,6 @@
 # Probe-gated fix verification — compose outcome-fit probe × verify oracle
 
-**Status:** OPEN (filed from Research 168 — arXiv:2607.05188 distillation)
+**Status:** OPEN (filed from Research 168 — arXiv:2607.05188 distillation) — **T1 MEASURED 2026-09-15: lane NOT viable on ring-native features** (horizon 1 < 2 on every corpus; see T1 notes). The probe lane's revival path is T2's embedding column — without it the strategy prior is a sufficient statistic for these corpora.
 
 ## Summary
 
@@ -23,7 +23,9 @@ Every half of "predict whether a fix attempt will land BEFORE running the compil
 
 ## Tasks
 
-- [ ] T1 — `--horizon-report`: one pass over existing fixseq rings, AUC(k) vs lead k (attempt index before outcome), horizon = max k ≥ floor+margin; floors = base-rate Beta-LCB and history-aggregate predictors. Report-first, exit 0, refuses green zero (empty ring / blind walk ⇒ exit 1). Decides lane viability (horizon ≥ 2 pays).
+- [x] T1 — `--horizon-report`: one pass over existing fixseq rings, AUC(k) vs lead k (attempt index before outcome), horizon = max k ≥ floor+margin; floors = base-rate Beta-LCB and history-aggregate predictors. Report-first, exit 0, refuses green zero (empty ring / blind walk ⇒ exit 1). Decides lane viability (horizon ≥ 2 pays).
+  **LANDED 2026-09-15** (`src/horizon_report.rs`, ungated pure-stats module + the `--horizon-report` CLI, the frontier-report pattern: LORO-held-out closed-form ridge over 9 ring-native features at i-k, base floor 0.5 + per-strategy Laplace-prior floor LORO; 8 module tests incl. the two-sided canary — planted lead-2 signal decodes at AUC ≥ 0.9, constant-feature ties yield exactly 0.5/horizon-none).
+  **Measurement (synthetic corpora, the production CompileDriver — the harness's standing label; ZERO organic rings exist workspace-wide, Bench 087/088):** single (126 runs) → BLIND WALK refusal (all 1-attempt, matches Bench 088's 1.00-decisions/run); multi5 (24) → SINGLE CLASS refusal (base rate 1.000, the Bench 045 first-try-perfect class); interacting (46) → measurable but readout AUC 1.000 WITH history floor 1.000 at k=1 → BELOW-FLOOR (the sufficient-statistic verdict: outcomes are strategy-determined on this corpus); pooled (196) → HORIZON = 1 (< 2), all k≥2 rows single-class. **Verdict: horizon ≥ 2 does NOT pay on ring-native features — the T2 embedding column is the lane's only revival path.** The k=1 pooled OK is a pooling artifact (cross-corpus strategy-prior contamination) — per-corpus reads are primary.
 - [ ] T2 — embedding column: extend `AttemptRecord` with the span embedding (or offline re-embed by `span_hash`); ring format stays jsonl-append.
 - [ ] T3 — probe fit harness: closed-form ridge fit per error-code family over rings; held-out-run AUC vs both floors; katgpt-core `OnlineLinearReadout` consumption once Issue 780 lands (local fit until then, clearly marked provisional).
 - [ ] T4 — gate wiring behind `probe_gated_verify` feature: SoftReject-pattern 3-way mapping; kill-switch `RIIR_HEAL_PROBE_GATE=0`; never gates raw correctness — only oracle invocation (compiles still verified on the keep path per the Issue-100 keep rule).

@@ -3049,7 +3049,8 @@ USAGE:
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
     cargo heal --collapse-report                      (self-collapse monitor, 042)
     cargo heal --corpus-stats [--json] [--import-series]  (corpus/score series, 050 T2)
-    cargo heal --frontier-report                       (learnability band report, 089 T1+T2)
+    cargo heal --frontier-report                       (learnability band report, 089 T1+2)
+    cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
@@ -3116,6 +3117,20 @@ USAGE:
                     never fails the run. Refuses (exit 1) on an empty
                     population — never a green zero. Needs --features
                     latent_retrieval.
+    --horizon-report
+                    Print the fixseq lead-k horizon report (Issue 107 T1):
+                    AUC(k) of a leave-one-run-out closed-form ridge readout
+                    over ring-native features at i-k, against the base floor
+                    (0.5) and the history-aggregate floor (per-strategy
+                    Laplace prior, LORO) — is an attempt's outcome linearly
+                    decodable from the ring state k attempts earlier?
+                    horizon ≥ 2 pays (the T3 probe lane's viability bar).
+                    Reads <path>/.heal/fixseq/run-*.jsonl directly — no
+                    store, no domain features, works on every feature build.
+                    Report-first, gates nothing; refuses (exit 1) on empty
+                    ring / blind walk (no run reaches 2 attempts) /
+                    single-class labels — never a green zero. Paths default
+                    to '.' (the config-audit convention).
     --config-audit Scan .rs files for config knobs that cannot be turned
                     (Plan 124, intake classes A+B): Default-impl fields whose
                     init is a bare const path, with ZERO field reads anywhere
@@ -3516,6 +3531,15 @@ struct Args {
     /// (the memory-stats pattern); refuses with exit 1 on an empty
     /// population (never a green zero). Needs `latent_retrieval` (the store).
     frontier_report: bool,
+    /// Issue 107 T1: `--horizon-report` — lead-k linear decodability of
+    /// fix-compile attempt outcomes over the `.heal/fixseq/` ring jsonl:
+    /// AUC(k) for a LORO-held-out closed-form ridge readout over
+    /// ring-native features at i-k, against the base floor (0.5) and the
+    /// history-aggregate floor (per-strategy Laplace prior, LORO). Report-
+    /// first, gates nothing; refuses exit 1 on empty ring / blind walk /
+    /// single-class labels (never a green zero). Ungated — reads jsonl
+    /// directly, no store, no domain features. Paths default to `.`.
+    horizon_report: bool,
     /// Plan 124: `--config-audit` — the config-hygiene report (classes A+B
     /// from the post-mining intake): Default-impl fields that default to a
     /// const nobody's field-read while the const IS read elsewhere (the
@@ -3591,6 +3615,7 @@ fn parse_args() -> Args {
         json: false,
         import_series: false,
         frontier_report: false,
+        horizon_report: false,
         config_audit: false,
         orphan_report: false,
     };
@@ -3651,6 +3676,7 @@ fn parse_args() -> Args {
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
             "--frontier-report" => args.frontier_report = true,
+            "--horizon-report" => args.horizon_report = true,
             "--config-audit" => args.config_audit = true,
             "--orphan-report" => args.orphan_report = true,
             "--misses" => args.misses = true,
@@ -4003,6 +4029,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.corpus_stats
         || args.import_series
         || args.frontier_report
+        || args.horizon_report
         || args.config_audit
         || args.orphan_report
         || args.candidates_path.is_some()
@@ -6384,6 +6411,45 @@ fn main() {
         #[cfg(not(feature = "latent_retrieval"))]
         {
             eprintln!("frontier-report: needs a latent_retrieval build (the trajectory store)");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // ── Issue 107 T1: --horizon-report — the fixseq lead-k report ──────────
+    // Report-first, gates nothing (the frontier-report law): reads the
+    // `.heal/fixseq/` ring jsonl directly — no store, no domain features,
+    // so this runs on EVERY feature build. Refuses exit 1 on empty ring /
+    // blind walk / single-class labels — never a confident green zero
+    // (the measurement on a store that exists NOWHERE in the workspace
+    // today must read as EMPTY, not healthy).
+    if args.horizon_report {
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        let mut runs = Vec::new();
+        let mut bad = 0usize;
+        let mut files = 0usize;
+        let mut scanned: Vec<std::path::PathBuf> = Vec::new();
+        for t in &targets {
+            let (r, b, f) = riir_clippy::horizon_report::load_runs(t);
+            runs.extend(r);
+            bad += b;
+            files += f;
+            scanned.push(t.clone());
+        }
+        let mut summary = riir_clippy::horizon_report::summarize(&runs);
+        summary.bad_lines = bad;
+        print!("{}", riir_clippy::horizon_report::render(&summary));
+        println!(
+            "scanned {} path(s), {} ring file(s), {} run(s)",
+            scanned.len(),
+            files,
+            runs.len()
+        );
+        if summary.refusal.is_some() {
             std::process::exit(1);
         }
         return;
@@ -9450,6 +9516,7 @@ mod mode_flag_tests {
             ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),
             ("--import-series", Box::new(|m| m.import_series = true)),
             ("--frontier-report", Box::new(|m| m.frontier_report = true)),
+            ("--horizon-report", Box::new(|m| m.horizon_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),

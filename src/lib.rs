@@ -302,6 +302,14 @@ pub mod traj_store;
 // band-mass is predictive).
 pub mod frontier_report;
 
+// Issue 107 T1: the fixseq horizon report — lead-k linear decodability of
+// attempt outcomes over the `.heal/fixseq/` ring (AUC(k) vs the base and
+// history-aggregate floors, LORO-held-out ridge readout). Pure stats over
+// the ring's jsonl wire shape, ungated so lib tests cover it at default
+// features. Report-first, gates nothing (the frontier-report law); refuses
+// green zero on empty/blind/single-class populations.
+pub mod horizon_report;
+
 // Plan 124: the config-hygiene audit — intake classes A + B as a report
 // lane (`--config-audit` in bin/heal.rs). Pure syn analysis over the scanned
 // file set, zero new deps, ungated so lib tests cover it at default

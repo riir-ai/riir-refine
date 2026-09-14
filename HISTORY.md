@@ -8,6 +8,48 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## Issue 107 T1 — the fixseq horizon report + the lane-viability verdict (`src/horizon_report.rs`)
+
+Issue 107's first task: is an attempt's outcome linearly decodable from the
+ring state k attempts earlier, at an AUC that beats both floors? The
+instrument + the honest first measurement, plus the cross-repo repair it
+unblocked.
+
+- **riir-kat `4bc8672` (the unblock)**: the previous session's `a80ec7a`
+  left the replay client's transport-tier imports ungated — `HttpResponse`
+  and the tests' `MockTransport` resolved `kat_transport`-gated items
+  unconditionally, so a default-features `cargo check` in riir-kat (and
+  riir-clippy's `kat_service` lane) failed E0432. The session that shipped
+  it had validated only under kat_transport builds — the count-identical
+  trap in feature form. Fixed by mirroring `kat_burn_client`'s own
+  cfg'd-import precedent (4 attribute lines).
+- **The instrument** (`src/horizon_report.rs`, ungated pure stats — the
+  `frontier_report` store-free law): a local `RingLine` wire mirror of the
+  ring jsonl (same `#[serde(default)]` legacy compat as `AttemptRecord`),
+  strict-lead features at i-k (nothing from `(i-k, i]`), LORO-held-out
+  closed-form ridge readout, base floor 0.5 + per-strategy Laplace-prior
+  floor (same fold — no leakage), per-target-code family rows at k=1, and
+  the three refusal classes (EMPTY / BLIND WALK / SINGLE CLASS — never a
+  green zero). 8 module tests incl. the two-sided canary: a planted lead-2
+  signal decodes at AUC ≥ 0.9 while exact-tie constant features yield
+  exactly 0.5 / horizon-none (the alternation trap is documented in the
+  test — any alternating label pattern is perfectly learnable from `kept_j`
+  and IS signal, so the no-signal fixture ties scores by construction).
+- **The measurement** (rings regenerated via `fixseq_prevalence --store`,
+  the production CompileDriver — synthetic corpora, the standing label;
+  ZERO organic rings exist workspace-wide): single (126 runs) → BLIND WALK
+  (all 1-attempt — matches Bench 088's 1.00-decisions/run); multi5 (24) →
+  SINGLE CLASS (base rate 1.000, the Bench 045 first-try-perfect class);
+  interacting (46) → readout AUC 1.000 WITH history floor 1.000 at k=1 —
+  BELOW-FLOOR, the sufficient-statistic verdict: on this corpus outcomes
+  are strategy-determined, so no feature set can beat the prior; pooled
+  (196) → HORIZON = 1 (< 2), all k≥2 rows single-class.
+- **The verdict**: `horizon ≥ 2 does NOT pay` on ring-native features —
+  T2's embedding column is the probe lane's only revival path, and the
+  organic surface stays the real open question. The k=1 pooled OK is a
+  pooling artifact (cross-corpus strategy-prior contamination) —
+  per-corpus reads are primary, footnoted in the issue.
+
 ## Plan 127 — P015 Phase 2: the `cargo heal replay` client landed (`4e1983ee`, byte movers riir-kat `a80ec7a`)
 
 The Max tier's earn lane, client half. Server landed as riir-dapps Plan
