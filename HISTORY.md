@@ -8,6 +8,39 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## The 09-14 evening queue-4 hygiene sweep — eleven more seal-game-editor issues closed on code evidence, the numbering-collision defect measured and filed as issue 151 (2026-09-14)
+
+Second and third units of the evening, same repo. The hygiene batch removed
+11 issue files whose work is verifiably landed at HEAD — each closed on code
+evidence, never on its own Status line: 004 (clock fields absent from
+world.rs), 059 (job_stat/job_type declared reads), 085 (plan 066 LEDGER
+WP-1..5 done — skill_weapon_req.rs + CodeSet; WP-6 parked out-of-phase with
+its own future ticket), 105+111+112 (plan 073 merged — Repo<ItemRow>::save
+has NO insert branch and its doc says the absence IS the fix, create_item
+allocates from id_map, editor_core::HasPk::key_is_assigned_by_db), 114
+(RULED OUT, recorded in plan 076 §4), 119 (fixed-by-deletion per plan 091's
+wholesale replace), 123 (level_curve.sql declared), 132 (thumbnail_frame.rs
+VISIBLE_MARGIN + bottom-baseline + tests), 136 (kind seeds the placement
+table default, pinned by an_npc_kind_creature_drops_as_a_fixed_character).
+Landed as seal-game-editor `2415427b` (11 files, -1122 lines).
+
+**125 deliberately left OPEN** — the P1 was verified NOT fixed and not
+crashable: seller_table + exp_coefficient are declared and live, but the
+other families are deliberate MissingLayer shells with per-family REASONs
+(bonus-result/craft: staging-only mirrors; combat-power: upstream extractor
+shifts fields; rank-buff: bad source header). It stays as the tracker for
+the shelled families' eventual declaration — content-lane work.
+
+**Issue 151 filed** (seal-game-editor `9351eae7`): the branch-isolation
+counter defect measured at scale during the pass — TWELVE dual-allocated
+plan numbers (094/098/099/103/104/106/109/111/123/126/134/191) plus issue
+129. Detection recorded first; the renumber (first-merged keeps the number,
+git-log adjudication, citation rewrite with the move) is deliberately a
+separate change. The evidence pass also surfaced that this box's terminal
+output renderer intermittently swallows multi-section output — worked
+around by redirecting to /tmp files + cat, which is why several sweeps were
+re-run; per-name counts are the reliable form.
+
 ## The 09-14 evening queue-1 unit — seal-game-editor issues 088/099/100 closed on verified HEAD evidence, the 088 sqlite_store half fixed (2026-09-14)
 
 The post-handoff re-scan found the repo's oldest OPEN-looking issues were
