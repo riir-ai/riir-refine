@@ -1,6 +1,6 @@
 # Proposal 015 — Replay endorsement reward class (the Max earn class, C1→C5 economics)
 
-Status: **draft — PHASE 1 COMPLETE 2026-09-15 (library slice `00b6583` + the worker routes Plan 029 T1.4: the account-authed `/mining/replay/*` surface on the mining DO + the ledger-plane canary forwards, wire canonical in the riir-kat leaf `kat_protocol_replay`; G1-a..d/G3 green + **G2 measured 58 µs/verdict release**; inert at cut=0 AND unconfigured-env — no deployment arms it); Phase 2 = the `cargo heal replay` client; Phase 3 = the econ-sim arm + owner ratification of a non-zero `replay_cut_bp` (owner-gated)**
+Status: **draft — PHASE 1 COMPLETE 2026-09-15 (library slice `00b6583` + the worker routes Plan 029 T1.4: the account-authed `/mining/replay/*` surface on the mining DO + the ledger-plane canary forwards, wire canonical in the riir-kat leaf `kat_protocol_replay`; G1-a..d/G3 green + **G2 measured 58 µs/verdict release**; inert at cut=0 AND unconfigured-env — no deployment arms it) · PHASE 2 COMPLETE 2026-09-15 (the `cargo heal replay` client, Plan 127: riir-kat `kat_replay_client` byte movers + the clippy_verify-gated engine — step-0 canary check, the pinned single-item rate rule, the toolchain fingerprint skew refusal; the lane doc at `.docs/01_orientation/replay_lane.md`; the live devnet leg is owner-gated by design — the lane arms in Phase 3); Phase 3 = the econ-sim arm + owner ratification of a non-zero `replay_cut_bp` (owner-gated)**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: [Proposal 013](013_consumer_install_tier_spec.md) T3.1 (the tier that needs the class) × [Proposal 005](005_kat_heal_service_network.md) §Mining (the C1→C5 escalation this economizes) × [Proposal 010](010_kat_yield_ceiling_and_treasury_funded_free_tier.md) (the sub-split + distribution-neutral-at-the-parent discipline) × TrueBit's forced-error incentive ([arXiv:1806.11476](https://arxiv.org/abs/1806.11476), adapted — cited-only) × the SHIPPED `VerdictVector.commitment()` / `verify_no_verdict_split()` / `ProofVerifier` substrate (`riir-dapps/src/kat/mining.rs`)
@@ -244,10 +244,10 @@ P008 versioned-bounded-movable law, entered through its re-open path.
 - [ ] T1.6 G1 (a)–(d) contract tests; G3 corpus green
 
 ### Phase 2 — the client (riir-clippy)
-- [ ] T2.1 `cargo heal replay` subcommand (lease → scratch replay → verdict)
-- [ ] T2.2 toolchain fingerprint + VersionSkew handling
-- [ ] T2.3 devnet e2e: one leased batch, agreement, reward rows visible
-- [ ] T2.4 docs: `.docs/` replay lane page + tier-spec status note
+- [x] T2.1 `cargo heal replay` subcommand (lease → scratch replay → verdict)
+- [x] T2.2 toolchain fingerprint + VersionSkew handling
+- [-] T2.3 devnet e2e: one leased batch, agreement, reward rows visible — the armed-lane leg is owner-gated BY DESIGN (no deployment sets `KAT_REPLAY_*` until Phase 3; reward rows are never written at cut=0, so "reward rows visible" is a Phase-3 question). Phase-2 evidence: the mock-transport contract suite (riir-kat, every accept arm + the 503/error forwarding) + the LIVE devnet dial (the client surfaces the deployed worker's own refusal — the worker predates the routes; account/URL/fingerprint/consent gates all exercised)
+- [x] T2.4 docs: `.docs/` replay lane page + tier-spec status note
 
 ### Phase 3 — economics + activation (owner-gated value write)
 - [ ] T3.1 econ-sim arm (cut × canary × adversary sweep)

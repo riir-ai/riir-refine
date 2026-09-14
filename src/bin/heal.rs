@@ -86,6 +86,12 @@ enum KatCommand {
     /// full-loop proof. Refuses mainnet with NO override (caveat #2);
     /// `--dry-run` is steps 1+6 only and runs on every network.
     Wetrun,
+    /// Proposal 015 Phase 2 (Plan 127): `replay` — the Max tier's earn
+    /// lane. Login-gated lease → local fix_verify + clippy-oracle replay
+    /// (scratch project) → signed verdict submit. Toolchain-fingerprint
+    /// gated; kill switch `RIIR_HEAL_REPLAY=0`. Needs kat_service +
+    /// kat_transport + clippy_verify (the oracle instrument).
+    Replay,
     /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
     /// the persisted service-url surface (env > config > default). Ungated:
     /// local-only (the consent-record precedent); the money commands it
@@ -2458,6 +2464,213 @@ fn run_kat_wetrun(dry_run: bool) {
     }
 }
 
+/// P015 Phase 2 (Plan 127): `cargo heal replay` — the Max tier's earn
+/// lane. One command = one lease → local replay of every item → one signed
+/// verdict per item. The judgment half is [`riir_clippy::kat_replay`]
+/// (step-0 canary hash check + the pinned rate rule over the real clippy
+/// oracle); the byte movers are [`riir_clippy::kat_replay_client`].
+///
+/// Gates (in order):
+/// 1. kill switch `RIIR_HEAL_REPLAY=0` — disabled lanes exit 0 quietly;
+/// 2. login (load-only, the wetrun precedent: a SIGNING command never
+///    silently mints an identity);
+/// 3. mining consent — `OptedOut` refuses (verdicts are contributions to
+///    the same economy the push half feeds; running the command IS the
+///    consent for `Unset`, the sync precedent);
+/// 4. the toolchain fingerprint (T2.2) — a lease pin that mismatches the
+///    local toolchain aborts BEFORE any compile (a skewed verdict is
+///    refused unscored server-side; running it would be pure waste).
+///
+/// Per item: judge → submit. `Unmeasurable` items are SKIPPED with the
+/// reason (a verdict is a claim — never submit what was not measured).
+#[cfg(all(
+    feature = "kat_transport",
+    feature = "clippy_verify",
+    feature = "latent_retrieval"
+))]
+fn run_kat_replay() {
+    use riir_clippy::kat_replay::{
+        ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
+    };
+    use riir_clippy::kat_replay_client::{
+        HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
+    };
+    use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
+
+    // 1. Kill switch (the RIIR_HEAL_KAT_METER idiom: exactly "0" disables).
+    const REPLAY_LEASE_LIMIT: u32 = 16;
+
+    if std::env::var("RIIR_HEAL_REPLAY").is_ok_and(|v| v == "0") {
+        println!("replay: disabled by RIIR_HEAL_REPLAY=0");
+        return;
+    }
+
+    // 2. Login — load-only (the wetrun precedent for signing commands).
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("replay: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("replay: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    // 3. Mining consent — the push-half posture: OptedOut refuses, Unset
+    //    proceeds (running the command IS the consent).
+    let consent_dir = riir_clippy::kat_mining_consent::default_dir();
+    let (consent, consent_warning) =
+        riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
+    if let Some(w) = consent_warning {
+        eprintln!("{w}");
+    }
+    if !consent.push_allowed() {
+        eprintln!(
+            "replay: SKIPPED — mining is opted out on this machine ({}); verdicts are \
+             contributions to the same economy the sync push feeds",
+            riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
+        );
+        eprintln!("replay: re-enable with `cargo heal --mine`");
+        std::process::exit(2);
+    }
+
+    // 4. The toolchain fingerprint — BEFORE the lease (T2.2): the local
+    //    toolchain must be pinnable at all, and the lease's pin decides
+    //    whether any verdict from this rig is scoreable.
+    let local_fp = match toolchain_fingerprint() {
+        Ok(fp) => fp,
+        Err(e) => {
+            eprintln!("replay: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!(
+        "replay: toolchain {} — fingerprint {}…",
+        toolchain_display(),
+        riir_clippy::kat_replay::hex32_short(&local_fp)
+    );
+
+    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let transport = HttpReplayTransport::new(&url, 60);
+    let ack = match request_lease(&transport, &signing_key, REPLAY_LEASE_LIMIT) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("replay: {e}");
+            std::process::exit(1);
+        }
+    };
+    if ack.items.is_empty() {
+        println!(
+            "replay: lease {} carries no items — nothing to verify (all queued rows are \
+             proven, leased elsewhere, or the queue is empty)",
+            ack.lease_id
+        );
+        return;
+    }
+    println!(
+        "replay: lease {} — {} item(s) from {url}",
+        ack.lease_id,
+        ack.items.len()
+    );
+
+    // Every item in a lease shares the config's pin — one check, before
+    // any compile (P015 caveat 2: skew is a refusal, never a slash).
+    if let Some(pinned) = unhex32(&ack.items[0].toolchain_fingerprint) {
+        if pinned != local_fp {
+            eprintln!(
+                "replay: toolchain SKEW — the lease pins {}… but this rig runs {}… ({}); \
+                 verdicts under a different toolchain are not comparable and are refused \
+                 unscored server-side. Nothing was compiled or submitted.",
+                &ack.items[0].toolchain_fingerprint[..16],
+                riir_clippy::kat_replay::hex32_short(&local_fp),
+                toolchain_display()
+            );
+            std::process::exit(2);
+        }
+    } else {
+        eprintln!(
+            "replay: the lease's toolchain pin is malformed — refusing to run against an \
+             unpinnable lane"
+        );
+        std::process::exit(2);
+    }
+
+    let oracle = riir_clippy::draft::clippy_oracle::ClippyOracle::new();
+    if !oracle.is_available() {
+        eprintln!("replay: cargo is not on PATH — the oracle cannot measure a verdict");
+        std::process::exit(1);
+    }
+
+    let mut submitted = 0usize;
+    let mut skipped = 0usize;
+    let mut failed = 0usize;
+    let started = std::time::Instant::now();
+    for item in &ack.items {
+        let span_short = &item.span_hash[..12.min(item.span_hash.len())];
+        let Some(span) = unhex32(&item.span_hash) else {
+            skipped += 1;
+            eprintln!("replay:   {span_short}… SKIP — malformed span hash");
+            continue;
+        };
+        let verdict = judge_item(&oracle, item);
+        let outcome = match &verdict {
+            ReplayVerdict::Tamper => {
+                println!("replay:   {span_short}… CANARY — hash mismatch, reporting tamper");
+                ReplayOutcomeWire::Tamper
+            }
+            ReplayVerdict::Judgment(j) => {
+                let pass = if j.compile_ok && j.oracle_resolved { "PASS" } else { "FAIL" };
+                println!(
+                    "replay:   {span_short}… {pass} (compile {}, oracle {}, heal {}/1000, \
+                     created {}/1000{})",
+                    j.compile_ok,
+                    j.oracle_resolved,
+                    j.heal_rate_milli,
+                    j.created_rate_milli,
+                    if j.created_lints.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" — created: {}", j.created_lints.join(", "))
+                    }
+                );
+                j.to_outcome()
+            }
+            ReplayVerdict::Unmeasurable(why) => {
+                skipped += 1;
+                eprintln!("replay:   {span_short}… SKIP — {why}");
+                continue;
+            }
+        };
+        match submit_verdict(&transport, &signing_key, &span, &local_fp, &outcome) {
+            Ok(ack) => {
+                submitted += 1;
+                println!("replay:   {span_short}… verdict {}", accept_line(&ack));
+            }
+            Err(e) => {
+                failed += 1;
+                eprintln!("replay:   {span_short}… verdict SUBMIT FAILED — {e}");
+            }
+        }
+    }
+    println!(
+        "replay: done in {:.1}s — {} submitted, {} skipped, {} failed (lease {})",
+        started.elapsed().as_secs_f64(),
+        submitted,
+        skipped,
+        failed,
+        ack.lease_id
+    );
+    if failed > 0 || submitted == 0 {
+        std::process::exit(1);
+    }
+}
+
 /// Print the ASCII QR under a URL line (the T1.6 QR render, reused —
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
@@ -2850,6 +3063,7 @@ USAGE:
     cargo heal pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
     cargo heal faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo heal wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
+    cargo heal replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
     cargo heal config get                            (the ACTIVE service url + its source: env > config > default)
     cargo heal config set --url <devnet|testnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
 
@@ -3632,7 +3846,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
-            | "pay" | "faucet" | "wetrun" | "config"
+            | "pay" | "faucet" | "wetrun" | "config" | "replay"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -3647,6 +3861,7 @@ fn parse_args() -> Args {
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
+                    "replay" => KatCommand::Replay,
                     _ => KatCommand::Claim,
                 });
             }
@@ -3979,7 +4194,7 @@ fn print_suggestion(
         );
     }
     for lint in &s.anchored_missing {
-        println!("  [oracle] {:<32} NO CORPUS RULE (gap signal)", lint);
+        println!("  [oracle] {lint:<32} NO CORPUS RULE (gap signal)");
     }
     for (domain, rules) in &s.by_domain {
         if domain_filter.is_some_and(|want| want != *domain) {
@@ -4496,7 +4711,7 @@ fn finish_score_bench(
         ) {
             Ok(outcome) => println!("frontier snapshot (089 T4 bench tail): {outcome}"),
             Err(e) => {
-                eprintln!("frontier snapshot: bench-tail append failed (bench unaffected): {e}")
+                eprintln!("frontier snapshot: bench-tail append failed (bench unaffected): {e}");
             }
         }
     }
@@ -4761,7 +4976,7 @@ fn run_score_bench_perf() {
         .into_iter()
         // fn(&str) over String items — the closure adapts (a bare fn path
         // here failed E0631 on this score_bench-only lane, pre-existing).
-        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
@@ -5700,6 +5915,29 @@ fn main() {
             ),
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
             KatCommand::Wetrun => run_kat_wetrun(args.wetrun_dry_run),
+            // P015 Phase 2 (Plan 127): the replay lane needs the oracle
+            // (clippy_verify + the `draft` tree's latent_retrieval gate) on
+            // top of the account + transport gates — a release-set build
+            // (no clippy_verify) degrades with the exact remedy, the
+            // update/sync precedent.
+            #[cfg(all(
+                feature = "kat_transport",
+                feature = "clippy_verify",
+                feature = "latent_retrieval"
+            ))]
+            KatCommand::Replay => run_kat_replay(),
+            #[cfg(not(all(
+                feature = "kat_transport",
+                feature = "clippy_verify",
+                feature = "latent_retrieval"
+            )))]
+            KatCommand::Replay => {
+                eprintln!(
+                    "replay requires a build with --features kat_transport,clippy_verify (the \
+                     verdict is measured by the real clippy oracle — P015 Phase 2)"
+                );
+                std::process::exit(2);
+            }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {
@@ -8203,8 +8441,7 @@ fn main() {
     };
     let oracle_note = if clippy_feed.is_some() {
         let mut s = format!(
-            " · {} oracle-anchored · {} no-corpus-rule",
-            n_oracle_spans, n_anchored_missing
+            " · {n_oracle_spans} oracle-anchored · {n_anchored_missing} no-corpus-rule"
         );
         // P21: the fix lane's consumed suggestions. Zero in suggest-only
         // runs stays silent — the count names fix-lane behavior only.

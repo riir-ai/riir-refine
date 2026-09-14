@@ -193,8 +193,9 @@ pub mod scope_model;
 pub use riir_kat::{
     kat_account, kat_account_client, kat_burn_client, kat_lease_client, kat_meter,
     kat_payreq_client, kat_protocol_account, kat_protocol_burn, kat_protocol_lease,
-    kat_protocol_payreq, kat_protocol_stake, kat_protocol_vote, kat_protocol_wetrun,
-    kat_redact, kat_service_config, kat_stake_client, kat_vote_client, kat_wetrun,
+    kat_protocol_payreq, kat_protocol_replay, kat_protocol_stake, kat_protocol_vote,
+    kat_protocol_wetrun, kat_redact, kat_replay_client, kat_service_config, kat_stake_client,
+    kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
@@ -230,6 +231,18 @@ pub mod kat_sync_payload;
 // nothing here touches the network or the clock (pure by construction).
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 pub mod kat_pending_estimator;
+
+// Proposal 015 Phase 2 (Plan 127): the replay-endorsement ENGINE — the
+// toolchain fingerprint, the pinned single-item rate rule (the determinism
+// law two agreeing verifiers depend on), and the step-0 canary hash check
+// over one leased item. Gated with the ORACLE's own gates (clippy_verify
+// for the instrument + latent_retrieval for the `draft` tree it lives in);
+// the wire types come from the riir-kat protocol tier (always compiled —
+// the root dep has no default features). The command orchestration
+// (`cargo heal replay`) lives in the bin and adds the kat_service +
+// kat_transport gates.
+#[cfg(all(feature = "clippy_verify", feature = "latent_retrieval"))]
+pub mod kat_replay;
 
 // (issue 088: `kat_lease_client` moved to the riir-kat repo — see the
 // re-export block above.)
