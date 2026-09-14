@@ -8,6 +8,77 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## The 2026-09-14 Protocol B sweep — 10 repos screened, seal-game-editor healed oracle-fed (the queue-3 unit; first large multi-crate `--clippy-json --fix --write --verify` run) (2026-09-14)
+
+The idle-loop queue fell to item 3 (issues/plans drained per the handoff).
+Method: real `cargo clippy --workspace --all-targets --message-format=json`
+per repo (the oracle feed + the screen in one pass; exFAT hard-link noise
+filtered — it dominates raw warning counts on this box), then the healer's
+`--clippy-json`-anchored `--fix --write --verify` where findings exist.
+Dev-sweep network discipline (reusable): the cargo-heal bin REQUIRES
+kat_service, so every run carries the lease context — neutralized with
+`RIIR_HEAL_KAT_METER=0 RIIR_HEAL_KAT_GATE=0
+RIIR_HEAL_KAT_SERVICE_URL=http://127.0.0.1:9` (env > config > default
+precedence; the discard-port endpoint fail-fasts the run-start lease fetch
+→ compiled-in HEAD corpus stands, no lease installed into target repos,
+no burn/sync tails — the P12 lease-override class, prevented this time).
+
+**Screen results (10 repos):** riir-auth, riir-kat, riir-dapps,
+riir-neuron-db — CLEAN (0 real findings; dapps' 26 raw warnings are all
+exFAT hard-link noise). riir-game-sdk — BLOCKED pre-lint: its riir-engine
+path dep resolves to the sibling's stale (behind-16) riir-ai checkout,
+`E0432 katgpt_core::branching::DEFAULT_TAU_SPAWN` — the sibling's lane,
+not moved (re-arm: after riir-ai syncs). seal-game-editor — 61 real
+findings → healed. riir-mmorpg-examples / seal-online-remaster /
+seal-remake / riir-shader: deferred behind the game-sdk blocker timing
+(same riir-ai/katgpt dep class for the first two; box time for the rest).
+
+**The heal (seal-game-editor `e2112bce`, landed + pushed):** 126 edits
+proposed / 38 files; the verify gate ran **85 cargo checks**, kept
+**101 edits / 34 files**, reverted 23 (21 × `redundant_closure` heuristic
+proposals the compile gate refused + map_render.rs whole-file — its
+`single_match_else` edit broke, taking 2 valid `chunks_exact` edits with
+it; per-file atomicity). Findings 61 → 49; the two non-`chunks_exact`
+findings closed (question_mark hand-fixed `match→?`; the BORN
+`unnecessary_map_or` hand-fixed `map_or(false,..)→is_some_and` — born-lint
+family member #4, see the intake row). The 49 remainder is ALL
+`chunks_exact_to_as_chunks` in the two documented-out-of-scope classes:
+iterator-CHAIN shapes (`.chunks_exact(4).map(..)`, ~25 sites — the P13-class
+extension candidate, intake row filed with the live evidence) and
+non-const-N shapes (clippy fires, its own suggestion cannot apply).
+
+**En-route findings, load-bearing for future sweeps:**
+
+1. **The verify gate inherits the BOX toolchain when the target repo has
+   no `rust-toolchain.toml`** — the spawned `cargo check` resolved 1.93.0
+   (box default) and died at manifest load (`rustc 1.93.0 is not supported`).
+   Fix: `RUSTUP_TOOLCHAIN=1.98.1` on the healer invocation. This is intake
+   class (k) (toolchain-override decay, 2026-09-07 row) firing LIVE — the
+   09-07 note "a repo with version-sensitive code and NO pin file is itself
+   a drift hazard" is now a measured sweep incident, not a hypothetical.
+2. **Windows target-dir hazards measured:** (a) the healer's 85 check
+   passes + a full test run interleave → `bevy_pbr required in rlib
+   format` + E0463 downstream — transient, self-heals on the next clean
+   build; (b) a TIMED-OUT test run leaves a zombie test exe holding the
+   binary → `LNK1104: cannot open file` on rebuild — kill the zombie
+   (`tasklist | grep editor_widgets`; `taskkill //F //IM …`) and rebuild.
+3. **Pre-existing failure adjudication (all confirmed at HEAD via
+   single-file checkout):** editor-core `thumb_cache` ×2 + feat-map
+   `the_export_buttons_write_files` ×1 are Windows path-assert failures
+   (`contains("/00/")` on backslashed paths); `bevy_canvas::render_tests`
+   are GPU-contention FLAKY (HEAD failed 5/23 in one run, 0 in another —
+   the box runs the sibling's L4 eval at 14.5 GiB resident). None
+   heal-caused; the heal introduced ZERO test regressions.
+4. **Single-file checkout beats stash for HEAD-vs-heal adjudication** —
+   a full stash costs a rebuild of the whole crate graph (~15 min class on
+   this box) and one stash+pop cycle hit the 15-min tool timeout MID-POP
+   (caught by checking `stash list` before anything else; popped clean).
+   `cp file .bak && git checkout HEAD -- file && test && cp .bak file`
+   rebuilds exactly one crate.
+
+Intake rows filed (this commit): the chain-shape extension + born-lint #4.
+Snapshot queue updated. seal-game-editor at `e2112bce` (in sync).
+
 ## P12 post-mining intake — `needless_pass_by_ref_mut` lands: the 2026-09-09 nursery-gap row closes, probe-corrected twice (2026-09-14)
 
 The last open clippy_lints intake candidate (the ~80-finding riir-ai sweep
