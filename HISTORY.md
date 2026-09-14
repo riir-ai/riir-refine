@@ -77,6 +77,37 @@ P14 (downstream-hint landing) — this unit is P15, next free (the ad-hoc
 P-series is per-session and has dual-allocated before; two P12s and two
 P13s already exist in this file).
 
+## The 09-14 production re-heal of seal-game-editor — the P13 "owning lane's move" discharged same-day (2026-09-14)
+
+The P13 landing (`53f9f9fe`) closed with "production re-heal of seal-game-editor = the
+owning lane's move" — the sweep lane (this one) took it. Healer rebuilt at `b8b065b3`
+(HEAD, carries P13; via the `C:/git2` farm) — the 23:50 and 09:35 binaries both predate
+the extension, which is the standing reason to rebuild before every production heal.
+Oracle-fed `--fix --write --verify` on a fresh `--workspace --all-targets` feed of
+seal-game-editor at `d310c030`: **25 verified edits / 9 files, findings 49 → 19**
+chunks_exact (the remainder is exactly the two documented divergence classes: non-const-N
+shapes + macro-argument chains, the sibling's newest intake candidate), `0 no-corpus-rule`,
+and the 15-edit compile-gate-revert memory held (the redundant_closure/single_match_else
+class stays suppressed — self-evolve working as designed).
+
+En-route: the fresh feed caught **3 × `unused_must_use` in MY OWN morning commit's new
+tests** (`ctx.run_ui` without `let _ =`) — invisible to the `--lib` clippy of the d310c030
+validation because cfg(test) code needs `--all-targets`; the e68f8f2a rider class firing on
+the rider's own author. Fixed in `4c8f89f3`; the heal itself is `ae6d4d3d`.
+
+Validation: editor-data **872/872**, feat-quest **111/111** green; editor-core thumb_cache
+×2 re-adjudicated at HEAD via single-file checkout (Windows path-assert, pre-existing);
+feat-map export-buttons × same documented class; bevy_canvas render_tests = the GPU flake
+(moving count 9→3→8 across identical-code runs under sibling load — a semantic break
+would fail deterministically, and the as_chunks pixel-helper edits drop the remainder
+exactly like chunks_exact did). The chain-shape production edit itself:
+`.chunks_exact(4).filter(..)` → `.as_chunks::<4>().0.iter().filter(..)` — `&&[u8;4]`
+indexes through auto-deref, semantics identical, compile-gated by the verify pass.
+
+The re-arm map stands: seal-remake + riir-mmorpg-examples both wait ONLY on riir-ai's
+checkout (behind-40 at last check, `M Cargo.lock` — the sibling's active session);
+stale `E:/tmp/riir-clippy-wt` pruned; `C:/git2` farm + HEAD binary stay staged.
+
 ## The 09-14 morning re-arm pass — sweep blockers narrowed to ONE (riir-ai's stale checkout), healer HEAD binary staged clean-of-sibling-WIP, seal-game-editor #147 closed as the queue-1 unit (2026-09-14)
 
 The handoff's resume items, executed: **riir-viewbridge CLONED** to `E:/git/riir-viewbridge`
