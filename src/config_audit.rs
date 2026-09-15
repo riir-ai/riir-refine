@@ -285,11 +285,13 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
     let (serde_structs, skip_ser_fields) = collect_serde_config_structs(&files);
     if !serde_structs.is_empty() {
         let local_crates = scan_local_crate_roots(sources);
+        let local_fields = collect_struct_field_sets(&files);
         let mut extra: Vec<FieldCandidate> = Vec::new();
         for (name, file) in &files {
             let scope = FileScope::of(file, &local_crates);
             let mut v = StructLitCollector {
                 serde_structs: &serde_structs,
+                local_fields: &local_fields,
                 scope: &scope,
                 file: name,
                 out: &mut extra,
@@ -426,6 +428,57 @@ struct SerdeStructMarker<'a> {
     skip_ser_fields: &'a mut BTreeMap<String, BTreeSet<String>>,
 }
 
+/// Scan-global field sets for every TOP-LEVEL `struct` declaration, unioned
+/// across same-named decls (the Issue-109 re-sight, the riir-shader bevy-0.19
+/// FP): `FileScope::literal_is_foreign` cannot decide a file importing BOTH a
+/// foreign glob (`use bevy::prelude::*`) and a local glob
+/// (`use riir_shader_core::prelude::*`) — the documented conservative
+/// direction reads such a literal local. The field sets close the class from
+/// the other side: a literal naming a field that NO local same-named decl has
+/// provably cannot be any of them — a construction of the local type must
+/// compile against its real fields, so the mismatch is a foreign type
+/// masquerading under the same name. Mod-nested decls are excluded
+/// (consistent with [`FileScope::of`]'s top-level rule — a bare literal in
+/// another file can never name one without a path).
+#[must_use]
+pub fn collect_struct_field_sets(
+    files: &[(String, syn::File)],
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (_name, file) in files {
+        for item in &file.items {
+            if let syn::Item::Struct(s) = item {
+                let entry = out.entry(s.ident.to_string()).or_default();
+                for f in &s.fields {
+                    if let Some(ident) = &f.ident {
+                        entry.insert(ident.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Does this literal name a field that NO local same-named top-level struct
+/// declares? `true` = provably not the scanned set's type (skip it as
+/// evidence — both the candidate net and the wire pass); `false` = local,
+/// unknown type, no named fields, or no local decl — never rejected on a
+/// guess (the conservative direction).
+#[must_use]
+pub fn literal_is_field_mismatch(
+    local_fields: &BTreeMap<String, BTreeSet<String>>,
+    ty: &str,
+    named_fields: &[String],
+) -> bool {
+    match local_fields.get(ty) {
+        Some(fields) => {
+            !named_fields.is_empty() && named_fields.iter().any(|f| !fields.contains(f))
+        }
+        None => false,
+    }
+}
+
 /// Field-level doc index — (struct name, field name) → concatenated field
 /// doc text. The class-B downgrade evidence (Issue-030-class intake): a
 /// deliberate-write-only marker counts only on the FIELD doc; the struct's
@@ -539,9 +592,14 @@ impl Visit<'_> for SerdeStructMarker<'_> {
 /// check ([`FileScope::literal_is_foreign`]) — a bare `Name { … }` literal
 /// never resolves to a sibling module's same-named struct, so a foreign
 /// literal (bevy's `Node` through `use bevy::prelude::*`) is not evidence
-/// for the local serde struct of the same name.
+/// for the local serde struct of the same name. Issue 109 re-sight: the
+/// scope check alone cannot decide the foreign-glob + local-glob file, so
+/// the literal must ALSO pass [`literal_is_field_mismatch`] against the
+/// scan-global field sets — a field no local same-named decl has is
+/// provably not that decl.
 struct StructLitCollector<'a> {
     serde_structs: &'a BTreeSet<String>,
+    local_fields: &'a BTreeMap<String, BTreeSet<String>>,
     scope: &'a FileScope,
     file: &'a str,
     out: &'a mut Vec<FieldCandidate>,
@@ -550,8 +608,14 @@ struct StructLitCollector<'a> {
 impl<'ast> Visit<'ast> for StructLitCollector<'_> {
     fn visit_expr_struct(&mut self, lit: &'ast syn::ExprStruct) {
         if let Some(ty) = struct_lit_type(&lit.path) {
+            let named: Vec<String> = lit
+                .fields
+                .iter()
+                .filter_map(|fv| field_member_name(&fv.member))
+                .collect();
             if self.serde_structs.contains(&ty)
                 && !self.scope.literal_is_foreign(&ty)
+                && !literal_is_field_mismatch(self.local_fields, &ty, &named)
             {
                 for fv in &lit.fields {
                     let Some(field) = field_member_name(&fv.member) else {
@@ -594,7 +658,11 @@ impl<'ast> Visit<'ast> for StructLitCollector<'_> {
 /// file-local-decl + fn-local-foreign-import mix reads local, the
 /// conservative direction), and glob-imported names are only decidable as
 /// a class, not per-name (a foreign glob alongside a local glob reads
-/// local — the conservative direction).
+/// local — the conservative direction). That last undecidable shape is
+/// closed one level up by the scan-global field sets
+/// ([`collect_struct_field_sets`] + [`literal_is_field_mismatch`]): a
+/// literal the import shape cannot decide still names fields, and a field
+/// no local same-named decl has is provably foreign.
 #[derive(Debug, Default)]
 pub struct FileScope {
     /// Type idents declared at file top level (struct/enum/union/type alias).
@@ -1562,7 +1630,8 @@ fn assert_shape(trees: &[proc_macro2::TokenTree], i: usize) -> (Option<String>, 
     (comparator, negated)
 }
 
-fn field_member_name(member: &syn::Member) -> Option<String> {
+#[must_use]
+pub fn field_member_name(member: &syn::Member) -> Option<String> {
     match member {
         syn::Member::Named(ident) => Some(ident.to_string()),
         syn::Member::Unnamed(_) => None,
@@ -1775,7 +1844,7 @@ impl ConfigAuditReport {
         }
         let _ = writeln!(
             out,
-            "scope: detector sees only the scanned set; consumers in sibling/upstream crates are under-reported"
+            "scope: detector sees only the scanned set; consumers in sibling/upstream crates are under-reported; struct-literal evidence is per-file scope-resolved (Issue 109) and additionally skips a literal naming a field that NO local same-named top-level struct declares — provably a foreign type under the same name (the foreign-glob + local-glob shape is undecidable by import shape alone)"
         );
         out
     }

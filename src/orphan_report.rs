@@ -95,6 +95,12 @@
 //!   fn, would have FALSELY CLEARED the local struct's rows. The repair:
 //!   [`crate::config_audit::FileScope`] — provably-foreign literals are not
 //!   evidence in either direction (skipped for sites AND wire membership).
+//!   Re-sight (the bevy 0.19 migration restored the 4 rows through the
+//!   documented undecidable shape — a file importing BOTH the foreign glob
+//!   and a workspace-sibling glob reads local): the scan-global field sets
+//!   ([`crate::config_audit::collect_struct_field_sets`]) close it — a
+//!   literal naming a field that no local same-named decl has is provably
+//!   foreign, by the compile argument rather than the import shape.
 //! * **Generic serde bridges (specimen B, seal-game-editor):**
 //!   `fn row_to_mapping<T: serde::Serialize>(row: &T)` — the bridge fn has
 //!   NO struct literal (the serialized value is the generic param), and its
@@ -125,12 +131,15 @@
 //!   riir-auth `AccountState.created_at_unix`) re-appeared in every sweep
 //!   until this landed.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use crate::config_audit::{FieldCandidate, FileScope, WalkMode, ZeroReadField, ZeroReadScan};
+use crate::config_audit::{
+    collect_struct_field_sets, field_member_name, literal_is_field_mismatch, FieldCandidate,
+    FileScope, WalkMode, ZeroReadField, ZeroReadScan,
+};
 
 /// Default probe depths (commits back from HEAD), clamped to history depth.
 pub const DEFAULT_PROBE_DEPTHS: [usize; 4] = [10, 50, 200, 1000];
@@ -457,6 +466,12 @@ struct WireVisitor {
     bridge_fns: HashSet<String>,
     /// Pass-2 accumulation: concrete types named at bridge call sites.
     bridge_types: HashSet<String>,
+    /// Scan-global top-level struct field sets (Issue 109 re-sight): a
+    /// literal naming a field that no local same-named decl has is provably
+    /// foreign — neither a construction site nor wire-type membership. This
+    /// closes the foreign-glob + local-glob shape the import-scope check
+    /// documents as undecidable.
+    local_fields: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
@@ -525,6 +540,15 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
         // membership (a foreign literal inside a serde fn would FALSELY
         // CLEAR the local struct's rows).
         if self.scope.literal_is_foreign(&ty) {
+            syn::visit::visit_expr_struct(self, e);
+            return;
+        }
+        let named: Vec<String> =
+            e.fields.iter().filter_map(|fv| field_member_name(&fv.member)).collect();
+        if literal_is_field_mismatch(&self.local_fields, &ty, &named) {
+            // Provably not the scanned set's same-named struct (a field no
+            // local decl has): neither a construction site nor wire-type
+            // membership — mirrors the literal_is_foreign early return above.
             syn::visit::visit_expr_struct(self, e);
             return;
         }
@@ -760,8 +784,10 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
         syn::visit::visit_file(&mut f, file);
     }
 
+    let local_fields = collect_struct_field_sets(&parsed);
     let mut v = WireVisitor {
         bridge_fns,
+        local_fields,
         ..WireVisitor::default()
     };
     let local_crates = crate::config_audit::scan_local_crate_roots(sources);
@@ -1036,7 +1062,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
         );
         out
     }
@@ -2075,6 +2101,107 @@ pub fn row() -> Node { Node { id: 7 } }
             scan.fields
                 .iter()
                 .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id")
+        );
+    }
+
+    // ── Issue 109 re-sight: the field-set closure ──
+
+    /// The exact riir-shader bevy-0.19 shape (`d8c938b`): the file imports
+    /// BOTH a foreign glob and a workspace-sibling glob, so
+    /// [`FileScope::literal_is_foreign`] cannot decide (the documented
+    /// conservative direction reads the literal local). The field sets
+    /// close it: bevy's `Node` literal names fields that no local
+    /// same-named decl has — provably a foreign type under the same name.
+    #[test]
+    fn foreign_glob_plus_local_glob_field_mismatch_skipped() {
+        let graph = r"
+#[derive(serde::Deserialize)]
+pub struct Node { pub id: u32 }
+";
+        let ui = r"
+use bevy::prelude::*;
+use riir_shader_core::prelude::*;
+pub fn panel() {
+    let _n = Node {
+        position_type: PositionType::Absolute,
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(4.0),
+        padding: UiRect::all(Val::Px(8.0)),
+    };
+}
+";
+        let scan = crate::config_audit::zero_external_read_fields(&[
+            ("crates/riir-shader-graph/src/types.rs".to_string(), graph.to_string()),
+            ("crates/riir-shader-showcase/src/ui.rs".to_string(), ui.to_string()),
+        ]);
+        assert!(
+            scan.fields
+                .iter()
+                .all(|f| f.candidate.struct_name != "Node"),
+            "a literal naming fields no local same-named decl has is provably foreign"
+        );
+    }
+
+    /// The union direction: two same-named decls whose COMBINED fields
+    /// contain every literal field → still collected (never rejected on a
+    /// guess when some local decl could own the literal).
+    #[test]
+    fn field_mismatch_union_across_same_named_decls_keeps_evidence() {
+        let serde_side = r"
+#[derive(serde::Deserialize)]
+pub struct Node { pub id: u32 }
+";
+        let other = r"
+pub struct Node { pub flex_direction: u8 }
+";
+        let ui = r"
+pub fn panel() -> Node { Node { flex_direction: 1 } }
+";
+        let scan = crate::config_audit::zero_external_read_fields(&[
+            ("crates/a/src/types.rs".to_string(), serde_side.to_string()),
+            ("crates/b/src/other.rs".to_string(), other.to_string()),
+            ("crates/c/src/ui.rs".to_string(), ui.to_string()),
+        ]);
+        assert!(
+            scan.fields
+                .iter()
+                .any(|f| f.candidate.struct_name == "Node"
+                    && f.candidate.field_name == "flex_direction"),
+            "the field exists on SOME local same-named decl — evidence stays"
+        );
+    }
+
+    /// The wire half of the re-sight: a mismatched foreign literal inside a
+    /// serde fn must neither register wire membership (which would FALSELY
+    /// CLEAR a local struct's stillborn rows) nor construction sites (the
+    /// wire-const classification).
+    #[test]
+    fn field_mismatch_literal_is_not_wire_evidence() {
+        let graph = r"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Node { pub id: u32 }
+";
+        let ui = r"
+use bevy::prelude::*;
+use riir_shader_core::prelude::*;
+pub fn render(record: &Node, out: &mut Vec<u8>) {
+    let _n = Node { position_type: PositionType::Absolute };
+    if let Ok(bytes) = serde_json::to_vec(&record) {
+        out.extend_from_slice(&bytes);
+    }
+}
+";
+        let wire = wire_consumption(&[
+            ("crates/riir-shader-graph/src/types.rs".to_string(), graph.to_string()),
+            ("crates/riir-shader-showcase/src/ui.rs".to_string(), ui.to_string()),
+        ]);
+        assert!(
+            !wire.cleared.iter().any(|(ty, _)| ty == "Node"),
+            "a provably-foreign literal must not clear the local struct's rows"
+        );
+        assert!(
+            !wire.wire_const.iter().any(|(ty, _)| ty == "Node"),
+            "a provably-foreign literal must not register construction sites"
         );
     }
 

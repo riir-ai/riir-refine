@@ -7041,3 +7041,46 @@ substrate's matching authority dump in ANOTHER repo) is NOT repaired by
 either mechanism — readers outside the scanned set are the documented
 scope limit; the downstream-consumers hint names the repos. Issue 109
 resolved; file removed per the noise-reduction rule.
+
+## 2026-09-16 — the Issue-109 re-sight closed: scan-global struct field sets (the foreign-glob + local-glob shape)
+
+Found by the session's own housekeeping sweep: re-running `--orphan-report`
+over riir-shader returned **4 stillborn rows at `ui.rs:269-274` on bevy's
+`Node` fields** — the exact FP family the 2026-09-15 Issue-109 repair had
+measured at 0. Not a fixture regression: the bevy 0.17.3 → 0.19 migration
+(`d8c938b`, 16:56 +0700 the same day) rewrote the showcase UI literals, and
+the file carries BOTH `use bevy::prelude::*` (foreign glob) AND
+`use riir_shader_core::prelude::*` (workspace-sibling glob) — the shape
+`FileScope::literal_is_foreign` documents as UNDECIDABLE ("a foreign glob
+alongside a local glob reads local — the conservative direction"). The
+literal read local, the scan-global name match found the serde-backed
+`riir-shader-graph::Node`, and the 4 rows re-entered through the documented
+hole. The existing fixture family only covered the foreign-glob-ONLY file.
+
+**The closure is the compile argument, not a better import heuristic:**
+`collect_struct_field_sets` — scan-global field sets for every TOP-LEVEL
+`struct` declaration, unioned across same-named decls (mod-nested decls
+excluded, consistent with `FileScope::of`'s top-level rule — a bare literal
+in another file can never name one without a path). A literal naming a
+field that NO local same-named decl has PROVABLY cannot be any of them: a
+construction of the local type must compile against its real fields, so
+the mismatch is a foreign type masquerading under the same name.
+`literal_is_field_mismatch` is applied in BOTH evidence consumers — the
+serde-literal candidate net (`StructLitCollector`) and the orphan wire
+pass (`WireVisitor`: neither construction sites nor wire-type membership,
+mirroring the specimen-A early return). The no-reject direction is
+conservative: no local decl of the name, an all-unnamed (tuple) literal,
+or a field present on SOME same-named decl → evidence stays.
+
+**Measured:** riir-shader 4 stillborn → 0, candidates 170 → 160 (the 10
+foreign-literal fields dropped); every recorded canary byte-identical —
+self 0 orphaned / 11 stillborn / 373 files, riir-ai 70 stillborn, riir-chain
+0/0 + the 2 P26 marker rows, riir-deployer + riir-auth marker rows, dao's
+pinned `[wire-const] provenance_verified`, riir-dapps all-zero, and
+riir-mmorpg-examples' 4 orphaned rows still the adjudicated
+`DumpEntity.{h,hp,k,s}` NO-ACTION family. +3 fixtures (the re-sight shape,
+the union-rescue control, the wire false-clearance negative) → 39/39
+orphan + 41/41 config-audit, **lib 1534/1534**, clippy `-D warnings` clean
+(the one `must_use_candidate` on the now-`pub` `field_member_name` was
+healer-first — silent, its documented divergence; manual `#[must_use]`).
+Footers of both reports name the new skip direction.
