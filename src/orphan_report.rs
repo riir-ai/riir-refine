@@ -108,6 +108,22 @@
 //!   their history evidence but render at **wire-dto weak** severity (the
 //!   receiver consumes the serialized field; the in-repo read loss is not
 //!   the death verdict it would be for a local-only struct).
+//! * **The documented-write-only downgrade (P26, the config-audit parity):**
+//!   a stillborn OR ORPHANED row whose FIELD doc carries a deliberate-
+//!   write-only marker (`documented-write-only` | `deliberate` |
+//!   `forward surface` | `GOAT-gate territory` — the Issue-142/147 owner
+//!   vocabulary, one home in [`crate::config_audit`]) renders at the weak
+//!   `[documented-write-only]` annotation instead — DOWNGRADE-not-suppress
+//!   (the detector cannot verify the doc's claim, the `[wire-const]`
+//!   precedent). Scope: findings only — wire-cleared and bridge-cleared
+//!   rows stay cleared (consumed beats annotated), wire-const stays its own
+//!   class, and the marker counts on the FIELD doc only. A marked ORPHANED
+//!   row skips the pickaxe leg (the annotation needs no commit evidence).
+//!   Live evidence: the 09-16 quiet-repo sweep's four adjudicated rows
+//!   (riir-chain `GuardVerdict.redirect` — flagged WITH its full marker —
+//!   plus `backoff_ticks`, riir-deployer `TargetState.started_unix`,
+//!   riir-auth `AccountState.created_at_unix`) re-appeared in every sweep
+//!   until this landed.
 
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -336,6 +352,10 @@ pub struct OrphanReport {
     /// Wire-consumed but literal-constant at every construction site —
     /// schema-dead weight, weak severity (never cleared).
     pub wire_const: Vec<ZeroReadField>,
+    /// Stillborn/ORPHANED rows whose FIELD doc carries a deliberate-
+    /// write-only marker — downgraded to weak severity, never suppressed
+    /// (the P26 config-audit parity; the doc's claim is not verified).
+    pub documented_write_only: Vec<ZeroReadField>,
     /// Stillborn rows on bridge-consumed structs (Issue 109 specimen B:
     /// generic serde bridge at the call sites) — counted, not listed (the
     /// same measured-FP posture as `wire_cleared`).
@@ -839,6 +859,7 @@ pub fn classify_with_probe(
     let mut orphaned: Vec<OrphanRow> = Vec::new();
     let mut stillborn: Vec<ZeroReadField> = Vec::new();
     let mut wire_const: Vec<ZeroReadField> = Vec::new();
+    let mut documented_write_only: Vec<ZeroReadField> = Vec::new();
     let mut wire_cleared = 0usize;
     let mut bridge_cleared = 0usize;
     for field in &scan.fields {
@@ -868,12 +889,22 @@ pub fn classify_with_probe(
             field.candidate.field_name.clone(),
         );
         let bridge = wire.bridge_types.contains(&field.candidate.struct_name);
+        // The P26 downgrade: a field-doc deliberate-write-only marker moves
+        // a FINDING row to the weak annotation. Checked before the orphaned
+        // branch so the marked row skips the pickaxe leg (the annotation
+        // carries no commit evidence); consumed rows (wire-cleared,
+        // wire-const, bridge-cleared) outrank the annotation.
+        let marked = scan.marked_write_only.contains(&wire_key);
         if max_other > head_count {
             // ORPHANED rows keep their independent history evidence — the
             // wire pass never clears them (it only repairs the stillborn
             // class the 8-row probe measured). A bridge-consumed struct's
             // row keeps the evidence too, at wire-dto weak severity: the
             // receiver still consumes the serialized field.
+            if marked {
+                documented_write_only.push(field.clone());
+                continue;
+            }
             let commits = probe.pickaxe(&pattern, PICKAXE_MAX);
             let likely_by_optimization = commits
                 .first()
@@ -895,6 +926,8 @@ pub fn classify_with_probe(
                 wire_const.push(field.clone());
             } else if bridge {
                 bridge_cleared += 1;
+            } else if marked {
+                documented_write_only.push(field.clone());
             } else {
                 stillborn.push(field.clone());
             }
@@ -913,6 +946,7 @@ pub fn classify_with_probe(
         stillborn,
         wire_cleared,
         wire_const,
+        documented_write_only,
         bridge_cleared,
         probe_depths,
         blind: None,
@@ -954,10 +988,11 @@ impl OrphanReport {
             - self.stillborn.len()
             - self.wire_cleared
             - self.wire_const.len()
+            - self.documented_write_only.len()
             - self.bridge_cleared;
         let _ = writeln!(
             out,
-            "orphan-report: {} file(s) parsed, {} Default-impl field candidate(s), {} zero-external-read field(s): {} orphaned [C1] ({} wire-dto weak), {} stillborn, {} wire-cleared (serde co-occurrence), {} bridge-cleared (generic serde bridge), {} wire-const, {} silent (no vanished-reader evidence)",
+            "orphan-report: {} file(s) parsed, {} Default-impl field candidate(s), {} zero-external-read field(s): {} orphaned [C1] ({} wire-dto weak), {} stillborn, {} wire-cleared (serde co-occurrence), {} bridge-cleared (generic serde bridge), {} wire-const, {} documented-write-only (field-doc marker), {} silent (no vanished-reader evidence)",
             self.files_scanned,
             self.candidates,
             self.zero_read_fields,
@@ -967,6 +1002,7 @@ impl OrphanReport {
             self.wire_cleared,
             self.bridge_cleared,
             self.wire_const.len(),
+            self.documented_write_only.len(),
             silent
         );
         let _ = writeln!(
@@ -991,9 +1027,16 @@ impl OrphanReport {
                 s.candidate.origin, s.candidate.struct_name, s.candidate.field_name
             );
         }
+        for s in &self.documented_write_only {
+            let _ = writeln!(
+                out,
+                "  [documented-write-only] {} — {}.{} (the FIELD doc carries a deliberate-write-only marker — weak severity, the doc's claim is NOT verified; if it is not deliberate, drop the marker wording)",
+                s.candidate.origin, s.candidate.struct_name, s.candidate.field_name
+            );
+        }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
         );
         out
     }
@@ -1069,6 +1112,8 @@ mod tests {
         resolvable: Vec<String>,
         counts: FakeCounts,
         commits: FakeCommits,
+        /// The pickaxe-call witness — the P26 marked-orphaned skip pins this at 0.
+        pickaxe_calls: std::cell::Cell<usize>,
     }
 
     impl FakeHistory {
@@ -1079,6 +1124,7 @@ mod tests {
                     .collect(),
                 counts: Map::new(),
                 commits: Map::new(),
+                pickaxe_calls: std::cell::Cell::new(0),
             }
         }
 
@@ -1118,6 +1164,7 @@ mod tests {
         }
 
         fn pickaxe(&self, pattern: &str, max: usize) -> Vec<CommitHit> {
+            self.pickaxe_calls.set(self.pickaxe_calls.get() + 1);
             self.commits
                 .get(pattern)
                 .map(|c| c.iter().take(max).cloned().collect())
@@ -1178,6 +1225,109 @@ impl Default for BehaviorConfig {
         assert!(report.orphaned.is_empty(), "no delta, no orphan");
         assert_eq!(report.stillborn.len(), 1, "never read → stillborn");
         assert!(report.render().contains("[stillborn]"));
+    }
+
+    /// P26: a stillborn row whose FIELD doc carries a deliberate-write-only
+    /// marker downgrades to the weak `[documented-write-only]` annotation —
+    /// visible, never suppressed (the `[wire-const]` precedent).
+    #[test]
+    fn documented_write_only_marker_downgrades_stillborn() {
+        let src = r#"
+pub struct V {
+    /// documented-write-only: adjudicated (Issues 142 + 147) forward surface.
+    pub f: bool,
+}
+impl Default for V { fn default() -> Self { Self { f: true } } }
+"#;
+        let scan = scan_of(src);
+        assert_eq!(scan.marked_write_only.len(), 1, "the field doc is marked");
+        let fake = FakeHistory::new(&DEPTHS); // no counts anywhere → stillborn branch
+        let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
+        assert!(report.stillborn.is_empty(), "the marked row downgrades out of stillborn");
+        assert_eq!(report.documented_write_only.len(), 1);
+        let rendered = report.render();
+        assert!(rendered.contains("[documented-write-only]"), "{rendered}");
+        assert!(rendered.contains("1 documented-write-only"), "{rendered}");
+    }
+
+    /// P26: a marked ORPHANED row downgrades AND skips the pickaxe leg —
+    /// the annotation carries no commit evidence, so the expensive git
+    /// log -S probe is never spent on it.
+    #[test]
+    fn documented_write_only_marker_downgrades_orphaned_and_skips_pickaxe() {
+        let src = r#"
+pub struct BehaviorConfig {
+    /// forward surface: the YAML designer owns this at authoring time.
+    pub alarm_radius: f32,
+}
+impl Default for BehaviorConfig {
+    fn default() -> Self { Self { alarm_radius: 3.0 } }
+}
+"#;
+        let scan = scan_of(src);
+        let fake = FakeHistory::new(&DEPTHS)
+            .count("alarm_radius", "HEAD", 0)
+            .count("alarm_radius", "HEAD~10", 0)
+            .count("alarm_radius", "HEAD~50", 3)
+            .commit("alarm_radius", "perf: const-table species behavior values");
+        let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
+        assert_eq!(fake.pickaxe_calls.get(), 0, "the marked row never reaches the pickaxe");
+        assert!(report.orphaned.is_empty(), "the marked row downgrades out of [C1]");
+        assert_eq!(report.documented_write_only.len(), 1);
+        assert!(report.render().contains("[documented-write-only]"));
+    }
+
+    /// The marker counts only on the FIELD doc — a struct-level doc speaks
+    /// for the whole type, not for one member (the config-audit
+    /// `struct_doc_marker_does_not_downgrade_field` parity).
+    #[test]
+    fn struct_doc_marker_does_not_downgrade_orphan_row() {
+        let src = r#"
+/// deliberate: write-only config surface (struct-level doc).
+pub struct W { pub g: u32 }
+impl Default for W { fn default() -> Self { Self { g: 1 } } }
+"#;
+        let scan = scan_of(src);
+        assert!(scan.marked_write_only.is_empty(), "struct doc does not mark one field");
+        let fake = FakeHistory::new(&DEPTHS)
+            .count("g", "HEAD", 0)
+            .count("g", "HEAD~50", 2);
+        let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
+        assert_eq!(report.orphaned.len(), 1, "an unmarked row stays [C1]");
+        assert!(report.documented_write_only.is_empty());
+    }
+
+    /// P26 scope: wire-const is a different class and STAYS — a marked field
+    /// that is also constant-at-every-site renders [wire-const], not the
+    /// annotation (consumed verdicts outrank the marker).
+    #[test]
+    fn wire_const_beats_the_marker() {
+        let src = r#"
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct EpochSummary {
+    pub advisory: u32,
+    /// deliberate: pinned protocol constant, echoed verbatim.
+    pub provenance_verified: bool,
+}
+pub fn main() {
+    let verdict = decide();
+    let summary = EpochSummary {
+        advisory: verdict.count,
+        provenance_verified: true,
+    };
+    let artifact = serde_json::to_string_pretty(&summary).unwrap();
+    std::fs::write("run.json", artifact).unwrap();
+}
+"#;
+        let scan = scan_of(src);
+        assert!(scan
+            .marked_write_only
+            .contains(&("EpochSummary".to_string(), "provenance_verified".to_string())));
+        let wire = wire_of(src);
+        let fake = FakeHistory::new(&DEPTHS); // zero read-shaped occurrences everywhere
+        let report = classify_with_probe(&scan, &fake, &wire, &DEPTHS);
+        assert_eq!(report.wire_const.len(), 1, "wire-const keeps the row");
+        assert!(report.documented_write_only.is_empty(), "consumed outranks marked");
     }
 
     #[test]

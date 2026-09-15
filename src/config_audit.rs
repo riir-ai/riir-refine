@@ -232,6 +232,11 @@ pub struct ZeroReadScan {
     pub files_scanned: usize,
     pub candidates: usize,
     pub fields: Vec<ZeroReadField>,
+    /// (struct, field) pairs whose FIELD doc carries a deliberate-write-only
+    /// marker (the config-audit vocabulary). The C1 classifier downgrades a
+    /// marked row from ORPHANED/stillborn severity to the weak
+    /// `[documented-write-only]` annotation — visible, never verified.
+    pub marked_write_only: BTreeSet<(String, String)>,
 }
 
 /// Class-B comparator context: field name → the default representations it
@@ -336,6 +341,7 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
         files_scanned,
         candidates: candidates.len(),
         fields,
+        marked_write_only: marked_write_only_fields(&files),
     }
 }
 
@@ -435,6 +441,20 @@ fn collect_field_docs(files: &[(String, syn::File)]) -> FieldDocs {
     out
 }
 
+/// The (struct, field) pairs whose FIELD doc carries a deliberate-write-only
+/// marker — the shared downgrade evidence. The config-audit class-B lane
+/// consumes it via `collect_field_docs` directly; the orphan-report's C1/
+/// stillborn lanes consume this precomputed set (P26: downgrade-not-suppress,
+/// the `[wire-const]` precedent — marked rows render at the weak
+/// `[documented-write-only]` annotation instead of strong severity).
+pub(crate) fn marked_write_only_fields(files: &[(String, syn::File)]) -> BTreeSet<(String, String)> {
+    collect_field_docs(files)
+        .into_iter()
+        .filter(|(_, doc)| is_deliberate_write_only_marker(doc))
+        .map(|(key, _)| key)
+        .collect()
+}
+
 struct FieldDocVisitor<'a> {
     out: &'a mut FieldDocs,
 }
@@ -467,7 +487,12 @@ impl Visit<'_> for FieldDocVisitor<'_> {
 /// payload"), and the Issue-147 wording ("deliberate forward surface" /
 /// "GOAT-gate territory" — the adjudication the redirect field doc now
 /// carries). Matched on the field doc only, reported at weak severity.
-fn is_deliberate_write_only_marker(doc: &str) -> bool {
+/// The class-B downgrade evidence (Issue-030-class intake): a deliberate-
+/// write-only marker counts only on the FIELD doc; the struct's own doc
+/// speaks for the whole type, not for one write-only member.
+/// Shared with the orphan-report's C1/stillborn lanes (the P26 downgrade) —
+/// the marker vocabulary has exactly one home: [`is_deliberate_write_only_marker`].
+pub(crate) fn is_deliberate_write_only_marker(doc: &str) -> bool {
     let d = doc.to_lowercase();
     d.contains("documented-write-only")
         || d.contains("deliberate")
