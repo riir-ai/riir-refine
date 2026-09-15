@@ -52,7 +52,7 @@ This repo hosts the **LLM ops plane**: the `riir-kat-housekeeping` worker (`clou
 
 **Verdict: GO** (live trial, 2026-08-24). The healer is the DEFAULT tool for mechanical clippy findings across the workspace, ahead of manual fixes and `cargo clippy --fix`.
 
-- **Global binary**: `~/.cargo/bin/cargo-heal` → symlink to `target/release/cargo-heal` (built `--features fix_verify,clippy_verify` — rebuild after healer source changes; the symlink keeps resolving).
+- **Global binary**: `~/.cargo/bin/cargo-heal` → symlink to `target/release/cargo-heal` (built with the RELEASE feature set `--features latent_retrieval,kat_service,kat_transport,fix_verify` — rebuild after healer source changes; the symlink keeps resolving). ⚠ That set is not a stylistic choice: the bin's `required-features` are `latent_retrieval,rust_perf,clippy_lints,kat_service`, so a rebuild naming anything less (the long-standing `fix_verify,clippy_verify` wording here was WRONG) compiles no cargo-heal binary at all and the symlink silently keeps resolving to whatever binary was already there — Issue 110's owed-rebuild note recorded the stale-binary class; this line is the resolution.
 - **Dev-time skill**: `cargo-heal` (`.agents/skills/cargo-heal/`, symlinked globally) — usage, divergence table, discipline, post-mining logging.
 - **Post-mining**: improvement candidates mined from the healer's OWN usage artifacts; intake lives in `.distill/001_mining_queue_snapshot.md` §"Post-mining intake".
 
