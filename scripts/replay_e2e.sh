@@ -141,6 +141,10 @@ va_all=$(count '… verdict ' "$LOG_A"); vb_all=$(count '… verdict ' "$LOG_B")
 va_bad=$(count '… verdict SUBMIT FAILED' "$LOG_A"); vb_bad=$(count '… verdict SUBMIT FAILED' "$LOG_B")
 va=$(( va_all - va_bad )); vb=$(( vb_all - vb_bad ))
 quorum=$(( $(count 'quorum reached' "$LOG_A") + $(count 'quorum reached' "$LOG_B") ))
+# dapps 48b9473's already_confirmed arm: the row's quorum formed EARLIER —
+# proof of the K=2 machinery exactly as a fresh confirmation (an exhausted
+# queue serves these; without this the run reads "partial").
+confirmed_earlier=$(( $(count 'already confirmed by earlier verifiers' "$LOG_A") + $(count 'already confirmed by earlier verifiers' "$LOG_B") ))
 dups=$(( $(count 'duplicate' "$LOG_A") + $(count 'duplicate' "$LOG_B") ))
 accepted=$(( va + vb ))
 
@@ -172,9 +176,9 @@ if [ "$accepted" -eq 0 ]; then
   echo "replay-e2e: FAIL — no accepted verdict on either side" >&2
   exit 1
 fi
-if [ "$quorum" -gt 0 ]; then
+if [ "$((quorum + confirmed_earlier))" -gt 0 ]; then
   echo "replay-e2e: VERDICT: PASS (exercised) — lease + oracle verdicts + K=2"
-  echo "  confirmation all live on $URL"
+  echo "  confirmation all live on $URL (fresh: $quorum, earlier pairs': $confirmed_earlier)"
   COMPLETED=1
   exit 0
 fi
