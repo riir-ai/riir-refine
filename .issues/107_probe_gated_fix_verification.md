@@ -1,6 +1,6 @@
 # Probe-gated fix verification — compose outcome-fit probe × verify oracle
 
-**Status:** OPEN (filed from Research 168 — arXiv:2607.05188 distillation) — **T1 MEASURED 2026-09-15: lane NOT viable on ring-native features** (horizon 1 < 2 on every corpus) · **T2 LANDED 2026-09-15: the embedding column ships (write-time capture) — synthetic corpora NOT revived either (auc 1.000 under a 1.000 strategy floor); the revival verdict waits on organic rings, which start accumulating the column now**. T3+ gated on that evidence.
+**Status:** CLOSED 2026-09-15 — NEGATIVE on evidence, reopen triggers recorded (owner call, the Issue-093 precedent). T1 measured the lane NOT viable on ring-native features (horizon 1 < 2 on every corpus); T2 landed the embedding column and synthetic corpora did NOT revive either (auc 1.000 under a 1.000 strategy floor — the sufficient-statistic verdict). T3–T6 are closed UNBUILT: no probe harness, gate wiring, GOAT, or transfer row is warranted while every available corpus says outcomes are strategy-determined. **Reopen triggers (any one):** (1) an ORGANIC fixseq ring with ≥2-revert runs AND the span-embed column populated (accumulates from T2's write-time capture — the column is the lane's only revival path, and it ships); (2) riir-train densifying the store per R135/Bench-047; (3) any post-keep-fix corpus where the resolved rate moves between orderings at all (the Bench-085 corollary). Filed from Research 168 — arXiv:2607.05188 distillation.
 
 ## Summary
 
