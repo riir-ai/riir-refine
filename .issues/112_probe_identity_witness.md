@@ -213,12 +213,23 @@ next rebuild is what puts the tripwire in the fleet binary.
 
 ## Cross-repo
 
-⛔ **riir-train carries the same three-site port and does NOT have this
-witness.** Issue 110's fix was ported both ways (riir-train `61d85d62` /
-here `9443ef1a`); this half is landed here only. Filing the counterpart
-there is owed — and the Half A audit does **not** carry across, because
-riir-train's oracle has no `control_fires` scaffold and its `data/`
-miss-shape corpus is the artifact Issue 110 named as unadjudicated.
+riir-train carries the same port (Issue 110's fix went both ways —
+riir-train `61d85d62` / here `9443ef1a`), and Half B's **join** is landed
+there too: riir-train `3f8ce65a` (verify with
+`git -C ../riir-train cat-file -e 3f8ce65a`). Its oracle already re-probed
+from cold on `fresh && messages == 0`, and neither rule subsumes the other —
+the message-count rule is blind to a replay whose donor crate *linted*, the
+first-write rule does not cover a poisoned scratch dir from an interrupted
+process — so it re-probes on `fresh && (wrote_new || messages == 0)` rather
+than importing this module. Measured there: 1635 lib / 13 miss_shape,
+perturbation of the read-before-write reds its arm.
+
+⛔ **Half A does not carry across, and that is the part to remember.** Its
+oracle has no `control_fires` scaffold, so whether any row of
+`data/clippy_l4_rlvr.jsonl` was generated under a shared target dir is
+UNDETERMINED there and the repair is **regeneration, not re-reading**. The
+adjudication above was possible only because somebody, for an unrelated
+reason, had built a positive control into the harness.
 See riir-train Issue 555.
 
 Landed here: see the commit that closes this issue.
