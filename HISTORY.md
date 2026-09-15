@@ -1,5 +1,25 @@
 # HISTORY.md — riir-clippy
 
+## Issue 107 CLOSED 2026-09-15 — NEGATIVE on evidence; T3–T6 closed UNBUILT (record; file removed per the noise-reduction rule)
+
+The probe-gated fix-verification lane (compose an outcome-fit probe × the `fix_verify`
+compile oracle) is CLOSED NEGATIVE on the T1+T2 measurements, owner call (the Issue-093
+precedent for closing on evidence with recorded reopen triggers). T1 measured the lane
+NOT viable on ring-native features — horizon 1 < 2 on every corpus, and where a readout
+AUC is 1.000 the history-aggregate floor MATCHES it (the sufficient-statistic verdict:
+outcomes are strategy-determined on every available corpus). T2 landed the span-embed
+column and synthetic corpora did NOT revive the lane either (auc(embed) 1.000 under the
+same 1.000 strategy floor — the diverged arms share templates). With no corpus on which
+outcomes are NOT strategy-determined, T3–T6 (probe harness, gate wiring, GOAT, transfer
+row) are closed UNBUILT: no probe harness, gate, or bench is warranted while every
+available corpus says the oracle decision carries no decodable signal beyond the
+strategy prior. **Reopen triggers (any one):** (1) an ORGANIC fixseq ring with ≥2-revert
+runs AND the span-embed column populated (accumulates from the T2 write-time capture —
+the column is the lane's only revival path, and it ships); (2) riir-train densifying the
+store per R135/Bench-047; (3) any post-keep-fix corpus where the resolved rate moves
+between orderings at all (the Bench-085 corollary). Filed from Research 168
+(arXiv:2607.05188 distillation); T1/T2 landing records are the two entries below.
+
 > Archive created 2026-09-06: compacted out of `AGENTS.md` (3,883 lines →
 > compact operational form). NOTHING was deleted — every section removed from
 > AGENTS.md is preserved here VERBATIM (original AGENTS.md line ranges noted
