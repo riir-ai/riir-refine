@@ -758,6 +758,15 @@ required-features = ["cf_workers_ai", "groq_first"]
 cubecl-runtime = { path = "../riir-ai/vendor/cubecl-runtime-0.11.0-pre.2" }
 cubecl-wgpu = { path = "../riir-ai/vendor/cubecl-wgpu-0.11.0-pre.2" }
 wgpu-hal = { path = "../riir-ai/vendor/wgpu-hal-30.0.0" }
+# riir-ai commit 5cc8de028 (issue 950): the genlock-load fork — routes every
+# arc-swap load through the RwLock strategy, making the freed-and-reused
+# Inner-under-load class impossible by construction. riir-engine declares
+# `features = ["genlock-load"]`, which crates.io arc-swap does not have, so
+# resolution fails here until this row mirrors the sibling's patch (patch
+# inheritance does NOT cross workspace boundaries — the same rule as the
+# three vendored rows above). Remove with the rest of the section once
+# upstream ships the #156/#164 fix and riir-ai deletes its row.
+arc-swap = { git = "https://github.com/katopz/arc-swap", branch = "genlock-load" }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build profiles — dev debuginfo budget (riir-ai .issues/723 Phase 1)
