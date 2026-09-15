@@ -96,19 +96,44 @@ activation.
 ## Honest status (the P013 law)
 
 - **Server surface:** shipped (riir-dapps Plan 029; G2 measured
-  58 µs/verdict intake) — but **inert on every deployment**: the three
-  `KAT_REPLAY_*` knobs default empty and every request answers 503 until
-  Phase 3 arms the lane. The currently-deployed devnet worker predates
-  the routes (a lease dials it and gets the worker's own
-  `route not found` — the client surfaces the service's words verbatim).
+  58 µs/verdict intake) and **ARMED on devnet since 2026-09-15**
+  (riir-dapps Issue 091: `KAT_REPLAY_SECRET` + `KAT_REPLAY_TOOLCHAIN_HEX`
+  set via wrangler secrets; the lease starvation fix `pull_open` landed the
+  same day). Mainnet stays deliberately unarmed until the reward class
+  activates. Apex/mainnet reads of the lane still 503 by design.
 - **Client surface:** shipped (Plan 127) — gated behind `clippy_verify`
   builds as above.
 - **Settlement: NONE.** `replay_cut_bp` is genesis 0 — verifier reward
   rows are never written at cut 0; an agreed FAIL verdict still rejects a
   row (honesty arriving early), but nothing pays. **Do not advertise
-  replay earnings** until Phase 3 lands a live devnet replay-settled
-  reward (the tier-spec Max row stays "designed" until then; the
-  consumer mirror already says "does not settle yet").
+  replay earnings** until the owner ratifies a live cut (the decision
+  brief is riir-dapps Bench 013 §T5; recommended v1 posture = keep 0).
+
+## Repeatable e2e — `scripts/replay_e2e.sh`
+
+The 2026-09-15 manual two-verifier run, productized (riir-dapps Issue 091's
+"setup a mode"):
+
+```sh
+./scripts/replay_e2e.sh
+```
+
+Two identities × one `cargo heal replay` cycle each against devnet:
+verifier A = the default account dir (the fleet rig's identity), verifier
+B = a FRESH throwaway identity (ssh-keygen + `login --key` into a temp
+account dir — never the machine-SSH chain, which would derive the fleet
+account again, and one account cannot counter-sign its own verdict
+twice). Builds the oracle feature set
+(`latent_retrieval,kat_service,kat_transport,fix_verify,clippy_verify`)
+itself; refuses non-devnet URLs by default. Verdict ladder: PASS
+(exercised) needs a K=2 confirmation line; PASS (idempotent) = all
+duplicates (write-once held); EMPTY (exit 3) = both leases empty — push a
+real mining batch and re-run; everything else FAIL. Logs land in a
+`mktemp` work dir, kept and printed for forensics.
+
+First run (2026-09-15): A = 16 duplicates (this morning's verdicts,
+write-once held), B = 16 stored + **4 fresh K=2 confirmations** — the full
+lane (lease → oracle → signed submit → confirmation) green in ~30 s.
 
 ## What is deliberately NOT here
 
