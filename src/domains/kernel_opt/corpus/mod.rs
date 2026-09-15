@@ -1559,6 +1559,41 @@
 //!   codegen `#define`/`#if` twin), `launch-heuristic-pinned-to-calibration-arch`
 //!   (CC is not a sufficient SKU key), `fast-math-contraction-behind-feature-flag`
 //!   (fmad split from `use_fast_math`).
+//! - **Batch 144 (2026-09-16, the measured-GOAT self-distill of the riir-ai
+//!   4090 prefill-mma campaign, Plan 129):** 5 rules + 2 riders, corpus 607 ->
+//!   612 (A 130 -> 134, D 133 -> 134). Source: OUR OWN bench records --
+//!   riir-ai `.benchmarks/878`-`884` (Issue 884 rungs T2a/T2b/T4; read-only
+//!   citations, the owning lanes keep their code); two independent quote
+//!   lanes + caller spot-check, the intake's drifts corrected at admission.
+//!   `packed-code-cpasync-stage-per-use-prmt-decode` (A — the B883 rung-5
+//!   GOAT: packed 2-bit `Q2_0` codes shrink the A stage 4x — resident 6,144 B
+//!   vs payload 4,096 B, pad-skip reconciles the 256-chunk fill — buying
+//!   double-buffered depth at ONE barrier per group; per-use 9-op PRMT
+//!   decode measured ~free (1.26x from the decode alone); v9 1.222x/1.224x
+//!   vs v4-q8 AND 1.062x/1.064x vs v6tb; negative arms in-rule: per-fragment
+//!   global-A staging (B881/B882, both formats, both warp geometries), the
+//!   256-entry smem decode LUT (B879, sequential-protocol caveat), full-size
+//!   double-A v6d), `ldmatrix-byte-subword-granularity-limit` (A — the
+//!   complement of B9's positive rule: byte-sub-word fragment consumption
+//!   cannot be served under any swizzle; LDS quad-broadcast + per-use decode
+//!   is forced and measured winning), `transposed-smem-stage-repairs-
+//!   strided-epilogue` (A — the B884 rung-6 GOAT: an epilogue lane map
+//!   across the contiguous axis amplifies L2 write sectors 8.01x; the
+//!   [TOKS][33] stage (aliases the freed B slab, stride = 1 mod 32) + the
+//!   `r = idx & 31` reader map = 35.65M -> 4.46M sectors, L2 SOL 74.7 ->
+//!   59.0%, 1.533x over the route winner, T4's 1.8x gate CLEARED),
+//!   `per-block-scalar-slab-cpasync-stage` (A — the honest-cap arm: scalar
+//!   slab cp.async'd ONCE per group per block via 4-B .ca; read sectors
+//!   UNMOVED 84.4M — an issue-count/IPC rule, never quote it as bandwidth),
+//!   `profile-sol-table-before-compute-rung` (D — the methodology rung:
+//!   record the SOL table + sector counts and route by the TOP limiter
+//!   before any compute-side rung; the family's prior rungs ran with no ncu
+//!   data while L2 SOL sat at 69.9-89.8%). Riders ×2 on B9:
+//!   `cpasync-multistage-tile-pipeline` (+ the packed-code depth face),
+//!   `ldmatrix-mma-layout-loads` (+ the granularity-boundary face).
+//!   Benchability: the measurements ARE riir-gpu's own scored-lane records
+//!   — the tables are the decision content; no re-bench in this repo
+//!   (`kernel_verify` STUB). Record: Plan 129 / Research 169.
 //! - **Batch 142 (2026-09-10, the `CloudRift` "Outperforming vLLM and
 //!   Llama.cpp on Gemma4-12B" distill, Plan 122):** 2 rules, corpus 605 ->
 //!   607 (A 129 -> 130, N 43 -> 44). Source: `cloudrift-ai/emmy` @
@@ -1852,6 +1887,7 @@ mod entries_gpu_37;
 mod entries_gpu_38;
 mod entries_gpu_39;
 mod entries_gpu_40;
+mod entries_gpu_41;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1868,6 +1904,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_38::entries());
     entries.extend(entries_gpu_39::entries());
     entries.extend(entries_gpu_40::entries());
+    entries.extend(entries_gpu_41::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1917,7 +1954,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 607-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 612-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1925,11 +1962,15 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (130 rules)
+    // A: Memory access patterns (134 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            "packed-code-cpasync-stage-per-use-prmt-decode",
+            "ldmatrix-byte-subword-granularity-limit",
+            "transposed-smem-stage-repairs-strided-epilogue",
+            "per-block-scalar-slab-cpasync-stage",
             "smem-budget-single-buffer-refill-at-kill-points",
             "stream-invariant-operand-skips-staging-pipeline",
             "split-copy-issue-deposit-depth-uniform",
@@ -2185,11 +2226,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-residual-update-writes-separate-next-buffer",
         ],
     ),
-    // D: Dispatch patterns (133 rules)
+    // D: Dispatch patterns (134 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            "profile-sol-table-before-compute-rung",
             "sub-ms-bench-boost-clock-never-engages",
             "vendor-dispatch-verify-before-outsource",
             "sm-count-block-size",

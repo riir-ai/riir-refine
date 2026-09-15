@@ -101,8 +101,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        607,
-        "kernel batches through Batch 142 should have 607 rules"
+        612,
+        "kernel batches through Batch 144 should have 612 rules"
     );
 }
 
@@ -5339,7 +5339,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 607-rule corpus must appear in exactly one category.
+    // Every rule_id in the 612-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5382,12 +5382,12 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 142).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 144).
     let expected = [
-        (KernelCategory::MemoryAccess, 130),
+        (KernelCategory::MemoryAccess, 134),
         (KernelCategory::Compute, 63),
         (KernelCategory::Fusion, 46),
-        (KernelCategory::Dispatch, 133),
+        (KernelCategory::Dispatch, 134),
         (KernelCategory::Parallelism, 54),
         (KernelCategory::FlashAttnTiling, 14),
         (KernelCategory::LinearAttnRecurrence, 29),
@@ -5412,9 +5412,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 607.
+    // Sum must equal 612.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 607, "Plan 003: category totals must sum to 607");
+    assert_eq!(total, 612, "Plan 003: category totals must sum to 612");
 }
 
 #[test]
@@ -5425,8 +5425,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 607,
-        "Plan 003: grouped corpus has {total} rules, expected 607"
+        total, 612,
+        "Plan 003: grouped corpus has {total} rules, expected 612"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9533,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        607,
-        "Batch 142: corpus should have 607 rules"
+        612,
+        "Batch 144: corpus should have 612 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -11792,6 +11792,156 @@ fn batch142_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-142 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch144_rules_present() {
+    // Batch 144 (the measured-GOAT self-distill of the riir-ai 4090
+    // prefill-mma campaign, Benches 878-884 -- Plan 129 / Research 169):
+    // 5 kernel_opt rules, sources are our own league-lane records
+    // (read-only citations). Two independent quote lanes + caller
+    // spot-check; the intake's drifts corrected at admission.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "packed-code-cpasync-stage-per-use-prmt-decode",
+        "ldmatrix-byte-subword-granularity-limit",
+        "transposed-smem-stage-repairs-strided-epilogue",
+        "per-block-scalar-slab-cpasync-stage",
+        "profile-sol-table-before-compute-rung",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-144 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // the B51-style phrase pins, one block per rule
+fn batch144_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-144 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    // (e) packed-code staging: both denominators, the resident-vs-payload
+    // distinction, the ONE-barrier claim, the negative arms with their
+    // record attributions, and the L2-SOL cap.
+    let c = concept("packed-code-cpasync-stage-per-use-prmt-decode");
+    for phrase in [
+        "1.222x",
+        "1.062x",
+        "6,144 B",
+        "4,096 B",
+        "ONE barrier per group",
+        "0.989x",
+        "0.785x",
+        "1.175x",
+        "1.069x",
+        "B879",
+        "89.8%",
+        "RIIR_PREFILL_MMQ_FMT=2",
+        "Distinct from `cpasync-multistage-tile-pipeline`",
+        "0x7632",
+    ] {
+        assert!(c.contains(phrase), "packed-code concept missing '{phrase}'");
+    }
+    // (f) ldmatrix granularity limit: the complement framing + the
+    // positive rule's measured win.
+    let c = concept("ldmatrix-byte-subword-granularity-limit");
+    for phrase in [
+        "WHOLE",
+        "quad-broadcast",
+        "+3.8%",
+        "1.156x",
+        "Distinct from `ldmatrix-mma-layout-loads`",
+        "1.175x",
+    ] {
+        assert!(c.contains(phrase), "ldmatrix-limit concept missing '{phrase}'");
+    }
+    // (g) strided epilogue: the exact ratio, the stage geometry, the
+    // reader map, the row pitch, and the write-side distinct-from.
+    let c = concept("transposed-smem-stage-repairs-strided-epilogue");
+    for phrase in [
+        "8.01x",
+        "[TOKS][33]",
+        "r = idx & 31",
+        "69,632 B",
+        "4,456,461",
+        "1.533x",
+        "Distinct from `tile-amplification-precedes-staging-pass`",
+        "inherited v8's schedule",
+    ] {
+        assert!(c.contains(phrase), "strided-epilogue concept missing '{phrase}'");
+    }
+    // (h) scalar staging: the honest cap (read sectors UNMOVED), the
+    // combined-IPC framing, the per-group-per-block contract.
+    let c = concept("per-block-scalar-slab-cpasync-stage");
+    for phrase in [
+        "84.4M",
+        "IPC 1.13 -> 1.82",
+        "NOT a bandwidth rule",
+        "ONCE per group per BLOCK",
+        "0.7 GB",
+        "Distinct from `cpasync-multistage-tile-pipeline`",
+    ] {
+        assert!(c.contains(phrase), "scalar-slab concept missing '{phrase}'");
+    }
+    // (i) profile-first methodology: the measured SOL range, the
+    // first-ncu fact, the minimum-routing-evidence framing.
+    let c = concept("profile-sol-table-before-compute-rung");
+    for phrase in [
+        "69.9%",
+        "89.8%",
+        "74.7%",
+        "first ncu data for the family",
+        "MINIMUM routing evidence",
+        "kernel bugs, not physics",
+        "from `cross-run-profiles-key-on-content-not-stat-triplets`",
+    ] {
+        assert!(c.contains(phrase), "profile-first concept missing '{phrase}'");
+    }
+}
+
+#[test]
+fn batch144_pseudocode_parses() {
+    // G1 for Batch 144: syn-parse gate (the B878-884 self-distill rules).
+    // The B122/B123 lesson: syn parses WHOLE FILES, so every snippet is
+    // fn-wrapped Rust-shaped code, not bare statements.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "packed-code-cpasync-stage-per-use-prmt-decode",
+        "ldmatrix-byte-subword-granularity-limit",
+        "transposed-smem-stage-repairs-strided-epilogue",
+        "per-block-scalar-slab-cpasync-stage",
+        "profile-sol-table-before-compute-rung",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-144 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-144 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-144 opt_pattern for '{id}' must parse"
         );
     }
 }
