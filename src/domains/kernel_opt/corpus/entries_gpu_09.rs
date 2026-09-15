@@ -244,6 +244,13 @@ pub(super) fn entries() -> Vec<KernelRule> {
         // to an explicit-tree comparator kernel that the tests pin it
         // against". In-tree twins: the Bench-697 G3 / Issue-715 bit-exact
         // gates (external confirmation of the discipline).
+        // External doctrine (arXiv 2609.11356, walk #9 / Research 170): the
+        // measured bit-divergence axes are reduction order, partial-sum
+        // precision, FMA placement and rounding; the tile shape chosen FOR
+        // PERFORMANCE determines the arithmetic (breaking batch invariance);
+        // enforcing a fixed order costs up to 20%; and an autotuner cannot
+        // identify which configs are bitwise equivalent -- the blind spot
+        // this rule's source-owned comparator closes.
         // Batch 95 / Research 111 / Plan 055.
         KernelRule {
             rule_id: "reduction-restructure-needs-source-owned-comparator".to_string(),

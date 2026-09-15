@@ -134,6 +134,12 @@ pub(super) fn entries() -> Vec<KernelRule> {
 // same in-kernel defensive check (L6569-6575: 'identical
 // results either way'). Dispatch ladder: general -> fixed route
 // -> fixed route + static (L4592 -> L4632 -> L4773).
+// External doctrine (arXiv 2609.11356, walk #9 / Research 170): tile shape
+// chosen for performance determines the arithmetic -- batch invariance
+// holds only under a PINNED config, and an autotuner cannot identify
+// which configs are bitwise equivalent. The static sibling IS the pinned
+// config: one baked tile shape, byte-identical order, results reproducible
+// by construction instead of by toolchain coincidence.
 // Batch 97 / Research 117 / Plan 063.
         KernelRule {
             rule_id: "proven-shape-static-sibling-identical-results-fallback".to_string(),
