@@ -164,3 +164,36 @@ findings. One normalisation; 37/37, and 9 arms proven by perturbation.
 — `-- prepare_crate` reported `running 0 tests` with a green exit at default
 features, the green-zero trap. Any gate row covering this code must name the
 features.
+
+## ⛔ OWED, and deliberately NOT done here: rebuild the global binary
+
+The fix is in source. The **installed** `~/.cargo/bin/cargo-heal.exe` is a
+COPY (exFAT — the AGENTS.md "symlink" does not exist on this box) dated
+**2026-09-13**, so `cargo heal --verify` on this workstation still runs the
+defective verifier.
+
+Not rebuilt here, for two reasons that are about correctness, not caution:
+
+1. **AGENTS.md states two different feature sets** — §Global binary says
+   `--features fix_verify,clippy_verify`; §Release binary hygiene says
+   `default + latent_retrieval + kat_service + kat_transport + fix_verify`
+   ONLY. The same file records what picking wrong costs: a `00:21` rebuild
+   without the release set left `--refill` refusing with `exit 2` and
+   silently disabled `sync`/burn-push/auto-sync **while `--help` still
+   advertised the flags**.
+2. It **overwrites a tool other concurrent sessions are using**, and the
+   binary is 34 commits stale independently of this change — so the rebuild
+   ships someone else's unreviewed work too.
+
+The documented procedure, for whoever does it:
+
+```bash
+git worktree add /tmp/heal-build <clean HEAD>
+cd /tmp/heal-build && CARGO_TARGET_DIR=/tmp/heal-target cargo build --release \
+    --features latent_retrieval,kat_service,kat_transport,fix_verify
+cp /tmp/heal-target/release/cargo-heal ~/.cargo/bin/cargo-heal
+```
+
+⚠ And resolve the two feature lists while you are there — one of them is
+wrong, and the standing caveat in AGENTS.md says a bare
+`cargo build --release` re-stales the binary silently.
