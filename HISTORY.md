@@ -261,7 +261,7 @@ paid neuron burns. The provider-list shape Proposal 005 anticipated.
 
 The strand-keep poison (Bench 089/090): a KEEP that ends its run at a
 typeck-masked E0614 scored as a full verified success because every selection
-surface consumed the TERMINAL verdict. Research 554's PC-ALM identity named
+surface consumed the TERMINAL verdict. katgpt-rs Research 554's PC-ALM identity named
 the repair — credit = the integral of the residual history plus the terminal
 residual (`λ + ρ·r`), never the terminal alone. Landed as T1–T5 all green:
 
