@@ -565,6 +565,12 @@ pub struct PavManifest {
     pub max_steps: u32,
     pub eps_pit: f32,
     pub seed: u64,
+    /// Dataset-side stats snapshot serialized into the manifest.json sidecar
+    /// (read by the dataset consumer, not in-repo). documented-write-only:
+    /// adjudicated 2026-09-16 — the C1 row's vanished-reader delta was a
+    /// name-global masquerade (router fallback stats, dataset member reads,
+    /// corpus fixture strings), not a lost reader; Issues 051-T9/106 moved
+    /// OTHER types' occurrences.
     pub stats: PavStats,
 }
 
