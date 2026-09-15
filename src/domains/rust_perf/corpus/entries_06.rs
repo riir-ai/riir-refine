@@ -248,6 +248,44 @@ fn drain(rx: crossbeam_channel::Receiver<Item>, tx: crossbeam_channel::Sender<It
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
+        // ── caching: per-call residency-probe ROUTING (the probe picks the arm) ──
+        PerfRule {
+            rule_id: "mincore-probe-routes-gather-arm".to_string(),
+            name: "a gather over a large memory-mapped table pays warm-pass cost or cold-pass cost depending on page residency the program cannot see — route PER CALL with a sampled mincore(2) probe (fixed-stride row samples, worst-of-all-maps) whose ~0.5 ms cost decides a ~165 ms warm pass: high residency takes the vectorized fancy-index arm with NO warm pass, low residency takes the pooled-pread arm, and any probe error fails safe to the pread arm".to_string(),
+            category: "caching".to_string(),
+            buggy_code: "// The gather always pays the warm pass: threaded os.pread over every
+// unique row to fault the pages in, then fancy-indexes the mmap. On a
+// page-warm table the warm pass IS the cost (~165 ms of GIL-contended
+// pread per 32,768 rows against a 0.44 ms fancy index) — but the code
+// cannot know the table is warm, so it prefaults every call.
+fn gather_rows(fd: i32, mmap: &[f32], rows: &[usize], pool: &Pool) -> Vec<f32> {
+    // unconditional warm pass — the syscall count IS the cost
+    pool.submit_all(rows.iter().map(|&r| pread_row(fd, r)));
+    rows.iter().map(|&r| mmap[r]).collect() // 0.44 ms once warm
+}".to_string(),
+            fixed_code: "// The probe picks the arm PER CALL: ~1.9 us per sampled mincore, 256
+// fixed-stride samples (~0.5 ms total) — an answer that must not move
+// run to run. Worst-of-all-maps (the gather reads every map, so one
+// cold map is a cold gather). Threshold 0.99: at 1% cold the fancy
+// index pays ~650 serial faults (~40 ms) with the GIL held, so only
+// essentially-full residency earns the vectorized arm. Any probe
+// error answers pread — a false cold costs the shipped path, a false
+// warm stalls the generation thread.
+const RESIDENT_FRACTION_THRESHOLD: f64 = 0.99;
+
+fn gather_rows(fd: i32, maps: &[&[f32]], rows: &[usize], pool: &Pool) -> Vec<f32> {
+    let worst = maps.iter().map(|m| mincore_resident_fraction(m))
+        .min().unwrap_or(0.0); // probe error -> 0.0 -> pread arm
+    if worst < RESIDENT_FRACTION_THRESHOLD {
+        pool.submit_all(rows.iter().map(|&r| pread_row(fd, r))); // pooled pread
+    }
+    // warm arm skips the pass entirely; the fancy index follows either way
+    rows.iter().map(|&r| maps[0][r]).collect()
+}".to_string(),
+            context_notes: Some("SUGGESTION-ONLY, honestly NotBenchable here (host-side Python in the source; an mmap + page-cache-state fixture cannot run hermetic in the bench harness — the decision content is the ROUTING contract, not a Rust rewrite; NotBenchable-with-a-metric-mismatch per Issue 014's vocabulary). MEASURED figures (source-recorded, M5 Max): '~1.9 us per probe... so 256 probes is ~0.5 ms against the 165 ms warm pass it decides'; threshold rationale: 'At 1% cold the fancy index pays ~650 serial faults (~40 ms) with the GIL held; below that the pread pool is strictly better, and taking it is never wrong'; the regime gap is real: 'a prewarmed table probes at 1.00, a cold one at 0.00; there is no realistic middle'. ASYMMETRY: 'A false \"cold\" costs nothing (it takes the shipped pread path); a false \"warm\" is the expensive mistake, so the threshold is high and an unavailable/erroring probe answers pread' — fail-safe direction is load-bearing. SAMPLING DISCIPLINE: 'The sample is a fixed stride through it rather than a random draw: the answer must not move run to run for the same gather, or an A/B could not attribute a delta to the code instead of to the sampler.' PROBE THE WORST MAP: 'Every map is probed, and the WORST answers: the gather reads all three, so one cold map is a cold gather.' SMALL-GATHER INVERSION (anti-regime): below the hot-row threshold the ratio inverts, 'so small gathers keep the shipped path outright' — do not probe when the gather is small. PLATFORM CAVEAT (encoded; from the Batch-139 mining instrument note, NOT in-source): mincore on macOS reports FILE-WIDE page-cache residency of the backing file, not the task's mapped pages — a residency answer can reflect OTHER processes' warmth; treat macOS mincore routing as advisory and re-validate the threshold before shipping there. Distinct from `parallel-disjoint-pread-hides-cold-page-latency` (B118 — OVERLAPS cold page-ins with other work at gather time; here the probe PICKS between arms before any work), from the Batch-139 PLE-prefault admission rule (EAGERLY faults pages at admission gated on RAM headroom — a one-time decision; this is PER-CALL routing of an existing gather; the source's cold-arm bandwidth figures ride its own `mmap-willneed-unwired` measurement label: demand-faulting flat at 1.40 GiB/s vs pooled pread saturating at 12.9 GiB/s — a source measurement, not a corpus rule). Never a prefetch mandate: the pread arm touches exactly the rows the gather needs, ascending ('Reading the rows themselves in ASCENDING order is what the kernel can actually coalesce'). Source: youssofal/MTPLX @ a5e38bb7 (PR #391, Apache-2.0) — mtplx/ple_row_gather.py:93-103 (probe cost + threshold), :122-196 (the ctypes mincore probe + fixed-stride sampling), :199-216 (worst-of-maps arm selection + fail-safe), :34-37 (the asymmetry), mtplx/models/qwen4_exp.py:4888-4900 (the caller routing + counters). Batch 145 / Plan 130 / Research 171.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
 
         ]
 }

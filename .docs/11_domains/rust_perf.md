@@ -23,9 +23,16 @@
 
 ## Corpus
 
-126 rules across 12 categories (rust-optimize skill checklist +
+127 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 126 rules — Batch 143 (2026-09-10,
+profiling guide, Research 032; **now 127 rules — Batch 145 (2026-09-16,
+Plan 130 / Research 171 — the MTPLX `ple_row_gather` host lane of the
+Metal-shape pack) added the suggest-only caching rule
+`mincore-probe-routes-gather-arm` (per-call residency-probe ROUTING — the
+~0.5 ms sampled mincore probe picks warm→fancy-index vs cold→pooled pread
+against a ~165 ms warm pass; threshold 0.99, worst-of-all-maps,
+fail-safe-to-pread, small-gather inversion anti-regime, the macOS
+FILE-WIDE mincore caveat encoded; Batch 143 (2026-09-10,
 Plan 123 / Research 164 — the nnethercote "How to speed up the Rust compiler
 in December 2025" post distill, the PERF-SEARCH intake row staged at
 `cf9e44ae`; one MEASURED benchable rule + one NotBenchable-annotated rule,
@@ -322,7 +329,7 @@ annotation is x86-source-cited only, the Batch 86 bitflag rule is a
 deterministic size axis, the Batch 94 read-coalescing annotation is
 workload-level (source-reported, the cacheability coupling is the decision
 content), and the Batch 109 rule is the measurement-honesty axis itself (a
-timing gate whose work folds away has no nonzero baseline to ratio). 69 of 126 carry
+timing gate whose work folds away has no nonzero baseline to ratio). 70 of 127 carry
 `context_notes` — the class ledger that follows is the early-corpus
 accounting; Batches 83–112 kept adding to the annotated set, and the per-rule
 verdicts live in the table below — 11 verdict-class (4 `ParetoDominated` + 7
@@ -666,7 +673,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged, 126 rules / 91 `BenchSpec`s)
+- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 127 rules / 91 `BenchSpec`s)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)

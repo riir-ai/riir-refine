@@ -1594,6 +1594,45 @@
 //!   Benchability: the measurements ARE riir-gpu's own scored-lane records
 //!   — the tables are the decision content; no re-bench in this repo
 //!   (`kernel_verify` STUB). Record: Plan 129 / Research 169.
+//! - **Batch 145 (2026-09-16, the Metal-shape pack, Plan 130):** 2 rules +
+//!   2 riders + 1 rust-perf rule (`entries_06.rs`), corpus 612 -> 614
+//!   (B 63 -> 64, F 14 -> 15). Sources: arXiv 2609.09721 (EFQ-Softmax,
+//!   walk #9 lead 1) + youssofal/MTPLX @ `a5e38bb7` (PR #391, Apache-2.0;
+//!   the staged charter in `.distill/001`). Two quote lanes + caller
+//!   spot-checks; the charter's own dedup verdict CORRECTED at admission:
+//!   the `split.?k` grep was truncated and missed
+//!   `split-k-two-pass-attention-decode-long-context` (Batch 105) -- the
+//!   KV-split rule is scoped to the genuine delta (width-underfill trigger
+//!   plus sparse per-slot validity) with a loud distinct-from + a reciprocal
+//!   rider on the Batch-105 rule. `direct-low-bit-generation-replaces-
+//!   exp-quantize-roundtrip` (B -- the EFQ lane: shifted scores ->
+//!   block-scaled E2M1 codes DIRECTLY via the exponent-only scale + one
+//!   calibrated affine rule, same (code, scale) operand in numerator AND
+//!   denominator; the exp-then-quantize roundtrip deleted; -40.33% is the
+//!   VECTOR STAGE of the fused probability- generation kernel (fixpipe
+//!   0.3-1.0%, mmad excluded; the paper's kernel table is labeled "LUT" --
+//!   variant ambiguity carried); quality claim = beats MXFP4 within 0.005
+//!   of FP16 (language gain is operating- point-dependent; the large gains
+//!   are VL grounding)); `kv-split-decode-underfill-per-slot-validity`
+//!   (F -- the MTPLX lane: decode grids sized over query rows only
+//!   underfill at decode M (M=4 -> 8 threadgroups on 40 cores); split the
+//!   REDUCTION axis with unnormalized partials + an LSE merge that owns
+//!   the divide; PER-SLOT validity for the unsorted argpartition selection
+//!   (prefix cut admits/ drops, the <= predicate double-counts),
+//!   no-empty-split clamp, one-encoder combine; the underfill negative
+//!   cell is DUAL-SOURCED in-regime (MTPLX `hyper_read` v1 13.2 vs 67.8
+//!   tok/s + Hopper 2609.12923 fixed 64-row GMMA fragments)).
+//!   Riders x2: `same-input-gemv-weight-concat-at-upload` (+ the
+//!   hyper-read fused read: family confirmed, the row-parallel v1
+//!   negative cell, and the pointer-switch virtual-row weight fold --
+//!   concat semantics with zero upload-time copy),
+//!   `split-k-two-pass-attention-decode-long-context` (+ the sparse
+//!   decode twin cross-ref). `rust_perf`: `mincore-probe-routes-gather-arm`
+//!   (suggest-only -- the ~0.5 ms sampled mincore probe routes
+//!   warm->fancy-index vs cold->pooled pread against a ~165 ms warm pass;
+//!   threshold 0.99, fail-safe to pread, worst-of-all-maps,
+//!   small-gather inversion; the macOS FILE-WIDE mincore caveat
+//!   encoded). Record: Plan 130 / Research 171.
 //! - **Batch 142 (2026-09-10, the `CloudRift` "Outperforming vLLM and
 //!   Llama.cpp on Gemma4-12B" distill, Plan 122):** 2 rules, corpus 605 ->
 //!   607 (A 129 -> 130, N 43 -> 44). Source: `cloudrift-ai/emmy` @
@@ -1888,6 +1927,7 @@ mod entries_gpu_38;
 mod entries_gpu_39;
 mod entries_gpu_40;
 mod entries_gpu_41;
+mod entries_gpu_42;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1905,6 +1945,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_39::entries());
     entries.extend(entries_gpu_40::entries());
     entries.extend(entries_gpu_41::entries());
+    entries.extend(entries_gpu_42::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1954,7 +1995,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 612-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 614-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2103,7 +2144,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "extent-clamped-operand-views-partial-k-tile",
         ],
     ),
-    // B: Compute patterns (63 rules)
+    // B: Compute patterns (64 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2171,6 +2212,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rope-pair-partner-via-cross-lane-shuffle",
             "degenerate-selection-falls-back-to-identity-uniform",
             "lut-free-bit-spread-vadd4-unpack",
+            "direct-low-bit-generation-replaces-exp-quantize-roundtrip",
         ],
     ),
     // C: Fusion patterns (46 rules)
@@ -2428,7 +2470,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "narrow-matvec-one-row-per-simdgroup",
         ],
     ),
-    // F: Flash-attention tiling (14 rules)
+    // F: Flash-attention tiling (15 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -2447,6 +2489,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "mask-block-classification-skip-placement",
             "split-k-two-pass-attention-decode-long-context",
             "dense-fast-path-bounded-by-selector-coverage",
+            "kv-split-decode-underfill-per-slot-validity",
         ],
     ),
     // G: Linear-attention recurrence (29 rules)

@@ -15,8 +15,8 @@ does-not-own / dep allowlist / drift ledger); on any conflict, BOUNDARY.md wins.
 Retrieval domains (Plan 001 + Plans 018/030; `rustc_errors` is a 6th, driver-based rather than retrieval) — batch-by-batch corpus narratives live in `HISTORY.md`:
 
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 54 corpus lints across style/complexity/perf/pedantic/nursery (39 `--fix`, 12 `--verify`, 3 self_evolve-only).
-- **`rust_perf`** (default-on) — heals Rust perf issues; 126 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
-- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 612 rules.
+- **`rust_perf`** (default-on) — heals Rust perf issues; 127 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
+- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 614 rules.
 - **`sec`** (opt-in) — security-pattern bounded fixes (15 rules; 6 fixable + 9 suggest-only).
 - **`docker`** (default-on) — Dockerfile bounded-fix healing (31 rules, hadolint oracle).
 - **`rustc_errors`** (default-on) — `cargo heal --fix-compile`, oracle-driven compile-error repair keyed by rustc error code; driver-shaped, inert until invoked.
@@ -155,10 +155,10 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `default` = `["clippy_lints"]`: clippy domain + L0 corpus + L1 ternary drafter + L2 native pruner.
 - `clippy_lints` (default-on): the clippy lint healing domain.
 - `clippy_verify` (opt-in): lint-resolution verification via real `cargo clippy` re-run (slow, needs cargo+clippy on PATH). Implies `clippy_lints`.
-- `rust_perf` (default-on): rust performance healing domain (126 rules measured by `--corpus-stats` 2026-09-10; the feature list's older "105"/"112"/"114"/"117"/"120"/"121"/"124" was stale — Pareto + alloc-count promoted).
+- `rust_perf` (default-on): rust performance healing domain (127 rules measured by `--corpus-stats`; the feature list's older "105"/"112"/"114"/"117"/"120"/"121"/"124"/"126" was stale — Pareto + alloc-count promoted).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
-- `kernel_heal` (opt-in): GPU kernel optimization domain (612 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
+- `kernel_heal` (opt-in): GPU kernel optimization domain (614 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - `kernel_verify` (opt-in): CubeCL compile check (STUB — delegates to the shared `RustAnalyzerPruner`). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search (pattern reuse, no dep; once per invocation, not per-tick). Implies `clippy_lints`.
 - `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag; powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light).

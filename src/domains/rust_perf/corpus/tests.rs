@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 126); // Batch 143 (nnethercote Dec-2025) 124 → 126
+    assert_eq!(corpus.entries.len(), 127); // Batch 145 (MTPLX mincore routing) 126 → 127
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 35); // 126 total − 91 benchable
+    assert_eq!(without_spec.len(), 36); // 127 total − 91 benchable
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1869,7 +1869,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 69, "expected 69 context-annotated rules (Batch 143 added the nnethercote source-citation annotation + the build-time rationale)");
+    assert_eq!(annotated.len(), 70, "expected 70 context-annotated rules (Batch 145 added the mincore-routing routing-contract annotation)");
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
     assert!(annotated.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — the build-time rationale + the -Zmacro-stats instrument
     assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
@@ -1930,7 +1930,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 57, "expected 57 unannotated rules (126 total - 69 annotated; both Batch 143 rules joined the ANNOTATED side, so the count is unchanged)");
+    assert_eq!(unannotated, 57, "expected 57 unannotated rules (127 total - 70 annotated; the Batch 145 mincore rule joined the ANNOTATED side, so the unannotated count is unchanged)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1942,7 +1942,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 69); // Batch 143: 67 → 69
+    assert_eq!(annotated, 70); // Batch 143: 67 → 69; Batch 145: 69 → 70
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1983,7 +1983,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 69, "expected 69 annotated rules");
+    assert_eq!(annotated.len(), 70, "expected 70 annotated rules");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -3836,6 +3836,57 @@ fn batch143_rules_present_and_parse() {
             "batch-143 R1 must ship its Pareto bench spec"
         );
     }
+}
+
+#[test]
+fn batch145_mincore_rule_present_and_annotated() {
+    // Batch 145 — the MTPLX mincore-probe routing rule (suggest-only,
+    // NotBenchable: an mmap + page-cache-state fixture cannot run hermetic).
+    let corpus = build_perf_seed_corpus();
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "mincore-probe-routes-gather-arm")
+        .unwrap_or_else(|| panic!("batch-145 mincore rule missing from corpus"));
+    assert_eq!(e.category, "caching", "batch-145 mincore rule category");
+    assert!(
+        syn::parse_file(&e.buggy_code)
+            .and_then(|_| syn::parse_file(&e.fixed_code))
+            .is_ok(),
+        "batch-145 mincore buggy/fixed must both parse"
+    );
+    #[cfg(feature = "rust_perf_bench")]
+    assert!(
+        e.bench_spec.is_none(),
+        "batch-145 mincore rule is NotBenchable — no bench spec"
+    );
+    let text = format!(
+        "{}\n{}\n{}\n{}",
+        e.name,
+        e.buggy_code,
+        e.fixed_code,
+        e.context_notes.clone().unwrap_or_default()
+    );
+    for needle in [
+        "0.5 ms",
+        "165 ms",
+        "0.99",
+        "worst",
+        "pread",
+        "FILE-WIDE",
+        "parallel-disjoint-pread-hides-cold-page-latency",
+        "a5e38bb7",
+        "fixed stride",
+    ] {
+        assert!(text.contains(needle), "batch-145 mincore concept {needle:?} missing");
+    }
+    // The macOS caveat must be in the annotation (the Batch-139 instrument
+    // note), never only in the fixture code.
+    let notes = e.context_notes.clone().unwrap_or_default();
+    assert!(
+        notes.contains("FILE-WIDE") && notes.contains("macOS"),
+        "batch-145 mincore macOS caveat must live in context_notes"
+    );
 }
 
 /// Batch 143 — G1 semantics: the level gate decides whether the log-only

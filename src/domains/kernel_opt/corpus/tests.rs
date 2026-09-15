@@ -101,8 +101,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        612,
-        "kernel batches through Batch 144 should have 612 rules"
+        614,
+        "kernel batches through Batch 145 should have 614 rules"
     );
 }
 
@@ -5339,7 +5339,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 612-rule corpus must appear in exactly one category.
+    // Every rule_id in the 614-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5385,11 +5385,11 @@ fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for Batch 144).
     let expected = [
         (KernelCategory::MemoryAccess, 134),
-        (KernelCategory::Compute, 63),
+        (KernelCategory::Compute, 64),
         (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 134),
         (KernelCategory::Parallelism, 54),
-        (KernelCategory::FlashAttnTiling, 14),
+        (KernelCategory::FlashAttnTiling, 15),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
         (KernelCategory::NsaBlockSparse, 7),
@@ -5412,9 +5412,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 612.
+    // Sum must equal 614.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 612, "Plan 003: category totals must sum to 612");
+    assert_eq!(total, 614, "Plan 003: category totals must sum to 614");
 }
 
 #[test]
@@ -5425,8 +5425,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 612,
-        "Plan 003: grouped corpus has {total} rules, expected 612"
+        total, 614,
+        "Plan 003: grouped corpus has {total} rules, expected 614"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9533,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        612,
-        "Batch 144: corpus should have 612 rules"
+        614,
+        "Batch 145: corpus should have 614 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -11942,6 +11942,114 @@ fn batch144_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-144 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch145_rules_present() {
+    // Batch 145 (the Metal-shape pack -- Plan 130 / Research 171):
+    // 2 kernel_opt rules (EFQ paper lane + MTPLX PR #391 lane) + 1 rust_perf
+    // rule (mincore-probe routing, rust_perf tests) + 2 riders. The charter's
+    // own split-K dedup verdict was CORRECTED at admission: the Batch-105
+    // dense two-pass rule exists; this batch's rule is scoped to the delta.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "direct-low-bit-generation-replaces-exp-quantize-roundtrip",
+        "kv-split-decode-underfill-per-slot-validity",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-145 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // the B51-style phrase pins, one block per rule
+fn batch145_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-145 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    // EFQ: the direct-generation mapping, the numerator/denominator
+    // consistency, the honest scope of the -40.33% figure, the quality
+    // framing, and the mandated dedup boundary.
+    let c = concept("direct-low-bit-generation-replaces-exp-quantize-roundtrip");
+    for phrase in [
+        "40.33%",
+        "vector-stage latency",
+        "A5 vector unit",
+        "LUT",
+        "0.005 of the FP16 baseline",
+        "0.6749",
+        "0.6773",
+        "Distinct from `operand-precision-gated-by-consumer-invariance`",
+        "precision selection vs intermediate elimination",
+        "SAME (code, scale) operand",
+        "E2M1",
+        "row-level exp retained",
+        "scalar nearest-rounding optimality",
+    ] {
+        assert!(c.contains(phrase), "efq concept missing '{phrase}'");
+    }
+    // KV-split: the underfill arithmetic, the dual-source negative cell,
+    // the per-slot validity block, the no-empty-split clamp, and the
+    // mandated distinct-from on the Batch-105 rule.
+    let c = concept("kv-split-decode-underfill-per-slot-validity");
+    for phrase in [
+        "EIGHT threadgroups",
+        "13.2 tok/s",
+        "67.8 control",
+        "2609.12923",
+        "64-row fragments",
+        "PER SLOT",
+        "complete_blocks",
+        "prefix cut",
+        "double-count",
+        "no-empty-split clamp",
+        "ONE encoder",
+        "Distinct from `split-k-two-pass-attention-decode-long-context`",
+        "WIDTH UNDERFILL",
+    ] {
+        assert!(c.contains(phrase), "kv-split concept missing '{phrase}'");
+    }
+}
+
+#[test]
+fn batch145_pseudocode_parses() {
+    // G1 for Batch 145: syn-parse gate (fn-wrapped Rust-shaped code only --
+    // the B122/B123 lesson).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "direct-low-bit-generation-replaces-exp-quantize-roundtrip",
+        "kv-split-decode-underfill-per-slot-validity",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-145 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-145 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-145 opt_pattern for '{id}' must parse"
         );
     }
 }

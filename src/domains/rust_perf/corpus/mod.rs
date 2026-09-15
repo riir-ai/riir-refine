@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 126 entries across 12 categories (complexity 21, allocation 24, simd 8,
+//! 127 entries across 12 categories (complexity 21, allocation 24, simd 8,
 //! layout 10, iterators 10, concurrency 13, io 21, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 91 are benchable; 35 are honestly
+//! caching 5, bevy 1, wasm 1). 91 are benchable; 36 are honestly
 //! NotBenchable — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) (8 external-runtime/size-class + 2
@@ -248,7 +248,7 @@
 //!   fail-closed direction + the mincore instrument refusal; page-cache state
 //!   dominates any microbench; Batch 139, ds4-metal PR #5 PLE prefault)
 //!
-//! Not benchable (35/126) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context + Batch 143 nnethercote build-time rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
+//! Not benchable (36/127) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context + Batch 143 nnethercote build-time + Batch 145 mincore-routing rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
