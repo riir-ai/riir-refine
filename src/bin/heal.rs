@@ -7777,6 +7777,12 @@ fn main() {
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
     let mut n_fixed_files = 0usize;
+    // Proposal 004 Half 1.5 — the fix-stats row's rule counts: WRITTEN
+    // edits only (the Issue-018 law — review-only runs record nothing;
+    // the map stays empty and the tail skips). Accumulated beside the
+    // n_fixed_* counters so the two can never disagree about what a run
+    // "fixed".
+    let mut fixstat_rules: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
     // ── the clippy-fed oracle anchors (2026-09-13 retrieval-miss intake):
     // a real clippy JSON stream force-includes its diagnostic spans/rules
     // AHEAD of similarity ranking — the top-N gate must never eat a span
@@ -8204,6 +8210,11 @@ fn main() {
             if !all_edits.is_empty() {
                 n_fixed_files += 1;
                 n_fixed_edits += all_edits.len();
+                if args.write {
+                    for (rule, ..) in &all_edits {
+                        *fixstat_rules.entry(rule.clone()).or_insert(0) += 1;
+                    }
+                }
             }
             // Issue 018: only WRITTEN edits are applied fixes — review-only
             // runs record nothing. 038: applies persist to the active
@@ -8253,6 +8264,11 @@ fn main() {
             if !all_edits.is_empty() {
                 n_fixed_files += 1;
                 n_fixed_edits += all_edits.len();
+                if args.write {
+                    for (rule, ..) in &all_edits {
+                        *fixstat_rules.entry(rule.clone()).or_insert(0) += 1;
+                    }
+                }
             }
             // Issue 018: only WRITTEN edits are applied fixes — review-only
             // runs record nothing. 038: applies persist to the active
@@ -8725,6 +8741,12 @@ fn main() {
             }
             n_fixed_files += 1;
             n_fixed_edits += kept.len();
+            // Half 1.5: the compile-gated kept edits are WRITTEN fixes (the
+            // verify lane implies write) — the highest-quality rows the
+            // stats lane carries.
+            for e in &kept {
+                *fixstat_rules.entry(e.rule_id.clone()).or_insert(0) += 1;
+            }
             // 037-T2 (the F2 fix): kept edits earn POSITIVE verdicts — the
             // compile gate vouches at minimum (rustc-only pass = Heuristic
             // outcome-success); the clippy oracle (when built + runnable)
@@ -9078,6 +9100,79 @@ fn main() {
             c.state().meter_watermark_tokens,
         );
         print_burn_sync(&outcome);
+    }
+
+    // Proposal 004 Half 1.5 — the fix-stats push tail: a consenting
+    // `--fix` run leaves ONE ~1 KB signed stats row behind (lane `fix`,
+    // rule/count pairs — WRITTEN edits only, the Issue-018 law; never
+    // spans, never source). The THIRD consent plane gates it:
+    // kat_stats_consent OptedIn (deny-by-default — `Unset`/`OptedOut`
+    // never push), independent of `--mine` (the scope law). One status
+    // line, a ~5 s budget, never an exit-code change (the burn-push
+    // discipline). No offline stacking BY DESIGN — each run's row is
+    // independent and a lost row is a lost stat, not a lost commit
+    // (run-id idempotency makes retries free). Review-only runs (no
+    // --write) and clean trees push nothing (the empty map skips).
+    #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+    if args.fix
+        && !fixstat_rules.is_empty()
+        && riir_clippy::kat_stats_consent::read(&riir_clippy::kat_stats_consent::default_dir())
+            .push_allowed()
+    {
+        let account =
+            riir_clippy::kat_account::KatAccount::load(&riir_clippy::kat_account::KatAccount::default_dir());
+        let pushed = match account.ok().and_then(|a| a.signing_key().ok()) {
+            Some(key) => {
+                let url = riir_clippy::kat_lease_client::service_url_for_command();
+                let transport = riir_clippy::kat_fixstat_client::HttpFixstatTransport::new(
+                    &url,
+                    riir_clippy::kat_fixstat_client::FIXSTAT_TIMEOUT_SECS,
+                );
+                let machine = riir_clippy::kat_consent_client::machine_label();
+                let toolchain = std::process::Command::new("rustc")
+                    .arg("--version")
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|s| s.lines().next().unwrap_or("").trim().to_string())
+                    .unwrap_or_default();
+                let rules: Vec<_> = fixstat_rules
+                    .iter()
+                    .map(|(k, v)| riir_clippy::kat_protocol_fixstat::FixStatCount::new(k, *v))
+                    .collect();
+                // Domain totals: derivable only on a single-domain run (the
+                // common case); `--domain auto` leaves the map empty and the
+                // server's by_domain stays honest-empty rather than guessed.
+                let total: u32 = rules.iter().map(|e| e.count).sum();
+                let domains = match args.domain {
+                    Some(d) => vec![riir_clippy::kat_protocol_fixstat::FixStatCount::new(
+                        d.label(),
+                        total,
+                    )],
+                    None => Vec::new(),
+                };
+                let row = riir_clippy::kat_fixstat_client::FixStatRow {
+                    run_id: riir_clippy::kat_fixstat_client::fresh_run_id(&machine),
+                    machine,
+                    toolchain,
+                    files_touched: u32::try_from(n_fixed_files).unwrap_or(u32::MAX),
+                    rules,
+                    domains,
+                };
+                riir_clippy::kat_fixstat_client::push_fixstat(&transport, &key, &row)
+            }
+            None => Err("no logged-in account (run `cargo heal --stats on`)".to_string()),
+        };
+        match pushed {
+            Ok(ack) => println!(
+                "stats: shared {} rule-fix(es) across {} file(s) — epoch {} ({})",
+                fixstat_rules.values().sum::<u32>(),
+                n_fixed_files,
+                ack.epoch,
+                if ack.recorded_new { "recorded" } else { "duplicate run id — already shared" },
+            ),
+            Err(e) => eprintln!("stats: push failed ({e}) — not retried; the next run shares its own row"),
+        }
     }
 
     // The redesigned KAT footer (2026-09-13): one glanceable block —
