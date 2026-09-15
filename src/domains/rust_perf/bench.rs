@@ -433,23 +433,34 @@ impl PerfBenchValidator {
         }
         let hash = blake3::hash(hasher_input.as_bytes());
         let hex = hash.to_hex();
-        let dir = self.work_root.join(&hex[..16]);
+        let stem = &hex[..16];
+        let dir = self.work_root.join(stem);
 
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
 
-        let cargo_toml = "[package]\n\
-            name = \"perf_bench\"\n\
+        // ⛔ The package AND `[[bin]]` names carry the key, not just the
+        // directory (Issue 110). Two identically-named root packages sharing
+        // a target dir are ONE cargo unit — and for a BIN that is worse than
+        // a wrong verdict: `cargo run` re-executes the FIRST crate's binary.
+        // Measured with a known answer — two `perf_bench` bins printing
+        // different strings, one CARGO_TARGET_DIR: the second run printed
+        // "I AM CRATE A", exit 0. This harness would have timed one rule's
+        // code and reported the nanoseconds under another rule's id.
+        let cargo_toml = format!(
+            "[package]\n\
+            name = \"perf_bench_{stem}\"\n\
             version = \"0.0.0\"\n\
             edition = \"2021\"\n\
             \n\
             [[bin]]\n\
-            name = \"perf_bench\"\n\
-            path = \"src/main.rs\"\n";
+            name = \"perf_bench_{stem}\"\n\
+            path = \"src/main.rs\"\n"
+        );
 
         let deps = Self::extract_deps(&spec.harness);
         let cargo_toml: String = if deps.is_empty() {
-            cargo_toml.to_string()
+            cargo_toml
         } else {
             format!("{cargo_toml}\n[dependencies]\n{}", deps.join("\n"))
         };
@@ -657,6 +668,10 @@ static GLOBAL_COUNTING_ALLOCATOR: CountingAlloc = CountingAlloc;
     fn run_cargo(&self, crate_dir: &std::path::Path) -> Result<String, String> {
         let manifest_path = crate_dir.join("Cargo.toml");
         let output = Command::new(&self.cargo_bin)
+            // ⛔ PIN the probe's target dir, do not inherit one (Issue 110).
+            // With a shared one, `cargo run` re-executes another scratch
+            // crate's binary and this harness times the wrong code.
+            .env("CARGO_TARGET_DIR", crate_dir.join("target"))
             .arg("run")
             .arg("--release")
             .arg("--manifest-path")
@@ -743,6 +758,58 @@ static GLOBAL_COUNTING_ALLOCATOR: CountingAlloc = CountingAlloc;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ⛔ Issue 110, and this is the SHARPEST instance of the class because
+    /// the artifact is a BINARY. Two scratch crates with one package/bin
+    /// name, sharing a target dir, are one cargo unit — and `cargo run`
+    /// then re-executes the FIRST crate's binary. Measured with a known
+    /// answer: two `perf_bench` bins printing different strings, one
+    /// `CARGO_TARGET_DIR`, and the second run printed "I AM CRATE A" with
+    /// exit 0. This harness would have timed one rule's code and reported
+    /// the nanoseconds under another rule's id — not a wrong verdict but a
+    /// measurement that never happened, reported as one.
+    #[test]
+    fn prepare_crate_keys_the_package_and_bin_name() {
+        let root = std::env::temp_dir().join(format!("riir_perf_bench_unit_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let v = PerfBenchValidator::new().with_work_root(&root);
+        let spec = |h: &str| BenchSpec {
+            sizes: vec![8],
+            harness: h.to_string(),
+        };
+        let name_of = |dir: &std::path::Path| {
+            std::fs::read_to_string(dir.join("Cargo.toml"))
+                .unwrap()
+                .lines()
+                .filter_map(|l| l.trim().strip_prefix("name = "))
+                .map(|n| n.trim_matches('"').to_string())
+                .collect::<Vec<_>>()
+        };
+
+        let d1 = v.prepare_crate("rule_a", &spec("fn a() {}")).unwrap();
+        let d2 = v.prepare_crate("rule_b", &spec("fn b() {}")).unwrap();
+        let (n1, n2) = (name_of(&d1), name_of(&d2));
+
+        // BOTH names — package and [[bin]] — must be keyed. The bin name is
+        // the one that decides which executable `cargo run` launches, so a
+        // keyed package with an unkeyed bin still times the wrong code.
+        assert_eq!(n1.len(), 2, "expected a package name and a [[bin]] name");
+        assert_eq!(n2.len(), 2);
+        for (a, b) in n1.iter().zip(n2.iter()) {
+            assert_ne!(a, b, "two bench crates share a cargo unit");
+        }
+        for (dir, names) in [(&d1, &n1), (&d2, &n2)] {
+            let stem = dir.file_name().unwrap().to_string_lossy().to_string();
+            for n in names {
+                assert!(n.ends_with(&stem), "name must carry the dir key: {n} vs {stem}");
+            }
+        }
+        // Identical (rule, spec) must still reuse one crate — the cached
+        // build is what `run_bench_with_determinism`'s repeats ride on.
+        assert_eq!(d1, v.prepare_crate("rule_a", &spec("fn a() {}")).unwrap());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn classify_speedup_thresholds() {

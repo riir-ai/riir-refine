@@ -1,5 +1,89 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issues 110 + 111: two silent-wrong-verdict defects, both found by running this crate somewhere it had never been run
+
+### 110 — every scratch crate was ONE cargo unit
+
+All three scratch-crate oracles — `ClippyVerifier` (`clippy_verify`),
+`PerfVerifier` (`perf_verify`), `PerfBenchValidator` (`perf_bench`) — BLAKE3-key
+the scratch **directory** and wrote a **fixed package name**. Cargo's unit
+metadata for a ROOT package does not separate two identically-named ones by
+manifest path, so two scratch crates sharing a target dir are one unit and the
+second gets the first's cached answer.
+
+Known-answer proof, outside this repo, one `CARGO_TARGET_DIR`:
+
+```text
+cargo clippy --manifest-path a/…   # "fn f() {}"           Finished 0.20s
+cargo clippy --manifest-path b/…   # "no code fence here"  Finished 0.00s, exit 0  ⛔
+cargo run    --manifest-path a/…   →  I AM CRATE A
+cargo run    --manifest-path b/…   →  I AM CRATE A                              ⛔
+```
+
+For `ClippyVerifier` that is `present_lints = []` → `lint_resolved = true`:
+**the healer accepts a fix that was never verified.** For `PerfBenchValidator`
+it is worse than a wrong verdict — `cargo run` re-executes the other crate's
+binary, so the harness times one rule's code and reports the nanoseconds under
+another rule's id. A measurement that never happened, reported as one.
+
+Repair: the package name (and, for the bench, the `[[bin]]` name) carries the
+BLAKE3 stem, and the probe's `CARGO_TARGET_DIR` is PINNED to
+`<crate_dir>/target` rather than inherited. 3 new arms, none needing a
+toolchain — the collision is decided in the manifest, which is why it was
+assertable all along. The pre-existing
+`prepare_crate_different_code_different_dir` asserted the property that does
+*not* matter, which is how this survived in two repos.
+
+⚠ Exposure needs a **shared** target dir, i.e. `CARGO_TARGET_DIR` set — the
+isolated-target idiom this workspace recommends for measuring on a busy box.
+**The more carefully somebody isolates a run, the more reliably these oracles
+lied to them.**
+
+⛔ Found by riir-train Issue 555, where the same code — a *port* of
+`ClippyVerifier` — was a 2-in-3 flake on a bare box and a deterministic red
+under `CARGO_TARGET_DIR` (fixed there at `61d85d62`). The child shed the defect
+first; this is the parent catching up. UNDETERMINED and deliberately not
+assumed either way: whether any shipped `fix_verify` verdict, corpus label or
+`.benchmarks/` perf row was produced under a shared target dir — nothing
+recorded the environment.
+
+### 111 — the platform-audit mod-row lattice resolved NOTHING on Windows
+
+`ModRowLattice::build` resolves `#[cfg] mod x;` rows with `Path::join`, which
+emits `\` on Windows, against a key set that uses `/` (from `git ls-files`, or
+a caller's literal). They never match, so no mod row resolves — and an
+unresolved mod row does not error: the lattice degrades to empty,
+`files_modrow_gated` reads **0**, every gated item's root context reads as
+ungated, and the audit **invents platform-dead findings**. A real walk is
+mixed (`E:\repo\src/util/mod.rs`), so normalising one side is not enough; the
+index is keyed by the separator-insensitive form and maps back to the original.
+
+**8 of this module's own fixtures were red on clean `HEAD`** and nobody had
+seen it: no lane in this workspace runs this crate's tests on Windows
+(`full_gate` is macOS/aarch64, CI is `ubuntu-latest`). That is the platform
+axis one level in from where AGENTS.md applies it — not "a `--target` you never
+pass is a platform you never compile", but *a platform you never EXECUTE on is
+a set of assertions you have never read*.
+
+⚠ The new arm is itself platform-dependent, written down as a limit rather
+than a defect: it reds under perturbation on Windows and is VACUOUS on POSIX,
+and the stronger-looking all-`\` fixture passes on Windows and reds on POSIX
+for the opposite reason. **There is no separator fixture sound on both.** The
+standing gap — nothing automatic runs this crate on Windows — is the owner's
+call: a `windows-latest` job, or an explicit decision that Windows is
+unsupported, which is the current *de facto* state without anyone having
+chosen it.
+
+Gates: `--lib` 1594 passed / 0 failed / 11 ignored at
+`clippy_verify,rust_perf,rust_perf_bench,rust_perf_verify` (was 1585 / 8
+failed); `--ignored` 11 passed (the real-cargo oracle tests, end to end);
+clippy `--all-targets` 0 findings. Perturbation: 9 fixtures red with the
+normalisation removed, 3 with the keyed names removed.
+
+⛔ These oracle modules are feature-gated, so a plain `cargo test --lib`
+compiles them to NOTHING — `-- prepare_crate` printed `running 0 tests` with a
+green exit. Any gate row covering this code must name the features.
+
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
 
 The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`

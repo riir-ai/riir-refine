@@ -177,19 +177,29 @@ impl ClippyVerifier {
         // BLAKE3-hash the code for a stable, unique dir name.
         let hash = blake3::hash(code.as_bytes());
         let hex = hash.to_hex();
-        let dir = self.work_root.join(&hex[..16]);
+        let stem = &hex[..16];
+        let dir = self.work_root.join(stem);
 
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
 
-        // Write Cargo.toml (minimal, no deps).
-        let cargo_toml = "[package]\n\
-            name = \"clippy_verify\"\n\
+        // ⛔ The package NAME carries the key, not just the directory (Issue
+        // 110). Cargo's unit metadata for a ROOT package does not separate
+        // two identically-named ones by manifest path, so the moment two
+        // scratch crates share a target dir they are ONE unit: the second
+        // reports `Finished` in 0.00s, exits 0, and replays the FIRST one's
+        // diagnostics. Here that is `present_lints = []` → `lint_resolved =
+        // true` → the healer accepts a fix nothing checked. Measured with a
+        // known answer: a crate that CANNOT COMPILE passed.
+        let cargo_toml = format!(
+            "[package]\n\
+            name = \"clippy_verify_{stem}\"\n\
             version = \"0.0.0\"\n\
             edition = \"2021\"\n\
             \n\
             [lib]\n\
-            path = \"src/lib.rs\"\n";
+            path = \"src/lib.rs\"\n"
+        );
         std::fs::write(dir.join("Cargo.toml"), cargo_toml)
             .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
 
@@ -208,6 +218,12 @@ impl ClippyVerifier {
         let lint_flag = format!("clippy::{lint_name}");
 
         let output = Command::new(&self.cargo_bin)
+            // ⛔ PIN the probe's target dir, do not inherit one (Issue 110).
+            // A caller with CARGO_TARGET_DIR set — the isolated-target idiom
+            // this workspace recommends for measuring on a busy box — would
+            // otherwise put every scratch crate in ONE target dir, which is
+            // the collision above. Belt and braces with the keyed name.
+            .env("CARGO_TARGET_DIR", crate_dir.join("target"))
             .arg("clippy")
             .arg("--manifest-path")
             .arg(&manifest_path)
@@ -429,6 +445,56 @@ mod tests {
         let dir2 = v.prepare_crate("fn b() {}").unwrap();
 
         assert_ne!(dir1, dir2, "different code → different dir");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// ⛔ Issue 110's arm, and the reason the one above is NOT it. A
+    /// distinct DIRECTORY does not make a distinct cargo UNIT: cargo's unit
+    /// metadata for a root package does not separate two identically-named
+    /// ones by manifest path, so two scratch crates sharing a target dir
+    /// were one unit and the second replayed the first's diagnostics — here,
+    /// `present_lints = []` → `lint_resolved = true` on a fix nothing
+    /// checked. The collision is decided in the MANIFEST, so this needs no
+    /// cargo to assert.
+    #[test]
+    fn prepare_crate_different_code_different_package_name() {
+        let tmp =
+            std::env::temp_dir().join(format!("riir_clippy_test_unit_{}", std::process::id()));
+        let v = ClippyVerifier::new().with_work_root(&tmp);
+
+        let name_of = |dir: &std::path::Path| {
+            std::fs::read_to_string(dir.join("Cargo.toml"))
+                .unwrap()
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("name = "))
+                .unwrap()
+                .trim_matches('"')
+                .to_string()
+        };
+
+        let dir1 = v.prepare_crate("fn a() {}").unwrap();
+        let dir2 = v.prepare_crate("fn b() {}").unwrap();
+        assert_ne!(
+            name_of(&dir1),
+            name_of(&dir2),
+            "two probes share a cargo unit — the second replays the first's verdict"
+        );
+
+        // The name must carry its OWN directory's key, or the two facts can
+        // drift apart and the guarantee quietly stops holding.
+        for dir in [&dir1, &dir2] {
+            let stem = dir.file_name().unwrap().to_string_lossy().to_string();
+            assert!(
+                name_of(dir).ends_with(&stem),
+                "package name must carry the directory key: {} vs {stem}",
+                name_of(dir)
+            );
+        }
+
+        // Identical code must STILL reuse one crate — the build cache is
+        // what makes this design affordable.
+        assert_eq!(name_of(&dir1), name_of(&v.prepare_crate("fn a() {}").unwrap()));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

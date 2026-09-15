@@ -395,7 +395,25 @@ impl ModRowLattice {
 
         // Index external mod rows and resolve them to child files in the
         // scanned set.
-        let key_set: HashSet<&str> = parsed_files.iter().map(|(f, _)| f.as_str()).collect();
+        // ⛔ WINDOWS: the candidate keys below are built with `Path::join`,
+        // which emits `\`, while every source key here uses `/` — they come
+        // from `git ls-files` (P25) or from a caller's literal
+        // `src/util/win.rs`. A real walk produces MIXED keys
+        // (`E:\repo\src/util/mod.rs`), so normalising only one side is not
+        // enough. The index is therefore keyed by the separator-insensitive
+        // form and maps back to the ORIGINAL string, so every other map here
+        // stays keyed by the file as the caller spelled it.
+        //
+        // Unnormalised, NO mod row resolves on Windows: the lattice silently
+        // degrades to zero, every mod-row-gated item reads as ungated, and
+        // the audit invents platform-dead findings. 8 of this module's own
+        // fixtures were red here and green everywhere else — no lane in this
+        // workspace runs this crate's tests on Windows.
+        let norm = |s: &str| s.replace('\\', "/");
+        let key_set: HashMap<String, &str> = parsed_files
+            .iter()
+            .map(|(f, _)| (norm(f), f.as_str()))
+            .collect();
         let mut incoming: HashMap<String, Vec<IncomingRow>> = HashMap::new();
         for (file, pf) in parsed_files {
             let base = resolution_base(file);
@@ -413,13 +431,16 @@ impl ModRowLattice {
                     row.dir.join(&row.name).join("mod.rs"),
                 ];
                 for candidate in candidates {
-                    let key = candidate.display().to_string();
-                    if key_set.contains(key.as_str()) {
-                        incoming.entry(key).or_default().push(IncomingRow {
-                            parent: file.clone(),
-                            atoms: row.atoms.clone(),
-                            in_test: row.in_test,
-                        });
+                    let key = norm(&candidate.display().to_string());
+                    if let Some(orig) = key_set.get(&key) {
+                        incoming
+                            .entry((*orig).to_string())
+                            .or_default()
+                            .push(IncomingRow {
+                                parent: file.clone(),
+                                atoms: row.atoms.clone(),
+                                in_test: row.in_test,
+                            });
                     }
                 }
             }
@@ -1767,6 +1788,50 @@ pub mod wasm;"
             missing_of(&report, "K"),
             one_atom("target_family", "windows"),
             "`#[cfg(windows)]` on the mod row folds through the mod.rs shape"
+        );
+    }
+
+    /// ⛔ The SEPARATOR axis. `Path::join` emits `\` on Windows while every
+    /// source key here uses `/` — from `git ls-files` (P25) or a caller's
+    /// literal — and a real walk produces MIXED keys
+    /// (`E:\repo\src/util/mod.rs`), so normalising one side is not enough.
+    /// Unresolved mod rows do not error: the lattice degrades to zero, every
+    /// gated item reads as ungated, and the audit INVENTS platform-dead
+    /// findings. 8 fixtures in this module were red on Windows and green
+    /// everywhere else, silently, because nothing in this workspace runs
+    /// this crate's tests there.
+    ///
+    /// ⚠ This arm is itself PLATFORM-DEPENDENT and that is a limit, not an
+    /// oversight: perturbation reds it on Windows and it is VACUOUS on
+    /// POSIX, where `\` is an ordinary filename character and `Path::join`
+    /// reproduces the `/` form regardless. An arm that red everywhere would
+    /// need an all-`\` key set, and that one passes on Windows and reds on
+    /// POSIX for the opposite reason — a false failure, not a canary. There
+    /// is no separator fixture that is sound on both.
+    #[test]
+    fn mod_rows_resolve_through_mixed_path_separators() {
+        let report = audit_sources(&[
+            (
+                r"E:\repo\src/lib.rs".to_string(),
+                "pub mod util;".to_string(),
+            ),
+            (
+                r"E:\repo\src/util/mod.rs".to_string(),
+                "#[cfg(windows)] pub mod win;".to_string(),
+            ),
+            (
+                r"E:\repo\src/util/win.rs".to_string(),
+                "pub fn w() -> u8 { crate::K }".to_string(),
+            ),
+            (
+                r"E:\repo\src/other.rs".to_string(),
+                "pub const K: u8 = 3;".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            missing_of(&report, "K"),
+            one_atom("target_family", "windows"),
+            "a mixed-separator key set must resolve its mod rows"
         );
     }
 

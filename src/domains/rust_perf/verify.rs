@@ -208,19 +208,26 @@ impl PerfVerifier {
         // BLAKE3-hash the code for a stable, unique dir name.
         let hash = blake3::hash(code.as_bytes());
         let hex = hash.to_hex();
-        let dir = self.work_root.join(&hex[..16]);
+        let stem = &hex[..16];
+        let dir = self.work_root.join(stem);
 
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
 
-        // Write Cargo.toml (minimal, no deps).
-        let cargo_toml = "[package]\n\
-            name = \"perf_verify\"\n\
+        // ⛔ The package NAME carries the key, not just the directory (Issue
+        // 110) — two identically-named root packages sharing a target dir
+        // are ONE cargo unit, and the second gets the first's cached result.
+        // Here that means `exit_ok` and zero compile errors for a crate that
+        // was never built, i.e. `test_passes = true` on an unverified fix.
+        let cargo_toml = format!(
+            "[package]\n\
+            name = \"perf_verify_{stem}\"\n\
             version = \"0.0.0\"\n\
             edition = \"2021\"\n\
             \n\
             [lib]\n\
-            path = \"src/lib.rs\"\n";
+            path = \"src/lib.rs\"\n"
+        );
         std::fs::write(dir.join("Cargo.toml"), cargo_toml)
             .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
 
@@ -240,6 +247,8 @@ impl PerfVerifier {
         let manifest_path = crate_dir.join("Cargo.toml");
 
         let output = Command::new(&self.cargo_bin)
+            // ⛔ PIN the probe's target dir, do not inherit one (Issue 110).
+            .env("CARGO_TARGET_DIR", crate_dir.join("target"))
             .arg("test")
             .arg("--manifest-path")
             .arg(&manifest_path)
@@ -502,6 +511,35 @@ mod tests {
         let dir1 = v.prepare_crate("pub fn a() {}").unwrap();
         let dir2 = v.prepare_crate("pub fn b() {}").unwrap();
         assert_ne!(dir1, dir2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// ⛔ Issue 110. A distinct DIRECTORY is not a distinct cargo UNIT — the
+    /// test above asserts the property that does not matter. Two scratch
+    /// crates with one package name, sharing a target dir, are one unit, and
+    /// the second inherits the first's cached success: `exit_ok` and zero
+    /// compile errors for a crate that was never built.
+    #[test]
+    fn prepare_crate_different_code_different_package_name() {
+        let root = std::env::temp_dir().join("riir_perf_verify_test_unit");
+        let _ = std::fs::remove_dir_all(&root);
+        let v = PerfVerifier::new().with_work_root(&root);
+        let name_of = |dir: &std::path::Path| {
+            std::fs::read_to_string(dir.join("Cargo.toml"))
+                .unwrap()
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("name = "))
+                .unwrap()
+                .trim_matches('"')
+                .to_string()
+        };
+        let dir1 = v.prepare_crate("pub fn a() {}").unwrap();
+        let dir2 = v.prepare_crate("pub fn b() {}").unwrap();
+        assert_ne!(name_of(&dir1), name_of(&dir2), "two probes share a cargo unit");
+        for dir in [&dir1, &dir2] {
+            let stem = dir.file_name().unwrap().to_string_lossy().to_string();
+            assert!(name_of(dir).ends_with(&stem), "name must carry the dir key");
+        }
         let _ = std::fs::remove_dir_all(&root);
     }
 
