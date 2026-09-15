@@ -105,6 +105,25 @@
 //! same-named field on another struct read externally hides T's orphan) is a
 //! FALSE NEGATIVE, same direction as A/B; never a false positive from
 //! name-matching.
+//!
+//! ## The gpu-uniform downgrade (P28, 2026-09-16)
+//!
+//! A struct whose fields ride a shader uniform block (a `#[uniform(…)]` bind
+//! attribute — bevy `AsBindGroup`/`ShaderType`) has its bytes consumed by the
+//! WGSL even when no Rust code reads the field: struct-literal writes and
+//! per-frame buffer uploads are invisible to the member-read tally, and the
+//! instrument does not parse WGSL. Measured specimen: seal-game-editor
+//! `WaterParams.waves`/`.misc` (2 [A] rows) — written per-frame by the canvas
+//! (`show_animated_water`), read in the vertex/fragment shaders through the
+//! `#[uniform(0)]` block; the sibling field-expr writes in
+//! `apply_water_light` are exactly why `sun`/`sun_color`/`ambient` escaped
+//! [A] (the name-matched tally counts field-expr assignment as a touch).
+//! [A] and [C2] rows on such structs downgrade to the weak `[gpu-uniform]`
+//! annotation (downgrade-not-suppress, the `[wire-const]` precedent): a
+//! declared-but-unread WGSL field would be schema-dead weight, so the row
+//! stays visible with a confirm-the-shader fix line instead of disappearing.
+//! The bind type set is closed transitively through nested `ShaderType`
+//! struct fields (a nested struct is flattened into the same block).
 
 //! ## The walk (P25, 2026-09-15)
 //!
@@ -192,6 +211,10 @@ pub struct SelfReferentialConfig {
     pub struct_name: String,
     /// `file:line` of the FIRST candidate field's Default-impl init.
     pub origin: String,
+    /// The struct rides a `#[uniform(…)]` bind — the C2 verdict renders at
+    /// the weak `[C2·gpu-uniform]` annotation (P28; the shader consumes the
+    /// block's bytes, so "delete the struct" is not a safe fix line).
+    pub gpu_uniform: bool,
     pub fields: Vec<SelfRefField>,
 }
 
@@ -204,6 +227,13 @@ pub struct ConfigAuditReport {
     pub walk: WalkMode,
     pub candidates: usize,
     pub inert_knobs: Vec<InertKnob>,
+    /// The P28 intake downgrade: [A]-shaped rows on a struct whose fields
+    /// ride a shader uniform block (`#[uniform(…)]` bind attribute — the
+    /// WGSL consumes the block's bytes without a Rust read). Weak severity,
+    /// never hidden (the detector does not parse WGSL — the
+    /// `[documented-write-only]`/`[wire-const]` precedent:
+    /// downgrade-not-suppress).
+    pub gpu_uniform: Vec<InertKnob>,
     pub assert_only: Vec<AssertOnly>,
     /// The Issue-030-class intake downgrade: class-B rows whose FIELD doc
     /// carries a deliberate-write-only marker. Weak severity, never hidden
@@ -250,7 +280,8 @@ type DefaultsByField = BTreeMap<String, Vec<(Option<String>, Option<String>)>>;
 pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
     let (candidates, ix, files) = scan_core(sources);
     let field_docs = collect_field_docs(&files);
-    classify(&candidates, &ix, &field_docs, files.len())
+    let gpu_uniform = collect_gpu_uniform_structs(&files);
+    classify(&candidates, &ix, &field_docs, files.len(), &gpu_uniform)
 }
 
 /// Fields whose reads are all test- or own-impl-confined (the C1 candidate
@@ -579,6 +610,81 @@ impl Visit<'_> for SerdeStructMarker<'_> {
             }
         }
         syn::visit::visit_item_struct(self, item);
+    }
+}
+
+/// GPU-uniform bind surface (the P28 intake class): struct names whose
+/// fields ride a shader uniform block. A field carrying `#[uniform(…)]`
+/// (bevy's `AsBindGroup` bind attribute) makes its FIELD TYPE the uniform
+/// block root; a `ShaderType` struct nested inside another is flattened
+/// into the same block, so the closure descends through the field types of
+/// collected structs and stops at foreign types (whose fields no scan
+/// names). The Rust-side member-read tally cannot see the WGSL reads —
+/// the block's bytes are consumed by the shader even when no Rust code
+/// reads the field — so `classify` downgrades the [A]/[C2] rows of these
+/// structs to the weak `[gpu-uniform]` annotation (downgrade-not-suppress:
+/// a declared-but-unread shader field would be schema-dead weight, and the
+/// instrument does not parse WGSL).
+pub(crate) fn collect_gpu_uniform_structs(files: &[(String, syn::File)]) -> BTreeSet<String> {
+    // struct name → every path-segment type ident of its fields (only for
+    // structs that exist in the scanned set).
+    let mut field_types: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut direct: BTreeSet<String> = BTreeSet::new();
+    for (_name, file) in files {
+        for item in &file.items {
+            let Item::Struct(s) = item else { continue };
+            let sname = s.ident.to_string();
+            for f in &s.fields {
+                let mut idents = Vec::new();
+                collect_type_idents(&f.ty, &mut idents);
+                if f.attrs.iter().any(|a| a.path().is_ident("uniform")) {
+                    direct.extend(idents.iter().cloned());
+                }
+                field_types
+                    .entry(sname.clone())
+                    .or_default()
+                    .extend(idents);
+            }
+        }
+    }
+    let mut out = BTreeSet::new();
+    let mut queue: Vec<String> = direct.into_iter().collect();
+    while let Some(n) = queue.pop() {
+        if !out.insert(n.clone()) {
+            continue;
+        }
+        if let Some(types) = field_types.get(&n) {
+            for t in types {
+                if !out.contains(t) {
+                    queue.push(t.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Every path-segment ident in a type, descending generic arguments
+/// (`Option<Inner>` yields `Option` and `Inner` — the inner name is the one
+/// the closure consumes; the wrapper name matches nothing and is inert).
+fn collect_type_idents(ty: &syn::Type, out: &mut Vec<String>) {
+    match ty {
+        syn::Type::Path(p) => {
+            for seg in &p.path.segments {
+                out.push(seg.ident.to_string());
+                if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                    for arg in &args.args {
+                        if let syn::GenericArgument::Type(t) = arg {
+                            collect_type_idents(t, out);
+                        }
+                    }
+                }
+            }
+        }
+        syn::Type::Reference(r) => collect_type_idents(&r.elem, out),
+        syn::Type::Group(g) => collect_type_idents(&g.elem, out),
+        syn::Type::Paren(p) => collect_type_idents(&p.elem, out),
+        _ => {}
     }
 }
 
@@ -1064,6 +1170,7 @@ fn classify(
     ix: &InteractionIndex,
     field_docs: &FieldDocs,
     files_scanned: usize,
+    gpu_uniform: &BTreeSet<String>,
 ) -> ConfigAuditReport {
     let mut report = ConfigAuditReport {
         files_scanned,
@@ -1079,11 +1186,20 @@ fn classify(
         if let Some(const_path) = &cand.const_path {
             let (const_reads, array_len_uses) = ix.const_reads_of(const_path);
             if const_reads > 0 {
-                report.inert_knobs.push(InertKnob {
+                let knob = InertKnob {
                     candidate: cand.clone(),
                     const_reads,
                     array_len_uses,
-                });
+                };
+                if gpu_uniform.contains(&cand.struct_name) {
+                    // DOWNGRADE-not-suppress (the [wire-const] precedent):
+                    // the shader consumes the uniform block's bytes without
+                    // any Rust read; WGSL is not parsed, so the row stays
+                    // visible at annotation severity.
+                    report.gpu_uniform.push(knob);
+                } else {
+                    report.inert_knobs.push(knob);
+                }
                 continue;
             }
         }
@@ -1105,7 +1221,7 @@ fn classify(
             }
         }
     }
-    classify_self_referential(candidates, ix, &mut report);
+    classify_self_referential(candidates, ix, &mut report, gpu_uniform);
     report
 }
 
@@ -1116,6 +1232,7 @@ fn classify_self_referential(
     candidates: &[FieldCandidate],
     ix: &InteractionIndex,
     report: &mut ConfigAuditReport,
+    gpu_uniform: &BTreeSet<String>,
 ) {
     let mut seen: Vec<String> = Vec::new();
     for cand in candidates {
@@ -1151,6 +1268,7 @@ fn classify_self_referential(
             report.self_referential.push(SelfReferentialConfig {
                 struct_name: cand.struct_name.clone(),
                 origin: cand.origin.clone(),
+                gpu_uniform: gpu_uniform.contains(&cand.struct_name),
                 fields,
             });
         }
@@ -1767,12 +1885,13 @@ impl ConfigAuditReport {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B], {} documented-write-only (annotation), {} self-referential config struct(s) [C2]",
+            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B], {} documented-write-only (annotation), {} gpu-uniform (annotation), {} self-referential config struct(s) [C2]",
             self.files_scanned,
             self.candidates,
             self.inert_knobs.len(),
             self.assert_only.len(),
             self.documented_write_only.len(),
+            self.gpu_uniform.len(),
             self.self_referential.len()
         );
         let _ = writeln!(out, "{}", self.walk.note());
@@ -1796,6 +1915,22 @@ impl ConfigAuditReport {
             let _ = writeln!(
                 out,
                 "      fix: wire consumers to the field (or document the const as the contract)"
+            );
+        }
+        for k in &self.gpu_uniform {
+            let _ = writeln!(
+                out,
+                "  [gpu-uniform] {} — {}.{} defaults to const {} (field read 0x, const read {}x) but {} rides a #[uniform(..)] bind — the shader consumes the block's bytes without a Rust read (weak severity: WGSL is not parsed, a declared-but-unread shader field would be schema-dead weight — if the shader does not read it, treat as [A])",
+                k.candidate.origin,
+                k.candidate.struct_name,
+                k.candidate.field_name,
+                k.candidate.const_path.as_deref().unwrap_or("?"),
+                k.const_reads,
+                k.candidate.struct_name
+            );
+            let _ = writeln!(
+                out,
+                "      fix: confirm the WGSL reads the field and leave it, or delete the knob"
             );
         }
         for b in &self.assert_only {
@@ -1823,24 +1958,7 @@ impl ConfigAuditReport {
             );
         }
         for s in &self.self_referential {
-            let _ = writeln!(
-                out,
-                "  [C2] {} — {} ({} Default-impl field(s)) has ZERO external reads",
-                s.origin,
-                s.struct_name,
-                s.fields.len()
-            );
-            for f in &s.fields {
-                let _ = writeln!(
-                    out,
-                    "      .{} — {} read(s): {} test, {} own-validate-impl",
-                    f.field_name, f.total_reads, f.test_reads, f.self_impl_reads
-                );
-            }
-            let _ = writeln!(
-                out,
-                "      fix: delete the struct, or plumb a real consumer (reads inside other types' impls / accessors keep it live)"
-            );
+            render_self_referential(&mut out, s);
         }
         let _ = writeln!(
             out,
@@ -1848,6 +1966,50 @@ impl ConfigAuditReport {
         );
         out
     }
+}
+
+/// One [C2] row (or its `[C2·gpu-uniform]` weak downgrade, P28) with its
+/// per-field tally and fix line.
+fn render_self_referential(out: &mut String, s: &SelfReferentialConfig) {
+    if s.gpu_uniform {
+        let _ = writeln!(
+            out,
+            "  [C2·gpu-uniform] {} — {} ({} Default-impl field(s)) has ZERO external Rust reads, but the struct rides a #[uniform(..)] bind (weak severity — the shader consumes the block's bytes; WGSL is not parsed)",
+            s.origin,
+            s.struct_name,
+            s.fields.len()
+        );
+        for f in &s.fields {
+            let _ = writeln!(
+                out,
+                "      .{} — {} read(s): {} test, {} own-validate-impl",
+                f.field_name, f.total_reads, f.test_reads, f.self_impl_reads
+            );
+        }
+        let _ = writeln!(
+            out,
+            "      fix: confirm the WGSL reads the fields; do not delete on this row alone"
+        );
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "  [C2] {} — {} ({} Default-impl field(s)) has ZERO external reads",
+        s.origin,
+        s.struct_name,
+        s.fields.len()
+    );
+    for f in &s.fields {
+        let _ = writeln!(
+            out,
+            "      .{} — {} read(s): {} test, {} own-validate-impl",
+            f.field_name, f.total_reads, f.test_reads, f.self_impl_reads
+        );
+    }
+    let _ = writeln!(
+        out,
+        "      fix: delete the struct, or plumb a real consumer (reads inside other types' impls / accessors keep it live)"
+    );
 }
 
 #[cfg(test)]
@@ -1875,6 +2037,90 @@ pub fn live(c: &AuditConfig) -> usize { c.live }
         assert_eq!(r.inert_knobs[0].candidate.field_name, "ring_capacity");
         assert!(r.inert_knobs[0].const_reads >= 1);
         assert!(r.assert_only.is_empty());
+    }
+
+    #[test]
+    fn gpu_uniform_const_inited_field_downgrades() {
+        // The seal-game-editor WaterParams shape (P28): the params struct is
+        // the type of a #[uniform(0)]-bound field, its fields are const-inited
+        // in Default and never read in Rust — the WGSL consumes the block.
+        let r = one(
+            r"
+pub const RING: usize = 64;
+#[derive(Clone, Copy)]
+pub struct Params { pub ring: usize, pub live: usize }
+impl Default for Params { fn default() -> Self { Self { ring: RING, live: RING } } }
+pub struct Material { #[uniform(0)] pub params: Params }
+pub fn bind(_m: &Material) -> usize { RING }
+",
+        );
+        assert!(
+            r.inert_knobs.is_empty(),
+            "gpu-bound struct downgrades out of [A]"
+        );
+        assert_eq!(r.gpu_uniform.len(), 2, "both const-inited fields annotate");
+        assert!(r.render().contains("[gpu-uniform]"));
+    }
+
+    #[test]
+    fn gpu_uniform_downgrade_is_transitive_through_nested_shader_structs() {
+        // A ShaderType struct nested in the uniform block is flattened into
+        // it — the closure descends through field types.
+        let r = one(
+            r"
+pub const INNER_K: usize = 8;
+#[derive(Clone, Copy)]
+pub struct Inner { pub k: usize }
+impl Default for Inner { fn default() -> Self { Self { k: INNER_K } } }
+#[derive(Clone, Copy)]
+pub struct Params { pub inner: Inner }
+impl Default for Params { fn default() -> Self { Self { inner: Inner::default() } } }
+pub struct Material { #[uniform(0)] pub params: Params }
+pub fn ext() -> usize { INNER_K }
+",
+        );
+        assert!(
+            r.inert_knobs.is_empty(),
+            "Inner is in the block transitively"
+        );
+        assert_eq!(r.gpu_uniform.len(), 1);
+        assert_eq!(r.gpu_uniform[0].candidate.struct_name, "Inner");
+    }
+
+    #[test]
+    fn non_uniform_const_inited_field_still_fires() {
+        // Precision guard: without the #[uniform(..)] bind the row stays [A].
+        let r = one(
+            r"
+pub const RING: usize = 64;
+#[derive(Clone, Copy)]
+pub struct Params { pub ring: usize }
+impl Default for Params { fn default() -> Self { Self { ring: RING } } }
+pub struct Material { pub params: Params }
+pub fn bind(_m: &Material) -> usize { RING }
+",
+        );
+        assert_eq!(r.inert_knobs.len(), 1);
+        assert!(r.gpu_uniform.is_empty());
+    }
+
+    #[test]
+    fn gpu_uniform_c2_downgrades_to_weak_annotation() {
+        let r = one(
+            r"
+#[derive(Clone, Copy)]
+pub struct Params { pub a: u32, pub b: u32 }
+impl Default for Params { fn default() -> Self { Self { a: 1, b: 2 } } }
+pub struct Material { #[uniform(0)] pub params: Params }
+",
+        );
+        assert!(r.inert_knobs.is_empty());
+        assert_eq!(r.self_referential.len(), 1);
+        assert!(
+            r.self_referential[0].gpu_uniform,
+            "C2 downgrades, not suppresses"
+        );
+        assert!(r.render().contains("[C2·gpu-uniform]"));
     }
 
     #[test]

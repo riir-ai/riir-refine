@@ -1,5 +1,44 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — P28: the `[gpu-uniform]` downgrade (config-audit × shader uniform blocks)
+
+The 09-16 seal-game-editor audit triad (first completed `--config-audit` for that repo;
+the orphan-report lane's earlier 300 s timeout did not recur) printed 2 class-A rows:
+`WaterParams.waves`/`.misc` in `editor-widgets/src/bevy_canvas_water.rs`. Both are
+load-bearing: written per-frame by the canvas (`show_animated_water` — `waves` from
+the page's shape dials, `misc` = the water clock), read by the WGSL through the
+`#[uniform(0)]` block (`water.waves` drives the three-train vertex swell,
+`water.misc.x` the vertex phase + fragment ripples). The detector's member-read
+tally is Rust-syn-only: struct-literal writes are construction, per-frame buffer
+uploads are invisible, and WGSL is not parsed. The tell was in the report itself —
+the sibling fields (`sun`/`sun_color`/`ambient`) escaped [A] only because
+`apply_water_light` writes them via field expressions, which the name-matched tally
+counts as touches.
+
+Fix (config_audit): `collect_gpu_uniform_structs` — a field carrying `#[uniform(…)]`
+makes its FIELD TYPE a uniform-block root; the set closes transitively through
+nested struct field types (a nested `ShaderType` struct flattens into the same
+block) and stops at foreign types. `classify` reroutes such structs' [A] rows into
+a new `gpu_uniform` bucket and stamps `SelfReferentialConfig.gpu_uniform` for C2.
+Downgrade-not-suppress (the `[wire-const]` precedent): a declared-but-unread shader
+field would be schema-dead weight and the detector cannot tell, so rows stay
+visible at the weak `[gpu-uniform]` / `[C2·gpu-uniform]` annotation with a
+confirm-the-WGSL fix line; the render header gained the gpu-uniform count.
+
+Measured: seal-game-editor 2 [A] → 0 [A] + 2 gpu-uniform (same file:line); the
+canary set holds at 0 [A] (self, riir-chain, riir-shader, riir-dao, riir-auth,
+riir-deployer, riir-mmorpg-examples) — the reroute can only ever move rows OUT of
+[A], never into it. +4 fixtures (the WaterParams shape, the transitive closure, the
+no-attr precision guard, the C2 downgrade) → lib 1538/1538, clippy `-D warnings`
+clean. Rider: 3 pre-existing `needless_raw_string_hashes` fixtures in
+orphan_report.rs (P26 rows surfaced by a toolchain clippy update since P27's clean
+run) — fixed manually; they are cfg(test)-only strings a default `cargo check`
+healer gate would not compile (the P20 false-verified class). Global binary rebuilt
+with the release feature set from this tree and installed over the symlink target
+before the seal-game-editor re-run. Standing handoff recorded in `.distill/001`:
+riir-ai carries 1 [A] row (`HlaKarcConfig.delay_k`, riir-engine `karc_bridge/mod.rs:196`,
+const read 31×) — pre-existing, sibling-hot, their lane.
+
 ## 2026-09-16 — Issue 102 T5: the corpus authoring meta-rule guide (Library Drift's meta-skill, formalized)
 
 `.docs/02_corpus/authoring_discipline.md` — the explicit meta-rule guide consulted at

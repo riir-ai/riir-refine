@@ -1258,13 +1258,13 @@ impl Default for BehaviorConfig {
     /// visible, never suppressed (the `[wire-const]` precedent).
     #[test]
     fn documented_write_only_marker_downgrades_stillborn() {
-        let src = r#"
+        let src = r"
 pub struct V {
     /// documented-write-only: adjudicated (Issues 142 + 147) forward surface.
     pub f: bool,
 }
 impl Default for V { fn default() -> Self { Self { f: true } } }
-"#;
+";
         let scan = scan_of(src);
         assert_eq!(scan.marked_write_only.len(), 1, "the field doc is marked");
         let fake = FakeHistory::new(&DEPTHS); // no counts anywhere → stillborn branch
@@ -1281,7 +1281,7 @@ impl Default for V { fn default() -> Self { Self { f: true } } }
     /// log -S probe is never spent on it.
     #[test]
     fn documented_write_only_marker_downgrades_orphaned_and_skips_pickaxe() {
-        let src = r#"
+        let src = r"
 pub struct BehaviorConfig {
     /// forward surface: the YAML designer owns this at authoring time.
     pub alarm_radius: f32,
@@ -1289,7 +1289,7 @@ pub struct BehaviorConfig {
 impl Default for BehaviorConfig {
     fn default() -> Self { Self { alarm_radius: 3.0 } }
 }
-"#;
+";
         let scan = scan_of(src);
         let fake = FakeHistory::new(&DEPTHS)
             .count("alarm_radius", "HEAD", 0)
@@ -1308,11 +1308,11 @@ impl Default for BehaviorConfig {
     /// `struct_doc_marker_does_not_downgrade_field` parity).
     #[test]
     fn struct_doc_marker_does_not_downgrade_orphan_row() {
-        let src = r#"
+        let src = r"
 /// deliberate: write-only config surface (struct-level doc).
 pub struct W { pub g: u32 }
 impl Default for W { fn default() -> Self { Self { g: 1 } } }
-"#;
+";
         let scan = scan_of(src);
         assert!(scan.marked_write_only.is_empty(), "struct doc does not mark one field");
         let fake = FakeHistory::new(&DEPTHS)
