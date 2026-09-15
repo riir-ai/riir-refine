@@ -234,6 +234,14 @@ pub struct ConfigAuditReport {
     /// `[documented-write-only]`/`[wire-const]` precedent:
     /// downgrade-not-suppress).
     pub gpu_uniform: Vec<InertKnob>,
+    /// Class-A rows whose FIELD doc carries a deliberate-write-only marker —
+    /// the knob is documented as intentionally not consulted (e.g. a
+    /// const-generic forecaster keeps the field for a future dispatcher that
+    /// picks among pre-monomorphized shapes; the `HlaKarcConfig.delay_k`
+    /// shape). Weak severity, never hidden (downgrade-not-suppress — the
+    /// doc's claim is not verified; if it is NOT deliberate, wire the
+    /// consumers to the field or drop the marker wording).
+    pub documented_write_only_knobs: Vec<InertKnob>,
     pub assert_only: Vec<AssertOnly>,
     /// The Issue-030-class intake downgrade: class-B rows whose FIELD doc
     /// carries a deliberate-write-only marker. Weak severity, never hidden
@@ -1197,6 +1205,15 @@ fn classify(
                     // any Rust read; WGSL is not parsed, so the row stays
                     // visible at annotation severity.
                     report.gpu_uniform.push(knob);
+                } else if field_docs
+                    .get(&(cand.struct_name.clone(), cand.field_name.clone()))
+                    .is_some_and(|d| is_deliberate_write_only_marker(d))
+                {
+                    // P29: same downgrade when the FIELD doc carries the
+                    // deliberate-write-only marker (the class-B arm below is
+                    // the precedent); the doc's claim is not verified, so the
+                    // row stays visible at annotation severity.
+                    report.documented_write_only_knobs.push(knob);
                 } else {
                     report.inert_knobs.push(knob);
                 }
@@ -1885,10 +1902,11 @@ impl ConfigAuditReport {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} assert-only field(s) [B], {} documented-write-only (annotation), {} gpu-uniform (annotation), {} self-referential config struct(s) [C2]",
+            "config-audit: {} file(s) parsed, {} Default-impl field candidate(s): {} inert knob(s) [A], {} write-only knob(s) [A·documented-write-only], {} assert-only field(s) [B], {} documented-write-only (annotation), {} gpu-uniform (annotation), {} self-referential config struct(s) [C2]",
             self.files_scanned,
             self.candidates,
             self.inert_knobs.len(),
+            self.documented_write_only_knobs.len(),
             self.assert_only.len(),
             self.documented_write_only.len(),
             self.gpu_uniform.len(),
@@ -1917,21 +1935,11 @@ impl ConfigAuditReport {
                 "      fix: wire consumers to the field (or document the const as the contract)"
             );
         }
+        for k in &self.documented_write_only_knobs {
+            render_write_only_knob_row(&mut out, k);
+        }
         for k in &self.gpu_uniform {
-            let _ = writeln!(
-                out,
-                "  [gpu-uniform] {} — {}.{} defaults to const {} (field read 0x, const read {}x) but {} rides a #[uniform(..)] bind — the shader consumes the block's bytes without a Rust read (weak severity: WGSL is not parsed, a declared-but-unread shader field would be schema-dead weight — if the shader does not read it, treat as [A])",
-                k.candidate.origin,
-                k.candidate.struct_name,
-                k.candidate.field_name,
-                k.candidate.const_path.as_deref().unwrap_or("?"),
-                k.const_reads,
-                k.candidate.struct_name
-            );
-            let _ = writeln!(
-                out,
-                "      fix: confirm the WGSL reads the field and leave it, or delete the knob"
-            );
+            render_gpu_uniform_row(&mut out, k);
         }
         for b in &self.assert_only {
             let _ = writeln!(
@@ -1966,6 +1974,50 @@ impl ConfigAuditReport {
         );
         out
     }
+}
+
+/// One `[A·documented-write-only]` row (P29): the class-A fact plus the
+/// unverified deliberate-write-only marker and its fix line.
+fn render_write_only_knob_row(out: &mut String, k: &InertKnob) {
+    let _ = writeln!(
+        out,
+        "  [A·documented-write-only] {} — {}.{} defaults to const {} (field read 0x, const read {}x) but the FIELD doc carries a deliberate-write-only marker (weak severity — the knob is documented as intentionally not consulted; the doc's claim is not verified)",
+        k.candidate.origin,
+        k.candidate.struct_name,
+        k.candidate.field_name,
+        k.candidate.const_path.as_deref().unwrap_or("?"),
+        k.const_reads
+    );
+    if k.array_len_uses > 0 {
+        let _ = writeln!(
+            out,
+            "      note: {} array-length use(s) of the const — wiring the field needs array-type changes",
+            k.array_len_uses
+        );
+    }
+    let _ = writeln!(
+        out,
+        "      fix: keep only if the surface is genuinely deliberate (future dispatcher); otherwise wire consumers to the field or drop the marker"
+    );
+}
+
+/// One `[gpu-uniform]` row (P28): the class-A fact plus the
+/// shader-consumption mechanism and its confirm-the-WGSL fix line.
+fn render_gpu_uniform_row(out: &mut String, k: &InertKnob) {
+    let _ = writeln!(
+        out,
+        "  [gpu-uniform] {} — {}.{} defaults to const {} (field read 0x, const read {}x) but {} rides a #[uniform(..)] bind — the shader consumes the block's bytes without a Rust read (weak severity: WGSL is not parsed, a declared-but-unread shader field would be schema-dead weight — if the shader does not read it, treat as [A])",
+        k.candidate.origin,
+        k.candidate.struct_name,
+        k.candidate.field_name,
+        k.candidate.const_path.as_deref().unwrap_or("?"),
+        k.const_reads,
+        k.candidate.struct_name
+    );
+    let _ = writeln!(
+        out,
+        "      fix: confirm the WGSL reads the field and leave it, or delete the knob"
+    );
 }
 
 /// One [C2] row (or its `[C2·gpu-uniform]` weak downgrade, P28) with its
@@ -2252,6 +2304,61 @@ mod t {
         );
         assert!(r.assert_only.is_empty());
         assert_eq!(r.documented_write_only.len(), 1, "the Issue-147 wording downgrades");
+    }
+
+    /// The P29 class-A extension (the `HlaKarcConfig.delay_k` shape): a
+    /// const-defaulted knob whose FIELD doc carries a deliberate-write-only
+    /// marker reports at the weak `[A·documented-write-only]` annotation
+    /// instead of deletion-grade [A].
+    #[test]
+    fn documented_write_only_marker_downgrades_class_a() {
+        let r = one(
+            r"
+pub const SHAPE_K: usize = 4;
+pub struct ForecasterConfig {
+    /// Deliberate write-only forward surface — a future dispatcher picks
+    /// among pre-monomorphized shapes; the default forecaster never reads it.
+    pub delay_k: usize,
+}
+impl Default for ForecasterConfig { fn default() -> Self { Self { delay_k: SHAPE_K } } }
+pub fn shape(_c: &ForecasterConfig) -> usize { SHAPE_K }
+#[cfg(test)]
+mod t {
+    use super::*;
+    #[test]
+    fn pin() { let c = ForecasterConfig::default(); assert_eq!(c.delay_k, SHAPE_K); }
+}
+",
+        );
+        assert!(r.inert_knobs.is_empty(), "marked row downgrades out of [A]");
+        assert_eq!(r.documented_write_only_knobs.len(), 1);
+        assert_eq!(r.documented_write_only_knobs[0].candidate.field_name, "delay_k");
+        let rendered = r.render();
+        assert!(rendered.contains("[A·documented-write-only]"));
+        assert!(rendered.contains("0 inert knob(s) [A]"), "header [A] count is zero");
+    }
+
+    /// Precedence: a gpu-bound struct's const-inited field with a marker doc
+    /// stays in the P28 gpu-uniform bucket — the shader-consumption mechanism
+    /// is the more specific annotation.
+    #[test]
+    fn gpu_uniform_takes_precedence_over_write_only_marker() {
+        let r = one(
+            r"
+pub const RING: usize = 64;
+#[derive(Clone, Copy)]
+pub struct Params {
+    /// Deliberate write-only forward surface.
+    pub ring: usize,
+}
+impl Default for Params { fn default() -> Self { Self { ring: RING } } }
+pub struct Material { #[uniform(0)] pub params: Params }
+pub fn bind(_m: &Material) -> usize { RING }
+",
+        );
+        assert!(r.inert_knobs.is_empty());
+        assert!(r.documented_write_only_knobs.is_empty(), "gpu-uniform wins");
+        assert_eq!(r.gpu_uniform.len(), 1);
     }
 
     #[test]

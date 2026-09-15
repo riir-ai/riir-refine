@@ -1,5 +1,40 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
+
+The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`
+(`riir-engine/src/karc_bridge/mod.rs`, default `HLA_KARC_K`, const read 31×) as
+the workspace's last [A] row. Adjudication: NOT a dead knob — the field is a
+deliberate write-only forward surface. The KARC forecaster is const-generic
+over the basis dimension `M` and delay depth `K`; making them runtime-tunable
+needs either `generic_const_exprs` (unstable) or boxing a trait-object
+forecaster (hot-path allocations), so the module fixes the shape at the Plan
+308 GOAT config and keeps the `delay_k`/`basis_m`/`basis_kind` fields for a
+future multi-forecaster dispatcher. That intent is documented in prose in
+THREE places (module doc, struct doc, field doc) — but none carried the
+deliberate-write-only marker vocabulary, and the class-A arm had no marker
+check at all: only class B (the Issue-030 intake) downgraded on the marker.
+
+Fix (config_audit): `classify` gives class-A rows the same
+`is_deliberate_write_only_marker` arm class B uses, routing marked rows into a
+new `documented_write_only_knobs` bucket rendered as the weak
+`[A·documented-write-only]` annotation (downgrade-not-suppress — the doc's
+claim is not verified; the fix line says wire consumers to the field or drop
+the marker). gpu-uniform keeps precedence when both apply — the
+shader-consumption mechanism is the more specific annotation (precedence
+fixture). The render header gained the count, and the [A]-family row loops
+were extracted to `render_write_only_knob_row`/`render_gpu_uniform_row` to
+hold the `too_many_lines` pedantic gate.
+
+The riir-engine half (their repo, docs-only): `delay_k`/`basis_m`/`basis_kind`
+field docs now carry "deliberate write-only forward surface" wording — the
+auditor's vocabulary for an intent the docs already asserted three times over.
+
+Measured: riir-ai `karc_bridge` 1 [A] → 1 `[A·documented-write-only]`; canaries
+hold (self 0 [A], seal-game-editor WaterParams still 2 gpu-uniform + 0 [A]).
++2 fixtures → lib 1540/1540, clippy `-D warnings` clean. Global binary rebuilt
+with the release feature set and reinstalled.
+
 ## 2026-09-16 — P28: the `[gpu-uniform]` downgrade (config-audit × shader uniform blocks)
 
 The 09-16 seal-game-editor audit triad (first completed `--config-audit` for that repo;
