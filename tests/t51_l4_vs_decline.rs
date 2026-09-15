@@ -106,8 +106,11 @@ const REACHABLE: &[(&str, &str)] = &[
         "pub fn f() { let s = String::from(\"hi\"); let s2 = s.clone(); drop(s2); }",
     ),
     (
-        "vec_init_then_push",
-        "pub fn f() -> Vec<i32> { let mut v = Vec::new(); v.push(1); v.push(2); v }",
+        // Re-picked 2026-09-15: `vec_init_then_push` gained a proposer (the
+        // corpus grew) and the premise assert fired — this fixture's own
+        // loud-drift design working as intended.
+        "iter_kv_map",
+        "pub fn f(m: &std::collections::HashMap<u8, u8>) -> usize { m.iter().map(|(_k, v)| *v as usize).sum() }",
     ),
     (
         "manual_strip",

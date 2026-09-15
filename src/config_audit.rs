@@ -599,9 +599,9 @@ impl FileScope {
     /// in the scanned set, which is LOCAL evidence, not foreign.
     #[must_use]
     pub fn of(file: &syn::File, local_crates: &BTreeSet<String>) -> Self {
-        let mut scope = FileScope {
+        let mut scope = Self {
             local_crates: local_crates.clone(),
-            ..FileScope::default()
+            ..Self::default()
         };
         for item in &file.items {
             match item {
@@ -2481,18 +2481,14 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
             .output()
             .is_ok_and(|o| o.status.success()));
         fs::write(tmp.join(".gitignore"), "ignored/\n*.gen.rs\ntbi.rs\n").unwrap();
-        let walk = read_sources_walk(&[tmp.clone()]);
+        let walk = read_sources_walk(std::slice::from_ref(&tmp));
         assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
-        let joined: String = walk
-            .sources
-            .iter()
-            .map(|(f, _)| format!("\n{f}"))
-            .collect();
-        assert!(joined.contains("tracked.rs"));
-        assert!(joined.contains("wip.rs"), "untracked non-ignored WIP kept");
-        assert!(joined.contains("tbi.rs"), "tracked-but-later-ignored kept");
-        assert!(!joined.contains("ignored/"), "gitignored dir excluded");
-        assert!(!joined.contains("y.gen.rs"), "gitignored glob excluded");
+        let names: Vec<&str> = walk.sources.iter().map(|(f, _)| f.as_str()).collect();
+        assert!(names.iter().any(|f| f.contains("tracked.rs")));
+        assert!(names.iter().any(|f| f.contains("wip.rs")), "untracked non-ignored WIP kept");
+        assert!(names.iter().any(|f| f.contains("tbi.rs")), "tracked-but-later-ignored kept");
+        assert!(names.iter().all(|f| !f.contains("ignored/")), "gitignored dir excluded");
+        assert!(names.iter().all(|f| !f.contains("y.gen.rs")), "gitignored glob excluded");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -2509,11 +2505,11 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
             .output()
             .is_ok_and(|o| o.status.success()));
         fs::write(nested.join("foreign.rs"), "pub fn f() {}").unwrap();
-        let walk = read_sources_walk(&[tmp.clone()]);
+        let walk = read_sources_walk(std::slice::from_ref(&tmp));
         assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
-        let joined: String = walk.sources.iter().map(|(f, _)| format!("\n{f}")).collect();
-        assert!(joined.contains("own.rs"));
-        assert!(!joined.contains("foreign.rs"), "nested repo's files not ours");
+        let names: Vec<&str> = walk.sources.iter().map(|(f, _)| f.as_str()).collect();
+        assert!(names.iter().any(|f| f.contains("own.rs")));
+        assert!(names.iter().all(|f| !f.contains("foreign.rs")), "nested repo's files not ours");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -2525,9 +2521,9 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         fs::write(tmp.join("sub/inner.rs"), "pub fn i() {}").unwrap();
         let walk = read_sources_walk(&[tmp.join("sub")]);
         assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
-        let joined: String = walk.sources.iter().map(|(f, _)| format!("\n{f}")).collect();
-        assert!(joined.contains("inner.rs"));
-        assert!(!joined.contains("top.rs"), "cwd-limited listing, not repo-wide");
+        let names: Vec<&str> = walk.sources.iter().map(|(f, _)| f.as_str()).collect();
+        assert!(names.iter().any(|f| f.contains("inner.rs")));
+        assert!(names.iter().all(|f| !f.contains("top.rs")), "cwd-limited listing, not repo-wide");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -2535,7 +2531,7 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
     fn non_repo_root_falls_back_to_plain_walk() {
         let tmp = tmp_plain("fallback");
         fs::write(tmp.join("a.rs"), "pub fn a() {}").unwrap();
-        let walk = read_sources_walk(&[tmp.clone()]);
+        let walk = read_sources_walk(std::slice::from_ref(&tmp));
         assert_eq!(walk.mode, WalkMode::Plain);
         assert_eq!(walk.sources.len(), 1);
         assert!(walk.sources[0].0.ends_with("a.rs"));

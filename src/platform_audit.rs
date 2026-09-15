@@ -929,6 +929,7 @@ fn flatten_tokens(tokens: &proc_macro2::TokenStream) -> Vec<proc_macro2::TokenTr
             other => out.push(other),
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -1530,8 +1531,8 @@ fn a() -> u32 { constants::POOL }
 
     /// P24 (a), DECL side: a `#![cfg]`-gated file's items are NOT
     /// platform-dead — the whole file compiles away elsewhere, so the
-    /// first workspace sweep's 5 FP rows (the ane_prefill bank/exec/
-    /// exec_zc/headroom shape) must go silent once the file gate folds
+    /// first workspace sweep's 5 FP rows (the `ane_prefill` bank/exec/
+    /// `exec_zc`/headroom shape) must go silent once the file gate folds
     /// into the decl's atoms.
     #[test]
     fn file_gate_shelters_whole_file_decls() {
@@ -1556,7 +1557,7 @@ pub fn ane_stage_dump() -> String {
     /// P24 (a), USE side (the rustc-proven miss): uses inside a
     /// `#![cfg]`-gated file are NOT ungated — an ungated decl in another
     /// file whose every use lives in file-gated modules must flag with
-    /// the FILE's atoms (the note_ane_dispatch specimen).
+    /// the FILE's atoms (the `note_ane_dispatch` specimen).
     #[test]
     fn file_gate_on_use_side_flags_cross_file_row() {
         let report = audit_sources(&[
@@ -1900,7 +1901,7 @@ pub mod wasm;"
         );
     }
 
-    /// P24 (d) (the ane_npc_goat SWEEP_COUNTS specimen): the only
+    /// P24 (d) (the `ane_npc_goat` `SWEEP_COUNTS` specimen): the only
     /// ungated use is an inline `{X:?}` capture inside a format-family
     /// macro — counted, so the gated uses cannot condemn the decl alone.
     #[test]

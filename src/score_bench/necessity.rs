@@ -675,10 +675,10 @@ mod tests {
         crate::score_bench::FixtureOutcome {
             id: id.to_string(),
             ran: true,
-            vocab_before: vocab.iter().map(|s| s.to_string()).collect(),
+            vocab_before: vocab.iter().map(ToString::to_string).collect(),
             all_before: BTreeSet::new(),
             all_after: BTreeSet::new(),
-            vocab_persist: persist.iter().map(|s| s.to_string()).collect(),
+            vocab_persist: persist.iter().map(ToString::to_string).collect(),
             created: BTreeSet::new(),
             edits,
             passes: 1,
@@ -710,8 +710,8 @@ mod tests {
     }
 
     /// The empty (disabled) arm: a disabled rule contributes nothing — on
-    /// a manual_map-ONLY shape (non-identity arm body: needless_match
-    /// refuses it) disabling manual_map leaves the code untouched.
+    /// a `manual_map`-ONLY shape (non-identity arm body: `needless_match`
+    /// refuses it) disabling `manual_map` leaves the code untouched.
     #[test]
     fn disabled_rule_contributes_no_edits() {
         use crate::score_bench::heal_fixpoint_cfg;
@@ -726,9 +726,9 @@ mod tests {
 
     /// The matched-swap arm redirects dispatch OBSERVABLY: BOTH match-rule
     /// slots are disabled (silent) and a bystander rule's slot is swapped
-    /// to the needless_match donor — the identity shape can only heal to
+    /// to the `needless_match` donor — the identity shape can only heal to
     /// `{ x }` THROUGH the swapped slot. If the swap were inert (the slot
-    /// still dispatching redundant_static_lifetimes), no rule would fire
+    /// still dispatching `redundant_static_lifetimes`), no rule would fire
     /// and the match would survive untouched.
     #[test]
     fn swap_redirects_dispatch_to_donor() {

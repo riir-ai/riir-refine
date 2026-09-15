@@ -245,6 +245,26 @@ pub fn hex32_short(bytes: &[u8; 32]) -> String {
     riir_kat::kat_protocol_lease::hex32(bytes)[..16].to_string()
 }
 
+/// Test-only assertion helper (keeps the test bodies on the wire shape).
+#[cfg(test)]
+impl ReplayJudgment {
+    fn to_outcome_matches(&self) -> bool {
+        let ReplayOutcomeWire::Vector {
+            compile_ok,
+            oracle_resolved,
+            heal_rate_milli,
+            created_rate_milli,
+        } = self.to_outcome()
+        else {
+            return false;
+        };
+        compile_ok == self.compile_ok
+            && oracle_resolved == self.oracle_resolved
+            && heal_rate_milli == self.heal_rate_milli
+            && created_rate_milli == self.created_rate_milli
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,25 +430,5 @@ mod tests {
         // And the operator derivation agrees byte-for-byte.
         let out = std::process::Command::new("rustc").arg("-vV").output().unwrap();
         assert_eq!(blake3::hash(&out.stdout).as_bytes(), &a);
-    }
-}
-
-/// Test-only assertion helper (keeps the test bodies on the wire shape).
-#[cfg(test)]
-impl ReplayJudgment {
-    fn to_outcome_matches(&self) -> bool {
-        let ReplayOutcomeWire::Vector {
-            compile_ok,
-            oracle_resolved,
-            heal_rate_milli,
-            created_rate_milli,
-        } = self.to_outcome()
-        else {
-            return false;
-        };
-        compile_ok == self.compile_ok
-            && oracle_resolved == self.oracle_resolved
-            && heal_rate_milli == self.heal_rate_milli
-            && created_rate_milli == self.created_rate_milli
     }
 }

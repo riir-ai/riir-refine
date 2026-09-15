@@ -2041,7 +2041,7 @@ mod tests {
         // all_on short-circuits every feature atom to True.
         let all = FeatureSet {
             all_on: true,
-            names: Default::default(),
+            names: std::collections::HashSet::default(),
         };
         assert_eq!(
             eval_cfg(&expr_of("#[cfg(feature = \"b\")] fn f() {}"), &all),
