@@ -208,6 +208,16 @@ pub use riir_kat::kat_units;
 // consumers reach them through these ungated re-exports.
 pub use riir_kat::{kat_mining_consent, kat_service_urls, kat_soft_gate};
 
+// riir-dapps Proposal 004 Half 1: the work-stats sharing consent — the
+// THIRD consent plane beside mining, deny-by-default (Unset refuses; only
+// OptedIn pushes — the deliberate inverse of kat_mining_consent's Unset).
+// Ungated in-crate (the consent-module rule: writable in every feature
+// build); client-LOCAL state, so not in the riir-kat leaf — the record
+// resolution delegates to kat_mining_consent::default_dir so the account
+// dir cannot drift between planes. Fix-path push half lands with the
+// Proposal 004 Half-2 server route.
+pub mod kat_stats_consent;
+
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
 // gated rows + BLAKE3 batch commitment + the account-key Ed25519 signature

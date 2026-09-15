@@ -742,6 +742,120 @@ fn run_unmine() {
     println!("re-enable any time: cargo heal --mine");
 }
 
+/// riir-dapps Proposal 004 Half 1: the work-stats sharing consent —
+/// `cargo heal --stats [on|off]`, bare = the status readout.
+///
+/// A THIRD consent state beside mining, deny-by-default: unlike mining's
+/// `Unset` ("running sync IS consent"), an Unset stats record pushes
+/// NOTHING, because the trigger surface is `--fix`, which every coder runs —
+/// the bar is deliberately higher. Works in every build; the auto-login
+/// half of `--stats on` needs `kat_service` (it is the only gated line).
+/// The fix-path PUSH half is a later landing (it needs the Proposal 004
+/// Half-2 server route) — recorded consent is inert until then, and the
+/// output says so rather than implying rows are already flowing.
+fn run_stats_consent(on: bool, off: bool) {
+    use riir_clippy::kat_stats_consent::{self, StatsConsent};
+
+    let dir = kat_stats_consent::default_dir();
+    let (before, warning) = kat_stats_consent::read_with_warning(&dir);
+    if let Some(w) = warning {
+        eprintln!("{w}");
+    }
+
+    // Bare `--stats`: the status readout (the pure-read `config` shape) —
+    // the tier, the record path, the mining boundary, and the two writes.
+    let Some(opt_in) = (if on {
+        Some(true)
+    } else if off {
+        Some(false)
+    } else {
+        None
+    }) else {
+        println!("{}", before.status_line());
+        println!("record: {}", kat_stats_consent::consent_path(&dir).display());
+        println!();
+        println!(
+            "mining consent: separate — `--mine`/`--unmine` govern batch contributions; \
+             this record governs work-STATS sharing only"
+        );
+        println!("share: `cargo heal --stats on`    stop: `cargo heal --stats off`");
+        return;
+    };
+
+    if !opt_in {
+        // Opt-OUT: records the refusal so onboarding never re-asks — the
+        // state that distinguishes an explicit NO from never-asked Unset.
+        // Forward-only, like --unmine: future pushes stop; already-shared
+        // epoch aggregates stay public (they are epoch-level numbers, not
+        // per-fix rows).
+        let already = before == StatsConsent::OptedOut;
+        if let Err(e) = kat_stats_consent::write(&dir, false) {
+            eprintln!("stats: could NOT record the opt-out — {e}");
+            eprintln!(
+                "stats: consent is still `{}` — refusing to claim an opt-out that is not on disk",
+                before.label()
+            );
+            std::process::exit(1);
+        }
+        if already {
+            println!("stats: already opted out — record rewritten, nothing changed");
+        } else {
+            println!("stats: recorded — work-stats sharing is opted OUT for this machine");
+        }
+        println!("record: {}", kat_stats_consent::consent_path(&dir).display());
+        println!();
+        println!(
+            "NOTHING is pushed for this lane while opted out, and nothing was ever deleted — \
+             already-shared epoch aggregates stay public (forward-only)."
+        );
+        println!("re-enable any time: cargo heal --stats on");
+        return;
+    }
+
+    // Opt-IN: bind the account first when this build can — stats rows are
+    // ACCOUNT-SIGNED, so consent without an identity would be a record the
+    // push half cannot honour. Local key ops only (the --mine chain;
+    // ensure_logged_in prints its own outcome + summary lines).
+    let already = before == StatsConsent::OptedIn;
+    #[cfg(feature = "kat_service")]
+    if ensure_logged_in().is_none() {
+        eprintln!(
+            "stats: no account — consent recorded, but pushes need `cargo heal login` first"
+        );
+    }
+    #[cfg(not(feature = "kat_service"))]
+    eprintln!(
+        "stats: built without kat_service — consent recorded; `cargo heal login` (a \
+         kat_service build) is needed before any push"
+    );
+
+    if let Err(e) = kat_stats_consent::write(&dir, true) {
+        eprintln!("stats: could NOT record the opt-in — {e}");
+        std::process::exit(1);
+    }
+    if already {
+        println!("stats: already opted in — record rewritten, nothing changed");
+    } else {
+        println!("stats: recorded — work-stats sharing is opted IN for this machine");
+    }
+    println!("record: {}", kat_stats_consent::consent_path(&dir).display());
+    println!();
+    println!(
+        "WHAT future --fix runs share: one tiny signed row each — {{lane, rule_id, count}} \
+         pairs + totals; rule VOCABULARY only."
+    );
+    println!(
+        "NEVER: spans, source text, paths, repo names, direction vectors (those are \
+         mining-only and separately consented)."
+    );
+    println!();
+    println!(
+        "INERT until the Proposal 004 Half-2 server route lands — consent is recorded \
+         now; no row leaves this machine before then."
+    );
+    println!("stop any time: cargo heal --stats off");
+}
+
 /// The destructive half of `--unmine --purge`: remove the local account
 /// identity (key + pub sidecar + record) + the outbox + the watermark.
 ///
@@ -3085,6 +3199,7 @@ USAGE:
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --mine                                 <- what mining is + policy + how to earn KAT
     cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
+    cargo heal --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
     cargo heal --refill [--refill-wait <s>]           <- dev/test faucet refill when out of KAT (Plan 117; kat_transport)
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
@@ -3291,6 +3406,19 @@ USAGE:
                     balance and rewards are UNTOUCHED — fully reversible with
                     --mine. Healing (--fix / --suggest / the bare dry run) is
                     UNCHANGED and was always local.
+    --stats [on|off]
+                    The work-stats sharing consent (riir-dapps Proposal 004;
+                    a THIRD consent state beside mining). `on` records OptedIn:
+                    future --fix runs may push one tiny signed {{lane, rule,
+                    count}} row each — rule VOCABULARY + counts, NEVER spans,
+                    source, paths or repo names. `off` records OptedOut — a
+                    real NO that onboarding never re-asks (forward-only:
+                    already-shared epoch aggregates stay). Bare `--stats` is
+                    the status readout. Default OFF (deny-by-default): unlike
+                    mining (Unset proceeds — running sync IS consent), an
+                    Unset stats record pushes NOTHING, because --fix is
+                    universal. Mining consent is separate (--mine/--unmine);
+                    one does not imply the other. Works in every build.
     --purge         With --unmine ONLY: additionally remove the local account
                     identity (key + record + outbox + watermark). DESTRUCTIVE:
                     the identity IS the key — the server-side balance and
@@ -3410,6 +3538,20 @@ struct Args {
     /// return, works in every feature build. Mutually exclusive with
     /// `--mine`.
     unmine: bool,
+    /// `--stats` — the work-stats sharing consent (riir-dapps Proposal 004
+    /// Half 1). Standalone consent mode beside `--mine`/`--unmine`: bare
+    /// `--stats` is the status readout, `--stats on` records OptedIn, `--stats
+    /// off` records OptedOut. Deny-by-default: `Unset` pushes NOTHING (the
+    /// deliberate inverse of mining's "running sync IS consent" — the
+    /// trigger surface is `--fix`, which every coder runs). The value is
+    /// OPTIONAL by design: a peek-arm consumes only `on`/`off` and leaves
+    /// any other token to the path arm, so the parser needs no
+    /// optional-value precedent beyond this arm.
+    stats_flag: bool,
+    /// `--stats on` was seen.
+    stats_on: bool,
+    /// `--stats off` was seen.
+    stats_off: bool,
     /// `--purge` — with `--unmine` ONLY (Plan 020 review verdict: purging
     /// the identity ORPHANS the server-side balance forever — there is no
     /// recovery path — and a purge + re-login cycle is the fresh-grant farm
@@ -3654,6 +3796,9 @@ fn parse_args() -> Args {
         suggest: false,
         fix: false,
         mine: false,
+        stats_flag: false,
+        stats_on: false,
+        stats_off: false,
         version: false,
         yes: false,
         unmine: false,
@@ -3729,7 +3874,7 @@ fn parse_args() -> Args {
     if raw.first().is_some_and(|first| first == "heal") {
         raw.remove(0);
     }
-    let mut it = raw.into_iter();
+    let mut it = raw.into_iter().peekable();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--suggest" => args.suggest = true,
@@ -3744,6 +3889,28 @@ fn parse_args() -> Args {
             "--write" => args.write = true,
             "--mine" => args.mine = true,
             "--unmine" => args.unmine = true,
+            // Proposal 004 Half 1: the work-stats consent flag. OPTIONAL-value
+            // by peek (the parse loop has no other optional-value arm — every
+            // value arm consumes `it.next()` unconditionally and bare words
+            // fall through to the path arm): consume ONLY `on`/`off`, leave
+            // anything else (a scan path, another flag) for the arms below.
+            // Bare `--stats` is the status readout; the ambiguity guard in the
+            // post-parse section rejects `--stats <path>` so a path can never
+            // silently double as a missing value.
+            "--stats" => {
+                args.stats_flag = true;
+                match it.peek().map(String::as_str) {
+                    Some("on") => {
+                        it.next();
+                        args.stats_on = true;
+                    }
+                    Some("off") => {
+                        it.next();
+                        args.stats_off = true;
+                    }
+                    _ => {}
+                }
+            }
             "--version" | "-V" => args.version = true,
             // ONE global `--yes`: non-interactive consent for every y/N prompt
             // AND the vote arm it used to serve exclusively (the later
@@ -4034,6 +4201,31 @@ fn parse_args() -> Args {
         );
         usage();
     }
+    // Proposal 004 Half 1: `--stats` consent guards. (a) on/off are opposite
+    // writes to one record — no defensible resolution, exit 2 (the
+    // --mine/--unmine conflict code). (b) bare `--stats` followed by a path
+    // is ambiguous — the peek-arm deliberately did NOT eat the token, so
+    // reject rather than let a scan path double as a missing value. (c)
+    // standalone beside the other consent modes: reject a --mine/--unmine
+    // combo instead of silently skipping one of them.
+    if riir_clippy::kat_stats_consent::flags_conflict(args.stats_on, args.stats_off) {
+        eprintln!("{}", riir_clippy::kat_stats_consent::CONFLICT_MESSAGE);
+        std::process::exit(2);
+    }
+    if args.stats_flag && !args.stats_on && !args.stats_off && !args.paths.is_empty() {
+        eprintln!(
+            "--stats followed by paths is ambiguous — use `--stats on` or `--stats off` to \
+             record consent, or bare `--stats` (no paths) for the status readout"
+        );
+        usage();
+    }
+    if args.stats_flag && (args.mine || args.unmine) {
+        eprintln!(
+            "--stats is a standalone consent mode — run it without --mine/--unmine \
+             (the two consent planes are independent by design)"
+        );
+        usage();
+    }
     if args.refill_wait != 0 && !args.refill {
         eprintln!("--refill-wait requires --refill (it bounds the refill's settle poll)");
         usage();
@@ -4153,6 +4345,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.memory_stats
         || args.mine
         || args.unmine
+        || args.stats_flag
         || args.version
         || args.misses
         || args.misses_report
@@ -6327,6 +6520,19 @@ fn main() {
         if args.purge {
             run_unmine_purge();
         }
+        return;
+    }
+
+    // ── riir-dapps Proposal 004 Half 1: --stats — the work-stats consent ──
+    // Standalone consent mode beside --mine/--unmine (early return; the
+    // parse guards already rejected on+off, `--stats <path>` ambiguity, and
+    // the --mine/--unmine combo). Works in EVERY build — the consent record
+    // is ungated (the kat_mining_consent precedent); only the auto-login
+    // half of `--stats on` needs kat_service. The fix-path PUSH half is a
+    // later landing (it needs the server route) — recorded consent is
+    // inert until then, and says so.
+    if args.stats_flag {
+        run_stats_consent(args.stats_on, args.stats_off);
         return;
     }
 
