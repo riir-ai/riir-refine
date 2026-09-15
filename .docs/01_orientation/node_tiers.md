@@ -97,24 +97,30 @@ vessel/stake/endorsement machinery maturing. Say "our trainers" until then.
 | "consensus nolimit / lite consensus 100%" | Consensus participation is staked + all-or-nothing per record; a lite node **witnesses/verifies roots** (vote 0), it never confirms | riir-ai `node_tiers.md` System 2/3 |
 | "fix nolimit" | Meter + USD cap + rate limits bind every tier; the never-wrong verify contract holds everywhere | P005 window gates; `llm_spend.rs` |
 
-## Consumer mirror (ai.gist.rs) — SHIPPED on devnet 2026-09-14 (worker `c3c792b1`)
+## Consumer mirror (ai.gist.rs) — SHIPPED on devnet 2026-09-14 (worker `c3c792b1`); on the FRONT page since 2026-09-15 (riir-dapps `0553a7f`, live on all three envs)
 
-The chooser rides the leaderboard page (the www-host `GET /` + `/leaderboard`
-renderer — one page, both URLs): the four-tab section (radio-CSS, no JS)
-with per-tier install + incentive + honest status, a **tier chip on every
-contributor row** (every mining account today IS the Pro class), and the
-**operator-lanes strip** (drain/fixer *live — ours, settles through miner
-rows* · trainer *designed* · replay *designed, P015*). Capabilities-only
-copy per the P013 law: no earnings promise beyond what settles (Max's
-replay lane states "does not settle yet"; Ultra names "ours only"), no
-consumer-fixer advertising. The machine JSON stays the PINNED shape
-(HTML-only, test-pinned). The public dist README
-(`gist-rs/cargo-heal`) carries the same table, source-free per Proposal 003
-(still pending). Deploy note: the first widening against a LIVE deployment
-shipped with it — the 176→180 config-row append now MIGRATES in place
-(segment-checked: shared prefix + appended field at default + feature
-blocks unchanged; anything else stays the loud mismatch) instead of
-500ing the ledger DO (riir-dapps `373b754`).
+The mirror began as a leaderboard-page chooser (radio-CSS, no JS, per-tier
+install + incentive + honest status, a **tier chip on every contributor
+row**, the **operator-lanes strip**) and moved one day later to the FRONT
+page, where it belongs: a **node tiers × roles cross-matrix card** (coder /
+miner / fixer / trainer × lite / pro / max / ultra) above a **role-tabbed
+Get started** card (coder default; miner = the `--mine` join; fixer +
+trainer = operator-lane status, no install). The leaderboard renders
+leader stats only now — one pointer line to the front page, no install
+commands, JSON shape untouched. Capabilities-only copy per the P013 law:
+no earnings promise beyond what settles (the matrix's only earn cell is
+miner × pro; Max's replay lane says "designed (P015) — does not settle
+yet"; Ultra names "ours only at launch"), no consumer-fixer advertising.
+The public dist README (`gist-rs/cargo-heal`) carries the same roles ×
+tiers table, source-free per Proposal 003 — shipped 2026-09-15 (cargo-heal
+`62a435f`), which also repaired the README's per-token burn-unit figure
+(the shipped meter charges `CHARGE_KAT_PER_MILLION_TOKENS` = 1 KAT per
+MILLION code-word tokens) and its next-release mining staleness (`--mine`
+joins today; sync ships). Deploy note: the first widening against a LIVE
+deployment shipped with the 09-14 chooser — the 176→180 config-row append
+now MIGRATES in place (segment-checked: shared prefix + appended field at
+default + feature blocks unchanged; anything else stays the loud mismatch)
+instead of 500ing the ledger DO (riir-dapps `373b754`).
 
 **Game-launch reuse:** when the game ships its node choice, this same
 artifact shape (preset table over role/identity/hardware axes + honest status

@@ -1,6 +1,6 @@
 # Proposal 013 — Consumer-facing install tier spec (Ultra / Max / Pro / Lite)
 
-Status: **shipped Phase 1 (spec doc + corrections ledger, `c246e61f`, 2026-09-12); Phase 2 T2.1 SHIPPED on devnet 2026-09-14 (the chooser on the leaderboard page — four tabs + per-row tier chips + operator-lanes strip, worker `c3c792b1`; T2.2 public README pending); Phase 3 replay reward class designed — [Proposal 015](015_replay_endorsement_reward_class.md)**, Phase-1 library slice landed (riir-dapps `00b6583`); Phase 4 game-launch)
+Status: **shipped Phase 1 (spec doc + corrections ledger, `c246e61f`, 2026-09-12); Phase 2 COMPLETE 2026-09-15 (T2.1 the ai.gist.rs chooser — moved 2026-09-15 to the FRONT page as the tiers matrix + role-tabbed Get started, riir-dapps `0553a7f`, leaderboard stats-only, live on all three envs; T2.2 the public README tier section, cargo-heal `62a435f`); Phase 3 replay reward class designed — [Proposal 015](015_replay_endorsement_reward_class.md)**, Phase-1 library slice landed (riir-dapps `00b6583`); Phase 4 game-launch)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 005 §"Node-tier additions" × riir-ai `node_tiers.md` (the 4-system topology map) × `l4_fallback.md` §5 (the serving-lane decision) × Issue 051 `LlmRouter` (the groq-first API lane)
@@ -157,8 +157,8 @@ advertises them** — same law as "do not market LLM fixing".
 - [x] T1.3 index line in `.docs/01_orientation/README.md`
 
 ### Phase 2 — the consumer mirror (gated)
-- [x] T2.1 ai.gist.rs chooser page (dapps `9694677`+`373b754`, live on devnet `c3c792b1` 2026-09-14 — the owner's ask unblocked it; capabilities-only copy honored)
-- [ ] T2.2 gist-rs/cargo-heal README tier section (source-free)
+- [x] T2.1 ai.gist.rs chooser page (dapps `9694677`+`373b754`, live on devnet `c3c792b1` 2026-09-14 — the owner's ask unblocked it; capabilities-only copy honored; moved to the FRONT page 2026-09-15 as the tiers × roles matrix above a role-tabbed Get started, riir-dapps `0553a7f` — the leaderboard is stats-only now, live on all three envs)
+- [x] T2.2 gist-rs/cargo-heal README tier section (source-free; cargo-heal `62a435f` 2026-09-15 — the roles × tiers matrix, capabilities-only; also fixed the README's per-token burn unit + next-release mining staleness the section would have contradicted)
 
 ### Phase 3 — mechanisms the table honestly lacks
 - [ ] T3.1 replay endorsement reward class (design + ledger + G7 sim) — **design filed: [Proposal 015](015_replay_endorsement_reward_class.md)** (2026-09-14); ledger + sim = P015 Phases 1/3
