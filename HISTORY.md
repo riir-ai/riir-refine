@@ -84,6 +84,15 @@ normalisation removed, 3 with the keyed names removed.
 compiles them to NOTHING — `-- prepare_crate` printed `running 0 tests` with a
 green exit. Any gate row covering this code must name the features.
 
+Landed at `9443ef1a`; the fleet-binary follow-up closed the same morning on the
+M3: the global binary rebuilt from `3cfa4faf` with the release set (the fix was
+4 commits ahead of the installed binary), and the AGENTS.md global-binary
+bullet's `fix_verify,clippy_verify` wording corrected at `78c3c42f` — that set
+could not build the cargo-heal bin at all (`required-features =
+latent_retrieval,rust_perf,clippy_lints,kat_service`), so the symlink silently
+keeps resolving to whatever binary was already there. Issue files removed per
+the noise-reduction rule.
+
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
 
 The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`
