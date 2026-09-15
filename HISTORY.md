@@ -8,6 +8,52 @@
 > numbers are never reused, and historical citations to them name findings,
 > so they remain valid.
 
+## 2026-09-15 — Intake class P23: the `useless_format` escape guard on the oracle lane (clippy's own suggestion, refused where it is wrong)
+
+The 09-14 intake row recorded a divergence class with a HALF-STALE premise:
+it claimed "no `useless_format` fix-space" exists, but the Issue-016
+expansion had shipped one long since — the PROPOSER refuses any brace in the
+literal (its own v1 guard, `useless_format.rs:113`), which is exactly the
+class the row wanted covered. What the row's claim WAS right about, without
+naming it, is the door the fix actually needed: the P21 oracle lane consumes
+clippy's own MachineApplicable suggestion children VERBATIM for every lint
+in `FIXABLE_LINTS` — and `useless_format` is in that set. On an
+escape-carrying literal, clippy's suggestion reuses the ESCAPED literal
+text in a `.to_string()` position: `format!("{{x}}")` produces `{x}`, but
+`"{{x}}".to_string()` produces `{{x}}` — the behavior change that corrupted
+a JSON fixture from 1 parsed row to 0 in the original incident.
+
+**The fix** (`src/draft/clippy_feed.rs`, `oracle_edits`): a `useless_format`
+diagnostic whose covered call text contains ANY brace is dropped before the
+candidate push. Sound by construction — any brace in a compiling no-args
+`format!` literal is an escape (a lone brace would not compile), so
+brace-present ⇔ the escape class; the drop is conservative in the only
+direction that matters (a dropped edit, never a wrong one). It mirrors the
+proposer's generation-time guard at the oracle door — the two paths now
+agree on the shape. Documented divergence: the single-arg `{}`
+`to_string()`-arg shape rides the same refusal when it reaches the oracle
+lane (its `{}` placeholder trips the brace check); in practice the proposer
+fires on that shape first and the bin's proposer-wins-on-overlap rule
+handles it — the oracle lane only sees proposer-refused spans.
+
+**Gates:** 2 new fixtures (`oracle_edits_refuse_useless_format_brace_escapes`
++ the brace-free control `oracle_edits_consume_useless_format_brace_free`);
+clippy_feed 20/20; latent lib 1665 passed + 1 ignored; default lib 1515/1515
+(unchanged — the module is `latent_retrieval`-gated); clippy
+`-D warnings` clean at the touched surface; score-bench FLAT
+(96.2% / 1.9% / 64 edits, row #116 — the guard is not on the bench path).
+
+**Intake hygiene in the same commit:** the 6 stale opponent-watch rows
+(09-07/08/10/12/13/13#2) flipped `[ ]`→`[x]` — completed records whose
+open checkboxes were misrepresenting the live queue and costing re-triage
+(the consuming session re-read all six this cycle); the 09-09 DISTILL
+VERDICT row closed with a verified residue note (the `install.ps1`
+asset-name half is FIXED at gist-rs/cargo-heal main HEAD — the probe accepts
+both msvc and gnu asset names, verified by remote read; the `heal.gist.rs`
+DNS half superseded by the v0.1.4 default-URL flip + fallback chain). The 4
+open P14 rows stand (the (j)(k) tooling classes + the kernel mining leads —
+real candidates, homes blocked or batch-gated).
+
 ## Issue 107 T2 — the span-shape embedding column lands (write-time capture) + the embed arm (`src/span_embed.rs`)
 
 The revival-path column T1 named as the lane's only hope: every fixseq ring

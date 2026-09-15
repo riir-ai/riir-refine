@@ -43,7 +43,9 @@
 //! our type-blind proposer refuses (E0599-unsafe) but clippy's suggestion
 //! is type-aware and exact. Lints outside the fix lane's set are never
 //! consumed — the healer stays a corpus-rule engine, not a generic
-//! `cargo clippy --fix` re-run.
+//! `cargo clippy --fix` re-run. The ONE lint whose suggestion clippy itself
+//! gets wrong on a live shape is guarded: `useless_format` on an
+//! escape-carrying literal (P23) — see the refusal list on [`oracle_edits`].
 
 /// One real clippy finding, reduced to what anchoring needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -283,6 +285,14 @@ pub struct OracleLane {
 /// - lint outside `lane_lints` — the corpus-gap class stays the suggest
 ///   lane's `[no corpus rule]` signal; the healer never becomes a generic
 ///   `cargo clippy --fix` re-run;
+/// - the P23 `useless_format` escape guard — a brace anywhere in the
+///   covered call text means the literal carries `{{`/`}}` escapes (a lone
+///   brace would not compile), and clippy's own `.to_string()` suggestion
+///   reuses the ESCAPED literal verbatim, freezing the doubled form
+///   (`format!("{{x}}")` produces `{x}`; `"{{x}}".to_string()` produces
+///   `{{x}}`) — the exact class the intake recorded after it corrupted a
+///   JSON fixture. Mirrors the proposer's v1 brace-abort; the manual fix
+///   unescapes, never consumes verbatim;
 /// - merged range out of bounds / off a char boundary (a stale feed);
 /// - oracle-vs-oracle overlap (leftmost wins);
 /// - the parse-gate refusal (drops the file's whole oracle set).
@@ -306,7 +316,27 @@ pub fn oracle_edits(
             continue;
         };
         match merged_suggestion_edit(sug, src) {
-            Some(edit) => candidates.push((edit.start, edit.end, edit.replacement, d.lint.clone())),
+            Some(edit) => {
+                // P23: refuse `useless_format` on escape-carrying literals.
+                // Any brace in a compiling no-args format! literal is an
+                // escape (`{{`/`}}` — a lone brace would not compile), and
+                // clippy's suggestion reuses the escaped literal verbatim,
+                // so consuming it freezes the doubled form — a behavior
+                // change on exactly the class the intake recorded (a JSON
+                // fixture corrupted 1 row -> 0). The proposer's own v1
+                // guard refuses the same shape at generation time; this is
+                // the oracle-door mirror. Conservative by construction:
+                // drops the edit, never produces a wrong one.
+                if d.lint == "useless_format"
+                    && src
+                        .get(edit.start..edit.end)
+                        .is_some_and(|cov| cov.contains(['{', '}']))
+                {
+                    dropped += 1;
+                    continue;
+                }
+                candidates.push((edit.start, edit.end, edit.replacement, d.lint.clone()));
+            }
             None => dropped += 1, // stale offsets / misaligned boundaries
         }
     }
@@ -700,6 +730,65 @@ mod tests {
         assert_eq!(lane.edits.len(), 1, "leftmost wins");
         assert_eq!(lane.edits[0].edit.start, off);
         assert_eq!(lane.dropped, 1);
+    }
+
+    // ── P23: the `useless_format` escape guard — clippy's own suggestion
+    // is WRONG on escape-carrying literals (it reuses the escaped literal
+    // verbatim in a `.to_string()` position, freezing the doubled braces
+    // the macro would have processed). The oracle lane must refuse.
+
+    #[test]
+    fn oracle_edits_refuse_useless_format_brace_escapes() {
+        // `format!("{{x}}")` produces "{x}" — the literal carries escapes.
+        let src = "fn f() -> String {\n    format!(\"{{x}}\")\n}\n".to_string();
+        let off = src.find("format!").expect("fixture has the site");
+        let covered = "format!(\"{{x}}\")"; // 17 bytes, brace-carrying
+        // clippy's own (wrong) suggestion: the escaped literal verbatim.
+        let feed = vec![ClippyDiagnostic {
+            file: "src/lib.rs".to_string(),
+            line: 2,
+            lint: "useless_format".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(
+                    off,
+                    off + covered.len(),
+                    "\"{{x}}\".to_string()".to_string(),
+                )],
+            }),
+        }];
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["useless_format"]);
+        assert!(lane.edits.is_empty(), "escape class must refuse");
+        assert_eq!(lane.dropped, 1, "the refusal counts the candidate");
+    }
+
+    #[test]
+    fn oracle_edits_consume_useless_format_brace_free() {
+        // Control: brace-free literal — the suggestion is exact and the
+        // lane consumes it (the guard must not over-refuse the clean shape).
+        let src = "fn f() -> String {\n    format!(\"plain\")\n}\n".to_string();
+        let off = src.find("format!").expect("fixture has the site");
+        let covered = "format!(\"plain\")"; // 16 bytes, brace-free
+        let feed = vec![ClippyDiagnostic {
+            file: "src/lib.rs".to_string(),
+            line: 2,
+            lint: "useless_format".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(
+                    off,
+                    off + covered.len(),
+                    "\"plain\".to_string()".to_string(),
+                )],
+            }),
+        }];
+        let lane = oracle_edits(&feed, "src/lib.rs", &src, &["useless_format"]);
+        assert_eq!(lane.dropped, 0);
+        assert_eq!(lane.edits.len(), 1, "clean shape still consumes");
+        let patched = splice_sorted(&src, std::slice::from_ref(&lane.edits[0].edit));
+        assert!(
+            patched.contains("\"plain\".to_string()"),
+            "terminal form wrong: {patched}"
+        );
+        syn::parse_file(&patched).expect("parses");
     }
 
     #[test]
