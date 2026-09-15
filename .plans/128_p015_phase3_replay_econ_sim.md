@@ -9,8 +9,15 @@ ledger math it consumes). T3 measured (0.17 s/item cold, M3). The verdict:
 this finding) and the canary ladder (per-lease filtering weak; 10% is the
 only arm passing the zero-work tolerance at every share). G2's second
 clause FIRED and is re-worded to the ≤5% zero-work-capture tolerance —
-owner ratifies the re-wording WITH the cut. Remaining: T3.2 (the owner's
-ratification itself) + T3.3.
+owner ratifies the re-wording WITH the cut. **RATIFIED 2026-09-15 under
+owner delegation** ("make best decision for prod grade"): `replay_cut_bp`
+**STAYS 0** — the recording lane is live and free; paying at the current
+pool (~$3e-6/item) buys no economic behavior and the §T5 monitoring
+counters are unbuilt. The G2 re-wording is RATIFIED as the standing gate.
+Arming preconditions for any future flip (pool scale ≈10⁵×, 10% canary,
+monitoring counters, cut ≥ 2 223 bp) are recorded in dapps `.issues/091`.
+The tier-spec Max row flip is NOT OWED at cut 0 (the lane does not settle;
+the row's wording stays true). PLAN COMPLETE — nothing remains.
 
 Upstream design: [Proposal 015](../.proposals/015_replay_endorsement_reward_class.md)
 (§"G7-style econ arm"). Phase 1: dapps `kat` ledger plane + the
