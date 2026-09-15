@@ -61,6 +61,10 @@
 
 - Plan-first per batch (Protocol A step 0): `.plans/NNN` via `.plans/.highwater`,
   re-scan the folder at WRITE time (dual-allocation discipline).
+- **Authoring discipline (Issue 102 T5): read [.docs/02_corpus/authoring_discipline.md](../.docs/02_corpus/authoring_discipline.md)
+  at mining time** — route → dedup-grep (name variants) → probe-first → decision
+  content → bounded fix-space → tier → fixpoint safety → GOAT. Append new
+  authoring lessons there in the same commit.
 - Per batch, ONE commit: research note (with a `**Status:**` line) + AGENTS.md batch
   entry + corpus-count bump + this snapshot's one-line queue update.
 - Generator lessons (edit_file escape-stripping, `ensure_ascii=False`, line-initial

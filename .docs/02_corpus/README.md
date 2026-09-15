@@ -9,7 +9,8 @@
 | File | Scope |
 |---|---|
 | [`clippy_corpus.md`](clippy_corpus.md) | `ClippyCorpus` + `ClippyFixEntry` + BLAKE3 commitment + freeze/thaw |
-| [`seed_corpus.md`](seed_corpus.md) | `build_seed_corpus()` — the 10 built-in lint examples |
+| [`seed_corpus.md`](seed_corpus.md) | `build_seed_corpus()` — the built-in lint examples, with their killed/refuted leads |
+| [`authoring_discipline.md`](authoring_discipline.md) | the meta-rule — how rules get authored (Issue 102 T5; consulted at mining time) |
 
 ## Source
 

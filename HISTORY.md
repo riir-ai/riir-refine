@@ -1,5 +1,23 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 102 T5: the corpus authoring meta-rule guide (Library Drift's meta-skill, formalized)
+
+`.docs/02_corpus/authoring_discipline.md` — the explicit meta-rule guide consulted at
+mining time: route-before-propose, vocabulary-translation dedup grep, probe-first,
+decision-content, bounded fix-space + single-anti-pattern invariant, honest tiering
+(FIX/VERIFY/SUGGEST + the SAFER-than-clippy divergence pattern), fixpoint safety and
+the closure-birth pricing, the per-batch GOAT + count-pin walks, provenance/`.raw`
+discipline + never-inject, the append-only lifecycle law, the distinct-from-neighbor
+row requirement, and the meta-recursion (new authoring lessons append here in the
+same commit). Nothing new is policy — every rule cites the practice it formalizes
+(Protocol A, the distill skill, seed_corpus's killed/refuted leads, the P13/P23
+records), and the worked-examples table keeps the six instructive refusals readable
+in one place. Wiring: the `.distill/001` standing-rules section now points at it
+(the file the idle loop reads at session start) — SKILL.md deliberately left
+un-grown at 19 KB; the 02_corpus README indexes the file. Issue 102's T1–T4 stay
+accumulation-gated (the fade report's ≥3-generation clock); T5 was the one un-gated
+task and it is now `[x]` in the issue file.
+
 ## Issue 107 CLOSED 2026-09-15 — NEGATIVE on evidence; T3–T6 closed UNBUILT (record; file removed per the noise-reduction rule)
 
 The probe-gated fix-verification lane (compose an outcome-fit probe × the `fix_verify`
