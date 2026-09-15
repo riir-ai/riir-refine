@@ -935,6 +935,11 @@ fn run_kat_login(import_key: Option<&Path>) {
 /// service prints "no claim is made" and the local view, never a health
 /// claim (`kat_account_client::WelcomeGate` is three-state for exactly
 /// this reason).
+///
+/// `--history` (dapps Issue 092 Phase 1) prefers the fuller `GET /history`
+/// view — position + burn watermark + contribution fact + mint receipts —
+/// falling back to the `/balance` rendering when that route does not
+/// answer, and to the local projection when the service is unreadable.
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     use riir_clippy::kat_account::{history_lines, KatAccount};
@@ -1017,7 +1022,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // prints an honest "no claim is made" line and falls back to the local
     // view; it never renders as healthy, and never as out-of-sync either.
     #[cfg(feature = "kat_transport")]
-    let served = {
+    let (served, history_acct) = {
         use riir_clippy::kat_account_client as svc;
         match svc::service_account_hex(&account.state().account_id) {
             // The 64-hex local id truncates to the ledger's 32-hex
@@ -1026,7 +1031,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 eprintln!(
                     "kat account: the local account id is not the 64-hex derivation — skipping the service reads"
                 );
-                None
+                (None, None)
             }
             Some(acct) => {
                 let url = riir_clippy::kat_lease_client::service_url_for_command();
@@ -1049,7 +1054,10 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 // NOTHING when the grant is in place), signed with the
                 // account key, idempotent on replay; a failure is printed
                 // and never blocks the local view.
-                match account.signing_key() {
+                // The balance tail, unified so every exit carries the
+                // same tuple; `acct` is the /history query (`--history`,
+                // dapps Issue 092).
+                let balance = match account.signing_key() {
                     Ok(key) => {
                         let payreq =
                             riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
@@ -1089,20 +1097,54 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                         println!("grant:  not claimed — the account key is unusable ({e})");
                         view.balance
                     }
-                }
+                };
+                (balance, Some(acct.to_string()))
             }
         }
     };
     // No transport compiled: the local heuristic is all this build has.
+    // (`history_acct` is read only by the transport arm of `--history`
+    // below, hence the cfg'd allow.)
+    #[cfg_attr(not(feature = "kat_transport"), allow(unused_variables))]
     #[cfg(not(feature = "kat_transport"))]
-    let served: Option<riir_clippy::kat_account_client::ServiceBalance> = {
+    let (served, history_acct): (Option<riir_clippy::kat_account_client::ServiceBalance>, Option<String>) = {
         if spent == 0 {
             println!("{}", riir_clippy::kat_account::welcome_line());
         }
-        None
+        (None, None)
     };
 
     if show_history {
+        // dapps Issue 092: prefer the /history route — position + burn
+        // watermark + contribution fact + mint receipts. The read rides
+        // AFTER the probe, so an offline `--history` run pays one extra
+        // bounded timeout before the fallbacks below. A 404 / unreadable
+        // route degrades to the `/balance` rendering (the trait's default
+        // is an honest 404), never to a fabricated page.
+        #[cfg(feature = "kat_transport")]
+        if let Some(acct) = history_acct.as_deref() {
+            use riir_clippy::kat_account_client::AccountTransport;
+            use riir_clippy::kat_lease_client::HttpResponse;
+            let url = riir_clippy::kat_lease_client::service_url_for_command();
+            let transport = riir_clippy::kat_account_client::HttpAccountTransport::new(&url, 5);
+            let lines = match transport.get_history(acct, 20) {
+                HttpResponse::Ok(body) => riir_clippy::kat_account_client::parse_history(&body)
+                    .ok()
+                    .map(|h| {
+                        riir_clippy::kat_account_client::account_history_lines(&h, spent, tokens)
+                    }),
+                _ => None,
+            };
+            if let Some(lines) = lines {
+                for line in lines {
+                    println!("{line}");
+                }
+                return;
+            }
+            eprintln!(
+                "kat account: the /history route did not answer — the /balance view follows"
+            );
+        }
         match &served {
             Some(balance) => {
                 for line in
