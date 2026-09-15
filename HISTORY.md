@@ -93,6 +93,34 @@ latent_retrieval,rust_perf,clippy_lints,kat_service`), so the symlink silently
 keeps resolving to whatever binary was already there. Issue files removed per
 the noise-reduction rule.
 
+⛔ **Its one ⛔UNDETERMINED item was answered the same day, and the sentence
+that recorded it was too strong** (Issue 112 Half A). It read *"nothing
+recorded the environment, so this cannot be answered from the artifacts."*
+Nothing recorded the ENVIRONMENT — but two of the three sites emit a quantity
+a replay necessarily DESTROYS, and it is in the committed rows. The question
+was never "what does the provenance field say"; it was "is there anything in
+the output a replay could not have produced."
+
+- `ClippyVerifier`: `control_fires` (the Bench 039 scaffold, built for an
+  unrelated reason) is a per-CASE positive control, and a contaminated
+  multi-case run drives it to ~1 — every `verify()` after the first replays
+  the first's diagnostics, so from case 2 on it asks whether case 1's module
+  trips case *k*'s lint. All **8** rows of `fixer_quality_history.jsonl` sit
+  at `n` or `n − 1`, the shortfall reproducing at the same count across two
+  different models, which is a per-SAMPLE property rather than a run one.
+- `PerfBenchValidator`: a replay times ONE binary for every rule, so the
+  numbers would coincide. Bench 013 — the GOAT that promoted `rust_perf` to
+  default-on, and so the highest-stakes row in the repo — has **31 of 31**
+  numeric speedup profiles distinct; the only repeated profile is the empty
+  one shared by its 8 `NotBenchable` rows.
+- `PerfVerifier`: no shipped artifact was ever produced by it. Its only
+  appearance across `.benchmarks/`, `.docs/` and `.plans/` is Bench 019's G3
+  row recording that the feature *type-checks*.
+
+What stays open is riir-train's `data/` miss-shape corpus (its Issue 555) and
+any uncommitted local `--verify` run, which left no artifact and is
+unadjudicable by construction.
+
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
 
 The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`

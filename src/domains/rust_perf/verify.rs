@@ -33,6 +33,7 @@
 //! `cargo test` is a deterministic runner — no ML, no training. This satisfies
 //! the modelless-first mandate for Phase 2.
 
+use crate::domains::probe_witness;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -160,8 +161,8 @@ impl PerfVerifier {
     #[must_use]
     pub fn verify(&self, code: &str, _rule_id: &str) -> PerfVerifyResult {
         // Create the temp crate scaffold.
-        let crate_dir = match self.prepare_crate(code) {
-            Ok(dir) => dir,
+        let (crate_dir, source_changed) = match self.prepare_crate(code) {
+            Ok(pair) => pair,
             Err(e) => {
                 return PerfVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
             }
@@ -176,6 +177,15 @@ impl PerfVerifier {
             Ok((s, ok)) => (s, ok),
             Err(e) => return PerfVerifyResult::did_not_run(e),
         };
+
+        // ⛔ Issue 112: did cargo compile the source we just wrote? The
+        // collision's signature here is `exit_ok` with zero compile errors
+        // for a crate that was never built — indistinguishable, from the
+        // counts alone, from a clean run. Refuse rather than score it.
+        let witness = probe_witness::witness_cargo_json(&stdout, source_changed);
+        if !witness.trustworthy() {
+            return PerfVerifyResult::did_not_run(witness.reason());
+        }
 
         // Parse JSON output for test pass/fail counts + compiler errors.
         let (passed, failed) = parse_test_results(&stdout);
@@ -202,9 +212,11 @@ impl PerfVerifier {
 
     /// Prepare a temp crate with the given code as `src/lib.rs`.
     ///
-    /// Returns the path to the crate root. Uses a BLAKE3-keyed stable dir
-    /// so cargo reuses build cache on repeat calls with the same code.
-    fn prepare_crate(&self, code: &str) -> Result<PathBuf, String> {
+    /// Returns the crate root and whether `src/lib.rs` **changed** on this
+    /// call. Uses a BLAKE3-keyed stable dir so cargo reuses build cache on
+    /// repeat calls with the same code — the change flag is what separates
+    /// that intended cache hit from an Issue 110 replay (Issue 112).
+    fn prepare_crate(&self, code: &str) -> Result<(PathBuf, bool), String> {
         // BLAKE3-hash the code for a stable, unique dir name.
         let hash = blake3::hash(code.as_bytes());
         let hex = hash.to_hex();
@@ -231,11 +243,11 @@ impl PerfVerifier {
         std::fs::write(dir.join("Cargo.toml"), cargo_toml)
             .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
 
-        // Write src/lib.rs (the code being verified).
-        std::fs::write(src_dir.join("lib.rs"), code)
-            .map_err(|e| format!("write lib.rs failed: {e}"))?;
+        // Write src/lib.rs (the code being verified). Read-before-write so
+        // an unchanged repeat leaves the mtime alone.
+        let source_changed = probe_witness::write_probe_source(&src_dir.join("lib.rs"), code)?;
 
-        Ok(dir)
+        Ok((dir, source_changed))
     }
 
     /// Run `cargo test --message-format=json` on the temp crate.
@@ -476,7 +488,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
         let code = "pub fn add(a: i32, b: i32) -> i32 { a + b }";
-        let dir = v.prepare_crate(code).unwrap();
+        let (dir, changed) = v.prepare_crate(code).unwrap();
+        assert!(
+            changed,
+            "a probe dir that did not exist reports its source changed"
+        );
 
         assert!(dir.join("Cargo.toml").exists());
         assert!(dir.join("src/lib.rs").exists());
@@ -497,9 +513,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
         let code = "pub fn id(x: i32) -> i32 { x }";
-        let dir1 = v.prepare_crate(code).unwrap();
-        let dir2 = v.prepare_crate(code).unwrap();
+        let (dir1, changed1) = v.prepare_crate(code).unwrap();
+        let (dir2, changed2) = v.prepare_crate(code).unwrap();
         assert_eq!(dir1, dir2, "same code should hash to same dir");
+        // ⛔ Issue 112: the repeat must report UNCHANGED. That is what makes
+        // cargo's `fresh` verdict legitimate here rather than a replay.
+        assert!(
+            changed1 && !changed2,
+            "identical code must not be rewritten"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -508,8 +530,8 @@ mod tests {
         let root = std::env::temp_dir().join("riir_perf_verify_test_diff");
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
-        let dir1 = v.prepare_crate("pub fn a() {}").unwrap();
-        let dir2 = v.prepare_crate("pub fn b() {}").unwrap();
+        let (dir1, _) = v.prepare_crate("pub fn a() {}").unwrap();
+        let (dir2, _) = v.prepare_crate("pub fn b() {}").unwrap();
         assert_ne!(dir1, dir2);
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -533,9 +555,13 @@ mod tests {
                 .trim_matches('"')
                 .to_string()
         };
-        let dir1 = v.prepare_crate("pub fn a() {}").unwrap();
-        let dir2 = v.prepare_crate("pub fn b() {}").unwrap();
-        assert_ne!(name_of(&dir1), name_of(&dir2), "two probes share a cargo unit");
+        let (dir1, _) = v.prepare_crate("pub fn a() {}").unwrap();
+        let (dir2, _) = v.prepare_crate("pub fn b() {}").unwrap();
+        assert_ne!(
+            name_of(&dir1),
+            name_of(&dir2),
+            "two probes share a cargo unit"
+        );
         for dir in [&dir1, &dir2] {
             let stem = dir.file_name().unwrap().to_string_lossy().to_string();
             assert!(name_of(dir).ends_with(&stem), "name must carry the dir key");

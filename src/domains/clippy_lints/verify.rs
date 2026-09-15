@@ -24,6 +24,7 @@
 //! `cargo clippy` is a deterministic rules engine — no ML, no training.
 //! This satisfies the modelless-first mandate for Phase 3.
 
+use crate::domains::probe_witness;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -139,8 +140,8 @@ impl ClippyVerifier {
     #[must_use]
     pub fn verify(&self, code: &str, lint_name: &str) -> ClippyVerifyResult {
         // Create the temp crate scaffold.
-        let crate_dir = match self.prepare_crate(code) {
-            Ok(dir) => dir,
+        let (crate_dir, source_changed) = match self.prepare_crate(code) {
+            Ok(pair) => pair,
             Err(e) => {
                 return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
             }
@@ -151,6 +152,18 @@ impl ClippyVerifier {
             Ok(o) => o,
             Err(e) => return ClippyVerifyResult::did_not_run(e),
         };
+
+        // ⛔ Issue 112: did cargo compile the source we just wrote? The
+        // keyed package name (Issue 110) makes the collision impossible by
+        // construction, and a construction nothing observes is one that can
+        // be quietly re-opened — by a de-keyed name, a reachable
+        // `build.target-dir`, or a cargo freshness change. The failure mode
+        // is a clean `present_lints = []` → `lint_resolved = true`, so this
+        // must refuse rather than report the empty set.
+        let witness = probe_witness::witness_cargo_json(&output, source_changed);
+        if !witness.trustworthy() {
+            return ClippyVerifyResult::did_not_run(witness.reason());
+        }
 
         // Parse JSON output for clippy lint codes.
         let present_lints = parse_clippy_lints(&output);
@@ -171,9 +184,12 @@ impl ClippyVerifier {
 
     /// Prepare a temp crate with the given code as `src/lib.rs`.
     ///
-    /// Returns the path to the crate root. Uses a BLAKE3-keyed stable dir
-    /// so cargo reuses build cache on repeat calls with the same code.
-    fn prepare_crate(&self, code: &str) -> Result<PathBuf, String> {
+    /// Returns the crate root and whether `src/lib.rs` **changed** on this
+    /// call. Uses a BLAKE3-keyed stable dir so cargo reuses build cache on
+    /// repeat calls with the same code — which is exactly why the caller
+    /// needs the change flag: a fresh unit is legitimate on an unchanged
+    /// probe and is the Issue 110 collision on a changed one (Issue 112).
+    fn prepare_crate(&self, code: &str) -> Result<(PathBuf, bool), String> {
         // BLAKE3-hash the code for a stable, unique dir name.
         let hash = blake3::hash(code.as_bytes());
         let hex = hash.to_hex();
@@ -203,11 +219,12 @@ impl ClippyVerifier {
         std::fs::write(dir.join("Cargo.toml"), cargo_toml)
             .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
 
-        // Write src/lib.rs (the code being verified).
-        std::fs::write(src_dir.join("lib.rs"), code)
-            .map_err(|e| format!("write lib.rs failed: {e}"))?;
+        // Write src/lib.rs (the code being verified). Read-before-write:
+        // an unchanged repeat must not touch the mtime, or the cargo cache
+        // hit the BLAKE3 dir exists to provide stops being a cache hit.
+        let source_changed = probe_witness::write_probe_source(&src_dir.join("lib.rs"), code)?;
 
-        Ok(dir)
+        Ok((dir, source_changed))
     }
 
     /// Run `cargo clippy --message-format=json` on the temp crate.
@@ -399,7 +416,12 @@ mod tests {
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let code = "fn foo() -> i32 { 42 }";
-        let crate_dir = v.prepare_crate(code).expect("prepare should succeed");
+        let (crate_dir, first_write_changed) =
+            v.prepare_crate(code).expect("prepare should succeed");
+        assert!(
+            first_write_changed,
+            "a probe dir that did not exist must report its source as changed"
+        );
 
         // Cargo.toml exists and is valid.
         let cargo_toml = std::fs::read_to_string(crate_dir.join("Cargo.toml")).unwrap();
@@ -427,8 +449,13 @@ mod tests {
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let code = "fn bar() -> u64 { 99 }";
-        let dir1 = v.prepare_crate(code).unwrap();
-        let dir2 = v.prepare_crate(code).unwrap();
+        let (dir1, changed1) = v.prepare_crate(code).unwrap();
+        let (dir2, changed2) = v.prepare_crate(code).unwrap();
+        // ⛔ Issue 112: the SECOND call must report unchanged. That flag is
+        // what licenses cargo's `fresh` verdict on the repeat — without it
+        // the witness would red on the very cache hit this dir exists for.
+        assert!(changed1, "first write creates the file");
+        assert!(!changed2, "identical code must not be rewritten");
 
         assert_eq!(dir1, dir2, "same code → same dir");
 
@@ -441,8 +468,8 @@ mod tests {
             std::env::temp_dir().join(format!("riir_clippy_test_diff_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
-        let dir1 = v.prepare_crate("fn a() {}").unwrap();
-        let dir2 = v.prepare_crate("fn b() {}").unwrap();
+        let (dir1, _) = v.prepare_crate("fn a() {}").unwrap();
+        let (dir2, _) = v.prepare_crate("fn b() {}").unwrap();
 
         assert_ne!(dir1, dir2, "different code → different dir");
 
@@ -473,8 +500,8 @@ mod tests {
                 .to_string()
         };
 
-        let dir1 = v.prepare_crate("fn a() {}").unwrap();
-        let dir2 = v.prepare_crate("fn b() {}").unwrap();
+        let (dir1, _) = v.prepare_crate("fn a() {}").unwrap();
+        let (dir2, _) = v.prepare_crate("fn b() {}").unwrap();
         assert_ne!(
             name_of(&dir1),
             name_of(&dir2),
@@ -494,7 +521,10 @@ mod tests {
 
         // Identical code must STILL reuse one crate — the build cache is
         // what makes this design affordable.
-        assert_eq!(name_of(&dir1), name_of(&v.prepare_crate("fn a() {}").unwrap()));
+        assert_eq!(
+            name_of(&dir1),
+            name_of(&v.prepare_crate("fn a() {}").unwrap().0)
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

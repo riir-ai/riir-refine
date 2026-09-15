@@ -19,6 +19,17 @@
 //!   profile trap, over name-matched `Cargo.toml` manifests. Suggest-only in
 //!   Phase 1; the second no-`syn` scanner after docker.
 
+// Issue 112: the scratch-probe identity witness, shared by every domain
+// whose oracle spawns cargo on a generated crate. Gated on the union of
+// those three features rather than living inside one of them — a copy per
+// site is a second thing to get wrong, which is the shape Issue 110 was.
+#[cfg(any(
+    feature = "clippy_verify",
+    feature = "rust_perf_verify",
+    feature = "rust_perf_bench"
+))]
+pub mod probe_witness;
+
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;
 
