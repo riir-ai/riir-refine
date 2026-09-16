@@ -4086,8 +4086,9 @@ fn parse_args() -> Args {
                     "sec" => args.domain = Some(DomainId::Sec),
                     "docker" => args.domain = Some(DomainId::Docker),
                     "dist" => args.domain = Some(DomainId::Dist),
+                    "shader" => args.domain = Some(DomainId::ShaderPerf),
                     other => {
-                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec|docker|dist)");
+                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec|docker|dist|shader)");
                         usage();
                     }
                 }
@@ -4782,6 +4783,15 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
     out.push((
         "docker",
         riir_clippy::build_docker_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect(),
+    ));
+    #[cfg(feature = "shader_perf")]
+    out.push((
+        "shader",
+        riir_clippy::build_shader_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5828,6 +5838,9 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     // Issue 085: dist uses the positional `rule()` shorthand like docker —
     // same 4-space-indent needle convention.
     ("dist", "src/domains/dist/corpus.rs", "    rule("),
+    // Plan 134: shader_perf uses the same positional `rule()` shorthand —
+    // same needle convention.
+    ("shader_perf", "src/domains/shader_perf/corpus.rs", "    rule("),
 ];
 
 /// Whether the domain's feature is compiled into THIS binary (the honest
@@ -5842,6 +5855,7 @@ fn domain_compiled(domain: &str) -> bool {
         "sec" => cfg!(feature = "sec"),
         "docker" => cfg!(feature = "docker"),
         "dist" => cfg!(feature = "dist"),
+        "shader_perf" => cfg!(feature = "shader_perf"),
         _ => false,
     }
 }
@@ -5878,6 +5892,10 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
         #[cfg(feature = "dist")]
         "dist" => Some(
             u32::try_from(riir_clippy::build_dist_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+        ),
+        #[cfg(feature = "shader_perf")]
+        "shader_perf" => Some(
+            u32::try_from(riir_clippy::build_shader_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         _ => None,
     }
@@ -8957,6 +8975,24 @@ fn main() {
     #[cfg(not(feature = "kernel_heal"))]
     let n_non_syn = 0usize;
 
+    // ── Plan 134 T0.2/T1.4: the shader_perf lane — the RENDER-stage half
+    // of the `.wgsl` surface (the kernel pass above owns `@compute` by
+    // construction: its patterns are compute-attribute-shaped). Suggest
+    // = stage-aware scanner citations; fix = the bounded loop-guard
+    // proposer ONLY (everything else ships suggest-only by design — the
+    // DL3059 refusal table).
+    #[cfg(feature = "shader_perf")]
+    let n_shader = if args.domain.is_none_or(|d| d == DomainId::ShaderPerf)
+        && !wgsl_files.is_empty()
+    {
+        run_shader_lane(&wgsl_files, args.suggest, args.fix && args.write)
+    } else {
+        0
+    };
+    #[cfg(not(feature = "shader_perf"))]
+    let n_shader = 0usize;
+    let _ = n_shader;
+
     // ── Issue 015: the verify loop — write, cargo check, auto-revert.
     #[cfg(feature = "fix_verify")]
     if args.verify {
@@ -9977,6 +10013,93 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
     printed
 }
 
+/// Plan 134 T0.2: the render-stage `.wgsl` lane. Suggest = stage-aware
+/// scanner citations (rule tags `fix`/`suggest` by FIXABLE_SHADER);
+/// fix+write = the bounded loop-guard proposer ONLY, with the Tier-0
+/// invariants asserted on the healed output (entry-point multiset +
+/// binding multiset) and the naga tier when `shader_verify` is compiled
+/// (degrades to Tier-0 with ONE line — the Issue 018 oracle-split).
+#[cfg(feature = "shader_perf")]
+fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
+    use riir_clippy::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
+    use riir_clippy::domains::shader_perf::ShaderScanner;
+
+    let mut printed = 0usize;
+    for path in paths {
+        let Ok(src) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        // Render-stage files only (the routing split: @compute is the
+        // kernel lane's territory).
+        if !riir_clippy::domains::shader_perf::entry_stages(&src).has_render() {
+            continue;
+        }
+        let findings = ShaderScanner.scan(&src);
+        if !suggest && !fix_write {
+            continue;
+        }
+        for f in &findings {
+            let kind = if FIXABLE_SHADER.contains(&f.rule_id) {
+                "fix    "
+            } else {
+                "suggest"
+            };
+            println!(
+                "{}:{} [shader {kind}] {:<40} — {}",
+                path.display(),
+                f.line,
+                f.rule_id,
+                f.excerpt.trim()
+            );
+            printed += 1;
+        }
+        if !fix_write {
+            continue;
+        }
+        let edits = collect_all_edits(&src);
+        if edits.is_empty() {
+            continue;
+        }
+        let healed = riir_clippy::edit_emitter::apply_edits(
+            &src,
+            edits.iter().map(|re| re.edit.clone()).collect(),
+        );
+        // Tier-0 invariants on the healed output — a guard insertion that
+        // disturbs entry points or bindings is reverted, not shipped.
+        let verdict = riir_clippy::domains::shader_perf::verify::tier0_verdict(&src, &healed);
+        if !(verdict.parses && verdict.entry_points_intact && verdict.bindings_unchanged) {
+            eprintln!(
+                "  REFUSED {} — Tier-0 invariant violated (parses={}, entry_points={}, bindings={})",
+                path.display(),
+                verdict.parses,
+                verdict.entry_points_intact,
+                verdict.bindings_unchanged
+            );
+            continue;
+        }
+        #[cfg(feature = "shader_verify")]
+        {
+            match riir_clippy::domains::shader_perf::verify::validate_naga(&healed) {
+                Ok(Some(true)) => {}
+                Ok(Some(false)) => {
+                    eprintln!("  REFUSED {} — naga rejected the healed module", path.display());
+                    continue;
+                }
+                Ok(None) => eprintln!("  note: naga tier unavailable — standing on Tier-0"),
+                Err(e) => {
+                    eprintln!("  REFUSED {} — naga error: {e}", path.display());
+                    continue;
+                }
+            }
+        }
+        match std::fs::write(path, &healed) {
+            Ok(()) => println!("  wrote {} ({} bounded fix(es))", path.display(), edits.len()),
+            Err(e) => eprintln!("  FAILED to write {}: {e}", path.display()),
+        }
+    }
+    printed
+}
+
 /// Derive what the repo around a Dockerfile can prove, for the caller-gated
 /// rules. Anything not derivable stays `None` — never guessed.
 #[cfg(feature = "docker")]
@@ -10080,6 +10203,7 @@ fn run_overlay_with_promotion(
                 "sec" => Some(DomainId::Sec),
                 "docker" => Some(DomainId::Docker),
                 "dist" => Some(DomainId::Dist),
+                "shader" => Some(DomainId::ShaderPerf),
                 _ => None,
             }?;
             Some((id, triples))

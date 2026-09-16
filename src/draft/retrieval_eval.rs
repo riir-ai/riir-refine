@@ -1275,16 +1275,20 @@ mod tests {
         /// silently.
         #[must_use]
         pub fn router_annotation_floor() -> f32 {
-            // Plan 134 shader axis: `shader_perf` is opt-in (default-off), so
-            // every default-bearing lane keeps its pinned floor unchanged.
-            // The shader-on states INHERIT their shader-off twins' floors
-            // until a standing lane carries the feature — the 8 WGSL
-            // patterns are off-Rust-vocabulary (the docker mechanism: a
-            // distinctive off-vocabulary centroid absorbs FEWER generic
-            // Rust spans, so the expectation is hold-or-rise), but the
-            // Issue 020 contract wants a MEASUREMENT, and none of the
-            // gated states is buildable-and-run today. Re-measure + re-pin
-            // when the shader-toy editor lane first carries shader_perf.
+            // Plan 134 shader axis: MEASURED 2026-09-16 (the landing run,
+            // `default + latent_retrieval + shader_perf`): **67/101 (66.3%)
+            // vs the 73/101 shader-off twin — a −6 span DECAY**, floor =
+            // 62/101. The mechanism is the B131 SEC mechanism, NOT docker's:
+            // the WGSL corpus patterns are token-dense in generic control
+            // flow (`if`/`else`/`return`/`let`/`var`), so the shader
+            // centroid ATTRACTS clean Rust spans (the eval's miss taxonomy
+            // shows `branch-divergent-sample-select` in nearly every clean
+            // span's top-5). Recorded, not hidden — `shader_perf` is
+            // opt-in and no standing lane carries it; the number improves
+            // only when the corpus grows less token-generic patterns or the
+            // fixture set gains shader-labeled spans. Other shader-on
+            // combos (kernel+shader etc.) remain unmeasured and inherit
+            // their twins — re-measure when a lane first carries them.
             // Issue 085 dist axis: the ONLY buildable gated dist-on state is
             // `default + dist` = (k=false, s=false, d=true, dist=true),
             // MEASURED 2026-09-09: 74/101 (73.3%) vs its dist-off twin's
@@ -1340,7 +1344,14 @@ mod tests {
                 // to Proposal 006's open question about a 5th domain's cost
                 // to the router: for THIS domain it is not a cost.
                 (false, false, true) => {
-                    if dist_on {
+                    // Plan 134 shader-on twin (MEASURED 2026-09-16, the
+                    // landing run — `default + latent_retrieval +
+                    // shader_perf`): 67/101 (66.3%), −6 spans vs the 74/101
+                    // dist-on twin; floor = 62. The B131 sec mechanism (see
+                    // the fn header), not docker's.
+                    if cfg!(feature = "shader_perf") {
+                        62.0 / 101.0 // measured 67/101 (66.3%)
+                    } else if dist_on {
                         // Issue 085 measured arm (see the fn header).
                         69.0 / 101.0 // measured 74/101 (73.3%)
                     } else {
