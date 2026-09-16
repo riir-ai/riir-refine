@@ -4042,6 +4042,8 @@ fn batch147_rules_present_and_annotated() {
         ),
     ];
     for (id, category, benchable) in ids {
+        // consumed only under `rust_perf_bench` (the spec assert below)
+        let _ = benchable;
         let e = corpus
             .entries
             .iter()

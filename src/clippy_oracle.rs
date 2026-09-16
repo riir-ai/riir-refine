@@ -160,7 +160,7 @@ mod tests {
         let d = tmp_dir("direct");
         fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
         assert_eq!(
-            detect_project_root(&[d.clone()], Path::new("/nowhere")),
+            detect_project_root(std::slice::from_ref(&d), Path::new("/nowhere")),
             Some(d)
         );
     }
