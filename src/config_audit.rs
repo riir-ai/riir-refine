@@ -2322,11 +2322,11 @@ pub struct Material { #[uniform(0)] pub params: Params }
         let r = audit_sources(&[
             (
                 "tests/rig.rs".to_string(),
-                r#"
+                r"
 pub struct Rig { pub a: f32, pub b: f32 }
 impl Default for Rig { fn default() -> Self { Self { a: 1.0, b: 2.0 } } }
 fn probe(r: &Rig) -> f32 { if r.a > r.b { r.a } else { r.b } }
-"#
+"
                 .to_string(),
             ),
         ]);
@@ -2349,14 +2349,14 @@ fn probe(r: &Rig) -> f32 { if r.a > r.b { r.a } else { r.b } }
         let r = audit_sources(&[
             (
                 "src/lib.rs".to_string(),
-                r#"
+                r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 1.0 } } }
 #[cfg(test)]
 mod tests {
     fn probe(p: &super::P) -> f32 { p.a }
 }
-"#
+"
                 .to_string(),
             ),
         ]);
@@ -2377,22 +2377,22 @@ mod tests {
         let r = audit_sources(&[
             (
                 "tests/rig.rs".to_string(),
-                r#"
+                r"
 pub struct Rig { pub done: bool }
 impl Default for Rig { fn default() -> Self { Self { done: false } } }
 fn probe(r: &Rig) -> bool { r.done }
-"#
+"
                 .to_string(),
             ),
             (
                 "src/lib.rs".to_string(),
-                r#"
+                r"
 pub struct Other { pub done: bool }
 #[cfg(test)]
 mod t {
     fn probe(o: &super::Other) -> bool { o.done }
 }
-"#
+"
                 .to_string(),
             ),
         ]);
