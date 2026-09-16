@@ -151,6 +151,64 @@ What stays open is riir-train's `data/` miss-shape corpus (its Issue 555) and
 any uncommitted local `--verify` run, which left no artifact and is
 unadjudicable by construction.
 
+## 2026-09-16 — P30: the bench-target guard (rust_perf edits declined-and-flagged on measurement targets)
+
+The 2026-09-16 intake (a katgpt-rs clippy-sweep session, `448c77f91`): a dry
+run over `crates/katgpt-core/benches/bench_775_adjoint_goat.rs` proposed
+`[perf] dead-result-timing-loop-folded-under-lto → std::hint::black_box` (+
+loop/alloc restructures) at bench spans. Applying any of them changes WHAT the
+bench measures — `--verify` compiles baseline/after but cannot know whether
+the measured quantity survived; a benchmark file's numbers ARE its artifact
+(GOAT gate evidence), and a timing loop folded under LTO is often precisely
+the defect the bench exists to expose. The session declined manually and
+filed the class in the cargo-heal skill's divergence table; the intake asked
+for DECLINE-OR-FLAG automated at the lane — "a flag, not silence, so the
+operator sees why the bench lint was left standing."
+
+Landed as `src/domains/rust_perf/bench_guard.rs` + lane wiring in
+`src/bin/heal.rs`. Detection (`is_bench_target(path, src)`) is deliberately
+conservative — over-match is a loud, overridable false decline; under-match
+is the silent defect: (a) path axis, any `benches` component (a bench target
+AND every helper module under it — a perf edit in bench setup can alter the
+measured section it feeds); (b) syntax axis, string-contains over the harness
+signatures (`#[bench]`, `criterion_group!`/`criterion_main!`,
+`bench_function(`, `#[divan::bench]`, `iai::bench`, `bencher::`) — a comment
+mentioning a harness over-matches, documented. NOT a marker:
+`std::hint::black_box` in source — it is the FIX half of perf rules and legal
+in production code.
+
+Policy scope — PERF domain only, both lanes: the fix lane collects perf
+proposals into a side vec and declines them (pass-0 count, loud
+`bench-guard:` stderr line per file + a run-summary line; the edits never
+enter `edits`/verify batches, so `--verify`/write paths are covered by
+construction), and `reheat_fix_pass` carries the same guard. The suggest lane
+keeps every row visible but stamps perf rows on a bench target with
+`⚠ bench-guard: applying perf rules here alters what the bench measures —
+apply manually only`. Clippy lints, the rustc_errors `--fix-compile` lane
+(making a bench COMPILE is not measurement-altering), sec, docker, dist are
+out of scope by the recorded defect class.
+
+Live-fire validation (built bin, `latent_retrieval,kat_service`): the
+synthetic `benches/spec2.rs` specimen (static-str + vec-with-capacity shapes)
+— `--fix` declined exactly the 4 perf edits with both lines and left the
+file byte-identical, while the identical shapes in a plain `src/` file
+applied the same 4 edits (`Vec::with_capacity(n)`, `const fn … &'static str`);
+`--suggest` marked every perf row on the bench file (0 markers on the plain
+file). Full-circle: the intake's exact specimen re-run with the guard —
+`dead-result-timing-loop-folded-under-lto` at score 71.01 now carries the
+`⚠ bench-guard` marker (30 perf-row markers total on that file; run under
+`RIIR_HEAL_AUTO_ORACLE=0` — the Issue-113 auto-oracle spawns a whole-workspace
+clippy for a katgpt-rs path, minutes by itself and orthogonal to this gate).
+
+Gates: +10 bench_guard unit tests (path/syntax axes, the intake specimen
+path, Windows separators, `benches_prefix` non-component negative,
+black_box-not-a-marker, comment over-match documented) — lib 1560/1560
+(default), 1710/1710 (latent_retrieval), clippy `-D warnings` clean at the
+`latent_retrieval,kat_service,kat_transport,fix_verify` set; compiles at all
+checked feature states. Score-bench + retrieval floors structurally
+unaffected (no corpus/proposer/matcher change — lane policy only) and not
+re-run.
+
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
 
 The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`

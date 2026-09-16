@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{HealDomain, HealEntry};
 
+pub mod bench_guard;
 pub mod corpus;
 pub mod proposers;
 
