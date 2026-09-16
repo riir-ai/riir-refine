@@ -462,6 +462,7 @@ fn a_missing_source_is_unobserved_not_zero() {
     assert!(join_evidence(Some(1), None, None).tier() < join_evidence(None, None, Some(99_999)).tier());
 }
 
+#[test]
 fn the_three_source_precedence_is_documented_not_accidental() {
     // 1. fired + study is maximum breadth and stays Both regardless of the
     //    default-eco count (which remains in its own manifest).
@@ -489,7 +490,9 @@ fn the_three_source_precedence_is_documented_not_accidental() {
     assert!(def.tier() < local.tier());
     assert!(local.tier() < study.tier());
     assert_eq!(def.label(), "default-eco");
-    assert_eq!(def.rank(), 8);
+    // rank() mirrors the manifest count (the 8 above was the shadowing
+    // example's count; this binding carries 1).
+    assert_eq!(def.rank(), 1);
     assert!(def.is_cited());
 }
 

@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 56 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 62 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -49,7 +49,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       duplicates, negatives and the coverage walk included; the
 ///       boundary literals splice verbatim so the rewrite is
 ///       set-identical + inference-identical).
-// 56-entry data table, not logic — length is the point.
+// 62-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -529,6 +529,69 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "/// Wraps the doc_span word of an IdentText run.\nfn wrap() {}".to_string(),
             fixed_code: "/// Wraps the `doc_span` word of an `IdentText` run.\nfn wrap() {}".to_string(),
         },
+        // ── Batch 150 (the staged default-level + pedantic probe pack;
+        // each fixture's buggy_code FIRES its own proposer — the
+        // all_buggy_codes_fire_their_lint lockstep — and carries the
+        // probe-verified fire/silence shapes per the P11 pattern) ──
+        ClippyFixEntry {
+            lint_name: "print_with_newline".to_string(),
+            lint_group: "style".to_string(),
+            // Bench 094 default-level evidence (top-10k crates.io sample,
+            // clippy 0.1.98). Probe: print!/eprint! fire on a literal
+            // ending in the \n escape; println!/eprintln! never fire;
+            // raw strings and escaped-backslash endings are silent.
+            buggy_code: "fn ready() { print!(\"ready\\n\"); }".to_string(),
+            fixed_code: "fn ready() { println!(\"ready\"); }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "write_with_newline".to_string(),
+            lint_group: "style".to_string(),
+            // The fmt::Write sibling. 1-crate concentration caveat from
+            // the histogram (the 248-firing nominal top-1 is one codegen
+            // crate = 39% of its warnings) recorded in the bench doc.
+            buggy_code: "fn line(f: &mut String) { write!(f, \"line\\n\"); }".to_string(),
+            fixed_code: "fn line(f: &mut String) { writeln!(f, \"line\"); }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "unreadable_literal".to_string(),
+            lint_group: "pedantic".to_string(),
+            // The only parse-only-PROVABLE pedantic row in the staged
+            // head: digit grouping is value-preserving by construction.
+            // Digit-count threshold ≥6 (10000 silent, 999999 fires).
+            buggy_code: "fn pages() -> u32 { let pages = 1234567; pages }".to_string(),
+            fixed_code: "fn pages() -> u32 { let pages = 1_234_567; pages }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "legacy_numeric_constants".to_string(),
+            lint_group: "style".to_string(),
+            // Shadow-guarded FIXABLE: the rewrite is meaning-changing
+            // under an in-scope item named like a primitive and compiles,
+            // so the proposer refuses such files wholesale (real clippy
+            // marks its own suggestion MaybeIncorrect for this reason).
+            buggy_code: "fn cap() -> u32 { let cap = std::u32::MAX; cap }".to_string(),
+            fixed_code: "fn cap() -> u32 { let cap = u32::MAX; cap }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "partialeq_to_none".to_string(),
+            lint_group: "style".to_string(),
+            // VERIFY: type-blind rewrite, E0599 on a custom
+            // PartialEq<Option> receiver — check-visible, the compile
+            // gate reverts (the redundant_closure demotion precedent).
+            buggy_code: "fn check(x: Option<u32>) -> bool { x == None }".to_string(),
+            fixed_code: "fn check(x: Option<u32>) -> bool { x.is_none() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "cast_lossless".to_string(),
+            lint_group: "pedantic".to_string(),
+            // VERIFY via the safe-let gate: the operand type is only
+            // followed from an explicit annotation, and the rewrite
+            // emits only on std's primitive From table. The corpus
+            // fixture is the PARAM shape (the lockstep fixture must fire
+            // the proposer; the annotated-let shape is unit-tested in
+            // the module).
+            buggy_code: "fn widen(x: u8) -> u64 { x as u64 }".to_string(),
+            fixed_code: "fn widen(x: u8) -> u64 { u64::from(x) }".to_string(),
+        },
     ])
 }
 
@@ -613,9 +676,9 @@ mod tests {
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_56() {
+    fn corpus_size_is_62() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 56);
+        assert_eq!(corpus.entries.len(), 62);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

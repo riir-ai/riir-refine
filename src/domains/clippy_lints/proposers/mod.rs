@@ -132,7 +132,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 55 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 61 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -141,6 +141,7 @@
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
+pub mod cast_lossless;
 pub mod chunks_exact_to_as_chunks;
 pub mod collapsible_else_if;
 pub mod collapsible_if;
@@ -156,6 +157,7 @@ pub mod identity_op;
 pub mod items_after_statements;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
+pub mod legacy_numeric_constants;
 pub mod manual_checked_ops;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
@@ -173,6 +175,8 @@ pub mod needless_match;
 pub mod needless_pass_by_ref_mut;
 pub mod needless_range_loop;
 pub mod needless_return;
+pub mod partialeq_to_none;
+pub mod print_write_with_newline;
 pub mod question_mark;
 pub mod range_plus_one;
 pub mod receiver_kind;
@@ -186,6 +190,7 @@ pub mod single_match;
 pub mod single_match_else;
 pub mod suboptimal_flops;
 pub mod uninlined_format_args;
+pub mod unreadable_literal;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_map_or;
 pub mod unnecessary_mut_passed;
@@ -314,6 +319,36 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // its rewrite output (match with a std no-binding second arm, statement
     // position) re-enters `single_match_else`'s Issue-029-T3 territory →
     // fixpoint ping-pong with our own FIXABLE proposer. No corpus entry.
+    // ── Batch 150 (the staged default-level + pedantic probe pack) ──
+    // `print!("x\n")` → `println!("x")` (+ the `eprint!` twin). FIXABLE:
+    // parse-only provable — the literal ends in the `\n` ESCAPE and the
+    // macro family (print/eprint → println/eprintln) carries the newline
+    // for free. Probe-verified silent shapes mirrored (println! itself,
+    // interior \n, raw strings, escaped-backslash endings). Full-literal
+    // form produces the cascade terminal directly (`print!("\n")` →
+    // `println!()` — never the re-firing `println!("")`).
+    "print_with_newline",
+    // `write!(f, "x\n")` → `writeln!(f, "x")` — the fmt::Write sibling;
+    // same proposer module, same probe discipline (writeln! never fires
+    // — nothing to suggest).
+    "write_with_newline",
+    // `1234567` → `1_234_567` (+ the float/fraction form). FIXABLE: the
+    // only parse-only-PROVABLE pedantic row in the staged head — digit
+    // grouping is value-preserving by construction (no type knowledge, no
+    // scope resolution). Digit-COUNT threshold ≥6 (measured boundary:
+    // 10000 silent, 999999 fires); any existing `_` refuses (that is
+    // large_digit_groups' territory); radix prefixes + exponents refuse.
+    "unreadable_literal",
+    // `std::u32::MAX` → `u32::MAX` (+ the flat `use std::u32::MAX;` import
+    // form). FIXABLE with a SHADOW GUARD: path resolution prefers an
+    // in-scope item named like a primitive, and the rewrite compiles with
+    // a different meaning — the guard refuses any file carrying an item
+    // or non-std use-alias/last-segment named like one of the 14
+    // primitives (the compile gate cannot arbitrate this class; real
+    // clippy marks its own suggestion MaybeIncorrect for exactly this
+    // reason). Const table only names legacy constants with assoc-const
+    // twins (std::f64::MAX has none — refused).
+    "legacy_numeric_constants",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -437,10 +472,32 @@ pub const VERIFY_LINTS: &[&str] = &[
     // the `--clippy-json` oracle lane), real clippy's suggestion is
     // applicability `Unspecified` (`--fix` applied 0 — probed), and body
     // "never mutates self" is approximated parse-only (std-`&self`
+    // approximated parse-only (std-`&self`
     // allowlist + same-file unique-&self resolution) where clippy is
     // type-aware — every wrong fire is an E0596/E0384 check-visible
     // compile error the gate reverts.
     "needless_pass_by_ref_mut",
+    // ── Batch 150 (the staged default-level + pedantic probe pack) ──
+    // `x == None` → `x.is_none()` (+ `!= None` → `is_some()`, the
+    // `&None` and `Option::None` forms). VERIFY: type-blind — a non-Option
+    // receiver with a custom `PartialEq<Option>` impl has no `is_none`
+    // (E0599, check-visible, the gate reverts); real clippy is type-aware
+    // and stays silent there (probe-verified). Receiver safety: postfix
+    // receivers go bare, everything else parenthesized (method call binds
+    // tighter than any binary operator). MachineApplicable in real clippy
+    // → the P21 oracle lane consumes the residue shapes.
+    "partialeq_to_none",
+    // `x as u64` → `u64::from(x)` where provably widening. VERIFY via the
+    // SAFE-LET gate: the operand type is only followed from an EXPLICIT
+    // annotation (unique `let x: T = …` binding, or a uniquely-named fn
+    // param); the rewrite emits only when `From<Src> for Dst` is one of
+    // std's primitive impls (explicit table — incl. the measured
+    // sign-change u32→i64 case), so the rewrite is value-identical to the
+    // `as` cast whenever it compiles. A second binding of the same name
+    // refuses (shadow). All other operands (fields, generics, complex
+    // exprs) are the oracle lane's residue (clippy's suggestion is
+    // MachineApplicable there); a wrong fire is E0277 — check-visible.
+    "cast_lossless",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -478,7 +535,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 56 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 62 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -549,6 +606,13 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "format_collect" => format_collect::collect_edits(source, file),
         // ── P12 post-mining intake (2026-09-14, the 2026-09-09 nursery-gap row) ──
         "needless_pass_by_ref_mut" => needless_pass_by_ref_mut::collect_edits(source, file),
+        // ── Batch 150 (the staged default-level + pedantic probe pack) ──
+        "print_with_newline" => print_write_with_newline::collect_edits(source, file),
+        "write_with_newline" => print_write_with_newline::collect_writeln_edits(source, file),
+        "unreadable_literal" => unreadable_literal::collect_edits(source, file),
+        "legacy_numeric_constants" => legacy_numeric_constants::collect_edits(source, file),
+        "partialeq_to_none" => partialeq_to_none::collect_edits(source, file),
+        "cast_lossless" => cast_lossless::collect_edits(source, file),
         // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
         "doc_markdown" => doc_markdown::collect_edits(source, file),
         // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS artifact) ──
@@ -621,12 +685,16 @@ mod tests {
         // cannot change compilation, 2026-09-16).
         // + 1 P31 manual_range_patterns (verbatim-boundary set-identical
         // rewrite — the riir-chain 51b456f MISS artifact, 2026-09-17).
-        assert_eq!(FIXABLE_LINTS.len(), 41);
+        // + 4 Batch 150 (print_with_newline + write_with_newline +
+        // unreadable_literal + legacy_numeric_constants — the staged
+        // default-level + pedantic probe pack, probe-first per P10/P11;
+        // the two VERIFY rows carry their own module fixtures).
+        assert_eq!(FIXABLE_LINTS.len(), 45);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 56-row fixture table — length is the point.
+    /// 62-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -921,6 +989,33 @@ impl S {
                 "manual_range_patterns",
                 "fn f(n: u32) -> u8 { match n { 0 | 1 | 2 => 9, _ => 0 } }",
                 "0..=2 => 9",
+            ),
+            // ── Batch 150 (the staged default-level + pedantic probe pack) ──
+            (
+                "print_with_newline",
+                "fn f() { print!(\"ready\\n\"); }",
+                "println!(\"ready\")",
+            ),
+            (
+                "write_with_newline",
+                "fn f(f: &mut String) { write!(f, \"line\\n\"); }",
+                "writeln!(f, \"line\")",
+            ),
+            ("unreadable_literal", "fn f() { let pages = 1234567; }", "1_234_567"),
+            (
+                "legacy_numeric_constants",
+                "fn f() { let cap = std::u32::MAX; }",
+                "u32::MAX",
+            ),
+            (
+                "partialeq_to_none",
+                "fn check(x: Option<u32>) -> bool { x == None }",
+                "x.is_none()",
+            ),
+            (
+                "cast_lossless",
+                "fn widen(x: u8) -> u64 { x as u64 }",
+                "u64::from(x)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

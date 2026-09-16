@@ -14,7 +14,7 @@ does-not-own / dep allowlist / drift ledger); on any conflict, BOUNDARY.md wins.
 
 Retrieval domains (Plan 001 + Plans 018/030; `rustc_errors` is a 6th, driver-based rather than retrieval) — batch-by-batch corpus narratives live in `HISTORY.md`:
 
-- **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 56 corpus lints across style/complexity/perf/pedantic/nursery (41 `--fix`, 12 `--verify`, 3 self_evolve-only).
+- **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 62 corpus lints across style/complexity/perf/pedantic/nursery (45 `--fix`, 14 `--verify`, 3 self_evolve-only).
 - **`rust_perf`** (default-on) — heals Rust perf issues; 136 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
 - **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 619 rules.
 - **`sec`** (opt-in) — security-pattern bounded fixes (15 rules; 6 fixable + 9 suggest-only).

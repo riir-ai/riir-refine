@@ -1,5 +1,70 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — Batch 150: the staged default-level + pedantic probe pack lands (corpus 56 → 62)
+
+The staged pack from `.distill/001` (3 pedantic + 5 default-level
+candidates; the accumulation rule's "second input" had arrived with Bench
+094's default-eco histogram). Every candidate was probed against real
+clippy 0.1.98 FIRST (`--message-format=json`, applicability captured) per
+the P10/P11 discipline — the full matrix and adjudications live in
+[Research 177](.research/177_batch150_staged_probe_pack.md). Yield:
+
+- **FIXABLE (+4):** `print_with_newline` + `write_with_newline` (one
+  proposer module, two lint names; the `print!("\n")` full-literal form
+  emits the cascade TERMINAL `println!()` directly — never the re-firing
+  `println!("")`) · `unreadable_literal` (digit grouping — the only
+  parse-only-PROVABLE pedantic row in the staged head; digit-COUNT
+  threshold ≥6, measured: `10000` silent, `999999` fires) ·
+  `legacy_numeric_constants` (`std::u32::MAX` → `u32::MAX`, incl. the
+  flat `use` form, with a SHADOW GUARD: any file carrying an item or
+  non-std use-alias named like one of the 14 primitives refuses — the
+  rewrite compiles with a different meaning under shadowing, which the
+  compile gate cannot arbitrate; real clippy marks its own suggestion
+  MaybeIncorrect for exactly this reason).
+- **VERIFY (+2):** `partialeq_to_none` (`x == None` → `x.is_none()`;
+  E0599 on a custom `PartialEq<Option>` receiver is check-visible, the
+  gate reverts — the redundant_closure demotion precedent) ·
+  `cast_lossless` (the SAFE-LET gate: explicit-annotation operands only,
+  the std primitive `From` table as an explicit matrix; the measured
+  sign-change `u32 as i64` fires — `From<u32> for i64` exists). Both
+  carry MachineApplicable clippy suggestions, so the P21 oracle lane
+  also consumes the proposers' refused residue.
+- **DECLINED with evidence:** `redundant_closure_for_method_calls` —
+  clippy's suggestion is a typeck-resolved FULL PATH
+  (`std::string::String::len`); parse-only cannot name the receiver
+  type, and the corpus-lockstep gate correctly forbids a proposer-less
+  VERIFY row. The staging note's E0631 adjacency worry resolved
+  POSITIVELY for clippy itself: real clippy is SILENT on exactly the
+  danger shapes (by-value self `|x| x.pow(2)`, the `&&String` deref
+  chain, `to_string`) — its own firing surface is the safe subset.
+- **STAGED follow-up:** `doc_lazy_continuation` +
+  `doc_overindented_list_items` — the probe matrix is complete and the
+  authoring is unblocked (the trigger is a line-state machine over doc
+  lines: list-marker/blockquote tracking + lazy-continuation detection,
+  the doc_markdown-port complexity class; a full batch of its own).
+
+Gates: lib default **1711/0** (lockstep + `corpus_size_is_62` +
+`FIXABLE_LINTS.len() == 45` + the 62-row fire-and-parse table) ·
+latent_retrieval **1863/0** incl. the 14 retrieval gates · all-features
+check green · clippy `--all-targets` 0 on the write set · score-bench
+**96.4%** (was 96.2%) · `--corpus-stats` clippy_lints 62 ·
+`--coverage-report`: covered 56 → 62, fix-set-only stays 0, the
+default-firing evidenced-uncovered set 74 → 71 (−3 = exactly the three
+evidenced lints covered). Generator lessons recorded in Research 177:
+BARE TOP-LEVEL `let` IS NOT A RUST FILE (fn-wrap every fixture), numeric
+suffixes contain digits (suffix scanners must walk the alphanumeric run,
+not the alphabetic tail), and cargo's test-binary cache can serve a
+STALE suite after a failed compile (`--list` grep is the staleness
+check).
+
+**Rider — the Bench 094 dead test.**
+`corpus_coverage/tests.rs` landed
+`the_three_source_precedence_is_documented_not_accidental` WITHOUT its
+`#[test]` attr — dead code that never ran, and the moment this batch's
+clippy sweep surfaced it and the attr went on, it FAILED (`def.rank()`
+asserted 8 against a `FiredDefault(1)` binding). Attr + assertion fixed.
+An uninvoked assertion is *unknown*, not passing.
+
 ## 2026-09-17 — the default-level fired histogram lands (Bench 094, Issue 119's T4 successor)
 
 Issue 119's first `--coverage-report` run found its real gap in the EVIDENCE
