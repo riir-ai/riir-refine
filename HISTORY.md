@@ -1,5 +1,35 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 117 completed (the delta half): the six remaining stubs + the three silent tails — and the dual-implementation yield behind it
+
+The staleness guard landed TWICE in one window. The sibling session's
+`build.rs`-driven `src/build_stamp.rs` (staged for its own pathspec commit)
+was swept into the P32/P33 commit `3dc472c7` by a third session's bare
+`git commit` against the shared index — recorded at `4b24a607`. This
+session had independently implemented the same issue (a `cfg!`-based
+`feature_stamp.rs`, local `7e9b5874`, gates green); per the Issue-665
+discipline the duplicate was YIELDED (reset to origin) and only the
+additive delta re-landed on their API.
+
+**The delta (this commit):** their landing covered `--version`/`-V` stamp,
+the `refuse()` block, and four refusal sites (`--refill`, `replay`,
+`update`/`sync`, the not-kat_service arm) — but the issue's own spec names
+more: six stubs still carried the terse one-liner (`stake`/`unstake`/
+`vote`/`pay`/`faucet`/`wetrun` — now `build_stamp::refuse`, same block as
+the rest), and the three auto-push tails were still the 00:21 SILENT class
+(mining auto-contribute / burn sync / fix-stats — now loud `SKIPPED`
+companions under `not(all(kat_service, kat_transport[, latent_retrieval]))`,
+firing on exactly the runs that would have pushed: consent `OptedIn`, a
+settled charge, a consenting `--fix` with rules; one line naming the rebuild,
+never an exit-code change).
+
+Gates: clippy `-D warnings` clean in three states (stale-class
+`latent_retrieval,kat_service` · `+kat_transport` · default `--all-targets`),
+`build_stamp_cli` 5/5, lib `build_stamp` 11/11, lib `config_audit` 50/50.
+En-route unblock: 4 more fresh-fixture `needless_raw_string_hashes` in
+`config_audit.rs` (the P33 landing, same class as the P31 unhash earlier
+today) — committed separately.
+
 ## 2026-09-16 — Issue 115 resolved: the auto-oracle feature knob (`RIIR_HEAL_AUTO_ORACLE_FEATURES`) — gated diagnostics leave the `[heuristic]` blind spot
 
 The Issue-113 auto-oracle lints at DEFAULT features, so diagnostics that

@@ -1909,10 +1909,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, amount_base, root, now_unix);
-        eprintln!(
-            "stake: composing a transfer request requires a build with --features kat_transport"
-        );
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("stake", &["kat_transport"]);
     }
 }
 
@@ -1996,10 +1993,7 @@ fn run_kat_unstake() {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, root, now_unix);
-        eprintln!(
-            "unstake: composing a refund request requires a build with --features kat_transport"
-        );
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("unstake", &["kat_transport"]);
     }
 }
 
@@ -2089,8 +2083,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, signing_key, proposal_id, choice, root, now_unix);
-        eprintln!("vote: signing + submitting requires a build with --features kat_transport");
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("vote", &["kat_transport"]);
     }
 }
 
@@ -2206,8 +2199,7 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, qr, wait, short);
-        eprintln!("pay: creating a request requires a build with --features kat_transport");
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("pay", &["kat_transport"]);
     }
 }
 
@@ -2263,10 +2255,7 @@ fn run_kat_faucet(qr: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, qr);
-        eprintln!(
-            "faucet: opening a faucet request requires a build with --features kat_transport"
-        );
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("faucet", &["kat_transport"]);
     }
 }
 
@@ -2614,8 +2603,7 @@ fn run_kat_wetrun(dry_run: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, acct_hex, network);
-        eprintln!("wetrun: requires a build with --features kat_transport");
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("wetrun", &["kat_transport"]);
     }
 }
 
@@ -9262,6 +9250,29 @@ fn main() {
         let outcome = push_mining_batch(true, &url, &transport);
         print_mine_push(&outcome);
     }
+    // Issue 117 (the delta half) — the loud companion: an opted-in machine
+    // whose binary lacks the network features must hear that the
+    // auto-contribute tail DID NOT RUN (the 00:21 class was silent exactly
+    // here). One line, never an exit-code change — healing itself is
+    // unaffected.
+    #[cfg(not(all(
+        feature = "kat_service",
+        feature = "kat_transport",
+        feature = "latent_retrieval"
+    )))]
+    if matches!(
+        riir_clippy::kat_mining_consent::read_with_warning(
+            &riir_clippy::kat_mining_consent::default_dir()
+        )
+        .0,
+        riir_clippy::kat_mining_consent::MiningConsent::OptedIn
+    ) {
+        eprintln!(
+            "kat: mining auto-contribute SKIPPED — this binary lacks the network features \
+             (batch stays queued; drain it with a release-set binary); rebuild with: {}",
+            riir_clippy::build_stamp::rebuild_command()
+        );
+    }
 
     // Issue 076 client half: the burn auto-sync — account billing, NOT the
     // mining-consent plane (it rides the login; `--unmine` does not stop
@@ -9280,6 +9291,17 @@ fn main() {
             c.state().meter_watermark_tokens,
         );
         print_burn_sync(&outcome);
+    }
+    // Issue 117 (the delta half) — the loud companion: the git-style
+    // stacking promise is honest only if the skip is audible — a stale
+    // binary's burn delta stacks locally instead of reporting.
+    #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+    if kat_charge.is_some() {
+        eprintln!(
+            "kat: burn report SKIPPED — this binary lacks the network features (the un-pushed \
+             delta stacks locally and reports with the next release-set run); rebuild with: {}",
+            riir_clippy::build_stamp::rebuild_command()
+        );
     }
 
     // Proposal 004 Half 1.5 — the fix-stats push tail: a consenting
@@ -9353,6 +9375,21 @@ fn main() {
             ),
             Err(e) => eprintln!("stats: push failed ({e}) — not retried; the next run shares its own row"),
         }
+    }
+    // Issue 117 (the delta half) — the loud companion: a consenting --fix
+    // run's stats row is lost, not stacked (no offline stacking BY DESIGN),
+    // so the skip must be audible on exactly the runs that earned one.
+    #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+    if args.fix
+        && !fixstat_rules.is_empty()
+        && riir_clippy::kat_stats_consent::read(&riir_clippy::kat_stats_consent::default_dir())
+            .push_allowed()
+    {
+        eprintln!(
+            "kat: fix-stats push SKIPPED — this binary lacks the network features (a lost row \
+             is a lost stat, not a lost commit); rebuild with: {}",
+            riir_clippy::build_stamp::rebuild_command()
+        );
     }
 
     // The redesigned KAT footer (2026-09-13): one glanceable block —
