@@ -42,8 +42,13 @@ pub fn tier0_verdict(buggy: &str, fixed: &str) -> super::ShaderVerdict {
 /// Compiled only under `shader_verify` — a plain `shader_perf` build
 /// stands on Tier 0 with ONE degradation line (the Issue 018 oracle-split:
 /// "could not check" and "the check failed" are different facts).
+///
+/// # Errors
+///
+/// Never returned today: a `naga` parse failure AND a validation failure
+/// both map to `Ok(Some(false))` ("naga disagrees" is a verdict, not an
+/// error). The `Result` shape reserves the oracle-contract error lane.
 #[cfg(feature = "shader_verify")]
-#[must_use]
 pub fn validate_naga(source: &str) -> Result<Option<bool>, String> {
     let module = match naga::front::wgsl::parse_str(source) {
         Ok(m) => m,

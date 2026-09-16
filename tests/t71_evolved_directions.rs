@@ -48,6 +48,7 @@ fn corpus_for(domain: DomainId) -> Vec<String> {
         DomainId::Sec => Vec::new(),
         DomainId::Docker => Vec::new(),
         DomainId::Dist => Vec::new(),
+        DomainId::ShaderPerf => Vec::new(),
     }
 }
 

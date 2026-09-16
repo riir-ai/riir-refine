@@ -9,11 +9,11 @@
 //! them:
 //!
 //! - `fn` carrying a pending `@vertex`/`@fragment` attribute opens a
-//! **render-stage function** block (the domain's territory); a bare helper
-//! `fn` opens an unattributed block whose contents are conservatively
-//! skipped (stage unknown); `@compute` fns are `kernel_opt` territory.
+//!   **render-stage function** block (the domain's territory); a bare helper
+//!   `fn` opens an unattributed block whose contents are conservatively
+//!   skipped (stage unknown); `@compute` fns are `kernel_opt` territory.
 //! - `loop` / `while` / `for` open **loop** blocks (`while (true)` its own
-//! kind); `if` / `else` open **branch** blocks.
+//!   kind); `if` / `else` open **branch** blocks.
 //!
 //! Per-line accounting is sequential: a leading `}` closes one block (the
 //! `} else {` chain), the keyword opener pushes its block, content flags
@@ -60,10 +60,11 @@ pub struct ShaderFinding {
 /// Fragment fetch budget for the Class B annotation. MEASURED on the
 /// hero-verified port corpus at Plan-134 landing: the max fetches-per-
 /// fragment-fn observed is **9** (three-tsl/surface.wgsl); flare-composite
-/// carries 7 legitimately. The annotation therefore fires at >= 10 — the
-/// EXCESS class above what verified ports use (the first calibration at
-/// >= 5 fired on 4 clean ports; the negative control demoted it). Mobile
-/// bandwidth class: every fetch is a memory round trip per pixel.
+/// carries 7 legitimately. The annotation therefore fires at 10 or more
+/// (the EXCESS class above what verified ports use; the first calibration
+/// at 5 or more fired on 4 clean ports, and the negative control demoted
+/// it). Mobile bandwidth class: every fetch is a memory round trip per
+/// pixel.
 pub const FRAGMENT_FETCH_BUDGET: usize = 10;
 
 /// The measured corpus max the budget is floored above (three-tsl/surface
@@ -187,6 +188,9 @@ pub struct ShaderScanner;
 impl ShaderScanner {
     /// Scan one WGSL source. Render-stage findings only — `@compute`
     /// functions and unattributed helpers are skipped by construction.
+    /// One sequential ladder (112 lines): the brace-stack + pending-stage
+    /// invariants live in ONE place — splitting it would spread them.
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn scan(&self, source: &str) -> Vec<ShaderFinding> {
         let mut findings: Vec<ShaderFinding> = Vec::new();

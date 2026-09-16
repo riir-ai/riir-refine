@@ -259,8 +259,9 @@ impl HealDomain for ShaderPerfDomain {
 /// in this domain may EVER emit, regardless of how the input is shaped.
 ///
 /// These are named and tested, not documented-and-forgotten — the docker
-/// `DL3059` precedent (consolidating consecutive `RUN`s fights BuildKit caching)
+/// `DL3059` precedent (consolidating consecutive `RUN`s fights `BuildKit` caching)
 /// is the exact class: incumbent tooling folklore that is anti-modern HERE.
+#[must_use]
 pub fn refuses() -> &'static [&'static str] {
     &[
         // A one-sided branch-divergent rewrite: hoisting textureSample out
