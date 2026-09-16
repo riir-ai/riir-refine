@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 55 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 56 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -43,7 +43,13 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///     + the 1 Issue 120 intake row (2026-09-16, the pedantic doc-lint
 ///       family — `doc_markdown`, the every-landing manual backtick pass
 ///       this crate's own `#![warn(clippy::pedantic)]` root generates).
-// 55-entry data table, not logic — length is the point.
+///     + the 1 P31 post-mining intake row (2026-09-17, the riir-chain
+///       `51b456f` MISS artifact — `manual_range_patterns`, clippy's own
+///       algorithm ported verbatim onto syn: range alternatives,
+///       duplicates, negatives and the coverage walk included; the
+///       boundary literals splice verbatim so the rewrite is
+///       set-identical + inference-identical).
+// 56-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -338,6 +344,17 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             fixed_code: "fn f(n: u64) -> bool { n.is_multiple_of(4) }".to_string(),
         },
         ClippyFixEntry {
+            lint_name: "manual_range_patterns".to_string(),
+            lint_group: "style".to_string(),
+            // Post-mining P31 intake (2026-09-17, the riir-chain 51b456f
+            // MISS artifact — the file carried `0 | 1 | 2` the suggest lane
+            // could not rank). FIXABLE: clippy's own algorithm ported
+            // verbatim; the boundary literals splice verbatim so the
+            // rewrite is set-identical + inference-identical.
+            buggy_code: "fn f(n: u8) -> u8 { match n { 0 | 1 | 2 => 9, _ => 0 } }".to_string(),
+            fixed_code: "fn f(n: u8) -> u8 { match n { 0..=2 => 9, _ => 0 } }".to_string(),
+        },
+        ClippyFixEntry {
             lint_name: "use_self".to_string(),
             lint_group: "style".to_string(),
             // Batch 89 (the Plan 049 fired histogram: 130 real instances).
@@ -588,15 +605,17 @@ mod tests {
     /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13), the
     /// 1 P12 post-mining intake row (`needless_pass_by_ref_mut`,
     /// 2026-09-14), the 1 P15 post-mining intake row
-    /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure), and
-    /// the 1 Issue 120 intake row (`doc_markdown`, 2026-09-16) = 55.
+    /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure), the
+    /// 1 Issue 120 intake row (`doc_markdown`, 2026-09-16), and the 1
+    /// P31 post-mining intake row (`manual_range_patterns`, 2026-09-17
+    /// — the riir-chain `51b456f` MISS artifact) = 56.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_55() {
+    fn corpus_size_is_56() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 55);
+        assert_eq!(corpus.entries.len(), 56);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

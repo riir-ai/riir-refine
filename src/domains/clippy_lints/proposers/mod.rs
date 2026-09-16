@@ -86,6 +86,7 @@
 //! | `items_after_statements` | block items hoisted above the statements (order-independent resolution; guards: macro items, leading-gap / same-line-trailing comments) |
 //! | `manual_let_else` | let-bound 2-arm match with visibly diverging fallback → `let .. else` (guards: binding-use fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes, visible-divergence whitelist) |
 //! | `doc_markdown` | identifier-shaped words in `///`/`//!` docs → backtick wrap (comment-local — the edit cannot change compilation; clippy's own word predicates ported verbatim, context approximated per line) |
+//! | `manual_range_patterns` | or-pattern → `min..=max` (clippy's own algorithm ported verbatim incl. range alternatives, duplicates, negatives + the coverage walk; boundary literals spliced verbatim — probe-matrixed on 0.1.93 + 0.1.98) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -159,6 +160,7 @@ pub mod manual_checked_ops;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
 pub mod manual_map;
+pub mod manual_range_patterns;
 pub mod manual_slice_fill;
 pub mod manual_unwrap_or;
 pub mod map_unwrap_or;
@@ -296,6 +298,15 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // and detection is a faithful port of clippy's own word predicates
     // (the module docs carry the context approximations).
     "doc_markdown",
+    // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS
+    // artifact): `0 | 1 | 2` → `0..=2`. Clippy's own algorithm ported
+    // verbatim (rust-lang/rust@1.98.1) — the coverage walk admits
+    // scrambled/descending/duplicate/negative/range-bearing or-patterns;
+    // the boundary literals are spliced VERBATIM (sign/separators/suffix),
+    // so the rewrite is set-identical + inference-identical and every
+    // accepted input compiles after it. See the module doc for the probe
+    // matrix and the documented conservative divergences.
+    "manual_range_patterns",
     // NOTE — `option_if_let_else` (38 in the fired histogram) was PROBED
     // then REFUTED (Batch 90, see `.plans/051`): nursery-group pure style
     // with zero perf/correctness content, applicability Unspecified, its
@@ -467,7 +478,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 55 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 56 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -540,6 +551,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "needless_pass_by_ref_mut" => needless_pass_by_ref_mut::collect_edits(source, file),
         // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
         "doc_markdown" => doc_markdown::collect_edits(source, file),
+        // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS artifact) ──
+        "manual_range_patterns" => manual_range_patterns::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -606,12 +619,14 @@ mod tests {
         // forms — the born-lint closure, 2026-09-14)
         // + 1 Issue 120 doc_markdown (comment-local backtick wrap —
         // cannot change compilation, 2026-09-16).
-        assert_eq!(FIXABLE_LINTS.len(), 40);
+        // + 1 P31 manual_range_patterns (verbatim-boundary set-identical
+        // rewrite — the riir-chain 51b456f MISS artifact, 2026-09-17).
+        assert_eq!(FIXABLE_LINTS.len(), 41);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 55-row fixture table — length is the point.
+    /// 56-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -900,6 +915,12 @@ impl S {
                 "doc_markdown",
                 "/// Runs the shader_perf stage over a HashMap of buckets.\nfn stage() {}",
                 "`shader_perf`",
+            ),
+            // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS artifact) ──
+            (
+                "manual_range_patterns",
+                "fn f(n: u32) -> u8 { match n { 0 | 1 | 2 => 9, _ => 0 } }",
+                "0..=2 => 9",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
