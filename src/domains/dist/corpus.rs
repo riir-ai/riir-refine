@@ -1,15 +1,17 @@
 //! The dist seed corpus — Phase 1 (Issue 085).
 //!
-//! Five rules, all suggest-only, every one with measured provenance — the
+//! Six rules, all suggest-only, every one with measured provenance — the
 //! first four from the session that found the class (the owner had to ASK why
 //! the binary was 2x — that is the failure this domain exists to prevent),
 //! the fifth from upstream's own measured compile-time series (Batch 143 —
 //! nnethercote Dec-2025: `windows`/`rustix`/`aws-sdk-ec2` named with
-//! `-Zhint-mostly-unused` wins for small-fraction consumers). The dedup
-//! verdict rides each rule's `incumbent` field: `cargo` itself warns about
-//! NOTHING here (checked live 2026-09-09 — a bare release build of a bin
-//! crate with no profile section compiles silent), so all five are Class B
-//! (novel detection) with no incumbent to overlay.
+//! `-Zhint-mostly-unused` wins for small-fraction consumers), the sixth
+//! from the July-2026 series (Batch 146 — rustc #159091: PGO training-set
+//! coverage, the out-of-manifest next lever for the fully-tuned audience).
+//! The dedup verdict rides each rule's `incumbent` field: `cargo` itself
+//! warns about NOTHING here (checked live 2026-09-09 — a bare release build
+//! of a bin crate with no profile section compiles silent), so all six are
+//! Class B (novel detection) with no incumbent to overlay.
 //!
 //! | Rule | Family | Fix | Incumbent |
 //! |---|---|---|---|
@@ -18,6 +20,7 @@
 //! | `cli-panic-unwind-tables` | `ShipSize` | suggest | none |
 //! | `member-profile-ignored` | `ProfilePlacement` | suggest (gated) | none |
 //! | `large-api-dependency-mostly-unused-hint` | `BuildTime` | suggest | none |
+//! | `pgo-training-set-covers-real-workload-hint` | `BuildTime` | suggest | none |
 
 use super::{DistDomain, DistFamily, DistRule};
 use crate::corpus::Corpus;
@@ -96,6 +99,15 @@ fn entries() -> Vec<DistRule> {
             "# The fix is NOT a manifest edit — the hint is a rustc flag, set once\n# for the workspace. This IS the fixed artifact: .cargo/config.toml\n# (nightly-only; MEASURE per crate before adopting).\n[build]\nrustflags = [\"-Z\", \"hint-mostly-unused\"]\n",
             F::BuildTime,
             Some("Source: nnethercote, \"How to speed up the Rust compiler in December 2025\" — 'Josh Triplett introduced a new experimental flag, -Zhint-mostly-unused, which can give big compile time wins for people using small fractions of very large crates ... such as windows, rustix, and aws-sdk-ec2.' Caveats the advice text carries: nightly-only -Z; the flag lives in .cargo/config.toml rustflags — OUTSIDE the manifest, which is why the fixed fixture IS the config file (the scanner is manifest-scoped and cannot see adoption, so the suggestion repeats until the dep is dropped or the hint is measured in); per-crate measurement required before adopting. The crate table (windows, windows-sys, rustix, aws-sdk- prefix) is deliberately small — a miss is a silent no-advice, an over-broad table is noise."),
+        ),
+        rule(
+            "pgo-training-set-covers-real-workload-hint",
+            "a PGO-trained release binary only claims the win its TRAINING SET covers — a narrow or unrepresentative workload mix leaves the majority of the PGO win unclaimed even when the profile machinery is perfectly configured",
+            "a manifest with [[bin]] whose effective [profile.*] knobs (strip, lto, panic) are ALL set — the manifest-level levers exhausted, the audience whose next lever is out-of-manifest",
+            "[[bin]]\nname = \"mytool\"\n\n[profile.dist]\ninherits = \"release\"\nstrip = true\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\n",
+            "# The fix is NOT a manifest edit — PGO training-set coverage is a\n# build-pipeline property. This IS the fixed artifact: the training\n# workload must be the SHIPPED workload mix (rustc #159091 added\n# rustdoc benches to rustc's PGO training set: +2.85% mean wall-time\n# across rustdoc benchmarks, >6% best — 'the training set matters').\n# Train on your real corpus; measure before/after.\n# (pgo training pipeline snippet — out-of-manifest by construction)",
+            F::BuildTime,
+            Some("Source: nnethercote, \"How to speed up the Rust compiler in July 2026\" (2026-07-31), #159091 (Jakub Beránek), verbatim: 'added rustdoc benchmarks to the PGO training set, which lets rustdoc benefit more from PGO. This gave a mean 2.85% reduction in wall-time across all the rustdoc benchmarks, with the largest reduction exceeding 6%. PGO is fiddly to set up but it can really make a difference, and the training set matters.' PROXY-TRIGGERED BY DESIGN (the large-api-dependency precedent): the scanner cannot see whether PGO exists at all — the trigger is the fully-tuned effective profile (strip+lto+panic all set), i.e. the audience that has exhausted the manifest-level levers this domain advises; the -hint suffix + the conditional advice ('IF you use or add PGO') + the measure-first caveat are load-bearing. Strictly additive by construction: silent for every manifest with a missing knob (the three ship-size fixtures are unaffected), and on a fully-tuned shipped bin it fires alone — no sibling rule co-fires."),
         ),
     ]
 }
@@ -232,8 +244,19 @@ mod tests {
     fn lib_only_and_complete_profiles_stay_silent() {
         let lib_only = "[package]\nname = \"lib\"\n\n[lib]\ncrate-type = [\"rlib\"]\n";
         assert!(scan_source_with(lib_only, DistContext::default()).is_empty());
+        // Batch 146: a COMPLETE profile no longer scans empty — it earns
+        // exactly ONE finding, the PGO next-lever hint (the manifest-level
+        // levers are exhausted; the ship-size rules stay silent). The
+        // original intent — no SHIP-SIZE noise on a tuned manifest — is
+        // preserved and pinned below.
         let complete = "[[bin]]\nname = \"t\"\n\n[profile.dist]\ninherits = \"release\"\nopt-level = \"s\"\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\nstrip = true\n";
-        assert!(scan_source_with(complete, DistContext::default()).is_empty());
+        let findings = scan_source_with(complete, DistContext::default());
+        let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
+        assert_eq!(
+            ids,
+            vec!["pgo-training-set-covers-real-workload-hint"],
+            "a fully-tuned bin earns exactly the PGO hint — no ship-size noise"
+        );
     }
 
     /// The suggest-only contract: no dist rule is fixable in Phase 1.

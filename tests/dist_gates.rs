@@ -19,8 +19,9 @@ fn corpus_detector_and_fixable_tables_agree() {
     let entries = DistDomain::build_corpus();
     // Batch 143 (522f6947) joined large-api-dependency-mostly-unused-hint —
     // its count-pin walk missed THIS pin (the failure that proves the gate
-    // is live); suggest-only still holds.
-    assert_eq!(entries.len(), 5, "Phase 1 ships exactly 5 rules");
+    // is live); Batch 146 (Plan 132) joined pgo-training-set-covers-real-
+    // workload-hint — the pin moved WITH the batch. Suggest-only still holds.
+    assert_eq!(entries.len(), 6, "Phase 1 ships exactly 6 rules");
     let ids: std::collections::BTreeSet<String> =
         entries.iter().map(|r| r.rule_id.clone()).collect();
     let detectors: std::collections::BTreeSet<String> =
@@ -79,6 +80,57 @@ fn member_rule_silent_without_evidence() {
     );
 }
 
+/// Batch 146 — the PGO hint fires ONLY on the fully-tuned audience (all
+/// three effective knobs set) and is silent the moment any knob is
+/// missing. Strictly additive over the ship-size fixtures by construction.
+#[test]
+fn pgo_hint_fires_only_on_fully_tuned_bins() {
+    let fully_tuned = "[[bin]]\nname = \"m\"\n\n[profile.dist]\ninherits = \"release\"\nstrip = true\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\n";
+    let findings = scan_source_with(fully_tuned, DistContext::default());
+    let ids: Vec<&str> = findings.iter().map(|f| f.rule_id).collect();
+    assert_eq!(
+        ids,
+        vec!["pgo-training-set-covers-real-workload-hint"],
+        "a fully-tuned bin fires the PGO hint ALONE (no sibling co-fires)"
+    );
+
+    // One knob missing (the ship-size regime) — the hint must NOT fire:
+    // the audience has not exhausted the manifest-level levers yet.
+    for missing_one in [
+        "[[bin]]\nname = \"m\"\n\n[profile.release]\nlto = \"fat\"\npanic = \"abort\"\n", // no strip
+        "[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\npanic = \"abort\"\n",   // no lto
+        "[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\nlto = \"fat\"\n",         // no panic
+    ] {
+        let findings = scan_source_with(missing_one, DistContext::default());
+        assert!(
+            findings
+                .iter()
+                .all(|f| f.rule_id != "pgo-training-set-covers-real-workload-hint"),
+            "PGO hint fired on a manifest with a knob still missing"
+        );
+    }
+
+    // Root-inherited knobs count as effective tuning (the member whose
+    // build IS tuned through the workspace root is still the audience).
+    let member_no_local_profile = "[package]\nname = \"m\"\n\n[[bin]]\nname = \"m\"\n";
+    let ctx = DistContext {
+        under_workspace_root: true,
+        root_profile_knobs: Some(ProfileKnobs {
+            strip: true,
+            lto: true,
+            panic: true,
+        }),
+        ..DistContext::default()
+    };
+    let findings = scan_source_with(member_no_local_profile, ctx);
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.rule_id == "pgo-training-set-covers-real-workload-hint"),
+        "root-inherited full tuning must still fire the PGO hint"
+    );
+}
+
 /// The canonical precision fixture — a repo-shaped manifest missing every
 /// knob fires all three ship-size rules exactly once each; the same manifest
 /// with a complete [profile.dist] block is silent.
@@ -101,9 +153,15 @@ fn canonical_repo_manifest_fires_three_and_completes_to_silence() {
     }
 
     let after = format!("{before}\n[profile.dist]\ninherits = \"release\"\nopt-level = \"s\"\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\nstrip = true\n");
-    assert!(
-        scan_source_with(&after, DistContext::default()).is_empty(),
-        "the complete profile must silence every rule"
+    let completed = scan_source_with(&after, DistContext::default());
+    let ids: Vec<&str> = completed.iter().map(|f| f.rule_id).collect();
+    // Batch 146: the complete profile silences the three ship-size rules —
+    // and earns exactly the ONE next-lever finding (the PGO training-set
+    // hint, the out-of-manifest lever for the fully-tuned audience).
+    assert_eq!(
+        ids,
+        vec!["pgo-training-set-covers-real-workload-hint"],
+        "the complete profile must silence the ship-size rules (and earns only the Batch-146 PGO hint)"
     );
 }
 

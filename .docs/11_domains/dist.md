@@ -113,6 +113,19 @@ cargo-deny), NOT profile surgery on library-only crates (every ship-size
 rule requires `[[bin]]`), and Phase 1 never WRITES a manifest (the bounded
 `[profile.dist]` insert is the Phase-2 `--fix` lane).
 
+## The sixth rule (Batch 146, 2026-09-16)
+
+`pgo-training-set-covers-real-workload-hint` is PROXY-TRIGGERED BY DESIGN:
+the scanner cannot see whether PGO exists (it is an out-of-manifest build
+pipeline property), so the rule fires ONLY on the fully-tuned audience — a
+shipped binary whose effective `strip`+`lto`+`panic` knobs (own OR root)
+are ALL set, i.e. every manifest-level lever this domain advises is
+exhausted. Strictly additive: silent for every manifest with a knob still
+missing, fires ALONE on a fully-tuned one. Measured provenance: rustc
+#159091 (adding rustdoc benches to the PGO training set — 2.85% mean
+wall-time across rustdoc benchmarks, >6% best; "the training set
+matters"). Record: [Research 173](../../.research/173_batch146_accumulated_readlane_pack.md).
+
 ## See also
 
 - [`HISTORY.md`](../../HISTORY.md) §Issue 085 — the issue record + GOAT gate (issue file removed at closure)

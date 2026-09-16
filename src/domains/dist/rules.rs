@@ -46,6 +46,7 @@ pub const DIST_RULES: &[&str] = &[
     "cli-panic-unwind-tables",
     "member-profile-ignored",
     "large-api-dependency-mostly-unused-hint",
+    "pgo-training-set-covers-real-workload-hint",
 ];
 
 /// Phase 1 is suggest-only — no rule carries a bounded fix. The constant
@@ -309,6 +310,40 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
                 line: anchor,
                 excerpt,
                 advice: "consider `panic = \"abort\"` in the shipped profile — landing pads and unwind tables are real bytes in a CLI; NOT for servers that isolate panics per task/connection",
+            });
+        }
+
+        // Rule 6 — the BuildTime next-lever hint (Batch 146). Fires ONLY on
+        // the fully-tuned audience: a shipped binary whose effective
+        // strip+lto+panic knobs are ALL set. The manifest-level levers this
+        // domain advises are exhausted there; the next one (PGO
+        // training-set coverage) lives OUTSIDE the manifest, so the advice
+        // is conditional and the -hint suffix + measure-first caveat are
+        // load-bearing (the large-api-dependency precedent). The scanner
+        // cannot see whether PGO exists at all — proxy-triggered by
+        // design, and silent for every not-yet-tuned manifest, which keeps
+        // the rule strictly additive over the three ship-size fixtures.
+        if knobs.strip && knobs.lto && knobs.panic {
+            let anchor = scan
+                .profiles
+                .first()
+                .map(|(_, line, _)| *line)
+                .or_else(|| {
+                    scan.sections
+                        .iter()
+                        .find(|(name, _)| name == "bin")
+                        .map(|(_, line)| *line)
+                })
+                .unwrap_or(1);
+            let excerpt = match scan.profiles.first() {
+                Some((name, _, _)) => format!("[profile.{name}]"),
+                None => "[[bin]]".to_string(),
+            };
+            out.push(DistFinding {
+                rule_id: "pgo-training-set-covers-real-workload-hint",
+                line: anchor,
+                excerpt,
+                advice: "every manifest-level size/tuning knob this domain advises is set here — the next build-time lever is out-of-manifest: IF you use (or add) PGO, the training set must cover the SHIPPED workload mix (rustc #159091: adding rustdoc benches to the PGO training set = 2.85% mean wall-time across rustdoc benchmarks, >6% best; 'PGO is fiddly to set up but it can really make a difference, and the training set matters'); train on the real workload corpus, not a narrow benchmark — measure before/after",
             });
         }
     }

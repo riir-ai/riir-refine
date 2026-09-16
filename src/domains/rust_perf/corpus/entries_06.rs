@@ -287,6 +287,202 @@ fn gather_rows(fd: i32, maps: &[&[f32]], rows: &[usize], pool: &Pool) -> Vec<f32
             bench_spec: None,
         },
 
+        // ── Batch 146 (2026-09-16, Plan 132 / Research 173): the accumulated
+        // read-lane pack — nnethercote "How to speed up the Rust compiler
+        // in July 2026" (2026-07-31, nnethercote.github.io) + bevy 0.19
+        // release notes (2026-06-19, bevy.org), both re-verified against
+        // the live posts at admission (coordinator reads, not the charter
+        // text). All four rules are SUGGESTION-ONLY — a parse-only
+        // proposer cannot see handler emptiness, allocation-site heat,
+        // engine-owned layout, or shader-side layout. They document the
+        // restructure with measured provenance; they never fire
+        // mechanically. Fixtures original.
+
+        // ── complexity: multi-handler dispatch pipelines pay for EMPTY handlers ──
+        PerfRule {
+            rule_id: "dispatch-pass-fusion-skips-empty-handlers".to_string(),
+            name: "a visitor pipeline that calls every handler's check_foo on every node pays N virtual dispatches of which the vast majority enter empty bodies (most handlers implement one or two methods) — fuse the passes so only IMPLEMENTED handlers are registered per node kind: the win is the skipped calls plus the un-poisoned branch predictor, not any single call's devirtualization".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// Hundreds of handlers, each implementing a few dozen possible visitor
+// methods — but the walk calls EVERY handler's check_foo on EVERY node.
+// Each call is a virtual dispatch, and most are no-ops: the callee's
+// body is empty and returns immediately. The dispatch itself is the
+// cost, and one polymorphic site mixing hundreds of mostly-empty
+// targets poisons the branch predictor at every node.
+trait NodeVisitor {
+    fn check_item(&mut self, _item: &Item) {}
+    fn check_stmt(&mut self, _stmt: &Stmt) {}
+    fn check_expr(&mut self, _expr: &Expr) {}
+}
+
+fn walk(items: &[Item], stmts: &[Stmt], exprs: &[Expr], visitors: &mut [Box<dyn NodeVisitor>]) {
+    for item in items {
+        for v in visitors.iter_mut() {
+            v.check_item(item); // no-op for the vast majority of visitors
+        }
+    }
+    for stmt in stmts {
+        for v in visitors.iter_mut() {
+            v.check_stmt(stmt); // no-op again
+        }
+    }
+    for expr in exprs {
+        for v in visitors.iter_mut() {
+            v.check_expr(expr); // expressions dominate node count
+        }
+    }
+}".to_string(),
+            fixed_code: "// Registration builds per-node-kind tables of ONLY the implemented
+// handlers; the walk dispatches over table entries — an empty
+// handler is never called at all, so its vtable slot, its no-op body,
+// and its share of the predictor's target mix are all gone.
+struct HandlerTables<'a> {
+    item: Vec<Box<dyn FnMut(&Item) + 'a>>,
+    stmt: Vec<Box<dyn FnMut(&Stmt) + 'a>>,
+    expr: Vec<Box<dyn FnMut(&Expr) + 'a>>,
+}
+
+fn walk(items: &[Item], stmts: &[Stmt], exprs: &[Expr], t: &mut HandlerTables) {
+    for item in items {
+        for h in t.item.iter_mut() {
+            h(item); // every call enters a real body
+        }
+    }
+    for stmt in stmts {
+        for h in t.stmt.iter_mut() {
+            h(stmt);
+        }
+    }
+    for expr in exprs {
+        for h in t.expr.iter_mut() {
+            h(expr);
+        }
+    }
+}".to_string(),
+            context_notes: Some("SUGGESTION-ONLY, honestly NotBenchable (a parse-only proposer cannot see which handlers are no-ops — handler emptiness is semantic, not syntactic; the rule documents the restructure, never fires mechanically). SOURCE (nnethercote, \"How to speed up the Rust compiler in July 2026\", 2026-07-31, section Clippy, quotes verbatim): \"Clippy traverses the AST and HIR and for each node it calls the appropriate check_foo method for every lint on that node. Each call is a virtual dispatch. Critically, most of these calls are no-ops because most lints only implement a small number of check_foo methods (often just one).\" The merged fix (xmakro #17124/#17132): \"found a way to combine the passes so that the empty check_foo methods (i.e. the vast majority) are not called\"; the unmerged twin (#157762, functionally equivalent, more detailed measurements): \"in most cases this reduced Clippy's runtime by 10-30%! Branch mispredictions were reduced by 20-80% on real-world examples and by 97% on one stress test. The cost of virtual dispatch adds up if you do it a lot.\" MECHANISM (both halves load-bearing): (1) the skipped CALLS — handlers x node kinds minus the implemented pairs is nearly all waste; (2) the branch predictor — removing the mostly-empty targets un-poisons the sites that remain. Distinct from `dyn-to-enum` (entries_01 — devirtualizes ONE hot dispatch site through an enum, changing the call SHAPE; this restructures a MULTI-HANDLER pipeline so empty handlers are never registered, changing the call COUNT) and from the two-data-passes fusion rule (entries_01 — fuses passes over the same DATA to cut traffic; this fuses DISPATCH passes to cut calls). SHAPE IN OUR STACK: the healer's own syn visitor family (one visitor per domain over dozens of check methods, most empty per domain) and any ECS-style per-entity system dispatch where systems opt into a sparse handler/method matrix. REGIME: many handlers x many node kinds with a sparse implement-count matrix. ANTI-REGIME: a pipeline where every handler implements every method (the tables degenerate to the original calls; registration overhead is pure cost). Fixtures original. Batch 146 / Plan 132 / Research 173.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
+        // ── layout: single-threaded streaming CAPACITY — fit the hot node under the line class ──
+        PerfRule {
+            rule_id: "hot-alloc-struct-fits-cache-line-class".to_string(),
+            name: "a high-count allocation-site struct whose element size sits just above a cache-line class boundary (72/80 B over 64) streams zero whole elements per line through the hottest loop — shrink/reorder under the boundary, or move the rare arms' cold fields to a side table / box the cold tail; the win is elements-per-line capacity, measured >10% wall and -29% cache misses on rustc's own AST".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "// The hot node type, streamed millions of times per parse/walk:
+// 8 (kind+pad) + 8 (span) + 8 (lhs+rhs) + 8 (payload) + 24 (scratch
+// Vec — used by 3 of 20 kinds) + 24 (extra array — used by 2 of 20)
+// = 80 bytes: a whole 64-byte line plus 16, so every stream straddles
+// lines and no line holds a whole second node.
+struct HotNode {
+    kind: u8,
+    span: (u32, u32),
+    lhs: u32,
+    rhs: u32,
+    payload: u64,
+    scratch: Vec<u8>,  // rare-arm only, drags 24 B into every node
+    extra: [u8; 24],   // rare-arm only, another 24 B
+}".to_string(),
+            fixed_code: "// The rare arms' cold fields move to a side table keyed by node
+// index, consulted only when the rare kind is hit: the inline node
+// drops to 8 + 8 + 8 + 8 = 32 bytes — two whole nodes per line where
+// previously zero fit. (The rustc sequence for its AST expression
+// nodes: 104 -> 72 -> 64 bytes, \"small enough to fit in a cache
+// line\" — the companion PR moved removed data \"temporarily to the
+// side\".)
+struct HotNode {
+    kind: u8,
+    span: (u32, u32),
+    lhs: u32,
+    rhs: u32,
+    payload: u64,
+}
+
+struct HotNodeSide {
+    scratch: Vec<u8>,
+    extra: [u8; 24],
+}".to_string(),
+            context_notes: Some("SUGGESTION-ONLY, honestly NotBenchable (a parse-only proposer cannot see allocation-site counts or loop heat; size_of is computable but the WIN needs the hot-iteration scale — the rule documents the lever and the boundary arithmetic). SOURCE (nnethercote, July 2026 post, section AST, #158720, verbatim): \"I shrank the size of AST expression nodes from 72 bytes to 64 bytes. (Small enough to fit in a cache line.) Expressions are by far the most common AST node kind, and this change reduced wall-time on a small number of AST-heavy benchmarks, some by more than 10%. Cache miss rates on those same benchmarks fell by as much as 29%.\" The paving companion #158942: shrank nodes \"by removing a field. The removed data, when needed, is now stored temporarily to the side\" — the side-table lever this rule generalizes. The trajectory quote worth keeping: \"I remember a few years ago when AST expression nodes were 104 bytes. Good performance often comes from chip, chip, chipping away at things over the long term.\" MECHANISM: single-threaded streaming CAPACITY — how many elements of the hottest allocation site fit per coherence line as the hot loop walks them. Distinct from `adjacent per-thread atomic counter slots -> #[repr(align)]` (entries_02 — prevents FALSE SHARING between cores on adjacent written slots; this packs read-streamed nodes into fewer lines, no contention involved), from `hot-byval-move-over-memcpy-threshold` (entries_03 — the 128-byte LLVM memcpy threshold for MOVED values at call boundaries; this is the 64-byte line class for STREAMED allocations), and from the AoS->SoA split (entries_03 — restructures data ownership into per-field arrays for one hot field; this keeps the struct whole and shrinks it under the boundary). REGIME: allocation-site count x hot-iteration scale in the millions (rustc's AST); a struct just above a line-class boundary with cold rare-arm fields to move or box. ARCH CAVEAT (the memcpy rule's ARM note, same class): Apple Silicon coherence lines are 128 B (`hw.cachelinesize`) — the boundary class moves, the arithmetic does not; measure size_of against the TARGET's line size before claiming the win. ANTI-REGIME: small populations (thousands, not millions — the boundary is irrelevant); structs already under the boundary. Fixtures original. Batch 146 / Plan 132 / Research 173.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
+        // ── bevy: engine-owned table layout the ordinary iterator hides ──
+        PerfRule {
+            rule_id: "dense-table-bulk-update-via-contiguous-iter".to_string(),
+            name: "a bulk-UNIFORM update through the ordinary bevy Query iterator hands the loop one entity's components at a time even though table storage is a contiguous per-component array — contiguous_iter_mut hands the whole table slice to the loop so LLVM auto-vectorizes (bevy's own 10k-entity table: 5.58 -> 4.88 us scalar, 1.87 us AVX2, 1.58 with change-detection bypass); legal ONLY on dense queries: table storage, no Changed/Added filters, uniform body — and our own view-layer benches measured random-access shapes NEGATIVE".to_string(),
+            category: "bevy".to_string(),
+            buggy_code: "// A bulk-uniform update through the ordinary iterator: bevy's table
+// storage IS a contiguous array per component, but iter_mut() hands
+// the loop one entity's components at a time — the compiler cannot
+// see the underlying table and cannot vectorize.
+fn apply_velocity(mut query: Query<(&mut Position, &Velocity)>) {
+    for (mut position, velocity) in query.iter_mut() {
+        position.x += velocity.x;
+        position.y += velocity.y;
+        position.z += velocity.z;
+    }
+}".to_string(),
+            fixed_code: "// contiguous_iter_mut hands the whole table slice to the loop: LLVM
+// sees dense arrays and auto-vectorizes. ONLY legal when the query is
+// DENSE — the three gates are API contract, not advice: (1) default
+// table storage for every fetched component (returns Err otherwise);
+// (2) NO Changed<T>/Added<T> filters (archetypal With/Without are
+// fine) — they force a per-entity check that makes raw table slices
+// impossible; (3) a UNIFORM per-entity body — the SIMD premise.
+fn apply_velocity(mut query: Query<(&mut Position, &Velocity)>) {
+    for (position, velocity) in query.contiguous_iter_mut().unwrap() {
+        for (p, v) in position.iter_mut().zip(velocity) {
+            p.x += v.x;
+            p.y += v.y;
+            p.z += v.z;
+        }
+    }
+}".to_string(),
+            context_notes: Some("SUGGESTION-ONLY, honestly NotBenchable (+ ENGINE-GATED: bevy_ecs >= 0.19 — the contiguous_iter/_mut API landed there, PRs #21984/#24181; a parse-only proposer cannot see engine version or storage density, and the density contract is what makes the rule safe). SOURCE (bevy 0.19 release notes, Contiguous Query Access, verbatim): \"Table components in Bevy are already laid out flat in memory — all Transform components are stored as values in a contiguous table, exactly what SIMD wants. The Query iterator just wasn't exposing that structure\"; \"contiguous_iter and contiguous_iter_mut hand you the whole table slice at once. LLVM can see the contiguous array and auto-vectorize — or you can reach for explicit SIMD yourself.\" Measured table (10,000-entity position += velocity, bevy's own numbers): normal 5.58 us / 5.51 AVX2; contiguous 4.88 / 1.87; contiguous + bypass_change_detection() 4.40 / 1.58 — and \"While change detection is a generally useful feature, it does incur measurable performance overhead.\" DENSITY GATES (all three from the API contract, all load-bearing): (1) default TABLE storage for every fetched component — the methods return Err otherwise; (2) NO `Changed<T>`/`Added<T>` filters — \"they require a per-entity check that makes it impossible to return raw table slices\" (archetypal With/Without are fine); (3) a UNIFORM per-entity body — the SIMD premise. DUAL-EVIDENCE HONESTY (the anti-regime witness, OUR OWN measurement): riir-ai Bench 930 / Issue 960 measured the view layer's real hot paths NEGATIVE — snapshot-driven get_mut random access does not stream, the one legal contiguous site measured 9-10% SLOWER, best-case 0.13 us/pass at N=1000; the rule fires ONLY on the bulk-uniform-update loop shape (bevy's table regime), never on mixed/random-access sites, and cites 960 as the witness. Distinct from the AoS->SoA split (entries_03 — restructures data OWNERSHIP into per-field arrays; this exploits engine-owned table layout that already exists, zero restructuring, engine-version-gated). REGIME: dense tables, uniform bodies, 10k+ entity bulk passes (physics integrators, transform propagation, decay sweeps). ANTI-REGIME: snapshot/random-access-driven sites (the 960 negative), sparse archetypes, per-entity branching (breaks uniformity AND usually breaks density). Fixtures original. Batch 146 / Plan 132 / Research 173.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
+        // ── layout: a verified-identical layout makes the per-frame repack the identity transform ──
+        PerfRule {
+            rule_id: "gpu-upload-repack-skipped-when-layout-matches".to_string(),
+            name: "a hot per-frame GPU upload that runs a serialize/repack pass over data whose #[repr(C)] layout already equals the target (WGSL uniform/storage block) pays a no-op transform every frame — when the layout is verified-stable (repr(C), static sizes, a pinned layout test), a direct byte copy (bytemuck::cast_slice / extend_from_slice) is bit-identical and skips the conversion entirely; the verification precondition is the rule's other half, a layout drift is a correctness bug the copy cannot see".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "// Per-frame upload: a layout-preparing serializer walks every field
+// and writes bytes one member at a time — even though the Rust
+// struct's layout is byte-identical to the WGSL uniform block it
+// targets. The repack is the identity transform, paid every frame.
+fn upload_uniforms(device: &Device, params: &WaterParams, dst: &mut UploadBuffer) {
+    let mut writer = LayoutWriter::for_uniform_block(); // encase-like
+    writer.write_vec4(&params.sun); // serialize per field, per frame
+    writer.write_vec4(&params.sun_color);
+    writer.write_f32(params.ambient);
+    writer.write_f32_array(&params.waves);
+    device.write_buffer(dst, 0, writer.as_bytes());
+}".to_string(),
+            fixed_code: "// The layout is VERIFIED-STABLE: #[repr(C)] + static sizes + a
+// const size assertion + a pinned unit test against the WGSL block
+// (re-run on struct or shader change). The whole upload is then one
+// direct copy — bit-identical bytes, zero conversion work per frame.
+#[repr(C)]
+struct WaterParams {
+    sun: [f32; 4],
+    sun_color: [f32; 4],
+    ambient: f32,
+    waves: [f32; 8],
+}
+
+const _: () = assert!(std::mem::size_of::<WaterParams>() == 4 * 4 + 4 * 4 + 4 + 8 * 4);
+
+fn upload_uniforms(device: &Device, params: &WaterParams, dst: &mut UploadBuffer) {
+    device.write_buffer(dst, 0, bytemuck::cast_slice(std::slice::from_ref(params)));
+}".to_string(),
+            context_notes: Some("SUGGESTION-ONLY, honestly NotBenchable (a parse-only proposer cannot verify that the Rust layout equals the shader-side layout — the precondition is semantic; the rule documents the elision AND the precondition, never fires mechanically). SOURCE (bevy 0.19 release notes, Render Big Scenes Faster!, the encase bullet, verbatim): \"Bevy uses the encase library to prepare data for GPU buffers in the layout WGSL expects. In practice, this isn't always needed and incurs unnecessary overhead. We've swapped to cheaper direct memory copies when clustering lights to shave of a bit of time.\" — an engine-internal instance of the general form: a per-frame upload path running a serialize/repack pass over data whose layout already equals the target's. MECHANISM: when the source is #[repr(C)] with static sizes and the target layout is pinned, the repack is the IDENTITY transform — a direct byte copy is bit-identical and removes per-field writing entirely. Distinct from the consumption-ordered repack family (the matvec tile repack, entries_05 — those PAY a one-time repack to make the consumer's reads contiguous; this DELETES a per-frame repack that transforms nothing) and from zero-copy borrow rules (entries_02 — avoiding copies across API boundaries; this avoids a TRANSFORM, the copy remains). REGIME: hot per-frame uploads (uniform pushes, instance tables, staging buffers) at frame-dominating counts. THE PRECONDITION IS THE RULE'S OTHER HALF: a layout drift is a correctness bug the direct copy cannot see — encode the verification (repr(C), size_of const-assert, a pinned layout test against the shader block). SHAPE IN OUR STACK: seal-remake/riir-shader uniform uploads, riir-gpu buffer staging. ANTI-REGIME: cold uploads (the repack is noise, the assertion burden is not worth it); dynamically-laid-out targets (variable-length arrays, runtime offsets — no static layout to match). Fixtures original. Batch 146 / Plan 132 / Research 173.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
         ]
 }
 

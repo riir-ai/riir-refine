@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 127); // Batch 145 (MTPLX mincore routing) 126 → 127
+    assert_eq!(corpus.entries.len(), 131); // Batch 146 (read-lane pack) 127 → 131
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 36); // 127 total − 91 benchable
+    assert_eq!(without_spec.len(), 40); // 131 total − 91 benchable (Batch 146 added 4 NotBenchable suggestion-only rules)
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1869,7 +1869,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 70, "expected 70 context-annotated rules (Batch 145 added the mincore-routing routing-contract annotation)");
+    assert_eq!(annotated.len(), 74, "expected 74 context-annotated rules (Batch 145 added the mincore-routing annotation; Batch 146 added the four read-lane suggestion-only annotations)");
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
     assert!(annotated.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — the build-time rationale + the -Zmacro-stats instrument
     assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
@@ -1930,7 +1930,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 57, "expected 57 unannotated rules (127 total - 70 annotated; the Batch 145 mincore rule joined the ANNOTATED side, so the unannotated count is unchanged)");
+    assert_eq!(unannotated, 57, "expected 57 unannotated rules (131 total - 74 annotated; Batches 145+146 rules all joined the ANNOTATED side, so the unannotated count is unchanged)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1942,7 +1942,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 70); // Batch 143: 67 → 69; Batch 145: 69 → 70
+    assert_eq!(annotated, 74); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1983,7 +1983,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 70, "expected 70 annotated rules");
+    assert_eq!(annotated.len(), 74, "expected 74 annotated rules");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -3887,6 +3887,133 @@ fn batch145_mincore_rule_present_and_annotated() {
         notes.contains("FILE-WIDE") && notes.contains("macOS"),
         "batch-145 mincore macOS caveat must live in context_notes"
     );
+}
+
+/// Batch 146 — the accumulated read-lane pack (nnethercote July 2026 +
+/// bevy 0.19). Four suggestion-only rules; presence + parse + honest
+/// annotation gates. The bevy rule's DUAL-EVIDENCE law is asserted
+/// mechanically: the anti-regime witness (riir-ai Bench 930 / Issue 960)
+/// must live in the annotation, never only in the fixture prose.
+#[test]
+fn batch146_rules_present_and_annotated() {
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        ("dispatch-pass-fusion-skips-empty-handlers", "complexity"),
+        ("hot-alloc-struct-fits-cache-line-class", "layout"),
+        ("dense-table-bulk-update-via-contiguous-iter", "bevy"),
+        ("gpu-upload-repack-skipped-when-layout-matches", "layout"),
+    ];
+    for (id, category) in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-146 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-146 {id} category");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-146 {id} must carry context_notes (all four are suggestion-only: the annotation IS the content)"
+        );
+        #[cfg(feature = "rust_perf_bench")]
+        assert!(
+            e.bench_spec.is_none(),
+            "batch-146 {id} is NotBenchable — no bench spec"
+        );
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("SUGGESTION-ONLY"),
+            "batch-146 {id} annotation must state the suggestion-only verdict"
+        );
+    }
+}
+
+#[test]
+fn batch146_pseudocode_parses() {
+    // G1 for Batch 146: syn-parse gate over both fixtures of every rule.
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        "dispatch-pass-fusion-skips-empty-handlers",
+        "hot-alloc-struct-fits-cache-line-class",
+        "dense-table-bulk-update-via-contiguous-iter",
+        "gpu-upload-repack-skipped-when-layout-matches",
+    ];
+    for id in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-146 rule '{id}' missing"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-146 {id} buggy/fixed must both parse"
+        );
+    }
+}
+
+#[test]
+fn batch146_dual_evidence_and_distinct_rows_present() {
+    // The bevy rule carries BOTH sides (bevy's positive table + our own
+    // Issue 960 negative) — the dual-evidence law, mechanically pinned so
+    // a future edit cannot cite the win without the anti-regime witness.
+    let corpus = build_perf_seed_corpus();
+    let bevy = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "dense-table-bulk-update-via-contiguous-iter")
+        .unwrap();
+    let text = format!("{} {}", bevy.name, bevy.context_notes.clone().unwrap_or_default());
+    for needle in [
+        "5.58",
+        "1.87",
+        "contiguous_iter_mut",
+        "Changed<T>",
+        "Added<T>",
+        "Issue 960",
+        "AoS",
+        "21984",
+    ] {
+        assert!(
+            text.contains(needle),
+            "batch-146 bevy rule dual-evidence needle {needle:?} missing"
+        );
+    }
+    // Distinct-from rows: every rule names its nearest neighbors so
+    // retrieval cannot shadow them (the dedup law, admission-time).
+    for (id, neighbor) in [
+        (
+            "dispatch-pass-fusion-skips-empty-handlers",
+            "dyn-to-enum",
+        ),
+        (
+            "hot-alloc-struct-fits-cache-line-class",
+            "hot-byval-move-over-memcpy-threshold",
+        ),
+        (
+            "dense-table-bulk-update-via-contiguous-iter",
+            "AoS",
+        ),
+        (
+            "gpu-upload-repack-skipped-when-layout-matches",
+            "entries_05",
+        ),
+    ] {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap();
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-146 {id} must carry a Distinct-from row"
+        );
+        assert!(
+            notes.contains(neighbor),
+            "batch-146 {id} distinct-from row must name {neighbor}"
+        );
+    }
 }
 
 /// Batch 143 — G1 semantics: the level gate decides whether the log-only
