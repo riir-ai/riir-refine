@@ -132,6 +132,18 @@ class, site, evidence type). The idle loop (riir-clippy skill queue item 14)
 consumes it: probe each class against real clippy FIRST, then extend the
 proposer + fixtures + score-bench.
 
+The **aggregate** of the `miss` class — how much of clippy's surface the
+corpus does not cover at all, rather than the misses one session happened to
+hit — is `cargo heal --coverage-report` (Issue 119). It derives the lint list
+from the INSTALLED driver, so the debt moves as clippy ships lints, and joins
+two cited frequency sources (the Bench 061 real-code fired histogram + the
+published kornel 100K-crate top-10) without ever estimating a count. Read the
+DISJOINT warning if it prints: the local histogram was captured with
+pedantic+nursery enabled over already-swept repos, so it ranks the opt-in tail
+and can be structurally blind to the lints that fire on a plain clippy run —
+staging off the ranked head alone then stages opt-in lints. Report-only; it
+stages nothing and gates nothing.
+
 Audit adoption + loop state in one command (Issue 037's instrument):
 `/Users/katopz/git/riir-clippy/scripts/self_evolve_audit.sh` — memory
 tiers/outcomes, score-bench history, intake progress, heal-commit trail.
