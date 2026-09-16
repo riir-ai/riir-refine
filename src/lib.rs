@@ -368,6 +368,13 @@ pub mod platform_audit;
 // inputs — the driver spawn + manifest read live in the `--coverage-report`
 // CLI half — so lib tests cover it at default features.
 pub mod corpus_coverage;
+
+// Issue 116: the corpus-truth delta surface — lints the compiled FIX lane
+// can write that the LEASED suggest corpus cannot rank yet. Names the seam
+// (`[no corpus rule]` means "not leased yet" here, "unsupported" there),
+// never closes it: the split is load-bearing. Pure over its inputs, silent
+// on an empty delta.
+pub mod corpus_delta;
 pub mod scope_hint;
 pub mod downstream_hint;
 

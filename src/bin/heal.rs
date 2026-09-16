@@ -3293,6 +3293,13 @@ USAGE:
                     Suggest-only, always exit 0; the detector sees only the
                     scanned set (sibling/upstream consumers under-reported).
                     Reads paths from the CLI (default `.`).
+    --corpus-delta  With an oracle feed: print the per-lint table behind the corpus-truth
+                    delta line (Issue 116) — which [no corpus rule] lints the COMPILED
+                    fix lane can already write (the leased corpus lags, so the marker
+                    means NOT-LEASED-YET) vs which neither lane carries (the real
+                    coverage gap, where it means UNSUPPORTED). Report-only, exit
+                    unchanged; the two lanes' corpus truths are different BY DESIGN
+                    and this names the seam rather than closing it.
     --coverage-report
                     Print the corpus coverage-debt report (Issue 119): clippy's LIVE
                     lint surface, DERIVED from the installed driver
@@ -3822,6 +3829,11 @@ struct Args {
     /// the two frequency sources. Report-first, gates nothing; refuses
     /// exit 1 on a blind derivation — never a confident green zero.
     coverage_report: bool,
+    /// Issue 116: `--corpus-delta` — the per-lint table behind the suggest
+    /// lane's corpus-truth delta line. Report-only, exit unchanged; needs
+    /// an oracle feed (the delta is measured over `[no corpus rule]`
+    /// anchors, which only a feed produces).
+    corpus_delta: bool,
 }
 
 fn parse_args() -> Args {
@@ -3896,6 +3908,7 @@ fn parse_args() -> Args {
         platform_audit: false,
         orphan_report: false,
         coverage_report: false,
+        corpus_delta: false,
     };
     // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
     // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
@@ -4003,6 +4016,7 @@ fn parse_args() -> Args {
             "--platform-audit" => args.platform_audit = true,
             "--orphan-report" => args.orphan_report = true,
             "--coverage-report" => args.coverage_report = true,
+            "--corpus-delta" => args.corpus_delta = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -6039,6 +6053,29 @@ fn compiled_fix_set() -> Vec<String> {
     #[cfg(not(feature = "clippy_lints"))]
     {
         Vec::new()
+    }
+}
+
+/// Issue 116: the fix lane's two tiers, kept APART.
+///
+/// `compiled_fix_set` unions them because a coverage-debt figure must not
+/// move with the reader's feature flags; the delta surface needs them split,
+/// because the remedy differs — a VERIFY row only applies under
+/// `--fix --verify`, so collapsing the tiers would send half the rows to an
+/// invocation that will not touch them.
+fn fix_lane_tiers() -> (Vec<String>, Vec<String>) {
+    #[cfg(feature = "clippy_lints")]
+    {
+        use riir_clippy::domains::clippy_lints::proposers as p;
+        let own = |t: &[&str]| t.iter().map(|s| (*s).to_string()).collect();
+        (own(p::FIXABLE_LINTS), own(p::VERIFY_LINTS))
+    }
+    #[cfg(not(feature = "clippy_lints"))]
+    {
+        // No clippy lane compiled in: every missing lint is a genuine
+        // coverage gap for THIS binary, which is what an empty fix set
+        // makes the delta report.
+        (Vec::new(), Vec::new())
     }
 }
 
@@ -8215,6 +8252,11 @@ fn main() {
     };
     let mut n_oracle_spans = 0usize;
     let mut n_anchored_missing = 0usize;
+    // Issue 116: the per-span `[no corpus rule]` lists, kept so the run can
+    // report WHICH of the two messages that marker is delivering. Collected
+    // rather than counted because the delta is per-LINT: the existing
+    // `n_anchored_missing` is a span total and cannot be partitioned.
+    let mut missing_by_span: Vec<Vec<String>> = Vec::new();
     let mut n_fixed_edits = 0usize;
     // P21: oracle-anchored edits actually APPLIED in the fix lane.
     let mut n_oracle_edits = 0usize;
@@ -8797,6 +8839,9 @@ fn main() {
                 if !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty() {
                     n_oracle_spans += 1;
                     n_anchored_missing += s.anchored_missing.len();
+                    if !s.anchored_missing.is_empty() {
+                        missing_by_span.push(s.anchored_missing.clone());
+                    }
                 }
                 n_suggestions += 1;
                 print_suggestion(&s, &matcher, args.domain, clippy_feed.is_some(), bench_target);
@@ -9458,6 +9503,44 @@ fn main() {
         n_suggestions,
         args.top_k
     );
+
+    // ── Issue 116: the corpus-truth delta surface ─────────────────────────
+    // The two lanes read two corpus truths BY DESIGN — the fix lane the
+    // compiled FIXABLE ∪ VERIFY set, the suggest lane a rule book a leased
+    // epoch replaces wholesale. So `[no corpus rule]` carries two opposite
+    // messages ("not leased yet" vs "unsupported") and a reader met them one
+    // span at a time with no way to tell which. This names the seam; it does
+    // NOT close it (the split is why a freshly-landed lint heals at once and
+    // why suggest ranks on live evidence).
+    //
+    // Computed AFTER the summary so the delta line sits under the count it
+    // refines, and only when a feed ran — without one there are no anchors
+    // and the delta is vacuously empty.
+    if clippy_feed.is_some() && !missing_by_span.is_empty() {
+        let (fixable, verify) = fix_lane_tiers();
+        let delta = riir_clippy::corpus_delta::delta(
+            missing_by_span.iter().map(Vec::as_slice),
+            &fixable,
+            &verify,
+        );
+        // Silent on an empty delta — the EXPECTED state, bounded by the
+        // lease cadence. A line printing 0 every run is the cries-wolf
+        // instrument that gets ignored on the runs that matter.
+        if let Some(line) = delta.summary_line() {
+            println!("{line}");
+        }
+        if args.corpus_delta {
+            print!("{}", delta.render());
+        }
+    } else if args.corpus_delta {
+        // A flag that silently does nothing is worse than one that refuses:
+        // say which precondition failed.
+        eprintln!(
+            "corpus-delta: no oracle anchors this run — the delta is measured over \
+             [no corpus rule] markers, which only a clippy feed produces. Re-run with \
+             --clippy-json <path> (or let the auto-oracle run on a cargo project)."
+        );
+    }
 
     // KAT meter (T0.5): persist the session's burn. Save failure is a lost
     // bookkeeping event, never a failed heal — warn + continue (the
