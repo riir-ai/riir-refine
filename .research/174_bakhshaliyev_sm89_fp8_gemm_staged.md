@@ -1,8 +1,8 @@
 # Research 174 — the Bakhshaliyev RTX 4090 FP8 GEMM series: source VERIFIED, staged for the next kernel_opt batch window
 
-**Status:** DISTILLED — pending batch window (source access verified 2026-09-16; the corpus
-entries are staged, not landed — a full batch is 2 rules + ~6 riders across 5 files plus
-category/count/test surfaces, which deserves its own window)
+**Status:** RECORD — consumed by Batch 148 (Plan 133, landed 2026-09-16: 2 rules + 5
+riders admitted, corpus 614 → 616; the admission-time corrections are appended at the
+bottom).
 
 ## Provenance (both posts fetched FULL-TEXT 2026-09-16, direct LinkedIn read — no .raw clone needed; the source is prose, not a repo)
 
@@ -134,3 +134,27 @@ time — cargo processes on the box, 2026-09-16).
 kernel_opt only. No rust_perf content (host-side Go/CUDA sources; the only Rust-adjacent
 lesson is the SASS-verification one, already doctrine). riir-ai Issue 918 addendum 2 already
 consumes (g); this note supersedes the intake row as the batch input.
+
+## Admission record (Batch 148 / Plan 133, 2026-09-16)
+
+Yield exactly as staged: 2 new rules (`occupancy-before-async-consumer-ada` E,
+`hw-barrier-beats-mbarrier-polling` B) + 5 riders (xor-swizzle occupancy-compounding,
+ldmatrix sm_89 loser cell, stream-k compute-bound loser cell, cpasync regime-split rider,
+mma-fragment-layout QMMA swap + hardware-facts row). Corpus 614 → 616 (E 54 → 55,
+B 64 → 65). All GOAT gates green: G1 parse+presence+rider-marks test
+(`batch148_pseudocode_parses`), G2 lib tests at default (1564) + kernel_heal (1911) + the
+retrieval floors re-measured (15/15 incl. `retrieval_precision_regression_gate`), G3 clippy 0
+at default `--all-targets` + kernel_heal + rust_perf_bench states.
+
+**The GOAT re-grade EXECUTED** (the charter's open precondition): the rung-A lane landed as
+riir-ai Bench 933 the same window this note was staged, and the re-grade SPLIT the rule's
+own headline — "+1 block/SM buys more than a deeper pipeline" is TRUE for the SMEM route
+(XOR-swizzle 513 → 546 external) and FALSE for the register route (MINB=3 `__launch_bounds__`
+spills: 0.516×/0.340× our lane; −20% external; launch_bounds-forcing 20×-class on the
+CloudRift FFMA cell) and for the tile-shrink route (v12 spill-free at 75 regs, still
+0.648× — tile economics beat occupancy). The rule ships with the route split as its PRIMARY
+decision content; the unsplit staged form would have been a corpus defect (citing a win
+whose losing half we measured ourselves). Category adjudication: E not "B or E" (the four
+existing occupancy rules all live in E); hw-barrier → B per charter, consistent with
+`masked-branchless-wait-collapse`. Cell hygiene: Bench 933 figures quote the primary tables
+(§4 0.516×, §6 0.340×, §7 v12 0.648×), never §7's summary roundings (0.522×/0.330×).

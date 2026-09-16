@@ -101,8 +101,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        614,
-        "kernel batches through Batch 145 should have 614 rules"
+        616,
+        "kernel batches through Batch 148 should have 616 rules"
     );
 }
 
@@ -5339,7 +5339,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 614-rule corpus must appear in exactly one category.
+    // Every rule_id in the 616-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5382,13 +5382,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 144).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 148).
     let expected = [
         (KernelCategory::MemoryAccess, 134),
-        (KernelCategory::Compute, 64),
+        (KernelCategory::Compute, 65),
         (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 134),
-        (KernelCategory::Parallelism, 54),
+        (KernelCategory::Parallelism, 55),
         (KernelCategory::FlashAttnTiling, 15),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
@@ -5412,9 +5412,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 614.
+    // Sum must equal 616.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 614, "Plan 003: category totals must sum to 614");
+    assert_eq!(total, 616, "Plan 003: category totals must sum to 616");
 }
 
 #[test]
@@ -5425,8 +5425,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 614,
-        "Plan 003: grouped corpus has {total} rules, expected 614"
+        total, 616,
+        "Plan 003: grouped corpus has {total} rules, expected 616"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9533,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        614,
-        "Batch 145: corpus should have 614 rules"
+        616,
+        "Batch 148: corpus should have 616 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12050,6 +12050,74 @@ fn batch145_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-145 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch148_pseudocode_parses() {
+    // G1 for Batch 148 (Plan 133 / Research 174 -- the Bakhshaliyev sm_89
+    // FP8 GEMM series): syn-parse gate (fn-wrapped Rust-shaped code only --
+    // the B122/B123 lesson) + presence + the 5 rider surfaces.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "occupancy-before-async-consumer-ada",
+        "hw-barrier-beats-mbarrier-polling",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-148 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-148 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-148 opt_pattern for '{id}' must parse"
+        );
+    }
+    // The 5 riders must be present on their rules (B9 x4 + B15 x1).
+    let rider_marks = [
+        (
+            "xor-swizzle-smem-static-index-tables",
+            "OCCUPANCY-COMPOUNDING face",
+        ),
+        (
+            "ldmatrix-mma-layout-loads",
+            "the sm_89 LOSER cell",
+        ),
+        (
+            "mma-fragment-layout-m16n8k16",
+            "QMMA.16832.F16.E4M3.E4M3 SASS reads the A-fragment register pair SWAPPED",
+        ),
+        (
+            "cpasync-multistage-tile-pipeline",
+            "OCCUPANCY-STARVED vs HIGH-OCCUPANCY regime split",
+        ),
+        (
+            "stream-k-persistent-cta-mac-segments",
+            "COMPUTE-BOUND sm_89 loser cell",
+        ),
+    ];
+    for (rid, mark) in rider_marks {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-148 rider host '{rid}' missing"));
+        assert!(
+            entry.gpu_concept.contains(mark),
+            "batch-148 rider on '{rid}' missing its mark text"
+        );
+        assert!(
+            entry.gpu_concept.contains("Research 174"),
+            "batch-148 rider on '{rid}' missing its Research 174 provenance"
         );
     }
 }

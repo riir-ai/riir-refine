@@ -1928,6 +1928,7 @@ mod entries_gpu_39;
 mod entries_gpu_40;
 mod entries_gpu_41;
 mod entries_gpu_42;
+mod entries_gpu_43;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1946,6 +1947,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_40::entries());
     entries.extend(entries_gpu_41::entries());
     entries.extend(entries_gpu_42::entries());
+    entries.extend(entries_gpu_43::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2205,6 +2207,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-key-projection-hoist-out-of-query-sweep",
             "regularizer-above-noise-floor-coupled-to-damping-cap",
             "masked-branchless-wait-collapse",
+            "hw-barrier-beats-mbarrier-polling",
             "mma-fragment-layout-m16n8k16",
             "fwht-shuffle-xor-butterfly-register-resident",
             "fused-vector-site-transcendental-form-nonportable",
@@ -2444,6 +2447,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "occupancy-grid-cap-refuted-uncapped-default",
             "plane-specialization-load-compute-role-split",
             "grid-collapsing-mega-kernel-occupancy-trap",
+            "occupancy-before-async-consumer-ada",
             "capture-break-count-not-perf-target",
             "stripe-sms-l2-semaphore-reduce",
             "simdgroup-row-packing-reduction-amortization",
