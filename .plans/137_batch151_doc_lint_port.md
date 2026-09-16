@@ -57,6 +57,12 @@ clippy's own suggestions (verified by span arithmetic on the JSON).
       all-green, all-features check, clippy --all-targets clean on the write
       set, score-bench (append rows), `--corpus-stats` 64, `--coverage-report`
       covered 62→64 / fix-set-only 0 / evidenced-uncovered 71→69
+- [x] T7.5 — gen2/gen3 freeze tables REGENERATED for the 64-entry corpus
+      (the Batch-150 tables were stale on arrival for this batch — the
+      freeze-status gates went red as designed; the deterministic e2e re-run:
+      78 v2 labels / 82 v3, exclusions 12/10 = the same needless_match
+      cascade at new stride positions; v2 solve 100.0% every k, M4 PASS;
+      generations.rs record comment extended)
 - [x] T8 — HISTORY.md batch entry; Research 177 §7 pointer; `.distill/001`
       batch-state update; commit + push
 - [x] T9 — global binary rebuild (release feature set, isolated worktree,
