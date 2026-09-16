@@ -1,5 +1,26 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 114 resolved: the refusal-code client half (landed in riir-kat `a117163`)
+
+Issue 114 predates the issue-088 spinout (its "src/bin/heal.rs and friends"
+wording) — the kat clients have lived in `../riir-kat` since 2026-09-10, and
+that is where the client half of the dapps refusal-code wire landed:
+`kat_refusal.rs` (the 13-code table + `code_from_body` protocol-tier; the
+`client`-gated `RetryVerdict` — `RetryLater` vs `NeverRetry` vs `FixRequest`
+vs `Surface`, with absent/unknown code = the prose-era default, never a
+guessed retry) + the code-aware burn stack (`report_burn` →
+`BurnPushError { prose, code }`, Display = prose verbatim; the `Stacked`
+reason annotates the retry policy while retaining the delta under every
+verdict — the monotone watermark makes replays server-side no-ops, so
+retention is always safe and dropping without the ack advancing never is).
+The issue's two named branches (rate_limited-vs-already_settled,
+host_unavailable-vs-every-refusal) are the enum's reason to exist; the
+absent-code regression gate is pinned byte-identical to the String era by
+test. riir-clippy consumed nothing new (verified: no prose-matching sites
+existed here; the `Stacked` reason flows through the existing status lines
+unchanged — `kat_burn_stack` 3/3 + `kat_soft_gate_cli` 13/13 green against
+the updated leaf). Full record: riir-kat HISTORY.md 2026-09-16.
+
 ## 2026-09-16 — Issue 116: the corpus-truth delta surface — `[no corpus rule]` carries TWO opposite messages
 
 Landed `a0ec400d`. `src/corpus_delta.rs` + the suggest-lane summary line +
