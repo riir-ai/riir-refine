@@ -7385,3 +7385,54 @@ orphan + 41/41 config-audit, **lib 1534/1534**, clippy `-D warnings` clean
 (the one `must_use_candidate` on the now-`pub` `field_member_name` was
 healer-first — silent, its documented divergence; manual `#[must_use]`).
 Footers of both reports name the new skip direction.
+
+## 2026-09-16 — P31: the fn-A/fn-B inter-procedural wire-clearance (orphan-report; the riir-kat queue-writer intake)
+
+The 2026-09-16 quiet-repo audit batch's orphan intake, at 16-row
+concentration in one protocol leaf: riir-kat's intent DTOs
+(`VoteIntent`/`StakeIntent`/`UnstakeIntent`/`ClaimRequest` — version +
+reference + `queued_unix` fields) are literal-constructed in FLOW fns whose
+own bodies contain no `serde_json::to_*` path call (`json!` + `Value`'s
+`.to_string()` are not serde paths), and serialized by SIBLING queue-writer
+fns (`queue_vote_intent`: `serde_json::to_string(intent)`). Fn-scoped
+co-occurrence cannot join the two by construction — the documented
+"built-in-fn-A/serialized-in-fn-B stays flagged, the conservative
+direction" divergence, at concentration.
+
+**Fix, two arms:** (1) `serialized_concrete_param_types` — a fn whose body
+serde-serializes one of its own CONCRETE-typed params (per-param mention
+check; generic `T: Serialize` params stay `is_generic_serde_bridge`'s lane)
+contributes that param's type to `direct_wire_types`, so the caller's
+literal sites clear/wire-const exactly as if they sat inside the serde fn.
+(2) Macro token-stream scanning — the queue-writer's serde call sits INSIDE
+`writeln!(...)`, which syn's visitor does not descend:
+`token_stream_serde_to_mentions` matches the exact `serde_json::`/`serde_yaml::`
+to_* path at token level (ident equality, two `:` puncts, a following
+parenthesis group; recursive through nested groups) and checks the argument
+group for the param ident — hooked into BOTH `block_has_serde_call`'s and
+`block_serializes_param`'s finders via `visit_expr_macro`/`visit_item_macro`.
+This also widens bridge detection to macro-wrapped serde calls (same class,
+the correct direction) and makes `in_serde_fn` fire for literal-in-fn +
+serde-in-macro shapes.
+
+**Measured:** riir-kat 16 stillborn → **4** (the remaining four are
+`ProposalView`×3 + `PoolView`×1 — the Deserialize-side schema types, the
+recorded under-reported-consumer standing class), wire-cleared 8 → 19,
+wire-const 0 → 1 (an all-const-site field rendered at the weak class —
+honest). Self 11 → **8** stillborn (377 files — the batch-148 file growth
+plus three fn-A/fn-B shapes of the fixstats lane now clearing). Every other
+recorded canary holds byte-identical: **riir-ai 70 stillborn unchanged**,
+dao 0/0 + the pinned `[wire-const]` row, riir-mmorpg-examples' 4 orphaned
+`DumpEntity` NO-ACTION family, riir-chain 0/0 + 9 silent. +2 fixtures (the
+queue-writer positive — a const-PATH field value is not a literal; the
+per-param negative — a fn serializing an unrelated value while merely
+receiving a param of the type does not clear it) → **lib 1566/1566**,
+clippy clean. Footer + `WireConsumption.cleared` doc updated — the
+"built-in-fn-A stays flagged" clause replaced by the sibling-fn link. Global
+binary rebuilt from this tree with the release feature set and installed
+over the symlink target (verified: riir-kat 4/19 through the global).
+Remaining conservative gaps, on record: turbofish'd `to_string::<T>(..)` at
+token level, and method-shaped serializers (`self.to_json()`), and the
+Deserialize-side `from_slice::<T>` schema classes — the last is the standing
+under-reported-consumer class, NOT cleared (a deserialized field's local
+reads may still be owed).

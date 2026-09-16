@@ -398,9 +398,12 @@ pub fn subject_looks_like_optimization(subject: &str) -> bool {
 pub struct WireConsumption {
     /// Fields PROVEN consumed by a serialization path: the struct (or a
     /// `Vec<_>`/`Option<_>` wrapper of it) is literal-constructed inside a
-    /// fn that also makes a `serde_json::to_*`/`serde_yaml::to_*` call, AND
-    /// the field carries a non-literal-constant value at some construction
-    /// site. Stillborn rows matching here are cleared.
+    /// fn that also makes a `serde_json::to_*`/`serde_yaml::to_*` call, OR
+    /// the type is a CONCRETE param serde-serialized by some fn (the
+    /// sibling-fn link: literal in the flow, `to_string(&intent)` in the
+    /// queue writer — the fn-A/fn-B repair), AND the field carries a
+    /// non-literal-constant value at some construction site. Stillborn
+    /// rows matching here are cleared.
     pub cleared: HashSet<(String, String)>,
     /// Wire-consumed but literal-constant (`true`/`5`/`"x"`, incl. negated
     /// numeric literals) at EVERY construction site — schema-dead weight
@@ -456,7 +459,9 @@ struct WireVisitor {
     /// Per-file name-resolution scope (Issue 109 specimen A) — provably
     /// foreign literals are not evidence in either direction.
     scope: FileScope,
-    /// Type names literal-constructed inside a serde fn (direct evidence).
+    /// Type names literal-constructed inside a serde fn (direct evidence),
+    /// plus CONCRETE param types serialized by the fn itself (the fn-B half
+    /// of the fn-A/fn-B gap — both are direct wire evidence).
     direct_wire_types: HashSet<String>,
     /// (type, field) → per-site const classification, ALL contexts.
     sites: std::collections::HashMap<(String, String), Vec<SiteEntry>>,
@@ -490,6 +495,16 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
         let saved = self.in_serde_fn;
         if block_has_serde_call(&i.block) {
             self.in_serde_fn = true;
+            // The fn-B half of the fn-A/fn-B gap (the riir-kat queue-writer
+            // shape, 2026-09-16, 16-row concentration): a fn that
+            // serializes its own CONCRETE-typed param consumes that param's
+            // type on the wire — the struct literal lives in the CALLER (the
+            // flow fn), which fn-scoped co-occurrence cannot see. The
+            // generic `T: Serialize` twin is `is_generic_serde_bridge`'s
+            // lane; this is the concrete twin.
+            for ty in serialized_concrete_param_types(i) {
+                self.direct_wire_types.insert(ty);
+            }
         }
         syn::visit::visit_item_fn(self, i);
         self.in_serde_fn = saved;
@@ -604,10 +619,109 @@ fn block_has_serde_call(block: &syn::Block) -> bool {
             }
             syn::visit::visit_expr_call(self, c);
         }
+        fn visit_expr_macro(&mut self, m: &'ast syn::ExprMacro) {
+            if token_stream_has_serde_to(&m.mac.tokens) {
+                self.0 = true;
+            }
+            syn::visit::visit_expr_macro(self, m);
+        }
+        fn visit_item_macro(&mut self, m: &'ast syn::ItemMacro) {
+            if token_stream_has_serde_to(&m.mac.tokens) {
+                self.0 = true;
+            }
+            syn::visit::visit_item_macro(self, m);
+        }
     }
     let mut f = Finder(false);
     syn::visit::visit_block(&mut f, block);
     f.0
+}
+
+// ── Macro token-stream scanning (the writeln! class) ──
+//
+// `writeln!(f, "{}", serde_json::to_string(intent)…)` — the serde call sits
+// INSIDE the macro's token stream, which syn's visitor does not descend. The
+// queue-writer shape (the fn-A/fn-B intake's measured specimen) is exactly
+// this: token-level scanning of the macro body for the crate-rooted `to_*`
+// path, then the immediately following argument group for the param ident.
+
+/// Does the token stream contain a `serde_json::to_*`/`serde_yaml::to_*`
+/// path (recursively — nested groups included)?
+fn token_stream_has_serde_to(tts: &proc_macro2::TokenStream) -> bool {
+    token_stream_serde_to_mentions(tts, &[])
+}
+
+/// Token-level: does the stream contain a crate-rooted serde `to_*` path
+/// whose ARGUMENT group mentions one of `names` (bare ident, recursive)?
+/// With `names` empty this is just the path match. Token streams are what
+/// macros hand us — `writeln!(f, "{}", serde_json::to_string(intent)…)` —
+/// where syn's visitor cannot descend. Matching is conservative in the
+/// operator's direction: the path must be EXACTLY `serde_json::`/`serde_yaml::`
+/// (ident equality, not prefix) followed by a `to_*` ident and a
+/// parenthesis group; inside the argument group a bare ident match is
+/// accepted (`other.intent` at token level is indistinguishable from
+/// `intent.clone()`'s receiver — inside a serializer argument the name
+/// appearing at all is strong evidence the value flows into it).
+fn token_stream_serde_to_mentions(
+    tts: &proc_macro2::TokenStream,
+    names: &[String],
+) -> bool {
+    let tokens: Vec<proc_macro2::TokenTree> = tts.clone().into_iter().collect();
+    for (i, tt) in tokens.iter().enumerate() {
+        if let proc_macro2::TokenTree::Group(g) = tt {
+            if token_stream_serde_to_mentions(&g.stream(), names) {
+                return true;
+            }
+            continue;
+        }
+        let proc_macro2::TokenTree::Ident(root) = tt else { continue };
+        if *root != "serde_json" && *root != "serde_yaml" {
+            continue;
+        }
+        // `::` — two Punct tokens (Joint spacing on the first)
+        let colon_pair = matches!((tokens.get(i + 1), tokens.get(i + 2)), (
+            Some(proc_macro2::TokenTree::Punct(a)),
+            Some(proc_macro2::TokenTree::Punct(b)),
+        ) if a.as_char() == ':' && b.as_char() == ':');
+        if !colon_pair {
+            continue;
+        }
+        let Some(proc_macro2::TokenTree::Ident(f)) = tokens.get(i + 3) else { continue };
+        if !f.to_string().starts_with("to_") {
+            continue;
+        }
+        let Some(proc_macro2::TokenTree::Group(g)) = tokens.get(i + 4) else { continue };
+        if g.delimiter() == proc_macro2::Delimiter::Parenthesis
+            && (names.is_empty() || group_mentions_ident(g.stream(), names))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Does the token group mention one of `names` as a bare Ident anywhere
+/// (recursively — nested groups included)? Token-level: `other.intent`
+/// (a different binding's field) also matches — accepted inside a serde
+/// argument group specifically, where the name appearing at all is strong
+/// evidence the value flows into the serializer.
+fn group_mentions_ident(tts: proc_macro2::TokenStream, names: &[String]) -> bool {
+    for tt in tts {
+        match tt {
+            proc_macro2::TokenTree::Ident(id) => {
+                if names.iter().any(|n| id == n.as_str()) {
+                    return true;
+                }
+            }
+            proc_macro2::TokenTree::Group(g)
+                if group_mentions_ident(g.stream(), names) =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 // ── Generic serde bridges (Issue 109 specimen B — module doc above) ──
@@ -689,10 +803,62 @@ fn block_serializes_param(block: &syn::Block, params: &[String]) -> bool {
             }
             syn::visit::visit_expr_call(self, c);
         }
+        fn visit_expr_macro(&mut self, m: &'ast syn::ExprMacro) {
+            if token_stream_serde_to_mentions(&m.mac.tokens, self.params) {
+                self.hit = true;
+            }
+            syn::visit::visit_expr_macro(self, m);
+        }
+        fn visit_item_macro(&mut self, m: &'ast syn::ItemMacro) {
+            if token_stream_serde_to_mentions(&m.mac.tokens, self.params) {
+                self.hit = true;
+            }
+            syn::visit::visit_item_macro(self, m);
+        }
     }
     let mut f = F { params, hit: false };
     syn::visit::visit_block(&mut f, block);
     f.hit
+}
+
+/// The fn-B half of the fn-A/fn-B gap (the riir-kat queue-writer shape,
+/// 2026-09-16, 16-row concentration): the CONCRETE types of a fn's own
+/// params that the fn's body serde-serializes. Per-param mention check — a
+/// fn that serializes an unrelated value while merely RECEIVING a param of
+/// the type does not clear it. Generic type params are skipped (the
+/// `T: Serialize` twin belongs to `is_generic_serde_bridge`).
+fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
+    let generics: std::collections::HashSet<String> = i
+        .sig
+        .generics
+        .type_params()
+        .map(|p| p.ident.to_string())
+        .collect();
+    let mut out = Vec::new();
+    for input in &i.sig.inputs {
+        let syn::FnArg::Typed(pt) = input else { continue };
+        let syn::Pat::Ident(pi) = &*pt.pat else { continue };
+        let mut ty = &*pt.ty;
+        loop {
+            match ty {
+                syn::Type::Reference(r) => ty = &r.elem,
+                syn::Type::Group(g) => ty = &g.elem,
+                syn::Type::Paren(p) => ty = &p.elem,
+                _ => break,
+            }
+        }
+        let syn::Type::Path(tp) = ty else { continue };
+        let Some(seg) = tp.path.segments.last() else { continue };
+        let name = seg.ident.to_string();
+        if generics.contains(&name) {
+            continue;
+        }
+        let ident = pi.ident.to_string();
+        if block_serializes_param(&i.block, &[ident]) {
+            out.push(name);
+        }
+    }
+    out
 }
 
 /// Does the expression mention any of the given names as a bare path
@@ -1062,7 +1228,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal — built-in-fn-A/serialized-in-fn-B literals stay flagged, the conservative direction) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
         );
         out
     }
@@ -1647,6 +1813,83 @@ fn decide() -> Verdict { Verdict::default() }
         );
     }
 
+    /// The riir-kat queue-writer shape (the 2026-09-16 fn-A/fn-B intake,
+    /// 16-row concentration): the literal is built in the FLOW fn whose own
+    /// body has NO serde to_* call (`json!` + Value `.to_string()` are not
+    /// serde paths), and the SERIALIZING fn receives the struct as a
+    /// concrete `&VoteIntent` param. Fn-scoped co-occurrence cannot join
+    /// them; the per-param link does.
+    #[test]
+    fn wire_param_serialized_in_sibling_fn_clears() {
+        let src = r#"
+#[derive(serde::Serialize)]
+pub struct VoteIntent {
+    pub vote_version: u32,
+    pub queued_unix: u64,
+}
+pub fn vote_flow(now_unix: u64) -> std::io::Result<()> {
+    let intent = VoteIntent { vote_version: VOTE_VERSION, queued_unix: now_unix };
+    queue_vote_intent(std::path::Path::new("/tmp"), &intent)
+}
+pub fn queue_vote_intent(
+    root: &std::path::Path,
+    intent: &VoteIntent,
+) -> std::io::Result<()> {
+    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(root)?;
+    writeln!(f, "{}", serde_json::to_string(intent).unwrap_or_default())
+}
+pub const VOTE_VERSION: u32 = 1;
+"#;
+        let wire = wire_of(src);
+        assert!(
+            wire.cleared.contains(&("VoteIntent".to_string(), "vote_version".to_string())),
+            "a const-PATH field value is not a literal — the named const could change"
+        );
+        assert!(
+            wire.cleared.contains(&("VoteIntent".to_string(), "queued_unix".to_string())),
+            "variable-valued field clears through the sibling-fn param link"
+        );
+    }
+
+    /// The per-param mention check is load-bearing: a fn that serializes an
+    /// UNRELATED value while merely RECEIVING a param of the type must not
+    /// clear it (the conservative direction survives inside the new arm).
+    /// Both structs carry literals — the difference is solely which param
+    /// the serializer's argument mentions.
+    #[test]
+    fn wire_param_only_cleared_when_actually_serialized() {
+        let src = r#"
+#[derive(serde::Serialize)]
+pub struct StakeIntent {
+    pub stake_version: u32,
+}
+#[derive(serde::Serialize)]
+pub struct Misc {
+    pub note: String,
+}
+pub fn make_stake(v: u32) -> StakeIntent {
+    StakeIntent { stake_version: v }
+}
+pub fn make_misc(note: String) -> Misc {
+    Misc { note }
+}
+pub fn other(x: &StakeIntent, misc: &Misc) -> String {
+    let s = serde_json::to_string(misc).unwrap();
+    let _ = x;
+    s
+}
+"#;
+        let wire = wire_of(src);
+        assert!(
+            !wire.cleared.contains(&("StakeIntent".to_string(), "stake_version".to_string())),
+            "a serde call that does not serialize the param does not clear it"
+        );
+        assert!(
+            wire.cleared.contains(&("Misc".to_string(), "note".to_string())),
+            "the actually-serialized param's type clears through its literal sites"
+        );
+    }
+
     /// The `payload_json` shape (the wrapping clause): the INNER type has NO
     /// direct literal in any serde fn (its literals live only in builders /
     /// tests) — it is consumed transitively via a `Vec<T>` field of a
@@ -1721,8 +1964,9 @@ pub fn main() {
     }
 
     /// A struct literal in a NON-serde fn is NOT wire evidence — the field
-    /// stays stillborn (built-in-fn-A/serialized-in-fn-B is the documented,
-    /// conservative gap).
+    /// stays stillborn (no serializer touches the type anywhere: not in the
+    /// literal's fn, not through any param-serializing sibling fn — the
+    /// residual conservative gap).
     #[test]
     fn wire_literal_in_plain_fn_stays_flagged() {
         let src = r"
