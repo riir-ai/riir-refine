@@ -78,6 +78,20 @@ repo) · latent 1813 · all-features 2608 · clippy `--all-targets
 --all-features` clean · corpus fixture probe-verified fire/silent against
 real clippy 0.1.98 in a /tmp scratch crate (buggy fires both words, fixed
 silent, `//!` inner docs fire).
+
+**The rider (landed `7782ffaa`, same push):** the shader_perf landing
+(that morning, `21bdecc8`) arrived carrying the doc family AND two
+`--all-features` E0004 compile breaks its default-feature guard could not
+see (`DomainId::ShaderPerf` missing from `tests/t71_evolved_directions`
++ `tests/modelability_sweep` — the exact blind-spot class the
+Issue-115 knob exists for). The rider healed the three `doc_markdown`
+findings WITH THE NEW RULE (`cargo heal --fix`, verified/Certified) —
+the every-landing manual backtick pass demonstrated as ONE COMMAND on a
+real sibling landing, the day the rule shipped — plus the family's
+manual rows (list continuations ×4, a line-start `>=` blockquote-shaped
+reword, `missing_errors_doc`, `double_must_use`, `must_use_candidate`,
+`too_many_lines` allow) and the two match arms. First
+`--all-targets --all-features`-clean tree since the shader_perf landing.
 ## 2026-09-16 — Issue 114 resolved: the refusal-code client half (landed in riir-kat `a117163`)
 
 Issue 114 predates the issue-088 spinout (its "src/bin/heal.rs and friends"
