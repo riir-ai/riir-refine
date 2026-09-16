@@ -60,6 +60,19 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# Every verdict below prints ✓ / ✗ / ⛔ and em-dashes. On a console whose
+# encoding is not UTF-8 — the Windows workstation that runs these is cp874 —
+# print() raises UnicodeEncodeError and this script dies with NO output at all,
+# so its findings are not *unknown* but *unlooked at* (katgpt-rs Issue 804).
+# backslashreplace degrades the glyph to a visible escape and keeps every ASCII
+# character exact, so a verdict line stays greppable; forcing UTF-8 instead
+# gives mojibake, which is the silent direction.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="backslashreplace")
+    except (AttributeError, ValueError):
+        pass  # not a TextIOWrapper (embedded / detached); keep old behavior
+
 REPO = Path(__file__).resolve().parent.parent
 GGUF = Path("/Users/katopz/git/riir-train/data/Ternary-Bonsai-27B-Q2_0.gguf")
 LLAMA_SERVER = Path(
