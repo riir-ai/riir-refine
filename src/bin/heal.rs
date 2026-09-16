@@ -3226,6 +3226,7 @@ USAGE:
     --fix-compile   Compile-error repair (Plan 019, needs --features rustc_errors):
                     cargo-check the owning packages, parse coded errors (E0597...),
                     propose per error via playbooks, apply best → recheck → keep/revert,
+                    bench targets guarded (Issue 118) — name the file explicitly to override,
                     bounded by --max-iters. Review mode (default) prints the plan;
                     --write applies. Registry: the E0597 family (Phase 2) — six
                     ranked templates keyed on the diagnostic's labeled spans; other
@@ -7599,6 +7600,29 @@ fn main() {
             eprintln!("fix-compile: {e}");
             std::process::exit(1);
         }
+        // Issue 118 T1: the bench-guard decision surface — the driver
+        // declined (or flagged) bench-target candidates; print loudly so
+        // the operator knows why those errors were left standing.
+        if report.bench_declined > 0 {
+            for f in &report.bench_declined_files {
+                println!(
+                    "bench-guard: declined bench-target fixes in {} (a compile repair can \
+                     alter what the bench measures — apply manually only)",
+                    f.display()
+                );
+            }
+            println!(
+                "bench-guard: {} bench-target error site(s) declined this run",
+                report.bench_declined
+            );
+        }
+        for f in &report.bench_forced_files {
+            println!(
+                "bench-guard: {} is a bench target named explicitly — fixes proceeded \
+                 (measurement risk accepted by the explicit path)",
+                f.display()
+            );
+        }
         if args.write {
             for a in &report.applied {
                 println!(
@@ -8196,6 +8220,9 @@ fn main() {
     let mut n_oracle_edits = 0usize;
     // P30 bench-guard: rust_perf edits declined on bench targets, run total.
     let mut n_bench_declined_total = 0usize;
+    // Issue 118 T2: oracle suggestions declined on bench targets (the P21
+    // lane rides the P30 door), run total.
+    let mut n_bench_oracle_declined = 0usize;
     // P12: re-proposal suppression. Default-on; the kill-switch re-enables
     // unconditional re-proposal (force retry of previously-reverted edits).
     let suppress_reverted = !suppression_disabled();
@@ -8424,13 +8451,35 @@ fn main() {
                                 lane.dropped
                             );
                         }
-                        for oe in lane.edits {
-                            let overlaps = edits.iter().any(|pe| {
-                                riir_clippy::draft::clippy_feed::spans_overlap(&pe.edit, &oe.edit)
-                            });
-                            if !overlaps {
-                                oracle_keys.insert((oe.edit.start, oe.edit.end));
-                                edits.push(oe);
+                        // Issue 118 T2: the oracle lane rides the same bench-guard
+                        // door as rust_perf (P30) — a MachineApplicable
+                        // suggestion consumed verbatim can be structural (the
+                        // P15 two-part rename+delete shape), and a bench file's
+                        // numbers ARE its artifact. Decline unless the operator
+                        // named this file explicitly (the T3 posture: flag +
+                        // proceed, never a silent hard refusal).
+                        let oracle_forced = args
+                            .paths
+                            .iter()
+                            .any(|u| riir_clippy::bench_guard::user_path_forces(u, file));
+                        if bench_target && !oracle_forced {
+                            if !lane.edits.is_empty() {
+                                println!(
+                                    "bench-guard: declining {} oracle suggestion(s) on {display} \
+                                     (bench target — measurement-altering, apply manually only)",
+                                    lane.edits.len()
+                                );
+                                n_bench_oracle_declined += lane.edits.len();
+                            }
+                        } else {
+                            for oe in lane.edits {
+                                let overlaps = edits.iter().any(|pe| {
+                                    riir_clippy::draft::clippy_feed::spans_overlap(&pe.edit, &oe.edit)
+                                });
+                                if !overlaps {
+                                    oracle_keys.insert((oe.edit.start, oe.edit.end));
+                                    edits.push(oe);
+                                }
                             }
                         }
                     }
@@ -9340,6 +9389,13 @@ fn main() {
         println!(
             "bench-guard: declined {n_bench_declined_total} rust_perf edit(s) on bench target(s) \
              (measurement-altering — see the per-file lines above)"
+        );
+    }
+    // Issue 118 T2: the oracle-lane declines ride the same summary.
+    if n_bench_oracle_declined > 0 {
+        println!(
+            "bench-guard: declined {n_bench_oracle_declined} oracle suggestion(s) on bench \
+             target(s) (measurement-altering — apply manually only)"
         );
     }
     // P12: report the suppressed re-proposals — the operator must see what

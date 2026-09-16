@@ -362,6 +362,15 @@ pub struct FixCompileReport {
     /// run to `<root>/.heal/fixseq/run-<ts>.jsonl` by the CLI (the
     /// `dump_misses` law: an aid, never a gate).
     pub attempts: Vec<AttemptRecord>,
+    /// Issue 118 T1: bench-target error sites DECLINED by the bench guard
+    /// (distinct `(file, line, code)` — strategies for one site count
+    /// once). The routine write path leaves these standing, loudly.
+    pub bench_declined: usize,
+    /// Issue 118 T1: distinct bench files whose candidates were declined.
+    pub bench_declined_files: Vec<PathBuf>,
+    /// Issue 118 T3: bench files that proceeded under the explicit-path
+    /// override (flagged, not declined — the operator named the file).
+    pub bench_forced_files: Vec<PathBuf>,
 }
 
 impl FixCompileReport {
@@ -485,6 +494,30 @@ pub struct CompileDriver {
     revive: Option<ReviveFn>,
 }
 
+/// Issue 118 T3: the explicit-path override set. A bench-file candidate
+/// whose file one of the caller's paths NAMES — the exact file, or a
+/// `benches` directory above it — proceeds under a recorded flag instead
+/// of the routine decline; naming the target IS the operator's consent.
+/// Matching is best-effort canonicalized then lexical (see
+/// [`crate::bench_guard::user_path_forces`]).
+struct ForcedPaths {
+    roots: Vec<PathBuf>,
+}
+
+impl ForcedPaths {
+    fn new(user: &[PathBuf]) -> Self {
+        Self {
+            roots: user.to_vec(),
+        }
+    }
+
+    fn matches(&self, file: &Path) -> bool {
+        self.roots
+            .iter()
+            .any(|u| crate::bench_guard::user_path_forces(u, file))
+    }
+}
+
 impl Default for CompileDriver {
     fn default() -> Self {
         Self::new()
@@ -575,6 +608,11 @@ impl CompileDriver {
     /// `write == true` → the bounded loop; disk holds exactly the kept
     /// fixes on return.
     ///
+    /// Issue 118: in write mode, bench-target candidates are DECLINED
+    /// (or, when `paths` names the file / its `benches/` dir explicitly,
+    /// flagged and proceeded) — see the `bench_*` report fields. Review
+    /// mode is untouched: it writes nothing, so there is nothing to guard.
+    ///
     /// The loop body is intentionally one unit: propose → pick → apply →
     /// recheck → keep/revert share the `tried` set + the diagnostic state,
     /// and splitting it would thread four locals through helper
@@ -628,6 +666,13 @@ impl CompileDriver {
 
         // ── Write mode: the bounded loop ─────────────────────────────────
         let mut tried: HashSet<TriedKey> = HashSet::new();
+        // Issue 118: the explicit-path override set + the bench-guard
+        // bookkeeping (distinct sites/files, so per-iteration re-proposals
+        // of the same declined error never double-count).
+        let forced = ForcedPaths::new(paths);
+        let mut bench_flagged: HashSet<PathBuf> = HashSet::new();
+        let mut bench_files_declined: HashSet<PathBuf> = HashSet::new();
+        let mut bench_sites: HashSet<(PathBuf, usize, String)> = HashSet::new();
         for _iter in 0..self.max_iters {
             let iter_t0 = std::time::Instant::now();
             // Propose for every current diagnostic.
@@ -657,6 +702,36 @@ impl CompileDriver {
                 !tried.contains(&tried_key(c))
                     || revive.as_ref().is_some_and(|r| r(c))
             });
+            // Issue 118 T1 (the P30 lane shape, one domain over): a bench
+            // target's numbers ARE its artifact, and a compile repair can
+            // alter WHAT the bench measures — hoisting a loop, changing a
+            // type's size/copy semantics, deleting the "dead" result that
+            // was the timing subject (the exact specimen class that
+            // motivated P30 was itself compile-shaped). The routine write
+            // path DECLINES bench-file candidates; an explicit user path
+            // naming the file (or its `benches/` dir) overrides with a
+            // recorded flag, never silently (the T3 posture). The decision
+            // lands in the report; the CLI prints it loudly.
+            let mut allowed: Vec<FixCandidate> = Vec::with_capacity(candidates.len());
+            for c in candidates.drain(..) {
+                let is_bench = std::fs::read_to_string(&c.file).is_ok_and(|src| {
+                    crate::bench_guard::is_bench_target(&c.file.to_string_lossy(), &src)
+                });
+                if !is_bench || forced.matches(&c.file) {
+                    if is_bench && bench_flagged.insert(c.file.clone()) {
+                        report.bench_forced_files.push(c.file.clone());
+                    }
+                    allowed.push(c);
+                    continue;
+                }
+                if bench_files_declined.insert(c.file.clone()) {
+                    report.bench_declined_files.push(c.file.clone());
+                }
+                if bench_sites.insert((c.file.clone(), c.line, c.code.clone())) {
+                    report.bench_declined += 1;
+                }
+            }
+            candidates = allowed;
             let Some(best) = candidates.first().cloned() else {
                 break; // no untried candidates left — stop (misses recorded)
             };

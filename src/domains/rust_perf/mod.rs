@@ -38,7 +38,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{HealDomain, HealEntry};
 
-pub mod bench_guard;
+// Issue 118: the bench guard moved to the crate top level
+// (`crate::bench_guard`, ungated) so the rustc_errors driver can consume
+// it without gating on this domain's feature; re-exported here for the
+// established P30 call sites.
+pub use crate::bench_guard;
 pub mod corpus;
 pub mod proposers;
 

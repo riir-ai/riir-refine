@@ -1,5 +1,58 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 118: the bench-target guard extended to the compile-repair surfaces (`--fix-compile` writes + the oracle lane)
+
+P30 (same day) landed DECLINE-OR-FLAG for **rust_perf** edits on bench
+targets with a deliberately narrow scope note: "making a bench COMPILE is
+not measurement-altering". Issue 118 re-adjudicated that sentence: a
+compile repair can hoist a loop, change a type's size/copy semantics, or
+delete the "dead" result that was the timing subject — the exact
+`dead-result-timing-loop-folded-under-lto` specimen that motivated P30 was
+itself a compile-shape edit class. The `--fix-compile` driver runs
+`cargo check --all-targets` (bench targets included), so its write path
+had real reach into bench files with zero bench awareness.
+
+**Landed (T1–T4):**
+- `bench_guard` PROMOTED to the crate top level (`src/bench_guard.rs`,
+  ungated) — the rustc_errors driver consumes it without gating on the
+  `rust_perf` feature (`--no-default-features --features rustc_errors`
+  keeps compiling); `domains::rust_perf::bench_guard` re-exports it, so
+  the P30 call sites are unchanged.
+- **T1** — the driver's write loop filters candidates through
+  `is_bench_target` BEFORE the `best` pick: routine-path bench candidates
+  are declined into the report (`bench_declined` sites, distinct
+  `(file, line, code)`; `bench_declined_files`), never written; the loop
+  terminates honestly when only bench candidates remain (`remaining`
+  carries them). The CLI prints the per-file + total lines right after
+  `driver.run`.
+- **T3** — the explicit-path override: `bench_guard::user_path_forces`
+  (canonicalize-then-lexical) — the operator naming the bench FILE or its
+  `benches/` DIR on the command line prints the flag and proceeds
+  (`bench_forced_files`); naming a crate root or `.` never forces.
+  Never a silent hard refusal on a user-forced target.
+- **T2** — the P21 oracle-edits lane (`--clippy-json` under `--fix`)
+  rides the same door at the consumption site: MachineApplicable
+  suggestions at bench spans are declined with the loud line +
+  `n_bench_oracle_declined` run total, unless the file was named
+  explicitly (same `oracle_forced` check).
+- **T4** — `tests/fix_compile_bench_guard.rs`: real cargo, one E0596
+  specimen in BOTH a lib and a `harness = false` bench target — routine
+  run heals the lib, declines the bench (file byte-identical, zero
+  writes), explicit run flags-and-proceeds to CLEAN. Matcher units (8)
+  in `src/bench_guard.rs` — exact-file / `benches`-dir consent shapes,
+  the `benches_foo` + repo-root non-consent shapes, `\` + `..`
+  normalization, lexical fallback.
+
+**The strategy classification (the issue's adjudication artifact):**
+shipped the CONSERVATIVE blanket decline — ALL driver writes on bench
+targets decline on the routine path; the per-strategy safe subset
+(import-only / rename-in-place) is the recorded admission path when a
+real corpus need appears, not before (a loud false decline beats a
+silent measurement break — P30's own construction principle).
+
+Gates: `cargo test --lib bench_guard` 18/18 · `--test
+fix_compile_bench_guard` 2/2 (real cargo) · clippy clean on the touched
+files · full `--lib` green.
 ## 2026-09-16 — Issue 117 completed (the delta half): the six remaining stubs + the three silent tails — and the dual-implementation yield behind it
 
 The staleness guard landed TWICE in one window. The sibling session's

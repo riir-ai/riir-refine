@@ -59,6 +59,7 @@ pub mod adaptive_drafter;
 // compiled-out gated command prints before exit 2. Ungated on purpose — a
 // STALE binary is precisely one that has few features, so the module that
 // diagnoses staleness must be in every build.
+pub mod bench_guard;
 pub mod build_stamp;
 pub mod corpus;
 pub mod dispersion;

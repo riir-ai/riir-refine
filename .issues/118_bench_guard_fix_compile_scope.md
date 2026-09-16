@@ -1,5 +1,5 @@
 # Issue 118 — Bench-target guard scope: `--fix-compile` edits on bench targets are measurement-altering
-**Status:** OPEN — P2, unblocked. Filed 2026-09-16 from the room-to-improve triage (session record: HISTORY.md same-day entry).
+**Status:** RESOLVED 2026-09-16 — T1–T4 landed (see Landing record below).
 
 ## Why
 
@@ -47,14 +47,40 @@ strategies are pure syntax while others move code.
   adjudication artifact, the P30 SKILL.md-row precedent.
 
 ## Tasks
-- [ ] T1 — Wire `is_bench_target` into the `--fix-compile` write path:
-      decline + loud line + run-summary total (the P30 lane shape).
-- [ ] T2 — Oracle-edits lane (P21) on bench spans: same door, same line.
-- [ ] T3 — Explicit-path override posture: named bench path prints the flag
-      and proceeds (never a silent hard-refusal on a user-forced target).
-- [ ] T4 — Fixture tests: synthetic `benches/` compile-error specimen —
-      routine path declines, explicit path flags-and-proceeds; identical
-      error in `src/` heals unaffected.
+- [x] T1 — `is_bench_target` wired into the `--fix-compile` write path
+      (the candidate filter before the `best` pick in
+      `rustc_errors::driver::run`): decline + report fields
+      (`bench_declined`, `bench_declined_files`) + CLI loud lines.
+- [x] T2 — Oracle-edits lane (P21) on bench spans: same door, same line
+      (`n_bench_oracle_declined` + per-file decline print + run total).
+- [x] T3 — Explicit-path override posture: named bench path (exact file
+      or a `benches/` dir component) prints the flag and proceeds —
+      `bench_guard::user_path_forces` + `ForcedPaths` in the driver + the
+      `oracle_forced` check in the fix loop.
+- [x] T4 — Fixture tests: `tests/fix_compile_bench_guard.rs` (real cargo,
+      E0596 in both a lib and a `harness = false` bench target) — routine
+      path declines + bench file byte-identical + lib heals unaffected;
+      explicit path flags-and-proceeds to CLEAN. Matcher units in
+      `src/bench_guard.rs` (8 tests).
+
+## Landing record (2026-09-16)
+
+- **The strategy classification the issue asked for**: shipped the
+  CONSERVATIVE blanket decline — ALL driver writes on bench targets are
+  declined on the routine path, no per-strategy safe subset admitted.
+  Rationale: P30's own construction principle (a loud false decline
+  beats a silent measurement break); the per-strategy split
+  (import-only / rename-in-place as provably safe) is recorded here as
+  the admission path when a REAL corpus need appears — not before
+  (reopening trigger: a workspace `--fix-compile` run blocked on a bench
+  target whose fix is demonstrably measurement-safe).
+- `bench_guard` promoted to the crate top level (ungated) so the
+  `rustc_errors` driver consumes it without gating on the `rust_perf`
+  feature; `domains::rust_perf::bench_guard` re-exports it (P30 call
+  sites unchanged).
+- P30's founding scope sentence ("making a bench COMPILE is not
+  measurement-altering") is superseded by this issue's re-adjudication
+  — the module docs in `src/bench_guard.rs` record the reversal.
 
 ## Related
 - P30 / `src/domains/rust_perf/bench_guard.rs` (the guard + its detection),
