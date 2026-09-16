@@ -1,5 +1,131 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 116: the corpus-truth delta surface — `[no corpus rule]` carries TWO opposite messages
+
+Landed `a0ec400d`. `src/corpus_delta.rs` + the suggest-lane summary line +
+`--corpus-delta`; 14 fixtures; lib 1640/1640.
+
+The two lanes read two corpus truths **by design**: the fix lane the compiled
+`FIXABLE_LINTS ∪ VERIFY_LINTS` (why a freshly-landed lint heals the moment it
+ships), the suggest lane a rule book a leased epoch REPLACES wholesale
+(`DomainOverlay` — why it ranks on live evidence and lags by the lease
+cadence). The issue asked for a freshness COUNT; building it made the
+partition obvious and the partition is the finding:
+
+| bucket | what `[no corpus rule]` means | the action |
+|---|---|---|
+| in the compiled fix set | "not leased **yet**" | `cargo heal --fix` rewrites it today |
+| in neither lane | "unsupported" | mining intake (Issue 119's territory) |
+
+The two demand **opposite actions**, so reporting only the freshness half
+would have been the flattering number and the less useful one. Both print,
+and the counts are asserted to partition (`delta_lints + unfixable ==
+missing_lints`, same for spans); `missing_spans` is pinned against the run
+summary's own `no-corpus-rule` total so the two lines cannot contradict each
+other on screen.
+
+**The FIXABLE/VERIFY tiers stay split.** A VERIFY row only applies under
+`--fix --verify`, so collapsing them sends half the rows to an invocation
+that will not touch them; a lint in BOTH tables reports the LOOSER remedy
+(`redundant_closure` is historically both, and sending a reader to a flag
+they do not need is the same defect mirrored). `fix_lane_tiers()` is the
+deliberate split sibling of Issue 119's `compiled_fix_set()`, which UNIONS
+the same two tables for the opposite reason: a coverage-debt figure must not
+move with the reader's feature flags.
+
+**Never noise.** `summary_line()` is `None` on an empty delta AND when every
+missing lint is a genuine gap — the expected state is quiet, bounded by the
+lease cadence, and a line firing on gaps would print on nearly every real
+run (the cries-wolf instrument AGENTS.md warns gets ignored). `--corpus-delta`
+without a feed REFUSES with the precondition named rather than printing an
+empty table. It is a MODIFIER, deliberately not in `has_mode` — as a mode it
+would claim a run and scan nothing.
+
+⚠ **The freshness bucket is 0 BY CONSTRUCTION on a lease-less build.**
+Measured the same day by `--coverage-report`: fix-set-only = 0, so the
+compiled fix set is a strict subset of the seed corpus and **no end-to-end
+CLI run can exercise that path**. Every arm over hand-built input therefore
+asserts only the abstraction; `a_lagging_lease_produces_a_real_freshness_delta`
+drives the REAL producer instead — a `DomainOverlay` replacing clippy's seed
+with one unrelated rule (exactly a lagging lease), a real `needless_return`
+anchor through `suggest_file_anchored`, and the resulting `anchored_missing`
+fed to `delta()` against the real `FIXABLE_LINTS`, asserting the precondition
+(`rule_book` is `None`) so it cannot pass vacuously.
+
+`normalize` is SHARED with `corpus_coverage` rather than copied: the two
+reports answer different questions but must agree on what a lint NAME is, or
+a kebab-spelled feed row is a gap in one and covered in the other purely on
+punctuation — a FALSE mining-intake row.
+
+Non-goal held: the seam is NAMED, not closed, and the report says
+"DIFFERENT BY DESIGN" on its own output so the next reader does not file it
+as a bug.
+
+## 2026-09-16 — Issue 119: the corpus coverage-debt sweep — and the blind spot its first run found
+
+Landed `300411ed` (+ the cargo-heal SKILL.md row at `620357c8`).
+`cargo heal --coverage-report`, `src/corpus_coverage.rs`, 33 fixtures.
+
+Derived population, never hand-typed: the lint list comes from the INSTALLED
+driver (`clippy-driver -W help`), so the debt moves as clippy ships lints.
+Report-first; REFUSES exit 1 on a blind derivation or an uncompiled corpus.
+
+**First measurement, clippy 0.1.98 (48a229ceae 2026-09-01):** 822 derived
+lints in 9 groups · 54 corpus-covered · **768 UNCOVERED** · **449 of those
+fire on a plain `cargo clippy`**. Per-group debt: style 136/158 ·
+pedantic 132/143 · restriction 132/132 · complexity 127/143 ·
+suspicious 83/83 · correctness 66/67 · nursery 50/53 · perf 37/38 ·
+cargo 5/5.
+
+**Two cross-checks nothing had measured, both clean.** `fix-set-only = 0` —
+every one of the 51 `FIXABLE ∪ VERIFY` names has a corpus rule, so the
+corpus-lockstep law ("no corpus entry without a proposer") holds from the
+CONVERSE side, which only the forward direction had ever been asserted for.
+And 0 name collisions against the 173 rule ids in the other five compiled
+domains (the Batch-146 dedup law) — expected, because those are kebab-case
+concept ids, but expected-and-unmeasured is what that law exists for.
+
+⛔ **The finding outranks the candidate list: 0 of the 449 default-firing
+uncovered lints carry ANY frequency evidence.** Every evidenced row is
+`allow`-level. The mechanism is the evidence's own provenance — the Bench 061
+histogram was captured with pedantic+nursery ENABLED over repos this stack
+had already clippy-swept, so it ranks the OPT-IN tail and is structurally
+blind to the debt an ordinary user sees. Staging off the ranked head alone
+therefore stages opt-in lints, deliberately or not. The report prints the
+cross-tab and says `⚠ DISJOINT` out loud rather than leaving a reader to
+compute it. **The successor lead is a default-level histogram, not another
+rule** — filed in `.distill/001` §post-mining intake.
+
+**T3 — the frequency axis joins two cited sources and never estimates.**
+Local: the Bench 061 fired histogram with capture date, source-repo count and
+dataset digest printed, plus a loud warning that it was captured under cargo
+1.97 while the sweep runs 1.98. Study: kornel's published 100K-crate top-10
+(`.benchmarks/021`), transcribed WITH counts and restricted to the **3 rows
+in the `clippy::` namespace** — the other 7 are rustc lints, and attributing
+their frequency to a clippy corpus gap is the transcription error the arm
+pins against. **Tier dominates count**: a 2-source row at 90 firings outranks
+a 1-source row at 1011, because the two are different populations (6 repos on
+one day vs 100K crates) and summing them would invent a third number. A lint
+neither source observed renders `uncited`, **not zero**. Li et al. (ICSE
+2024) is deliberately NOT transcribed — 021 cites it for the SHAPE of the
+distribution, not a per-lint table, and inventing per-lint counts from a
+shape claim is what this axis exists to refuse.
+
+`MachineApplicable` is declared **underivable** rather than printed: it is a
+property of an EMITTED diagnostic, not of a lint declaration; the
+`--clippy-json` oracle lane owns that axis.
+
+**Collision record.** A concurrent session implemented this issue in parallel
+as `src/coverage_report.rs` (480 lines + CLI wiring) and deleted it unlanded
+while this work was in flight. Its frequency axis asserted that no histogram
+could exist for an uncovered lint ("nothing fired them through us") — the
+premise is false and is the measured reason this implementation joins Bench
+061: the histogram measures what REAL CLIPPY fires on our repos, and **26 of
+its 30 rows are uncovered** (3,734 firings). The 4 that are covered are
+exactly the rows past batches mined OUT of it (`use_self` +
+`suboptimal_flops` Batch 89, `items_after_statements` + `manual_let_else`
+Batch 90) — it is already the proven intake instrument for uncovered lints.
+
 ## 2026-09-16 — Issue 118: the bench-target guard extended to the compile-repair surfaces (`--fix-compile` writes + the oracle lane)
 
 P30 (same day) landed DECLINE-OR-FLAG for **rust_perf** edits on bench
