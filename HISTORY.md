@@ -209,6 +209,24 @@ checked feature states. Score-bench + retrieval floors structurally
 unaffected (no corpus/proposer/matcher change — lane policy only) and not
 re-run.
 
+Residue counted (the guard-landing protocol): workspace heal history mined
+for perf-signature edits in `benches/` — the only benches/ hit across the
+swept repos is riir-ai `e8f758995` (7 vec-with-capacity edits in its 95-file
+batch, exactly one in a bench file: `reconstruction_bench.rs`
+`g2_find_peaks`). Adjudicated NOT measurement-altering: the fn runs in
+`run_g2_gate()`'s verification phase (recall/FPR verdict), outside every
+timing loop (the `Instant::now` sites live in other fns), and the commit's
+own validation had already pinned "24 benches exit + normalized-output
+identical". Verdict: 0 measurement-altering heal edits landed in consumer
+bench files — the guard closes a live lane, not an already-leaked one.
+
+Collision note (shared worktree): the heal.rs lane wiring landed inside the
+concurrent Issue-113 auto-oracle commit `3f0eecb9` (the sibling session
+staged heal.rs for their hunks and these hunks rode along; their message
+notes the in-flight `bench_guard.rs` as pre-existing). That intermediate
+state could not build the cargo-heal bin alone; this module + docs commit
+(`152cfeee`) completed the landing and repaired the tip.
+
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
 
 The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`
