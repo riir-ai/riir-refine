@@ -48,6 +48,18 @@ cargo heal --fix --verify --verify-args "--features <set>" <paths>   # gated cod
   (pre-existing drift + CRLF files are skipped — no formatting churn).
 - After applying: validate in the TARGET repo — `cargo clippy --all-targets`
   + `cargo test` (assert COUNTS for gated suites, never bare exit codes).
+- **Auto-oracle (Issue 113) + the feature knob (Issue 115)**: a bare/suggest
+  run over a cargo project lints it with REAL clippy at DEFAULT features
+  (`[oracle]`-anchored spans replace similarity ranking; `[heuristic]` =
+  feed-covered span with no diagnostic). Diagnostics that only fire behind a
+  non-default feature are INVISIBLE at that posture — re-aim the spawn with
+  `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` (loud status line; a
+  feature-superset clippy run is materially slower — pay it when the
+  project's diagnostics of interest live behind cfg gates, e.g. after a
+  heal touched `#[cfg(feature)]` code; `RIIR_HEAL_AUTO_ORACLE=0` disables
+  the auto-run entirely; a manual `--clippy-json` still wins over both).
+  Unknown feature names fail the spawn → LOUD heuristic-only fallback
+  naming the knob.
 - Commit the heal separately: `fix: heal <repo> <scope>`.
 - **Invocation note (agents, the misattribution trap)**: run the healer with
   your terminal tool's `cd` PARAMETER + absolute target paths. A

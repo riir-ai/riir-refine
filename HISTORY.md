@@ -1,5 +1,41 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 115 resolved: the auto-oracle feature knob (`RIIR_HEAL_AUTO_ORACLE_FEATURES`) — gated diagnostics leave the `[heuristic]` blind spot
+
+The Issue-113 auto-oracle lints at DEFAULT features, so diagnostics that
+only fire behind a non-default feature were invisible to the anchored
+suggest lane — spans fell back to `[heuristic]` ranking, the exact class
+`consumer_residue_sweep.sh`'s screen exists for (`--all-features` because
+"measured residue sat behind non-default ones"). Issue 115 (the room-to-improve
+triage) closed the gap the honest way: the operator re-aims the spawn.
+
+**Landed:** `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` — `clippy_oracle::features_from`
+(unset/blank/empty-segments → `None` = the default posture; trimmed CSV,
+empty segments dropped) → `run_clippy` gains `--features <csv>` injection;
+the bin call site prints a LOUD knob-active line (cost honesty: a
+feature-superset clippy run is materially slower), words the clean-tree arm
+honestly (clean at the REQUESTED features, not "default"), and BOTH failure
+arms (spawn error + zero-parseable-diagnostic exit) name the knob when it is
+set — the most likely cause is a feature name the target project does not
+carry. `RIIR_HEAL_AUTO_ORACLE=0` still wins outright; a manual `--clippy-json`
+still wins over both; `--all-features` stays a deliberate non-default (cost +
+sibling feature-combo explosion — riir-engine ~50 features). T4: the
+`--clippy-json` usage/docs rows + the cargo-heal SKILL.md bullet (when to pay
+the superset cost).
+
+**Live-proven e2e** (`tests/auto_oracle_features_cli.rs`, the P15 specimen
+shape one lane over — a scratch crate whose ONLY diagnostic lives behind
+`#[cfg(feature = "gated")]`, billing plane hard-off, scratch-local
+CARGO_TARGET_DIR): WITHOUT the knob — `clean tree at default features`, the
+span `[heuristic]`, zero `oracle finding`; WITH the knob — the loud
+`with features [gated]` line, the span `[oracle]`-anchored,
+`needless_return` as an oracle finding, nothing heuristic. Gates: clippy
+`-D warnings` clean in BOTH states (default `--all-targets` +
+`latent_retrieval,kat_service --all-targets`), oracle unit tests 8/8 (2 new
+for the knob parse). En-route unblock: the fresh P31 `orphan_report.rs`
+fixture's `r#"…"#` needed no hashes (`needless_raw_string_hashes`, red under
+`--tests` in the lane) — 2-char unhash, no semantic change.
+
 ## 2026-09-16 — Issue 113: the auto-oracle — `cargo heal` now runs the clippy oracle for you (the "agave 6951 rows → +1 credit" session)
 
 **Owner mandate:** mining agave pushed 6951 heuristic rows for ~0 credit — the

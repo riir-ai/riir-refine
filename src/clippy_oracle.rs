@@ -19,14 +19,21 @@
 //!
 //! Precedent: `--fix-compile` already spawns cargo through
 //! [`crate::compile_oracle`] — the healer spawning the user's toolchain is
-//! not a new class. What stays true: the auto-run never picks features for
-//! you (default features only, said so in the status line) and never
-//! silently changes the verdict of a run it could not anchor.
+//! not a new class. What stays true: the auto-run never GUESSES features
+//! for you (default features unless you say otherwise, said so in the
+//! status line) and never silently changes the verdict of a run it could
+//! not anchor.
 //!
 //! Default-features scoping is honest, not complete: cfg-gated code compiles
-//! to nothing under it (the workspace's own blindness class). The status
-//! line names the arm; widening (feature sets, targets) is a later owner
-//! call, not a silent guess.
+//! to nothing under it (the workspace's own blindness class —
+//! `consumer_residue_sweep.sh` runs `--all-features` for exactly this
+//! reason). Issue 115 added the operator re-aim:
+//! `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` spawns with `--features <csv>`
+//! (a loud status line when active — a feature-superset clippy run is
+//! materially slower; unknown feature names fail the clippy spawn, which
+//! degrades LOUD to heuristic-only naming the knob). `--all-features`
+//! stays a deliberate non-default (cost + sibling feature-combo explosion);
+//! the auto-run never widens its own scope.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -43,6 +50,33 @@ pub fn enabled_from(v: Option<&str>) -> bool {
 #[must_use]
 pub fn auto_oracle_enabled() -> bool {
     enabled_from(std::env::var("RIIR_HEAL_AUTO_ORACLE").ok().as_deref())
+}
+
+/// Parsed `RIIR_HEAL_AUTO_ORACLE_FEATURES` value (Issue 115): `None` = the
+/// default-features posture (unset, blank, or nothing but empty segments);
+/// `Some(non-empty)` = spawn clippy with `--features <csv>`. The oracle can
+/// only name features the TARGET project's manifests carry — unknown names
+/// fail the clippy spawn, which the caller degrades to heuristic-only LOUD
+/// (never a silent un-anchored run that looks anchored).
+#[must_use]
+pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
+    let raw = v?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let list: Vec<String> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if list.is_empty() { None } else { Some(list) }
+}
+
+/// The live env read.
+#[must_use]
+pub fn auto_oracle_features() -> Option<Vec<String>> {
+    features_from(std::env::var("RIIR_HEAL_AUTO_ORACLE_FEATURES").ok().as_deref())
 }
 
 /// Nearest cargo project root for the scan targets (v1: the FIRST target —
@@ -78,16 +112,31 @@ pub struct OracleRun {
 }
 
 /// Spawn `cargo clippy --workspace --no-deps --message-format=json --quiet`
-/// in `root`.
+/// in `root`, optionally re-aimed at a feature set (`--features <csv>`, the
+/// `RIIR_HEAL_AUTO_ORACLE_FEATURES` posture — `None` = default features).
 ///
 /// # Errors
 ///
 /// Returns the spawn failure verbatim — the caller degrades to
 /// heuristic-only with this message; a spawned-but-failing clippy is NOT an
 /// error here (its exit code travels in [`OracleRun`]).
-pub fn run_clippy(root: &Path, cargo_bin: &str) -> Result<OracleRun, String> {
-    let output = Command::new(cargo_bin)
-        .args(["clippy", "--workspace", "--no-deps", "--message-format=json", "--quiet"])
+pub fn run_clippy(
+    root: &Path,
+    cargo_bin: &str,
+    features: Option<&[String]>,
+) -> Result<OracleRun, String> {
+    let mut cmd = Command::new(cargo_bin);
+    cmd.args([
+        "clippy",
+        "--workspace",
+        "--no-deps",
+        "--message-format=json",
+        "--quiet",
+    ]);
+    if let Some(set) = features {
+        cmd.arg("--features").arg(set.join(","));
+    }
+    let output = cmd
         .current_dir(root)
         .output()
         .map_err(|e| format!("cannot spawn `{cargo_bin} clippy`: {e}"))?;
@@ -153,6 +202,28 @@ mod tests {
         assert!(!enabled_from(Some("false")));
         assert!(!enabled_from(Some("off")));
         assert!(enabled_from(Some("2")), "unknown values default ON, not silent-off");
+    }
+
+    #[test]
+    fn features_knob_unset_blank_or_empty_segments_is_default_posture() {
+        assert_eq!(features_from(None), None);
+        assert_eq!(features_from(Some("")), None);
+        assert_eq!(features_from(Some("   ")), None);
+        assert_eq!(features_from(Some(",, ,,")), None, "nothing but empty segments");
+    }
+
+    #[test]
+    fn features_knob_parses_trimmed_csv_dropping_empty_segments() {
+        assert_eq!(features_from(Some("gated")), Some(vec!["gated".to_owned()]));
+        assert_eq!(
+            features_from(Some(" a , b ,c")),
+            Some(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()])
+        );
+        assert_eq!(
+            features_from(Some("a ,, b")),
+            Some(vec!["a".to_owned(), "b".to_owned()]),
+            "interior empty segments drop, the rest keep their order"
+        );
     }
 
     #[test]

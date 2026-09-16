@@ -3493,7 +3493,10 @@ USAGE:
                     never consumed. AUTO: with no feed given, a scan over a
                     cargo project runs the oracle itself (default features,
                     loud, compiles the project — RIIR_HEAL_AUTO_ORACLE=0
-                    disables; a manual --clippy-json wins outright).
+                    disables; RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv> re-aims
+                    the auto run at a feature set, for diagnostics that
+                    only fire behind a non-default feature; a manual
+                    --clippy-json wins outright).
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
@@ -3602,8 +3605,10 @@ struct Args {
     /// no diagnostic are marked `[heuristic]`. Augments `--suggest` /
     /// the bare dry run / the `--fix` review pass. Since Issue 113 the
     /// AUTO-ORACLE runs this stream for you on cargo projects (default
-    /// features, loud, `RIIR_HEAL_AUTO_ORACLE=0` opts out) — this flag
-    /// remains the explicit/curated override and wins outright.
+    /// features, loud, `RIIR_HEAL_AUTO_ORACLE=0` opts out;
+    /// `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` re-aims the spawn at a
+    /// feature set — Issue 115) — this flag remains the explicit/curated
+    /// override and wins outright.
     clippy_json: Option<String>,
     top_k: usize,
     verify: bool,
@@ -7842,11 +7847,39 @@ fn main() {
             Some(root) => {
                 let cargo_bin =
                     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-                eprintln!(
-                    "clippy oracle (auto): linting {} at default features — this compiles the project, first run can take a while (RIIR_HEAL_AUTO_ORACLE=0 disables)",
-                    root.display()
-                );
-                match riir_clippy::clippy_oracle::run_clippy(&root, &cargo_bin) {
+                // Issue 115: the operator can re-aim the spawn at a feature
+                // set — diagnostics that only fire behind a non-default
+                // feature are invisible at the default posture (the exact
+                // class consumer_residue_sweep.sh's screen exists for).
+                let features = riir_clippy::clippy_oracle::auto_oracle_features();
+                match features.as_deref() {
+                    Some(set) => eprintln!(
+                        "clippy oracle (auto): linting {} with features [{}] — a feature-superset clippy run is materially slower than default features; first run can take a while (RIIR_HEAL_AUTO_ORACLE_FEATURES; unset for default features; RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                        root.display(),
+                        set.join(",")
+                    ),
+                    None => eprintln!(
+                        "clippy oracle (auto): linting {} at default features — this compiles the project, first run can take a while (RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                        root.display()
+                    ),
+                }
+                // A knob-directed spawn that fails must name the knob: the
+                // most likely cause is a feature name the target project
+                // does not carry (Issue 115 T2 — loud, never silent).
+                let feature_hint = |msg: &str| {
+                    if features.is_some() {
+                        format!(
+                            "{msg} — RIIR_HEAL_AUTO_ORACLE_FEATURES is set; check the feature names against the project's manifests, or unset the knob"
+                        )
+                    } else {
+                        msg.to_owned()
+                    }
+                };
+                match riir_clippy::clippy_oracle::run_clippy(
+                    &root,
+                    &cargo_bin,
+                    features.as_deref(),
+                ) {
                     Ok(run) => {
                         let diags = parse_clippy_feed(&run.text);
                         match riir_clippy::clippy_oracle::classify(run.exit, diags.len()) {
@@ -7857,21 +7890,34 @@ fn main() {
                                 Some(diags)
                             }
                             riir_clippy::clippy_oracle::OracleOutcome::Clean => {
-                                eprintln!(
-                                    "clippy oracle (auto): clean tree at default features — covered spans will be marked heuristic"
-                                );
+                                // Word the arm honestly: with the knob active
+                                // this is clean at the REQUESTED features, not
+                                // at default ones.
+                                match features.as_deref() {
+                                    Some(set) => eprintln!(
+                                        "clippy oracle (auto): clean tree at features [{}] — covered spans will be marked heuristic",
+                                        set.join(",")
+                                    ),
+                                    None => eprintln!(
+                                        "clippy oracle (auto): clean tree at default features — covered spans will be marked heuristic"
+                                    ),
+                                }
                                 Some(diags)
                             }
                             riir_clippy::clippy_oracle::OracleOutcome::Failed(msg) => {
                                 eprintln!(
-                                    "clippy oracle (auto): {msg} — continuing heuristic-only"
+                                    "clippy oracle (auto): {} — continuing heuristic-only",
+                                    feature_hint(&msg)
                                 );
                                 None
                             }
                         }
                     }
                     Err(e) => {
-                        eprintln!("clippy oracle (auto): {e} — continuing heuristic-only");
+                        eprintln!(
+                            "clippy oracle (auto): {} — continuing heuristic-only",
+                            feature_hint(&e)
+                        );
                         None
                     }
                 }
