@@ -107,6 +107,7 @@ pub struct LatentMatcher {
     sec: Option<RuleIndex>,
     docker: Option<RuleIndex>,
     dist: Option<RuleIndex>,
+    shader_perf: Option<RuleIndex>,
     rule_book: std::collections::HashMap<String, RuleInfo>,
     /// G4 scratch — reused across every span + domain query.
     scratch: super::corpus_index::SuggestScratch,
@@ -335,13 +336,33 @@ impl LatentMatcher {
         #[cfg(not(feature = "dist"))]
         let dist = None;
 
+        #[cfg(feature = "shader_perf")]
+        let shader_perf = index_domain!(
+            shader_perf,
+            DomainId::ShaderPerf,
+            overlay_for(DomainId::ShaderPerf).unwrap_or_else(|| {
+                crate::domains::shader_perf::ShaderPerfDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.rule_id().to_string(),
+                            e.buggy_code().to_string(),
+                            e.fixed_code().to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+        );
+        #[cfg(not(feature = "shader_perf"))]
+        let shader_perf = None;
+
         if router_domains.is_empty() {
             // Single-domain-less feature combos (latent_retrieval alone):
             // the config + overlay are only consumed inside `index_domain!`
             // — reference them so the no-domain build stays warning-clean.
             let _ = (&config, &overlay_for);
             return Err(
-                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal/sec/docker/dist)"
+                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal/sec/docker/dist/shader_perf)"
                     .to_string(),
             );
         }
@@ -365,6 +386,7 @@ impl LatentMatcher {
             sec,
             docker,
             dist,
+            shader_perf,
             rule_book,
             scratch: super::corpus_index::SuggestScratch::default(),
         })
@@ -404,6 +426,7 @@ impl LatentMatcher {
             DomainId::Sec => self.sec.is_some(),
             DomainId::Docker => self.docker.is_some(),
             DomainId::Dist => self.dist.is_some(),
+            DomainId::ShaderPerf => self.shader_perf.is_some(),
         }
     }
 
@@ -471,6 +494,7 @@ impl LatentMatcher {
                 DomainId::Sec => self.sec.as_ref(),
                 DomainId::Docker => self.docker.as_ref(),
                 DomainId::Dist => self.dist.as_ref(),
+                DomainId::ShaderPerf => self.shader_perf.as_ref(),
             };
             if let Some(index) = index {
                 // Retrieve a POOL deeper than the caller's top_k: re-ranking
@@ -518,6 +542,7 @@ impl LatentMatcher {
             DomainId::Sec => self.sec.as_ref(),
             DomainId::Docker => self.docker.as_ref(),
             DomainId::Dist => self.dist.as_ref(),
+            DomainId::ShaderPerf => self.shader_perf.as_ref(),
         }?;
         let pool = index
             .suggest_deep_into(

@@ -63,17 +63,22 @@ pub enum DomainId {
     Docker,
     /// `dist` — shipped-artifact build-config advice (Issue 085).
     Dist,
+    /// `shader_perf` — WGSL render-pipeline bounded-fix patterns (Plan 134
+    /// / Proposal 014; `@compute` stays `kernel_opt` — the entry-point
+    /// routing split).
+    ShaderPerf,
 }
 
 impl DomainId {
     /// All domains, in router order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Clippy,
         Self::Perf,
         Self::Kernel,
         Self::Sec,
         Self::Docker,
         Self::Dist,
+        Self::ShaderPerf,
     ];
 
     /// Stable label (feature-independent).
@@ -86,6 +91,7 @@ impl DomainId {
             Self::Sec => "sec",
             Self::Docker => "docker",
             Self::Dist => "dist",
+            Self::ShaderPerf => "shader",
         }
     }
 }

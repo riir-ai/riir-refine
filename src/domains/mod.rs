@@ -18,6 +18,12 @@
 //!   build-config advice: release-profile size knobs + the workspace-member
 //!   profile trap, over name-matched `Cargo.toml` manifests. Suggest-only in
 //!   Phase 1; the second no-`syn` scanner after docker.
+//! - `shader_perf` (opt-in, Plan 134 / Proposal 014) — WGSL render-pipeline
+//!   (`@vertex`/`@fragment`) bounded-fix healing: loop boundedness (the TDR
+//!   class), sample budgets, branch-vs-sample divergence, derivative
+//!   safety. `@compute` stays `kernel_opt` (entry-point routing split). The
+//!   third no-`syn` scanner; consumers: the upcoming shader-toy editor's
+//!   submit/save gate + riir-dapps Proposal 002's Stage-2 mint gate.
 
 // Issue 112: the scratch-probe identity witness, shared by every domain
 // whose oracle spawns cargo on a generated crate. Gated on the union of
@@ -50,3 +56,6 @@ pub mod docker;
 
 #[cfg(feature = "dist")]
 pub mod dist;
+
+#[cfg(feature = "shader_perf")]
+pub mod shader_perf;

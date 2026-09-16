@@ -337,6 +337,9 @@ CORPUS_DOMAINS = [
     # recorded docker:2 against 27..31 true entries since the domain landed
     # (Issue 066). `    rule(` matches exactly the 8-space entry calls.
     ("docker", "src/domains/docker/corpus.rs", "    rule("),
+    # Plan 134: shader_perf uses the same positional `rule()` shorthand —
+    # same needle convention (dist, Issue 085, likewise).
+    ("shader_perf", "src/domains/shader_perf/corpus.rs", "    rule("),
 ]
 
 # The RECORDED series (the bridge to the neuron-db Warm tier — Issue 050).

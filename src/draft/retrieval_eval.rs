@@ -547,6 +547,7 @@ pub(crate) fn domain_index(d: DomainId) -> usize {
         DomainId::Sec => 3,
         DomainId::Docker => 4,
         DomainId::Dist => 5,
+        DomainId::ShaderPerf => 6,
     }
 }
 
@@ -1274,6 +1275,16 @@ mod tests {
         /// silently.
         #[must_use]
         pub fn router_annotation_floor() -> f32 {
+            // Plan 134 shader axis: `shader_perf` is opt-in (default-off), so
+            // every default-bearing lane keeps its pinned floor unchanged.
+            // The shader-on states INHERIT their shader-off twins' floors
+            // until a standing lane carries the feature — the 8 WGSL
+            // patterns are off-Rust-vocabulary (the docker mechanism: a
+            // distinctive off-vocabulary centroid absorbs FEWER generic
+            // Rust spans, so the expectation is hold-or-rise), but the
+            // Issue 020 contract wants a MEASUREMENT, and none of the
+            // gated states is buildable-and-run today. Re-measure + re-pin
+            // when the shader-toy editor lane first carries shader_perf.
             // Issue 085 dist axis: the ONLY buildable gated dist-on state is
             // `default + dist` = (k=false, s=false, d=true, dist=true),
             // MEASURED 2026-09-09: 74/101 (73.3%) vs its dist-off twin's

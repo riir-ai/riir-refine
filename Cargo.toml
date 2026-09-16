@@ -34,6 +34,14 @@ papaya = "0.2"
 # build stays dependency-light).
 regex = { version = "1", optional = true }
 
+# Plan 134 T0.3: the shader_perf domain's Tier-1 oracle — naga, the
+# gfx-rs WGSL validator (bevy's front-end; already in the lock at 30.0.1
+# via the optional riir-gpu/wgpu arm, so enabling it adds ZERO new
+# packages). Optional so the default build stays dependency-light; only
+# `shader_verify` pulls it (wgsl-in front-end; `valid` is unconditional
+# in naga 30).
+naga = { version = "30.0.1", optional = true, default-features = false, features = ["wgsl-in"] }
+
 # L2 pruner: pure Rust syntax parser (modelless, zero ML).
 # L3 ruliology search: AST delta-size computation via `syn::visit`.
 # `visit` feature gates the AST traversal walker; `full` + `parsing` are
@@ -462,6 +470,29 @@ docker_buildcheck = ["docker", "docker_verify"]
 # directly ([profile.bench] inherits release — that edit poisons criterion
 # benches; the refuses() table pins it).
 dist = []
+
+# Plan 134 / Proposal 014: the `shader_perf` domain — WGSL render-pipeline
+# (`@vertex`/`@fragment`) bounded-fix healing. OPT-IN (default-off): the
+# promotion pull is the upcoming shader-toy editor's submit/save gate (the
+# docker T1.6 standing-consumer rule — one-shot artifacts do not promote).
+# ZERO new dependencies: the scanner is the third hand-written no-`syn`
+# line scanner after docker and dist (no regex either). `@compute` entry
+# points stay kernel_opt territory (the entry-point routing split is
+# mechanical: the stage attribute set).
+# 8 rules at landing: 1 bounded (loop-guard, proposer-backed) + 1
+# two-regime + 1 decision + 1 suggest-lean + 3 Class B annotations + 1
+# corpus-only (not line-expressible in v1). The honest bounded count is
+# below the Proposal 014 close-condition bar (≥6) — recorded as a
+# sec-style marginal landing: opt-in, doc-noted, folded-not (see the
+# domain doc page for the ledger).
+shader_perf = []
+
+# The shader_perf oracle tier: naga validation (in-process, pure Rust) of
+# a post-fix module — parse + validate. Degrades to the Tier-0 text
+# invariants (entry-point multiset + @group/@binding multiset + brace
+# balance) with ONE log line when absent (the Issue 018 oracle-split).
+# naga is already in the lock via the riir-gpu arm — zero new packages.
+shader_verify = ["shader_perf", "dep:naga"]
 
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).
@@ -1161,3 +1192,11 @@ required-features = ["kernel_heal"]
 [[test]]
 name = "dist_gates"
 required-features = ["dist"]
+
+# Plan 134 T0.5: the shader_perf control gates — fixture firing, the
+# negative control over the sibling vgpu port corpus (SKIP-loud when the
+# sibling is absent, embedded fixtures always run), determinism, the
+# refusal table, and the proposer's drift guard.
+[[test]]
+name = "shader_perf_gates"
+required-features = ["shader_perf"]
