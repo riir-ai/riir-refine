@@ -136,6 +136,18 @@
 > exclude link-target spans (`](...)`) from `doc_markdown` rewriting, or extend
 > the verify leg with `cargo doc --no-deps` for runs whose edits touch doc
 > comments. The first is cheap and local; the second closes the class.
+> **REPAIR 1 LANDED 2026-09-17 (same window, the doc_markdown owner session):**
+> the mechanism was sharper than `](...)` span exclusion — a link whose text is
+> a code span splits across tick segments, the outside segment starts `](`, and
+> the trim dance strips that boundary from BOTH ends, so the old guard (in
+> `fix_shape`, on the TRIMMED word) never saw it. The `](`/`][` guards now run
+> on the RAW token beside the autolink guard (the same lesson the bare-URL arm
+> needed for `<`/`>` — guards whose trigger text the trim dance consumes live
+> pre-trim, guards on the word's SHAPE live post-trim). Red-first reproduction
+> `code_span_link_target_untouched` incl. the exact `DelegationAuthoriser`
+> specimen; module 27/27, lib 1667/1667, clippy clean. **Repair 2 stays
+> RECORDED-NOT-LANDED** (a verify-leg `cargo doc --no-deps` extension is a
+> cost/design call on every doc-touching fix run — owner's).
 >
 > ⚠ Also worth a look: `--verify-args "... --all-targets"` fails the whole run
 > with `error: the argument '--all-targets' cannot be used multiple times`,

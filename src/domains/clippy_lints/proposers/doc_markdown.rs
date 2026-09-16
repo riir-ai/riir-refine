@@ -62,12 +62,16 @@
 //!   which has no suggestion to consume).
 //! - **Blockquotes** — lines starting `>` skipped (clippy skips words at
 //!   `blockquote_level > 0`).
-//! - **Link-shaped tokens** — a word containing `](` or `][` is skipped
-//!   whole (markdown-link destinations are pulldown territory), and a
-//!   token carrying a `CommonMark` autolink (`<scheme:...>`) is skipped
-//!   whole — clippy consumes those as Autolink events and never
-//!   word-checks them (probe-silent; without the guard the trim dance
-//!   unwraps the angles and double-wraps the inner URI).
+//! - **Link-shaped tokens** — a raw token containing `](` or `][` is
+//!   skipped whole (markdown-link destinations are pulldown territory),
+//!   as is a token carrying a `CommonMark` autolink (`<scheme:...>`) —
+//!   clippy consumes those as Autolink events and never word-checks them
+//!   (probe-silent; without the guard the trim dance unwraps the angles
+//!   and double-wraps the inner URI). The guards live on the RAW token,
+//!   not the trimmed word: a link whose text is a code span splits across
+//!   tick segments, the outside segment starts `](`, and the trim dance
+//!   strip that boundary — the riir-chain usage artifact where a bare
+//!   `super::` path got backticked INSIDE a link target (2026-09-17).
 //! - **Bare URLs** — the OPPOSITE of a skip: clippy's URL arm (the first
 //!   arm in `check_word`) fires on any word that parses as an absolute
 //!   URL and suggests `<word>`. Probe-verified against installed clippy
@@ -219,11 +223,19 @@ fn process_doc_line(text: &str, base: usize, in_fence: &mut bool, edits: &mut Ve
         if seg_idx % 2 == 0 {
             for (token_off, orig_word) in split_words(segment) {
                 let token_start = seg_base + token_off;
-                // A CommonMark autolink is pulldown territory — clippy
-                // never word-checks it. Checked on the RAW token: the
-                // trim dance would strip the `<`/`>` and feed the inner
-                // URI straight into the URL arm (a double-wrap FP).
-                if token_has_autolink(orig_word) {
+                // Link + autolink guards run on the RAW token. The trim
+                // dance can strip the very boundary the guard exists for:
+                // a link whose text is a code span splits across tick
+                // segments, the outside segment starts `](`, and both the
+                // start-trim and end-trim eat it — leaving a bare path
+                // that fires and backticks the rustdoc link target (a
+                // break `--verify` cannot certify: broken intra-doc links
+                // are a rustdoc diagnostic, not a rustc one). Same for
+                // the `<`/`>` angles an autolink guard needs.
+                if token_has_autolink(orig_word)
+                    || orig_word.contains("](")
+                    || orig_word.contains("][")
+                {
                     continue;
                 }
                 if let Some((word_off, word)) = clippy_trimmed_word(orig_word) {
@@ -394,14 +406,6 @@ fn fix_shape(word: &str) -> FixShape {
         s != "-" && s.contains('-')
     }
 
-    // Link-shaped guard (skip-direction): a markdown link destination is
-    // pulldown territory — clippy never word-checks it. The scheme
-    // validation in `is_absolute_url` independently refuses these tokens
-    // (a `[text](https` scheme starts with `[`), so the order here is
-    // belt-and-suspenders, not load-bearing.
-    if word.contains("](") || word.contains("][") {
-        return FixShape::Silent;
-    }
     // Arm order is load-bearing (clippy's check_word): the URL arm runs
     // before the shape arms, so an `ftp://foo_bar-baz.com` word angle-wraps
     // rather than backtick-wrapping.
@@ -716,6 +720,27 @@ mod tests {
             "/// Wrapped (<https://example.com>) tight.\nfn go() {}",
             "/// A <b::c> autolink.\nfn go() {}",
             "/// Mail <mailto:foo@bar.com> me.\nfn go() {}",
+        ] {
+            assert!(propose_fix("doc_markdown", src).is_none(), "{src}");
+        }
+    }
+
+    #[test]
+    fn code_span_link_target_untouched() {
+        // The sibling's riir-chain usage artifact (2026-09-17): a link whose
+        // TEXT is a code span splits across tick segments — the outside
+        // segment starts `](`, and the trim dance strips that boundary, so
+        // the trimmed word is a bare path that fires. The link-target guard
+        // must run on the RAW token (where `](` still exists), or the fix
+        // backticks the rustdoc path and breaks the link — a break the
+        // compile gate cannot certify (broken intra-doc links are a rustdoc
+        // diagnostic, not a rustc one).
+        let src = "/// [`DelegationAuthoriser`](super::delegation::DelegationAuthoriser)\nfn go() {}";
+        assert!(propose_fix("doc_markdown", src).is_none(), "{src}");
+        // Reference-style and plain-text link shapes too:
+        for src in [
+            "/// See [the doc][shader_perf_ref] now.\nfn go() {}",
+            "/// See [the doc](crate::shader_perf) now.\nfn go() {}",
         ] {
             assert!(propose_fix("doc_markdown", src).is_none(), "{src}");
         }

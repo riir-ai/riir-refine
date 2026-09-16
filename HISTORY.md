@@ -43,6 +43,23 @@ a constant. Module 26/26 (6 new fixtures), lib 1666/1666, clippy --lib clean
 (the pedantic gate caught 2 `CommonMark` backtick misses in the new doc
 comments — dogfood working as designed, fixed by hand).
 
+**Follow-up the same session — the link-target guard moved to the raw token.**
+The sibling's riir-chain usage artifact landed mid-session (09139278): a
+`doc_markdown` edit backticked the inside of an intra-doc link TARGET
+(`[`DelegationAuthoriser`](super::delegation::DelegationAuthoriser)` →
+`[`DelegationAuthoriser`](`super::…`)` — a broken rustdoc path the compile
+gate provably cannot certify, `broken_intra_doc_links` being a rustdoc not
+rustc diagnostic). Mechanism: a link whose text is a code span splits across
+tick segments; the outside segment starts `](`, and the trim dance strips
+that boundary from BOTH ends — the `](` guard in `fix_shape` ran on the
+TRIMMED word and never saw it. Fix: the `](`/`][` guards joined the
+autolink guard on the RAW token (the same lesson the URL arm needed for
+`<`/`>`); `fix_shape` now classifies trimmed words only. The intake's
+repair 2 (extend the verify leg with `cargo doc --no-deps` for runs touching
+doc comments) stays RECORDED-NOT-LANDED — a verify-leg cost/design call.
+Reproduction test `code_span_link_target_untouched` (red before, green
+after); module 27/27, lib 1667/1667, clippy clean.
+
 ## 2026-09-16 — Issue 120, the parallel session's side: the yield + the rust_perf debt closes (the allow lifted, 157 edits healed by the landed rule)
 
 A second session (this one) executed the full Issue 120 batch in the same
