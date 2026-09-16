@@ -656,6 +656,36 @@ mod tests {
         }]
     }
 
+    /// Issue 120: `doc_markdown` suggestions are single-part
+    /// `MachineApplicable` backtick wraps — once the lint is in the lane's
+    /// corpus set, the oracle consumes clippy's own span verbatim (the
+    /// e2e dogfood at landing ran the real binary against the proposer's
+    /// own module docs; this unit test pins the lane-set gate itself).
+    #[test]
+    fn oracle_edits_consumes_doc_markdown_backtick_wrap() {
+        let src = "/// Runs the shader_perf stage over a HashMap.\nfn stage() {}\n";
+        let off = src.find("shader_perf").unwrap();
+        let feed = vec![ClippyDiagnostic {
+            file: "src/lib.rs".to_string(),
+            line: 1,
+            lint: "doc_markdown".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(off, off + "shader_perf".len(), "`shader_perf`".to_string())],
+            }),
+        }];
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"]);
+        assert_eq!(lane.dropped, 0);
+        assert_eq!(lane.edits.len(), 1);
+        assert_eq!(lane.edits[0].rule_id, "doc_markdown");
+        assert_eq!(lane.edits[0].edit.replacement, "`shader_perf`");
+        let patched = splice_sorted(src, std::slice::from_ref(&lane.edits[0].edit));
+        assert!(patched.contains("Runs the `shader_perf` stage"), "{patched}");
+        // The lane-set gate is the point: the SAME feed is refused when
+        // the lint is not in the lane (the corpus-gap signal).
+        let refused = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"]);
+        assert!(refused.edits.is_empty());
+    }
+
     #[test]
     fn oracle_edits_merge_parts_with_gap_text_preserved() {
         let src = probe_src();

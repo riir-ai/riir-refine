@@ -1,5 +1,83 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 120: `doc_markdown` lands — the every-landing manual backtick pass is the healer's now
+
+The pedantic doc-lint family batch. The trigger adjudication first, because
+the issue deferred the batch on "single-session evidence": HISTORY search
+found FOUR more recorded instances of the same manual pass that PREDATE the
+filing (score-bench rows #107/#112 "the doc_markdown/doc-indent set manual";
+Batches 35/36 "doc-markdown backtick warnings fixed pre-commit") — the
+trigger's intent (recurrence, not a one-off) was already satisfied by
+evidence the filing session had not searched. Issue 119's charter input had
+meanwhile recorded `doc_markdown` as having "no fix space at all — a
+doc-writing lint no AST rewrite can produce"; this batch REFUTES that claim
+(the fix is not an AST rewrite — it is a comment-local text rewrite over syn
+`#[doc]` attributes) and the `.distill/001` row is corrected in place.
+
+**The proposer** (`src/domains/clippy_lints/proposers/doc_markdown.rs`):
+clippy's own word predicates ported VERBATIM from
+`clippy_lints/src/doc/markdown.rs` (fetched 2026-09-16, ≈1.98): split on
+whitespace + `'`, end-trim keeping `:`, the `()` claw-back, start-trim,
+single-`:` strips, the 84-entry `DEFAULT_DOC_VALID_IDENTS` default list
+embedded, then fire on `has_underscore || contains("::") || is_camel_case
+|| ends_with("()")` — plural strips included (`IDs`/`Vecs`/`Clippy` stay
+silent), `\_` escapes and underscore+hyphen mixes refused.
+
+**Why syn attributes, not a line scan** — the load-bearing FIXABLE property:
+a doc comment is located as a REAL `#[doc]` attribute (comment-style only,
+marker-checked), so a STRING LITERAL containing `///`-shaped text is
+unreachable by construction (this repo's own fixtures embed Rust source in
+strings — a line scan would backtick STRING CONTENT). Macro token trees
+are opaque → doc text inside `macro_rules!` invisible (skip-direction).
+Comment-local edits cannot change compilation; corpus 54→55, FIXABLE
+39→40.
+
+**Context approximations** (all skip-direction, documented at the module):
+fence markers (triple-backtick or `~~~`) toggled across a doc block
+(adjacency-reset), 4+-space
+indented code, backtick-span exclusion, per-line odd-backtick suppression
+(clippy's paragraph-level unbalanced-tick rule), blockquote lines,
+link/URL-shaped tokens (`](`, `][`, `://` — clippy's `<url>` fix shape is
+deliberately not produced), `#[doc = "…"]` attr form, `#[doc(hidden)]`.
+
+**The oracle-lane complement**: once `doc_markdown` is in the lane set, the
+P21 lane consumes clippy's own MachineApplicable spans verbatim — and
+because this crate enables the family via its own
+`#![warn(clippy::pedantic)]` root, the Issue-113 AUTO-ORACLE feeds it on a
+plain `cargo heal --fix`. **Dogfooded at landing**: the freshly built binary
+healed its own new module's docs (5 edits — `MachineApplicable`,
+`CommonMark`, `clippy_config/src/conf.rs`, …) with zero manual passes; the
+module's own docs were the first live fire of the rule.
+
+**Freeze + eval aftermath** (the designed responses, not regressions):
+- gen2/gen3 atom tables grew 39→40 and the stride windows reshuffled →
+  tables regenerated deterministically (v2 68 labels/8 excluded, v3 74/6)
+  and RE-VERIFIED against real clippy: v2 `68 verified, 0 newly excluded,
+  8 pre-excluded` (24.8 s), v3 `74/0/6` (25.8 s) — the new atom fires
+  exactly its own lint, zero interference.
+- Router annotation floor (Issue 020 contract): the all-on arm measured
+  77/131 (58.8%, was 83/131) — a **-6-span decay from the rule's
+  PRESENCE**: a doc-flavored fixture reword (`HashMap`-free vocabulary)
+  measured bit-identical 77/131, proving the centroid aggregate shifts for
+  every added rule rather than this fixture's tokens being at fault. Delta
+  recorded in the floor table; re-pinned 78→72 per the Plan-030 measured−5
+  convention. The `latent_retrieval`-only arm held its floor unchanged.
+- score-bench row #123: heal 96.4% (35 ran / 69 edits / vocab 40) — flat-slightly-up
+  vs the 96.2% standing figure.
+
+**Deliberately NOT lifted**: `rust_perf/mod.rs:27`'s wholesale
+`#![allow(clippy::doc_markdown)]` stays — removing it rewrites 136 rules'
+corpus prose in one pass, a measured retrieval-centroid risk the same week
+the all-on floor took a -6 hit. Recorded as the follow-up lead (a self-heal
+dogfood can consume it once the floor re-stabilizes).
+
+Gates: default lib 1660 (`downstream_hint::relative_target_fires` excluded
+as a nested-worktree cwd artifact — passes from a normal-layout cwd, root
+cause `scanned_repo_root`'s topmost-Cargo.toml walk reaching the outer
+repo) · latent 1813 · all-features 2608 · clippy `--all-targets
+--all-features` clean · corpus fixture probe-verified fire/silent against
+real clippy 0.1.98 in a /tmp scratch crate (buggy fires both words, fixed
+silent, `//!` inner docs fire).
 ## 2026-09-16 — Issue 114 resolved: the refusal-code client half (landed in riir-kat `a117163`)
 
 Issue 114 predates the issue-088 spinout (its "src/bin/heal.rs and friends"

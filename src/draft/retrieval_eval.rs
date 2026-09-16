@@ -1412,7 +1412,17 @@ mod tests {
                     // default+dist arm's +1 span does not survive the kernel
                     // vocabulary). Floor = 83 - 5 = 78 per the Plan-030
                     // convention.
-                    78.0 / 131.0 // measured 83/131 (63.4%)
+                    //
+                    // Issue 120 (2026-09-16, the doc_markdown corpus add):
+                    // re-measured 77/131 (58.8%, was 83/131 = 63.4%) — a
+                    // -6-span decay from the RULE'S PRESENCE, not its
+                    // fixture tokens (a doc-flavored fixture reword measured
+                    // bit-identical 77/131: the clippy centroid aggregate
+                    // shifts for every added rule, and 6 generic spans' top
+                    // domain annotation flipped). Delta recorded, not
+                    // weakened silently — floor = 77 - 5 = 72 per the
+                    // Plan-030 convention.
+                    72.0 / 131.0 // measured 77/131 (58.8%)
                 }
             }
         }

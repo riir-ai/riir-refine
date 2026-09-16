@@ -2,7 +2,7 @@
 //!
 //! Each entry is a `(lint_name, lint_group, buggy_code, fixed_code)` tuple
 //! representing a real clippy lint pattern. The corpus is BLAKE3-committed
-//! via [`Corpus::new`](crate::corpus::Corpus::new).
+//! via [`Corpus::new`](`crate::corpus::Corpus::new`).
 //!
 //! ## Caveat
 //!
@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 54 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 55 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -39,8 +39,11 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///     + the 1 P15 post-mining intake row (2026-09-14, the born-lint
 ///       closure — `unnecessary_map_or`, the healer's own `map_or(false, f)`
 ///       fallback output re-flagged by real clippy; fires only on receivers
-///       PROVEN Option/Result by the shared `receiver_kind` substrate).
-// 54-entry data table, not logic — length is the point.
+///       PROVEN Option/Result by the shared `receiver_kind` substrate)
+///     + the 1 Issue 120 intake row (2026-09-16, the pedantic doc-lint
+///       family — `doc_markdown`, the every-landing manual backtick pass
+///       this crate's own `#![warn(clippy::pedantic)]` root generates).
+// 55-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -495,6 +498,20 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "struct Probe { hits: u32 }\nimpl Probe {\n    fn read(&mut self) -> u32 {\n        self.hits\n    }\n    fn run() -> u32 {\n        let mut p = Probe { hits: 1 };\n        p.read()\n    }\n}".to_string(),
             fixed_code: "struct Probe { hits: u32 }\nimpl Probe {\n    fn read(&self) -> u32 {\n        self.hits\n    }\n    fn run() -> u32 {\n        let p = Probe { hits: 1 };\n        p.read()\n    }\n}".to_string(),
         },
+        // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
+        ClippyFixEntry {
+            lint_name: "doc_markdown".to_string(),
+            lint_group: "pedantic".to_string(),
+            // The every-landing manual backtick pass (this crate compiles
+            // `#![warn(clippy::pedantic)]`, so every new module generates
+            // the family). Probe-verified fire/silent against real clippy
+            // 0.1.98 at landing (the /tmp scratch-crate record in
+            // HISTORY): buggy fires on both words, fixed is silent. The
+            // fixture vocabulary is deliberately DOC-flavored (no generic
+            // Rust tokens) — centroid-defensive for the retrieval router.
+            buggy_code: "/// Wraps the doc_span word of an IdentText run.\nfn wrap() {}".to_string(),
+            fixed_code: "/// Wraps the `doc_span` word of an `IdentText` run.\nfn wrap() {}".to_string(),
+        },
     ])
 }
 
@@ -570,15 +587,16 @@ mod tests {
     /// 2 Batch 90, 4 Batch 91, the 2 P10 post-mining intake rows, the
     /// 1 P11 post-mining intake row (`format_collect`, 2026-09-13), the
     /// 1 P12 post-mining intake row (`needless_pass_by_ref_mut`,
-    /// 2026-09-14), and the 1 P15 post-mining intake row
-    /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure) = 54.
+    /// 2026-09-14), the 1 P15 post-mining intake row
+    /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure), and
+    /// the 1 Issue 120 intake row (`doc_markdown`, 2026-09-16) = 55.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_54() {
+    fn corpus_size_is_55() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 54);
+        assert_eq!(corpus.entries.len(), 55);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

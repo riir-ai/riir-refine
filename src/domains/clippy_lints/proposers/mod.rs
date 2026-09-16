@@ -41,7 +41,7 @@
 //! `--fix` applies edits without a type checker — the L2 pruner only validates
 //! syntax. Rules whose **detection is purely structural** (the pattern match
 //! alone guarantees the rewrite preserves semantics) are `--fix` eligible.
-//! The 39 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
+//! The 40 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
 //! `use_self` + 2 Batch 90, selected
 //! frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
 //! 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
@@ -85,6 +85,7 @@
 //! | `use_self` | inherent-impl `TypeName` → `Self` path rewrite (guards: nested items, bounds, attrs, macros, generic-arg identity, value-namespace ambiguity) |
 //! | `items_after_statements` | block items hoisted above the statements (order-independent resolution; guards: macro items, leading-gap / same-line-trailing comments) |
 //! | `manual_let_else` | let-bound 2-arm match with visibly diverging fallback → `let .. else` (guards: binding-use fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes, visible-divergence whitelist) |
+//! | `doc_markdown` | identifier-shaped words in `///`/`//!` docs → backtick wrap (comment-local — the edit cannot change compilation; clippy's own word predicates ported verbatim, context approximated per line) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -130,11 +131,12 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 54 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 55 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
-//! `chunks_exact_to_as_chunks`) + the P15 `unnecessary_map_or` rule); future
+//! `chunks_exact_to_as_chunks`) + the P15 `unnecessary_map_or` rule + the
+//! Issue 120 `doc_markdown` rule); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -143,6 +145,7 @@ pub mod collapsible_else_if;
 pub mod collapsible_if;
 pub mod comparison_to_empty;
 pub mod deref_addrof;
+pub mod doc_markdown;
 pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
@@ -288,6 +291,11 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // documented divergence; the `--clippy-json` oracle lane is the close.
     // MSRV floors: `is_some_and`/`is_ok_and` 1.70, `is_none_or` 1.82.
     "unnecessary_map_or",
+    // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
+    // Comment-local backtick wrap — the edit cannot change compilation,
+    // and detection is a faithful port of clippy's own word predicates
+    // (the module docs carry the context approximations).
+    "doc_markdown",
     // NOTE — `option_if_let_else` (38 in the fired histogram) was PROBED
     // then REFUTED (Batch 90, see `.plans/051`): nursery-group pure style
     // with zero perf/correctness content, applicability Unspecified, its
@@ -459,7 +467,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 51 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 55 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -530,6 +538,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "format_collect" => format_collect::collect_edits(source, file),
         // ── P12 post-mining intake (2026-09-14, the 2026-09-09 nursery-gap row) ──
         "needless_pass_by_ref_mut" => needless_pass_by_ref_mut::collect_edits(source, file),
+        // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
+        "doc_markdown" => doc_markdown::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -593,13 +603,15 @@ mod tests {
         // + 2 Batch 90 (items_after_statements + manual_let_else)
         // + 2 Batch 91 (byte_char_slices + manual_slice_fill)
         // + 1 P15 unnecessary_map_or (classified-receiver-only terminal
-        // forms — the born-lint closure, 2026-09-14).
-        assert_eq!(FIXABLE_LINTS.len(), 39);
+        // forms — the born-lint closure, 2026-09-14)
+        // + 1 Issue 120 doc_markdown (comment-local backtick wrap —
+        // cannot change compilation, 2026-09-16).
+        assert_eq!(FIXABLE_LINTS.len(), 40);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 50-row fixture table — length is the point.
+    /// 55-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -882,6 +894,12 @@ impl S {
                 "needless_pass_by_ref_mut",
                 "struct C { v: u32 }\nimpl C {\n    fn peek(&mut self) -> u32 { self.v }\n    fn demo() -> u32 { let mut c = C { v: 1 }; c.peek() }\n}\n",
                 "fn peek(&self)",
+            ),
+            // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
+            (
+                "doc_markdown",
+                "/// Runs the shader_perf stage over a HashMap of buckets.\nfn stage() {}",
+                "`shader_perf`",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

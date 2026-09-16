@@ -160,6 +160,15 @@ The Bench-088 usage artifact (`format_collect` fixed by hand on
 |---|---|---|---|
 | `format_collect` | pedantic | verify | `.map(\|x\| format!(..)).collect::<String>()` → `.fold(String::new(), \|mut out, x\| { let _ = write!(out, ..); out })` + a `use std::fmt::Write as _;` insertion (skipped when the trait is already imported) — the FIRST two-span clippy rule; help-only in real clippy (probed — no machine-applicable suggestion); the anonymous `as _` import cannot collide (E0252) and cannot be ambiguous (`String` implements `io::Write` nowhere in std — probed E0599) |
 
+The Issue-120 intake (2026-09-16 — the pedantic doc-lint family: the
+Plan 134 landing's ~35-finding manual backtick pass, the FIFTH recorded
+instance of the family; this crate's `#![warn(clippy::pedantic)]` root
+generates it on every module landing):
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `doc_markdown` | pedantic | fix | identifier-shaped words in `///` / `//!` doc comments → backtick wrap — a faithful port of clippy's own word predicates (`markdown.rs`: the trim dance + `()` claw-back + the 84-entry `DEFAULT_DOC_VALID_IDENTS` + `is_camel_case` plural strips) located through syn `#[doc]` attributes, so string literals carrying fake `///` text are unreachable by construction (the load-bearing FIXABLE safety property — comment-local edits cannot change compilation). Context approximations, all skip-direction, at the module docs: fenced/indented code + blockquote + unbalanced-tick lines, link/URL-shaped tokens, `#[doc = "…"]` attr form, macro-token opacity. The P21 oracle lane consumes clippy's own MachineApplicable spans verbatim for the same lint — e2e dogfooded at landing (the binary healed its own module's docs) |
+
 Same day, the intake's OTHER row — the `needless_borrow` method-receiver
 shape gap — landed as a proposer EXTENSION (no new corpus entry): `(&x).m()`
 → `x.m()` for m in {as_slice, as_mut_slice, len, iter, as_ptr}, full
