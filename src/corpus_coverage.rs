@@ -48,15 +48,31 @@
 //! (allow / warn / deny), which is what actually decides whether a lint
 //! fires on anybody's build.
 //!
-//! **Frequency is joined, never estimated** (T3). The only machine-readable
-//! real-code frequency evidence in this repo is the Bench 061 fired
-//! histogram (`.benchmarks/data/049_t01/manifest.json`), and it is joined
-//! with its provenance printed — dataset digest, capture date, and the
-//! toolchain it was captured under, which is NOT the toolchain being swept.
-//! Every row outside that histogram is `uncited`. The `.benchmarks/021`
-//! study evidence (kornel's 100K-crate run, Li et al.'s 8.09M-warning
-//! study) is PROSE in that document with no machine-readable table, so it
-//! is cited in the header and never silently attributed to a row.
+//! **Frequency is joined, never estimated** (T3). The machine-readable
+//! real-code frequency evidence is three sources, each carried with its
+//! provenance printed — dataset digest, capture date, and the toolchain it
+//! was captured under:
+//!
+//! 1. **local** — the Bench 061 fired histogram
+//!    (`.benchmarks/data/049_t01/manifest.json`), captured with
+//!    pedantic+nursery ENABLED over already-swept sibling repos, so its hot
+//!    rows are opt-in lints and it is structurally blind to the
+//!    default-firing debt.
+//! 2. **default-eco** — the Bench 094 default-level fired histogram
+//!    (`.benchmarks/data/094_t01/manifest.json`): plain `cargo clippy` (no
+//!    `-W` flags) over a stratified crates.io top-100K-window sample. This
+//!    is the source the default-firing uncovered set can actually carry —
+//!    the T4 successor lead Issue 119's first run filed.
+//! 3. **study** — kornel's 100K-crate run (3 clippy-namespace rows) plus
+//!    Li et al. ICSE 2024 (8.09M warnings), the latter deliberately NOT
+//!    transcribed: its per-lint table is a figure with no printed value
+//!    labels and an unpublished supplementary (checked 2026-09-17 — the
+//!    refusal is measured, not assumed), so only the SHAPE claim
+//!    (top-5 > 80%) is citable, never a per-lint count.
+//!
+//! Every row outside all three is `uncited`. A count from one population is
+//! never summed with another (6 repos on one day ≠ 184 crates ≠ 100K
+//! crates — adding them invents a fourth).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -167,16 +183,32 @@ pub fn normalize(name: &str) -> String {
         .to_ascii_lowercase()
 }
 
-/// Join the two frequency sources into one tier. Neither is defaulted to
-/// zero in the other's absence — a missing source is *unobserved*, and a
-/// zero would rank it below a genuinely-rare lint that WAS observed.
+/// Join the three frequency sources into one evidence value. Neither is
+/// defaulted to zero in the others' absence — a missing source is
+/// *unobserved*, and a zero would rank it below a genuinely-rare lint that
+/// WAS observed.
+///
+/// Precedence, each step documented:
+/// 1. `fired` + `study` → [`FreqEvidence::Both`] — two independent sources
+///    agreeing is maximum breadth and stays top whatever the third says
+///    (the default-eco count it shadows remains in its own manifest).
+/// 2. any `fired_default` → [`FreqEvidence::FiredDefault`] — same-level
+///    evidence beats a lone opt-in-captured local count, and also beats a
+///    lone published count for the same reason.
+/// 3. lone `fired` → [`FreqEvidence::Fired`]; lone `study` →
+///    [`FreqEvidence::Study`].
 #[must_use]
-pub const fn join_evidence(fired: Option<u32>, study: Option<u32>) -> FreqEvidence {
-    match (fired, study) {
-        (Some(fired), Some(study)) => FreqEvidence::Both { fired, study },
-        (Some(fired), None) => FreqEvidence::Fired(fired),
-        (None, Some(study)) => FreqEvidence::Study(study),
-        (None, None) => FreqEvidence::Uncited,
+pub const fn join_evidence(
+    fired: Option<u32>,
+    fired_default: Option<u32>,
+    study: Option<u32>,
+) -> FreqEvidence {
+    match (fired, fired_default, study) {
+        (Some(fired), _, Some(study)) => FreqEvidence::Both { fired, study },
+        (_, Some(d), _) => FreqEvidence::FiredDefault(d),
+        (Some(f), None, None) => FreqEvidence::Fired(f),
+        (None, None, Some(s)) => FreqEvidence::Study(s),
+        (None, None, None) => FreqEvidence::Uncited,
     }
 }
 
@@ -325,6 +357,16 @@ pub const STUDY_SOURCE: &str =
 pub enum FreqEvidence {
     /// Local real-code histogram AND the published study agree it fires.
     Both { fired: u32, study: u32 },
+    /// Observed count from the DEFAULT-LEVEL ecosystem histogram (Bench
+    /// 094: plain `cargo clippy` over a crates.io sample) — the same level
+    /// the uncovered row fires at, which is the evidence the local
+    /// histogram (opt-in-captured, already-swept repos) cannot supply for
+    /// the default-firing debt.
+    ///
+    /// Shadows a lone [`FreqEvidence::Fired`] count (same-level evidence is
+    /// the axis this report's charter needs); the shadowed count remains in
+    /// its own manifest, never summed.
+    FiredDefault(u32),
     /// Observed count from the joined real-code fired histogram (Bench 061).
     Fired(u32),
     /// Published crate-ecosystem count only ([`STUDY_KORNEL_2024`]).
@@ -341,20 +383,22 @@ impl FreqEvidence {
     pub const fn tier(self) -> u8 {
         match self {
             Self::Both { .. } => 0,
-            Self::Fired(_) => 1,
-            Self::Study(_) => 2,
-            Self::Uncited => 3,
+            Self::FiredDefault(_) => 1,
+            Self::Fired(_) => 2,
+            Self::Study(_) => 3,
+            Self::Uncited => 4,
         }
     }
 
     /// The within-tier sort key: the LOCAL count where one exists, else the
-    /// published one. Never a sum — the two are different populations
-    /// (6 repos on one day vs 100K crates) and adding them invents a third.
+    /// observed count of whichever source the variant carries. Never a sum
+    /// — the sources are different populations (6 repos on one day vs 184
+    /// crates vs 100K crates) and adding them invents a third.
     #[must_use]
     pub const fn rank(self) -> u32 {
         match self {
             Self::Both { fired, .. } | Self::Fired(fired) => fired,
-            Self::Study(n) => n,
+            Self::FiredDefault(n) | Self::Study(n) => n,
             Self::Uncited => 0,
         }
     }
@@ -370,6 +414,7 @@ impl FreqEvidence {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Both { .. } => "local+study",
+            Self::FiredDefault(_) => "default-eco",
             Self::Fired(_) => "local",
             Self::Study(_) => "study",
             Self::Uncited => "uncited",
@@ -426,6 +471,12 @@ pub struct CoverageInputs<'a> {
     /// `(lint, fired count)` from the real-code histogram, plus provenance.
     pub histogram: &'a [(String, u32)],
     pub histogram_provenance: Option<HistogramProvenance>,
+    /// `(lint, fired count)` from the DEFAULT-LEVEL ecosystem histogram
+    /// (Bench 094), plus provenance — the source the default-firing
+    /// uncovered set can actually carry. OPTIONAL like the local half: its
+    /// absence costs the default-eco axis and nothing else.
+    pub default_histogram: &'a [(String, u32)],
+    pub default_histogram_provenance: Option<HistogramProvenance>,
 }
 
 /// The report.
@@ -455,6 +506,10 @@ pub struct CoverageReport {
     pub histogram_provenance: Option<HistogramProvenance>,
     /// Histogram rows naming a lint the driver no longer ships.
     pub histogram_rows_stale: usize,
+    /// The default-eco histogram's provenance + stale-row count — the same
+    /// two axes the local histogram carries, for the same reasons.
+    pub default_histogram_provenance: Option<HistogramProvenance>,
+    pub default_histogram_rows_stale: usize,
     pub surface_level_unparsed: usize,
     pub surface_ambiguous_group: usize,
     pub surface_ungrouped: usize,
@@ -509,6 +564,18 @@ impl CoverageReport {
             .count()
     }
 
+    /// Of the default-firing uncovered rows, how many carry the DEFAULT-ECO
+    /// source specifically — the join the Issue-119 first run said was
+    /// missing for the entire set. Reported beside the cross-tab so the
+    /// reader can see WHICH source closed the gap.
+    #[must_use]
+    pub fn firing_with_default_evidence(&self) -> usize {
+        self.uncovered
+            .iter()
+            .filter(|r| r.level.fires_by_default() && matches!(r.freq, FreqEvidence::FiredDefault(_)))
+            .count()
+    }
+
     /// The dual-evidence head — the rows the mining batch discipline stages
     /// first (T4), because each carries two independent sources.
     #[must_use]
@@ -534,6 +601,8 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         other_domains,
         histogram,
         histogram_provenance,
+        default_histogram,
+        default_histogram_provenance,
     } = inputs;
 
     let corpus: BTreeSet<String> = corpus_rules.iter().map(|r| normalize(r)).collect();
@@ -550,6 +619,10 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         .iter()
         .map(|(name, n)| (normalize(name), *n))
         .collect();
+    let freq_default: BTreeMap<String, u32> = default_histogram
+        .iter()
+        .map(|(name, n)| (normalize(name), *n))
+        .collect();
     let study: BTreeMap<&str, u32> = STUDY_KORNEL_2024.iter().copied().collect();
 
     let mut report = CoverageReport {
@@ -560,6 +633,7 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         fix_set: fixes.len(),
         other_domain_rules: other_rules,
         histogram_provenance: histogram_provenance.clone(),
+        default_histogram_provenance: default_histogram_provenance.clone(),
         surface_level_unparsed: surface.level_unparsed,
         surface_ambiguous_group: surface.ambiguous_group,
         surface_ungrouped: surface.ungrouped,
@@ -626,6 +700,7 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
                     level: lint.level,
                     freq: join_evidence(
                         freq.get(&lint.name).copied(),
+                        freq_default.get(&lint.name).copied(),
                         study.get(lint.name.as_str()).copied(),
                     ),
                 });
@@ -642,6 +717,10 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         }
     }
     report.histogram_rows_stale = freq
+        .keys()
+        .filter(|k| !surface_names.contains(k.as_str()))
+        .count();
+    report.default_histogram_rows_stale = freq_default
         .keys()
         .filter(|k| !surface_names.contains(k.as_str()))
         .count();
@@ -738,6 +817,26 @@ impl CoverageReport {
             }
             None => out.push_str("  local: NONE joined — no real-code histogram was supplied\n"),
         }
+        match &self.default_histogram_provenance {
+            Some(p) => {
+                let _ = writeln!(
+                    out,
+                    "  default-eco: {} ({} rows over {} crates, captured {}, {})",
+                    p.source, p.rows, p.repos, p.captured_utc, p.toolchain
+                );
+                let _ = writeln!(out, "         dataset blake3 {}", p.dataset_blake3);
+                if !p.toolchain.is_empty() && !self.toolchain.contains(&p.toolchain) {
+                    out.push_str(
+                        "         ⚠ captured under a DIFFERENT toolchain than the one \\
+                         swept — the counts RANK, they do not measure today\n",
+                    );
+                }
+            }
+            None => out.push_str(
+                "  default-eco: NONE joined — the default-firing set carries no \\
+                 same-level evidence\n",
+            ),
+        }
         let _ = writeln!(
             out,
             "  study: {STUDY_SOURCE} ({} clippy-namespace row(s))",
@@ -750,8 +849,15 @@ impl CoverageReport {
                 self.histogram_rows_stale
             );
         }
+        if self.default_histogram_rows_stale > 0 {
+            let _ = writeln!(
+                out,
+                "  ⚠ {} default-eco histogram row(s) name a lint this driver no longer ships",
+                self.default_histogram_rows_stale
+            );
+        }
         if ranked.is_empty() {
-            out.push_str("  (no uncovered lint carries frequency evidence from either source)\n");
+            out.push_str("  (no uncovered lint carries frequency evidence from any source)\n");
         } else {
             let _ = writeln!(
                 out,
@@ -783,7 +889,7 @@ impl CoverageReport {
         let uncited = uncovered - ranked.len();
         let _ = writeln!(
             out,
-            "  {uncited} uncovered lint(s) carry NO evidence from either source — \
+            "  {uncited} uncovered lint(s) carry NO evidence from any source — \
              uncited, NOT zero"
         );
         // The cross-tab, because the two headline axes can be DISJOINT and
@@ -793,6 +899,19 @@ impl CoverageReport {
             out,
             "  of the {firing} uncovered lint(s) that FIRE by default, {fwe} carry evidence"
         );
+        let fwe_default = self.firing_with_default_evidence();
+        if fwe_default > 0 {
+            let rest = fwe - fwe_default;
+            let _ = writeln!(
+                out,
+                "    ({fwe_default} via the default-eco histogram — the same-level source{})",
+                if rest > 0 {
+                    format!("; {rest} via local/study")
+                } else {
+                    String::new()
+                }
+            );
+        }
         if fwe == 0 && firing > 0 {
             out.push_str(
                 "  ⚠ DISJOINT: every evidenced row is an opt-in lint and every \

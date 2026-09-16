@@ -1,5 +1,79 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — the default-level fired histogram lands (Bench 094, Issue 119's T4 successor)
+
+Issue 119's first `--coverage-report` run found its real gap in the EVIDENCE
+axis: 0 of the 449 default-firing uncovered lints carried any frequency
+evidence, because the only local histogram (Bench 061) was captured with
+pedantic+nursery ENABLED over already-swept repos. The staged successor lead
+(the `.distill/001` 09-16 #3 charter input) asked for "the pre-heal
+git-history measurement design". The session delivered the histogram by
+refuting that design first, then measuring the population that actually
+carries the debt:
+
+- **Sibling-git-history REFUTED as the population.** Pre-heal ≠
+  pre-clippy-clean: every workspace repo has enforced `cargo clippy -D
+  warnings` in CI since long before the healer (adopted 2026-08-24), so
+  default-level warnings were fixed at write time all along — no commit of
+  ours carries unhealed default-level debt, and the git history is blind in
+  exactly the direction current HEAD is.
+- **Li et al. (ICSE 2024, arXiv:2310.11738) transcription REFUTED,
+  measured.** The obvious cheap source — 8,095,259 warnings over 94,715
+  crates.io latest releases — publishes its per-lint distribution ONLY as
+  Figure 2, a bar chart with NO printed value labels (verified by
+  extracting the embedded 2728×1932 image from the PDF and reading it
+  twice); the "detailed data in the supplementary" is on no public host, and
+  the arXiv record carries no ancillary files. The figure's NAMES gave the
+  session its own finding: that head is almost entirely
+  pedantic/restriction-group, because that run used each project's OWN
+  `[lints]` configuration — a configured run and a default-level run measure
+  different questions, and the standing refusal in `corpus_coverage.rs`
+  ("no per-lint table; inventing counts from a shape claim is what this axis
+  refuses") is upgraded from assumed to measured.
+- **Measured first-party instead (Bench 094).** Stratified crates.io
+  sample: the list API supports only `sort=downloads` and blocks pages >100,
+  so the accessible window is the top-10,000 by total downloads; five rank
+  strata ×40 candidates, mechanical filters (not yanked, stable max
+  version, ≥1000 downloads) → 200 samples → **184 compiled clean / 16
+  compile_error (mostly platform-mismatched: core-graphics, kqueue-sys,
+  wayland-sys, esp-idf-sys) / 761 warnings / 105 distinct default-firing
+  clippy lints** at plain `cargo clippy` (no flags), clippy 0.1.98 — the
+  same toolchain the report derives with. Data:
+  `.benchmarks/data/094_t01/manifest.json`, rows
+  `[lint, count, crate_spread]`, blake3 `079cfddf…`.
+- **The join flips the cross-tab 0 → 74 of 448.** `FreqEvidence`
+  gains `FiredDefault(u32)` at tier 1 (same-level evidence outranks the
+  opt-in-biased local capture; `Both` stays top; a `FiredDefault` count
+  shadows a lone local/study count, never summed — precedence documented at
+  `join_evidence`); `CoverageInputs`/`CoverageReport` carry the second
+  histogram + provenance; the render prints the default-eco source line,
+  its stale rows, and the cross-tab breakdown (`firing_with_default_evidence`).
+  `bin/heal.rs::load_default_fired_histogram` mirrors the Bench 061 loader's
+  OPTIONAL contract — an absent manifest renders "default-eco: NONE
+  joined", never a silent zero.
+- **The CONCENTRATION LAW (why the spread column exists).** The nominal
+  top-1, `write_with_newline` 248, came from exactly ONE crate
+  (`nano-gemm-codegen-0.2.1`, itself 294 of 761 warnings — 39%), and median
+  warnings/crate is 0 (132 of 184 crates are default-level clean). A count
+  concentrated in one crate ranks as an anecdote, not a population — the
+  robust multi-crate head is `needless_borrow` 40/12, `useless_conversion`
+  45/6, `missing_safety_doc` 37/3, `legacy_numeric_constants` 23/5,
+  `manual_range_contains` 12/3, `doc_overindented_list_items` 11/5,
+  `doc_lazy_continuation` 8/4, `partialeq_to_none` 9/3, `clone_on_copy`
+  9/3. Two staging consequences recorded in `.distill/001`: the
+  evidence-gated `doc_lazy_continuation` intake item's gate is now MET, and
+  `write_with_newline` (parse-only-provable, uncovered despite being
+  clippy-MachineApplicable) is the top new gap candidate — read with its
+  1-crate caveat.
+- Gates: corpus_coverage 36/36 (3 new: gap-closure + render,
+  disjoint-still-live-when-absent, stale-row counting); full lib **1694/0**
+  at default features; clippy clean on the write set (the only remaining
+  warnings are the sibling riir-kat WIP's unused-import rows — not this
+  lane's). Score-bench not run: no proposer or corpus entry changed, so
+  flatness is by construction. The temp sampler/driver scripts and the
+  sample tree were throwaway (methodology + exact selection rule live in
+  the bench doc and manifest); the 09-16 session's own cleanup law applied.
+
 ## 2026-09-17 — the manual_range_patterns corpus rule lands (the intake MISS folded, P31)
 
 The `.distill/001` 09-16/09-17 riir-chain usage artifact recorded a two-part

@@ -6016,6 +6016,9 @@ fn run_coverage_report() -> riir_clippy::corpus_coverage::CoverageReport {
     let (histogram, provenance) = resolve_corpus_repo_root()
         .map(|root| load_fired_histogram(&root))
         .unwrap_or_default();
+    let (default_histogram, default_provenance) = resolve_corpus_repo_root()
+        .map(|root| load_default_fired_histogram(&root))
+        .unwrap_or_default();
 
     cc::coverage(&cc::CoverageInputs {
         toolchain: &toolchain,
@@ -6025,6 +6028,8 @@ fn run_coverage_report() -> riir_clippy::corpus_coverage::CoverageReport {
         other_domains: &other_domains,
         histogram: &histogram,
         histogram_provenance: provenance,
+        default_histogram: &default_histogram,
+        default_histogram_provenance: default_provenance,
     })
 }
 
@@ -6177,6 +6182,66 @@ fn load_fired_histogram(
             .get("source_repos")
             .and_then(serde_json::Value::as_array)
             .map_or(0, Vec::len),
+        rows: rows.len(),
+    };
+    (rows, Some(provenance))
+}
+
+/// The Bench 094 DEFAULT-LEVEL ecosystem fired histogram + its provenance.
+///
+/// Same OPTIONAL contract as [`load_fired_histogram`]: a missing or
+/// unreadable manifest costs the default-eco axis and nothing else — and
+/// its absence is VISIBLE in the report ("default-eco: NONE joined"), which
+/// is the honest degeneration, not a silent zero. This is the histogram the
+/// default-firing uncovered set can actually carry (plain `cargo clippy`;
+/// no pedantic/nursery capture bias), which is why it gets its own file and
+/// its own loader rather than a row in the Bench 061 manifest.
+fn load_default_fired_histogram(
+    root: &std::path::Path,
+) -> (
+    Vec<(String, u32)>,
+    Option<riir_clippy::corpus_coverage::HistogramProvenance>,
+) {
+    const REL: &str = ".benchmarks/data/094_t01/manifest.json";
+    let Ok(bytes) = std::fs::read(root.join(REL)) else {
+        return (Vec::new(), None);
+    };
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return (Vec::new(), None);
+    };
+    let rows: Vec<(String, u32)> = v
+        .get("default_fired_histogram")
+        .and_then(serde_json::Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|row| {
+                    let pair = row.as_array()?;
+                    let name = pair.first()?.as_str()?.to_string();
+                    let n = u32::try_from(pair.get(1)?.as_u64()?).ok()?;
+                    Some((name, n))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if rows.is_empty() {
+        return (Vec::new(), None);
+    }
+    let text = |k: &str| {
+        v.get(k)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let provenance = riir_clippy::corpus_coverage::HistogramProvenance {
+        source: format!("Bench 094 default-level fired histogram ({REL})"),
+        captured_utc: text("created_utc"),
+        toolchain: text("clippy_version"),
+        dataset_blake3: text("dataset_blake3"),
+        repos: v
+            .get("population")
+            .and_then(|p| p.get("compiled_clean"))
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as usize,
         rows: rows.len(),
     };
     (rows, Some(provenance))

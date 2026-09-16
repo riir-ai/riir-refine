@@ -1,0 +1,1649 @@
+{
+ "schema_version": 1,
+ "created_utc": "2026-09-16T19:52:19+00:00",
+ "generator": "riir-clippy .tmp_run_clippy.py (throwaway driver, methodology in .benchmarks/094_default_level_fired_histogram.md)",
+ "clippy_version": "clippy 0.1.98 (48a229ceae 2026-09-01)",
+ "cargo_version": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+ "bench": "094_default_level_fired_histogram.md",
+ "selection_rule": "crates.io list API sort=downloads desc, per_page=100, pages 11/31/51/76/96 (ranks 1001-1100, 3001-3100, 5001-5100, 7501-7600, 9501-9600; pages >100 are API-blocked, so the accessible window is the top-10000 by total downloads); not yanked; max_stable_version present; total downloads >= 1000; first 200 passing rows after interleaving bands round-robin",
+ "lint_invocation": "cargo clippy --quiet --message-format=json at DEFAULT lint level (no -W/-A flags), lib+bins, host target; crate's own [lints] table honored as published; dependency warnings suppressed by cap-lints as usual",
+ "row_schema": "[lint, fired_count, crates_with_at_least_one_firing] \u2014 the spread column is part of the dataset identity; a count concentrated in one crate ranks as an anecdote, not a population",
+ "population": {
+  "candidates": 499,
+  "sampled": 200,
+  "compiled_clean": 184,
+  "compile_error": 16,
+  "timeout": 0,
+  "warnings_total": 761,
+  "distinct_lints": 105
+ },
+ "dataset_blake3": "079cfddf78ee0d55b8eafd56343a2519068a3b1b9cbdbea624923f09c890a5e7",
+ "rows": 105,
+ "default_fired_histogram": [
+  [
+   "write_with_newline",
+   248,
+   1
+  ],
+  [
+   "useless_conversion",
+   45,
+   6
+  ],
+  [
+   "needless_borrow",
+   40,
+   12
+  ],
+  [
+   "missing_safety_doc",
+   37,
+   3
+  ],
+  [
+   "legacy_numeric_constants",
+   23,
+   5
+  ],
+  [
+   "unnecessary_map_or",
+   22,
+   4
+  ],
+  [
+   "redundant_field_names",
+   15,
+   2
+  ],
+  [
+   "needless_borrowed_reference",
+   15,
+   5
+  ],
+  [
+   "too_many_arguments",
+   13,
+   3
+  ],
+  [
+   "needless_lifetimes",
+   12,
+   3
+  ],
+  [
+   "manual_range_contains",
+   12,
+   3
+  ],
+  [
+   "needless_return",
+   11,
+   4
+  ],
+  [
+   "doc_overindented_list_items",
+   11,
+   5
+  ],
+  [
+   "needless_borrows_for_generic_args",
+   10,
+   2
+  ],
+  [
+   "clone_on_copy",
+   9,
+   3
+  ],
+  [
+   "partialeq_to_none",
+   9,
+   2
+  ],
+  [
+   "doc_lazy_continuation",
+   8,
+   4
+  ],
+  [
+   "into_iter_on_ref",
+   8,
+   3
+  ],
+  [
+   "unnecessary_lazy_evaluations",
+   8,
+   4
+  ],
+  [
+   "nonminimal_bool",
+   7,
+   3
+  ],
+  [
+   "single_match",
+   6,
+   4
+  ],
+  [
+   "unnecessary_cast",
+   6,
+   5
+  ],
+  [
+   "result_unit_err",
+   6,
+   1
+  ],
+  [
+   "cast_possible_truncation",
+   6,
+   1
+  ],
+  [
+   "type_complexity",
+   6,
+   4
+  ],
+  [
+   "to_string_trait_impl",
+   6,
+   1
+  ],
+  [
+   "needless_range_loop",
+   5,
+   4
+  ],
+  [
+   "match_like_matches_macro",
+   5,
+   2
+  ],
+  [
+   "to_string_in_format_args",
+   5,
+   2
+  ],
+  [
+   "useless_format",
+   5,
+   2
+  ],
+  [
+   "len_without_is_empty",
+   5,
+   3
+  ],
+  [
+   "empty_line_after_doc_comments",
+   4,
+   4
+  ],
+  [
+   "precedence",
+   4,
+   1
+  ],
+  [
+   "unbuffered_bytes",
+   4,
+   1
+  ],
+  [
+   "redundant_pattern",
+   4,
+   1
+  ],
+  [
+   "expect_used",
+   4,
+   1
+  ],
+  [
+   "derivable_impls",
+   4,
+   3
+  ],
+  [
+   "ptr_offset_with_cast",
+   4,
+   1
+  ],
+  [
+   "manual_unwrap_or_default",
+   4,
+   1
+  ],
+  [
+   "manual_div_ceil",
+   3,
+   3
+  ],
+  [
+   "match_ref_pats",
+   3,
+   2
+  ],
+  [
+   "collapsible_else_if",
+   3,
+   3
+  ],
+  [
+   "borrow_deref_ref",
+   3,
+   2
+  ],
+  [
+   "new_without_default",
+   3,
+   3
+  ],
+  [
+   "too_many_lines",
+   3,
+   1
+  ],
+  [
+   "len_zero",
+   3,
+   1
+  ],
+  [
+   "wrong_self_convention",
+   3,
+   1
+  ],
+  [
+   "byte_char_slices",
+   3,
+   1
+  ],
+  [
+   "manual_is_ascii_check",
+   3,
+   1
+  ],
+  [
+   "tabs_in_doc_comments",
+   3,
+   1
+  ],
+  [
+   "manual_repeat_n",
+   2,
+   2
+  ],
+  [
+   "toplevel_ref_arg",
+   2,
+   1
+  ],
+  [
+   "manual_is_multiple_of",
+   2,
+   2
+  ],
+  [
+   "single_component_path_imports",
+   2,
+   2
+  ],
+  [
+   "suspicious_open_options",
+   2,
+   1
+  ],
+  [
+   "cast_sign_loss",
+   2,
+   1
+  ],
+  [
+   "io_other_error",
+   2,
+   1
+  ],
+  [
+   "unit_arg",
+   2,
+   1
+  ],
+  [
+   "suspicious_else_formatting",
+   2,
+   1
+  ],
+  [
+   "redundant_locals",
+   2,
+   1
+  ],
+  [
+   "collapsible_if",
+   2,
+   2
+  ],
+  [
+   "needless_option_as_deref",
+   2,
+   1
+  ],
+  [
+   "get_first",
+   2,
+   2
+  ],
+  [
+   "missing_transmute_annotations",
+   2,
+   1
+  ],
+  [
+   "format_in_format_args",
+   2,
+   1
+  ],
+  [
+   "only_used_in_recursion",
+   2,
+   2
+  ],
+  [
+   "while_let_on_iterator",
+   2,
+   1
+  ],
+  [
+   "manual_inspect",
+   1,
+   1
+  ],
+  [
+   "let_and_return",
+   1,
+   1
+  ],
+  [
+   "unused_unit",
+   1,
+   1
+  ],
+  [
+   "redundant_closure",
+   1,
+   1
+  ],
+  [
+   "non_canonical_clone_impl",
+   1,
+   1
+  ],
+  [
+   "default_constructed_unit_structs",
+   1,
+   1
+  ],
+  [
+   "manual_clamp",
+   1,
+   1
+  ],
+  [
+   "explicit_counter_loop",
+   1,
+   1
+  ],
+  [
+   "empty_docs",
+   1,
+   1
+  ],
+  [
+   "missing_const_for_thread_local",
+   1,
+   1
+  ],
+  [
+   "slow_vector_initialization",
+   1,
+   1
+  ],
+  [
+   "significant_drop_tightening",
+   1,
+   1
+  ],
+  [
+   "trivially_copy_pass_by_ref",
+   1,
+   1
+  ],
+  [
+   "match_single_binding",
+   1,
+   1
+  ],
+  [
+   "manual_map",
+   1,
+   1
+  ],
+  [
+   "manual_strip",
+   1,
+   1
+  ],
+  [
+   "manual_find",
+   1,
+   1
+  ],
+  [
+   "redundant_pattern_matching",
+   1,
+   1
+  ],
+  [
+   "search_is_some",
+   1,
+   1
+  ],
+  [
+   "multiple_crate_versions",
+   1,
+   1
+  ],
+  [
+   "unnecessary_unwrap",
+   1,
+   1
+  ],
+  [
+   "infallible_destructuring_match",
+   1,
+   1
+  ],
+  [
+   "implicit_saturating_sub",
+   1,
+   1
+  ],
+  [
+   "explicit_auto_deref",
+   1,
+   1
+  ],
+  [
+   "filter_next",
+   1,
+   1
+  ],
+  [
+   "match_overlapping_arm",
+   1,
+   1
+  ],
+  [
+   "from_over_into",
+   1,
+   1
+  ],
+  [
+   "manual_pattern_char_comparison",
+   1,
+   1
+  ],
+  [
+   "double_ended_iterator_last",
+   1,
+   1
+  ],
+  [
+   "redundant_static_lifetimes",
+   1,
+   1
+  ],
+  [
+   "extra_unused_lifetimes",
+   1,
+   1
+  ],
+  [
+   "should_implement_trait",
+   1,
+   1
+  ],
+  [
+   "enum_variant_names",
+   1,
+   1
+  ],
+  [
+   "map_clone",
+   1,
+   1
+  ],
+  [
+   "iter_cloned_collect",
+   1,
+   1
+  ],
+  [
+   "needless_update",
+   1,
+   1
+  ],
+  [
+   "redundant_guards",
+   1,
+   1
+  ],
+  [
+   "large_enum_variant",
+   1,
+   1
+  ]
+ ],
+ "crates": [
+  {
+   "name": "actix-macros-0.2.4",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "akin-0.4.0",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "aliasable-0.1.3",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "almost-0.2.0",
+   "verdict": "ok",
+   "warnings": 12
+  },
+  {
+   "name": "argmin-math-0.5.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "arr_macro-0.2.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "arr_macro_impl-0.2.1",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "assert_matches-1.5.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "async-oneshot-0.5.9",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "async_cell-0.2.3",
+   "verdict": "ok",
+   "warnings": 2
+  },
+  {
+   "name": "autometrics-3.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "autometrics-macros-3.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "axum_typed_multipart-0.16.7",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "bb8-redis-0.26.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "bitm-0.5.2",
+   "verdict": "ok",
+   "warnings": 57
+  },
+  {
+   "name": "boolenum-0.1.0",
+   "verdict": "ok",
+   "warnings": 2
+  },
+  {
+   "name": "bounded-collections-0.3.2",
+   "verdict": "ok",
+   "warnings": 17
+  },
+  {
+   "name": "burn-cubecl-0.21.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "burn-dataset-0.21.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "bvh-0.12.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "c2pa-crypto-0.10.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "c2pa-status-tracker-0.7.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "cadence-macros-1.8.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "capnp-rpc-0.27.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "cgroups-fs-1.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "chunked_transfer-1.5.0",
+   "verdict": "ok",
+   "warnings": 5
+  },
+  {
+   "name": "circular-buffer-2.0.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "clio-0.3.5",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "cmov-0.5.4",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "cmsketch-0.2.4",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "colorz-1.1.4",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "connectrpc-codegen-0.9.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "core-graphics-0.25.0",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "countio-0.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "croaring-2.7.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "css-color-0.2.8",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "cssparser-macros-0.7.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "deno_web-0.290.0",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "devicemapper-0.34.8",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "dot-0.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "dtoa-short-0.3.5",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "earcut-0.4.11",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "easy-ext-1.0.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "embedded-nal-async-0.9.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "enum_index-0.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "enum_index_derive-0.2.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "erasable-1.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "error-chain-0.12.4",
+   "verdict": "ok",
+   "warnings": 7
+  },
+  {
+   "name": "esp-idf-sys-0.38.1",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "esp32c6-0.25.0",
+   "verdict": "compile_error",
+   "warnings": 96
+  },
+  {
+   "name": "ext-trait-2.0.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "ext-trait-proc_macros-2.0.3",
+   "verdict": "ok",
+   "warnings": 7
+  },
+  {
+   "name": "extension-traits-2.0.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "fcnet-types-0.1.1",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "file-per-thread-logger-0.2.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "file_test_runner-0.12.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "findshlibs-0.10.2",
+   "verdict": "ok",
+   "warnings": 7
+  },
+  {
+   "name": "five8_const-1.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "flutter_rust_bridge_codegen-2.13.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "forwarded-header-value-0.1.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "foyer-memory-0.22.6",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "from_bytes_or_zeroed-0.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "fs_at-0.2.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "fvm-4.8.2",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "garde-0.23.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "generator-0.8.9",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "gobject-2-0-sys-0.46.4",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "google-cloud-type-1.6.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "gpiocdev-embedded-hal-0.1.3",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "gpsd_proto-1.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "growable-bloom-filter-2.1.1",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "grpcio-0.13.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "gstreamer-sdp-0.25.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "gstreamer-sdp-sys-0.25.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "h3-datagram-0.0.2",
+   "verdict": "ok",
+   "warnings": 2
+  },
+  {
+   "name": "hex-literal-1.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "humantime-serde-1.1.1",
+   "verdict": "ok",
+   "warnings": 5
+  },
+  {
+   "name": "iai-0.1.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "icu_decimal_data-2.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "image-webp-0.2.4",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "interp-2.1.2",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "iroh-quinn-proto-0.15.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "iter-read-1.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "jsonptr-0.8.2",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "jubjub-0.11.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "k8s-openapi-0.28.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "kqueue-sys-1.1.2",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "kube-4.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "lance-namespace-impls-11.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "libcrux-chacha20poly1305-0.0.9",
+   "verdict": "ok",
+   "warnings": 2
+  },
+  {
+   "name": "libcrux-poly1305-0.0.6",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "libp2p-plaintext-0.44.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "libsql-rusqlite-0.33.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "libsql_replication-0.9.30",
+   "verdict": "ok",
+   "warnings": 5
+  },
+  {
+   "name": "libudev-0.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "lingua-hebrew-language-model-1.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "lsm-tree-3.1.10",
+   "verdict": "ok",
+   "warnings": 18
+  },
+  {
+   "name": "lttng-ust-0.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "lz4-1.28.1",
+   "verdict": "ok",
+   "warnings": 14
+  },
+  {
+   "name": "miette-7.6.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "miette-derive-7.6.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "mint-0.5.9",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "mozjpeg-0.10.13",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "mupdf-0.8.0",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "nano-gemm-0.2.2",
+   "verdict": "ok",
+   "warnings": 21
+  },
+  {
+   "name": "nano-gemm-codegen-0.2.1",
+   "verdict": "ok",
+   "warnings": 294
+  },
+  {
+   "name": "nano-gemm-core-0.2.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "nanoserde-derive-0.2.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "ndarray-npy-0.10.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "nonzero_ext-0.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "normalize-path-0.2.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "octseq-0.6.1",
+   "verdict": "ok",
+   "warnings": 4
+  },
+  {
+   "name": "odbc-api-29.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "ogg_pager-0.7.2",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "open-feature-env-var-0.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "openraft-0.9.25",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "packagemerge-0.1.0",
+   "verdict": "ok",
+   "warnings": 2
+  },
+  {
+   "name": "pallet-collective-49.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "pallet-fast-unstake-48.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "pallet-offences-47.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "parlance-0.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "parse_arg-1.0.1",
+   "verdict": "ok",
+   "warnings": 5
+  },
+  {
+   "name": "pastey-0.2.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "pco-1.0.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "pico-args-0.5.0",
+   "verdict": "ok",
+   "warnings": 2
+  },
+  {
+   "name": "platform-dirs-0.3.0",
+   "verdict": "ok",
+   "warnings": 10
+  },
+  {
+   "name": "postgres-protocol-0.6.12",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "profiling-1.0.18",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "prometheus-static-metric-0.5.1",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "prost-codec-0.4.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "protobuf-support-3.7.2",
+   "verdict": "ok",
+   "warnings": 44
+  },
+  {
+   "name": "pxfm-0.1.30",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "qr2term-0.3.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "ra-ap-rustc_ast_ir-0.174.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "ra-ap-rustc_next_trait_solver-0.174.0",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "ra-ap-rustc_type_ir-0.174.0",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "ra-ap-rustc_type_ir_macros-0.174.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "range-set-0.1.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "re_auth-0.38.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "reqsign-tencent-cos-3.0.6",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "rhai-1.26.1",
+   "verdict": "ok",
+   "warnings": 16
+  },
+  {
+   "name": "ropey-1.6.1",
+   "verdict": "ok",
+   "warnings": 32
+  },
+  {
+   "name": "roxmltree-0.21.1",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "rquickjs-0.13.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "rquickjs-core-0.13.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "rs-can-0.4.1",
+   "verdict": "ok",
+   "warnings": 6
+  },
+  {
+   "name": "rtrb-0.4.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "rusoto_qldb_session-0.48.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "rust-mcp-schema-2.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "rustracing-0.6.0",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "rustracing_jaeger-0.10.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "schemafy_core-0.6.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "schemafy_lib-0.6.0",
+   "verdict": "ok",
+   "warnings": 11
+  },
+  {
+   "name": "scratch-1.0.9",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "scroll_derive-0.13.2",
+   "verdict": "ok",
+   "warnings": 6
+  },
+  {
+   "name": "selectors-0.40.0",
+   "verdict": "ok",
+   "warnings": 40
+  },
+  {
+   "name": "serde-json-core-0.6.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "serde_codegen_internals-0.14.2",
+   "verdict": "ok",
+   "warnings": 15
+  },
+  {
+   "name": "serde_default-0.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "simba-0.10.2",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "simpl-0.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "single-instance-0.3.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "solana-inline-spl-2.2.20",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "solana-stake-program-5.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "solana-system-interface-3.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "sp-consensus-slots-0.49.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "spl-instruction-padding-0.3.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "ssh-key-0.6.7",
+   "verdict": "ok",
+   "warnings": 9
+  },
+  {
+   "name": "stm32-metapac-21.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "stm32h7-0.16.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "swc_ecma_compat_es2021-50.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "swc_html_minifier-61.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "system_shutdown-4.1.0",
+   "verdict": "ok",
+   "warnings": 5
+  },
+  {
+   "name": "target-features-0.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "thread-priority-3.1.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "throbber-widgets-tui-0.11.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "tiny-fn-0.1.9",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "tiny_pretty-0.4.3",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "tl-0.7.8",
+   "verdict": "ok",
+   "warnings": 34
+  },
+  {
+   "name": "tokio-rayon-2.1.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "tonic_prometheus_layer-0.3.0",
+   "verdict": "ok",
+   "warnings": 3
+  },
+  {
+   "name": "tor-keymgr-0.46.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "tr-0.1.11",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "tree-sitter-dart-0.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "trie-root-0.18.0",
+   "verdict": "ok",
+   "warnings": 6
+  },
+  {
+   "name": "unsafe-libyaml-norway-0.2.15",
+   "verdict": "compile_error",
+   "warnings": 4
+  },
+  {
+   "name": "utf8-width-0.1.9",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "version-compare-0.2.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "vsock-0.5.4",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "vte-0.15.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "wasm-bindgen-test-shared-0.2.128",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "wasmtime-internal-winch-48.0.2",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "wayland-sys-0.31.11",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "web3-async-native-tls-0.4.0",
+   "verdict": "ok",
+   "warnings": 1
+  },
+  {
+   "name": "weedle2-5.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "wide-1.7.1",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "windows-permissions-0.2.4",
+   "verdict": "ok",
+   "warnings": 6
+  },
+  {
+   "name": "x11-clipboard-0.9.3",
+   "verdict": "compile_error",
+   "warnings": 0
+  },
+  {
+   "name": "x25519-dalek-3.0.0",
+   "verdict": "ok",
+   "warnings": 0
+  },
+  {
+   "name": "zvariant_utils-4.2.0",
+   "verdict": "ok",
+   "warnings": 0
+  }
+ ],
+ "compile_error_crates": [
+  {
+   "name": "aliasable-0.1.3",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `aliasable` (lib) due to 6 previous errors; 6 warnings emitted\n"
+  },
+  {
+   "name": "colorz-1.1.4",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `colorz` (lib) due to 4 previous errors\n"
+  },
+  {
+   "name": "core-graphics-0.25.0",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `core-foundation` (lib) due to 2 previous errors\n"
+  },
+  {
+   "name": "deno_web-0.290.0",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `deno_v8` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "esp-idf-sys-0.38.1",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `konst_macro_rules` (lib) due to 1 previous error\nerror: could not compile `compile-fmt` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "esp32c6-0.25.0",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `esp32c6` (lib) due to 14 previous errors; 96 warnings emitted\n"
+  },
+  {
+   "name": "gpiocdev-embedded-hal-0.1.3",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `ioctl-sys` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "kqueue-sys-1.1.2",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `kqueue-sys` (lib) due to 9 previous errors; 1 warning emitted\n"
+  },
+  {
+   "name": "mint-0.5.9",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `mint` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "mupdf-0.8.0",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `mupdf` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "ra-ap-rustc_next_trait_solver-0.174.0",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `ra-ap-rustc_abi` (lib) due to 8 previous errors\n"
+  },
+  {
+   "name": "ra-ap-rustc_type_ir-0.174.0",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `ra-ap-rustc_abi` (lib) due to 8 previous errors\n"
+  },
+  {
+   "name": "unsafe-libyaml-norway-0.2.15",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "uld not compile `unsafe-libyaml-norway` (bin \"run-parser-test-suite\") due to 5 previous errors\nerror: could not compile `unsafe-libyaml-norway` (bin \"run-emitter-test-suite\") due to 3 previous errors\n"
+  },
+  {
+   "name": "vsock-0.5.4",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `cfg-if` (lib) due to 1 previous error\nerror: could not compile `bitflags` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "wayland-sys-0.31.11",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `wayland-sys` (lib) due to 1 previous error\n"
+  },
+  {
+   "name": "x11-clipboard-0.9.3",
+   "verdict": "compile_error",
+   "exit_code": 101,
+   "stderr_tail": "error: could not compile `x11-clipboard` (lib) due to 14 previous errors\n"
+  }
+ ]
+}

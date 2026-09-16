@@ -75,6 +75,10 @@ fn fix_set() -> Vec<String> {
     v
 }
 
+/// Rows for the default-eco axis when a test does not exercise it — a
+/// named const so the lifetime outlives the helper's body.
+const NO_DEFAULT_ROWS: &[(String, u32)] = &[];
+
 fn inputs<'a>(
     surface: LintSurface,
     corpus: &'a [String],
@@ -97,7 +101,33 @@ fn inputs<'a>(
             repos: 6,
             rows: 2,
         }),
+        default_histogram: NO_DEFAULT_ROWS,
+        default_histogram_provenance: None,
     }
+}
+
+/// The same inputs with a default-eco histogram joined — the Bench-094 half
+/// of the frequency axis. Provenance is a fixture: same shape as the real
+/// manifest supplies, so the render arms are exercised identically.
+fn inputs_with_default<'a>(
+    surface: LintSurface,
+    corpus: &'a [String],
+    fixes: &'a [String],
+    others: &'a BTreeMap<String, Vec<String>>,
+    hist: &'a [(String, u32)],
+    default_hist: &'a [(String, u32)],
+) -> CoverageInputs<'a> {
+    let mut ins = inputs(surface, corpus, fixes, others, hist);
+    ins.default_histogram = default_hist;
+    ins.default_histogram_provenance = Some(HistogramProvenance {
+        source: "Bench 094 default-level fired histogram (fixture)".into(),
+        captured_utc: "2026-09-17".into(),
+        toolchain: "clippy 0.1.98 (deadbeef 2026-09-01)".into(),
+        dataset_blake3: "2740b5e6".into(),
+        repos: 184,
+        rows: default_hist.len(),
+    });
+    ins
 }
 
 // ── the parser ───────────────────────────────────────────────────────────
@@ -423,12 +453,44 @@ fn the_two_source_counts_are_never_summed() {
 
 #[test]
 fn a_missing_source_is_unobserved_not_zero() {
-    assert_eq!(join_evidence(None, None), FreqEvidence::Uncited);
-    assert_eq!(join_evidence(Some(5), None), FreqEvidence::Fired(5));
-    assert_eq!(join_evidence(None, Some(5)), FreqEvidence::Study(5));
+    assert_eq!(join_evidence(None, None, None), FreqEvidence::Uncited);
+    assert_eq!(join_evidence(Some(5), None, None), FreqEvidence::Fired(5));
+    assert_eq!(join_evidence(None, None, Some(5)), FreqEvidence::Study(5));
+    assert_eq!(join_evidence(None, Some(7), None), FreqEvidence::FiredDefault(7));
     // An unobserved source must NOT rank below an observed rare lint by
     // being defaulted to 0 — it leaves the tier instead.
-    assert!(join_evidence(Some(1), None).tier() < join_evidence(None, Some(99_999)).tier());
+    assert!(join_evidence(Some(1), None, None).tier() < join_evidence(None, None, Some(99_999)).tier());
+}
+
+fn the_three_source_precedence_is_documented_not_accidental() {
+    // 1. fired + study is maximum breadth and stays Both regardless of the
+    //    default-eco count (which remains in its own manifest).
+    assert_eq!(
+        join_evidence(Some(3), Some(9), Some(50_000)),
+        FreqEvidence::Both { fired: 3, study: 50_000 }
+    );
+    // 2. a default-eco count shadows a lone local count — same-level
+    //    evidence is the axis this report's charter needs.
+    assert_eq!(
+        join_evidence(Some(40), Some(8), None),
+        FreqEvidence::FiredDefault(8)
+    );
+    // ...and shadows a lone published count for the same reason.
+    assert_eq!(
+        join_evidence(None, Some(8), Some(99_999)),
+        FreqEvidence::FiredDefault(8)
+    );
+    // 3. the tiers order default-eco between Both and Fired.
+    let both = FreqEvidence::Both { fired: 1, study: 1 };
+    let def = FreqEvidence::FiredDefault(1);
+    let local = FreqEvidence::Fired(1);
+    let study = FreqEvidence::Study(1);
+    assert!(both.tier() < def.tier());
+    assert!(def.tier() < local.tier());
+    assert!(local.tier() < study.tier());
+    assert_eq!(def.label(), "default-eco");
+    assert_eq!(def.rank(), 8);
+    assert!(def.is_cited());
 }
 
 #[test]
@@ -589,4 +651,59 @@ fn the_firing_evidence_cross_tab_is_reported_and_its_disjoint_case_is_loud() {
     let r2 = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &hist2));
     assert_eq!(r2.firing_with_evidence(), 1);
     assert!(!r2.render().contains("⚠ DISJOINT"));
+}
+
+// ── T4 successor: the default-eco axis (Bench 094) ─────────────────────
+
+/// The exact shape the Issue-119 first run said was missing for the ENTIRE
+/// default-firing set: a default-firing uncovered lint whose only evidence
+/// comes from the default-level ecosystem histogram. The cross-tab's
+/// breakdown line must name the source, and the provenance must print.
+#[test]
+fn a_default_eco_row_closes_the_default_firing_evidence_gap() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let def = vec![("filler_lint_0000".to_string(), 8)];
+    let r = coverage(&inputs_with_default(full_surface(), &corpus, &fixes, &others, &[], &def));
+    assert_eq!(r.firing_with_evidence(), 1);
+    assert_eq!(r.firing_with_default_evidence(), 1);
+    let row = r
+        .uncovered
+        .iter()
+        .find(|r| r.lint == "filler_lint_0000")
+        .expect("filler is uncovered");
+    assert_eq!(row.freq, FreqEvidence::FiredDefault(8));
+    let out = r.render();
+    assert!(out.contains("default-eco: Bench 094"), "the source must print");
+    assert!(out.contains("via the default-eco histogram"));
+    assert!(!out.contains("⚠ DISJOINT"));
+}
+
+/// The disjoint warning STILL fires when the default-eco histogram is
+/// absent — the gap can regress, and the instrument must stay loud.
+#[test]
+fn a_missing_default_eco_manifest_prints_none_joined_and_disjoint_stays_live() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let hist = vec![("must_use_candidate".to_string(), 1011)];
+    let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &hist));
+    let out = r.render();
+    assert!(out.contains("default-eco: NONE joined"));
+    assert!(out.contains("⚠ DISJOINT"));
+    assert_eq!(r.firing_with_default_evidence(), 0);
+}
+
+/// Stale rows in the default-eco histogram count separately — a lint the
+/// driver no longer ships is drift, not evidence.
+#[test]
+fn default_eco_stale_rows_are_counted_not_silently_dropped() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let def = vec![
+        ("filler_lint_0000".to_string(), 8),
+        ("removed_lint_from_2023".to_string(), 500),
+    ];
+    let r = coverage(&inputs_with_default(full_surface(), &corpus, &fixes, &others, &[], &def));
+    assert_eq!(r.default_histogram_rows_stale, 1);
+    assert_eq!(r.default_histogram_provenance.as_ref().unwrap().rows, 2);
 }
