@@ -10670,6 +10670,7 @@ mod mode_flag_tests {
             ("--import-series", Box::new(|m| m.import_series = true)),
             ("--frontier-report", Box::new(|m| m.frontier_report = true)),
             ("--horizon-report", Box::new(|m| m.horizon_report = true)),
+            ("--coverage-report", Box::new(|m| m.coverage_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
             ("--platform-audit", Box::new(|m| m.platform_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),

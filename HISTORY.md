@@ -126,6 +126,35 @@ exactly the rows past batches mined OUT of it (`use_self` +
 `suboptimal_flops` Batch 89, `items_after_statements` + `manual_let_else`
 Batch 90) — it is already the proven intake instrument for uncovered lints.
 
+## 2026-09-16 — Issue 119, the parallel session's side: the yield + the process-boundary delta (e2e arms + the never-bare row)
+
+The entry above is the landing's record; this is the OTHER side of the
+collision it names, closed per the Issue-665 discipline. The parallel
+implementation (local `9a2bede8`, committed 21:47 — `src/coverage_report.rs`,
+same `clippy-driver -W help` derivation, dash→underscore normalization, its
+own e2e) independently measured **the identical first numbers**
+822/54/768/449 — a two-way cross-check neither session planned — and was
+YIELDED (reset to origin, file removed) the moment the rebase surfaced the
+winner. Only genuine deltas re-landed, on the winner's API:
+
+1. `tests/coverage_report_cli.rs` — the two exit contracts pinned at the
+   PROCESS boundary (real binary, real driver, real env override). The
+   landing verified both LIVE but committed no `tests/` arm; the lib
+   fixtures cover the pure arithmetic, and this file covers what only the
+   process can — spawn, env, exit code 0/1, the BLIND posture naming the
+   remedy knob. No live numbers pinned (toolchain-derived by design).
+2. The `standalone_modes_are_never_bare` case row for `--coverage-report`
+   — the flag joined `is_bare_posture` in the landing but not the test's
+   manual enumeration; the row closes the drift class the test exists
+   for.
+3. This record (the yield side of the collision story, beside the
+   landing's own above).
+
+Gates: e2e 2/2 (live-toolchain structure arm + the refusal arm), the
+never-bare suite green with the new row, usage-parity 3/3, bin builds
+clean on the release feature set (only the standing Windows hard-link
+technicality).
+
 ## 2026-09-16 — Issue 118: the bench-target guard extended to the compile-repair surfaces (`--fix-compile` writes + the oracle lane)
 
 P30 (same day) landed DECLINE-OR-FLAG for **rust_perf** edits on bench
