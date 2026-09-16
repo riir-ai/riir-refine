@@ -55,6 +55,11 @@
 
 // ── Domain-agnostic core (always compiled) ─────────────────────────────────
 pub mod adaptive_drafter;
+// Issue 117: the compiled-feature stamp (`--version`) + the loud refusal a
+// compiled-out gated command prints before exit 2. Ungated on purpose — a
+// STALE binary is precisely one that has few features, so the module that
+// diagnoses staleness must be in every build.
+pub mod build_stamp;
 pub mod corpus;
 pub mod dispersion;
 pub mod domain;
@@ -118,6 +123,20 @@ pub mod self_evolve;
 #[cfg(feature = "latent_retrieval")]
 pub mod draft;
 
+// Issue 113: the auto-oracle — a scanning run over a cargo project lints it
+// with REAL clippy itself. std-only (Path + Command), so it is UNGATED: the
+// `cargo-heal` bin calls it from the scan path without a cfg, and its
+// required-features do NOT include `compile_oracle`.
+//
+// ⛔ It was gated on `compile_oracle` from Issue 113's landing (3f0eecb9)
+// until Issue 117: the `pub mod clippy_oracle;` line was inserted BETWEEN
+// the attribute below and the item that attribute was written for, so the
+// gate landed on the wrong module and `compile_oracle` — the one the comment
+// describes — lost its gate entirely. Silent under default features (both
+// features are on), and a `--no-default-features` build of the bin's own
+// required-feature set would not compile.
+pub mod clippy_oracle;
+
 // Plan 019 T0.3: the retrieval-free compile-oracle substrate shared by
 // `fix_verify` and the `rustc_errors` `--fix-compile` driver — the cargo
 // check runner, the rustc-reported-path resolution, and the package /
@@ -125,7 +144,6 @@ pub mod draft;
 // consume it WITHOUT pulling `latent_retrieval` (riir-rag + riir-neuron-db)
 // into a compile fixer.
 #[cfg(feature = "compile_oracle")]
-pub mod clippy_oracle;
 pub mod compile_oracle;
 
 // Issue 015: `--fix --verify` — the compile gate as tooling for the edit

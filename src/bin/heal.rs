@@ -2378,8 +2378,7 @@ fn run_kat_refill(wait_secs: u64) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, acct_hex, wait_secs);
-        eprintln!("refill: refilling requires a build with --features kat_transport");
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse("--refill", &["kat_transport"]);
     }
 }
 
@@ -3382,7 +3381,13 @@ USAGE:
     --json          With --corpus-stats: stdout carries ONLY the dashboard
                     JSON payload ({{today, corpus, scores}}) — the human table
                     moves to stderr.
-    --version       Print the version and exit (also -V).
+    --version       Print the version and exit (also -V). Prints the COMPILED
+                    feature set beside it and, when the release set is
+                    incomplete, the rebuild command (Issue 117 — a bare
+                    release build overwrites the global binary with a
+                    default-features one and silently compiles sync/update/
+                    --refill/burn-push out while this usage page still
+                    lists them).
     --yes           Non-interactive consent: every y/N prompt answers yes
                     (the flag form of RIIR_HEAL_YES=1 — agents/CI). Currently
                     arms the depleted-run contribute-now offer (Issue 079).
@@ -6353,16 +6358,23 @@ fn main() {
             )))]
             KatCommand::Replay => {
                 eprintln!(
-                    "replay requires a build with --features kat_transport,clippy_verify (the \
-                     verdict is measured by the real clippy oracle — P015 Phase 2)"
+                    "replay: the verdict is measured by the real clippy oracle (P015 Phase 2)"
                 );
-                std::process::exit(2);
+                riir_clippy::build_stamp::refuse(
+                    "replay",
+                    &["kat_transport", "clippy_verify", "latent_retrieval"],
+                );
             }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {
-                eprintln!("update/sync require a build with --features kat_transport");
-                std::process::exit(2);
+                // Issue 117 T2: name the missing feature, this binary's own
+                // set, and the rebuild — the three facts the 00:21 diagnosis
+                // had to reconstruct by hand.
+                riir_clippy::build_stamp::refuse(
+                    if cmd == KatCommand::Update { "update" } else { "sync" },
+                    &["kat_transport"],
+                );
             }
             // Exhaustiveness only — `config` is dispatched (ungated) before
             // this match ever runs.
@@ -6372,8 +6384,10 @@ fn main() {
     }
     #[cfg(not(feature = "kat_service"))]
     if args.command.is_some() {
-        eprintln!("login/account/update/sync/claim/stake/unstake/vote/pay require a build with --features kat_service");
-        std::process::exit(2);
+        riir_clippy::build_stamp::refuse(
+            "login/account/update/sync/claim/stake/unstake/vote/pay",
+            &["kat_service"],
+        );
     }
 
     // ── Plan 014: clippy-bench modes (standalone — no paths) ─────────────
@@ -6513,7 +6527,14 @@ fn main() {
     // `--version` answers before anything else (standalone; ungated — a
     // feature-less build still knows its own version).
     if args.version {
-        println!("cargo-heal {}", env!("CARGO_PKG_VERSION"));
+        // Issue 117 T1: the version carries the COMPILED FEATURE SET, so a
+        // stale binary (the 00:21 class — a bare `cargo build --release`
+        // overwrote the symlink target with a default-features build) is
+        // identifiable in one command from any terminal. Line 0 is the
+        // unchanged `cargo-heal <version>`.
+        for line in riir_clippy::build_stamp::version_lines() {
+            println!("{line}");
+        }
         return;
     }
     // `--yes` arms every y/N prompt (the flag form of `RIIR_HEAL_YES`) — set

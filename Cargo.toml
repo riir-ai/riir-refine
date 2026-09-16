@@ -1039,6 +1039,16 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 name = "kat_refill_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# Issue 117 T3: the compiled-feature stamp + the staleness refusal through
+# the REAL binary. The bin's own required-features ONLY — deliberately NOT
+# `kat_transport`, because the refusal arm is what a build LACKING the
+# transport does, and the file runs its stamp arms in every set (the refusal
+# arms are cfg'd per-function, never per-file — a whole-file gate would
+# report a green `0 passed` under the release set).
+[[test]]
+name = "build_stamp_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]

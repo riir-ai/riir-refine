@@ -34,7 +34,17 @@
 //!   A same-named item in another module masquerades; names declared 2+
 //!   times are skipped as ambiguous rather than guessed (counted in the
 //!   footer). Adjudicate rows against the listed atoms, same as every
-//!   sibling audit (config-audit / orphan-report).
+//!   sibling audit (config-audit / orphan-report). **USE rows are
+//!   scope-attributed** (2026-09-16, the chaind `BrowserNodeState`
+//!   specimen): a module-PRIVATE import's binding is visible only inside
+//!   its own file's module subtree, so its evidence reads only mentions
+//!   at its scope or DESCENDANT scopes in its own file (child scopes see
+//!   parent bindings; ancestors, siblings and other files cannot).
+//!   Cross-file and out-of-scope same-name mentions were attributing
+//!   atoms to test-scoped imports their scope does not guarantee — the
+//!   internally-inconsistent pair (enum clean + its test import flagged).
+//!   Non-private imports (`pub`/`pub(crate)`/… — the re-export surface)
+//!   keep the name-global evidence: they are reachable from any module.
 //! * **Module-DECLARATION gates (`#[cfg] mod x;` in the parent) ARE
 //!   folded** (P24 (b), 2026-09-15): each file's unique incoming `mod
 //!   x;` row — resolved by the standard rustc path rules (root files and
@@ -220,8 +230,7 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
     // gated is exactly the ProcessStatus specimen). use-decls therefore
     // read only code evidence; value decls read the union.
     let mut decls: BTreeMap<String, Vec<DeclRec>> = BTreeMap::new();
-    let mut code_uses: BTreeMap<String, UseEvidence> = BTreeMap::new();
-    let mut src_uses: BTreeMap<String, UseEvidence> = BTreeMap::new();
+    let mut sinks = UseSinks::default();
 
     for (file, parsed) in &parsed_files {
         // File-level `#![cfg]` INNER attrs gate the whole file (the
@@ -235,14 +244,7 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
         // ungated use — the note_ane_dispatch miss). `#![cfg(test)]` at
         // file level is test context, same as an item-level one.
         let ctx = lattice.effective_ctx(file);
-        walk_items(
-            &parsed.items,
-            &ctx,
-            &mut decls,
-            &mut code_uses,
-            &mut src_uses,
-            file,
-        );
+        walk_items(&parsed.items, &ctx, &mut decls, &mut sinks, file, &Vec::new());
     }
 
     report.decls_tracked = decls.values().map(Vec::len).sum();
@@ -252,18 +254,25 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
             continue;
         }
         let d = &ds[0];
-        let merged: Vec<&UseEvidence> = if d.kind == "use" {
-            code_uses
-                .get(name)
-                .into_iter()
-                .collect::<Vec<_>>()
+        let merged: Vec<UseEvidence> = if d.kind == "use" && !d.is_pub {
+            // Module-private import: the binding is visible only inside
+            // its own file's scope subtree — in-scope evidence only (the
+            // chaind BrowserNodeState specimen: the wasm32 type-path uses
+            // at file root referenced the ENUM, not the test-scoped
+            // binding, and were attributing atoms its scope does not
+            // guarantee).
+            in_scope_evidence(&sinks.scoped, &d.file, &d.scope, name)
+        } else if d.kind == "use" {
+            // Re-export surface: reachable from any module, so the
+            // name-global evidence stands.
+            sinks.code.get(name).cloned().into_iter().collect()
         } else {
-            let mut v: Vec<&UseEvidence> = Vec::new();
-            if let Some(e) = code_uses.get(name) {
-                v.push(e);
+            let mut v: Vec<UseEvidence> = Vec::new();
+            if let Some(e) = sinks.code.get(name) {
+                v.push(e.clone());
             }
-            if let Some(e) = src_uses.get(name) {
-                v.push(e);
+            if let Some(e) = sinks.src.get(name) {
+                v.push(e.clone());
             }
             v
         };
@@ -307,13 +316,31 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
 }
 
 struct DeclRec {
+    /// The declared name (the decl-map key — carried so the record is
+    /// self-contained and `record_decl` stays single-argument).
+    name: String,
     kind: &'static str,
     origin: String,
     atoms: AtomSet,
     is_pub: bool,
+    /// Declaring file + lexical scope (inline-mod path from the file
+    /// root) — the use-row attribution half: a private import's binding
+    /// is visible only inside this subtree of its own file.
+    file: String,
+    scope: Vec<String>,
 }
 
+/// Mention-evidence sinks for one scan. `code`/`src` are the name-global
+/// maps (value decls + non-private re-export rows read them); `scoped` is
+/// the (file → lexical scope → name) map the private-use-row half reads.
 #[derive(Default)]
+struct UseSinks {
+    code: BTreeMap<String, UseEvidence>,
+    src: BTreeMap<String, UseEvidence>,
+    scoped: BTreeMap<String, BTreeMap<Vec<String>, BTreeMap<String, UseEvidence>>>,
+}
+
+#[derive(Default, Clone)]
 struct UseEvidence {
     /// Distinct (cfg context, test flag) pairs — the intersection folds
     /// over these; the count does not.
@@ -619,9 +646,9 @@ fn walk_items(
     items: &[syn::Item],
     ctx: &Ctx,
     decls: &mut BTreeMap<String, Vec<DeclRec>>,
-    code_uses: &mut BTreeMap<String, UseEvidence>,
-    src_uses: &mut BTreeMap<String, UseEvidence>,
+    sinks: &mut UseSinks,
     file: &str,
+    scope: &[String],
 ) {
     for item in items {
         let item_atoms = guaranteed_from_attrs(item_attrs(item));
@@ -634,7 +661,9 @@ fn walk_items(
         match item {
             syn::Item::Mod(m) => {
                 if let Some((_, inner)) = &m.content {
-                    walk_items(inner, &ctx2, decls, code_uses, src_uses, file);
+                    let mut inner_scope = scope.to_vec();
+                    inner_scope.push(m.ident.to_string());
+                    walk_items(inner, &ctx2, decls, sinks, file, &inner_scope);
                 }
                 // External `mod x;` — the child file's inherited gate is
                 // resolved by the ModRowLattice (P24 (b)) and folded into
@@ -643,49 +672,65 @@ fn walk_items(
             syn::Item::Const(c) => {
                 record_decl(
                     decls,
-                    &c.ident.to_string(),
-                    "const",
-                    format!("{}:{}", file, c.ident.span().start().line),
-                    ctx2.atoms.clone(),
-                    !matches!(c.vis, syn::Visibility::Inherited),
+                    DeclRec {
+                        name: c.ident.to_string(),
+                        kind: "const",
+                        origin: format!("{}:{}", file, c.ident.span().start().line),
+                        atoms: ctx2.atoms.clone(),
+                        is_pub: !matches!(c.vis, syn::Visibility::Inherited),
+                        file: file.to_string(),
+                        scope: scope.to_vec(),
+                    },
                 );
-                collect_uses(item, &ctx2, code_uses, &BTreeSet::new());
+                tally_item_uses(sinks, item, &ctx2, file, scope, &BTreeSet::new());
             }
             syn::Item::Static(s) => {
                 record_decl(
                     decls,
-                    &s.ident.to_string(),
-                    "static",
-                    format!("{}:{}", file, s.ident.span().start().line),
-                    ctx2.atoms.clone(),
-                    !matches!(s.vis, syn::Visibility::Inherited),
+                    DeclRec {
+                        name: s.ident.to_string(),
+                        kind: "static",
+                        origin: format!("{}:{}", file, s.ident.span().start().line),
+                        atoms: ctx2.atoms.clone(),
+                        is_pub: !matches!(s.vis, syn::Visibility::Inherited),
+                        file: file.to_string(),
+                        scope: scope.to_vec(),
+                    },
                 );
-                collect_uses(item, &ctx2, code_uses, &BTreeSet::new());
+                tally_item_uses(sinks, item, &ctx2, file, scope, &BTreeSet::new());
             }
             syn::Item::Fn(f) => {
                 let name = f.sig.ident.to_string();
                 record_decl(
                     decls,
-                    &name,
-                    "fn",
-                    format!("{}:{}", file, f.sig.ident.span().start().line),
-                    ctx2.atoms.clone(),
-                    !matches!(f.vis, syn::Visibility::Inherited),
+                    DeclRec {
+                        name: name.clone(),
+                        kind: "fn",
+                        origin: format!("{}:{}", file, f.sig.ident.span().start().line),
+                        atoms: ctx2.atoms.clone(),
+                        is_pub: !matches!(f.vis, syn::Visibility::Inherited),
+                        file: file.to_string(),
+                        scope: scope.to_vec(),
+                    },
                 );
                 // Recursion inside the fn's own body is not a use.
                 let mut skip = BTreeSet::new();
                 skip.insert(name);
-                collect_uses(item, &ctx2, code_uses, &skip);
+                tally_item_uses(sinks, item, &ctx2, file, scope, &skip);
             }
             syn::Item::Use(u) => {
                 for leaf in use_leaves(&u.tree) {
                     record_decl(
                         decls,
-                        &leaf.local,
-                        "use",
-                        format!("{}:{}", file, u.span().start().line),
-                        ctx2.atoms.clone(),
-                        !matches!(u.vis, syn::Visibility::Inherited),
+                        DeclRec {
+                            name: leaf.local.clone(),
+                            kind: "use",
+                            origin: format!("{}:{}", file, u.span().start().line),
+                            atoms: ctx2.atoms.clone(),
+                            is_pub: !matches!(u.vis, syn::Visibility::Inherited),
+                            file: file.to_string(),
+                            scope: scope.to_vec(),
+                        },
                     );
                     // The import IS a reference to its source name, in
                     // the import's cfg context — a gated import is the
@@ -693,10 +738,10 @@ fn walk_items(
                     // count for the local binding (an ungated import
                     // whose only code mentions are gated is the specimen
                     // class and must stay flaggable).
-                    tally_use(src_uses, &leaf.source, &ctx2, 1);
+                    tally_use(&mut sinks.src, &leaf.source, &ctx2, 1);
                 }
             }
-            _ => collect_uses(item, &ctx2, code_uses, &BTreeSet::new()),
+            _ => tally_item_uses(sinks, item, &ctx2, file, scope, &BTreeSet::new()),
         }
     }
 }
@@ -760,20 +805,8 @@ fn walk_use_tree(tree: &syn::UseTree, out: &mut Vec<UseLeaf>) {
     }
 }
 
-fn record_decl(
-    decls: &mut BTreeMap<String, Vec<DeclRec>>,
-    name: &str,
-    kind: &'static str,
-    origin: String,
-    atoms: AtomSet,
-    is_pub: bool,
-) {
-    decls.entry(name.to_string()).or_default().push(DeclRec {
-        kind,
-        origin,
-        atoms,
-        is_pub,
-    });
+fn record_decl(decls: &mut BTreeMap<String, Vec<DeclRec>>, rec: DeclRec) {
+    decls.entry(rec.name.clone()).or_default().push(rec);
 }
 
 fn tally_use(uses: &mut BTreeMap<String, UseEvidence>, name: &str, ctx: &Ctx, n: usize) {
@@ -782,23 +815,63 @@ fn tally_use(uses: &mut BTreeMap<String, UseEvidence>, name: &str, ctx: &Ctx, n:
     e.total += n;
 }
 
-/// Collect every path occurrence inside an item with one cfg context.
-/// Nested fn-local items are not decl-tracked (documented); their contents
-/// attribute to this context — under-approximation, the safe direction.
-fn collect_uses(
-    item: &syn::Item,
-    ctx: &Ctx,
-    uses: &mut BTreeMap<String, UseEvidence>,
-    skip: &BTreeSet<String>,
-) {
+/// Collect an item's path mentions (name → count) under one cfg context;
+/// callers tally them into the evidence sinks.
+fn collect_uses(item: &syn::Item, skip: &BTreeSet<String>) -> BTreeMap<String, usize> {
     let mut visitor = UseVisitor {
         found: BTreeMap::new(),
         skip,
     };
     visitor.visit_item(item);
-    for (name, n) in visitor.found {
-        tally_use(uses, &name, ctx, n);
+    visitor.found
+}
+
+/// Tally one item's mentions into BOTH evidence maps: the name-global
+/// `code` map (value decls + non-private re-export rows) and the
+/// file/scope-scoped map the private-use-row half reads.
+fn tally_item_uses(
+    sinks: &mut UseSinks,
+    item: &syn::Item,
+    ctx: &Ctx,
+    file: &str,
+    scope: &[String],
+    skip: &BTreeSet<String>,
+) {
+    let found = collect_uses(item, skip);
+    let UseSinks { code, scoped, .. } = sinks;
+    let scope_entry = scoped
+        .entry(file.to_string())
+        .or_default()
+        .entry(scope.to_vec())
+        .or_default();
+    for (name, n) in found {
+        tally_use(code, &name, ctx, n);
+        tally_use(scope_entry, &name, ctx, n);
     }
+}
+
+/// Evidence for a module-private import binding: mentions inside its own
+/// file whose lexical scope is the import's scope or a DESCENDANT (child
+/// scopes see parent bindings; ancestors, siblings and other files
+/// cannot). An import with no in-scope mention is rustc's
+/// unused-import class, not a platform row — it reads as no-use here.
+fn in_scope_evidence(
+    scoped: &BTreeMap<String, BTreeMap<Vec<String>, BTreeMap<String, UseEvidence>>>,
+    file: &str,
+    scope: &[String],
+    name: &str,
+) -> Vec<UseEvidence> {
+    let mut v = Vec::new();
+    if let Some(scopes) = scoped.get(file) {
+        for (s, names) in scopes {
+            if s.starts_with(scope) {
+                if let Some(e) = names.get(name) {
+                    v.push(e.clone());
+                }
+            }
+        }
+    }
+    v
 }
 
 /// Format-family macros whose string literals carry inline `{name}`
@@ -1461,6 +1534,120 @@ fn a(m: Locked) {}
         assert_eq!(
             missing_of(&report, "Locked"),
             one_atom("target_os", "macos")
+        );
+    }
+
+    /// The chaind `BrowserNodeState` specimen (2026-09-16 intake): a
+    /// PRIVATE import inside `#[cfg(test)] mod tests` must not inherit
+    /// platform atoms from out-of-scope same-name mentions — the wasm32
+    /// type-path uses at file root reference the ENUM, not the test-scoped
+    /// binding. Pre-fix the pair was internally inconsistent: the enum
+    /// stayed clean BECAUSE the ungated import counted as an ungated
+    /// reference to it, while the import itself flagged off atoms its
+    /// scope does not guarantee.
+    #[test]
+    fn cfg_test_import_ignores_out_of_scope_uses() {
+        let report = one(
+            r#"
+enum X { A, B }
+
+#[cfg(target_arch = "wasm32")]
+struct S { pub st: X }
+
+#[cfg(target_arch = "wasm32")]
+impl S { pub fn st(&self) -> X { X::A } }
+
+#[cfg(test)]
+mod tests {
+    use super::X;
+
+    #[test]
+    fn t() {
+        assert!(!X::A.eq(&X::B));
+    }
+}
+"#,
+        );
+        assert!(
+            !report.findings.iter().any(|f| f.name == "X"),
+            "the test-scoped import cannot carry wasm32 atoms from out-of-scope uses"
+        );
+    }
+
+    /// The scoping cut must not lose the true positive — and it must
+    /// RESTORE one the name-global law hid: a private import whose
+    /// IN-SCOPE mentions are all gated flags even when an out-of-scope
+    /// UNGATED same-name mention exists (that mention references the
+    /// enum, not the binding; pre-fix it broke the intersection and
+    /// suppressed the flag).
+    #[test]
+    fn private_import_in_scope_gated_uses_flag_despite_out_of_scope_ungated() {
+        let report = one(
+            r#"
+enum Engine { A }
+
+mod m {
+    use super::Engine;
+
+    #[cfg(target_os = "linux")]
+    fn go(e: Engine) {}
+}
+
+fn root(e: Engine) {}
+"#,
+        );
+        assert_eq!(
+            missing_of(&report, "Engine"),
+            one_atom("target_os", "linux"),
+            "in-scope gated evidence stands; the out-of-scope ungated mention no longer suppresses"
+        );
+    }
+
+    /// A non-private import is a re-export surface — reachable from any
+    /// module — so it keeps the name-global evidence: the out-of-scope
+    /// ungated mention keeps the row silent (the private twin above
+    /// flags).
+    #[test]
+    fn pub_reexport_keeps_name_global_evidence() {
+        let report = one(
+            r#"
+enum Engine { A }
+
+mod m {
+    pub use super::Engine;
+
+    #[cfg(target_os = "linux")]
+    fn go(e: Engine) {}
+}
+
+fn root(e: Engine) {}
+"#,
+        );
+        assert!(
+            !report.findings.iter().any(|f| f.name == "Engine"),
+            "pub use rows keep the name-global evidence"
+        );
+    }
+
+    /// Cross-file same-name mentions cannot reference a module-private
+    /// import (it is invisible outside its file) — pre-fix a gated
+    /// mention in ANOTHER file condemned the import off atoms from a
+    /// binding that file cannot even see.
+    #[test]
+    fn private_import_ignores_cross_file_mentions() {
+        let report = audit_sources(&[
+            (
+                "a.rs".to_string(),
+                "enum E { A }\nmod m { use super::E; }".to_string(),
+            ),
+            (
+                "b.rs".to_string(),
+                "#[cfg(target_os = \"macos\")]\nfn f(e: E) {}".to_string(),
+            ),
+        ]);
+        assert!(
+            !report.findings.iter().any(|f| f.name == "E"),
+            "cross-file mentions are not evidence for a private import"
         );
     }
 

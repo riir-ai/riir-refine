@@ -125,6 +125,27 @@
 //! The bind type set is closed transitively through nested `ShaderType`
 //! struct fields (a nested struct is flattened into the same block).
 
+//! ## The test-rig downgrade (2026-09-16)
+//!
+//! A struct DECLARED at top level in a `tests/`/`benches/`-path file whose
+//! every read sits under tests-path files is definitionally confined — it
+//! cannot be production config (tests files do not compile into the lib),
+//! and the C2 class was built for PRODUCTION config structs whose consumer
+//! never materialized (the `PetAiConfig` canonical TP). Measured specimens:
+//! riir-ai `Outcome` (`riir-engine` `tests/cgsp_rewind_recovery_poc.rs`) and
+//! `ProbeConfig` (`riir-gpu` `tests/support/gpu_exclusivity.rs`) — both with
+//! LIVE in-rig reads that read as confined test context only because the
+//! whole file is a test. Such rows downgrade to the weak `[C2·test-rig]`
+//! annotation (downgrade-not-suppress): the fix line points at the rig
+//! (prune it with its test), not at a production schema. Eligibility is
+//! CONSERVATIVE — top-level decl in the tests tree AND every read under
+//! tests-path files: a src/-declared struct whose reads are cfg(test)-
+//! confined stays at FULL [C2] (the path axis is separate from cfg(test)
+//! confinement), and a same-named field read outside the tree (the
+//! name-global masquerade) blocks the downgrade. Test-rig outranks
+//! gpu-uniform when both apply — a tests-tree struct is not production
+//! schema either way.
+
 //! ## The walk (P25, 2026-09-15)
 //!
 //! [`read_sources_walk`] — shared by `--config-audit`, `--orphan-report`,
@@ -211,10 +232,20 @@ pub struct SelfReferentialConfig {
     pub struct_name: String,
     /// `file:line` of the FIRST candidate field's Default-impl init.
     pub origin: String,
-    /// The struct rides a `#[uniform(…)]` bind — the C2 verdict renders at
-    /// the weak `[C2·gpu-uniform]` annotation (P28; the shader consumes the
+    /// `#[uniform(…)]` bind — the C2 verdict renders at the weak
+    /// `[C2·gpu-uniform]` annotation (P28; the shader consumes the
     /// block's bytes, so "delete the struct" is not a safe fix line).
     pub gpu_uniform: bool,
+    /// Declared at top level in a tests-path file AND every read under a
+    /// tests-path file — the C2 verdict renders at the weak
+    /// `[C2·test-rig]` annotation (2026-09-16, the riir-ai
+    /// `Outcome`/`ProbeConfig` intake): the C2 class was built for
+    /// PRODUCTION config structs whose consumer never materialized
+    /// (`PetAiConfig`); a struct that lives wholly in the tests tree is
+    /// definitionally confined — if the rig is dead, delete the file.
+    /// Outranks `gpu_uniform` when both apply (a tests-tree struct is not
+    /// production schema either way).
+    pub test_rig: bool,
     pub fields: Vec<SelfRefField>,
 }
 
@@ -289,7 +320,15 @@ pub fn audit_sources(sources: &[(String, String)]) -> ConfigAuditReport {
     let (candidates, ix, files) = scan_core(sources);
     let field_docs = collect_field_docs(&files);
     let gpu_uniform = collect_gpu_uniform_structs(&files);
-    classify(&candidates, &ix, &field_docs, files.len(), &gpu_uniform)
+    let test_rig = collect_test_rig_decls(&files);
+    classify(
+        &candidates,
+        &ix,
+        &field_docs,
+        files.len(),
+        &gpu_uniform,
+        &test_rig,
+    )
 }
 
 /// Fields whose reads are all test- or own-impl-confined (the C1 candidate
@@ -429,6 +468,7 @@ fn scan_core(
             suppress_const: false,
             defaults_by_field: &defaults_by_field,
             file_is_test: file_is_test_path(name) || attrs_cfg_test(&file.attrs),
+            file_in_tests_tree: file_is_test_path(name),
             test_depth: 0,
             impl_stack: Vec::new(),
             impl_is_trait: Vec::new(),
@@ -1179,6 +1219,7 @@ fn classify(
     field_docs: &FieldDocs,
     files_scanned: usize,
     gpu_uniform: &BTreeSet<String>,
+    test_rig: &TestRigDecls,
 ) -> ConfigAuditReport {
     let mut report = ConfigAuditReport {
         files_scanned,
@@ -1238,7 +1279,7 @@ fn classify(
             }
         }
     }
-    classify_self_referential(candidates, ix, &mut report, gpu_uniform);
+    classify_self_referential(candidates, ix, &mut report, gpu_uniform, test_rig);
     report
 }
 
@@ -1250,6 +1291,7 @@ fn classify_self_referential(
     ix: &InteractionIndex,
     report: &mut ConfigAuditReport,
     gpu_uniform: &BTreeSet<String>,
+    test_rig: &TestRigDecls,
 ) {
     let mut seen: Vec<String> = Vec::new();
     for cand in candidates {
@@ -1259,8 +1301,19 @@ fn classify_self_referential(
         seen.push(cand.struct_name.clone());
         let mut fields: Vec<SelfRefField> = Vec::new();
         let mut all_confined = true;
+        // Every read under a tests-path file (the path axis — distinct
+        // from cfg(test) confinement): the `[C2·test-rig]` input.
+        let mut all_reads_in_tests_tree = true;
         for f in candidates.iter().filter(|c| c.struct_name == cand.struct_name) {
             let total = ix.field_reads.get(&f.field_name).copied().unwrap_or(0);
+            let tree = ix
+                .field_reads_tests_tree
+                .get(&f.field_name)
+                .copied()
+                .unwrap_or(0);
+            if total != tree {
+                all_reads_in_tests_tree = false;
+            }
             let tests = ix
                 .field_reads_tests
                 .get(&f.field_name)
@@ -1286,10 +1339,46 @@ fn classify_self_referential(
                 struct_name: cand.struct_name.clone(),
                 origin: cand.origin.clone(),
                 gpu_uniform: gpu_uniform.contains(&cand.struct_name),
+                test_rig: all_reads_in_tests_tree && test_rig.is_eligible(&cand.struct_name),
                 fields,
             });
         }
     }
+}
+
+/// Top-level struct decls split by whether their file sits under a
+/// `tests/`/`benches/` path — the `[C2·test-rig]` eligibility input. A
+/// name declared in BOTH trees is NOT eligible (the conservative
+/// direction — same-name decls cannot be told apart by the name-global
+/// read tally). Nested (non-top-level) decls are out of scope, mirroring
+/// `collect_gpu_uniform_structs`.
+#[derive(Default)]
+struct TestRigDecls {
+    tests_tree: BTreeSet<String>,
+    non_tests: BTreeSet<String>,
+}
+
+impl TestRigDecls {
+    fn is_eligible(&self, name: &str) -> bool {
+        self.tests_tree.contains(name) && !self.non_tests.contains(name)
+    }
+}
+
+fn collect_test_rig_decls(files: &[(String, syn::File)]) -> TestRigDecls {
+    let mut out = TestRigDecls::default();
+    for (name, file) in files {
+        let in_tree = file_is_test_path(name);
+        for item in &file.items {
+            if let syn::Item::Struct(s) = item {
+                if in_tree {
+                    out.tests_tree.insert(s.ident.to_string());
+                } else {
+                    out.non_tests.insert(s.ident.to_string());
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Cross-file interaction tallies (pass-2 output).
@@ -1297,6 +1386,11 @@ fn classify_self_referential(
 struct InteractionIndex {
     /// Field name → read touches.
     field_reads: BTreeMap<String, usize>,
+    /// Field name → read touches in files under a `tests/`/`benches/` PATH
+    /// (the path axis alone — the `[C2·test-rig]` input; distinct from
+    /// cfg(test) inline confinement, which keeps src/-declared structs at
+    /// full [C2]).
+    field_reads_tests_tree: BTreeMap<String, usize>,
     /// Field name → read touches inside TEST context.
     field_reads_tests: BTreeMap<String, usize>,
     /// (field name, impl self-type) → read touches inside validate-shaped
@@ -1409,6 +1503,9 @@ struct InteractionVisitor<'a> {
     defaults_by_field: &'a DefaultsByField,
     /// File-level test heuristic (`tests/`/`benches/` path or `#![cfg(test)]`).
     file_is_test: bool,
+    /// The PATH axis alone (`tests/`/`benches/` file) — feeds the
+    /// `[C2·test-rig]` downgrade, distinct from cfg(test) confinement.
+    file_in_tests_tree: bool,
     /// Depth inside `#[cfg(test)]` mods / `#[test]`-like fns.
     test_depth: usize,
     /// Self-type names of the enclosing impl blocks (innermost last).
@@ -1424,14 +1521,24 @@ struct InteractionVisitor<'a> {
 /// One field-read touch, attributed for class C2: the A/B total always
 /// increments; the test / own-impl tallies only inside their contexts.
 /// `internal_impl` is `Some(T)` when the read sits in a validate-shaped
-/// method of `impl T` (test context takes precedence).
+/// method of `impl T` (test context takes precedence). `tests_tree` is
+/// the PATH axis alone (a `tests/`/`benches/` file) — kept separate from
+/// `in_test` so a src/-declared rig (cfg(test)-confined) stays at full
+/// [C2] while a tests-tree one downgrades to `[C2·test-rig]`.
 fn tally_field_read(
     ix: &mut InteractionIndex,
     name: &str,
     in_test: bool,
     internal_impl: Option<&str>,
+    tests_tree: bool,
 ) {
     *ix.field_reads.entry(name.to_string()).or_insert(0) += 1;
+    if tests_tree {
+        *ix
+            .field_reads_tests_tree
+            .entry(name.to_string())
+            .or_insert(0) += 1;
+    }
     if in_test {
         *ix.field_reads_tests.entry(name.to_string()).or_insert(0) += 1;
     } else if let Some(ty) = internal_impl {
@@ -1587,17 +1694,24 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
         if let Some(name) = field_member_name(&f.member) {
             let (in_test, internal_impl) = self.read_ctx();
             let ix = &mut *self.ix;
-            tally_field_read(ix, &name, in_test, internal_impl.as_deref());
+            tally_field_read(
+                ix,
+                &name,
+                in_test,
+                internal_impl.as_deref(),
+                self.file_in_tests_tree,
+            );
         }
         syn::visit::visit_expr_field(self, f);
     }
 
     fn visit_pat_struct(&mut self, pat: &'ast syn::PatStruct) {
         let (in_test, internal_impl) = self.read_ctx();
+        let tests_tree = self.file_in_tests_tree;
         let ix = &mut *self.ix;
         for pf in &pat.fields {
             if let Some(name) = field_member_name(&pf.member) {
-                tally_field_read(ix, &name, in_test, internal_impl.as_deref());
+                tally_field_read(ix, &name, in_test, internal_impl.as_deref(), tests_tree);
             }
         }
         syn::visit::visit_pat_struct(self, pat);
@@ -1631,6 +1745,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
         let is_ne = name.ends_with("_ne");
         let suppress_const = self.suppress_const;
         let (in_test, internal_impl) = self.read_ctx();
+        let tests_tree = self.file_in_tests_tree;
         let defaults = self.defaults_by_field;
         let ix = &mut *self.ix;
         let mut sink = |touch: TokenTouch| match touch {
@@ -1641,7 +1756,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
             } => {
                 if !is_assert {
                     // A field reference inside any other macro is a read.
-                    tally_field_read(ix, &ident, in_test, internal_impl.as_deref());
+                    tally_field_read(ix, &ident, in_test, internal_impl.as_deref(), tests_tree);
                     return;
                 }
                 // Assert family: default-equality (per the intake spec —
@@ -1672,7 +1787,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
                 if is_default_eq {
                     *ix.field_asserts.entry(ident).or_insert(0) += 1;
                 } else {
-                    tally_field_read(ix, &ident, in_test, internal_impl.as_deref());
+                    tally_field_read(ix, &ident, in_test, internal_impl.as_deref(), tests_tree);
                 }
             }
             TokenTouch::Const(ident) => {
@@ -2020,9 +2135,30 @@ fn render_gpu_uniform_row(out: &mut String, k: &InertKnob) {
     );
 }
 
-/// One [C2] row (or its `[C2·gpu-uniform]` weak downgrade, P28) with its
-/// per-field tally and fix line.
+/// One [C2] row (or its `[C2·test-rig]` / `[C2·gpu-uniform]` weak
+/// downgrades) with its per-field tally and fix line.
 fn render_self_referential(out: &mut String, s: &SelfReferentialConfig) {
+    if s.test_rig {
+        let _ = writeln!(
+            out,
+            "  [C2·test-rig] {} — {} ({} Default-impl field(s)) has ZERO external Rust reads and lives wholly in the tests tree (declared + read under tests/-path files; weak severity — the C2 class targets PRODUCTION config structs whose consumer never materialized. If the rig is dead, delete the file)",
+            s.origin,
+            s.struct_name,
+            s.fields.len()
+        );
+        for f in &s.fields {
+            let _ = writeln!(
+                out,
+                "      .{} — {} read(s): {} test, {} own-validate-impl",
+                f.field_name, f.total_reads, f.test_reads, f.self_impl_reads
+            );
+        }
+        let _ = writeln!(
+            out,
+            "      fix: prune the rig with its test, or plumb a real consumer if the struct was meant to graduate"
+        );
+        return;
+    }
     if s.gpu_uniform {
         let _ = writeln!(
             out,
@@ -2173,6 +2309,96 @@ pub struct Material { #[uniform(0)] pub params: Params }
             "C2 downgrades, not suppresses"
         );
         assert!(r.render().contains("[C2·gpu-uniform]"));
+    }
+
+    /// The `[C2·test-rig]` downgrade (2026-09-16, the riir-ai
+    /// `Outcome`/`ProbeConfig` intake): a struct DECLARED at top level in
+    /// a tests-path file whose every read is under tests-path files is
+    /// definitionally confined — the C2 class targets PRODUCTION config
+    /// structs whose consumer never materialized. Downgrade-not-suppress:
+    /// the row stays visible at the weak annotation.
+    #[test]
+    fn tests_tree_struct_c2_downgrades_to_test_rig() {
+        let r = audit_sources(&[
+            (
+                "tests/rig.rs".to_string(),
+                r#"
+pub struct Rig { pub a: f32, pub b: f32 }
+impl Default for Rig { fn default() -> Self { Self { a: 1.0, b: 2.0 } } }
+fn probe(r: &Rig) -> f32 { if r.a > r.b { r.a } else { r.b } }
+"#
+                .to_string(),
+            ),
+        ]);
+        assert_eq!(r.self_referential.len(), 1);
+        assert!(
+            r.self_referential[0].test_rig,
+            "tests-tree decl + all-tree reads downgrade, not suppress"
+        );
+        let rendered = r.render();
+        assert!(rendered.contains("[C2·test-rig]"));
+        assert!(!rendered.contains("[C2] tests/rig.rs"));
+    }
+
+    /// The distinguishing twin: a src/-declared struct whose reads are
+    /// cfg(test)-confined stays at FULL [C2] — the path axis (tests tree)
+    /// is separate from cfg(test) confinement, and the production-struct
+    /// class is what C2 exists for.
+    #[test]
+    fn src_cfg_test_struct_stays_full_c2() {
+        let r = audit_sources(&[
+            (
+                "src/lib.rs".to_string(),
+                r#"
+pub struct P { pub a: f32 }
+impl Default for P { fn default() -> Self { Self { a: 1.0 } } }
+#[cfg(test)]
+mod tests {
+    fn probe(p: &super::P) -> f32 { p.a }
+}
+"#
+                .to_string(),
+            ),
+        ]);
+        assert_eq!(r.self_referential.len(), 1);
+        assert!(!r.self_referential[0].test_rig);
+        let rendered = r.render();
+        assert!(rendered.contains("[C2]"));
+        assert!(!rendered.contains("[C2·test-rig]"));
+    }
+
+    /// The conservative guard: a tests-tree DECL alone does not downgrade
+    /// when the name-global read tally carries non-tree reads — a
+    /// same-named field on a src struct read inside cfg(test) is
+    /// indistinguishable from the rig's own reads, so eligibility
+    /// requires every read under tests-path files.
+    #[test]
+    fn tests_tree_decl_with_src_name_sharing_stays_full_c2() {
+        let r = audit_sources(&[
+            (
+                "tests/rig.rs".to_string(),
+                r#"
+pub struct Rig { pub done: bool }
+impl Default for Rig { fn default() -> Self { Self { done: false } } }
+fn probe(r: &Rig) -> bool { r.done }
+"#
+                .to_string(),
+            ),
+            (
+                "src/lib.rs".to_string(),
+                r#"
+pub struct Other { pub done: bool }
+#[cfg(test)]
+mod t {
+    fn probe(o: &super::Other) -> bool { o.done }
+}
+"#
+                .to_string(),
+            ),
+        ]);
+        assert_eq!(r.self_referential.len(), 1);
+        assert!(!r.self_referential[0].test_rig);
+        assert!(!r.render().contains("[C2·test-rig]"));
     }
 
     #[test]

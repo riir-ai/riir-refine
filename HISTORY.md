@@ -263,6 +263,98 @@ notes the in-flight `bench_guard.rs` as pre-existing). That intermediate
 state could not build the cargo-heal bin alone; this module + docs commit
 (`152cfeee`) completed the landing and repaired the tip.
 
+## 2026-09-16 — P33: use-row lexical scoping (platform-audit; the riir-chain `BrowserNodeState` intake)
+
+The 09-16 quiet-repo batch's riir-chain platform-audit FP, fixed at the
+classifier: a PRIVATE import inside `#[cfg(test)] mod tests`
+(`crates/riir-chaind/src/browser/node.rs:138`, `use super::BrowserNodeState;`)
+flagged `[PLATFORM-DEAD]` off `target_arch = "wasm32"` atoms attributed from
+TWO type-path uses at file ROOT (`pub state: BrowserNodeState` / `pub fn
+state(&self) -> BrowserNodeState`, both inside the wasm32-gated
+`BrowserMeshNode`) — mentions that reference the ENUM, not the test-scoped
+binding, pooled in by the name-global last-segment law. The pair was
+internally inconsistent into the bargain: the enum decl itself stayed clean
+precisely BECAUSE the ungated import counted as an ungated source reference —
+under a scoping-correct model both cannot hold.
+
+The fix (an import's binding is visible only inside its own module subtree):
+
+- `UseSinks` bundles the evidence maps; a new per-(file → lexical scope →
+  name) map records every mention's inline-mod scope (threaded through
+  `walk_items`).
+- A module-PRIVATE use row reads ONLY same-file mentions at its scope or
+  DESCENDANT scopes (`T.starts_with(S)` — child scopes see parent bindings;
+  ancestors, siblings, and other files cannot). An import with no in-scope
+  mention is rustc's unused-import class, not a platform row (no_use).
+- Non-private imports (`pub`/`pub(crate)`/… — the re-export surface) keep the
+  name-global evidence: they are reachable from any module.
+
+Measured (new binary vs the P31 global, side by side):
+
+- **riir-chain: CLEAN** — the `BrowserNodeState` row is gone (was the repo's
+  only row). No code change in riir-chain (gating the import wasm32-only
+  E0432s the host test build; gating enum+tests orphans the tests — the
+  cfg-green-zero trap; the classifier was the wrong half).
+- **The two standing `use anyhow::Context` rows (riir-mmorpg-examples
+  warm-tier-do host.rs + riir-deployer cloudflare DO host) are mechanized
+  away** — both were adjudicated trait-method-consumption FPs whose only
+  "evidence" was cross-file name-global phantom mentions (`.context()` is a
+  method call, never path-visible); private-import scoping drops them. Both
+  repos now measure CLEAN.
+- **Full workspace platform re-sweep (every repo on disk): every repo CLEAN
+  except self's standing `ECHO_DAEMON` (const — value-decl path, unchanged)**
+  — the hardening direction (out-of-scope ungated mentions no longer
+  suppress) surfaced ZERO new rows anywhere.
+- riir-dapps stays clean (`ACCOUNT_HEADER` was fixed in-repo at `19abde1`).
+
++4 fixtures: the chaind specimen shape (out-of-scope uses don't flag the
+test-scoped import), the hardening direction (in-scope gated uses flag
+DESPITE an out-of-scope ungated mention that pre-fix suppressed the row —
+evidence the cut restores true positives, not just kills FPs), pub-reexport
+rows keep name-global evidence (the private twin flags), and cross-file
+mentions are not evidence for a private import. Lib 1590/1590 in the shared
+tree (includes concurrent sibling tests), clippy clean on the touched files.
+
+## 2026-09-16 — P32: the `[C2·test-rig]` downgrade (config-audit; the riir-ai `Outcome`/`ProbeConfig` intake)
+
+The 09-16 quiet-repo batch's other classifier intake: 2 of riir-ai's 3 [C2]
+rows were test RIGS — `Outcome` (`riir-engine` `tests/cgsp_rewind_recovery_poc.rs:101`)
+and `ProbeConfig` (`riir-gpu` `tests/support/gpu_exclusivity.rs:324`) — both
+with LIVE in-rig field reads that read as confined test context only because
+the entire file is a test. The C2 class was built for PRODUCTION config
+structs whose consumer never materialized (the `PetAiConfig` canonical TP); a
+struct that lives wholly in the tests tree is definitionally confined — it
+cannot be production config (tests files do not compile into the lib).
+
+The downgrade (downgrade-not-suppress, the `[wire-const]`/P26/P28
+precedent):
+
+- `InteractionIndex.field_reads_tests_tree` — a new read tally on the PATH
+  axis alone (`tests/`/`benches/` files), kept SEPARATE from cfg(test)
+  confinement so a src/-declared struct whose reads are cfg(test)-confined
+  stays at full [C2] (that IS the production class C2 exists for).
+- `TestRigDecls` — top-level struct decls split by tests-path-ness (mirroring
+  `collect_gpu_uniform_structs`' top-level-only scope); a name declared in
+  BOTH trees is not eligible (name-global masquerade, conservative).
+- A [C2] row renders `[C2·test-rig]` when the decl is tests-tree AND every
+  read of every field is under tests-path files — with a prune-the-rig fix
+  line. Test-rig outranks gpu-uniform when both apply (a tests-tree struct is
+  not production schema either way).
+
+Measured (new binary vs the P31 global, side by side): riir-ai converts
+EXACTLY the two predicted rows (`Outcome`, `ProbeConfig` → `[C2·test-rig]`);
+`SftWarmupConfig` (`src/config.rs`) stays full [C2]; [A]/[B] counts unchanged
+(0/1/5). Every other repo on disk is byte-identical old-vs-new (seal-remake's
+3 C2-family + 4 [B], seal-game-editor's 3 gpu-uniform, async-await-gpu,
+seal-online-remaster, self/chain/kat/shader/dao all-zero) — the annotation
+converts, it never adds or hides rows.
+
++3 fixtures: the tests-tree downgrade, the src cfg(test) twin stays full C2
+(the path axis ≠ the cfg axis), and the name-sharing guard (a src struct's
+same-named field read inside cfg(test) blocks the downgrade — the
+name-global masquerade stays conservative). Lib 1590/1590 in the shared tree,
+clippy clean on the touched files.
+
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
 
 The P28 sweep left one standing handoff: riir-ai's `HlaKarcConfig.delay_k`

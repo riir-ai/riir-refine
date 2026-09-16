@@ -1,5 +1,5 @@
 # Issue 117 — Global-binary staleness guard (the 00:21 class: silent re-stale on bare `cargo build --release`)
-**Status:** OPEN — P1, unblocked. Filed 2026-09-16 from the room-to-improve triage (session record: HISTORY.md same-day entry).
+**Status:** RESOLVED 2026-09-16 — T1-T4 all green (`build.rs`, `src/build_stamp.rs`, `tests/build_stamp_cli.rs`). Filed same day from the room-to-improve triage.
 
 ## Why
 
@@ -40,15 +40,67 @@ out, so the CLI either hides them or parse-errors them — the user sees a
   `cfg`-branches on the same match arms, not extra dispatch.
 
 ## Tasks
-- [ ] T1 — `--version` feature-set stamp (const from `cfg!`/build script;
-      shown on `-V` and in the startup banner when any gated surface is
-      invoked).
-- [ ] T2 — Stub refusal arms for the network-gated commands under
-      `not(feature = "kat_transport")` etc. — loud line + exit 2.
-- [ ] T3 — Contract test (the `kat_soft_gate_cli.rs` pattern): a
-      default-features build's `sync` invocation exits 2 with the refusal
-      line, never "unknown flag".
-- [ ] T4 — SKILL.md rebuild-recipe row.
+- [x] T1 — `--version` / `-V` prints the compiled feature set and the
+      release-set verdict (`complete` or `STALE — missing …` + the rebuild).
+      **Derived, not typed:** `build.rs` reads cargo's own `CARGO_FEATURE_*`
+      exports for the compilation actually happening, so the stamp cannot go
+      stale the way a hand-maintained `cfg!` ladder would. Line 0 stays the
+      unchanged `cargo-heal <version>` — anything parsing the old
+      single-line output keeps working.
+- [x] T2 — The gated commands already PARSED ungated (the subcommand words
+      and `--refill` both reach a `cfg`'d arm), so the gap was the message,
+      not the dispatch: all five refusal sites (`sync`/`update`, `replay`,
+      the whole `kat_service` family, `--refill`) now print the three facts
+      the 00:21 diagnosis had to reconstruct by hand — what refused and why,
+      this binary's own feature set, and a rebuild command — and exit 2.
+- [x] T3 — `tests/build_stamp_cli.rs` at the process boundary. The refusal
+      arms are `#[cfg]`'d per FUNCTION rather than per file: a whole-file
+      `#![cfg(not(feature = "kat_transport"))]` would compile this target to
+      an empty binary under the release set and under `--all-features` and
+      print a green `0 passed` — the Issue-713 green-zero trap. Measured:
+      5 pass without the transport (2 refusal arms), 4 with it (1 healthy
+      arm). Revert-probed: replacing the refusal with `unknown flag` reds it.
+- [x] T4 — SKILL.md §Setup row (the footgun + the one-command diagnosis) and
+      the `--version` usage row; the AGENTS.md "Standing caveat" sentence now
+      records the repair beside the incident.
+
+## What the landing measured that the filing did not
+
+⛔ **"Print the release feature set" was the wrong remedy for one of the five
+sites, and the error is the silent kind.** `replay`'s gate is
+`kat_transport + clippy_verify + latent_retrieval`, and `clippy_verify` is NOT
+in the shipped release set — so a user who pasted the bare release recipe
+would spend a full release rebuild and hit the SAME refusal, with every reason
+to conclude the guard is broken. `rebuild_command_for(needed)` unions the
+release set with whatever the refusal named, de-duplicated and release-order
+first; `the_rebuild_covers_every_feature_the_refusal_named` is the arm. **A
+remedy that does not remedy is worse than no remedy** — it spends the user's
+trust and their build time.
+
+⚠ **What this does NOT do, unchanged from the filing:** it cannot protect the
+SYMLINK. A `cargo build --release` outside this repo's control still
+overwrites the target; the guard converts silent staleness into loud refusal
+at the CLI boundary, which is the whole of the claim.
+
+⛔ **A collateral defect, carried here because Issue 115 landed concurrently
+from another session (`a9ac4ee5`) and its file is already removed:** Issue
+113's landing (`3f0eecb9`) inserted `pub mod clippy_oracle;` BETWEEN a
+`#[cfg(feature = "compile_oracle")]` attribute and the item that attribute was
+written for, so the gate landed on `clippy_oracle` (which is std-only and is
+called UNGATED from the bin) and `compile_oracle` — the module the adjacent
+comment describes — lost its gate entirely. Silent under default features,
+because both are on; a `--no-default-features` build of the bin's own
+`required-features` set did not compile. Repaired in this commit. It is the
+orphaned-attribute class the workspace gates for one repo over, reached by an
+INSERTION rather than by a blank line — which is why `orphaned_attr_gate.py`'s
+blank-line predicate would not have seen it.
+
+⚠ `RELEASE_FEATURES` is the one constant here that is TYPED rather than
+derived, because it is a claim about `.github/workflows/release.yml`. It
+carries `release_set_matches_the_release_workflow`, which parses that file and
+compares — and a companion arm proving the parser REFUSES (rather than
+returning a plausible wrong set) on the shapes that would make the comparison
+vacuous.
 
 ## Related
 - AGENTS.md §"Production adoption" (the 00:21 class, the 2026-09-10

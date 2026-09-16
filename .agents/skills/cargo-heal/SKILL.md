@@ -22,6 +22,17 @@ self-evolve trajectories on every apply.
   (the symlink keeps pointing at the rebuilt binary).
 - Fresh box without the sibling repo → fall back to manual fixes +
   `cargo clippy --fix`; do not block on the healer.
+- ⛔ **A bare `cargo build --release` of riir-clippy silently re-stales the
+  global binary** (Issue 117, the 00:21 class): it overwrites the symlink
+  target with a DEFAULT-FEATURES build, so `sync` / `update` / `--refill` /
+  the burn push / the consent heartbeat are compiled out while the usage
+  page still lists them. Always rebuild with the feature list above.
+  **Diagnose it in one command — `cargo heal --version` prints the compiled
+  feature set and, when the shipped set is incomplete, says `release set:
+  STALE` and names the rebuild.** Invoking a compiled-out command now
+  refuses loudly (`sync: refused — this build has no kat_transport …`,
+  exit 2) and prints a rebuild recipe that supplies everything it asked
+  for — never `unknown flag`, never silence.
 
 ## Usage (the just-works UX, 2026-09-08)
 

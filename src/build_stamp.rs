@@ -1,0 +1,363 @@
+//! Issue 117 — the compiled-feature stamp and the loud staleness refusal.
+//!
+//! ## The class
+//!
+//! Any bare `cargo build --release` of this crate overwrites the symlink
+//! target (`~/.cargo/bin/cargo-heal`) with a DEFAULT-FEATURES binary. That
+//! binary exists, runs, and still advertises `sync` / `--refill` / the
+//! burn-push tail in `--help` — while every one of them is `cfg`'d out. The
+//! 00:21 incident (AGENTS.md "Standing caveat") is exactly that: a healer
+//! that looked like it worked and could not talk to the network.
+//!
+//! The repair is not to prevent the build — a build outside this repo's
+//! control cannot be prevented from here. It is to make the staleness
+//! **loud at the CLI boundary** and **identifiable in one command**:
+//!
+//! 1. [`version_lines`] — `--version` prints the compiled feature set beside
+//!    the version, plus what the release set is missing. A stale binary is
+//!    then diagnosable from any terminal without reading the build log.
+//! 2. [`refusal_lines`] — a gated command that is compiled out prints a
+//!    refusal block naming the missing features AND the rebuild command,
+//!    then exits 2 (the `--refill` exit-2 precedent). Never "unknown flag",
+//!    never silence.
+//!
+//! ## The stamp is derived, not typed
+//!
+//! [`COMPILED_FEATURES`] comes from `build.rs`, which reads the
+//! `CARGO_FEATURE_*` environment cargo exports for the compilation actually
+//! happening. A `cfg!` ladder here would need a hand-maintained list of
+//! feature names and would go stale on the next feature added — the drift
+//! class this workspace gates for elsewhere. The release set
+//! ([`RELEASE_FEATURES`]) IS typed, because it is a claim about
+//! `.github/workflows/release.yml`; [`release_set_matches_workflow`] is the
+//! arm that keeps the claim honest against the workflow file.
+
+/// Every feature ON for this compilation, comma-separated and sorted.
+/// Written by `build.rs` from cargo's own `CARGO_FEATURE_*` exports.
+pub const COMPILED_FEATURES: &str = env!("RIIR_CLIPPY_COMPILED_FEATURES");
+
+/// The feature set `.github/workflows/release.yml` builds the shipped
+/// `cargo-heal` with, in the workflow's own order (the order is part of the
+/// claim — the rebuild command below is meant to be copy-pasteable).
+pub const RELEASE_FEATURES: &[&str] = &[
+    "latent_retrieval",
+    "kat_service",
+    "kat_transport",
+    "fix_verify",
+];
+
+/// The copy-pasteable rebuild for the shipped set. Deliberately names
+/// `--bin cargo-heal`: a workspace-wide release build is what produced the
+/// stale binary in the first place.
+#[must_use]
+pub fn rebuild_command() -> String {
+    rebuild_command_for(&[])
+}
+
+/// The rebuild that actually fixes THIS refusal: the release set plus any
+/// feature the refusing command needs that the release set does not carry.
+///
+/// ⛔ Printing the bare release set would have been wrong for `replay`,
+/// whose gate is `kat_transport + clippy_verify + latent_retrieval` — a user
+/// who pasted the shipped recipe would rebuild and hit the same refusal. A
+/// remedy that does not remedy is worse than none: it spends the user's
+/// trust and their build time, and it looks like the guard is broken.
+#[must_use]
+pub fn rebuild_command_for(needed: &[&str]) -> String {
+    let mut set: Vec<&str> = RELEASE_FEATURES.to_vec();
+    for f in needed {
+        if !set.contains(f) {
+            set.push(f);
+        }
+    }
+    format!(
+        "cargo build --release --features {} --bin cargo-heal",
+        set.join(",")
+    )
+}
+
+/// The compiled set as a slice, for membership questions.
+#[must_use]
+pub fn compiled() -> Vec<&'static str> {
+    COMPILED_FEATURES
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Is `feature` compiled into this binary?
+#[must_use]
+pub fn has(feature: &str) -> bool {
+    compiled().contains(&feature)
+}
+
+/// Which of [`RELEASE_FEATURES`] this build lacks, in the release order.
+/// Empty = this binary carries the shipped surface.
+#[must_use]
+pub fn missing_release_features() -> Vec<&'static str> {
+    RELEASE_FEATURES
+        .iter()
+        .copied()
+        .filter(|f| !has(f))
+        .collect()
+}
+
+/// The `--version` block (Issue 117 T1). Line 0 is the unchanged
+/// `cargo-heal <version>` — anything parsing the old single-line output keeps
+/// working; the stamp rides after it.
+#[must_use]
+pub fn version_lines() -> Vec<String> {
+    let mut out = vec![
+        format!("cargo-heal {}", env!("CARGO_PKG_VERSION")),
+        format!("features: {COMPILED_FEATURES}"),
+    ];
+    let missing = missing_release_features();
+    if missing.is_empty() {
+        out.push(format!(
+            "release set: complete ({})",
+            RELEASE_FEATURES.join(",")
+        ));
+    } else {
+        out.push(format!(
+            "release set: STALE — missing {} (the network surfaces — sync/update/--refill/burn-push — are compiled out of this binary)",
+            missing.join(",")
+        ));
+        out.push(format!("rebuild: {}", rebuild_command()));
+    }
+    out
+}
+
+/// The refusal block a compiled-out command prints before `exit(2)`
+/// (Issue 117 T2). `command` is what the user typed (`sync`, `--refill`, …);
+/// `needed` is the feature(s) whose absence disabled it.
+///
+/// Three lines, in the order a reader needs them: what refused and why, what
+/// this binary actually is, and the one command that fixes it. The middle
+/// line is the part the 00:21 incident lacked — without it a user cannot tell
+/// a stale binary from a server outage.
+#[must_use]
+pub fn refusal_lines(command: &str, needed: &[&str]) -> Vec<String> {
+    vec![
+        format!(
+            "{command}: refused — this build has no {} (the command is compiled out, not broken)",
+            needed.join(",")
+        ),
+        format!("{command}: this binary's features: {COMPILED_FEATURES}"),
+        format!("{command}: rebuild with: {}", rebuild_command_for(needed)),
+    ]
+}
+
+/// Print [`refusal_lines`] to stderr and exit 2.
+pub fn refuse(command: &str, needed: &[&str]) -> ! {
+    for line in refusal_lines(command, needed) {
+        eprintln!("{line}");
+    }
+    std::process::exit(2)
+}
+
+/// Does [`RELEASE_FEATURES`] still match what the release workflow builds?
+///
+/// The constant is a CLAIM about a file in this repo, and a claim nothing
+/// checks is a claim that goes stale — the exact shape the stamp itself was
+/// built to derive around. Returns the workflow's set when it can be read, so
+/// the caller can name the disagreement.
+///
+/// # Errors
+///
+/// The workflow is unreadable, or carries no `--features` line beside
+/// `--bin cargo-heal`. Both are "the instrument cannot see", never "matches".
+pub fn release_set_from_workflow(workflow: &str) -> Result<Vec<String>, String> {
+    // The release build line is `--features <set> --bin cargo-heal`, wrapped
+    // across a shell continuation in the real file. Read the token AFTER
+    // `--features` on whichever line also mentions `--bin cargo-heal`.
+    let line = workflow
+        .lines()
+        .find(|l| l.contains("--bin cargo-heal") && l.contains("--features"))
+        .ok_or_else(|| {
+            "no line carrying both `--features` and `--bin cargo-heal`".to_string()
+        })?;
+    let mut it = line.split_whitespace();
+    while let Some(tok) = it.next() {
+        if tok == "--features" {
+            let set = it.next().ok_or_else(|| {
+                "`--features` with no value on the release line".to_string()
+            })?;
+            // A value that is itself a flag means the line does not have the
+            // shape assumed — report that rather than returning `["--bin"]`,
+            // which would read as a real (wrong) set to the comparison arm.
+            if set.starts_with('-') {
+                return Err(format!("`--features` followed by {set:?}, not a feature set"));
+            }
+            return Ok(set.split(',').map(str::to_string).collect());
+        }
+    }
+    Err("`--features` present but not as its own token".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The stamp is non-empty in any real build: `default` alone supplies
+    /// six features, and a build script that stopped exporting would leave
+    /// this empty — a stamp that silently says nothing is worse than none,
+    /// because `--version` would print a confident blank set.
+    #[test]
+    fn the_stamp_is_populated() {
+        assert!(
+            !COMPILED_FEATURES.is_empty(),
+            "build.rs must export the compiled feature set"
+        );
+        // Sorted + comma-separated, no stray whitespace.
+        let v = compiled();
+        let mut sorted = v.clone();
+        sorted.sort_unstable();
+        assert_eq!(v, sorted, "the stamp must be sorted: {COMPILED_FEATURES}");
+        assert!(v.iter().all(|f| !f.contains(' ')), "{COMPILED_FEATURES}");
+    }
+
+    /// `has` answers about the build running the test — assert it against a
+    /// `cfg!`, the one independent witness available in-process.
+    #[test]
+    fn has_agrees_with_cfg() {
+        assert_eq!(has("clippy_lints"), cfg!(feature = "clippy_lints"));
+        assert_eq!(has("kat_transport"), cfg!(feature = "kat_transport"));
+        assert_eq!(has("latent_retrieval"), cfg!(feature = "latent_retrieval"));
+        // A name that is not a feature is never compiled in.
+        assert!(!has("not_a_feature"));
+    }
+
+    /// The missing set is exactly the release features `cfg!` says are off —
+    /// and it is ORDERED by the release list, not by the compiled set.
+    #[test]
+    fn missing_is_the_release_complement_in_release_order() {
+        let missing = missing_release_features();
+        for f in RELEASE_FEATURES {
+            assert_eq!(
+                missing.contains(f),
+                !has(f),
+                "{f} membership disagrees with the stamp"
+            );
+        }
+        let idx: Vec<usize> = missing
+            .iter()
+            .map(|m| RELEASE_FEATURES.iter().position(|r| r == m).unwrap())
+            .collect();
+        let mut sorted = idx.clone();
+        sorted.sort_unstable();
+        assert_eq!(idx, sorted, "missing must keep the release order");
+    }
+
+    /// The version block always names the version, always names the compiled
+    /// set, and names the rebuild command IFF something is missing — a
+    /// complete build must not nag, an incomplete one must not be quiet.
+    #[test]
+    fn version_block_shape_follows_the_verdict() {
+        let lines = version_lines();
+        assert!(lines[0].starts_with("cargo-heal "));
+        assert!(lines[1].starts_with("features: "));
+        let joined = lines.join("\n");
+        if missing_release_features().is_empty() {
+            assert!(joined.contains("release set: complete"), "{joined}");
+            assert!(!joined.contains("rebuild:"), "{joined}");
+        } else {
+            assert!(joined.contains("release set: STALE"), "{joined}");
+            assert!(joined.contains(&rebuild_command()), "{joined}");
+        }
+    }
+
+    /// The refusal names the command, the missing feature, the binary's own
+    /// set, and the rebuild — all four, because dropping any one of them
+    /// recreates a half of the 00:21 diagnosis that had to be done by hand.
+    #[test]
+    fn refusal_carries_all_four_facts() {
+        let text = refusal_lines("sync", &["kat_transport"]).join("\n");
+        assert!(text.contains("sync: refused"), "{text}");
+        assert!(text.contains("kat_transport"), "{text}");
+        assert!(text.contains(COMPILED_FEATURES), "{text}");
+        assert!(text.contains(&rebuild_command()), "{text}");
+        // Never the shape the class is mistaken for.
+        assert!(!text.contains("unknown flag"), "{text}");
+    }
+
+    #[test]
+    fn refusal_joins_multiple_needed_features() {
+        let text = refusal_lines("replay", &["kat_transport", "clippy_verify"]).join("\n");
+        assert!(text.contains("kat_transport,clippy_verify"), "{text}");
+    }
+
+    /// The remedy must remedy. `replay` needs `clippy_verify`, which the
+    /// shipped release set does not carry — a refusal that printed the bare
+    /// release recipe would send the user through a full rebuild into the
+    /// SAME refusal.
+    #[test]
+    fn the_rebuild_covers_every_feature_the_refusal_named() {
+        let needed = ["kat_transport", "clippy_verify", "latent_retrieval"];
+        let cmd = rebuild_command_for(&needed);
+        for f in needed {
+            assert!(cmd.contains(f), "{cmd} cannot supply {f}");
+        }
+        for f in RELEASE_FEATURES {
+            assert!(cmd.contains(f), "{cmd} dropped the release feature {f}");
+        }
+        // And the refusal PRINTS that command, not the bare one.
+        let text = refusal_lines("replay", &needed).join("\n");
+        assert!(text.contains(&cmd), "{text}");
+    }
+
+    /// An already-covered feature is not duplicated — `--features a,a` is
+    /// accepted by cargo but reads as a bug in the tool printing it.
+    #[test]
+    fn a_needed_feature_already_in_the_release_set_is_not_repeated() {
+        let cmd = rebuild_command_for(&["kat_transport"]);
+        assert_eq!(cmd.matches("kat_transport").count(), 1, "{cmd}");
+        assert_eq!(cmd, rebuild_command(), "no extra feature = the plain recipe");
+    }
+
+    #[test]
+    fn rebuild_command_names_the_bin_and_the_whole_release_set() {
+        let cmd = rebuild_command();
+        assert!(cmd.contains("--bin cargo-heal"), "{cmd}");
+        assert!(cmd.contains("--release"), "{cmd}");
+        for f in RELEASE_FEATURES {
+            assert!(cmd.contains(f), "{cmd} is missing {f}");
+        }
+    }
+
+    /// The typed release set vs the workflow that actually builds the
+    /// shipped binary. This is the one constant here that CAN drift, so it
+    /// is the one with an arm pointed at its source of truth.
+    #[test]
+    fn release_set_matches_the_release_workflow() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".github/workflows/release.yml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            // Absent workflow = the instrument cannot see. Say so; never
+            // read it as agreement (the UNSEEN-is-not-a-pass rule).
+            panic!("release workflow unreadable at {} — this arm asserts nothing without it", path.display());
+        };
+        let from_workflow = release_set_from_workflow(&text)
+            .unwrap_or_else(|e| panic!("release.yml parse: {e}"));
+        assert_eq!(
+            from_workflow,
+            RELEASE_FEATURES
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<Vec<_>>(),
+            "RELEASE_FEATURES drifted from .github/workflows/release.yml"
+        );
+    }
+
+    /// The parser's own failure modes are distinguishable from a match —
+    /// an extractor that returns an empty set on an unreadable file would
+    /// make the arm above pass over nothing.
+    #[test]
+    fn workflow_parser_refuses_rather_than_guessing() {
+        assert!(release_set_from_workflow("nothing relevant here\n").is_err());
+        assert!(release_set_from_workflow("  --bin cargo-heal\n").is_err());
+        assert!(release_set_from_workflow("  --features --bin cargo-heal\n").is_err());
+        let ok = release_set_from_workflow("  cargo build --features a,b --bin cargo-heal \\\n")
+            .expect("a well-formed line parses");
+        assert_eq!(ok, vec!["a".to_string(), "b".to_string()]);
+    }
+}
