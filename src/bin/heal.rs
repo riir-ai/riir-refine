@@ -3194,6 +3194,7 @@ USAGE:
     cargo heal --collapse-report                      (self-collapse monitor, 042)
     cargo heal --corpus-stats [--json] [--import-series]  (corpus/score series, 050 T2)
     cargo heal --frontier-report                       (learnability band report, 089 T1+2)
+    cargo heal --coverage-report                       (corpus coverage debt, 119)
     cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke]  (Issue 108, score_bench)
@@ -3291,6 +3292,26 @@ USAGE:
                     Suggest-only, always exit 0; the detector sees only the
                     scanned set (sibling/upstream consumers under-reported).
                     Reads paths from the CLI (default `.`).
+    --coverage-report
+                    Print the corpus coverage-debt report (Issue 119): clippy's LIVE
+                    lint surface, DERIVED from the installed driver
+                    (`clippy-driver -W help` — never a hand-typed list, so the debt
+                    moves as clippy ships lints), diffed against the clippy_lints
+                    corpus and the compiled fix set (FIXABLE_LINTS u VERIFY_LINTS).
+                    Three buckets, never pooled: corpus-covered / fix-set-only (the
+                    Issue 116 seam — suggest cannot rank what --fix can already
+                    write) / UNCOVERED, split again by whether the lint fires on a
+                    plain `cargo clippy`. The frequency axis JOINS two cited
+                    sources and never estimates: the Bench 061 real-code fired
+                    histogram (6 sibling repos, stamped with its capture date and
+                    digest) and kornel's published 100K-crate top-10
+                    (.benchmarks/021); rows carrying BOTH are the dual-evidence head
+                    the mining batch discipline stages first, and a lint neither
+                    source saw renders `uncited`, NOT zero. Applicability is a
+                    property of an EMITTED diagnostic and is declared underivable
+                    rather than printed. Report-first: stages nothing, gates
+                    nothing; refuses exit 1 on a blind derivation or an uncompiled
+                    corpus (the frontier-report law).
     --orphan-report Scan .rs files for config knobs ORPHANED BY OPTIMIZATION
                     (Plan 126, intake class C1 — the shape a perf refactor
                     leaves when it replaces a config-fed path with a
@@ -3792,6 +3813,14 @@ struct Args {
     /// LIKELY-BY-OPTIMIZATION tag). Refuses exit 1 on an empty scan or a
     /// blind history leg — never a confident green zero.
     orphan_report: bool,
+    /// Issue 119: `--coverage-report` — the corpus coverage-debt sweep.
+    /// clippy's LIVE lint surface, derived from the INSTALLED driver
+    /// (`clippy-driver -W help`, never a hand-typed list), diffed against
+    /// the clippy_lints corpus + the compiled fix set, with the real-code
+    /// fired histogram (Bench 061) and kornel's published top-10 joined as
+    /// the two frequency sources. Report-first, gates nothing; refuses
+    /// exit 1 on a blind derivation — never a confident green zero.
+    coverage_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -3865,6 +3894,7 @@ fn parse_args() -> Args {
         config_audit: false,
         platform_audit: false,
         orphan_report: false,
+        coverage_report: false,
     };
     // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
     // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
@@ -3971,6 +4001,7 @@ fn parse_args() -> Args {
             "--config-audit" => args.config_audit = true,
             "--platform-audit" => args.platform_audit = true,
             "--orphan-report" => args.orphan_report = true,
+            "--coverage-report" => args.coverage_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -4362,6 +4393,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.config_audit
         || args.platform_audit
         || args.orphan_report
+        || args.coverage_report
         || args.candidates_path.is_some()
         || args.command.is_some()
 }
@@ -5885,6 +5917,215 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = Some(env!("CARGO_MANIFEST_DIR")
 #[cfg(not(debug_assertions))]
 const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 
+/// Issue 119 T1 — the I/O half of the coverage-debt sweep.
+///
+/// Everything undecidable-without-the-world lives here and the arithmetic
+/// lives in [`riir_clippy::corpus_coverage`], so the rules are unit-testable
+/// at default features while the spawn + manifest read are not.
+///
+/// Three reads, each of which can fail INDEPENDENTLY and says so:
+/// 1. the installed driver's lint surface (`clippy-driver -W help`) — a
+///    spawn failure is BLIND, never an empty surface;
+/// 2. the compiled corpora (whatever domains this binary was built with);
+/// 3. the real-code fired histogram, which is OPTIONAL — its absence costs
+///    the local half of the frequency axis and nothing else, so it degrades
+///    to `None` provenance rather than refusing the whole report.
+fn run_coverage_report() -> riir_clippy::corpus_coverage::CoverageReport {
+    use riir_clippy::corpus_coverage as cc;
+
+    let driver = std::env::var("RIIR_HEAL_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
+
+    // The lint surface. `-W help` prints to stdout and exits 0 with no
+    // input; stdin is nulled so a driver that DOES want one fails fast
+    // instead of hanging a report behind a closed pipe.
+    let help = std::process::Command::new(&driver)
+        .arg("-W")
+        .arg("help")
+        .stdin(std::process::Stdio::null())
+        .output();
+    let surface = match &help {
+        Ok(out) if out.status.success() => {
+            cc::parse_lint_help(&String::from_utf8_lossy(&out.stdout))
+        }
+        Ok(out) => cc::LintSurface {
+            blind: Some(format!(
+                "`{driver} -W help` exited {} — the lint surface is UNKNOWN, not empty",
+                out.status
+            )),
+            ..cc::LintSurface::default()
+        },
+        Err(e) => cc::LintSurface {
+            blind: Some(format!(
+                "cannot spawn `{driver}` ({e}) — install the clippy component \
+                 (`rustup component add clippy`) or set RIIR_HEAL_CLIPPY_DRIVER"
+            )),
+            ..cc::LintSurface::default()
+        },
+    };
+
+    let toolchain = std::process::Command::new(&driver)
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map_or_else(
+            || "(driver version unavailable)".to_string(),
+            |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        );
+
+    // The corpus side. `clippy_lints` is the diffed-against set; every OTHER
+    // compiled domain feeds the dedup axis (the Batch-146 near-miss law).
+    let corpus_rules = clippy_corpus_rule_ids();
+    let fix_set = compiled_fix_set();
+    let other_domains = other_domain_rule_ids();
+
+    let (histogram, provenance) = resolve_corpus_repo_root()
+        .map(|root| load_fired_histogram(&root))
+        .unwrap_or_default();
+
+    cc::coverage(&cc::CoverageInputs {
+        toolchain: &toolchain,
+        surface,
+        corpus_rules: &corpus_rules,
+        fix_set: &fix_set,
+        other_domains: &other_domains,
+        histogram: &histogram,
+        histogram_provenance: provenance,
+    })
+}
+
+/// The `clippy_lints` corpus rule ids, from the COMPILED builder — the same
+/// runtime-corpus source `--corpus-stats` prefers over a source walk.
+fn clippy_corpus_rule_ids() -> Vec<String> {
+    #[cfg(feature = "clippy_lints")]
+    {
+        use riir_clippy::domain::HealEntry as _;
+        riir_clippy::build_seed_corpus()
+            .entries
+            .iter()
+            .map(|e| e.rule_id().to_string())
+            .collect()
+    }
+    #[cfg(not(feature = "clippy_lints"))]
+    {
+        // The floor in `coverage()` turns this into a loud refusal.
+        Vec::new()
+    }
+}
+
+/// `FIXABLE_LINTS u VERIFY_LINTS` — the fix lane's compiled truth, which is
+/// why a freshly-landed lint heals before the leased corpus has seen it
+/// (Issue 116's seam, measured here from the other side).
+///
+/// `VERIFY_LINTS` is counted UNCONDITIONALLY, by full path rather than
+/// through the `fix_verify`-gated import at the top of this file. Two
+/// reasons, and the second is the binding one: `fix_verify` is in the
+/// shipped `RELEASE_FEATURES` set, so the tier is live for every real user;
+/// and a coverage-debt figure that MOVED with the reader's own feature flags
+/// would be a property of their build instead of a property of the project,
+/// which is the one thing this report is for.
+fn compiled_fix_set() -> Vec<String> {
+    #[cfg(feature = "clippy_lints")]
+    {
+        use riir_clippy::domains::clippy_lints::proposers as p;
+        p::FIXABLE_LINTS
+            .iter()
+            .chain(p::VERIFY_LINTS.iter())
+            .map(|s| (*s).to_string())
+            .collect()
+    }
+    #[cfg(not(feature = "clippy_lints"))]
+    {
+        Vec::new()
+    }
+}
+
+/// Every OTHER compiled domain's rule ids, for the dedup axis. Expected to
+/// collide with nothing (those are kebab-case concept ids, not lint names);
+/// a collision is a real finding — two domains claiming one name.
+fn other_domain_rule_ids() -> std::collections::BTreeMap<String, Vec<String>> {
+    #[allow(unused_mut)]
+    let mut out: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    #[allow(unused_imports)]
+    use riir_clippy::domain::HealEntry as _;
+    macro_rules! domain_rules {
+        ($feat:literal, $name:literal, $build:path) => {
+            #[cfg(feature = $feat)]
+            {
+                out.insert(
+                    $name.to_string(),
+                    $build().entries.iter().map(|e| e.rule_id().to_string()).collect(),
+                );
+            }
+        };
+    }
+    domain_rules!("rust_perf", "rust_perf", riir_clippy::build_perf_seed_corpus);
+    domain_rules!("kernel_heal", "kernel_opt", riir_clippy::build_kernel_seed_corpus);
+    domain_rules!("sec", "sec", riir_clippy::build_sec_seed_corpus);
+    domain_rules!("docker", "docker", riir_clippy::build_docker_seed_corpus);
+    domain_rules!("dist", "dist", riir_clippy::build_dist_seed_corpus);
+    out
+}
+
+/// The Bench 061 real-code fired histogram + its provenance.
+///
+/// OPTIONAL by construction: a missing or unreadable manifest costs the
+/// LOCAL half of the frequency axis and nothing else, so it returns empty
+/// rather than refusing a report whose other three axes are intact. The
+/// provenance is carried so the reader can see the counts were captured
+/// under a different toolchain than the one being swept.
+fn load_fired_histogram(
+    root: &std::path::Path,
+) -> (
+    Vec<(String, u32)>,
+    Option<riir_clippy::corpus_coverage::HistogramProvenance>,
+) {
+    const REL: &str = ".benchmarks/data/049_t01/manifest.json";
+    let Ok(bytes) = std::fs::read(root.join(REL)) else {
+        return (Vec::new(), None);
+    };
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return (Vec::new(), None);
+    };
+    let rows: Vec<(String, u32)> = v
+        .get("fired_histogram_top")
+        .and_then(serde_json::Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|row| {
+                    let pair = row.as_array()?;
+                    let name = pair.first()?.as_str()?.to_string();
+                    let n = u32::try_from(pair.get(1)?.as_u64()?).ok()?;
+                    Some((name, n))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if rows.is_empty() {
+        return (Vec::new(), None);
+    }
+    let text = |k: &str| {
+        v.get(k)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let provenance = riir_clippy::corpus_coverage::HistogramProvenance {
+        source: format!("Bench 061 fired histogram ({REL})"),
+        captured_utc: text("created_utc"),
+        toolchain: text("cargo_version"),
+        dataset_blake3: text("dataset_blake3"),
+        repos: v
+            .get("source_repos")
+            .and_then(serde_json::Value::as_array)
+            .map_or(0, Vec::len),
+        rows: rows.len(),
+    };
+    (rows, Some(provenance))
+}
+
 fn resolve_corpus_repo_root() -> Option<PathBuf> {
     const MARKER: &str = "src/domains/kernel_opt/corpus";
     let mut dir = std::env::current_dir().ok()?;
@@ -6904,6 +7145,21 @@ fn main() {
         let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
         if !cross.is_empty() {
             println!("{cross}");
+        }
+        return;
+    }
+
+    // ── Issue 119: --coverage-report — the corpus coverage-debt sweep ─────
+    // The uncovered half of clippy's LIVE lint surface. Report-first, gates
+    // nothing; refuses exit 1 on a blind derivation (the frontier-report
+    // law) — a `-W help` format change must RED rather than report a
+    // flattering small debt. Needs no paths: the population is the
+    // installed toolchain, not the working tree.
+    if args.coverage_report {
+        let report = run_coverage_report();
+        print!("{}", report.render());
+        if report.blind.is_some() {
+            std::process::exit(1);
         }
         return;
     }

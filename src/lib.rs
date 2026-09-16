@@ -358,6 +358,15 @@ pub mod orphan_report;
 // items whose every use sits inside a platform gate the declaration
 // lacks (the NEON_U8 class no single-platform CI matrix can see).
 pub mod platform_audit;
+
+// Issue 119: the corpus coverage-debt sweep — clippy's LIVE lint surface
+// (derived from the installed driver, never hand-typed) diffed against the
+// clippy_lints corpus + the compiled fix set. Report-first, gates nothing
+// (the frontier-report law); refuses on a blind derivation or an
+// uncompiled corpus rather than reporting a flattering zero. Pure over its
+// inputs — the driver spawn + manifest read live in the `--coverage-report`
+// CLI half — so lib tests cover it at default features.
+pub mod corpus_coverage;
 pub mod scope_hint;
 pub mod downstream_hint;
 
