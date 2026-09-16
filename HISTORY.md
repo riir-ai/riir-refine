@@ -1,5 +1,61 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 120, the parallel session's side: the yield + the rust_perf debt closes (the allow lifted, 157 edits healed by the landed rule)
+
+A second session (this one) executed the full Issue 120 batch in the same
+window the sibling's `0321e6fa` landed — the Issue-665 dual-allocation shape,
+third occurrence (148/149 precedent). YIELDED per the discipline: the local
+implementation (81b36c72, preserved on branch `b150-yielded`) duplicated the
+landed proposer's core (clippy-predicate port + valid-idents + the FIXABLE
+tier) and the duplicate is dropped.
+
+The DELTA re-landed on the landed implementation (nothing here modifies their
+module):
+
+- **The `rust_perf` module-level `#![allow(clippy::doc_markdown)]` is LIFTED**
+  — the exact item the sibling's landing deliberately deferred ("rewriting 136
+  rules' corpus prose is a measured centroid risk; recorded as the follow-up
+  lead"). The deferred debt is now paid BY THE LANDED RULE ITSELF:
+  `cargo heal --fix --write --verify src/domains/rust_perf/` healed **157
+  edits across the module tree, all compile-gated and kept** — the dogfood
+  closing the allow's reason to exist. clippy --all-features: 0 doc_markdown
+  findings remain in the crate.
+- **The three feature-gated residues the default-feature heals could not
+  see** (`entries_04.rs:1227` `UInt32`, `entries_05.rs:992` `HashMap`,
+  `lib.rs:521` the cfg'd-out `shader_perf` corpus doc — the last one was
+  still LIVE at the rider's HEAD despite the rider claiming it) — fixed by
+  hand from clippy's own --all-features suggestions.
+- **The `vec_with_capacity.rs` stray-backtick hand-typo** (a `\
+  `.wrapping_sub` line continuation with an unpaired opening tick — clippy's
+  "backticks are unbalanced" class, not a doc_markdown fire) — fixed by hand;
+  not a lint-class fix.
+
+Validation notes from the yielded implementation worth keeping (the landed
+module's own gates + this session's):
+
+- The landed syn-attr location strategy is CORRECT on the shape this
+  session's line-scanner draft got wrong: indented doc-list lines
+  (`//!   (iter/iter_mut only).`) — the draft passed the marker-end offset
+  with TRIMMED content and shifted every indented line's edit left by its
+  indent (caught by the session's own dogfood heal pre-yield, pinned as a
+  fixture there; the landed implementation verified immune by direct probe,
+  `//!   (`iter/iter_mut` only).` byte-exact).
+- The landed rule documents bare-URL and link shapes as skip-direction
+  divergences (probed here: `https://x.io/a_b` → no edit). Real clippy's URL
+  branch angle-wraps bare `scheme://` URLs (clippy 0.1.98 `doc/markdown.rs`,
+  verified live in the session's probe rounds) — a genuine under-fire gap,
+  the follow-up lead if the family re-opens; the skip is the safe direction.
+- Differential discipline carried over: the landed rule applied to the
+  pre-lift tree produced clippy-clean output everywhere clippy fired, and
+  the three residues above are exactly the set clippy --all-features sees
+  past the default-feature blind spot.
+
+Gates: lib 1660/0 · clippy --all-targets 0 · clippy --all-targets
+--all-features 0 · retrieval gates 13/13 HELD · score-bench rows #123 (the
+sibling's) / #124 (this session's independent run, 96.4%, healable 29→31 —
+two independent derivations of the same post-batch number, the 148/149
+two-way-cross-check precedent).
+
 ## 2026-09-16 — Issue 120: `doc_markdown` lands — the every-landing manual backtick pass is the healer's now
 
 The pedantic doc-lint family batch. The trigger adjudication first, because

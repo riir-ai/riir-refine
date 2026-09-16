@@ -50,8 +50,8 @@
 //!    - an integer literal,
 //!    - `<expr>.len()` (the std `len` convention; a custom non-usize
 //!      `len` is out of scope for this rule),
-//!    - usize-preserving arithmetic (`.saturating_sub/.saturating_add/
-//!      `.wrapping_sub/.wrapping_add`) on a provably-usize receiver with
+//!    - usize-preserving arithmetic (`.saturating_sub`/`.saturating_add`/
+//!      `.wrapping_sub`/`.wrapping_add`) on a provably-usize receiver with
 //!      an integer-literal argument,
 //!    - a plain path naming a fn param explicitly annotated `usize`.
 //!      Plain-path bounds that are consts, associated consts, or locals
@@ -490,7 +490,7 @@ fn cap_replacement(
 /// Source text for a capacity node, with a non-`usize` integer-literal
 /// suffix stripped (`5u64` → `5`): `with_capacity` takes `usize`, and an
 /// unsuffixed decimal literal infers it in that position (riir-train
-/// gepo_goat lesson — the suffixed emit was an E0308).
+/// `gepo_goat` lesson — the suffixed emit was an E0308).
 fn usize_text(source: &str, node: &Expr) -> Option<String> {
     if let Expr::Lit(ExprLit {
         lit: Lit::Int(li), ..

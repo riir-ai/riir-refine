@@ -24,7 +24,10 @@
 //! Rules without a [`BenchSpec`] are honestly marked `NotBenchable` — they
 //! need external runtimes (Bevy, WASM) a temp crate cannot provide.
 
-#![allow(clippy::doc_markdown)]
+// (`#![allow(clippy::doc_markdown)]` REMOVED 2026-09-16 — the Batch-150
+// rule now owns this lint; the module tree's hidden debt was healed by the
+// landed `doc_markdown` proposer itself in the same session, see
+// HISTORY.md §"the doc_markdown debt closes".)
 #![allow(clippy::needless_raw_string_hashes)]
 //!
 //! ## Domain classification (per AGENTS.md sync boundary rule)

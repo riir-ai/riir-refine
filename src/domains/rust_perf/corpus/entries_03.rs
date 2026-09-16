@@ -1,6 +1,6 @@
 //! Entries slice 03 of 06 — rules 53–75 of 126 — moved VERBATIM from the
 //! former corpus.rs monolith (2026-09-10 split, scripted by
-//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! `scripts/split_rust_perf_corpus.py`). Append new batches to the
 //! LAST slice or open a new one past ~1800 lines.
 
 use crate::domains::rust_perf::PerfRule;
@@ -895,7 +895,7 @@ pub fn run_fixed(input: &usize) {
 }
 
 /// Bench spec for `iter-copied-deref-map`: generic Map adapter vs specialized
-/// copied(). Sum consumer at plain sizes — honest Tie expected in tight
+/// `copied()`. Sum consumer at plain sizes — honest Tie expected in tight
 /// release loops; the alloc axis + adapter markers carry the distinction.
 #[cfg(feature = "rust_perf_bench")]
 fn iter_copied_deref_map_bench_spec() -> BenchSpec {
@@ -932,7 +932,7 @@ pub fn run_fixed(input: &[u64]) {
     }
 }
 
-/// Bench spec for `filter-map-fuse`: two adapters vs filter_map. The
+/// Bench spec for `filter-map-fuse`: two adapters vs `filter_map`. The
 /// perf-book hedges — the Pareto verdict decides the annotation.
 #[cfg(feature = "rust_perf_bench")]
 fn filter_map_fuse_bench_spec() -> BenchSpec {
@@ -967,8 +967,8 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
-/// Bench spec for `vec-insert-front-deque`: Vec::insert(0, x) O(n²) prepend
-/// loop vs VecDeque::push_front O(1). Mirrors the vec-remove-front harness.
+/// Bench spec for `vec-insert-front-deque`: `Vec::insert(0`, x) O(n²) prepend
+/// loop vs `VecDeque::push_front` O(1). Mirrors the vec-remove-front harness.
 #[cfg(feature = "rust_perf_bench")]
 fn vec_insert_front_deque_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -1051,7 +1051,7 @@ pub fn run_fixed(input: &[f32]) {
 
 /// Bench spec for `distance-sq-no-sqrt`: sqrt-then-compare vs squared
 /// compare. On aarch64 f32 sqrt is a single NEON instruction — the bench
-/// decides whether the scalar-ARM reality matches the Box2D x86-SIMD
+/// decides whether the scalar-ARM reality matches the `Box2D` x86-SIMD
 /// rationale (Batch 53).
 #[cfg(feature = "rust_perf_bench")]
 fn distance_sq_no_sqrt_bench_spec() -> BenchSpec {
@@ -1116,10 +1116,10 @@ pub fn run_fixed(input: &Input) {
 
 /// Bench spec for `runtime-int-exponent-powi`: runtime-integer-exponent
 /// powf (libm call) vs powi (binary exponentiation). The f64 arm is the
-/// source shape (RoPE theta scaling); the f32 arm checks the idiom holds
+/// source shape (`RoPE` theta scaling); the f32 arm checks the idiom holds
 /// at lower precision. Rel-error gate lives in the harness's correctness
 /// sum (max rel-error across the swept exponent range folded into the
-/// black_box output — the validator only times; the GOAT gate asserts the
+/// `black_box` output — the validator only times; the GOAT gate asserts the
 /// rel-error separately in corpus tests).
 #[cfg(feature = "rust_perf_bench")]
 fn runtime_int_exponent_powi_bench_spec() -> BenchSpec {
@@ -1176,7 +1176,7 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `hashmap-with-capacity`: rehash ladder vs single exact
-/// reservation. The alloc axis gates this even where SipHash timing
+/// reservation. The alloc axis gates this even where `SipHash` timing
 /// dominates (Batch 53).
 #[cfg(feature = "rust_perf_bench")]
 fn hashmap_with_capacity_bench_spec() -> BenchSpec {
@@ -1221,8 +1221,8 @@ pub fn run_fixed(input: &usize) {
     }
 }
 
-/// Bench spec for `soa-hot-field`: 40-byte AoS stride scan vs contiguous
-/// SoA column sum (Batch 53).
+/// Bench spec for `soa-hot-field`: 40-byte `AoS` stride scan vs contiguous
+/// `SoA` column sum (Batch 53).
 #[cfg(feature = "rust_perf_bench")]
 fn soa_hot_field_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -1447,12 +1447,12 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `keyword-map-to-match`: static-keyword HashMap dispatch vs
-/// plain match on string literals. The map pays SipHash per lookup; the match
+/// Bench spec for `keyword-map-to-match`: static-keyword `HashMap` dispatch vs
+/// plain match on string literals. The map pays `SipHash` per lookup; the match
 /// compiles to a switch on length + 1-2 inline compares (LLVM; oxc verified
 /// via --emit=llvm-ir after failing to beat it with a gperf-style perfect
 /// hash). Mixed identifier workload (7 keywords + 3 non-keywords cycling);
-/// the LazyLock init amortizes across the timing loop — the measured cost is
+/// the `LazyLock` init amortizes across the timing loop — the measured cost is
 /// per-lookup dispatch, not construction.
 #[cfg(feature = "rust_perf_bench")]
 fn keyword_map_to_match_bench_spec() -> BenchSpec {
@@ -1666,7 +1666,7 @@ pub fn run_fixed(input: &Input) {
 /// into output-vector accumulators (the ryg 2015 transposed-lane Mv
 /// analysis; microGPT-C `mv16_blk16v(4)` shape, portable-Rust form).
 /// NOUT fixed at 64 (4 NEON / 2 AVX2 full lanes); `n` sweeps NIN
-/// 16 / 64 / 4096. **Measured (Batch 62, M3 Max): ParetoDominant 1.18x /
+/// 16 / 64 / 4096. **Measured (Batch 62, M3 Max): `ParetoDominant` 1.18x /
 /// 2.09x / 6.08x — the research's "wash at large nin" expectation was
 /// WRONG-DIRECTION**: in strict-FP Rust the row-dot's scalar accumulator is
 /// a serial dependency chain LLVM cannot vectorize without reassociation,
@@ -1692,7 +1692,7 @@ fn transposed_weight_register_gemv_bench_spec() -> BenchSpec {
 /// Mixed — hardware never loses: 1.09x at 1K, 1.01x at 100K** (source
 /// measured 2-4% on Ryzen 5 5600H; the M3's fdiv/sqrt latency flattens
 /// the gap at 100K where the pipeline hides it). **x86 re-gate
-/// (2026-08-19, 4090 box): ParetoDominant 1.64x/1.66x — the win is
+/// (2026-08-19, 4090 box): `ParetoDominant` 1.64x/1.66x — the win is
 /// LARGER on x86; the near-tie is M3-aarch64-specific.** The rule's purpose is
 /// stopping the plausible-looking GPU→CPU fast-math port — the annotation
 /// class (`filter-count-to-any` precedent). Well-conditioned [0.5, 2.0]
@@ -1720,9 +1720,9 @@ fn loop_order_innermost_contiguous_bench_spec() -> BenchSpec {
     }
 }
 
-/// Bench spec for `debug-assert-length-hoist`: debug_assert vs assert
+/// Bench spec for `debug-assert-length-hoist`: `debug_assert` vs assert
 /// before an indexing loop. The whole point is RELEASE behavior
-/// (debug_assert is erased there — in debug both assert forms run);
+/// (`debug_assert` is erased there — in debug both assert forms run);
 /// the validator builds generated crates in release, so the buggy side
 /// retains every bounds check. **Measured (Batch 64, M3 aarch64):
 /// Mixed regime-split — 1.13x at n=1K (elision win) but a STABLE
@@ -1744,7 +1744,7 @@ fn debug_assert_length_hoist_bench_spec() -> BenchSpec {
 }
 
 /// Bench spec for `sparse-set-bit-iteration-tz-blsr`: 64-iteration
-/// shift-test scan vs trailing_zeros+BLSR loop over sparse masks.
+/// shift-test scan vs `trailing_zeros+BLSR` loop over sparse masks.
 ///
 /// ~4/64 set bits per word (the rule's applicable sparse regime —
 /// `0x0101..` selects bit 0 of each byte, each set with p~1/2). The
@@ -1766,9 +1766,9 @@ fn sparse_set_bit_iteration_bench_spec() -> BenchSpec {
 /// 0.8/8/32 MB (u64 arm) vs 0.4/4/16 MB (u32 arm) — the smallest size
 /// is L2-resident (density pays nothing — the honest Tie regime), the
 /// largest is DRAM-bound. Alloc axis: buggy 1 alloc of 8N bytes, fixed
-/// 1 alloc of 4N (empty HashMap never allocates) — the halving is exact.
+/// 1 alloc of 4N (empty `HashMap` never allocates) — the halving is exact.
 /// G1: totals are closed-form identical (no promotion fires in the
-/// common regime; debug_assert per run).
+/// common regime; `debug_assert` per run).
 #[cfg(feature = "rust_perf_bench")]
 fn narrow_counter_overflow_promotion_bench_spec() -> BenchSpec {
     BenchSpec {

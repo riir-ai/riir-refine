@@ -1,6 +1,6 @@
 //! Entries slice 06 of 06 — rules 116–126 of 126 — moved VERBATIM from the
 //! former corpus.rs monolith (2026-09-10 split, scripted by
-//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! `scripts/split_rust_perf_corpus.py`). Append new batches to the
 //! LAST slice or open a new one past ~1800 lines.
 
 use crate::domains::rust_perf::PerfRule;
@@ -763,7 +763,7 @@ fn upload_uniforms(device: &Device, params: &WaterParams, dst: &mut UploadBuffer
 /// With no logger configured (the bench crate never installs one), the fixed
 /// arm builds ZERO summaries; the buggy arm builds one per item — the binding
 /// is a real statement and log's runtime max-level atomic keeps the disabled
-/// branch from being const-folded. Expected ParetoDominant (the fixed arm
+/// branch from being const-folded. Expected `ParetoDominant` (the fixed arm
 /// does strictly less work; the observable log output is identical: nothing).
 /// Default `log` features ONLY — a `release_max_level_*` feature would compile
 /// the whole regime away and make both arms tie at zero.
@@ -852,8 +852,8 @@ pub fn run_fixed(input: &Input) {
 
 /// Bench spec for `vec-reuse-across-lifetime-change` (Batch 135): the buggy
 /// arm builds a fresh `Vec<&[u32]>` per call (malloc + fill + consume); the
-/// fixed arm owns a `'static`-typed buffer (thread_local), retargets it per
-/// call via the reuse_vec pattern, and refills — capacity retained, so the
+/// fixed arm owns a `'static`-typed buffer (`thread_local`), retargets it per
+/// call via the `reuse_vec` pattern, and refills — capacity retained, so the
 /// steady-state alloc axis is 1 → 0. The rows are `Box::leak`ed so the
 /// `'static` element type is sound inside the harness (the rule text carries
 /// the real-world caller contract). G1: identical sums.
@@ -945,7 +945,7 @@ pub fn run_fixed(input: &Input) {
 /// stores with zero synchronization. Sizes = THREAD counts per the align-64
 /// precedent. G1: the closed-form checksum (every cell bumped ITERS times)
 /// is asserted in-harness. The alloc axis is EXEMPT for this rule (see
-/// ALLOC_AXIS_EXEMPT — contended macOS pthread mutex slow path).
+/// `ALLOC_AXIS_EXEMPT` — contended macOS pthread mutex slow path).
 #[cfg(feature = "rust_perf_bench")]
 fn partitioned_mut_slices_zero_sync_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -1032,14 +1032,14 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `bounded-batch-buffer-pool` (Batch 147, Plan 131 / Research
-/// 172 — the scheduler MAX_RECYCLED_BATCHES + PacketBufferPool distill):
+/// 172 — the scheduler `MAX_RECYCLED_BATCHES` + `PacketBufferPool` distill):
 /// fresh buffer triple per cycle vs bounded take/put pool.
 ///
 /// sizes = CYCLE COUNT (the churn axis): the buggy arm pays 3 malloc/free
 /// per cycle forever; the fixed arm allocates once per parked buffer, then
 /// ~0 (pool at steady state). The cap (1024) parks the pool at steady state
 /// — retention is bounded, never grown. G1: both arms return the same total
-/// (keys+vals+stamps over every record), debug_assert'd against a
+/// (keys+vals+stamps over every record), `debug_assert`'d against a
 /// make_input-computed ground truth. Alloc axis: N cycles × 3 allocs → ~3
 /// total (warmup) — the deterministic axis; timing axis the malloc/free
 /// round-trips.

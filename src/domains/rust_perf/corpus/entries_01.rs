@@ -1,6 +1,6 @@
 //! Entries slice 01 of 06 — rules 1–26 of 126 — moved VERBATIM from the
 //! former corpus.rs monolith (2026-09-10 split, scripted by
-//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! `scripts/split_rust_perf_corpus.py`). Append new batches to the
 //! LAST slice or open a new one past ~1800 lines.
 
 use crate::domains::rust_perf::PerfRule;
@@ -494,7 +494,7 @@ pub(super) fn entries() -> Vec<PerfRule> {
 // Convention for external deps: prefix with `// [dep: crate_name]` — the
 // validator strips these markers + adds them to the generated Cargo.toml.
 
-/// Bench spec for `o1-lookup`: worst-case Vec scan (last element) vs HashMap O(1).
+/// Bench spec for `o1-lookup`: worst-case Vec scan (last element) vs `HashMap` O(1).
 #[cfg(feature = "rust_perf_bench")]
 fn o1_lookup_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -585,14 +585,14 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
-/// Bench spec for `dedupe-hashset-vs-vec`: O(n²) growing-Vec dedup vs O(n) HashSet.
+/// Bench spec for `dedupe-hashset-vs-vec`: O(n²) growing-Vec dedup vs O(n) `HashSet`.
 ///
 /// The buggy path builds a unique list by repeatedly calling `Vec::contains`
 /// on a growing vector — O(n²) total comparisons. The fixed path collects
-/// into a HashSet in O(n) average. Input has ~n/2 unique values repeated
+/// into a `HashSet` in O(n) average. Input has ~n/2 unique values repeated
 /// twice, ensuring the growing-Vec scan has meaningful work at every step.
-/// Sizes capped at 5_000 because the O(n²) buggy path dominates wall-clock
-/// at larger n (~6 ms at 5_000; ~25 ms at 10_000).
+/// Sizes capped at `5_000` because the O(n²) buggy path dominates wall-clock
+/// at larger n (~6 ms at `5_000`; ~25 ms at `10_000`).
 #[cfg(feature = "rust_perf_bench")]
 fn dedupe_hashset_vs_vec_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -802,7 +802,7 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `mutex-to-atomic`: Mutex<u32> inc loop vs AtomicU32 fetch_add.
+/// Bench spec for `mutex-to-atomic`: Mutex<u32> inc loop vs `AtomicU32` `fetch_add`.
 ///
 /// The buggy path locks + unlocks a `Mutex<u32>` per increment. Even on the
 /// uncontended path, this involves an atomic CAS to acquire + an atomic store
@@ -912,7 +912,7 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
-/// Bench spec for `collect-avoidance`: .collect() intermediate vs chained iterator.
+/// Bench spec for `collect-avoidance`: .`collect()` intermediate vs chained iterator.
 ///
 /// The buggy path collects an intermediate `Vec<u64>` from the map, then
 /// iterates it again for the sum. The collect allocates (heap alloc + copy
@@ -1037,7 +1037,7 @@ pub fn run_fixed(input: &[f64]) {
     }
 }
 
-/// Bench spec for `entry-vs-contains-insert`: contains_key() + insert() vs entry().
+/// Bench spec for `entry-vs-contains-insert`: `contains_key()` + `insert()` vs `entry()`.
 ///
 /// The buggy path calls `contains_key(k)` then `insert(k, v)` — two hash
 /// computations + two probes. The fixed path uses `entry(k).or_insert(v)` —
@@ -1161,7 +1161,7 @@ pub fn run_fixed(input: &Input) {
 /// — two separate iterator consumers, each independently walking the slice.
 /// The compiler cannot fuse them into a single pass. The fixed path does
 /// both reductions in one explicit `for` loop — one cache pass. Bench 013:
-/// ParetoDominant ~1.5× across all sizes (1K → 1M). The win is cache
+/// `ParetoDominant` ~1.5× across all sizes (1K → 1M). The win is cache
 /// locality at large N (second reduction in the fused loop reads from L1;
 /// second pass in the buggy version re-reads from L2/L3 or RAM).
 #[cfg(feature = "rust_perf_bench")]
@@ -1210,7 +1210,7 @@ pub fn run_fixed(input: &[u64]) {
 /// Bench spec for `prefix-sum-2d`: O(n) 2D region-sum scan vs O(1) prefix sum.
 ///
 /// Tests K=50 random region queries on a sqrt(N)×sqrt(N) grid. The scan reads
-/// K×region_area cells; the prefix reads K×4 cells (after a one-time O(N) build
+/// `K×region_area` cells; the prefix reads K×4 cells (after a one-time O(N) build
 /// in `make_input`). The win grows linearly with N — at N=1K it's ~30×, at
 /// N=1M it's ~26,000×.
 #[cfg(feature = "rust_perf_bench")]
@@ -1353,7 +1353,7 @@ pub fn run_fixed(input: &[u8]) {
 
 /// Bench spec for `papaya-lockfree`: RwLock-contended reads vs papaya lock-free.
 ///
-/// Single-threaded read burst — measures the RwLock read-lock overhead vs
+/// Single-threaded read burst — measures the `RwLock` read-lock overhead vs
 /// papaya's epoch-based read. (True multi-threaded contention would need
 /// threads, which complicates the harness; the single-threaded path still
 /// shows the lock-acquisition cost.)
@@ -1443,7 +1443,7 @@ std::hint::black_box(acc);
     }
 }
 
-/// Bench spec for `vec-with-capacity`: Vec::new() growth vs Vec::with_capacity.
+/// Bench spec for `vec-with-capacity`: `Vec::new()` growth vs `Vec::with_capacity`.
 ///
 /// The buggy path uses `Vec::new()` + push, triggering the growth strategy
 /// (1 → 2 → 4 → 8 → … reallocs + copies). The fixed path pre-allocates with
@@ -1496,7 +1496,7 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `format-concat-loop`: O(n²) format! concat vs O(n) push_str.
+/// Bench spec for `format-concat-loop`: O(n²) format! concat vs O(n) `push_str`.
 ///
 /// The buggy path uses `s = format!("{s}{chunk}")` which allocates a new String
 /// each iteration + copies the entire accumulated string. The fixed path uses
@@ -1609,7 +1609,7 @@ pub fn run_fixed(input: &[Option<u32>]) {
     }
 }
 
-/// Bench spec for `swap-remove`: Vec::remove (O(n) shift) vs Vec::swap_remove (O(1)).
+/// Bench spec for `swap-remove`: `Vec::remove` (O(n) shift) vs `Vec::swap_remove` (O(1)).
 #[cfg(feature = "rust_perf_bench")]
 fn swap_remove_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -1696,10 +1696,10 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
-/// Bench spec for `fxhashmap`: std HashMap (SipHash) lookup vs FxHashMap (FxHash).
+/// Bench spec for `fxhashmap`: std `HashMap` (`SipHash`) lookup vs `FxHashMap` (`FxHash`).
 ///
 /// Both maps pre-populated with n entries. The bench sweeps all keys for
-/// membership. SipHash does 2 rounds of AES-like mixing; FxHash does 1
+/// membership. `SipHash` does 2 rounds of AES-like mixing; `FxHash` does 1
 /// multiply + xor. ~2-4× faster lookups, ~2× faster inserts.
 #[cfg(feature = "rust_perf_bench")]
 fn fxhashmap_bench_spec() -> BenchSpec {

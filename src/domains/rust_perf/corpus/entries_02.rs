@@ -1,6 +1,6 @@
 //! Entries slice 02 of 06 — rules 27–52 of 126 — moved VERBATIM from the
 //! former corpus.rs monolith (2026-09-10 split, scripted by
-//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! `scripts/split_rust_perf_corpus.py`). Append new batches to the
 //! LAST slice or open a new one past ~1800 lines.
 
 use crate::domains::rust_perf::PerfRule;
@@ -529,7 +529,7 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
-/// Bench spec for `mem-take`: clone+clear vs mem::take for Vec<String> buffer.
+/// Bench spec for `mem-take`: clone+clear vs `mem::take` for Vec<String> buffer.
 ///
 /// The buggy path deep-clones every String then clears. The fixed path
 /// moves the Vec's allocation in O(1). ~3× at all sizes.
@@ -649,8 +649,8 @@ pub fn run_fixed(input: &Input) {
 
 /// Bench spec for `reuse-allocation-clear`: alloc-per-call vs clear-reuse.
 ///
-/// The buggy path allocates a fresh Vec::new() inside the function body
-/// every call. The fixed path reuses a caller-passed buffer via .clear().
+/// The buggy path allocates a fresh `Vec::new()` inside the function body
+/// every call. The fixed path reuses a caller-passed buffer via .`clear()`.
 /// **Mixed** — wins at N ≤ 10,000 (up to 5.97× at N=100), loses at N=100,000
 /// where the reused buffer exceeds L2 cache.
 #[cfg(feature = "rust_perf_bench")]
@@ -787,10 +787,10 @@ pub fn run_fixed(input: &usize) {
     }
 }
 
-/// Bench spec for `buffered-io`: File::read byte-by-byte vs BufReader.
+/// Bench spec for `buffered-io`: `File::read` byte-by-byte vs `BufReader`.
 ///
 /// Both paths read the same temp file. The buggy path issues a syscall per
-/// byte; the fixed path batches reads through BufReader's 8KB buffer.
+/// byte; the fixed path batches reads through `BufReader`'s 8KB buffer.
 /// ~97× at 100KB file. The bench writes a temp file per run + cleans up.
 #[cfg(feature = "rust_perf_bench")]
 fn buffered_io_bench_spec() -> BenchSpec {
@@ -851,7 +851,7 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `log-write-direct`: push_str(&format!(...)) vs write! direct.
+/// Bench spec for `log-write-direct`: `push_str(&format`!(...)) vs write! direct.
 ///
 /// The buggy path creates a temporary String via format! every iteration,
 /// pushes it into the log buffer, then drops the temp. The fixed path uses
@@ -952,8 +952,8 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `sort-by-key`: sort_by with repeated closure calls vs
-/// sort_by_key with single key extraction.
+/// Bench spec for `sort-by-key`: `sort_by` with repeated closure calls vs
+/// `sort_by_key` with single key extraction.
 ///
 /// Uses `Vec<(String, u32)>` sorted by the u32 score field. `sort_by` calls
 /// the comparator O(N log N) times — each call reads `.1` from two elements.
@@ -1015,11 +1015,11 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `bufwriter-batched`: per-record File::write (syscall each)
-/// vs BufWriter batched.
+/// Bench spec for `bufwriter-batched`: per-record `File::write` (syscall each)
+/// vs `BufWriter` batched.
 ///
 /// Uses `tempfile` to get a real filesystem path. Each record is 64 bytes;
-/// with 8KB BufWriter buffering, ~128 records per flush. The buggy path does
+/// with 8KB `BufWriter` buffering, ~128 records per flush. The buggy path does
 /// one syscall per record; the fixed path does one syscall per ~128 records.
 #[cfg(feature = "rust_perf_bench")]
 fn bufwriter_batched_bench_spec() -> BenchSpec {
@@ -1146,8 +1146,8 @@ pub fn run_fixed(input: &Input) {
 
 /// Bench spec for `vec-remove-front-to-vecdeque`: drain N elements from front.
 ///
-/// Vec::remove(0) does a memmove of all remaining elements (O(n) per call,
-/// O(n²) total). VecDeque::pop_front advances the head index (O(1) per call,
+/// `Vec::remove(0`) does a memmove of all remaining elements (O(n) per call,
+/// O(n²) total). `VecDeque::pop_front` advances the head index (O(1) per call,
 /// O(n) total). Grows quadratically with N.
 #[cfg(feature = "rust_perf_bench")]
 fn vec_remove_front_bench_spec() -> BenchSpec {
@@ -1202,9 +1202,9 @@ pub fn run_fixed(input: &Input) {
 
 /// Bench spec for `btreemap-sorted-iteration`: sorted iteration × K queries.
 ///
-/// HashMap + sort_unstable per query is O(n log n) each. BTreeMap's keys()
+/// `HashMap` + `sort_unstable` per query is O(n log n) each. `BTreeMap`'s `keys()`
 /// iterator is already sorted — O(n) per query. Insert in pseudo-random order
-/// so HashMap's iteration order is NOT accidentally sorted.
+/// so `HashMap`'s iteration order is NOT accidentally sorted.
 #[cfg(feature = "rust_perf_bench")]
 fn btreemap_sorted_iteration_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -1339,7 +1339,7 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-/// Bench spec for `regex-hoist-lazylock`: Regex::new per call vs static LazyLock.
+/// Bench spec for `regex-hoist-lazylock`: `Regex::new` per call vs static `LazyLock`.
 ///
 /// Regex compilation is runtime NFA construction — real work (μs-scale, plus
 /// KB of allocation) the compiler cannot elide or cache. The buggy path
@@ -1480,13 +1480,13 @@ pub fn run_fixed(input: &Input) {
 /// sizes = THREAD COUNTS (the `n` threaded through `make_input` is the
 /// worker count, not an array length — the contention axis IS the size
 /// axis; 1t deliberately excluded: no contention, honest Tie, and the
-/// source measured 0% there). ITERS=10_000 iterations × 3 RMW per thread
+/// source measured 0% there). `ITERS=10_000` iterations × 3 RMW per thread
 /// keeps the contended arm ≈1 ms/call (the calibration target) at 8t.
 /// The fixed arm pads to 128 B — the ARCH line size on this M3 Max
 /// (`hw.cachelinesize`; align(64) leaves even-index slot pairs sharing
 /// [0,128) lines on Apple Silicon — measured 1.16-2.44× vs the full
 /// 3.27-10.75× separation, the annotation's load-bearing caveat).
-/// G1: per-call checksum is deterministic (fetch_add totals cannot drift
+/// G1: per-call checksum is deterministic (`fetch_add` totals cannot drift
 /// with layout) — asserted in-run against the closed form.
 #[cfg(feature = "rust_perf_bench")]
 #[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
@@ -1631,7 +1631,7 @@ pub fn run_fixed(input: &Input) {
 /// (µs-scale intervals — the source's measurement cadence) while the
 /// receiver only counts. `select!` bypasses crossbeam's direct-subscribe
 /// spin path, so the empty poll parks the receiver — one park/unpark pair
-/// per message in the buggy arm, one per FLUSH_EVERY in the fixed arm.
+/// per message in the buggy arm, one per `FLUSH_EVERY` in the fixed arm.
 /// The ctrl arm exists to force the two-channel select! shape (held
 /// connected-but-silent until the receiver joins; the data channel's
 /// disconnect is the shutdown signal). G1: receiver item count == total

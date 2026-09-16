@@ -1,6 +1,6 @@
 //! Entries slice 05 of 06 — rules 88–115 of 126 — moved VERBATIM from the
 //! former corpus.rs monolith (2026-09-10 split, scripted by
-//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! `scripts/split_rust_perf_corpus.py`). Append new batches to the
 //! LAST slice or open a new one past ~1800 lines.
 
 use crate::domains::rust_perf::PerfRule;
@@ -885,7 +885,7 @@ fn host_ram_bytes() -> Option<u64> {
 /// sizes = STORE SIZE N (the accumulation axis): the buggy arm pays O(N) per
 /// op (B=100 inserted per call) — the win GROWS with store size (the source:
 /// 559s → 2–3s at 19M items). G1: both arms return the same final
-/// (items.len, link_count, mean_bits) triple, debug_assert_eq'd against a
+/// (items.len, `link_count`, `mean_bits`) triple, `debug_assert_eq`'d against a
 /// make_input-computed ground truth. Alloc axis: equal by design (2 Vecs for
 /// the store + batch in both arms) — the TIMING axis is the mechanism.
 #[cfg(feature = "rust_perf_bench")]
@@ -987,9 +987,9 @@ pub fn run_fixed(input: &Input) {
 /// sizes = STORE SIZE N at fixed K=1,000 touched ids (the subset-ratio axis:
 /// N=1M × 32 B nodes ≈ 32 MB > L2 — the scan's cache traffic evicts what the
 /// subset reads; the source's disk-page story at cache scale). G1: both arms
-/// fold the same wrapping checksum over the touched payloads, debug_assert_eq'd
-/// against the make_input ground truth. Alloc axis: buggy builds a
-/// HashMap<usize, &Node> (3 allocs, ~2.4 MB at N=1M); fixed allocates nothing.
+/// fold the same wrapping checksum over the touched payloads, `debug_assert_eq`'d
+/// against the `make_input` ground truth. Alloc axis: buggy builds a
+/// `HashMap`<usize, &Node> (3 allocs, ~2.4 MB at N=1M); fixed allocates nothing.
 #[cfg(feature = "rust_perf_bench")]
 #[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
 fn eager_pointer_collect_lazy_fetch_bench_spec() -> BenchSpec {
@@ -1085,7 +1085,7 @@ pub fn run_fixed(input: &Input) {
 /// consumption-ordered 64×512 tiles (the x slice L1-resident across each
 /// tile's 64 rows).
 ///
-/// n = n_in; n_out fixed at 64 — the memory-bounded shape that crosses M3
+/// n = `n_in`; `n_out` fixed at 64 — the memory-bounded shape that crosses M3
 /// Max's 128 KB P-core L1-d (4× the source's Sandy Bridge 32 KB target —
 /// the size axis is SHIFTED, the ratio story preserved). W-row + x per row:
 ///   n=4096  →  32 KB (L1-resident — the honest Tie arm; both arms stream
@@ -1094,8 +1094,8 @@ pub fn run_fixed(input: &Input) {
 ///   n=32768 → 256 KB (2× L1 — eviction regime; row-major re-fetches x
 ///                     from L2 once per row, tiled once per row-GROUP)
 ///   n=65536 → 512 KB (4× L1 — the paper's headline regime)
-/// TILE_ROWS=64 = n_out (one row-group); TILE_COLS=512 (x slice = 2 KB).
-/// The repack lives in make_input (setup — NEVER measured). Float
+/// `TILE_ROWS=64` = `n_out` (one row-group); `TILE_COLS=512` (x slice = 2 KB).
+/// The repack lives in `make_input` (setup — NEVER measured). Float
 /// sum-order differs between the arms (per-tile partials) — the corpus
 /// rel-error gate covers it (NOT bit-identity; the B64 gate shape).
 #[cfg(feature = "rust_perf_bench")]
@@ -1324,7 +1324,7 @@ pub fn run_fixed(input: &Input) {
 /// Bench spec for `context-equal-field-elide` (Batch 86, Research 100):
 /// owner stored on EVERY record vs Option<Box<str>> elided to None when the
 /// owner equals the record's lookup context (the cache key) — resolved at
-/// read via as_deref().unwrap_or(context). ~80% context-equal mix (the
+/// read via `as_deref().unwrap_or(context`). ~80% context-equal mix (the
 /// source's DNS-owner distribution); the alloc axis is the headline
 /// (n → ~0.2n owner allocations); the fixed arm pays the insert-time
 /// equality compare (the mechanism's honest cost).
@@ -1610,7 +1610,7 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `mir-destprop-branch-site-merge` (Batch 99, Research 119
-/// — the wasmi v2.0 blog distill): the DestProp shape — both arms load a
+/// — the wasmi v2.0 blog distill): the `DestProp` shape — both arms load a
 /// KNOWN fn item, converge into one call (cmov + single indirect tail-jump,
 /// asm-verified) vs two distinct direct tail-jump sites. 50/50 mixed
 /// dispatch stream (LCG), sizes on the dispatch-count axis. G1 output

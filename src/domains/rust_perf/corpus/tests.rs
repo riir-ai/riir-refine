@@ -73,12 +73,12 @@ fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
 /// (casual tests miss subtle wrongness; the construction's wrapping
 /// multiplies especially). Sweeps: (a) every digit-string length
 /// 0..=19 × structured boundaries (all-0s, all-9s, 10^k) + the exact
-/// 20-digit u64::MAX string; (b) 10_000 LCG digit strings of LCG
+/// 20-digit `u64::MAX` string; (b) `10_000` LCG digit strings of LCG
 /// lengths; (c) non-digit terminators at EVERY offset (b'x', b',',
 /// b' ', 0x00, 0xFF) — value AND consumed-length identical; (d) the
 /// validation matrix: `is_made_of_eight_digits_fast` ≡ "every byte in
-/// 0x30..=0x39" over 8 positions × boundary bytes + 10_000 LCG octets;
-/// (e) the fold itself vs a u32 reference over structured + 100_000
+/// 0x30..=0x39" over 8 positions × boundary bytes + `10_000` LCG octets;
+/// (e) the fold itself vs a u32 reference over structured + `100_000`
 /// LCG octets. Domain: digit runs whose value fits u64 (beyond that
 /// BOTH arms overflow — documented out-of-domain).
 #[test]
@@ -247,12 +247,12 @@ fn swar_digit_parse_equivalence_gate() {
 /// G1 for `varint-compose-word-single-store` (Batch 68, Research 075 —
 /// the tantivy distill): the 5-threshold ladder in the corpus fixture +
 /// bench harness must be exactly equivalent to the reference per-byte
-/// loop across a FULL u16 sweep + every 128^i band boundary + u32::MAX +
+/// loop across a FULL u16 sweep + every 128^i band boundary + `u32::MAX` +
 /// an LCG u32 sample — bit-identical output bytes (the Batch 59
 /// ported-numeric exhaustive-gate rule; the source ships its own
 /// equivalence test at 128^i boundaries — `aux_test_serialize_vint_u32`
 /// — this gate is the stronger local mirror). BOTH conventions are
-/// proven: (a) stop-bit-on-LAST (tantivy VInt — the shipped fixture)
+/// proven: (a) stop-bit-on-LAST (tantivy `VInt` — the shipped fixture)
 /// and (b) continuation-bit-on-all-but-LAST (protobuf/LEB128 — the same
 /// ladder mechanism with the convention bit placed where the loop put
 /// it), demonstrating the fix is convention-faithful, not
@@ -840,7 +840,7 @@ fn runtime_int_exponent_powi_rel_error_gate() {
 /// dots, accumulated into y) != row-major accumulation order (one
 /// sequential dot per row) — the gate is max rel-error over swept
 /// shapes (never bit-identity; the B64/powi gate shape). Non-tile-
-/// multiple shapes exercise the min() edge paths. Positive-only inputs
+/// multiple shapes exercise the `min()` edge paths. Positive-only inputs
 /// (no cancellation): sums of positives keep the relative bound tight.
 #[test]
 #[allow(clippy::cast_possible_truncation)] // the 24-bit hash — intentional, the loop_order convention
@@ -1164,8 +1164,8 @@ fn batch99_pseudocode_parses() {
 }
 
 /// Batch 99 — the load-bearing concepts survive into the corpus text
-/// (retrieval discriminators, the kernel-batch concepts_covered
-/// convention applied to a rust_perf batch).
+/// (retrieval discriminators, the kernel-batch `concepts_covered`
+/// convention applied to a `rust_perf` batch).
 #[test]
 fn batch99_concepts_covered() {
     let corpus = build_perf_seed_corpus();
@@ -1223,9 +1223,9 @@ fn batch101_pseudocode_parses() {
 
 /// Batch 101 — the load-bearing concepts survive into the corpus text
 /// (retrieval discriminators), and the recorded verdicts + the
-/// cross-arch x86 evidence are in context_notes. (The x86-pending
-/// caveat was RESOLVED 2026-09-04 by the armed re-gate: x86_64 read
-/// ParetoDominant 3/0/0, refuting the expected Tie — the annotation
+/// cross-arch x86 evidence are in `context_notes`. (The x86-pending
+/// caveat was RESOLVED 2026-09-04 by the armed re-gate: `x86_64` read
+/// `ParetoDominant` 3/0/0, refuting the expected Tie — the annotation
 /// updates, never deletes.)
 #[test]
 fn batch101_concepts_covered() {
@@ -1330,8 +1330,8 @@ fn batch109_pseudocode_parses() {
 }
 
 /// Batch 109 — the measurement-honesty contract is pinned in the rule
-/// text: the callee-side black_box caveat, the constant-work fold
-/// hazard, the NaN comparison directions, and the NotBenchable verdict
+/// text: the callee-side `black_box` caveat, the constant-work fold
+/// hazard, the NaN comparison directions, and the `NotBenchable` verdict
 /// (no fabricated Pareto number for a rule whose baseline is zero).
 #[test]
 fn batch109_concepts_covered() {
@@ -1736,7 +1736,7 @@ fn batch86_byte_buffer_store_reconstructs_exactly() {
 /// the flag-cluster layout is 12 bytes, the bitflag layout is 8 —
 /// pinned EXACTLY (align rules are platform-stable for these primitive
 /// members), and every bit position round-trips through the packed
-/// form. The "measure size_of before/after" caveat is the RULE's
+/// form. The "measure `size_of` before/after" caveat is the RULE's
 /// (default-repr layouts vary); this fixture's layout is fixed.
 #[test]
 fn batch86_bitflag_size_axis_and_roundtrip() {
@@ -1823,13 +1823,13 @@ fn fourteen_rules_are_not_benchable() {
 }
 
 /// Bench 013 found 4 rules with non-dominant verdicts in the default
-/// config (2 ParetoDominated + 2 Mixed). Their `context_notes` annotation
+/// config (2 `ParetoDominated` + 2 Mixed). Their `context_notes` annotation
 /// records the finding so consumers don't unconditionally suggest them.
 /// Bench 016 (Issue 012) added 2 more annotated rules (sort-by-key,
 /// copy-from-slice). Issue 014 T2.3/T2.4 added 2 more in the
-/// NotBenchable metric-mismatch class (tokio-guard-across-await,
+/// `NotBenchable` metric-mismatch class (tokio-guard-across-await,
 /// bounded-channel-backpressure). Batch 48 added 2 verdict-class rules
-/// (filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed).
+/// (filter-count-to-any `ParetoDominated`, iter-copied-deref-map Mixed).
 /// Batch 53 (Bench 038) added 2 more (powi-vs-powf all-Tie Mixed,
 /// soa-hot-field latency-bound Mixed). Batch 62 added 1 (the
 /// newton-refinement regime-inversion annotation) + Batch 64 added 1
@@ -1842,10 +1842,10 @@ fn fourteen_rules_are_not_benchable() {
 /// sorts-per-update amortization regime + the source-vs-isolated
 /// magnitude caveat; lock-guard-narrow-field-accessor — the honest
 /// margin note on a clean winner). Batch 78 added 2 (narrow-counter-
-/// overflow-promotion — the ParetoDominated memory-for-speed trade
+/// overflow-promotion — the `ParetoDominated` memory-for-speed trade
 /// (the Datadog 2,100 GiB regime vs the measured update-path cost);
 /// cache-line-block-partitioned-lock — measured-winner regime note +
-/// the first ALLOC_AXIS_EXEMPT rule). Batch 86 added 3 (serialize-once-
+/// the first `ALLOC_AXIS_EXEMPT` rule). Batch 86 added 3 (serialize-once-
 /// byte-buffer-store — the shrinking-ratio + regime note;
 /// context-equal-field-elide — the %-equal two-regime note;
 /// bitflag-pack-when-footprint-dominates — the NotBenchable-speed size
@@ -1855,11 +1855,11 @@ fn fourteen_rules_are_not_benchable() {
 /// invariance-precondition note). Batch 94 added 1
 /// (coalesce-nearby-reads-bounded-gap-cacheability-gated — the
 /// cacheability-coupling regime, source-reported). Batch 99 added 1
-/// (mir-destprop-branch-site-merge — the measured ParetoDominant verdict
+/// (mir-destprop-branch-site-merge — the measured `ParetoDominant` verdict
 /// with the runtime-opaque-targets negative-control boundary and the
-/// rustc DestProp toolchain regime).
+/// rustc `DestProp` toolchain regime).
 /// The other 57 have `context_notes: None` (unconditional wins or
-/// honestly NotBenchable).
+/// honestly `NotBenchable`).
 #[test]
 fn forty_three_annotated_rules_carry_context_notes() {
     let corpus = build_perf_seed_corpus();
@@ -1919,7 +1919,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
     assert!(annotated.contains(&"dispatch-handler-pair-hoist")); // Batch 101 — measured ParetoDominant (aarch64) + the unpredictable-stream regime + the x86 re-gate verdict (2026-09-04, expected-Tie REFUTED)
 }
 
-/// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
+/// The non-annotated rules (`ParetoDominant` + honestly `NotBenchable`) must
 /// have `context_notes: None` — they are either unconditional wins or
 /// honestly unmeasurable.
 #[test]
@@ -1957,16 +1957,16 @@ fn context_notes_backward_compatible_serde() {
 
 /// Integration: the drafter propagates `context_notes` from `PerfRule`
 /// through `DraftedFix` for the annotated rules, and `None` for the
-/// unconditional wins. Twenty annotations: Bench 013 (2 ParetoDominated
+/// unconditional wins. Twenty annotations: Bench 013 (2 `ParetoDominated`
 /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
-/// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
+/// (2 `NotBenchable` metric-mismatch), Batch 48 (2 verdict-class),
 /// Batch 53 (Bench 038, 2 verdict-class), Batch 62 (1 regime-class),
 /// Batch 64 (1 release-erasure class), Batch 66 (1 regime-split
-/// class), Batch 68 (1 ParetoDominated honest-loser — the tantivy
+/// class), Batch 68 (1 `ParetoDominated` honest-loser — the tantivy
 /// varint ladder regresses on aarch64 across 3 tested writer regimes),
 /// Batch 65 (2 measured-winner regime caveats — align-64's
 /// arch-granularity + channel-send's pipeline-overlap margin; a NEW
-/// annotation class: ParetoDominant verdict + applicability condition,
+/// annotation class: `ParetoDominant` verdict + applicability condition,
 /// accepted by the token check below), and Batch 73 (2 measured-winner
 /// caveats — the mnt.io room-list distill: sort-key-cache's
 /// sorts-per-update regime + source-vs-isolated magnitude note;
@@ -2034,10 +2034,10 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
 
 /// G1 for `align-64-false-sharing` (Batch 65, Research 081): the
 /// per-thread counter totals are a deterministic closed form — layout
-/// (and thread interleaving) cannot change them. fetch_add is atomic, so
+/// (and thread interleaving) cannot change them. `fetch_add` is atomic, so
 /// each counter's final value is exactly its op count regardless of which
 /// slot layout the atomics lived in. Pins the bench harness's in-run
-/// debug_assert at the corpus level + documents the identity the wall-clock
+/// `debug_assert` at the corpus level + documents the identity the wall-clock
 /// arms share (the timing differential is PURELY the line ping-pong).
 #[test]
 fn align_64_false_sharing_totals_are_layout_invariant() {
@@ -2122,7 +2122,7 @@ fn align_64_false_sharing_totals_are_layout_invariant() {
 
 /// G1 for `channel-send-batching-unpark` (Batch 65, Research 081): the
 /// per-item and per-batch producer paths deliver the SAME item count —
-/// the flush boundary cannot drop or double-count (the mem::replace
+/// the flush boundary cannot drop or double-count (the `mem::replace`
 /// swap keeps the tail batch's capacity + the final flush covers the
 /// remainder). Also pins the annotation's take-vs-replace warning: the
 /// replace pattern is the one that wins the alloc axis (take-then-regrow
@@ -2406,7 +2406,7 @@ fn debug_stat_maintained_aggregate_matches_scan_exactly() {
 
 /// Batch 75 — the candidate-list correctness contract: an injected
 /// worst-case hash (len % 4) MUST NOT merge distinct groups. Pins the
-/// `HashMap<u64, Vec<usize>>` decision content a real SipHash collision
+/// `HashMap<u64, Vec<usize>>` decision content a real `SipHash` collision
 /// never exercises (the Lane B falsifiable-gate recommendation).
 #[test]
 fn batch75_collision_candidate_list_never_merges() {
@@ -2614,7 +2614,7 @@ fn batch83_bitplane_mask_matches_scalar_exactly() {
 /// equivalent to the u64 buffer for ANY monotone update stream,
 /// including streams that CROSS the u32 boundary (the promotion path
 /// the bench never fires). Adversarial sequences: repeated
-/// u32::MAX-adjacent adds, mixed small/large, LCG, and every-slot
+/// `u32::MAX-adjacent` adds, mixed small/large, LCG, and every-slot
 /// overflow sweeps. Totals AND per-slot values must match bit-exactly.
 #[test]
 #[allow(clippy::cast_possible_truncation)] // the LCG truncation IS the generator under test
@@ -2790,8 +2790,8 @@ fn batch121_pseudocode_parses() {
 }
 
 /// Batch 121 — the load-bearing concepts survive into the corpus text
-/// (retrieval discriminators), the NotBenchable annotations are honest
-/// (context_notes carry the annotation), and the source quotes' key
+/// (retrieval discriminators), the `NotBenchable` annotations are honest
+/// (`context_notes` carry the annotation), and the source quotes' key
 /// phrases are pinned.
 #[test]
 fn batch121_concepts_covered() {
@@ -2906,7 +2906,7 @@ fn batch122_pseudocode_parses() {
 }
 
 /// Batch 122 — the load-bearing concepts survive into the corpus text
-/// (retrieval discriminators), the NotBenchable annotations are honest,
+/// (retrieval discriminators), the `NotBenchable` annotations are honest,
 /// and the source quotes' key phrases are pinned.
 #[test]
 fn batch122_concepts_covered() {
@@ -3203,7 +3203,7 @@ fn batch129_rules_present_and_parse() {
     }
 }
 
-/// Batch 135 (2026-09-09, Plan 114 — the Wild-linker RustForge article
+/// Batch 135 (2026-09-09, Plan 114 — the Wild-linker `RustForge` article
 /// distill): the three new rules are present and parse. The
 /// `vec-reuse-across-lifetime-change` fixed fixture carries an INLINE
 /// CONST block (the compile-time layout assert) — this gate is what
@@ -3412,8 +3412,8 @@ fn batch135_pareto_benches() {
 
 /// Batch 136 (2026-09-09, Plan 115 — the Lattimore "Graph Algorithms in
 /// Rayon" blog distill): the three new rules are present, parse, and
-/// carry the concept needles. NotBenchable by design (qualitative source
-/// — no bench_spec), so the without_spec membership pin above carries
+/// carry the concept needles. `NotBenchable` by design (qualitative source
+/// — no `bench_spec`), so the `without_spec` membership pin above carries
 /// the count half and this gate carries the presence/parse half.
 #[test]
 fn batch136_rules_present_and_parse() {
@@ -3500,7 +3500,7 @@ fn batch136_termination_parity() {
 
 /// Batch 139 (2026-09-09, Plan 119 / Research 154 — the ds4-metal PR #5
 /// distill): the prefault-admission rule is present, parses, is io, and
-/// carries its NotBenchable rationale. The fail-closed direction is
+/// carries its `NotBenchable` rationale. The fail-closed direction is
 /// pinned by a G1 parity: an unqueryable RAM total must choose the
 /// DEMAND-PAGED arm (the slow-but-safe side), never the prefault.
 #[test]
@@ -3572,7 +3572,7 @@ fn batch139_rules_present_and_parse() {
 /// Batch 141 (2026-09-09, Plan 121 — the antirez/ds4 Part-B distill,
 /// Research 162's staged batch): the three new rules are present, parse,
 /// carry the concept needles, and sit in their categories. All
-/// NotBenchable by design — the without_spec membership pin above carries
+/// `NotBenchable` by design — the `without_spec` membership pin above carries
 /// the count half; the G1 function tests below carry the semantics.
 #[test]
 fn batch141_rules_present_and_parse() {
@@ -3764,9 +3764,9 @@ fn batch141_reserve_boundary_holdback_semantics() {
 
 /// Batch 143 (2026-09-10, Plan 123 — the nnethercote Dec-2025 rustc-perf
 /// post distill): R1 + R2 present, parse, carry the concept needles, sit
-/// in their categories. R1 is BENCHABLE (the without_spec membership pin
+/// in their categories. R1 is BENCHABLE (the `without_spec` membership pin
 /// does NOT apply; the Pareto runner carries the measurement half); R2 is
-/// NotBenchable with its rationale in context_notes.
+/// `NotBenchable` with its rationale in `context_notes`.
 #[test]
 fn batch143_rules_present_and_parse() {
     let corpus = build_perf_seed_corpus();
@@ -4017,7 +4017,7 @@ fn batch146_dual_evidence_and_distinct_rows_present() {
 }
 
 /// Batch 147 (staged agave batch, Plan 131 / Research 172) — G1: presence,
-/// categories, annotation discipline. Three of the five are NotBenchable
+/// categories, annotation discipline. Three of the five are `NotBenchable`
 /// suggestion-only (the annotation IS the content); two carry specs.
 #[test]
 fn batch147_rules_present_and_annotated() {

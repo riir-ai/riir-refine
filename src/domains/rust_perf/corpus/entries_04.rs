@@ -1,6 +1,6 @@
 //! Entries slice 04 of 06 — rules 76–87 of 126 — moved VERBATIM from the
 //! former corpus.rs monolith (2026-09-10 split, scripted by
-//! scripts/split_rust_perf_corpus.py). Append new batches to the
+//! `scripts/split_rust_perf_corpus.py`). Append new batches to the
 //! LAST slice or open a new one past ~1800 lines.
 
 use crate::domains::rust_perf::PerfRule;
@@ -416,8 +416,8 @@ fn byte_find_position_to_memchr_bench_spec() -> BenchSpec {
 /// 5-threshold ladder composing all bytes into one u64 + ONE `write_all`.
 ///
 /// THE WRITER SHAPE IS THE RULE'S REGIME (first bench run, load-recorded:
-/// the Vec-push shape measures ParetoDominated 0/3 — 128 is a compile-time
-/// constant so LLVM strength-reduces the div/mod, and Vec::push-per-byte is
+/// the Vec-push shape measures `ParetoDominated` 0/3 — 128 is a compile-time
+/// constant so LLVM strength-reduces the div/mod, and `Vec::push-per-byte` is
 /// cheap enough that the ladder's if-chain loses; the honest win is N
 /// writer calls → 1). Sink: `std::io::Cursor<&mut Vec<u8>>` — a real
 /// generic `Write` impl with per-call branching but no syscall noise; on a
@@ -530,10 +530,10 @@ pub fn run_fixed(input: &Input) {
 ///
 /// **Cross-arch probe 2026-08-19 (median-of-5, interleaved arms): u64
 /// 2.17-2.23x on aarch64 (M3, load ~118 shared) / 1.39-1.47x on x86 (4090
-/// box, load 7-31); u32 1.27-1.38x / 1.20-1.29x — ParetoDominant BOTH
+/// box, load 7-31); u32 1.27-1.38x / 1.20-1.29x — `ParetoDominant` BOTH
 /// arches BOTH widths.** The mechanism is LOAD-COUNT (8 L1 loads + the
 /// serial shift/or chain vs 1 fused load) — distinct from the varint
-/// honest-loser's call-count class (OoO hides N dyn-dispatch calls; it
+/// honest-loser's call-count class (`OoO` hides N dyn-dispatch calls; it
 /// cannot hide 8 loads behind 1). The u32 family shares the buffer; the
 /// harness measures the u64 headline (the family's worst-case-for-buggy
 /// shape). G1: bit-identical at EVERY byte alignment (the exhaustive corpus
@@ -611,7 +611,7 @@ pub fn run_fixed(input: &Input) {
 /// sizes = SORTS PER REFRESH CYCLE (the amortization axis — the reactive
 /// stream regime: every filter change / pagination reset does a fresh full
 /// sort over the same data, and eyeball-im-util's `SortBy` re-invokes the
-/// comparator from `binary_search_by` on every diff). N_ROOMS = 512 is the
+/// comparator from `binary_search_by` on every diff). `N_ROOMS` = 512 is the
 /// article's 500-600 room scale. Every sort is preceded by a fixed
 /// deterministic Fisher-Yates permutation (in-place, no allocs, the SAME
 /// swap list in both arms) — a pseudo-random permutation has ~N/2 runs so
@@ -976,12 +976,12 @@ pub fn run_fixed(input: &Input) {
 ///
 /// sizes = DIGITS PER RUN (the regime axis — the source's own README:
 /// "a slight performance hit if most of the floats have less than 8
-/// digits"). N_RUNS = 2000 fixed; runs are LCG-generated digit strings of
+/// digits"). `N_RUNS` = 2000 fixed; runs are LCG-generated digit strings of
 /// exactly n digits (values fit u64 at 19 digits = the axis max), offsets
-/// precomputed in make_input so the measured delta isolates the parse.
+/// precomputed in `make_input` so the measured delta isolates the parse.
 /// G1: both arms wrapping-sum the SAME u64 values — the expectation is
 /// accumulated in u128 during generation (== the wrapping u64 sum) and
-/// debug_assert_eq'd in both arms. At size 4 (< 8) the chunk loop never
+/// `debug_assert_eq`'d in both arms. At size 4 (< 8) the chunk loop never
 /// fires — the honest Tie bound of the regime; 8/12/19 exercise the fold.
 /// Alloc axis: 0/0 (both arms parse from the pre-built buffer).
 #[cfg(feature = "rust_perf_bench")]
@@ -1092,18 +1092,18 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `runtime-feature-detect-per-chunk` (Batch 74, Research
-/// 088): CPU feature detection paid PER CHUNK (the std::detect string
+/// 088): CPU feature detection paid PER CHUNK (the `std::detect` string
 /// resolution + cached detector read, modeled via the arch-portable
 /// `detected()` helper) vs resolved ONCE into a cached atomic byte.
 ///
 /// sizes = BYTES PER CHUNK (the work-per-detection axis): at small chunks
 /// the detection rivals the work itself (the source's finding — their
 /// per-8-digit-group check "costs more than the SWAR fallback"); as chunk
-/// work grows the fixed ratio decays toward 1. N_CHUNKS = 1000 fixed.
+/// work grows the fixed ratio decays toward 1. `N_CHUNKS` = 1000 fixed.
 /// Both arms' chunk fns are `#[inline(never)]` — models the real-world
-/// outlined dispatch (the source's "two outlined target_feature calls")
+/// outlined dispatch (the source's "two outlined `target_feature` calls")
 /// AND prevents the compiler from hoisting the detection out of the loop.
-/// G1: both arms sum the same bytes — checksum debug_assert_eq'd.
+/// G1: both arms sum the same bytes — checksum `debug_assert_eq`'d.
 /// Alloc axis: 0/0. HONEST SCOPE: on rustc 1.97 the feature-name match on
 /// a string literal may const-fold after inlining — the measured delta is
 /// whatever remains (detector read + branch + call shape); the annotation
@@ -1218,19 +1218,19 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `encoded-layout-borrowed-view` (Batch 75, Research 089 —
-/// the GreptimeDB `recordbatches_to_timeseries` distill): dictionary-encoded
+/// the `GreptimeDB` `recordbatches_to_timeseries` distill): dictionary-encoded
 /// column (S distinct strings + one u32 key per row) consumed through a
 /// generic materializing accessor vs a borrowing enum view with one variant
 /// per layout.
 ///
-/// sizes = ROWS R per column; S_DISTINCT = 100 distinct dictionary values
-/// and L_COLS = 4 label columns fixed (the source's Dictionary<UInt32, Utf8>
+/// sizes = ROWS R per column; `S_DISTINCT` = 100 distinct dictionary values
+/// and `L_COLS` = 4 label columns fixed (the source's Dictionary<`UInt32`, Utf8>
 /// regime — a label layout like `host` has few distinct values across many
 /// rows). The buggy accessor is the source's `iter_column_as_string` shape:
 /// a GENERIC path that does not recognize the dictionary layout and calls
-/// to_string() row by row. G1: both arms sum the same label lengths — the
-/// expectation is computed in make_input straight from the keys (no view
-/// involved) and debug_assert_eq'd in both arms.
+/// `to_string()` row by row. G1: both arms sum the same label lengths — the
+/// expectation is computed in `make_input` straight from the keys (no view
+/// involved) and `debug_assert_eq`'d in both arms.
 /// Alloc axis: buggy = L + R·L per call (one collect Vec per column + one
 /// String per cell — "the 3 strings become 1000"); fixed = 0 steady-state
 /// (the view borrows; no copy, no allocation).
@@ -1357,23 +1357,23 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `group-keys-borrow-allocate-on-first-sight` (Batch 75,
-/// Research 089 — the GreptimeDB `recordbatches_to_timeseries` distill):
-/// per-row owned-key grouping (clone the label set into a BTreeMap key
+/// Research 089 — the `GreptimeDB` `recordbatches_to_timeseries` distill):
+/// per-row owned-key grouping (clone the label set into a `BTreeMap` key
 /// every row) vs hash-the-borrowed-labels + candidate index list, cloning
 /// the owned key only when a NEW series is first seen + one final
-/// sort_unstable_by restoring the BTreeMap's ordered output.
+/// `sort_unstable_by` restoring the `BTreeMap`'s ordered output.
 ///
-/// sizes = ROWS R; S_GROUPS = 1000 distinct label sets fixed (the axis is
+/// sizes = ROWS R; `S_GROUPS` = 1000 distinct label sets fixed (the axis is
 /// the R/S dedup ratio: R·L clones become S·L). Rows reference an interned
 /// label arena by index so INPUT memory stays O(S) strings while the buggy
 /// arm still clones 2·L Strings + 1 Vec per row per call; group ids are
 /// assigned by a fixed LCG (pseudo-random order — no fast-path locality
 /// smuggled in; this rule's win is pure clone-avoidance). G1: both arms
-/// emit groups in SORTED key order (the BTreeMap's free order; the fixed
+/// emit groups in SORTED key order (the `BTreeMap`'s free order; the fixed
 /// arm's final sort restores it) — a position-weighted checksum over the
-/// independently-sorted group table is debug_assert_eq'd in both arms.
+/// independently-sorted group table is `debug_assert_eq`'d in both arms.
 /// Top cell 300K not 1M: the buggy arm at 1M is ~7M allocs + 1M ordered
-/// BTreeMap string inserts per call — the R/S-ratio story is unchanged and
+/// `BTreeMap` string inserts per call — the R/S-ratio story is unchanged and
 /// the bench stays minutes-scale (the B73 sorts-per-update sizing lesson).
 /// Alloc axis: buggy ≈ 7·R + 2·S per call; fixed ≈ 8·S + ~30 (first-sight
 /// key clones + candidate index lists + table/vec growth) — independent
@@ -1588,23 +1588,23 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `sorted-input-previous-row-fast-path` (Batch 75,
-/// Research 089 — the GreptimeDB `recordbatches_to_timeseries` distill):
+/// Research 089 — the `GreptimeDB` `recordbatches_to_timeseries` distill):
 /// hash-every-row grouping vs compare-against-the-previous-row's-group
 /// first, hash fallback on miss.
 ///
-/// sizes = RUN LENGTH (the hit-rate regime axis, the sort_key_cache
+/// sizes = RUN LENGTH (the hit-rate regime axis, the `sort_key_cache`
 /// semantic-sizes precedent): n = 100 → adjacent input (S=1000 contiguous
 /// runs of 100 — the real query shape: rows sorted by primary key so one
 /// series' samples arrive together); n = 1 → interleaved (round-robin over
 /// all 1000 series — the honest bound: every row pays one failed [u64; 2]
-/// comparison before the hash). R_ROWS = 100_000 fixed; S_SERIES = 1000.
+/// comparison before the hash). `R_ROWS` = `100_000` fixed; `S_SERIES` = 1000.
 /// G1: both arms emit groups in FIRST-SIGHT order — identical in both arms
-/// and computable in make_input (series 0..S ascending for BOTH layouts) —
+/// and computable in `make_input` (series 0..S ascending for BOTH layouts) —
 /// and fold the same position-weighted (series, count, sum) checksum,
-/// debug_assert_eq'd against the make_input ground truth. Correctness
+/// `debug_assert_eq`'d against the `make_input` ground truth. Correctness
 /// never depends on the fast path: the hash fallback with full-key
 /// equality is the semantic contract.
-/// Alloc axis: ~equal by design (both build the same HashMap + groups
+/// Alloc axis: ~equal by design (both build the same `HashMap` + groups
 /// Vec; neither allocates per row) — the TIMING axis is the mechanism
 /// here, and the alloc integers pin that no per-row allocation snuck in.
 #[cfg(feature = "rust_perf_bench")]

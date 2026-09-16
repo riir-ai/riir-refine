@@ -38,7 +38,7 @@
 //! - **`docker`** (default-on since 2026-08-28, Plan 030) — Dockerfile healing, the first no-`syn` scanner
 //! - **`rustc_errors`** (default-on since 2026-08-29, Plan 019) — `--fix-compile` compile-error repair (driver-shaped, inert until invoked)
 //! - **`dist`** (default-on since 2026-09-13, Issue 085) — Cargo.toml build-config advice (suggest-only)
-//! - **`shader_perf`** (opt-in, Plan 134 / Proposal 014) — WGSL render-pipeline bounded-fix healing (`@vertex`/`@fragment`; `@compute` stays kernel_opt)
+//! - **`shader_perf`** (opt-in, Plan 134 / Proposal 014) — WGSL render-pipeline bounded-fix healing (`@vertex`/`@fragment`; `@compute` stays `kernel_opt`)
 //!
 //! Cross-domain auto-routing ships behind the `latent_retrieval` feature
 //! (Plan 005): real-file span-level `--suggest` via the riir-rag latent
@@ -518,7 +518,7 @@ pub use domains::shader_perf::{
     ShaderVerdict, StageSet,
 };
 
-/// The shader_perf seed corpus (behind `shader_perf`).
+/// The `shader_perf` seed corpus (behind `shader_perf`).
 #[cfg(feature = "shader_perf")]
 pub use domains::shader_perf::corpus::build_shader_seed_corpus;
 
