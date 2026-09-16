@@ -1,6 +1,18 @@
 # Issue 117 — Global-binary staleness guard (the 00:21 class: silent re-stale on bare `cargo build --release`)
 **Status:** RESOLVED 2026-09-16 — T1-T4 all green (`build.rs`, `src/build_stamp.rs`, `tests/build_stamp_cli.rs`). Filed same day from the room-to-improve triage.
 
+⛔ **Landed at `3dc472c7`, whose message describes P32/P33 and not this issue.**
+A concurrent session ran `git commit` against the shared index in the second
+between this work being staged and its own `git commit … -- <pathspec>`, and
+git cannot tell one session's staged files from another's. The content is
+intact and verified at that commit; the message is not recoverable without
+rewriting a commit that is half somebody else's work. Recorded here rather
+than repaired, because the record is the part a reader needs. The narrower
+habit the incident argues for: stage and commit in ONE `git commit --only
+<paths>` rather than `git add` followed by `git commit -- <paths>`, which
+leaves a window in which the shared index carries your files and anyone's
+bare commit takes them.
+
 ## Why
 
 Any bare `cargo build --release` of this crate **overwrites the symlink
