@@ -147,7 +147,26 @@
 > `code_span_link_target_untouched` incl. the exact `DelegationAuthoriser`
 > specimen; module 27/27, lib 1667/1667, clippy clean. **Repair 2 stays
 > RECORDED-NOT-LANDED** (a verify-leg `cargo doc --no-deps` extension is a
-> cost/design call on every doc-touching fix run — owner's).
+> cost/design call on every doc-touching fix run — owner's).">
+> **RESOLVED 2026-09-17 (the MISS half, folded per the accumulation rule —
+> one landing, one adjudication; full narrative: `HISTORY.md` 09-17).**
+> (a) `manual_range_patterns`: corpus rule LANDED (P31, `53269d3a`) —
+> clippy's own coverage-walk algorithm ported verbatim onto syn from
+> rust-lang/rust@1.98.1 (25-cell probe matrix, 0.1.93 + 0.1.98 identical;
+> the naive ascending-pair AND single-fold models were both refuted by
+> probe before the port). FIXABLE; corpus 56, FIXABLE 41; e2e dogfood
+> healed the exact `0 | 1 | 2` miss shape; score-bench skipped with
+> recorded flatness proof.
+> (b) `manual_is_multiple_of` (`rng.next()`): ADJUDICATED NOT-A-CORPUS-GAP.
+> The proposer's unknown-method silence is the landed E0689 design
+> (check-invisible ⇒ `--verify` blind ⇒ must never see the proposal);
+> firing there would put possibly-signed rewrites into the suggest lane —
+> the doc_markdown wrong-suggestion class. The system path for these spans
+> is the oracle lane (clippy is type-aware, suggestion MachineApplicable,
+> P21 consumes it verbatim; the lint is in the compiled fix set). The
+> incident run was feature-gated while the Issue-113 auto-oracle spawns at
+> default features — `RIIR_HEAL_AUTO_ORACLE_FEATURES` (Issue 115) is the
+> documented remediation for that blindness, not a new rule.
 >
 > ⚠ Also worth a look: `--verify-args "... --all-targets"` fails the whole run
 > with `error: the argument '--all-targets' cannot be used multiple times`,

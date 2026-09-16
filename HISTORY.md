@@ -1,5 +1,86 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — the manual_range_patterns corpus rule lands (the intake MISS folded, P31)
+
+The `.distill/001` 09-16/09-17 riir-chain usage artifact recorded a two-part
+MISS: the healer's `--fix` run over `programs/dispatch.rs` fixed neither
+`manual_range_patterns` (`0 | 1 | 2` -> `0..=2`) nor the `rng.next()` dividend
+of `manual_is_multiple_of`. The fold executed per the accumulation rule, and
+it split honestly into one code landing and one adjudication:
+
+**1. `manual_range_patterns` — corpus rule LANDED (`53269d3a`), and the
+classifier is a VERBATIM PORT of clippy's own algorithm, not an
+approximation.** The lint's source at rust-lang/rust@`1.98.1`
+(`src/tools/clippy/clippy_lints/src/manual_range_patterns.rs`) was
+transcribed statement-for-statement onto syn, after the probe matrix
+(25 cells, installed 0.1.93 AND 0.1.98 — identical on every cell) refuted
+two successive naive models: an ascending-contiguous rule, then a
+single-fold rule. Clippy's real model is a COVERAGE WALK over a flat case
+list, and its non-obvious corners are all now pinned by unit tests:
+
+- order-free: `12 | 11 | 10` → `10..=12`; `9 | 7 | 8` → `7..=9`; scrambled
+  NEGATIVES fire too (`-1 | -3 | -2` → `-3..=-1`) — the shape a
+  pairwise-ascending port would wrongly refuse (and the one probe cell an
+  off-by-one label map initially misread as silent; re-probed clean);
+- duplicates absorb: `1 | 2 | 2` → `1..=2`, `1 | 2 | 3 | 2` → `1..=3`;
+- RANGE ALTERNATIVES join the walk: `1..=3 | 2` → `1..=3`, and TWO
+  alternatives fire when a range case is present and the span is covered
+  (`4..=6 | 7` → `4..=7`), while an uncovered span stays silent
+  (`4..=6 | 9` — 7-8 uncovered);
+- the exclusion kind rides the max-winner: `1..5 | 2 | 3` → `1..5`
+  (text VERBATIM `5`, value-decremented, open `..` kind), and a later num
+  steals max on clippy's `>=` tie and RESETS the kind — `0..2 | 1` → `0..=1`;
+- boundary texts splice VERBATIM: `1u32 | 2 | 3` → `1u32..=3`,
+  `1_0 | 1_1 | 1_2` → `1_0..=1_2`, negatives keep their sign — the rewrite
+  is set-identical AND inference-identical, hence FIXABLE (not VERIFY);
+- synrepresentation corners: pattern literals carry the sign FUSED in the
+  token (`-3` token, `base10_parse::<i128>` handles it), while range ends
+  arrive as `Unary(Neg)` EXPRESSIONS — two parse paths, one `num` helper
+  pair;
+- `flatten()` mirrors HIR's paren-free or-chain so `(0 | 1 | 2) | 3`
+  collapses like clippy sees it; and when a pattern rewrites, nested
+  or-patterns inside are NOT visited (the whole span is replaced — no
+  overlapping second edit);
+- `drops_interior_comment` refuses comment-bearing spans (the emitter
+  deletes dropped-gap bytes; Issue 027/028/029 class).
+
+Documented conservative divergences (module doc): macro bodies invisible
+(crate-wide syn property), the uncollapsible-outer inner rewrite
+(`(0 | 1 | 2) | 5` → `(0..=2) | 5`, one step clippy does not take), the
+i128::MAX jump-guard (clippy survives by release-mode wrap luck; the healer
+runs debug and must not panic), and u128 literals above `i128::MAX`
+silent (clippy's own documented `try_from` limit).
+
+Registration walked every count pin: corpus 55 → 56, FIXABLE 40 → 41, the
+56-row fixture table row, dispatch arm, module-doc table row, both ledger
+comment chains. `--corpus-stats` reads 56 through the rebuilt binary; the
+e2e dogfood healed a specimen carrying the exact riir-chain miss shape
+(`0 | 1 | 2` → `0..=2`, one edit, file still parses). Score-bench SKIPPED
+with recorded proof: no fixture names the lint and no fixture source
+carries a 3+-alternative or-pattern (or any or-with-range), so no fixture
+outcome can move — the Issue-120 landing precedent.
+
+**2. `manual_is_multiple_of` — the intake half ADJUDICATED, no code change.**
+The rule already ships (landed 2026-08-29); the miss was the proposer's
+unknown-method-return silence (`is_known_unsigned_method` knows only
+`len`/`capacity`), and that silence is the module's own documented design:
+the E0689 ambiguous-`{integer}` class is check-INVISIBLE (`--verify`
+structurally blind), so the proposer refuses every dividend whose type it
+cannot prove unsigned. Firing on unknown method calls would move the
+breakage into the SUGGEST lane — a proposal that breaks when the operator
+applies it by hand on a signed return type — which is exactly the
+`doc_markdown` wrong-suggestion class this repo just paid for. The system's
+answer for these spans is the oracle lane: real clippy is type-aware, fires
+only on provably-unsigned dividends, and its suggestion is
+MachineApplicable, so an oracle-fed (or Issue-113 auto-oracle) run applies
+clippy's OWN rewrite verbatim through the P21 lane (`manual_is_multiple_of`
+is in the compiled fix set). The incident run was feature-gated
+(`--verify-args "--features chain,..."`) while the auto-oracle spawns at
+default features — the Issue-115 knob
+(`RIIR_HEAL_AUTO_ORACLE_FEATURES`) is the documented remediation for
+exactly that blindness. The `rng.next()` half closes as
+by-design-silence-plus-oracle-lane, not as a corpus gap.
+
 ## 2026-09-17 — the doc_markdown bare-URL arm lands (the staged follow-up lead)
 
 The under-fire gap the Issue-120 yield record staged is closed. Real clippy
