@@ -108,6 +108,40 @@
 
 ## Post-mining intake (compact — full records in `.research/108_mining_queue_snapshot_history.md`)
 
+> **RECORD 2026-09-17 (usage artifact, riir-chain — a `doc_markdown` suggestion
+> that BREAKS an intra-doc link, and the compile gate provably cannot catch it).**
+> `cargo heal --fix --write --verify` pointed at `riir-chain/src/programs/dispatch.rs`
+> under `--verify-args "--features chain,chain_cold_write,chain_wallet_tier"`
+> applied 19 edits, all verified, and the run was **reverted by hand**. Two
+> findings, the second is the one that matters:
+>
+> 1. **MISS.** The two clippy warnings the file actually carries on that feature
+>    surface were not fixed and not proposed: `manual_range_patterns`
+>    (`0 | 1 | 2` -> `0..=2`) and `manual_is_multiple_of`
+>    (`rng.next() % 50 == 0` -> `rng.next().is_multiple_of(50)`). Both are in
+>    the repo's mechanical class. Fixed manually at riir-chain `51b456f`.
+> 2. ⛔ **WRONG SUGGESTION, and it is invisible to `--verify`.** 16 of the 19
+>    edits were `doc_markdown` (a pedantic lint no gate in that repo enforces),
+>    and one backticked the inside of an **intra-doc link TARGET**:
+>    `` [`DelegationAuthoriser`](super::delegation::DelegationAuthoriser) `` ->
+>    `` [`DelegationAuthoriser`](`super::delegation::DelegationAuthoriser`) ``.
+>    A backticked path is not a valid rustdoc path, so the link resolves to a
+>    broken URL instead of the item.
+>
+> **The reusable part is the gate boundary, not the rule.** `fix_verify` compiles
+> with `cargo check`, and a broken intra-doc link is a **rustdoc** diagnostic
+> (`rustdoc::broken_intra_doc_links`), not a rustc one — so the compile gate is
+> green on it by construction, and this whole class of doc-comment rewrite is
+> outside what `--verify` can certify. Two candidate repairs, either sufficient:
+> exclude link-target spans (`](...)`) from `doc_markdown` rewriting, or extend
+> the verify leg with `cargo doc --no-deps` for runs whose edits touch doc
+> comments. The first is cheap and local; the second closes the class.
+>
+> ⚠ Also worth a look: `--verify-args "... --all-targets"` fails the whole run
+> with `error: the argument '--all-targets' cannot be used multiple times`,
+> because the verify leg already passes it. Harmless (it refuses loudly rather
+> than verifying nothing) but it costs a full build to discover.
+
 > **RECORD 2026-09-16 (Plan 134 close-out — the shader_perf domain's Phase-1 tail + G5-real EXECUTED, [Bench 093](../.benchmarks/093_shader_perf_g5_real.md) GO).** The last Phase-1 item (T1.6 G5-real: heal a synthetic Tier-2-shaped shader end-to-end through the consumer protocol — scan → fix → naga-validate → capture pre/post at pinned frame in riir-shader's harness → byte-identity) is done, harness pinned at riir-shader `ae8123e2`. **Two harness facts mined for any future capture-fidelity work (the reusable part):** (1) **carrier selection is a 4-way conjunct** — file-backed (hot-reload lane) ∧ import-free (plain naga parses it; the `#import`/Tint-`import` files cannot cross the healer's naga tier — this leaves exactly ONE shader in the 9 file-backed effects: `tlf/led-emitters.wgsl`) ∧ pointer-independent at the hero protocol ∧ plain-frame-clock (NOT execution-gated: po measured pairwise byte-different warm-to-warm — its execution-gated clock drifts with pipeline-compile timing; tlf's plain counter is byte-stable per frame index). (2) **MIN_MS=0 reintroduces the black-capture invalid** — the exact hazard `warmup_min_duration` exists to prevent; a black frame is information-free (hash-equal across DIFFERENT shaders, proven by the canary) so the protocol discards it and extends runs; the 750 ms wall itself is a knife edge at frame 90 (adjacent-frame LSB drift misreadable as GPU noise — it was, initially, here). **Protocol shape (reusable as the mint gate's Tier-2 half):** frame-pinned captures, valid=non-black, hash-set equality over ≥4 runs/side, canary-proven detection floor (a 0.2% `emit` bump detected 2/2). No intake for the mining queue from this run — the shader domain is not a read-lane distill; this row is the G5 record pointer + the harness findings' home. Full record: Bench 093; plan ticked T1.6.
 
 > **STAGED CHARTER INPUT 2026-09-16 #3 — Issue 119 `--coverage-report` first run (the corpus coverage-debt sweep; derived population, NOT a batch — accumulation rule applies).** First measurement of the corpus against clippy's FULL live surface, clippy 0.1.98 (48a229ceae 2026-09-01): **822 derived lints · 54 corpus-covered · 768 UNCOVERED · 449 of those fire on a plain `cargo clippy`**. Two cross-checks fell out of it and both are clean: **fix-set-only = 0** (every one of the 51 `FIXABLE_LINTS ∪ VERIFY_LINTS` names has a corpus rule — the corpus-lockstep law holds from the side no test had measured), and **0 name collisions** against the 173 rule_ids in the other five compiled domains (the Batch-146 dedup law). Per-group debt: style 136/158 · pedantic 132/143 · restriction 132/132 · complexity 127/143 · suspicious 83/83 · correctness 66/67 · nursery 50/53 · perf 37/38 · cargo 5/5.
