@@ -132,12 +132,13 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 61 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 64 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
 //! `chunks_exact_to_as_chunks`) + the P15 `unnecessary_map_or` rule + the
-//! Issue 120 `doc_markdown` rule); future
+//! Issue 120 `doc_markdown` rule + the P31 `manual_range_patterns` rule + the
+//! 6 Batch 150 rows + the 2 Batch 151 doc-lint rows); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -147,6 +148,7 @@ pub mod collapsible_else_if;
 pub mod collapsible_if;
 pub mod comparison_to_empty;
 pub mod deref_addrof;
+pub mod doc_lazy_continuation;
 pub mod doc_markdown;
 pub mod double_parens;
 pub mod filter_map_bool_then;
@@ -349,6 +351,27 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // reason). Const table only names legacy constants with assoc-const
     // twins (std::f64::MAX has none — refused).
     "legacy_numeric_constants",
+    // ── Batch 151 (the doc-line state-machine port, Plan 137 — the staged
+    // follow-up from the Batch 150 probe pack, Research 177 #7) ──
+    // Lazy markdown continuation lines → explicit markers. `> quote` then a
+    // bare line → `> ` insert (MachineApplicable in real clippy);
+    // `- item` then an under-indented line → deficit-spaces insert
+    // (MaybeIncorrect there — clippy's own help names the blank-line
+    // alternative, surfaced as our context_note). FIXABLE per the
+    // doc_markdown precedent: comment-local edits can never change
+    // compilation, so the compile gate has nothing to revert — the guards
+    // are the measured state machine (probe151 boundary matrix: exact-col,
+    // blank-gap, heading/fence block starts, marker lines, the `>`-count
+    // quirk) plus render-stability in rustdoc (pulldown reads the fixed
+    // line exactly as it read the lazy one).
+    "doc_lazy_continuation",
+    // Continuation indented past the list item's content col → dedent to
+    // exactly the content col (MaybeIncorrect in real clippy). One state
+    // machine with doc_lazy_continuation (clippy checks both from one
+    // file); +4-over (CommonMark code-block territory) still fires —
+    // pulldown reads it as paragraph text, so the dedent is render-stable
+    // where it matters (the module doc carries the eyes-open note).
+    "doc_overindented_list_items",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -384,6 +407,15 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // calls/macros/indexing), so no behavior change — but an
         // expensive pure default now costs the hot path too.
         "unnecessary_lazy_evaluations" => Some("evaluation timing — the default computes EAGERLY on every path (was: only on None/Err); pure-body-gated (no behavior change), an expensive default now costs the hot path"),
+        // The line is absorbed into the preceding quote/list item (Batch
+        // 151). Render-stable in rustdoc, but if a SEPARATE paragraph was
+        // intended, clippy's own help names the right fix — a blank line
+        // (or the `\>` escape in quotes).
+        "doc_lazy_continuation" => Some("paragraph join — the line is absorbed into the preceding quote/list item; if it was meant as its own paragraph, add a blank line instead (in quotes, escape with \\>)"),
+        // Dedent to the item's content col (Batch 151). A deliberately
+        // indented code-block continuation would be dedented too — verify
+        // the line is prose (clippy's MaybeIncorrect hedge, same standing).
+        "doc_overindented_list_items" => Some("indent dedent — the continuation joins the list item's paragraph; verify it is not a deliberately indented code block"),
         _ => None,
     }
 }
@@ -535,7 +567,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 62 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 64 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -615,6 +647,11 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "cast_lossless" => cast_lossless::collect_edits(source, file),
         // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
         "doc_markdown" => doc_markdown::collect_edits(source, file),
+        // ── Batch 151 (the doc-line state-machine port, Plan 137) ──
+        "doc_lazy_continuation" => doc_lazy_continuation::collect_edits(source, file),
+        "doc_overindented_list_items" => {
+            doc_lazy_continuation::collect_overindent_edits(source, file)
+        }
         // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS artifact) ──
         "manual_range_patterns" => manual_range_patterns::collect_edits(source, file),
         _ => Vec::new(),
@@ -689,12 +726,15 @@ mod tests {
         // unreadable_literal + legacy_numeric_constants — the staged
         // default-level + pedantic probe pack, probe-first per P10/P11;
         // the two VERIFY rows carry their own module fixtures).
-        assert_eq!(FIXABLE_LINTS.len(), 45);
+        // + 2 Batch 151 (doc_lazy_continuation + doc_overindented_list_items
+        // — the doc-line state-machine port, one module both lints, the
+        // probe151 boundary matrix in Plan 137).
+        assert_eq!(FIXABLE_LINTS.len(), 47);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 62-row fixture table — length is the point.
+    /// 64-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1016,6 +1056,17 @@ impl S {
                 "cast_lossless",
                 "fn widen(x: u8) -> u64 { x as u64 }",
                 "u64::from(x)",
+            ),
+            // ── Batch 151 (the doc-line state-machine port, Plan 137) ──
+            (
+                "doc_lazy_continuation",
+                "/// > The quote paragraph.\n/// lazy continuation line.\nfn quoted() {}",
+                "> lazy continuation line.",
+            ),
+            (
+                "doc_overindented_list_items",
+                "/// - the item text.\n///     an overindented cont.\nfn listed() {}",
+                "///   an overindented cont.",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

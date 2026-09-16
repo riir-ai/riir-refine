@@ -10,7 +10,7 @@
 
 use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
-use syn::{Expr, ExprLit, Lit, Macro, Pat};
+use syn::{Attribute, Expr, ExprLit, File, Lit, Macro, Pat};
 
 /// Can `<expr>.method(...)` be appended without changing grouping? Postfix
 /// chains (paths, calls, field/index access, `?`, awaits, literals, macros)
@@ -182,4 +182,78 @@ pub(crate) fn macro_expr_args(mac: &Macro) -> Vec<Expr> {
 /// Span helper: byte range of any spanned node (kept-fragment input).
 pub(crate) fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
     t.span().byte_range()
+}
+
+/// One comment-style doc line, resolved for the doc-lint proposers
+/// (`doc_markdown` + the Batch 151 doc-line state machine — the shared walk
+/// both consume; extracted 2026-09-17 when the second consumer landed).
+pub(crate) struct DocLine<'a> {
+    /// Byte offset of the doc TEXT (right after the `///`/`//!` marker).
+    pub base: usize,
+    /// The doc text (everything after the marker, verbatim — including the
+    /// conventional leading space — no trailing newline).
+    pub text: &'a str,
+    /// True when a source-line gap precedes this attr (a new doc block:
+    /// cross-line state must not leak from the previous block).
+    pub new_block: bool,
+}
+
+/// Walk every comment-style doc line in source order. Doc comments are
+/// located through REAL `#[doc]` attributes (comment-style only — the source
+/// at the attribute's byte range must start `///` or `//!`); a raw line scan
+/// cannot distinguish a doc comment from a STRING LITERAL containing `///`
+/// text. `#[doc = "..."]` attribute-form docs are skipped by construction
+/// (the +3 marker slicing only holds for comment-style). Macro token trees
+/// are opaque to syn, so doc-shaped text inside `macro_rules!` bodies is
+/// invisible (silent divergence, the safe direction).
+pub(crate) fn doc_lines<'a>(source: &'a str, file: &File) -> Vec<DocLine<'a>> {
+    use syn::visit::Visit as _;
+
+    struct Collector {
+        docs: Vec<std::ops::Range<usize>>,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for Collector {
+        fn visit_attribute(&mut self, attr: &'ast Attribute) {
+            if attr.path().is_ident("doc") {
+                self.docs.push(byte_range(attr));
+            }
+            syn::visit::visit_attribute(self, attr);
+        }
+    }
+
+    let mut v = Collector { docs: Vec::new() };
+    v.visit_file(file);
+    // Visit order is roughly source order but not guaranteed across item
+    // kinds — sort, then walk in line order.
+    v.docs.sort_by_key(|r| r.start);
+    let mut out = Vec::with_capacity(v.docs.len());
+    let mut prev_line: Option<usize> = None;
+    let mut line_no = 0usize;
+    let mut scanned = 0usize;
+    for range in v.docs {
+        // Line number of this doc attr (for the adjacency gap flag).
+        while scanned < range.start {
+            if source.as_bytes()[scanned] == b'\n' {
+                line_no += 1;
+            }
+            scanned += 1;
+        }
+        let new_block = prev_line.is_some_and(|p| line_no.saturating_sub(p) > 1);
+        prev_line = Some(line_no);
+        let line_end = source[range.start..]
+            .find('\n')
+            .map_or(source.len(), |i| range.start + i);
+        let line = &source[range.start..line_end];
+        // Comment-style only: the marker is exactly 3 chars, and the doc
+        // text (syn's `#[doc]` value) is the rest of the line verbatim.
+        let Some(_marker) = line.strip_prefix("///").or_else(|| line.strip_prefix("//!")) else {
+            continue;
+        };
+        out.push(DocLine {
+            base: range.start + 3,
+            text: &source[range.start + 3..line_end],
+            new_block,
+        });
+    }
+    out
 }

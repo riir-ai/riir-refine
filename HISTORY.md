@@ -1,5 +1,83 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — Batch 151: the doc-line state-machine port lands (corpus 62 → 64, FIXABLE 45 → 47)
+
+The staged follow-up from Research 177 adjudication #7:
+`doc_lazy_continuation` + `doc_overindented_list_items` — both lints live
+in ONE clippy source file (`doc/lazy_continuation.rs`) and are checked
+from ONE per-line pass, so ONE proposer module
+(`proposers/doc_lazy_continuation.rs`) houses both (the
+`print_write_with_newline` one-module-two-names precedent). The authoring
+input was a FRESH boundary probe (`.raw/probe151`, real clippy 0.1.98,
+JSON spans — cleaned at landing) closing the gaps the Batch 150 matrix
+left: exact suggestion spans/bytes, the content-column math for
+`/// `-style docs, and the code-block boundary.
+
+Measured findings that shaped the port:
+
+- **The cooked doc text is the attr value verbatim** — the conventional
+  space after `///` counts as leading — so `/// - item` has content col 3
+  and every deficit/dedent in the matrix reconciles exactly.
+- **Clippy's zero-width insert span sits at the CONTENT start** (after the
+  conventional space — c5 on `/// lazy line`), not right after the marker;
+  the first implementation inserted at the marker and produced
+  `///>  lazy` — caught by the module's own fire-shape tests before any
+  gate ran, fixed, and the byte shape now matches clippy's suggestions
+  exactly in all three fix forms.
+- **+4-over still fires** (`///       seven-space cont`, content col 3):
+  CommonMark would call that an indented code block inside the item, but
+  pulldown — rustdoc's renderer — reads it as paragraph text, so the
+  dedent is render-stable WHERE IT MATTERS (rustdoc output unchanged);
+  clippy's MaybeIncorrect hedge is about author intent on other
+  renderers, which no parse-only tool arbitrates. Mirrored, eyes open.
+- **FIXABLE tier per the doc_markdown precedent:** comment-local edits
+  can never change compilation, so the compile gate has nothing to revert
+  — VERIFY's protection is structurally vacuous for doc edits. The real
+  guards: the measured state machine (fires only on the probed shapes),
+  render-stability, and two `context_note` entries surfacing clippy's own
+  alternative fixes (blank line / `\>` escape) at review time.
+- **Documented divergences, all silent-direction:** paragraph continuity
+  required for the overindent fire (across a blank line clippy's event
+  walk can still fire — unmeasured, we stay silent); quote/list mixing
+  bounded out (a partially-marked dedent `> > a` / `> b` is clippy's
+  `find('>')` dance — silent); one nesting axis (top-of-stack content col
+  — the measured nested case reconciles exactly); tabs refuse the line.
+- **Silent shapes mirrored from the probe:** exact content-col
+  continuation, blank-separated paragraphs, `# heading` after an item
+  (block start), a fenced code block inside an item AND the line after it
+  (the code block breaks paragraph continuity — laziness cannot attach),
+  the marker lines themselves, prose carrying `>` (clippy's count quirk:
+  any `>` in the line reaches the depth).
+
+Substrate: the shared doc-line walk extracted as
+`helpers::doc_lines` (`DocLine` + the sorted adjacency walk) —
+`doc_markdown::collect_edits` refactored onto it (behavior pinned by its
+27 tests, all green) so the two doc proposers consume ONE Collector.
+The landing's own dogfood: the new module tripped 12 clippy findings
+under this crate's `#![warn(clippy::pedantic)]` root — the exact
+every-landing family doc_markdown exists for; 7 healed by the global
+`cargo heal --fix --write --verify` binary (5 doc_markdown backticks + 1
+shrink_to_fit + 1 dedup), 5 manual (the 3 remaining doc_markdown sites
+sit on 4-space list-continuation lines that our indented-code
+approximation refuses by design — manual territory; + too_many_lines,
+fixed by the `Machine` struct extraction; + items_after_statements,
+unnested_or_patterns).
+
+Gates at landing: lib default **1717/0** (incl. the corpus-lockstep
+`all_buggy_codes_fire_their_lint`, `corpus_size_is_64`, FIXABLE 47 pin,
+the 64-row fire-and-parse table, the 6 new module tests covering the full
+fire+silence matrix + fixpoint + the blank-gap divergence) ·
+latent_retrieval **1869/0 + 1 ignored** · all-features check green ·
+clippy `--all-targets` **0 warnings** · score-bench **96.36% flat** (row
+#126; the new lints carry no bench fixtures yet — no regression) ·
+`--corpus-stats` **64** · `--coverage-report` covered 62 → 64,
+fix-set-only **0**, default-firing evidenced-uncovered **71 → 69**
+(minus exactly the two doc lints covered). One transient: the first
+latent_retrieval run died with STATUS_ACCESS_VIOLATION (harness process
+death, zero assertions — the shared-box shape documented in AGENTS.md);
+the immediate rerun was clean and the second full run after the clippy
+fixes also clean.
+
 ## 2026-09-17 — Batch 150: the staged default-level + pedantic probe pack lands (corpus 56 → 62)
 
 The staged pack from `.distill/001` (3 pedantic + 5 default-level

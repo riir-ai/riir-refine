@@ -77,15 +77,14 @@ the coverage report derives with).
    clippy-side safety does not give US a fix space. Oracle-lane residue
    only; the corpus-lockstep gate (every table name needs a proposer +
    entry) correctly forbids a proposer-less VERIFY row.
-7. **`doc_lazy_continuation` + `doc_overindented_list_items` — STAGED
-   follow-up (probe complete, authoring unblocked, NOT landed this
-   batch).** The probe matrix above is the design input: the lint's real
-   trigger is a LINE-STATE machine over doc-comment lines (list item /
-   blockquote-marker tracking + lazy-continuation detection), the same
-   complexity class as the doc_markdown and manual_range_patterns ports —
-   a full batch of its own on the next quiet window. Oracle coverage
-   would be partial (only the quote case is MachineApplicable), so a
-   proposer port is the only full route.
+7. **`doc_lazy_continuation` + `doc_overindented_list_items` — LANDED as
+   Batch 151 (2026-09-17, Plan 137 — HISTORY entry "the doc-line
+   state-machine port").** The probe matrix above was the design input; a
+   SECOND boundary probe (`.raw/probe151`) closed the remaining gaps
+   before authoring (exact suggestion spans/bytes, the content-column
+   math for `/// `-style docs, the +4-over code-block boundary). One
+   proposer module houses both lints; FIXABLE per the doc_markdown
+   precedent; corpus 62 → 64, FIXABLE 45 → 47.
 
 ## Generator lessons (for the next batch)
 

@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 62 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 64 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -49,7 +49,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       duplicates, negatives and the coverage walk included; the
 ///       boundary literals splice verbatim so the rewrite is
 ///       set-identical + inference-identical).
-// 62-entry data table, not logic — length is the point.
+///     + the 2 Batch 151 rows (2026-09-17, the doc-line state-machine
+///       port — `doc_lazy_continuation` + `doc_overindented_list_items`,
+///       the staged follow-up from the Batch 150 probe pack, Research 177
+///       #7; one proposer module houses both, the probe151 boundary
+///       matrix in Plan 137).
+// 64-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -549,8 +554,11 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // The fmt::Write sibling. 1-crate concentration caveat from
             // the histogram (the 248-firing nominal top-1 is one codegen
             // crate = 39% of its warnings) recorded in the bench doc.
-            buggy_code: "fn line(f: &mut String) { write!(f, \"line\\n\"); }".to_string(),
-            fixed_code: "fn line(f: &mut String) { writeln!(f, \"line\"); }".to_string(),
+            // The fixture carries the trait import — the real fire shape
+            // needs it to compile (the freeze oracle's compiles filter;
+            // write! on &mut String is E0599 without it).
+            buggy_code: "use std::fmt::Write as _;\nfn line(f: &mut String) { write!(f, \"line\\n\"); }".to_string(),
+            fixed_code: "use std::fmt::Write as _;\nfn line(f: &mut String) { writeln!(f, \"line\"); }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "unreadable_literal".to_string(),
@@ -591,6 +599,25 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // the module).
             buggy_code: "fn widen(x: u8) -> u64 { x as u64 }".to_string(),
             fixed_code: "fn widen(x: u8) -> u64 { u64::from(x) }".to_string(),
+        },
+        // ── Batch 151 (2026-09-17, the doc-line state-machine port — the
+        // staged follow-up from the Batch 150 probe pack, Research 177 #7;
+        // probe151 boundary matrix in Plan 137). FIXABLE per the
+        // doc_markdown precedent: comment-local edits can never change
+        // compilation. Fixtures are the quote shape (MachineApplicable in
+        // real clippy) and the overindent shape (the dedent to the content
+        // col); doc-flavored vocab for centroid defense.
+        ClippyFixEntry {
+            lint_name: "doc_lazy_continuation".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "/// > The quote paragraph.\n/// lazy continuation line.\nfn quoted() {}".to_string(),
+            fixed_code: "/// > The quote paragraph.\n/// > lazy continuation line.\nfn quoted() {}".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "doc_overindented_list_items".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "/// - the item text.\n///     an overindented cont.\nfn listed() {}".to_string(),
+            fixed_code: "/// - the item text.\n///   an overindented cont.\nfn listed() {}".to_string(),
         },
     ])
 }
@@ -675,14 +702,16 @@ mod tests {
     /// rows (`print_with_newline`, `write_with_newline`,
     /// `unreadable_literal`, `legacy_numeric_constants`,
     /// `partialeq_to_none`, `cast_lossless` — the staged default-level +
-    /// pedantic probe pack, Bench 094 evidence) = 62.
+    /// pedantic probe pack, Bench 094 evidence), and the 2 Batch 151
+    /// rows (`doc_lazy_continuation`, `doc_overindented_list_items` —
+    /// the doc-line state-machine port, Research 177 #7) = 64.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_62() {
+    fn corpus_size_is_64() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 62);
+        assert_eq!(corpus.entries.len(), 64);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

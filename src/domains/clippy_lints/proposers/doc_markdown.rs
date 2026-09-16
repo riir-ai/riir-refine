@@ -93,10 +93,8 @@
 //! - **`#[doc(hidden)]` items** — clippy skips them entirely; we do not
 //!   (the wrap is cosmetic there, never wrong syntax).
 
-use super::helpers::byte_range;
 use super::SourceEdit;
-use syn::visit::Visit;
-use syn::{Attribute, File};
+use syn::File;
 
 /// clippy's `DEFAULT_DOC_VALID_IDENTS` (`clippy_config/src/conf.rs`, fetched
 /// 2026-09-16 from master ≈ 1.98). A consumer's `clippy.toml`
@@ -135,57 +133,19 @@ const DOC_VALID_IDENTS: &[&str] = &[
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { docs: Vec::new() };
-    v.visit_file(file);
-    // Visit order is roughly source order but not guaranteed across item
-    // kinds — sort, then process with cross-line fence tracking.
-    v.docs.sort_by_key(|r| r.start);
     let mut edits = Vec::new();
     let mut in_fence = false;
-    let mut prev_line: Option<usize> = None;
-    let mut line_no = 0usize;
-    let mut scanned = 0usize;
-    for range in v.docs {
-        // Line number of this doc attr (for the adjacency fence reset).
-        while scanned < range.start {
-            if source.as_bytes()[scanned] == b'\n' {
-                line_no += 1;
-            }
-            scanned += 1;
-        }
-        if prev_line.is_some_and(|p| line_no.saturating_sub(p) > 1) {
+    for line in super::helpers::doc_lines(source, file) {
+        if line.new_block {
             // A gap between doc attrs = a new doc block: unbalanced-fence
             // state from the previous block must not leak (an unbalanced
             // fence is already broken markdown; suppressing later
             // unrelated docs for it would be a false skip).
             in_fence = false;
         }
-        prev_line = Some(line_no);
-        let line_end = source[range.start..]
-            .find('\n')
-            .map_or(source.len(), |i| range.start + i);
-        let line = &source[range.start..line_end];
-        // Comment-style only: the marker is exactly 3 chars, and the doc
-        // text (syn's `#[doc]` value) is the rest of the line verbatim.
-        let Some(text) = line.strip_prefix("///").or_else(|| line.strip_prefix("//!")) else {
-            continue;
-        };
-        process_doc_line(text, range.start + 3, &mut in_fence, &mut edits);
+        process_doc_line(line.text, line.base, &mut in_fence, &mut edits);
     }
     edits
-}
-
-struct Collector {
-    docs: Vec<std::ops::Range<usize>>,
-}
-
-impl<'ast> Visit<'ast> for Collector {
-    fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        if attr.path().is_ident("doc") {
-            self.docs.push(byte_range(attr));
-        }
-        syn::visit::visit_attribute(self, attr);
-    }
 }
 
 /// Process one doc line's text (`base` = byte offset of `text[0]` in the
