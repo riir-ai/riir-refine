@@ -1,6 +1,6 @@
 # Plan 135 — Batch 149: the sm_89 spill-law / nodecode-probe STANDALONE pack (the Batch-148 dual-allocation yield's re-issue)
 
-**Status:** IN PROGRESS 2026-09-16 (4090 idle-loop session; re-issue of the non-duplicate delta after the Issue-665 yield)
+**Status:** COMPLETE 2026-09-16 — LANDED at `cdcbea49` (batch 149; the yield's ref `a970a3e8` preserved in Research 175's record; global binary rebuilt same-session, kernel_opt 619 verified through the symlink)
 
 ## Context — the dual-allocation
 
