@@ -36,8 +36,10 @@
 //!
 //! One `SourceEdit` per word: the word's byte extent replaced by
 //! `` `word` `` — byte-identical to real clippy's `MachineApplicable`
-//! suggestion (verified by probe, clippy 0.1.98). Comment-local edits can
-//! never change compilation, which is why this sits in `FIXABLE_LINTS`.
+//! suggestion (verified by probe, clippy 0.1.98) — or, for bare URLs,
+//! by `<word>` (clippy's separate angle-bracket escape, see the URL arm
+//! below). Comment-local edits can never change compilation, which is
+//! why this sits in `FIXABLE_LINTS`.
 //! The P21 oracle lane consumes clippy's own spans verbatim for the same
 //! lint once it is in the lane set — the proposer and the oracle lane are
 //! complements (the oracle is exact on context, the proposer runs without
@@ -60,10 +62,28 @@
 //!   which has no suggestion to consume).
 //! - **Blockquotes** — lines starting `>` skipped (clippy skips words at
 //!   `blockquote_level > 0`).
-//! - **Link-shaped tokens** — a word containing `](`, `][`, or `://` is
-//!   skipped whole; clippy checks link TEXT and autolinks with different
-//!   machinery (bare URLs get an `<word>` suggestion instead — a
-//!   different fix shape we deliberately do not produce).
+//! - **Link-shaped tokens** — a word containing `](` or `][` is skipped
+//!   whole (markdown-link destinations are pulldown territory), and a
+//!   token carrying a `CommonMark` autolink (`<scheme:...>`) is skipped
+//!   whole — clippy consumes those as Autolink events and never
+//!   word-checks them (probe-silent; without the guard the trim dance
+//!   unwraps the angles and double-wraps the inner URI).
+//! - **Bare URLs** — the OPPOSITE of a skip: clippy's URL arm (the first
+//!   arm in `check_word`) fires on any word that parses as an absolute
+//!   URL and suggests `<word>`. Probe-verified against installed clippy
+//!   0.1.98 (the `target/urlprobe` scratch-crate record): `https://`,
+//!   `ftp://`, `wss://` (any RFC scheme, not just http/https), drive
+//!   paths `E:/git/...` and `C:/...`, single-slash `http:/x`, and
+//!   `file:///usr/bin` all get the angle-bracket suggestion, while
+//!   opaque-path words (`foo:bar`, `mailto:x@y`, `localhost:8080`,
+//!   `12:30:45`), dangling bare schemes (`https://` with nothing after),
+//!   autolinks and markdown links stay silent. Implemented as a bounded
+//!   predicate — no `url`-crate dep (the default build stays light);
+//!   documented divergences: `IPv6 http://[::1]:8080/` (clippy backticks
+//!   the `::1` fragment — a pulldown text-mangling artifact we do not
+//!   replicate; our wrap is the whole URL) and special schemes without
+//!   `//` (`http:foo` — url normalizes to a host form and fires; we stay
+//!   silent).
 //! - **`#[doc = "..."]` attribute form** — skipped (the `+3` marker
 //!   slicing only holds for comment-style docs).
 //! - **`#[doc(hidden)]` items** — clippy skips them entirely; we do not
@@ -199,15 +219,25 @@ fn process_doc_line(text: &str, base: usize, in_fence: &mut bool, edits: &mut Ve
         if seg_idx % 2 == 0 {
             for (token_off, orig_word) in split_words(segment) {
                 let token_start = seg_base + token_off;
+                // A CommonMark autolink is pulldown territory — clippy
+                // never word-checks it. Checked on the RAW token: the
+                // trim dance would strip the `<`/`>` and feed the inner
+                // URI straight into the URL arm (a double-wrap FP).
+                if token_has_autolink(orig_word) {
+                    continue;
+                }
                 if let Some((word_off, word)) = clippy_trimmed_word(orig_word) {
-                    if fires_doc_markdown(word) {
-                        let word_start = token_start + word_off;
-                        edits.push(SourceEdit {
-                            start: word_start,
-                            end: word_start + word.len(),
-                            replacement: format!("`{word}`"),
-                        });
-                    }
+                    let (open, close) = match fix_shape(word) {
+                        FixShape::Silent => continue,
+                        FixShape::Backtick => ('`', '`'),
+                        FixShape::AngleUrl => ('<', '>'),
+                    };
+                    let word_start = token_start + word_off;
+                    edits.push(SourceEdit {
+                        start: word_start,
+                        end: word_start + word.len(),
+                        replacement: format!("{open}{word}{close}"),
+                    });
                 }
             }
         }
@@ -309,11 +339,18 @@ fn clippy_trimmed_word(orig_word: &str) -> Option<(usize, &str)> {
     Some((word_off, word))
 }
 
-/// The firing predicate, ported from `markdown.rs::check_word` minus the
-/// URL arm (bare URLs get clippy's `<word>` shape — a different fix we do
-/// not produce; link-shaped words are refused here instead).
-fn fires_doc_markdown(word: &str) -> bool {
-    // Link-shaped / URL-shaped guards (our divergences, skip-direction).
+/// The fix shape clippy's `MachineApplicable` suggestion carries for this
+/// word: silent, the backtick wrap, or the bare-URL angle-bracket escape.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FixShape {
+    Silent,
+    Backtick,
+    AngleUrl,
+}
+
+/// The firing predicate, ported from `markdown.rs::check_word` including
+/// the URL arm.
+fn fix_shape(word: &str) -> FixShape {
     /// clippy's `is_camel_case`: starts upper (not digit/lower), ≥2
     /// uppercase, ≥1 lowercase, all alphanumeric — with the plural strips
     /// (`IDs`, `Vecs`, `Clippy` stay silent).
@@ -357,15 +394,92 @@ fn fires_doc_markdown(word: &str) -> bool {
         s != "-" && s.contains('-')
     }
 
-    if word.contains("://") || word.contains("](") || word.contains("][") {
-        return false;
+    // Link-shaped guard (skip-direction): a markdown link destination is
+    // pulldown territory — clippy never word-checks it. The scheme
+    // validation in `is_absolute_url` independently refuses these tokens
+    // (a `[text](https` scheme starts with `[`), so the order here is
+    // belt-and-suspenders, not load-bearing.
+    if word.contains("](") || word.contains("][") {
+        return FixShape::Silent;
     }
+    // Arm order is load-bearing (clippy's check_word): the URL arm runs
+    // before the shape arms, so an `ftp://foo_bar-baz.com` word angle-wraps
+    // rather than backtick-wrapping.
+    if is_absolute_url(word) {
+        return FixShape::AngleUrl;
+    }
+
     // Mixed-case words with BOTH separators are names, not idents
     // (clippy Issue #2343 class) — refused before any arm fires.
     if has_underscore(word) && has_hyphen(word) {
+        return FixShape::Silent;
+    }
+    if has_underscore(word) || word.contains("::") || is_camel_case(word) || word.ends_with("()") {
+        FixShape::Backtick
+    } else {
+        FixShape::Silent
+    }
+}
+
+/// clippy's URL-arm predicate without the `url`-crate dep. Master (and the
+/// probe-verified installed 0.1.98) test `Url::parse(word)` +
+/// `!url.cannot_be_a_base()`; for single doc-line tokens that reduces to:
+/// an RFC-3986 scheme (`[a-zA-Z][a-zA-Z0-9+.-]*`) then a `/`-rooted
+/// remainder (the `//` authority form for any scheme, or a `/`-absolute
+/// path — probe-fired: `x://y`, `x:/y`, `file:///usr/bin`, and the
+/// drive-letter `E:/git/...` shape, scheme `e` being legal per RFC).
+///
+/// The cannot-be-a-base guard is what keeps the Rust-shaped words in the
+/// backtick arms: `foo::bar` parses as scheme `foo` + opaque path `:bar`
+/// (no `/`), `12:30:45` has no valid scheme (digit start), and a scheme
+/// word without any `/` (`mailto:x@y`, `localhost:8080`) parses but stays
+/// cannot-be-a-base — all silent, all probe-verified. Dangling bare
+/// schemes (`https://` with nothing after) never reach the `/` test:
+/// the upstream trim dance end-trims the `/` tail and strips the lone
+/// `:`, collapsing the token to the bare scheme name (probe-silent).
+fn is_absolute_url(word: &str) -> bool {
+    let Some(colon) = word.find(':') else {
+        return false;
+    };
+    let scheme = &word[..colon];
+    let mut chars = scheme.chars();
+    if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
         return false;
     }
-    has_underscore(word) || word.contains("::") || is_camel_case(word) || word.ends_with("()")
+    if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
+        return false;
+    }
+    word[colon + 1..].starts_with('/')
+}
+
+/// A `CommonMark` autolink anywhere in the raw token: `<` + URI + `>` with
+/// an RFC-3986 scheme (`<https://a>`, `<mailto:x@y>`, `<b::c>` — a URI
+/// path may carry `:`, so `b::c` qualifies). Pulldown consumes these as
+/// Autolink events before `check_word` runs — clippy is probe-silent on
+/// the shape — while the trim dance alone would unwrap the angles and
+/// fire the URL arm on the inner URI. A `<word>` with no scheme (the
+/// HTML-tag-shaped token) is NOT an autolink and keeps its pre-existing
+/// trim-dance behavior.
+fn token_has_autolink(orig_word: &str) -> bool {
+    let Some(lt) = orig_word.find('<') else {
+        return false;
+    };
+    let Some(gt_rel) = orig_word[lt..].find('>') else {
+        return false;
+    };
+    let inner = &orig_word[lt + 1..lt + gt_rel];
+    let Some(colon) = inner.find(':') else {
+        return false;
+    };
+    let scheme = &inner[..colon];
+    let mut chars = scheme.chars();
+    if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
+    if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
+        return false;
+    }
+    !inner[colon + 1..].is_empty()
 }
 
 #[cfg(test)]
@@ -532,5 +646,90 @@ mod tests {
         let src = "/// shader_perf meets ArcSwapGuard.\nfn go() {}";
         let out = propose_fix("doc_markdown", src).expect("fires");
         assert!(out.contains("`shader_perf` meets `ArcSwapGuard`"), "{out}");
+    }
+
+    #[test]
+    fn bare_urls_angle_wrap_not_backtick() {
+        // Probe-verified against installed clippy 0.1.98 (the
+        // target/urlprobe scratch-crate record): the URL arm fires for ANY
+        // RFC scheme and suggests the `<word>` escape — including shapes
+        // carrying an underscore, which proves the URL arm precedes the
+        // backtick shape arms.
+        for (url, wrapped) in [
+            ("https://example.com/foo", "<https://example.com/foo>"),
+            ("ftp://foo_bar.com", "<ftp://foo_bar.com>"),
+            ("wss://chat.example.com/ws", "<wss://chat.example.com/ws>"),
+            ("s3://bucket/key", "<s3://bucket/key>"),
+        ] {
+            let src = format!("/// See {url} for details.\nfn go() {{}}");
+            let out = propose_fix("doc_markdown", &src).expect("fires");
+            assert!(out.contains(wrapped), "{url} -> {out}");
+            assert!(syn::parse_file(&out).is_ok(), "{out}");
+            assert!(!out.contains(&format!("`{url}`")), "backtick shape is wrong: {out}");
+        }
+    }
+
+    #[test]
+    fn drive_letter_and_single_slash_paths_fire() {
+        // The url crate treats a `/`-absolute remainder as host/path-based
+        // for any legal scheme — including the single-letter drive scheme.
+        let src = "/// Lives at E:/git/riir-clippy via file:///usr/bin.\nfn go() {}";
+        let out = propose_fix("doc_markdown", src).expect("fires");
+        assert!(out.contains("<E:/git/riir-clippy>"), "{out}");
+        assert!(out.contains("<file:///usr/bin>"), "{out}");
+    }
+
+    #[test]
+    fn url_trailing_punctuation_stays_outside_the_wrap() {
+        // The trim dance strips the sentence period and the wrapping paren
+        // BEFORE the URL arm — clippy's span covers the inner word only.
+        let src = "/// Ends with https://example.com. Wrapped (http://a.b) here.\nfn go() {}";
+        let out = propose_fix("doc_markdown", src).expect("fires");
+        assert!(out.contains("<https://example.com>."), "{out}");
+        assert!(out.contains("(<http://a.b>)"), "{out}");
+    }
+
+    #[test]
+    fn opaque_scheme_words_stay_silent() {
+        // Probe-silent: opaque paths parse but stay cannot-be-a-base, and a
+        // dangling `scheme://` collapses to the bare scheme in the trim
+        // dance (the trailing `/` pair end-trims, the lone `:` strips).
+        for src in [
+            "/// Email mailto:foo@bar.com here.\nfn go() {}",
+            "/// Port localhost:8080 shape.\nfn go() {}",
+            "/// Time 12:30:45 and ratio 1:2.\nfn go() {}",
+            "/// Single foo:bar colon word.\nfn go() {}",
+            "/// Dangling https:// scheme alone.\nfn go() {}",
+        ] {
+            assert!(propose_fix("doc_markdown", src).is_none(), "{src}");
+        }
+    }
+
+    #[test]
+    fn autolinks_stay_silent_even_with_punctuation() {
+        // The autolink guard runs on the RAW token because the trim dance
+        // strips the angles: `<url>.` and `(<url>)` would otherwise feed
+        // the inner URI to the URL arm (double-wrap / no-op-edit FPs).
+        // `<b::c>` is an autolink too — a URI path may carry `:`.
+        for src in [
+            "/// Visit <https://example.com>. Now.\nfn go() {}",
+            "/// Wrapped (<https://example.com>) tight.\nfn go() {}",
+            "/// A <b::c> autolink.\nfn go() {}",
+            "/// Mail <mailto:foo@bar.com> me.\nfn go() {}",
+        ] {
+            assert!(propose_fix("doc_markdown", src).is_none(), "{src}");
+        }
+    }
+
+    #[test]
+    fn colon_path_words_still_backtick() {
+        // THE cannot-be-a-base guard's load-bearing direction: `foo::bar`
+        // parses as a URL (scheme `foo`, opaque path `:bar`) but must fall
+        // through to the backtick arms, not be stolen by the URL arm.
+        let src = "/// Control foo::bar and std::vec::Vec here.\nfn go() {}";
+        let out = propose_fix("doc_markdown", src).expect("fires");
+        assert!(out.contains("`foo::bar`"), "{out}");
+        assert!(out.contains("`std::vec::Vec`"), "{out}");
+        assert!(!out.contains("<foo"), "URL arm must not fire: {out}");
     }
 }

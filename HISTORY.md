@@ -1,5 +1,48 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — the doc_markdown bare-URL arm lands (the staged follow-up lead)
+
+The under-fire gap the Issue-120 yield record staged is closed. Real clippy
+(0.1.98, probe-verified live in `target/urlprobe`, a 20-cell scratch-crate
+matrix) does NOT restrict its URL branch to `https://`/`http://` prefixes —
+it tests `Url::parse(word)` + `!url.cannot_be_a_base()`, so `ftp://`,
+`wss://`, `s3://` (any RFC scheme), drive-letter paths `E:/git/...`,
+single-slash `http:/x`, and `file:///usr/bin` ALL get the `<word>`
+angle-bracket suggestion, while opaque-path words (`foo:bar`, `mailto:`,
+`localhost:8080`, `12:30:45`), dangling bare schemes (`https://` with
+nothing after), autolinks, and markdown links stay silent. The landed
+proposer's blanket `"//"` guard refused every one of the firing shapes.
+
+Landed in `doc_markdown.rs`:
+
+- `fires_doc_markdown -> fix_shape` returning a `FixShape { Silent,
+  Backtick, AngleUrl }` — the URL arm ordered BEFORE the backtick shape
+  arms exactly as clippy orders it (an `ftp://foo_bar-baz.com` word
+  angle-wraps rather than backtick-wrapping).
+- `is_absolute_url` — the `url`-crate predicate re-derived bounded, NO new
+  dep: RFC-3986 scheme (`[a-zA-Z][a-zA-Z0-9+.-]*`) + a `/`-rooted remainder.
+  The cannot-be-a-base guard is what keeps `foo::bar` (scheme `foo`, opaque
+  path `:bar`) and `12:30:45` (digit-start scheme) in the backtick arms —
+  the load-bearing negative direction, pinned by `colon_path_words_still_backtick`.
+  Dangling `scheme://` tokens never reach the `/` test: the upstream trim
+  dance end-trims the `/` tail and strips the lone `:` (collapses to the
+  bare scheme — probe-silent).
+- `token_has_autolink` — a guard on the RAW token the first cut missed and
+  the existing `link_shaped_tokens_skipped` fixture caught immediately: the
+  trim dance strips `<`/`>`, so `<https://a>.` fed the inner URI to the URL
+  arm (double-wrap) and `(<https://a>)` produced a no-op edit. CommonMark
+  autolinks (`<scheme:...>`, including `<b::c>` — a URI path may carry `:`)
+  are pulldown events clippy never word-checks; scheme-charset validation
+  keeps `Map<K:V>`-ish tokens on the old path (a scheme cannot contain `_`).
+
+Score-bench NOT re-run, with the proof: zero `://` occurrences in any
+fixture source (`generations.rs` construction specs, grep) and the autolink
+shapes the guard skips were provably silent on the old path too (`<b:c>` →
+trim → no fire arm) — no fixture outcome can move, so a row would re-measure
+a constant. Module 26/26 (6 new fixtures), lib 1666/1666, clippy --lib clean
+(the pedantic gate caught 2 `CommonMark` backtick misses in the new doc
+comments — dogfood working as designed, fixed by hand).
+
 ## 2026-09-16 — Issue 120, the parallel session's side: the yield + the rust_perf debt closes (the allow lifted, 157 edits healed by the landed rule)
 
 A second session (this one) executed the full Issue 120 batch in the same
@@ -45,6 +88,9 @@ module's own gates + this session's):
   branch angle-wraps bare `scheme://` URLs (clippy 0.1.98 `doc/markdown.rs`,
   verified live in the session's probe rounds) — a genuine under-fire gap,
   the follow-up lead if the family re-opens; the skip is the safe direction.
+  **LANDED 2026-09-17** (the section above — broader than staged: any RFC
+  scheme, not just http/https, plus the autolink guard the first cut
+  needed).
 - Differential discipline carried over: the landed rule applied to the
   pre-lift tree produced clippy-clean output everywhere clippy fired, and
   the three residues above are exactly the set clippy --all-features sees
