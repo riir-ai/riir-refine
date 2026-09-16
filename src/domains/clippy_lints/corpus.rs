@@ -669,9 +669,13 @@ mod tests {
     /// 1 P12 post-mining intake row (`needless_pass_by_ref_mut`,
     /// 2026-09-14), the 1 P15 post-mining intake row
     /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure), the
-    /// 1 Issue 120 intake row (`doc_markdown`, 2026-09-16), and the 1
+    /// 1 Issue 120 intake row (`doc_markdown`, 2026-09-16), the 1
     /// P31 post-mining intake row (`manual_range_patterns`, 2026-09-17
-    /// — the riir-chain `51b456f` MISS artifact) = 56.
+    /// — the riir-chain `51b456f` MISS artifact), and the 6 Batch 150
+    /// rows (`print_with_newline`, `write_with_newline`,
+    /// `unreadable_literal`, `legacy_numeric_constants`,
+    /// `partialeq_to_none`, `cast_lossless` — the staged default-level +
+    /// pedantic probe pack, Bench 094 evidence) = 62.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)

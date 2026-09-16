@@ -175,7 +175,7 @@ fn group_left(digits: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{group_left, group_right, split_suffix};
 
     fn fix(code: &str) -> Option<String> {
         super::super::propose_fix("unreadable_literal", code)
