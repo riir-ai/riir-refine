@@ -50,6 +50,9 @@ targets decline on the routine path; the per-strategy safe subset
 real corpus need appears, not before (a loud false decline beats a
 silent measurement break — P30's own construction principle).
 
+Landed at `12108d3e` (issue file removed per the noise-reduction rule; the
+strategy-classification record is the paragraph above).
+
 Gates: `cargo test --lib bench_guard` 18/18 · `--test
 fix_compile_bench_guard` 2/2 (real cargo) · clippy clean on the touched
 files · full `--lib` green.
