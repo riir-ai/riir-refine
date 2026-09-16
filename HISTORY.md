@@ -1,5 +1,35 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-16 — Issue 113: the auto-oracle — `cargo heal` now runs the clippy oracle for you (the "agave 6951 rows → +1 credit" session)
+
+**Owner mandate:** mining agave pushed 6951 heuristic rows for ~0 credit — the
+credit-bearing (oracle-anchored, proof-reproducible) spans sat behind
+`--clippy-json`, a flag no user discovers without reading AGENTS.md. A gain
+path that exists only behind a discoverability wall is not a gain path;
+`--mine` must do every good for the user (the auto-login/auto-sync precedent).
+
+**Landed:** `src/clippy_oracle.rs` — with no manual feed and a rust lane, a
+scan over (or inside) a cargo project spawns `cargo clippy --workspace
+--no-deps --message-format=json --quiet` at DEFAULT features in the detected
+root (bounded 4-step ancestor walk, `$CARGO`-resolved). Loud status lines;
+loud heuristic-only fallback (spawn failure, or compile error with zero
+parseable diagnostics — never a fabricated "clean"); partial compiles feed
+what built; `RIIR_HEAL_AUTO_ORACLE=0` restores the pre-113 never-spawn
+posture; manual `--clippy-json` wins outright (hard exit-2 semantics kept);
+docker/dist lanes skipped. Precedent: `--fix-compile` already spawns cargo
+(`compile_oracle`) — this is not a new class.
+
+**Live-proven e2e** (the release-set binary, a throwaway fixture carrying
+`bool_comparison` + `clone_on_copy`): `clippy oracle (auto): 2 real
+diagnostic(s) anchored ahead of ranking` — both anchored `[oracle]`, both
+surfaced as `NO CORPUS RULE` gap signals (a real mining-intake datum:
+neither lint has a corpus rule today); kill-switch run verified silent and
+oracle-free. Gates: lib 1560/1560, clippy clean on the release set + bin;
+the 1 pre-existing default-set warning in `bench_guard.rs:53` predates this
+change (not touched). Default-features scoping is honest, not complete —
+cfg-gated code compiles to nothing under it; widening is a later owner
+call, named in the status line.
+
 ## 2026-09-16 — Issues 110 + 111: two silent-wrong-verdict defects, both found by running this crate somewhere it had never been run
 
 ### 110 — every scratch crate was ONE cargo unit

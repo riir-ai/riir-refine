@@ -125,6 +125,7 @@ pub mod draft;
 // consume it WITHOUT pulling `latent_retrieval` (riir-rag + riir-neuron-db)
 // into a compile fixer.
 #[cfg(feature = "compile_oracle")]
+pub mod clippy_oracle;
 pub mod compile_oracle;
 
 // Issue 015: `--fix --verify` — the compile gate as tooling for the edit

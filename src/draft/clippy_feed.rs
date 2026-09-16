@@ -13,8 +13,16 @@
 //! [`LatentMatcher::suggest_file_anchored`]).
 //!
 //! The feed is clippy's own `--message-format=json` stream (JSON lines).
-//! The healer never spawns clippy itself: toolchain, flags and target
-//! selection stay the caller's, and the heal run stays local + fast.
+//! Since Issue 113 (the auto-oracle, 2026-09-16) the healer SPAWNS clippy
+//! itself when a scanning run targets a cargo project and no manual feed
+//! was given — default features, loud status lines, `RIIR_HEAL_AUTO_ORACLE=0`
+//! restores the old never-spawn posture (see [`crate::clippy_oracle`]).
+//! Toolchain and target-dir discipline stay the caller's environment; a
+//! manual `--clippy-json` still wins outright. Before that the oracle was
+//! manual-only, and the owner's finding was sharp: a gain path that exists
+//! only behind a flag nobody discovers is not a gain path — `cargo heal
+//! --mine` must do every good for the user (the auto-login/auto-sync
+//! precedent).
 //! Only what anchoring needs is parsed: the primary-span file + line and
 //! the `clippy::*` code. Non-`clippy::` codes are ignored — rustc lints
 //! have no corpus rules, so feeding them would only manufacture

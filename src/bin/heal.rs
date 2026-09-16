@@ -3490,7 +3490,10 @@ USAGE:
                     edits at spans the lane's proposers did not already
                     cover (P21 — the type-aware close for Unknown
                     receivers); lints outside the lane's corpus set are
-                    never consumed. Never spawns clippy itself.
+                    never consumed. AUTO: with no feed given, a scan over a
+                    cargo project runs the oracle itself (default features,
+                    loud, compiles the project — RIIR_HEAL_AUTO_ORACLE=0
+                    disables; a manual --clippy-json wins outright).
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
@@ -3597,7 +3600,10 @@ struct Args {
     /// similarity ranking (`[oracle]`), lints with no corpus rule surface
     /// as a gap signal (`[no corpus rule]`), and feed-covered spans with
     /// no diagnostic are marked `[heuristic]`. Augments `--suggest` /
-    /// the bare dry run / the `--fix` review pass; never spawns clippy.
+    /// the bare dry run / the `--fix` review pass. Since Issue 113 the
+    /// AUTO-ORACLE runs this stream for you on cargo projects (default
+    /// features, loud, `RIIR_HEAL_AUTO_ORACLE=0` opts out) — this flag
+    /// remains the explicit/curated override and wins outright.
     clippy_json: Option<String>,
     top_k: usize,
     verify: bool,
@@ -4517,6 +4523,7 @@ fn print_suggestion(
     matcher: &LatentMatcher,
     domain_filter: Option<DomainId>,
     feed_present: bool,
+    bench_target: bool,
 ) {
     let routed = s.routed_domain.label();
     let anchored = !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty();
@@ -4556,8 +4563,16 @@ fn print_suggestion(
         for rule in rules {
             let info = matcher.rule_book(&rule.rule_id);
             let fixed = info.map_or("?", |i| snippet_head(&i.fixed_code));
+            // P30 bench-guard: the suggestion stays visible (a flag, never
+            // silence) but perf rows on a measurement target carry the
+            // marker so the operator knows why --fix will decline them.
+            let bench_mark = if bench_target && *domain == DomainId::Perf {
+                "  ⚠ bench-guard: applying perf rules here alters what the bench measures — apply manually only"
+            } else {
+                ""
+            };
             println!(
-                "  [{:<6}] {:<32} score {:>8.2}  →  {fixed}",
+                "  [{:<6}] {:<32} score {:>8.2}  →  {fixed}{bench_mark}",
                 domain.label(),
                 rule.rule_id,
                 rule.score
@@ -7787,7 +7802,12 @@ fn main() {
     // a real clippy JSON stream force-includes its diagnostic spans/rules
     // AHEAD of similarity ranking — the top-N gate must never eat a span
     // real clippy flagged. Loaded once; anchors are matched per file.
-    let clippy_feed: Option<Vec<ClippyDiagnostic>> = args.clippy_json.as_ref().map(|path| {
+    // Issue 113 (the auto-oracle): with no manual feed, a scan over a cargo
+    // project RUNS the oracle itself — the anchored spans (the ones that
+    // reproduce under the proof oracle and can credit) become the default
+    // instead of a flag nobody discovers. RIIR_HEAL_AUTO_ORACLE=0 restores
+    // the old never-spawn posture; docker/dist lanes have no rust spans.
+    let clippy_feed: Option<Vec<ClippyDiagnostic>> = if let Some(path) = args.clippy_json.as_ref() {
         match std::fs::read_to_string(path) {
             Ok(text) => {
                 let diags = parse_clippy_feed(&text);
@@ -7796,7 +7816,7 @@ fn main() {
                         "clippy feed: parsed 0 diagnostics from {path} — every span will be marked heuristic"
                     );
                 }
-                diags
+                Some(diags)
             }
             Err(e) => {
                 // A requested oracle that cannot be read is a hard error:
@@ -7806,12 +7826,65 @@ fn main() {
                 std::process::exit(2);
             }
         }
-    });
+    } else if matches!(
+        args.domain,
+        Some(DomainId::Docker) | Some(DomainId::Dist)
+    ) || !riir_clippy::clippy_oracle::auto_oracle_enabled()
+    {
+        // Non-rust lanes have no spans to anchor; the kill-switch restores
+        // the pre-113 never-spawn posture. Both are quiet by design —
+        // opting out should not nag.
+        None
+    } else {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        match riir_clippy::clippy_oracle::detect_project_root(&args.paths, &cwd) {
+            None => None,
+            Some(root) => {
+                let cargo_bin =
+                    std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+                eprintln!(
+                    "clippy oracle (auto): linting {} at default features — this compiles the project, first run can take a while (RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                    root.display()
+                );
+                match riir_clippy::clippy_oracle::run_clippy(&root, &cargo_bin) {
+                    Ok(run) => {
+                        let diags = parse_clippy_feed(&run.text);
+                        match riir_clippy::clippy_oracle::classify(run.exit, diags.len()) {
+                            riir_clippy::clippy_oracle::OracleOutcome::Feed(n) => {
+                                eprintln!(
+                                    "clippy oracle (auto): {n} real diagnostic(s) anchored ahead of ranking"
+                                );
+                                Some(diags)
+                            }
+                            riir_clippy::clippy_oracle::OracleOutcome::Clean => {
+                                eprintln!(
+                                    "clippy oracle (auto): clean tree at default features — covered spans will be marked heuristic"
+                                );
+                                Some(diags)
+                            }
+                            riir_clippy::clippy_oracle::OracleOutcome::Failed(msg) => {
+                                eprintln!(
+                                    "clippy oracle (auto): {msg} — continuing heuristic-only"
+                                );
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("clippy oracle (auto): {e} — continuing heuristic-only");
+                        None
+                    }
+                }
+            }
+        }
+    };
     let mut n_oracle_spans = 0usize;
     let mut n_anchored_missing = 0usize;
     let mut n_fixed_edits = 0usize;
     // P21: oracle-anchored edits actually APPLIED in the fix lane.
     let mut n_oracle_edits = 0usize;
+    // P30 bench-guard: rust_perf edits declined on bench targets, run total.
+    let mut n_bench_declined_total = 0usize;
     // P12: re-proposal suppression. Default-on; the kill-switch re-enables
     // unconditional re-proposal (force retry of previously-reverted edits).
     let suppress_reverted = !suppression_disabled();
@@ -7869,6 +7942,10 @@ fn main() {
             continue;
         };
         let display = file.display().to_string();
+        // P30: bench-target detection, shared by both lanes — the fix lane
+        // declines rust_perf edits on it, the suggest lane stamps perf rows.
+        let bench_target =
+            riir_clippy::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
 
         // KAT meter (T0.5): one bill per source READ — the fix + suggest
         // passes share this read; fixpoint passes re-parse already-billed
@@ -7919,6 +7996,13 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
+            // The bench-target guard (2026-09-16 intake, P30): applying a
+            // perf rule to a bench target changes WHAT the bench measures —
+            // `--verify` proves compilation, never measurement validity,
+            // and a bench file's numbers ARE its artifact. Decline loudly,
+            // never silently; the operator can still apply manually.
+            let bench_guard = run_perf && bench_target;
+            let mut n_bench_declined = 0usize;
                              // fxhashmap dep gate (Issue 015): skip the rule for files in
                              // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
@@ -7943,13 +8027,14 @@ fn main() {
                 };
                 let mut edits: Vec<RuleEdit> = Vec::new();
                 if run_perf {
+                    let mut perf_edits: Vec<RuleEdit> = Vec::new();
                     for rule in FIXABLE_RULES {
                         if *rule == "fxhashmap" && !fxhashmap_allowed {
                             continue;
                         }
                         #[cfg(feature = "fix_verify")]
                         {
-                            edits.extend(
+                            perf_edits.extend(
                                 riir_clippy::domains::rust_perf::proposers::collect_edits_opts(
                                     rule,
                                     &current,
@@ -7960,12 +8045,22 @@ fn main() {
                         }
                         #[cfg(not(feature = "fix_verify"))]
                         {
-                            edits.extend(
+                            perf_edits.extend(
                                 riir_clippy::domains::rust_perf::proposers::collect_edits(
                                     rule, &current, &parsed,
                                 ),
                             );
                         }
+                    }
+                    // P30 bench-target guard: count at pass 0 only — nothing
+                    // is applied, so every later pass would re-propose the
+                    // identical set against identical text.
+                    if bench_guard {
+                        if pass == 0 {
+                            n_bench_declined += perf_edits.len();
+                        }
+                    } else {
+                        edits.extend(perf_edits);
                     }
                 }
                 // `mut` only under fix_verify (the VERIFY_LINTS extend below).
@@ -8130,6 +8225,16 @@ fn main() {
                 if !changed {
                     break;
                 }
+            }
+            // P30: the bench-guard decline line — loud, named, actionable
+            // (the intake's "a flag, not silence").
+            if n_bench_declined > 0 {
+                n_bench_declined_total += n_bench_declined;
+                eprintln!(
+                    "bench-guard: declined {n_bench_declined} rust_perf edit(s) on {display} — \
+                     measurement-altering on a bench target (the file's numbers ARE its \
+                     artifact; apply manually only if judged safe)"
+                );
             }
         }
         // Remap each edit's offset through ALL passes from its own onward
@@ -8334,7 +8439,7 @@ fn main() {
                     n_anchored_missing += s.anchored_missing.len();
                 }
                 n_suggestions += 1;
-                print_suggestion(&s, &matcher, args.domain, clippy_feed.is_some());
+                print_suggestion(&s, &matcher, args.domain, clippy_feed.is_some(), bench_target);
             }
         }
 
@@ -8918,6 +9023,14 @@ fn main() {
     } else {
         String::new()
     };
+    // P30: bench-guard run total — the decline must survive in the run
+    // summary too, not only the per-file stderr line.
+    if n_bench_declined_total > 0 {
+        println!(
+            "bench-guard: declined {n_bench_declined_total} rust_perf edit(s) on bench target(s) \
+             (measurement-altering — see the per-file lines above)"
+        );
+    }
     // P12: report the suppressed re-proposals — the operator must see what
     // was skipped and why (a suppressed edit keeps its lint firing; the
     // escape hatch is RIIR_HEAL_SUPPRESS_REVERTED=0 for one run).
@@ -9559,19 +9672,35 @@ fn reheat_fix_pass(
     let (run_perf, run_clippy, run_sec) = fix_domain_scopes(domain);
     #[cfg(not(feature = "sec"))]
     let _ = run_sec;
+    // P30 bench-target guard — same policy as the main fix lane: a perf
+    // edit on a bench target alters what the bench measures; decline
+    // loudly (count reported once, pass 0), never silently.
+    let bench_guard = run_perf
+        && riir_clippy::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
     let mut current = src.clone();
     let mut total_applied = 0usize;
     let mut changed = false;
-    for _pass in 0..MAX_PASSES {
+    for pass in 0..MAX_PASSES {
         let Ok(parsed) = syn::parse_file(&current) else {
             return total_applied;
         };
         let mut edits: Vec<RuleEdit> = Vec::new();
         if run_perf {
+            let mut perf_edits: Vec<RuleEdit> = Vec::new();
             for rule in FIXABLE_RULES {
-                edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
+                perf_edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
                     rule, &current, &parsed,
                 ));
+            }
+            if bench_guard {
+                if pass == 0 && !perf_edits.is_empty() {
+                    println!(
+                        "reheat: bench-guard declined {} rust_perf edit(s) on {display} (measurement-altering)",
+                        perf_edits.len()
+                    );
+                }
+            } else {
+                edits.extend(perf_edits);
             }
         }
         if run_clippy {
