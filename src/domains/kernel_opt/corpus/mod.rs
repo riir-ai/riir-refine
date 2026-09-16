@@ -1929,6 +1929,7 @@ mod entries_gpu_40;
 mod entries_gpu_41;
 mod entries_gpu_42;
 mod entries_gpu_43;
+mod entries_gpu_44;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1948,6 +1949,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_41::entries());
     entries.extend(entries_gpu_42::entries());
     entries.extend(entries_gpu_43::entries());
+    entries.extend(entries_gpu_44::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1997,7 +1999,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 614-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 619-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2271,11 +2273,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-residual-update-writes-separate-next-buffer",
         ],
     ),
-    // D: Dispatch patterns (134 rules)
+    // D: Dispatch patterns (135 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            "nodecode-arm-bounds-overhead-elimination",
             "profile-sol-table-before-compute-rung",
             "sub-ms-bench-boost-clock-never-engages",
             "vendor-dispatch-verify-before-outsource",
@@ -2412,11 +2415,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sustained-load-drift-interleave-protocol",
         ],
     ),
-    // E: Parallelism patterns (54 rules)
+    // E: Parallelism patterns (57 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            "spill-fragility-law-accumulator-regcap-cliff",
+            "tile-shrink-occupancy-pays-feed-economics",
             "left-right-fold-pair-proves-associative-combine",
             "defensive-sync-peephole-tile-body-scope",
             "splitk-atomic-free-contention-threshold",

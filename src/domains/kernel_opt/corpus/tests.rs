@@ -101,8 +101,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        616,
-        "kernel batches through Batch 148 should have 616 rules"
+        619,
+        "kernel batches through Batch 149 should have 619 rules"
     );
 }
 
@@ -5339,7 +5339,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 616-rule corpus must appear in exactly one category.
+    // Every rule_id in the 619-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5387,8 +5387,8 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 134),
         (KernelCategory::Compute, 65),
         (KernelCategory::Fusion, 46),
-        (KernelCategory::Dispatch, 134),
-        (KernelCategory::Parallelism, 55),
+        (KernelCategory::Dispatch, 135),
+        (KernelCategory::Parallelism, 57),
         (KernelCategory::FlashAttnTiling, 15),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
@@ -5412,9 +5412,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 616.
+    // Sum must equal 619.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 616, "Plan 003: category totals must sum to 616");
+    assert_eq!(total, 619, "Plan 003: category totals must sum to 619");
 }
 
 #[test]
@@ -5425,8 +5425,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 616,
-        "Plan 003: grouped corpus has {total} rules, expected 616"
+        total, 619,
+        "Plan 003: grouped corpus has {total} rules, expected 619"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9533,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        616,
-        "Batch 148: corpus should have 616 rules"
+        619,
+        "Batch 149: corpus should have 619 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12118,6 +12118,127 @@ fn batch148_pseudocode_parses() {
         assert!(
             entry.gpu_concept.contains("Research 174"),
             "batch-148 rider on '{rid}' missing its Research 174 provenance"
+        );
+    }
+}
+
+#[test]
+fn batch149_rules_present() {
+    // Batch 149 (the sm_89 spill-law / nodecode-probe STANDALONE pack --
+    // Plan 135 / Research 175): 3 kernel_opt rules -- the measured LAWS of
+    // the riir-ai Plan-597 close (Benches 895+933) as independent rules,
+    // re-issued after the Issue-665 dual-allocation yield against Batch 148
+    // (the sibling landing embedded these laws' evidence as route-split
+    // regime content; the standalone forms serve the retrievals the
+    // integrator cannot answer) + 1 rider on setmaxnreg-fit-gate.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "spill-fragility-law-accumulator-regcap-cliff",
+        "nodecode-arm-bounds-overhead-elimination",
+        "tile-shrink-occupancy-pays-feed-economics",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-149 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // the B51-style phrase pins, one block per rule
+fn batch149_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-149 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    // Spill law: the four measured cliff cells, the envelope arithmetic,
+    // both escape hatches, the reject-before-benchmark discipline, the
+    // distinct-from on the Batch-148 integrator.
+    let c = concept("spill-fragility-law-accumulator-regcap-cliff");
+    for phrase in [
+        "104 B -> 0.550x",
+        "192 B -> 0.328x",
+        "56 B -> 0.516x",
+        "104 B -> 0.340x",
+        "dh[2][4][4] i32 + o[2][4][4] f32",
+        "65,536",
+        "255 regs/thread",
+        "spill bytes sit in the INNERMOST k-group loop",
+        "local_size_bytes()",
+        "Distinct from occupancy-before-async-consumer-ada",
+        "from m-group-shared-weight-scan-register-relief (B110",
+    ] {
+        assert!(c.contains(phrase), "spill-law concept missing '{phrase}'");
+    }
+    // Nodecode probe: the share cells, the single-vs-single correction,
+    // the 64.6% ceiling, the three measurement traps.
+    let c = concept("nodecode-arm-bounds-overhead-elimination");
+    for phrase in [
+        "7.3%",
+        "8.4%",
+        "+10.7%",
+        "64.6%",
+        "427 TF",
+        "VALUES GARBAGE BY DESIGN",
+        "SINGLE-vs-SINGLE",
+        "scheduler stretches differently",
+        "from work-scaling-probe-launch-bound (B82",
+    ] {
+        assert!(c.contains(phrase), "nodecode concept missing '{phrase}'");
+    }
+    // Tile-shrink: the v12 cells, the feed mechanism, the local optimum,
+    // the two reopen triggers.
+    let c = concept("tile-shrink-occupancy-pays-feed-economics");
+    for phrase in [
+        "0.648x",
+        "0.656x",
+        "75 regs",
+        "25,088 B",
+        "cannot pay for their own feed",
+        "LOCAL OPTIMUM",
+        "sm_90+",
+        "Machete",
+        "from spill-fragility-law-accumulator-regcap-cliff (Batch 149 companion",
+    ] {
+        assert!(c.contains(phrase), "tile-shrink concept missing '{phrase}'");
+    }
+}
+
+#[test]
+fn batch149_pseudocode_parses() {
+    // G1 for Batch 149: syn-parse gate (fn-wrapped Rust-shaped code only --
+    // the B122/B123 lesson).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "spill-fragility-law-accumulator-regcap-cliff",
+        "nodecode-arm-bounds-overhead-elimination",
+        "tile-shrink-occupancy-pays-feed-economics",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-149 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-149 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-149 opt_pattern for '{id}' must parse"
         );
     }
 }
