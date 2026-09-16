@@ -483,6 +483,276 @@ fn upload_uniforms(device: &Device, params: &WaterParams, dst: &mut UploadBuffer
             bench_spec: None,
         },
 
+        // ── Batch 147 (2026-09-16, Plan 131 / Research 172): the staged agave
+        // distill — five rules from anza-xyz/agave @ c95d87063 (Apache-2.0),
+        // all fixtures original reproductions of the patterns.
+        //
+        // ── allocation: hot alloc/free cycle around fixed-shape batch ────
+        // objects → bounded recycle pool: take/put with a HARD CAP on ────
+        // retained capacity ─────────────────────────────────────────────
+        // Source: TWO in-source instances of the same decision.
+        // (1) scheduler_common.rs:21 `const MAX_RECYCLED_BATCHES: usize =
+        // 1024;` + the `recycled_batches` field: take_batch pops a parked
+        // triple or allocates fresh; the return path drains ids/
+        // transactions and clears max_ages (:262-263, :288), then parks the
+        // empty-but-sized triple ONLY below the cap (:289-293) — the 1025th
+        // returned batch is dropped. (2) recvmmsg.rs:28
+        // `PacketBufferPool(Vec<BytesMut>)`: "Buffers that got used for a
+        // packet leave the pool, so it must be replenished periodically";
+        // `replenish()` "will allocate only as many buffers as were
+        // consumed since last call, so it is idempotent" — and the bound is
+        // STRUCTURAL: "we never need to worry about pool being >
+        // PACKETS_PER_BATCH since this is the only place where we add
+        // elements to it". Decision content: a hot alloc/free cycle around
+        // FIXED-SHAPE work objects keeps a recycle pool whose bound is the
+        // load-bearing half — unbounded retention is a leak by design (a
+        // producer burst grows the pool monotonically and nothing ever
+        // shrinks it), so THE CAP IS THE DECISION, enforced either
+        // structurally (fixed-width replenish + take-out-only-on-success:
+        // "only take it out once it holds a packet, so that no error path
+        // can forget to put it back") or explicitly (len check before
+        // push). Win = allocator round-trips + header bytes eliminated per
+        // cycle. Distinct from kernel_opt B123
+        // `batch-pool-read-makes-serial-readahead-redundant` (an IO READ
+        // pool whose decision DELETES a redundant read-ahead hint — this is
+        // an ALLOCATION recycle pool bounding ALLOCATOR traffic; no
+        // absorption either direction), from `reuse-allocation-clear`
+        // (entries_02 — ONE caller-owned scratch buffer cleared across
+        // calls; no ownership transfer, no retention cap), from
+        // `vec-reuse-across-lifetime-change` (ONE buffer hoisted across a
+        // lifetime barrier; no pooling, no cap), from `mem-take` (the
+        // single-move primitive this pattern composes take/put around), and
+        // from `smallvec-stack` (SMALL collections onto the stack; these
+        // buffers are page-to-KiB scale heap objects where stack storage is
+        // impossible). Suggestion-only (a parse-only proposer cannot prove
+        // the alloc/free cycle is hot, the object shape is fixed, or the
+        // chosen cap fits the workload's burst profile).
+        PerfRule {
+            rule_id: "bounded-batch-buffer-pool".to_string(),
+            name: "hot alloc/free cycle around fixed-shape batch buffers → bounded recycle pool (take()/put() with a HARD cap on retained capacity; top-up allocates only what left; ownership stays with the pool until success)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "const TARGET: usize = 64;\n\nstruct Work {\n    key: u64,\n    val: u64,\n    stamp: u32,\n}\n\n// every cycle allocates a FRESH buffer triple and drops it at cycle\n// end — 3 malloc/free round-trips per cycle, forever, even though\n// every batch has the same fixed shape\nfn cycle(work: &[Work]) -> u64 {\n    let mut keys: Vec<u64> = Vec::with_capacity(TARGET);\n    let mut vals: Vec<u64> = Vec::with_capacity(TARGET);\n    let mut stamps: Vec<u32> = Vec::with_capacity(TARGET);\n    for w in work {\n        keys.push(w.key);\n        vals.push(w.val);\n        stamps.push(w.stamp);\n    }\n    let sum = keys.iter().sum::<u64>()\n        + vals.iter().sum::<u64>()\n        + stamps.iter().map(|&s| s as u64).sum::<u64>();\n    // buffers dropped here — the allocator pays the round-trip\n    sum\n}".to_string(),
+            fixed_code: "const TARGET: usize = 64;\n// the HARD bound on retention — without it the pool is a leak by\n// design: a producer burst grows it monotonically and nothing shrinks it\nconst MAX_RECYCLED: usize = 1024;\n\nstruct Work {\n    key: u64,\n    val: u64,\n    stamp: u32,\n}\n\nstruct BatchPool {\n    recycled: Vec<(Vec<u64>, Vec<u64>, Vec<u32>)>,\n}\n\nimpl BatchPool {\n    // pop a parked triple when one exists; fresh only when empty\n    fn take(&mut self) -> (Vec<u64>, Vec<u64>, Vec<u32>) {\n        self.recycled.pop().unwrap_or_else(|| {\n            (\n                Vec::with_capacity(TARGET),\n                Vec::with_capacity(TARGET),\n                Vec::with_capacity(TARGET),\n            )\n        })\n    }\n    // reset to empty (capacity RETAINED) and park ONLY below the cap —\n    // the 1025th returned batch is dropped\n    fn put(&mut self, mut batch: (Vec<u64>, Vec<u64>, Vec<u32>)) {\n        batch.0.clear();\n        batch.1.clear();\n        batch.2.clear();\n        if self.recycled.len() < MAX_RECYCLED {\n            self.recycled.push(batch);\n        }\n    }\n}\n\nfn cycle(work: &[Work], pool: &mut BatchPool) -> u64 {\n    let (mut keys, mut vals, mut stamps) = pool.take();\n    for w in work {\n        keys.push(w.key);\n        vals.push(w.val);\n        stamps.push(w.stamp);\n    }\n    let sum = keys.iter().sum::<u64>()\n        + vals.iter().sum::<u64>()\n        + stamps.iter().map(|&s| s as u64).sum::<u64>();\n    pool.put((keys, vals, stamps));\n    sum\n}".to_string(),
+            context_notes: Some("REGIME: hot alloc/free cycles of fixed-shape buffers — packet batches, scheduler batch triples, request/response objects churned per connection or per tick. THE BOUND IS THE DECISION, two enforcement forms, both in-source: STRUCTURAL (recvmmsg — the pool only ever grows via resize_with to the batch width and shrinks only by consumption; take-out-only-on-success so no error path leaks a buffer) and EXPLICIT (scheduler — `if len < MAX_RECYCLED_BATCHES` before push; the return path drains/clears to empty so capacity is retained without stale contents). TOP-UP SHAPE: replenish allocates only what was consumed ('so it is idempotent') — never resize to a target larger than the working width. ANTI-REGIMES: one-shot allocations (no cycle to amortize — the pool adds a struct for nothing); objects with unstable shape (a one-off huge batch parked in the pool pins its oversized capacity until evicted — the cap bounds the damage, the shape assumption bounds the waste); single-threaded single-buffer scratch (that is reuse-allocation-clear's shape — caller-owned &mut, no pool needed). Suggestion-only (a parse-only proposer cannot prove hotness, fixed shape, or a sane cap). MEASURED ParetoDominant 2/0/1 (rust_perf_bench, Batch 147): allocs 48000 → 4 and bytes 20.5 MB → 1568 at the max size (16K cycles x 3 buffers parked at steady state), timing faster on the majority of sizes. Distinct from kernel_opt B123 batch-pool-read-makes-serial-readahead-redundant (IO read-pool / readahead-hint deletion behind a parallel pool — different axis: disk-I/O dedup vs allocator traffic; no absorption either direction), from reuse-allocation-clear (ONE caller-owned scratch, cleared across calls — no ownership transfer, no retention cap), from vec-reuse-across-lifetime-change (ONE buffer hoisted across a lifetime barrier via layout retyping — no pooling, no cap), from mem-take (the single move primitive this pattern composes take/put around), and from smallvec-stack (stack placement of SMALL collections — these buffers are page-to-KiB scale heap objects where stack storage is impossible; the win is allocator round-trips, not placement). Fixtures original. Source: anza-xyz/agave @ c95d87063 (Apache-2.0) — core/src/banking_stage/transaction_scheduler/scheduler_common.rs:21,27,99-106,262-263,288-293; streamer/src/recvmmsg.rs:21-47,63-70,197-198; perf/src/packet.rs:31 (PACKETS_PER_BATCH = 64). Staged agave batch / Plan 131 / Research 172.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(bounded_batch_buffer_pool_bench_spec()),
+        },
+        // ── io: reading a LENGTH-PREFIXED record allocates a heap buffer ──
+        // per record → fixed STACK page buffer first; the length prefix ──
+        // gates the rare heap fallback ──────────────────────────────────
+        // Source: accounts-db/src/append_vec.rs
+        // get_stored_account_meta_callback (:491): ONE fixed stack page
+        // `let mut buf = [MaybeUninit::<u8>::uninit(); PAGE_SIZE];` (with
+        // the comment "4096 was just picked to be a single page size");
+        // read_into_buffer fills the stack slice (fs/src/file_io.rs:120);
+        // parse the fixed header from the valid prefix, then the DECISION
+        // at :504-506: `remaining_bytes_for_data >= data_len` — the stack
+        // read already suffices, parse the payload as a zero-copy ref INTO
+        // the stack buffer; else the rare oversized record takes the heap
+        // path (:518-537): a second positioned read into a right-sized
+        // heap buffer. The same shape ships twice more in the file: the
+        // exact-sized twin at :559 ([MaybeUninit<u8>; STORE_META_OVERHEAD],
+        // 136 bytes — no fallback needed, the record is fixed-size) and
+        // get_account_shared_data at :594 (page-then-heap via
+        // Vec::with_capacity + spare_capacity_mut). Decision content: read
+        // ONE page into a STACK buffer first; the record's length prefix
+        // decides stack-parse (zero heap on the common path) vs heap
+        // fallback; the page may over-read into the next record —
+        // harmless, only the record's own bytes are used. Anti-pattern
+        // paid by the buggy shape: a heap alloc per record even though the
+        // overwhelming majority of records fit in one page. Distinct from
+        // `smallvec-stack` (a TYPE choice putting small collections on the
+        // stack; this is a READ-PATH buffer strategy gated by a length
+        // prefix — io category, and the buffer is a fixed page, not a
+        // growable collection), from kernel_opt B123 (deletes a redundant
+        // read-ahead HINT behind a parallel read pool — no buffering
+        // decision at all), and from `bounded-batch-buffer-pool`
+        // (allocation recycle of work objects; this is a read strategy —
+        // the two COMPOSE: the oversized fallback could draw its heap
+        // buffer from a recycle pool). Suggestion-only default with the
+        // SAFE form: the simple `[0u8; PAGE]` fixed arm needs no unsafe;
+        // the source's `[MaybeUninit; PAGE]` skips the zero-fill but needs
+        // unsafe (source SAFETY comments: "read_into_buffer will only
+        // write to uninitialized memory" / "we only read the initialized
+        // portion") — document the upgrade, suggest the safe form. HOIST
+        // the buffer across records when scanning (a fresh `[0u8; PAGE]`
+        // per record pays a 4 KiB fill each time — the fill can dominate
+        // small records and eat the win). Regime: many small
+        // length-prefixed records — append-only files, packet streams, log
+        // replay. ANTI-REGIME: records larger than the buffer are common
+        // (the fallback pays DOUBLE — the page read AND the heap read);
+        // no length prefix to gate on; single huge-record formats.
+        PerfRule {
+            rule_id: "stack-read-fast-path-length-prefixed-record".to_string(),
+            name: "length-prefixed record read heap-allocates per record → MEASURED-NEGATIVE in-memory: a stack page read copies ~16x the bytes (ParetoDominated 0/3/0); adopt ONLY when reads carry per-call syscall/FFI overhead — read ONE fixed stack page first, the length prefix gates the heap fallback".to_string(),
+            category: "io".to_string(),
+            buggy_code: "const HEADER: usize = 4;\n\nstruct Blob {\n    bytes: Vec<u8>,\n}\n\nimpl Blob {\n    // stands in for pread: fills buf at `offset`, returns bytes read\n    fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {\n        let end = (offset + buf.len()).min(self.bytes.len());\n        if offset >= self.bytes.len() {\n            return 0;\n        }\n        let n = end - offset;\n        buf[..n].copy_from_slice(&self.bytes[offset..end]);\n        n\n    }\n}\n\n// heap buffer PER RECORD: one small header read, then allocate exactly\n// data_len and read again — an allocator round-trip for every record\n// even though the overwhelming majority fit in a single page\nfn record_sum(file: &Blob, offset: usize) -> Option<u64> {\n    let mut hdr = [0u8; HEADER];\n    let n = file.read_at(offset, &mut hdr);\n    if n < HEADER {\n        return None;\n    }\n    let data_len = u32::from_le_bytes(hdr) as usize;\n    let mut data = vec![0u8; data_len];\n    if file.read_at(offset + HEADER, &mut data) < data_len {\n        return None;\n    }\n    Some(data.iter().map(|&b| b as u64).sum())\n}".to_string(),
+            fixed_code: "const HEADER: usize = 4;\n// one page — covers the header and the typical payload\nconst PAGE: usize = 4096;\n\nstruct Blob {\n    bytes: Vec<u8>,\n}\n\nimpl Blob {\n    fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {\n        let end = (offset + buf.len()).min(self.bytes.len());\n        if offset >= self.bytes.len() {\n            return 0;\n        }\n        let n = end - offset;\n        buf[..n].copy_from_slice(&self.bytes[offset..end]);\n        n\n    }\n}\n\n// ONE page read covers header + typical payload; the length prefix\n// decides: fits → parse straight from the stack slice (zero heap);\n// oversized → the rare heap fallback re-reads exactly data_len\nfn record_sum(file: &Blob, offset: usize) -> Option<u64> {\n    // stack, not heap — upgrade to [MaybeUninit<u8>; PAGE] to also skip\n    // the zero-fill (needs unsafe; the safe form is the default)\n    let mut buf = [0u8; PAGE];\n    let n = file.read_at(offset, &mut buf);\n    if n < HEADER {\n        return None;\n    }\n    let data_len = u32::from_le_bytes(buf[..HEADER].try_into().ok()?) as usize;\n    if HEADER + data_len <= n {\n        // the stack read already suffices — parse in place\n        return Some(buf[HEADER..HEADER + data_len].iter().map(|&b| b as u64).sum());\n    }\n    // rare oversized record: heap + positioned read\n    let mut data = vec![0u8; data_len];\n    if file.read_at(offset + HEADER, &mut data) < data_len {\n        return None;\n    }\n    Some(data.iter().map(|&b| b as u64).sum())\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominated 0/3/0 — DEMOTED TO SUGGESTION-ONLY BY THE MEASUREMENT (rust_perf_bench, Batch 147: allocs 100000 → 802 and bytes 29.5 MB → 3.5 MB at max size — the ALLOCATION axis is a real win — but timing LOSES at every size). THE HONEST MECHANISM: the fixture models reads as memcpy (in-memory blob), so the fixed arm's one 4 KiB page read copies ~16x the bytes of the buggy arm's two small reads — the page-fill cost dominates and the timing loses. The pattern's real-world win requires reads to carry a FIXED PER-CALL OVERHEAD (a syscall per pread, a cross-device fetch) that one big read amortizes and two small reads pay twice — a constant the microbench cannot honestly model (adding an artificial constant to force a win would be fabrication). THE RULE SHIPS AS THE ANNOTATED ANTI-REGIME WITNESS (the Issue-960/batch-146 precedent): adopt the stack-page form ONLY when reads cross a syscall/FFI boundary AND records overwhelmingly fit one page; in a pure in-memory/memcpy regime the heap-per-record form measured FASTER — do not apply. SAFETY LADDER (safe form first): `[0u8; PAGE]` needs no unsafe; `[MaybeUninit<u8>; PAGE]` skips the zero-fill but needs unsafe — the source's two SAFETY obligations are exact ('read_into_buffer will only write to uninitialized memory' on write, 'we only read the initialized portion' on read). HOIST the buffer across records when scanning: a fresh `[0u8; PAGE]` per record re-pays a 4 KiB fill each time. TWIN SITES: the exact-sized record needs NO fallback at all (STORE_META_OVERHEAD = 136 — when the shape is constant the length gate disappears). ALSO TRUE AND MEASURED-WINNING: the ALLOCATION axis (1 heap alloc per record → ~1 per 128 oversized) — the composition candidate is bounded-batch-buffer-pool for the oversized tail, not a standalone win. REGIME (where it CAN win): reads are syscalls/FFI, records overwhelmingly ≪ page. ANTI-REGIME (MEASURED): in-memory/memcpy reads — this measurement. Distinct from smallvec-stack (a TYPE choice for small collections; this is a READ-PATH buffer strategy gated by a length prefix — io), from kernel_opt B123 batch-pool-read-makes-serial-readahead-redundant (readahead-hint deletion behind a read pool — no buffering decision), and from bounded-batch-buffer-pool (allocation recycle; COMPOSES — the oversized fallback's heap buffer could be pooled). Fixtures original. Source: anza-xyz/agave @ c95d87063 (Apache-2.0) — accounts-db/src/append_vec.rs:53,183,491-549,559,594-649; fs/src/file_io.rs:120. Staged agave batch / Plan 131 / Research 172.".to_string()),
+            // Measured ParetoDominated (Batch 147) — demoted to suggestion-only;
+            // the spec is deliberately withheld so the G5 promotion gate never
+            // sees a known-dominated candidate. The negative is the witness.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── caching: batch validation — N==1 bypass, optimistic AGGREGATE ─
+        // verify first, per-item fallback ONLY on aggregate failure ───────
+        // Source: bls-sigverify/src/bls_vote_sigverify.rs verify_votes
+        // (:224-298): the N==1 short-circuit does INDIVIDUAL verification —
+        // "no need to do optimistic verification when batch size == 1"
+        // (`if let [unverified_vote] = unverified_votes`); otherwise "Try
+        // optimistic verification - fast to verify, but cannot identify
+        // invalid votes" — the aggregate check covers the whole batch (the
+        // in-source cost model at :352: pairings "reduced to (1 + number
+        // of distinct messages)"); on aggregate failure the fallback runs
+        // verify_individual_votes (:419) to identify the bad votes
+        // precisely. Decision content: batch-validating N items where full
+        // per-item validation is expensive is a three-tier cost ladder —
+        // (1) N==1 skips the batch machinery entirely; (2) N>1 pays the
+        // CHEAP AGGREGATE claim first (common case: the whole batch is
+        // valid, one check); (3) only on aggregate failure pay the
+        // per-item pass to locate offenders. ADMISSION CONDITION (the
+        // fixture ships a generic `fn verify_aggregate` stand-in): the
+        // aggregate primitive must already exist in the consumer's stack —
+        // the source's is BLS aggregate signature verification and BLS is
+        // not a workspace dep; a dalek-style verify_batch stand-in + owner
+        // sign-off is required before any propose-path use. Distinct from
+        // `filter-count-to-any` / the short-circuit family (those skip
+        // per-element work on PREDICATES; this is an AGGREGATE-vs-individual
+        // VERIFICATION cost ladder with an N==1 bypass) and from kernel_opt
+        // B123 (io-pool read-ahead dedup; unrelated axis). Regime:
+        // signature/batch verification, merkle batch proofs, bulk integrity
+        // checks — anywhere an all-valid batch is the common case. The
+        // N==1 short-circuit is its own micro-win: it keeps batch/aggregate
+        // overhead off the single-item hot path. ANTI-REGIME (state it
+        // honestly): adversarial inputs where the aggregate ALWAYS fails —
+        // the ladder then pays aggregate + individual, strictly worse than
+        // individual-only; the ladder needs a LOW aggregate-failure-rate
+        // assumption (honest senders, transient corruption) and that
+        // assumption must hold in the consumer's regime. Suggestion-only
+        // (a parse-only proposer can see the per-item map but can neither
+        // prove an aggregate primitive exists nor bound the failure rate).
+        PerfRule {
+            rule_id: "batch-verify-optimistic-aggregate-fallback-individual".to_string(),
+            name: "N-item batch always pays N full verifications → N==1 bypass + cheap AGGREGATE verify first, per-item fallback only on aggregate failure".to_string(),
+            category: "caching".to_string(),
+            buggy_code: "struct SignedTx {\n    sig: [u8; 64],\n    signer: [u8; 32],\n}\nimpl SignedTx {\n    // the EXPENSIVE per-item check — heavy curve math per call\n    fn verify(&self, msg: &[u8; 32]) -> bool {\n        self.signer != [0u8; 32] && self.sig[..32] != [0u8; 32]\n    }\n}\nfn verify_batch(txs: &[SignedTx], msg: &[u8; 32]) -> Vec<bool> {\n    // N items → N full verifications, ALWAYS — even when one cheap\n    // aggregate check over all N would have proven the batch valid\n    txs.iter().map(|tx| tx.verify(msg)).collect()\n}".to_string(),
+            fixed_code: "struct SignedTx {\n    sig: [u8; 64],\n    signer: [u8; 32],\n}\nimpl SignedTx {\n    fn verify(&self, msg: &[u8; 32]) -> bool {\n        self.signer != [0u8; 32] && self.sig[..32] != [0u8; 32]\n    }\n}\n// ADMISSION CONDITION: this primitive must already exist in the consumer's\n// stack (the source's is BLS aggregate verification — one check over all\n// signatures). Fast, but CANNOT name which item failed.\nfn verify_aggregate(txs: &[SignedTx], msg: &[u8; 32]) -> bool {\n    txs.iter().all(|tx| tx.signer != [0u8; 32])\n}\nfn verify_batch(txs: &[SignedTx], msg: &[u8; 32]) -> Vec<bool> {\n    // tier 1 — N == 1: skip the batch machinery entirely\n    if let [only] = txs {\n        return vec![only.verify(msg)];\n    }\n    // tier 2 — N > 1: cheap AGGREGATE claim first (common case: all valid)\n    if verify_aggregate(txs, msg) {\n        return vec![true; txs.len()];\n    }\n    // tier 3 — aggregate failed: NOW pay the per-item pass to locate\n    // the invalid items\n    txs.iter().map(|tx| tx.verify(msg)).collect()\n}".to_string(),
+            context_notes: Some("CONDITIONAL — ADMISSION CONDITION: the aggregate primitive must exist in the consumer's stack (the source's is BLS aggregate signature verification; BLS is not a workspace dep — a dalek-style verify_batch stand-in + owner sign-off is the staging-plan requirement); the fixture ships a generic `fn verify_aggregate(items) -> bool` stand-in and the rule must not propose where no real aggregate/batch-verify primitive exists. REGIME: signature/batch verification, merkle batch proofs, bulk integrity checks — anywhere an all-valid batch is the common case. The N==1 short-circuit is its own micro-win: it keeps batch/aggregate overhead off the single-item hot path. Cost model (in-source): the aggregate collapses the per-item crypto work to one check over the batch — pairings 'reduced to (1 + number of distinct messages)'. ANTI-REGIME (stated honestly): adversarial inputs where the aggregate ALWAYS fails — the ladder then pays aggregate + individual, strictly worse than individual-only; the ladder needs a LOW aggregate-failure-rate assumption and the consumer's regime must supply it. Distinct from `filter-count-to-any`/short-circuit family (those skip per-element work on predicates; this is an AGGREGATE-vs-individual verification cost ladder with an N==1 bypass) and from `batch-pool-read-makes-serial-readahead-redundant` (kernel_opt B123, io pool; unrelated). SUGGESTION-ONLY, NotBenchable as drafted (a parse-only proposer cannot prove the aggregate primitive exists or bound the failure rate; the honest bench needs a real aggregate primitive a generic stand-in cannot supply). Source: anza-xyz/agave @ c95d87063 (Apache-2.0) — bls-sigverify/src/bls_vote_sigverify.rs verify_votes:224-298, verify_votes_optimistic:315-379 (the :352 cost model), verify_individual_votes:419. Staged agave batch / Plan 131 / Research 172.".to_string()),
+            // NotBenchable as drafted — tier 2 needs a real aggregate primitive
+            // (BLS-class batch verify) that a generic fixture cannot honestly
+            // stand in for; bench spec deferred to the admission-condition landing.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── allocation: fixed-cap pool — O(1) WATERMARK freelist + PARTIAL ─
+        // reset of the used prefix on return, never a whole-object clear ──
+        // Source: program-runtime/src/mem_pool.rs Pool<T, SIZE>
+        // (:24-55): `next_empty` is a WATERMARK over a fixed [Option<T>;
+        // SIZE] — get() takes items[next_empty - 1] and decrements;
+        // put() resets the value IN PLACE — `value.reset(len)` — then
+        // stores it at the watermark and increments. The Reset impl for
+        // the pooled AlignedMemory (:57-65) zeroes only the used PREFIX:
+        // `let len = len.min(slice.len())` then fill over ..len — the
+        // clear is sized by the work done since checkout, never by the
+        // buffer's capacity. Decision content: a fixed-capacity freelist
+        // where returned objects are reset ONLY up to the length actually
+        // used (partial reset at the watermark), and get/put are O(1)
+        // watermark moves — no scan, no free-list Vec, no realloc: the
+        // pool's steady-state alloc count is SIZE, forever. Buggy shapes:
+        // clear the WHOLE object on every return (cost ∝ capacity), or
+        // drop-and-reallocate per checkout (re-buying the alloc every
+        // time). Distinct from `reuse-allocation-clear` (entries_02 —
+        // clear-reuse of ONE scratch buffer handed in by a caller; this is
+        // a POOL of N objects the caller checks out from), from `mem-take`
+        // (move-the-allocation idiom, no reset semantics), and from
+        // `bounded-batch-buffer-pool` (companion rule, same batch —
+        // bounded RETENTION cap + replenish-consumed for batch buffers;
+        // the boundary: WHERE the bound lives — retention cap vs fixed
+        // compile-time SIZE — and WHAT reset costs — full clear vs
+        // used-prefix). Regime: execution-memory pools — wasm/VM scratch
+        // arenas, fixed-cap object pools in request paths (the source
+        // pools VM stack/heap/call-frame memory). Partial-reset cost
+        // model: reset cost ∝ the used prefix reported at put() — a
+        // checkout that touched 512 bytes of a 64 KiB buffer pays 512
+        // bytes of clear, not 64 KiB. ANTI-REGIME (state it honestly):
+        // objects where stale data from the UN-reset tail could be
+        // OBSERVED — the tail beyond used_len keeps the previous tenant's
+        // bytes, so keys/secrets/anything read past the logical length
+        // must FULLY clear instead; and the contract requires put() to
+        // receive the TRUE used length (a lying length leaves stale bytes
+        // inside the logical prefix). Suggestion-only (a parse-only
+        // proposer cannot see the pool's size policy or the reset
+        // contract).
+        PerfRule {
+            rule_id: "partial-reset-watermark-pool".to_string(),
+            name: "fixed-cap pool clears the WHOLE object on return (or reallocates per checkout) → O(1) watermark freelist + reset(used_len) partial reset".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "struct ScratchBuf {\n    data: Vec<u8>, // fixed working size, e.g. 64 KiB\n}\nstruct BufPool {\n    free: Vec<ScratchBuf>,\n}\nimpl BufPool {\n    fn get(&mut self) -> Option<ScratchBuf> {\n        self.free.pop()\n    }\n    // interface cannot express \"only the prefix I touched\" — every\n    // return clears the WHOLE object: cost ∝ capacity, not work done\n    fn put(&mut self, mut buf: ScratchBuf) {\n        buf.data.fill(0);\n        self.free.push(buf);\n    }\n}".to_string(),
+            fixed_code: "trait Reset {\n    // reset only up to the length actually used — cost ∝ work, not capacity\n    fn reset(&mut self, used_len: usize);\n}\nstruct ScratchBuf {\n    data: Vec<u8>, // fixed working size, e.g. 64 KiB\n}\nimpl Reset for ScratchBuf {\n    fn reset(&mut self, used_len: usize) {\n        let len = used_len.min(self.data.len());\n        self.data[..len].fill(0);\n    }\n}\n// fixed-capacity freelist: get/put are O(1) watermark moves, no scan\nstruct BufPool<T: Reset, const SIZE: usize> {\n    items: [Option<T>; SIZE],\n    next_empty: usize, // watermark: slots [next_empty..SIZE] are free\n}\nimpl<T: Reset, const SIZE: usize> BufPool<T, SIZE> {\n    fn new(items: [T; SIZE]) -> Self {\n        Self {\n            items: items.map(Some),\n            next_empty: SIZE,\n        }\n    }\n    fn get(&mut self) -> Option<T> {\n        self.next_empty = self.next_empty.checked_sub(1)?;\n        self.items.get_mut(self.next_empty).and_then(|s| s.take())\n    }\n    fn put(&mut self, mut value: T, used_len: usize) -> bool {\n        let Some(slot) = self.items.get_mut(self.next_empty) else {\n            return false; // pool full\n        };\n        value.reset(used_len); // partial reset, in place, AT the watermark\n        slot.replace(value);\n        self.next_empty += 1;\n        true\n    }\n}".to_string(),
+            context_notes: Some("REGIME: execution-memory pools — wasm/VM scratch arenas, fixed-cap object pools in request paths (the source pools VM stack/heap/call-frame memory). Partial-reset cost model: reset cost ∝ the used prefix reported at put(), NOT capacity — a checkout that touched 512 bytes of a 64 KiB buffer pays a 512-byte clear; get/put are O(1) watermark moves (no free-list scan, no realloc — steady-state alloc count is the fixed SIZE forever). ANTI-REGIME (stated honestly): security-sensitive buffers where the un-reset TAIL could be observed — keys, secrets, anything read past the logical length must fully clear instead, and the rule requires put() to receive the TRUE used length (a lying length leaves stale bytes inside the logical prefix). Distinct from `reuse-allocation-clear` (entries_02 — clear-reuse of ONE caller-supplied scratch buffer; this is a POOL of N objects with a watermark freelist + partial reset), from `mem-take` (move idiom, no reset semantics), and from `bounded-batch-buffer-pool` (companion rule, same batch — bounded RETENTION cap + replenish-consumed for batch buffers; the boundary: WHERE the bound lives — retention cap vs fixed compile-time SIZE — and WHAT reset costs — full clear vs used-prefix). Suggestion-only, NotBenchable as drafted (a parse-only proposer cannot see the pool's size policy or the reset contract; the allocation microbench — used-prefix vs full-clear at a realistic touched/capacity ratio — is writable and deferred, not claimed). Source: anza-xyz/agave @ c95d87063 (Apache-2.0) — program-runtime/src/mem_pool.rs Pool<T, SIZE>:24-55, the Reset impl for AlignedMemory:57-65. Staged agave batch / Plan 131 / Research 172.".to_string()),
+            // Bench spec deliberately deferred to a follow-up: the honest
+            // allocation microbench (used-prefix vs full-clear at a
+            // realistic touched/capacity ratio) is writable but was not
+            // produced this batch; the rule ships suggestion-only.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── caching: batch-local loader caches the MISS too — an Absent ──
+        // tombstone so a repeated miss costs a map hit, not a second ────
+        // backend query ─────────────────────────────────────────────
+        // Source: svm/src/account_loader.rs load_account (:256-274): the
+        // batch-local `loaded_accounts` map serves FOUR arms —
+        // cache-hit-alive (Some, false) → Some; cache-hit-placeholder
+        // (None, false) → None; backend-hit (Some, true) → insert the
+        // clone (POSITIVE caching); and the decisive miss arm (None, true)
+        // → "Does not exist and has never been seen" → INSERTS
+        // AccountSharedData::default() as the tombstone before returning
+        // None — so the NEXT ask of the same absent key reads the map
+        // (do_load's lamports == 0 path, :279-296) instead of re-querying
+        // accounts-db. The tombstone rides in the SAME map as the
+        // positives (a default account's zero lamports encodes "absent")
+        // — no second structure; and the in-source staleness contract is
+        // "We *never* remove accounts, or else we would fetch stale state
+        // from accounts-db" (:283) — entries live for the batch's
+        // lifetime and the batch's own writes own the state. Decision
+        // content: a batch/staged loader that will re-ask the same key
+        // must cache NEGATIVE results too — Entry = Present(T) | Absent
+        // tombstone — so repeated misses cost a map hit, not a backend
+        // query. Buggy shape: the cache stores hits only, Option<&T> None
+        // is indistinguishable from not-yet-asked, and every miss walks
+        // the store again. Distinct from `sort-key-cache-precompute-out-
+        // of-lock` (per-COMPARISON key cache), from the per-insert
+        // aggregate-statistic family (`debug-stat-full-scan-out-of-hot-
+        // path` — per-operation whole-collection statistics), and from
+        // the resume-provenance identity rules (entries_05 — build-level
+        // identity pins, not a lookup cache). The decision content is
+        // NEGATIVE-result caching within a batch scope, distinguishable by
+        // the tombstone insert ON THE MISS PATH. Regime: transaction
+        // loading against a store, batch pipelines re-asking absent keys
+        // (an absent fee-credit account referenced by several txs in one
+        // batch). Tombstone memory is bounded by the batch's key set — one
+        // entry per key asked, absent or not. ANTI-REGIME (state it
+        // honestly): keys asked exactly once — the tombstone is pure
+        // overhead (a map insert for nothing); and a store that MUTATES
+        // mid-batch under the loader's feet — a cached Absent can then be
+        // stale, which is why the tombstone's scope is the batch, not a
+        // global cache. Suggestion-only (a parse-only proposer cannot
+        // prove the loader re-asks keys or bound the key set).
+        PerfRule {
+            rule_id: "batch-local-memoization-negative-cache-tombstone".to_string(),
+            name: "batch cache stores hits only — every miss re-queries the backend → cache the miss too (Absent tombstone), repeated misses cost a map hit".to_string(),
+            category: "caching".to_string(),
+            buggy_code: "use std::collections::HashMap;\nstruct AccountDb;\nimpl AccountDb {\n    // expensive: index lookups + storage reads per call\n    fn fetch(&self, key: u64) -> Option<Vec<u8>> {\n        (key % 3 == 0).then(|| vec![0u8; 32])\n    }\n}\nstruct StagedLoader<'a> {\n    cache: HashMap<u64, Vec<u8>>, // POSITIVE results only\n    backend: &'a AccountDb,\n}\nimpl<'a> StagedLoader<'a> {\n    fn load(&mut self, key: u64) -> Option<Vec<u8>> {\n        if let Some(account) = self.cache.get(&key) {\n            return Some(account.clone());\n        }\n        // the map cannot tell \"asked and absent\" from \"never asked\" —\n        // every miss walks the backend AGAIN (and again, per re-ask)\n        match self.backend.fetch(key) {\n            Some(account) => {\n                self.cache.insert(key, account.clone());\n                Some(account)\n            }\n            None => None,\n        }\n    }\n}".to_string(),
+            fixed_code: "use std::collections::HashMap;\nstruct AccountDb;\nimpl AccountDb {\n    fn fetch(&self, key: u64) -> Option<Vec<u8>> {\n        (key % 3 == 0).then(|| vec![0u8; 32])\n    }\n}\nenum Entry {\n    Present(Vec<u8>),\n    Absent, // tombstone: \"known absent\" — do not re-ask this batch\n}\nstruct StagedLoader<'a> {\n    cache: HashMap<u64, Entry>,\n    backend: &'a AccountDb,\n}\nimpl<'a> StagedLoader<'a> {\n    fn load(&mut self, key: u64) -> Option<Vec<u8>> {\n        match self.cache.get(&key) {\n            // both flavors of hit answer WITHOUT a backend query\n            Some(Entry::Present(account)) => return Some(account.clone()),\n            Some(Entry::Absent) => return None,\n            None => {}\n        }\n        match self.backend.fetch(key) {\n            Some(account) => {\n                self.cache.insert(key, Entry::Present(account.clone()));\n                Some(account)\n            }\n            None => {\n                // the tombstone insert — repeated misses are now map hits\n                self.cache.insert(key, Entry::Absent);\n                None\n            }\n        }\n    }\n}".to_string(),
+            context_notes: Some("REGIME: transaction loading against a store, batch pipelines that re-ask absent keys (an absent fee-credit account referenced by several txs in one batch). Tombstone memory is bounded by the batch key set — one entry per key asked, absent or not; the source rides the tombstone in the SAME map as positives (a default account's zero lamports encodes absent) so no second structure is needed, and its staleness contract is in-source: entries are never removed within the batch ('We *never* remove accounts, or else we would fetch stale state from accounts-db') — the batch's own writes own the state. ANTI-REGIME (stated honestly): keys asked exactly once — the tombstone is pure overhead; and a store that mutates mid-batch under the loader's feet makes a cached Absent stale — the tombstone's scope is the BATCH, never a global cache. Distinct from `sort-key-cache-precompute-out-of-lock` (per-comparison key cache), from the per-insert aggregate-statistic family (`debug-stat-full-scan-out-of-hot-path`), and from the resume-provenance identity rules (entries_05 — build-level identity): the decision content is NEGATIVE-result caching within a batch scope, distinguishable by the tombstone insert ON THE MISS PATH. Suggestion-only, NotBenchable as drafted (a parse-only proposer cannot prove the loader re-asks keys or bound the key set; the honest bench needs a backend whose miss cost dominates a map hit at a realistic ratio — deferred, not claimed). Source: anza-xyz/agave @ c95d87063 (Apache-2.0) — svm/src/account_loader.rs load_account:256-274 (the (None, true) tombstone arm), do_load:279-296 (the lamports == 0 read-back + the never-remove staleness contract at :283). Staged agave batch / Plan 131 / Research 172.".to_string()),
+            // Bench spec deliberately deferred: the honest bench needs a
+            // backend whose miss cost dominates a map hit at a realistic
+            // ratio; spec deferred to the integration follow-up.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
         ]
 }
 
@@ -755,6 +1025,148 @@ pub fn run_fixed(input: &Input) {
     let cs: u64 = grid.iter().sum();
     debug_assert_eq!(cs, expected());
     std::hint::black_box(cs);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `bounded-batch-buffer-pool` (Batch 147, Plan 131 / Research
+/// 172 — the scheduler MAX_RECYCLED_BATCHES + PacketBufferPool distill):
+/// fresh buffer triple per cycle vs bounded take/put pool.
+///
+/// sizes = CYCLE COUNT (the churn axis): the buggy arm pays 3 malloc/free
+/// per cycle forever; the fixed arm allocates once per parked buffer, then
+/// ~0 (pool at steady state). The cap (1024) parks the pool at steady state
+/// — retention is bounded, never grown. G1: both arms return the same total
+/// (keys+vals+stamps over every record), debug_assert'd against a
+/// make_input-computed ground truth. Alloc axis: N cycles × 3 allocs → ~3
+/// total (warmup) — the deterministic axis; timing axis the malloc/free
+/// round-trips.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+fn bounded_batch_buffer_pool_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 4_000, 16_000],
+        harness: r#"
+pub const TARGET: usize = 64; // records per batch (fixed shape)
+pub const CAP: usize = 1024; // MAX_RECYCLED — the pool's hard bound
+
+pub struct Work {
+    pub key: u64,
+    pub val: u64,
+    pub stamp: u32,
+}
+pub struct Input {
+    pub work: Vec<Work>, // n * TARGET records, chunked into n batches
+    pub expected: u64,
+}
+fn next(rng: &mut u64) -> u64 {
+    *rng = rng
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *rng >> 16
+}
+fn checksum(work: &[Work]) -> u64 {
+    let mut total = 0u64;
+    for chunk in work.chunks(TARGET) {
+        total = total
+            .wrapping_add(chunk.iter().map(|w| w.key).sum::<u64>())
+            .wrapping_add(chunk.iter().map(|w| w.val).sum::<u64>())
+            .wrapping_add(chunk.iter().map(|w| w.stamp as u64).sum::<u64>());
+    }
+    total
+}
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x853C_49E6_748F_EA9B;
+    let mut work = Vec::with_capacity(n * TARGET);
+    for _ in 0..n * TARGET {
+        let key = next(&mut rng) & 0xF;
+        let val = next(&mut rng) & 0xF;
+        let stamp = (next(&mut rng) & 0xF) as u32;
+        work.push(Work { key, val, stamp });
+    }
+    let expected = checksum(&work);
+    Input { work, expected }
+}
+mod buggy {
+    use super::*;
+    // fresh triple allocated and dropped EVERY cycle
+    pub fn run(work: &[Work]) -> u64 {
+        let mut total = 0u64;
+        for chunk in work.chunks(TARGET) {
+            let mut keys: Vec<u64> = Vec::with_capacity(TARGET);
+            let mut vals: Vec<u64> = Vec::with_capacity(TARGET);
+            let mut stamps: Vec<u32> = Vec::with_capacity(TARGET);
+            for w in chunk {
+                keys.push(w.key);
+                vals.push(w.val);
+                stamps.push(w.stamp);
+            }
+            total = total
+                .wrapping_add(keys.iter().sum::<u64>())
+                .wrapping_add(vals.iter().sum::<u64>())
+                .wrapping_add(stamps.iter().map(|&s| s as u64).sum::<u64>());
+            // dropped here — 3 malloc/free per cycle
+        }
+        total
+    }
+}
+mod fixed {
+    use super::*;
+    pub struct BatchPool {
+        recycled: Vec<(Vec<u64>, Vec<u64>, Vec<u32>)>,
+    }
+    impl BatchPool {
+        fn new() -> Self {
+            Self { recycled: Vec::new() }
+        }
+        fn take(&mut self) -> (Vec<u64>, Vec<u64>, Vec<u32>) {
+            self.recycled.pop().unwrap_or_else(|| {
+                (
+                    Vec::with_capacity(TARGET),
+                    Vec::with_capacity(TARGET),
+                    Vec::with_capacity(TARGET),
+                )
+            })
+        }
+        fn put(&mut self, mut batch: (Vec<u64>, Vec<u64>, Vec<u32>)) {
+            batch.0.clear();
+            batch.1.clear();
+            batch.2.clear();
+            if self.recycled.len() < CAP {
+                self.recycled.push(batch);
+            } // else dropped — the cap is the decision
+        }
+    }
+    pub fn run(work: &[Work]) -> u64 {
+        let mut pool = BatchPool::new();
+        let mut total = 0u64;
+        for chunk in work.chunks(TARGET) {
+            let (mut keys, mut vals, mut stamps) = pool.take();
+            for w in chunk {
+                keys.push(w.key);
+                vals.push(w.val);
+                stamps.push(w.stamp);
+            }
+            total = total
+                .wrapping_add(keys.iter().sum::<u64>())
+                .wrapping_add(vals.iter().sum::<u64>())
+                .wrapping_add(stamps.iter().map(|&s| s as u64).sum::<u64>());
+            pool.put((keys, vals, stamps));
+        }
+        total
+    }
+}
+pub fn run_buggy(input: &Input) {
+    let total = buggy::run(&input.work);
+    debug_assert_eq!(total, input.expected);
+    std::hint::black_box(total);
+}
+pub fn run_fixed(input: &Input) {
+    let total = fixed::run(&input.work);
+    debug_assert_eq!(total, input.expected);
+    std::hint::black_box(total);
 }
 "#
         .to_string(),

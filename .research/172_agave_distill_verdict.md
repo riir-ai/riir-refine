@@ -1,7 +1,9 @@
 # Research 172 — Agave distill verdict (the pool pack lead)
 
-**Status:** DISTILLED — pending owner decision (verdict recorded 2026-09-16;
-batch staged behind the bevy-0.19 charter, Plan 131)
+**Status:** RECORD — Batch 147 landed 2026-09-16 (all five candidates admitted;
+the batch's own measurement DEMOTED the stack-read lead to suggestion-only with
+the ParetoDominated verdict as its pinned anti-regime witness — see
+`.docs/11_domains/rust_perf.md` + `entries_06.rs` Batch 147; corpus 131 → 136)
 
 ## Source & provenance
 

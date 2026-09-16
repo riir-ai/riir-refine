@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 131); // Batch 146 (read-lane pack) 127 → 131
+    assert_eq!(corpus.entries.len(), 136); // Batch 147 (staged agave batch) 131 → 136
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1778,7 +1778,7 @@ fn eighty_six_rules_have_bench_specs() {
         .iter()
         .filter(|e| e.bench_spec.is_some())
         .count();
-    assert_eq!(with_spec, 91, "expected 91 benchable rules (Batch 143 added the debug-level-gated-computation Pareto bench), got {with_spec}");
+    assert_eq!(with_spec, 92, "expected 92 benchable rules (Batch 147 added the bounded-pool spec; the stack-read spec was withheld after its measured ParetoDominated verdict), got {with_spec}");
 }
 
 #[cfg(feature = "rust_perf_bench")]
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 40); // 131 total − 91 benchable (Batch 146 added 4 NotBenchable suggestion-only rules)
+    assert_eq!(without_spec.len(), 44); // 136 total − 92 benchable (Batch 147 added 4 NotBenchable suggestion-only rules)
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1869,7 +1869,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 74, "expected 74 context-annotated rules (Batch 145 added the mincore-routing annotation; Batch 146 added the four read-lane suggestion-only annotations)");
+    assert_eq!(annotated.len(), 79, "expected 79 context-annotated rules (Batch 146 added the four read-lane annotations; Batch 147 added the five agave annotations)");
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
     assert!(annotated.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — the build-time rationale + the -Zmacro-stats instrument
     assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
@@ -1930,7 +1930,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 57, "expected 57 unannotated rules (131 total - 74 annotated; Batches 145+146 rules all joined the ANNOTATED side, so the unannotated count is unchanged)");
+    assert_eq!(unannotated, 57, "expected 57 unannotated rules (136 total - 79 annotated; Batches 145+146+147 rules all joined the ANNOTATED side, so the unannotated count is unchanged)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1942,7 +1942,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 74); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74
+    assert_eq!(annotated, 79); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1983,7 +1983,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 74, "expected 74 annotated rules");
+    assert_eq!(annotated.len(), 79, "expected 79 annotated rules (Batch 147: 74 → 79)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -4014,6 +4014,177 @@ fn batch146_dual_evidence_and_distinct_rows_present() {
             "batch-146 {id} distinct-from row must name {neighbor}"
         );
     }
+}
+
+/// Batch 147 (staged agave batch, Plan 131 / Research 172) — G1: presence,
+/// categories, annotation discipline. Three of the five are NotBenchable
+/// suggestion-only (the annotation IS the content); two carry specs.
+#[test]
+fn batch147_rules_present_and_annotated() {
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        ("bounded-batch-buffer-pool", "allocation", true),
+        (
+            "stack-read-fast-path-length-prefixed-record",
+            "io",
+            false,
+        ),
+        (
+            "batch-verify-optimistic-aggregate-fallback-individual",
+            "caching",
+            false,
+        ),
+        ("partial-reset-watermark-pool", "allocation", false),
+        (
+            "batch-local-memoization-negative-cache-tombstone",
+            "caching",
+            false,
+        ),
+    ];
+    for (id, category, benchable) in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-147 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-147 {id} category");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-147 {id} must carry context_notes (the annotation IS the content)"
+        );
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("Suggestion-only")
+                || notes.contains("CONDITIONAL")
+                || notes.contains("SUGGESTION-ONLY"),
+            "batch-147 {id} annotation must state the suggestion-only/conditional verdict"
+        );
+        #[cfg(feature = "rust_perf_bench")]
+        if benchable {
+            assert!(e.bench_spec.is_some(), "batch-147 {id} must carry its spec");
+        } else {
+            assert!(e.bench_spec.is_none(), "batch-147 {id} is NotBenchable as drafted");
+        }
+    }
+}
+
+#[test]
+fn batch147_pseudocode_parses() {
+    // G1 for Batch 147: syn-parse gate over both fixtures of every rule.
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        "bounded-batch-buffer-pool",
+        "stack-read-fast-path-length-prefixed-record",
+        "batch-verify-optimistic-aggregate-fallback-individual",
+        "partial-reset-watermark-pool",
+        "batch-local-memoization-negative-cache-tombstone",
+    ];
+    for id in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-147 rule '{id}' missing"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-147 {id} buggy/fixed must both parse"
+        );
+    }
+}
+
+#[test]
+fn batch147_distinct_rows_present() {
+    // The dedup law, admission-time: every rule names its nearest neighbors
+    // so retrieval cannot shadow them — including the two-sided B123 row.
+    let corpus = build_perf_seed_corpus();
+    for (id, neighbor) in [
+        ("bounded-batch-buffer-pool", "batch-pool-read-makes-serial-readahead-redundant"),
+        ("bounded-batch-buffer-pool", "reuse-allocation-clear"),
+        ("bounded-batch-buffer-pool", "smallvec-stack"),
+        ("stack-read-fast-path-length-prefixed-record", "smallvec-stack"),
+        ("stack-read-fast-path-length-prefixed-record", "bounded-batch-buffer-pool"),
+        ("partial-reset-watermark-pool", "bounded-batch-buffer-pool"),
+        ("partial-reset-watermark-pool", "reuse-allocation-clear"),
+        (
+            "batch-verify-optimistic-aggregate-fallback-individual",
+            "filter-count-to-any",
+        ),
+        (
+            "batch-local-memoization-negative-cache-tombstone",
+            "sort-key-cache-precompute-out-of-lock",
+        ),
+    ] {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap();
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-147 {id} must carry a Distinct-from row"
+        );
+        assert!(
+            notes.contains(neighbor),
+            "batch-147 {id} distinct-from row must name {neighbor}"
+        );
+    }
+}
+
+/// Batch 147 — the batch-verify ladder's G1 SEMANTICS on the stand-in
+/// primitive: N==1 bypasses the aggregate; all-valid batches answer from
+/// tier 2 without any per-item call; an adversarial batch pays tier 2 +
+/// tier 3 and still returns the same verdicts as individual-only.
+#[test]
+fn batch147_verify_ladder_semantics() {
+    struct Tx {
+        sig: [u8; 64],
+        signer: [u8; 32],
+    }
+    impl Tx {
+        fn verify(&self, _msg: &[u8; 32]) -> bool {
+            // the stand-in reads both fields (a real verifier checks the
+            // signature AND the signer; the aggregate half reads signer only)
+            self.signer != [0u8; 32] && self.sig.iter().any(|&b| b != 0)
+        }
+    }
+    fn verify_aggregate(txs: &[Tx], _msg: &[u8; 32]) -> bool {
+        txs.iter().all(|tx| tx.signer != [0u8; 32])
+    }
+    fn verify_batch(txs: &[Tx], msg: &[u8; 32]) -> Vec<bool> {
+        if let [only] = txs {
+            return vec![only.verify(msg)];
+        }
+        if verify_aggregate(txs, msg) {
+            return vec![true; txs.len()];
+        }
+        txs.iter().map(|tx| tx.verify(msg)).collect()
+    }
+    let msg = [0u8; 32];
+    let good = |s: u8| Tx {
+        sig: [s; 64],
+        signer: [s; 32],
+    };
+    let bad = || Tx {
+        sig: [1u8; 64],
+        signer: [0u8; 32],
+    };
+
+    // N==1: the ladder returns the individual verdict directly.
+    assert_eq!(verify_batch(&[good(1)], &msg), vec![true]);
+    assert_eq!(verify_batch(&[bad()], &msg), vec![false]);
+
+    // All-valid N>1: tier 2 answers for the whole batch.
+    assert_eq!(verify_batch(&[good(1), good(2), good(3)], &msg), vec![true, true, true]);
+
+    // Adversarial: one invalid vote — the aggregate fails, the per-item
+    // fallback locates it. Same verdicts as individual-only, honestly.
+    assert_eq!(
+        verify_batch(&[good(1), bad(), good(3)], &msg),
+        vec![true, false, true]
+    );
 }
 
 /// Batch 143 — G1 semantics: the level gate decides whether the log-only

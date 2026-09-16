@@ -1,8 +1,19 @@
 # Plan 131 — Agave distill batch (staged): the pool-pack lead
 
-**Status:** STAGED — 2026-09-16 (verdict recorded, Research 172; batch runs at
-a future batch window AFTER the staged Batch 146 bevy-0.19 charter; owner may
-pull it forward)
+**Status:** COMPLETE — Batch 147 landed 2026-09-16 (corpus 131 → 136; GOAT:
+lib 1564/0 default + 1593/0 rust_perf_bench + 1714/0 latent + 2061/0
+kernel+latent; retrieval floors HELD byte-identical 94.7/96.9 + kernel 100;
+score-bench FLAT 96.2% rows #120-121 + frontier snapshot; clippy -D clean on
+the write-set in 3 states — one PRE-EXISTING `cloned_ref_to_slice_refs` on
+`src/clippy_oracle.rs:163` under `--tests` noted, NOT this batch's write-set).
+**Admission-time finding: the stack-read candidate measured ParetoDominated
+0/3/0 (allocation axis won 100000→802 but timing lost at every size — the
+fixture's memcpy cost model dominates the page fill) and was DEMOTED to
+suggestion-only with the measured negative as its pinned anti-regime witness
+(the Issue-960/batch-146 precedent) — the honest direction, not a fixture tune.
+`bounded-batch-buffer-pool` measured ParetoDominant 2/0/1 (48000→4 allocs,
+20.5 MB→1568 B). The batch-verify candidate ships CONDITIONAL (aggregate
+primitive must exist consumer-side; owner sign-off per the staging note).**
 
 ## Source
 
@@ -32,24 +43,25 @@ verification).
 
 ## Tasks
 
-- [ ] Re-clone `.raw/agave` at `c95d8706…`, re-verify the five candidate
+- [x] Re-clone `.raw/agave` at `c95d8706…`, re-verify the five candidate
       file:line anchors (the repo moves fast; re-pin if HEAD moved and
       re-run the dedup greps)
-- [ ] Dedup re-verification under BOTH vocabularies (incl. the B123
+- [x] Dedup re-verification under BOTH vocabularies (incl. the B123
       distinct-from requirement)
-- [ ] Author ORIGINAL minimal-reproduction fixtures (license hygiene —
+- [x] Author ORIGINAL minimal-reproduction fixtures (license hygiene —
       nothing verbatim from agave)
-- [ ] Corpus entries landed (rust_perf; batch number assigned at mining)
-- [ ] Standing gates: lib tests at default + full-feature, clippy 0
+- [x] Corpus entries landed (rust_perf; batch number assigned at mining —
+      **Batch 147**)
+- [x] Standing gates: lib tests at default + full-feature, clippy 0
       write-set ×3 states, kernel_heal corpus test if any entry touches
       shared files
-- [ ] GOAT: G1 correctness (integer-exact for 1/2/4; dalek batch-verdict
+- [x] GOAT: G1 correctness (integer-exact for 1/2/4; dalek batch-verdict
       equality for 3), G2 perf (alloc-count axis for 1/4), G3
       no-regression, G4 alloc-free-or-equivalent
-- [ ] score-bench run + frontier snapshot append
-- [ ] Research 172 status → RECORD; queue snapshot row closed
-- [ ] docs: AGENTS corpus counts + HISTORY record + queue snapshot update
-- [ ] Commit + push; `rm -rf .raw/agave`
+- [x] score-bench run + frontier snapshot append
+- [x] Research 172 status → RECORD; queue snapshot row closed
+- [x] docs: AGENTS corpus counts + HISTORY record + queue snapshot update
+- [ ] Commit + push; `rm -rf .raw/agave` *(in flight — this commit)*
 
 ## Honest scope note
 
