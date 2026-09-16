@@ -61,7 +61,7 @@ verification).
 - [x] score-bench run + frontier snapshot append
 - [x] Research 172 status → RECORD; queue snapshot row closed
 - [x] docs: AGENTS corpus counts + HISTORY record + queue snapshot update
-- [ ] Commit + push; `rm -rf .raw/agave` *(in flight — this commit)*
+- [x] Commit + push; `rm -rf .raw/agave` *(landed at `26061174`; the box was left for the batch-148 session's sweep — complete)*
 
 ## Honest scope note
 
