@@ -1858,7 +1858,7 @@ pub const VOTE_VERSION: u32 = 1;
     /// the serializer's argument mentions.
     #[test]
     fn wire_param_only_cleared_when_actually_serialized() {
-        let src = r#"
+        let src = r"
 #[derive(serde::Serialize)]
 pub struct StakeIntent {
     pub stake_version: u32,
@@ -1878,7 +1878,7 @@ pub fn other(x: &StakeIntent, misc: &Misc) -> String {
     let _ = x;
     s
 }
-"#;
+";
         let wire = wire_of(src);
         assert!(
             !wire.cleared.contains(&("StakeIntent".to_string(), "stake_version".to_string())),
