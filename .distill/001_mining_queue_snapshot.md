@@ -127,8 +127,16 @@
 > MARGINAL B− retracted, both grades kept in Research 179 as the resolved
 > borderline-call precedent. All fixtures ORIGINAL; source numbers source-reported
 > (mini-redis p50 0.967→0.105 ms / p99 2.548→0.320 ms; ~50k blocking tasks/s @
-> 32-core). Lane-intel axis does NOT fire (0 tokio hits in riir-ai/.issues;
-> league rows are GPU lanes).
+> 32-core). Lane-intel axis does NOT fire (0 tokio ISSUES in riir-ai/.issues;
+> league rows are GPU lanes). READ CORRECTLY: the zero is an issue-ledger fact,
+> NOT a surface fact — riir-chaind/riir-rest/riir-net run tokio and these rules
+> fire on our own repos at heal time too. **PRODUCT-COVERAGE axis added per owner
+> directive: cargo-heal serves the world's Rust — tokio is top-tier ecosystem
+> infra (hyper/axum/reqwest/sqlx/tonic) and the corpus's 3-rule tokio family is
+> thin against it; this batch SEEDS the family and the async-perf source pool
+> extends behind it (Alice Ryhl "What is Blocking?", tokio blocking docs,
+> tokio-rs/mini-redis — Research 179 §product-coverage; accumulation clause
+> applies).**
 
 > **RECORD 2026-09-17 (perf-rematch pipeline read — llama.cpp OPEN-PR forward-look, two
 > ENGINE-LANE leads handed from the riir-ai league; no clippy-rule candidates, no batch).**

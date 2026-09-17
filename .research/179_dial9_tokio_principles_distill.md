@@ -44,9 +44,24 @@ Drops (positive instances / not rule-shaped — the dedup gate working):
 | Multiple runtimes / niceness / cgroups core pinning | KILL | Deployment topology — not code-shaped, no bounded fix |
 | Global queue depth / schedule-latency diagnostics | KILL | Diagnosis methodology (dial9's product surface); zero fix content |
 
-## Lane-intel axis — does NOT fire
+## Lane-intel axis — does NOT fire (workspace lanes; deliberately narrow)
 
-Checked before recording: (a) league scoreboard rows are all GPU kernel lanes (M3 Metal decode, 4090 CUDA prefill/decode) — no tokio scheduling row; (b) `../riir-ai/.issues/*.md` greps for `tokio|yield_now|schedule latency|blocking pool|spawn_blocking` = **0 hits**; (c) no source-shelf row names async-runtime serving. Honest adjacency, NOT a lane mapping: `riir-chaind` wallet RPC (measured 1,344.5 µs p50 / 783 req/s loopback), `riir-rest`, and the `riir-net` relay are tokio consumers that would benefit at heal time — but no open issue on those lanes names scheduling latency, and none of our benches records a p99-under-load metric.
+Checked before recording: (a) league scoreboard rows are all GPU kernel lanes (M3 Metal decode, 4090 CUDA prefill/decode) — no tokio scheduling row; (b) `../riir-ai/.issues/*.md` greps for `tokio|yield_now|schedule latency|blocking pool|spawn_blocking` = **0 hits**; (c) no source-shelf row names async-runtime serving.
+
+⚠ Read that zero correctly — it is an ISSUE-LEDGER fact, not a surface fact. Our own repos run tokio (`riir-chaind` RPC, `riir-rest`, the `riir-net` relay, `riir-mmorpg-examples` authority), so this batch's rules fire at heal time on our own code too; the zero only means nobody has filed a tokio perf issue yet. The lane-intel axis is issue-based by design and stays narrow; it does not measure world-facing value.
+
+## Product-coverage axis (added same day, owner directive — the axis the verdict is actually FOR)
+
+`cargo heal` ships publicly (gist-rs/cargo-heal releases + homebrew tap + scoop bucket + the KAT mining network); its consumers are the world's Rust repos, and tokio is top-tier ecosystem infrastructure — hyper, axum, reqwest, sqlx, tonic, aws-sdk all stand on it. The corpus's entire tokio family before this batch is **3 rules** — thin against that surface. "Famous lib" coverage is a first-class corpus goal: the corpus already carries bevy + wasm + rayon families for the same reason. This batch seeds the tokio family; the pool must keep feeding it.
+
+**Async-perf source pool (extends the mining queue — same distill discipline per source):**
+
+1. Alice Ryhl, "What is Blocking?" — the article's own upstream cite; the canonical source for the 10–100 µs poll guidance + the blocking taxonomy. The family's regime boundary lives here.
+2. tokio official docs: "Bridging with sync code" + the blocking-pool pages (`tokio.rs/tokio/tutorial` + `Runtime`/`spawn_blocking` docs) — the runtime's own prescriptions, prime suggestion-only rule material.
+3. `tokio-rs/mini-redis` — the demo repo the article benchmarks; in-source comments explain the fairness yield. License-check at clone; `.raw` discipline.
+4. carllerche/Johnny Törnblom/tokio-discord SIGperf material as leads surface (opportunistic, same two-vocabulary dedup gate).
+
+**Accumulation clause:** if any pool source is read before this batch's window opens, fold its candidates into the same batch — the Batch-145/146 staged-charter precedent ("not batch-justifying alone" is a staging note, not a gate).
 
 ## Honest caveats
 
@@ -58,4 +73,4 @@ Checked before recording: (a) league scoreboard rows are all GPU kernel lanes (M
 
 ## Queue slot
 
-Staged in `.distill/001_mining_queue_snapshot.md` (2026-09-17 entry). Execution: next mining window, plan-first — **Plan 142** (`.plans/142_batch152_dial9_tokio_distill.md`); the batch takes the next free batch number at execution (150 and 151 already claimed; nominally 152 — claim at landing per the staged-intake race rule).
+Staged in `.distill/001_mining_queue_snapshot.md` (2026-09-17 entry). Execution: next mining window, plan-first — **Plan 142** (`.plans/142_batch152_dial9_tokio_distill.md`); the batch takes the next free batch number at execution (150 and 151 already claimed; nominally 152 — claim at landing per the staged-intake race rule). Owner priority note (2026-09-17): this batch is the SEED of world-facing tokio coverage, not a workspace-lane response — the product-coverage axis above governs the family's continuation.
