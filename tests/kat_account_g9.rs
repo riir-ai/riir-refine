@@ -8,7 +8,7 @@
 //! - **G9b** — the record shape is version-stamped with an explicit changelog;
 //!   the version rides the persisted file.
 //! - **G9d** — accounting-only: the grant is a LOCAL projection (since
-//!   Issue 081, literally the [`FREE_TIER_GRANT_KAT`] meter constant — the
+//!   Issue 081, literally the [`FREE_TIER_GRANT_MICRO_KAT`] meter constant — the
 //!   canonical record no longer carries a grant field). No code path in the
 //!   account module mints, spends, or mutates the grant; re-login must not
 //!   move anything (the "once per account key" property, client half).
@@ -26,7 +26,7 @@
 use riir_clippy::kat_account::{
     account_id_for, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
 };
-use riir_clippy::kat_meter::{ChargeState, KatCharge, KatMeter, FREE_TIER_GRANT_KAT};
+use riir_clippy::kat_meter::{ChargeState, KatCharge, KatMeter, FREE_TIER_GRANT_MICRO_KAT};
 
 fn temp_dir(tag: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("kat_acct_g9_{tag}_{}", std::process::id()));
@@ -85,7 +85,7 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     assert!(first.summary_lines().iter().any(|l| {
         l.contains("grant projection")
             && l.contains(&riir_clippy::kat_payreq_client::render_kat(
-                i64::try_from(FREE_TIER_GRANT_KAT).unwrap_or(i64::MAX),
+                i64::try_from(FREE_TIER_GRANT_MICRO_KAT).unwrap_or(i64::MAX),
             ))
     }));
 
@@ -141,9 +141,9 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     assert_eq!(persisted.charged_kat, tokens, "1 KAT/token at the v1 rate");
 
     // Issue 081: the grant projection is the meter constant (G9d).
-    let grant = FREE_TIER_GRANT_KAT;
+    let grant = FREE_TIER_GRANT_MICRO_KAT;
     let remaining = grant.saturating_sub(persisted.charged_kat);
-    assert_eq!(remaining, FREE_TIER_GRANT_KAT - tokens);
+    assert_eq!(remaining, FREE_TIER_GRANT_MICRO_KAT - tokens);
     // And the ledger files are distinct roots by design: the account is
     // machine-global, the charge is repo-local.
     assert_ne!(

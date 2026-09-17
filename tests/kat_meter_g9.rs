@@ -29,7 +29,7 @@
 
 use riir_clippy::kat_meter::{
     count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
-    CHARGE_CHANGELOG, CHARGE_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, METER_CHANGELOG,
+    CHARGE_CHANGELOG, CHARGE_MICRO_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, METER_CHANGELOG,
     METER_VERSION,
 };
 
@@ -289,7 +289,7 @@ fn g9_charge_rate_arithmetic_matches_the_independent_mirror() {
     // Test-side mirror computed independently — pins the u128 mul-div
     // arithmetic and the v1 identity.
     let mirror = |t: u64| {
-        u64::try_from((u128::from(t) * u128::from(CHARGE_KAT_PER_MILLION_TOKENS)) / 1_000_000)
+        u64::try_from((u128::from(t) * u128::from(CHARGE_MICRO_KAT_PER_MILLION_TOKENS)) / 1_000_000)
             .unwrap_or(u64::MAX)
     };
     for t in [
@@ -310,6 +310,6 @@ fn g9_charge_rate_arithmetic_matches_the_independent_mirror() {
         );
     }
     // v1 pin: the rate IS 1 KAT per token — identity for every input.
-    assert_eq!(CHARGE_KAT_PER_MILLION_TOKENS, 1_000_000);
+    assert_eq!(CHARGE_MICRO_KAT_PER_MILLION_TOKENS, 1_000_000);
     assert_eq!(kat_for_tokens(123_456_789), 123_456_789);
 }

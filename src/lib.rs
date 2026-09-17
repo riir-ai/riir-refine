@@ -563,8 +563,8 @@ pub use scope_model::{ScopeModel, KAPPA, OUT_OF_SCOPE_DOCS, THETA};
 #[cfg(feature = "kat_service")]
 pub use kat_meter::{
     count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
-    CHARGE_CHANGELOG, CHARGE_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, FREE_TIER_GRANT_KAT,
-    KAT_WARN_REMAINING, METER_CHANGELOG, METER_VERSION,
+    CHARGE_CHANGELOG, CHARGE_MICRO_KAT_PER_MILLION_TOKENS, CHARGE_VERSION,
+    FREE_TIER_GRANT_MICRO_KAT, KAT_WARN_REMAINING, METER_CHANGELOG, METER_VERSION,
 };
 
 // Proposal 005 Phase 0 T0.1 (Plan 025): the KAT account surface.

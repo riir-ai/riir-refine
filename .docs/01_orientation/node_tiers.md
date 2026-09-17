@@ -114,7 +114,7 @@ yet"; Ultra names "ours only at launch"), no consumer-fixer advertising.
 The public dist README (`gist-rs/cargo-heal`) carries the same roles ×
 tiers table, source-free per Proposal 003 — shipped 2026-09-15 (cargo-heal
 `62a435f`), which also repaired the README's per-token burn-unit figure
-(the shipped meter charges `CHARGE_KAT_PER_MILLION_TOKENS` = 1 KAT per
+(the shipped meter charges `CHARGE_MICRO_KAT_PER_MILLION_TOKENS` = 1 KAT per
 MILLION code-word tokens) and its next-release mining staleness (`--mine`
 joins today; sync ships). Deploy note: the first widening against a LIVE
 deployment shipped with the 09-14 chooser — the 176→180 config-row append

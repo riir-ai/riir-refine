@@ -1103,7 +1103,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // Issue 081: the grant projection is the meter CONSTANT now — the
     // canonical record no longer carries a grant_kat field (it was never
     // mutated after first write, so the constant IS the projection).
-    let grant = riir_clippy::kat_meter::FREE_TIER_GRANT_KAT;
+    let grant = riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT;
     match &charge {
         Some(charge) => {
             let remaining = grant.saturating_sub(charge.charged_kat);
@@ -9885,7 +9885,7 @@ fn main() {
             // local projection).
             eprintln!(
                 "kat-charge: 0 KAT remain of the {} grant projection — out-of-KAT",
-                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_KAT)
+                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
             );
             eprintln!(
                 "kat-charge: healing continues on the local corpus; the evolved-corpus \\
@@ -9915,7 +9915,7 @@ fn main() {
                 "kat-charge: warning — {} KAT remain of the {} grant projection; \\
                  healing continues offline (the server ledger is the authority)",
                 kat(remaining),
-                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_KAT)
+                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
             );
         }
     }
@@ -10155,8 +10155,8 @@ fn main() {
             run_tokens: m.session_tokens(),
             run_micro_kat: c.session_kat(),
             cum_micro_kat: c.state().charged_kat,
-            grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_KAT,
-            rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_KAT_PER_MILLION_TOKENS,
+            grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
+            rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
             meter_version: m.state().version,
             charge_version: c.state().charge_version,
             account_hex: account.as_ref().map(|a| a.state().account_id.as_str()),
