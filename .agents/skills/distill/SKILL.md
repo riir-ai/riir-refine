@@ -1,6 +1,6 @@
 ---
 name: distill
-description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-clippy's rule corpora — kernel_opt, rust_perf, clippy_lints, and proposed future domains (sec, wasm). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification, and honest WIP/provenance caveats.
+description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-clippy's rule corpora — kernel_opt, rust_perf, clippy_lints, and proposed future domains (sec, wasm). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification (two failure classes — domain-unbenchable is an annotation, pattern weakness is MARGINAL), the product-coverage axis for famous-lib families, and honest WIP/provenance caveats.
 ---
 
 # Distillation-Source Verdict Workflow — riir-clippy Mining
@@ -93,7 +93,12 @@ The verdict MUST name the single strongest benchable candidate and test it again
 3. **Magnitude story** — a mechanism-level cycle/instruction/allocation argument (hardware div 20-40+ cycles vs mul+shift ~5), not "probably faster".
 4. **Deterministic** — same input, same output, no timing-dependent verdicts.
 
-If no candidate passes all four, the source is MARGINAL **as a corpus batch** at best — say so, then run the lane-intel axis below before recording: a corpus-MARGINAL source can still be the highest-value verdict of the session when it maps onto an open perf lane (the qwen38-recipe precedent).
+If no candidate passes all four, record WHICH criterion failed and WHY before grading — the two failure classes grade differently (the 2026-09-17 dial9 correction; both grades preserved in Research 179):
+
+- **Criterion 1 fails for a DOMAIN reason** — the win metric lives in a runtime the validator cannot host (tokio fairness/contention latency, bevy frame pacing, wasm FFI), so *no* rule from this domain can ever Pareto-bench. That is a per-rule ANNOTATION (`NotBenchable`, `bench_spec: None`), not a demotion: the corpus lands suggestion-only decision-content entries as first-class (**Batch 136 precedent — the Lattimore rayon blog distill landed 3 NotBenchable rules from a source with NO measured numbers**; the corpus's tokio/bevy/wasm families are built this way). Grade on decision content × novelty × dedup clearance × yield; the verdict can be YES.
+- **Criteria 2–4 fail** (or 1 fails because the PATTERN is unbenchable while its domain siblings are not) — the pattern itself is weak: no exact semantics, no magnitude story, timing-dependent. That is MARGINAL **as a corpus batch** at best — say so, then run the lane-intel axis below before recording: a corpus-MARGINAL source can still be the highest-value verdict of the session when it maps onto an open perf lane (the qwen38-recipe precedent).
+
+⛔ **A domain-level limitation must never demote a source — only source-level properties can** (thin decision content, dedup collisions, unreachable code). The retired veto reading ("no benchable candidate ⇒ MARGINAL") meant no tokio source could EVER grade YES while the corpus contained a tokio family graded in by earlier verdicts; that contradiction is the tell that the gate was misread.
 
 ## The lane-intel axis — MANDATORY second output (added 2026-09-05, the qwen38-recipe miss)
 
@@ -115,21 +120,35 @@ The corpus grade answers ONE question: "how many rules does this source feed rii
 
 **Source-class note:** serving-recipe / measured-config repos (env-gated patches around someone else's runtime, JSON tuning tables, benchmark JSONs) are corpus-MARGINAL by construction — their unit of value is the QUALIFIED CONFIGURATION, not kernels. Grade them on the lane axis; mine them only when a component survives the dedup gate as a new rule.
 
+## The product-coverage axis — MANDATORY third output (added 2026-09-17, the dial9 tokio miss)
+
+The lane-intel axis greps OUR workspace issue ledger — it answers "does this move OUR open lanes?" and nothing else. But `cargo heal` ships publicly (gist-rs releases + tap/bucket + the KAT mining network); its consumers are the world's Rust repos. **"Famous lib" coverage is a first-class corpus goal**: tokio, rayon, serde, regex, bevy — the ecosystem's top-tier infrastructure. A 3-rule tokio family against tokio's real surface (hyper/axum/reqwest/sqlx/tonic/aws-sdk) is a PRODUCT GAP, not a niche interest. The corpus carries bevy/wasm/rayon families for exactly this reason; ecosystem coverage is why the corpus exists.
+
+**For EVERY verdict, BEFORE recording:**
+
+1. Identify which ecosystem libraries the source's patterns live in (tokio async? rayon parallel? serde wire? std io?).
+2. Grep the target corpus for that lib's family size (e.g. `tokio|spawn_blocking|yield_now` in `rust_perf` corpus entries).
+3. Read a SMALL family on a top-tier lib as a COVERAGE GAP — a seeding source can grade YES on decision content even with zero workspace lane mapping and no benchable GOAT. The founding case: the dial9 tokio verdict (2026-09-17) recorded "0 tokio hits in riir-ai/.issues" — an ISSUE-LEDGER fact that must never be read as a surface fact (our own repos run tokio; the rules fire at home too).
+
+**When the product-coverage axis fires, the research note MUST also name the family's follow-up pool** — the canonical upstream sources for that lib (tokio → Alice Ryhl "What is Blocking?" + the official blocking docs + tokio-rs/mini-redis; rayon → the Lattimore posts; ...) — with an accumulation clause: pool sources read before the batch window folds into the same batch (the Batch-145/146 staged-charter precedent).
+
+Do not let a lane-intel zero suppress a product-coverage YES; do not let product coverage inflate a weak corpus grade — the grade still counts rules, the axis sets the family's priority and continuation.
+
 ## Verdict format — exact output shape, in conversation
 
-1. **Verdict line** — YES / NO / MARGINAL + letter grade, PLUS the lane-intel verdict when the axis fires (e.g. "MARGINAL C+ corpus / LEAGUE INTEL HIGH").
+1. **Verdict line** — YES / NO / MARGINAL + letter grade, PLUS the lane-intel verdict when that axis fires (e.g. "MARGINAL C+ corpus / LEAGUE INTEL HIGH"), PLUS the product-coverage verdict when a famous-lib family is in play (e.g. "YES B− corpus / no lane mapping / seeds the tokio family").
 2. **Domain routing** — target corpus + category, explicitly naming the tempting WRONG domain (the CPU-SIMD-is-not-kernel_opt trap).
-3. **Lane mapping** — when the axis fires: mapped lane + issues, transferable vs not-transferable (each with its measured negative), follow-up offered.
+3. **Lane mapping** — when the axis fires: mapped lane + issues, transferable vs not-transferable (each with its measured negative), follow-up offered. **Product-coverage** — when a famous-lib family is in play: the family's current size, the gap, and the follow-up source pool (this lives in the research note; the verdict line just names it).
 4. **Ranked candidate table** — pattern | source file | grade | notes. Include the Drop rows (killed candidates) for transparency.
 5. **Yield estimate** — expected rules landing after ~50% coordinator falsification.
 6. **Honest caveats** — WIP status, provenance, maintenance, consumer-base narrowness, unread files.
-7. **Bottom line** — "mine as one batch (next batch number), lead with `<GOAT rule>`" + offer to add to the mining queue; or the lane-intel follow-up when corpus-MARGINAL.
+7. **Bottom line** — "mine as one batch (next batch number), lead with `<GOAT rule>`" + offer to add to the mining queue; or the lane-intel follow-up when corpus-MARGINAL; or the family-seeding follow-up pool when product-coverage fires on a MARGINAL corpus grade.
 
 ## Recording the verdict
 
 - **NO / MARGINAL, no lane mapping** → conversation only. No files, no queue entry.
 - **NO / MARGINAL, WITH lane mapping** → the lane-intel line in the queue snapshot (committed, `docs:` prefix) + the issue-filing recommendation recorded in that line. No research note, no plan, no corpus batch.
-- **YES (grade B or better)** → three artifacts, same commit:
+- **YES** (any B-band grade — B+/B/B−; a C-band YES records the same artifacts plus an explicit weak-grade caveat; the letter is informational, the STATUS drives recording) → three artifacts, same commit:
   1. One line in the mining queue snapshot at `riir-clippy/.distill/001_mining_queue_snapshot.md`.
   2. A `.research/` note in riir-clippy following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
   3. **The batch plan** — `riir-clippy/.plans/NNN_*.md` (next number per `.plans/.highwater`, re-scan the folder at write time), created BEFORE any corpus edit when the verdict proceeds to a mining batch. `- [ ]` checkbox tasks for: dedup re-verification, entry authoring, standing gates, count pins, GOAT (G1/G2/G3 + retrieval floors), research note, docs/AGENTS/queue-snapshot updates, commit+push. Mark `[x]` on completion, `- [-]` for defers with a reason. The verdict note + queue line cite the plan number. (Adopted 2026-08-18, owner call — the canonical retroactive plan is 006/Batch 60; every batch after it is plan-FIRST.)
@@ -144,6 +163,14 @@ User: "is raygon-renderer/thermite a good distill source?" Verdict: **YES, B+, r
 - Ranked: divider A (GOAT) · capability-gated-approx-op B · double-pump B− · input-domain algorithm selection C · branch-hint-cold-fn C · MM_SHUFFLE macros + packed-struct drop.
 - Caveats: WIP repo (mine completed modules only), CPU-SIMD-only domain fit, cite libdivide upstream, `math/policy.rs` unread (timed out — verify at mine time).
 - Yield: 1-3 rules. Record: `.research/` note + queue line, same commit.
+
+## Second worked example (dial9 tokio blog, 2026-09-17 — the corrected-verdict precedent)
+
+User: distill `dial9-rs "Principles for fast Tokio applications"`. First pass graded MARGINAL B− — every candidate failed GOAT criterion 1 (fairness/coordination metrics live outside the Pareto validator), and "no candidate passes all four ⇒ MARGINAL" was applied as a veto. Owner challenge ("why you ditch B grade?") forced the re-examination that produced this skill's GOAT two-class split and the product-coverage axis. Re-graded: **YES B− / no lane mapping / seeds the tokio family** (Research 179 / Plan 142, nominal Batch 152).
+
+- Dedup: 2 kills were positive instances of the existing tokio family (`tokio-guard-across-await`, `papaya-lockfree`), 1 kill was the corpus's own park-vs-spin rejection — the gate working; recorded as evidence, never as a grade penalty.
+- Candidates: `batch-blocking-pool-segment` B (zero corpus hits; distinct from buffered-io/bufwriter-batched SYSCALL batching) · adaptive-yield-K-consecutive-ready B+ content (distinct-from `async-yield-point` BOTH directions + the light/heavy-load anti-regime — long polls are benign until the runtime OR the OS is loaded) · bounded-fanout-semaphore B− (expected drop; adjacent to `bounded-channel-backpressure`, same family distinct fix-space).
+- The reusable lesson: **a corrected verdict keeps BOTH grades in the research note** — the correction is resolved precedent the next borderline call cites, not history to quietly overwrite.
 
 ## Constraints (non-negotiable)
 
