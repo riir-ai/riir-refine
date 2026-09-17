@@ -141,6 +141,13 @@ ed25519-dalek = "2"
 [features]
 default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist"]
 
+# Issue 122 PoC: the PowerPlay frontier miner — modelless generator at the
+# capability frontier (unsolved-before / solved-after / regression-green /
+# exactly-once, clippy-oracle-verified). Opt-in; GOAT pending (Plan 145).
+# Implies score_bench (heal_fixpoint_cfg + ComponentOverride) and
+# clippy_lints (stock regression rows). Read-only over the seed corpus.
+frontier_miner = ["clippy_lints", "score_bench"]
+
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
 # (promoted to default-on 2026-08-13 after the perf-bench Pareto validator
@@ -569,6 +576,13 @@ required-features = ["rust_perf_bench"]
 [[example]]
 name = "gw_corpus_poc"
 required-features = ["gw_corpus"]
+
+# Issue 122 / Plan 145 — the frontier-miner real-clippy e2e (admission is
+# measured, never asserted). Run from the repo root:
+#   cargo run --features frontier_miner --example frontier_miner
+[[example]]
+name = "frontier_miner"
+required-features = ["frontier_miner"]
 
 # Issue 097 — the linking↔confusion defend-wrong PoC (measurement-only).
 [[example]]

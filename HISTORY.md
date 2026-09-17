@@ -1,5 +1,35 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Issue 122 / Plan 145: the PowerPlay frontier miner PoC (G1–G4 PASS, opt-in)
+
+The idle-loop cycle's unit (the only uncontended ungated issue in the
+workspace — katgpt-rs + riir-ai claimed by live siblings). A modelless,
+deterministic, zero-LLM generator at the capability frontier:
+`src/frontier_miner.rs` (feature `frontier_miner`, implies `score_bench` +
+`clippy_lints`) + `examples/frontier_miner.rs` (the real-clippy e2e —
+admission MEASURED, the `interacting_gate.rs` precedent) +
+`.benchmarks/frontier_miner_rows.jsonl` (append-only, BLAKE3-deduped).
+
+Full invariant loop (unsolved-before / solved-after / regression-green /
+exactly-once + per-family K-minimality ACROSS passes), two modes: HeldOut
+(the `ComponentOverride` lens holds out `needless_return`; re-enable =
+solution) and Frontier (5 leads: `let_and_return`, `ptr_arg`,
+`needless_borrow`, `redundant_slicing`, `map_flatten` — each firing
+EXACTLY its target lint, all outside the compiled fix set). Band fold
+InBand (p̂=0.5) via `frontier_report`, construction-provenance ε. Reruns
+are verify-passes (committed rows re-judged; drift = red). Measured live:
+16/16 seeds clean (after the oracle caught TWO real seed defects — nursery
+`missing_const_for_fn` ×4, pedantic `redundant_closure_for_method_calls`
+×1 — repaired in the tables, never by weakening the gate); 6 rows
+committed + re-verified 0-drift. GOAT G1–G4 PASS (13 hermetic tests +
+e2e ×2 + clippy 0 both states + lib 1738/0 + corpus commitment pinned).
+Promotion NOT claimed — rides the Issue-089 band-predictivity clock.
+Record: [Research 182](.research/182_powerplay_frontier_miner_poc.md);
+plan [145](.plans/145_powerplay_frontier_miner.md). Pre-existing, not
+fixed (unrelated lane): `cargo check --all-features` RED at HEAD from
+`8fc52d22` (groq.rs `TOKENS_PER_MTOK` combo break — verified by
+stash-and-rerun).
+
 ## 2026-09-18 — Batch 154 / Plan 144: the tokio upstream-surface refresh (CHANGELOG 1.47–1.52.3 + "Actors with Tokio"), rust_perf 142 → 145
 
 The async-perf pool's designated NEXT POOL, verdicted and EXECUTED in one

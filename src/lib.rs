@@ -336,6 +336,18 @@ pub mod traj_store;
 // band-mass is predictive).
 pub mod frontier_report;
 
+// Issue 122 PoC: the PowerPlay frontier miner — a modelless, deterministic,
+// zero-LLM generator that constructs the simplest fixtures the current
+// fix-rule corpus cannot repair, verifies them with the real clippy oracle
+// only, and commits admissible rows (unsolved-before / solved-after /
+// prior-rows-green / exactly-once) with band evidence for the Issue-089
+// gate. Opt-in (PoC pending its GOAT); implies `score_bench` (the heal
+// fixpoint + ComponentOverride substrate) + `clippy_lints` (the stock
+// regression rows). Never touches `build_seed_corpus()` (the freeze-table
+// law). The real-clippy e2e: `examples/frontier_miner.rs`.
+#[cfg(feature = "frontier_miner")]
+pub mod frontier_miner;
+
 // Issue 107 T1: the fixseq horizon report — lead-k linear decodability of
 // attempt outcomes over the `.heal/fixseq/` ring (AUC(k) vs the base and
 // history-aggregate floors, LORO-held-out ridge readout). Pure stats over
