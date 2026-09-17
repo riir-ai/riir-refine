@@ -370,6 +370,17 @@ pub mod platform_audit;
 // CLI half — so lib tests cover it at default features.
 pub mod corpus_coverage;
 
+// Plan 134 T2.1: the frame-time budget tier — the measurement VERDICT half
+// of the shader_perf domain, consuming riir-shader's capture-side
+// `<capture>.frames.json` sidecars (schema riir_shader_frame_time_v1):
+// per-effect p50/p90 vs the carried budget + the pre/post A/B diff with
+// warmup-parity and pairing-uniqueness evidence guards. Ungated (the
+// corpus_coverage/horizon_report law): pure over its inputs, no domain
+// machinery, lib-tested at default features, the CLI arm works on every
+// feature build. Report-first, gates nothing; refuses exit 1 on a blind
+// scan — never a flattering partial (the frontier-report law).
+pub mod frame_time_report;
+
 // Issue 116: the corpus-truth delta surface — lints the compiled FIX lane
 // can write that the LEASED suggest corpus cannot rank yet. Names the seam
 // (`[no corpus rule]` means "not leased yet" here, "unsupported" there),

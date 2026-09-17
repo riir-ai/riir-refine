@@ -3358,6 +3358,25 @@ USAGE:
                     that class). Report-first; exit 0 on real scans, refuses
                     exit 1 on an empty one. Reads paths from the CLI
                     (default `.`).
+    --frame-time-report
+                    The frame-time budget tier (Plan 134 T2.1) over
+                    riir-shader's capture-side `<capture>.frames.json`
+                    sidecars (schema riir_shader_frame_time_v1, issue 018
+                    there): per-effect p50/p90/mean vs the carried budget
+                    (--frame-budget <MS> overrides) + the heal hint naming
+                    where `--domain shader_perf` should run next. With
+                    --vs <PATH>: the pre/post A/B diff — pairs by effect
+                    slug, verdicts at --frame-delta-pct (default ±5% on
+                    p50), warmup parity + one-sidecar-per-effect enforced
+                    (a pair captured under different warmup configs, or an
+                    effect with several sidecars on a side — the burst
+                    class — is not evidence). Report-first, gates nothing;
+                    refuses exit 1 on an empty scan, any unparsable
+                    sidecar, or (A/B) any mismatch / zero usable pairs —
+                    never a green zero. Confirm IMPROVED/REGRESSED verdicts
+                    with a second sweep pair before acting (one run is one
+                    run). Reads paths from the CLI (default `.`; the
+                    positional paths are the PRE side when --vs is given).
     --misses       Print the authoring queues in FRONTIER order (Plan 091
                     + Issue 089 T3): the `.heal/misses/` rustc_errors
                     per-CODE queue (dispersion-informative error codes first
@@ -3821,6 +3840,31 @@ struct Args {
     /// LIKELY-BY-OPTIMIZATION tag). Refuses exit 1 on an empty scan or a
     /// blind history leg — never a confident green zero.
     orphan_report: bool,
+    /// Plan 134 T2.1: `--frame-time-report` — the frame-time budget tier
+    /// over riir-shader's capture-side `<capture>.frames.json` sidecars
+    /// (schema `riir_shader_frame_time_v1`): per-effect p50/p90/mean vs the
+    /// carried budget (`--frame-budget` overrides) + the heal hint for
+    /// over-budget effects. With `--vs <PATH>`: the A/B diff — pairs by
+    /// effect slug, verdicts at `--frame-delta-pct` (default ±5% on p50),
+    /// warmup parity + pairing uniqueness enforced (a pair with different
+    /// warmup configs, or an effect with multiple sidecars on a side, is
+    /// not evidence). Reads sidecars directly — no domain features, works
+    /// on every feature build. Report-first, gates nothing; refuses exit 1
+    /// on an empty scan / any unparsable sidecar / (A/B) any mismatch or
+    /// zero usable pairs — never a green zero. Paths default to `.`.
+    frame_time_report: bool,
+    /// `--frame-budget <MS>`: the budget override for
+    /// `--frame-time-report` (wins over the sidecar's
+    /// `frame_budget_ms` echo — an explicit CLI budget is the stricter
+    /// statement).
+    frame_budget: Option<f64>,
+    /// `--vs <PATH>`: the POST side (dir or file) turning
+    /// `--frame-time-report` into the pre/post A/B diff. The positional
+    /// paths are the PRE side.
+    frame_vs: Option<PathBuf>,
+    /// `--frame-delta-pct <PCT>`: the A/B verdict threshold on the p50
+    /// delta (default 5.0).
+    frame_delta_pct: Option<f64>,
     /// Issue 119: `--coverage-report` — the corpus coverage-debt sweep.
     /// clippy's LIVE lint surface, derived from the INSTALLED driver
     /// (`clippy-driver -W help`, never a hand-typed list), diffed against
@@ -3838,6 +3882,10 @@ struct Args {
 
 fn parse_args() -> Args {
     let mut args = Args {
+        frame_time_report: false,
+        frame_budget: None,
+        frame_vs: None,
+        frame_delta_pct: None,
         account_history: false,
         suggest: false,
         fix: false,
@@ -4015,6 +4063,38 @@ fn parse_args() -> Args {
             "--config-audit" => args.config_audit = true,
             "--platform-audit" => args.platform_audit = true,
             "--orphan-report" => args.orphan_report = true,
+            "--frame-time-report" => args.frame_time_report = true,
+            "--frame-budget" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--frame-budget requires a value (milliseconds)");
+                    usage();
+                };
+                let parsed = value.parse::<f64>().ok().filter(|ms| *ms > 0.0);
+                let Some(ms) = parsed else {
+                    eprintln!("--frame-budget expects a positive number of ms, got {value:?}");
+                    usage();
+                };
+                args.frame_budget = Some(ms);
+            }
+            "--vs" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--vs requires a value (the POST side dir or sidecar file)");
+                    usage();
+                };
+                args.frame_vs = Some(PathBuf::from(value));
+            }
+            "--frame-delta-pct" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--frame-delta-pct requires a value (percent)");
+                    usage();
+                };
+                let parsed = value.parse::<f64>().ok().filter(|p| *p > 0.0);
+                let Some(pct) = parsed else {
+                    eprintln!("--frame-delta-pct expects a positive percent, got {value:?}");
+                    usage();
+                };
+                args.frame_delta_pct = Some(pct);
+            }
             "--coverage-report" => args.coverage_report = true,
             "--corpus-delta" => args.corpus_delta = true,
             "--misses" => args.misses = true,
@@ -4409,6 +4489,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.config_audit
         || args.platform_audit
         || args.orphan_report
+        || args.frame_time_report
         || args.coverage_report
         || args.candidates_path.is_some()
         || args.command.is_some()
@@ -7342,6 +7423,51 @@ fn main() {
             println!("{cross}");
         }
         if report.blind.is_some() {
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // ── Plan 134 T2.1: --frame-time-report — the frame-time budget tier ──
+    // The measurement VERDICT half of shader_perf: riir-shader ships the
+    // capture-side sidecars (issue 018 there), this reports the budget
+    // verdicts + the pre/post A/B. Report-first, gates nothing; refuses
+    // exit 1 on a blind scan (the frontier-report law). Ungated — reads
+    // sidecar files directly, no domain features.
+    if args.frame_time_report {
+        let pre_paths: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        if let Some(vs) = args.frame_vs.clone() {
+            let (pre, pre_fail) = riir_clippy::frame_time_report::collect_sidecars(&pre_paths);
+            let (post, post_fail) =
+                riir_clippy::frame_time_report::collect_sidecars(std::slice::from_ref(&vs));
+            let threshold = args
+                .frame_delta_pct
+                .unwrap_or(riir_clippy::frame_time_report::DEFAULT_DELTA_PCT);
+            let pre_rows = riir_clippy::frame_time_report::budget_rows(&pre, args.frame_budget);
+            let post_rows =
+                riir_clippy::frame_time_report::budget_rows(&post, args.frame_budget);
+            let report = riir_clippy::frame_time_report::diff_ab(
+                &pre_rows,
+                &post_rows,
+                threshold,
+                pre_fail,
+                post_fail,
+            );
+            print!("{}", report.render());
+            if report.blind() {
+                std::process::exit(1);
+            }
+            return;
+        }
+        let (loaded, failures) = riir_clippy::frame_time_report::collect_sidecars(&pre_paths);
+        let rows = riir_clippy::frame_time_report::budget_rows(&loaded, args.frame_budget);
+        let report = riir_clippy::frame_time_report::FrameTimeReport { rows, failures };
+        print!("{}", report.render());
+        if report.blind() {
             std::process::exit(1);
         }
         return;
@@ -10863,6 +10989,7 @@ mod mode_flag_tests {
             ("--config-audit", Box::new(|m| m.config_audit = true)),
             ("--platform-audit", Box::new(|m| m.platform_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
+            ("--frame-time-report", Box::new(|m| m.frame_time_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),
             (
                 "--dump-trajectories",

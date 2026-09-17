@@ -1080,6 +1080,15 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 name = "build_stamp_cli"
 required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
 
+# Plan 134 T2.1 — the frame-time budget tier's process-boundary exit
+# contracts (empty scan / unparsable sidecar / A/B mismatch refuse). The
+# bin's required-features gate the target (CARGO_BIN_EXE_cargo-heal exists
+# only under them); the report module itself is UNGATED — every feature
+# build compiles it, only this CLI test needs the shipping set.
+[[test]]
+name = "frame_time_report_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]

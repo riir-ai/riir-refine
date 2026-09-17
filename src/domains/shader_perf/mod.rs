@@ -290,3 +290,14 @@ pub fn refuses() -> &'static [&'static str] {
 /// `CORPUS_DOMAIN_TABLE` convention; a constructor-plumbing needle counts 2
 /// at every rev and lies about the corpus, Issue 066).
 pub use scanner::{entry_point_multiset, group_binding_multiset, ShaderFinding, ShaderScanner};
+
+// Plan 134 T2.1: the frame-time budget tier — this domain's measurement
+// VERDICT half (the rules are here; the sidecars are riir-shader's, issue
+// 018 there). The module lives UNGATED at the crate root
+// (`crate::frame_time_report` — the corpus_coverage/horizon_report law:
+// pure over its inputs, lib-tested at default features); this gated
+// re-export is the domain-charter handle, so domain consumers reach it at
+// `domains::shader_perf::frame_time`.
+
+#[cfg(feature = "shader_perf")]
+pub use crate::frame_time_report as frame_time;

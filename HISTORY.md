@@ -1,5 +1,44 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — Plan 134 T2.1 COMPLETE: the frame-time budget tier ships (Bench 095)
+
+The Tier-2 measurement leg of the `shader_perf` domain, unblocked the same
+day by riir-shader's capture-side frame-time axis (issue 018 there;
+`34ff053` + `a92000a` — every automated capture writes a
+`<capture>.frames.json` sidecar, schema `riir_shader_frame_time_v1`).
+`src/frame_time_report.rs` (UNGATED — the corpus_coverage/horizon_report
+law: pure over its inputs, lib-tested at default features) + the
+`--frame-time-report [PATHS…]` CLI (`--frame-budget` / `--vs` /
+`--frame-delta-pct`) + the domain handle
+`domains::shader_perf::frame_time` under the feature. Two surfaces: the
+budget report (per-effect p50/p90/mean vs the carried budget, `OK`/`OVER`
++ the heal hint routing over-budget effects to `--domain shader_perf` —
+the tier PRIORITIZES the source-scan rules, it does not replace them) and
+the pre/post A/B diff (±5% default on p50; IMPROVED/REGRESSED/FLAT) with
+two load-bearing evidence guards: **warmup parity** (a pair captured under
+different warmup configs is not evidence) and **pairing uniqueness** (an
+effect with several sidecars on a side — the burst class — refuses; the
+tool never invents pairings). Refusal law: exit 1 on an empty scan, any
+unparsable sidecar, or (A/B) any mismatch with zero usable pairs — an
+incomplete measurement REDs, never prints a flattering partial as a pass.
+Gates: 11 lib fixtures + 8 process-boundary CLI contracts
+(`tests/frame_time_report_cli.rs`, the bin's required-features set) + live
+29-effect riir-shader sweep validation (29/29 parse, 9.3 ms whole-process
+wall) + self-A/B FLAT exit 0 + warmup-mismatch/empty-dir exit 1. Two
+findings on record: (1) the walker matched `Path::extension()` (=
+`json`), so every real `.frames.json` sweep dir read as EMPTY — the
+blind-walk class, caught by the CLI contract's first run, fixed to a full
+filename-suffix match and pinned by a unit test; (2) the sidecar's warmup
+fields were promised in the riir-shader issue text but never emitted —
+caught during this tier's design review, fixed there (`a92000a`) before
+any consumer existed. `.benchmarks/094` was dual-allocated upstream
+mid-session (the idle-queue session's fired-histogram bench) — the
+numbering check fired; this record took 095. Honest scope: verdict math is
+proven on fixtures + the self-A/B; the first real IMPROVED row awaits the
+first healed-effect re-sweep. Pre-existing clippy residue in
+`rust_perf/proposers/` (fresh-pass pedantic findings, Batch-150/151 files)
+observed and left to the owning session.
+
 ## 2026-09-17 — Batch 151: the doc-line state-machine port lands (corpus 62 → 64, FIXABLE 45 → 47)
 
 The staged follow-up from Research 177 adjudication #7:

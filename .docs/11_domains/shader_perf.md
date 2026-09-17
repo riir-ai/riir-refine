@@ -65,6 +65,48 @@ naga-rejected — riir-shader Plan 001) is recorded in the domain: naga
 rejections on browser-legal shapes degrade to Tier 0 + the browser smoke is
 final truth.
 
+## The frame-time budget tier (T2.1, 2026-09-17)
+
+The measurement VERDICT half of the domain: **the rules are ours, the
+sidecars are riir-shader's** (issue 018 there — commits `34ff053` +
+`a92000a`): every automated capture (single / sweep / burst) writes a
+`<capture>.frames.json` sidecar beside the PNG — schema
+`riir_shader_frame_time_v1` (effect, capture path, warmup config,
+`frame_budget_ms` echo, n/mean/p50/p90/min/max/fps + the per-frame sample
+ring, bounded 8192 frames, reset on effect switch).
+
+`cargo heal --frame-time-report [PATHS…]` consumes them:
+
+- **Budget report**: per-effect p50/p90/mean vs the carried budget
+  (`--frame-budget <MS>` overrides), `OK`/`OVER` per row, and the heal
+  hint — the over-budget effects are exactly where `--domain shader_perf`
+  (the sample-budget / loop-boundedness corpus) should run next. The tier
+  PRIORITIZES the source-scan rules; it does not replace them.
+- **A/B diff** (`--vs <PATH>`): pairs pre/post by effect slug, verdicts at
+  `--frame-delta-pct` (default ±5% on p50 → IMPROVED/REGRESSED/FLAT). Two
+  evidence guards are load-bearing: **warmup parity** (a pair captured
+  under different warmup configs is not evidence) and **pairing
+  uniqueness** (several sidecars per effect on a side — the burst class —
+  refuses; the tool never invents pairings).
+
+The module (`src/frame_time_report.rs`, domain handle
+`domains::shader_perf::frame_time` under the feature) is deliberately
+UNGATED — the corpus_coverage/horizon_report law: pure over its inputs,
+no domain machinery, lib-tested at default features. Refusal law: exit 1
+on an empty scan, any unparsable sidecar, or (A/B) any mismatch with zero
+usable pairs — an incomplete measurement REDs, never prints a flattering
+partial as a pass. Noise discipline is documented, not mechanized: one run
+is one run — confirm IMPROVED/REGRESSED with a second sweep pair before
+acting on it.
+
+Gates: 11 lib fixtures + 8 process-boundary CLI contracts
+(`tests/frame_time_report_cli.rs`); live validation = the 29-effect
+riir-shader sweep (29/29 parse, 9.3 ms wall) + self-A/B FLAT exit 0 +
+warmup-mismatch / empty-dir exit 1 (`.benchmarks/094`). The walker matches
+the FULL `.frames.json` filename suffix, not `Path::extension()` (which
+returns `json` — the empty-sweep bug the CLI test caught live before any
+consumer ran).
+
 ## Gates
 
 - `tests/shader_perf_gates.rs` — fixture firing (buggy→fixed pairs),
