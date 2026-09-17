@@ -20,7 +20,8 @@ is created for depletion tests — never the fleet accounts.
 ## 1. Preconditions
 
 - [ ] P1: riir-dapps Issue 094 fix tasks landed (grant 10⁸ µ; devnet ÷10⁶
-      rescale; faucet retune per D4; front-page copy from constant).
+      rescale — D3; faucet/drip user tier RETIRED per D4, devnet ops-only
+      credit remains for this rig; front-page copy from constant).
 - [ ] P2: both machines rebuilt with the RELEASE feature set
       `default + latent_retrieval + kat_service + kat_transport + fix_verify`
       — the 00:21 stale-binary class; verify via `cargo heal --version`
@@ -54,10 +55,16 @@ is created for depletion tests — never the fleet accounts.
       fleet accounts touched).
 - [ ] Next scanning run REFUSES: exit 1, the three refuel paths named
       (`--refill`, `--mine` + sync, payment page).
-- [ ] Refuel arm A: `--refill` lifts the gate via the faucet (daily cap
-      honored — post-D4 cap).
-- [ ] Refuel arm B: `--mine` + sync contributes; the contribute-now prompt
-      path (`RIIR_HEAL_KAT_PROMPT_YES=1`) exercises clean.
+- [ ] Refuel arm A (post-D4): NO user faucet exists — assert `--refill`
+      refuses loud and names the two real paths; the RIG itself uses the
+      devnet ops-only credit to reset the throwaway account between runs
+      (ops tool, never a user path).
+- [ ] Refuel arm B (the primary user path): `--mine` + sync contributes; the
+      contribute-now prompt (`RIIR_HEAL_KAT_PROMPT_YES=1`) exercises clean;
+      the sticky contributed-grace lifts the gate.
+- [ ] D4 consequence datum: measure the depletion→spendable gap (epoch settle
+      + 7d vest) on the test account and record it — the deferred item in
+      Issue 094 §4 D4.
 - [ ] Negative arm: never-synced accounts stay warn-only (no server truth →
       no gate) — the designed leniency, verified rather than assumed.
 
