@@ -1,6 +1,6 @@
 # Plan 141 — Devnet burn-process e2e: M3 + RTX4090 as the full client fleet
 
-**Status:** OPEN — planned 2026-09-17 on the owner ask ("it's devnet and only us m3, rtx4090 — use this as a chance to test the burn process from the client"). Blocks on riir-dapps Issue 094's fix tasks (grant 10⁸ µ + devnet ÷10⁶ rescale + faucet retune). No code yet.
+**Status:** OPEN — planned 2026-09-17 on the owner ask ("it's devnet and only us m3, rtx4090 — use this as a chance to test the burn process from the client"). Blocks on riir-dapps Issue 094's fix tasks (grant 10⁸ µ + devnet ÷10⁶ rescale + faucet/drip RETIREMENT per D4 + `KAT_MINT_VEST_DAYS=1` per D4a). No code yet.
 
 ## 0. Goal + why now
 
