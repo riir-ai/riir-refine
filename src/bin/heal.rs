@@ -2282,12 +2282,14 @@ fn run_kat_faucet(qr: bool) {
     }
 }
 
-/// Plan 117: `cargo heal --refill` — the dev/test faucet refill. The
-/// composition lives in [`riir_clippy::kat_refill`] (the module doc owns
-/// the posture: the faucet/balance legs ride the `faucet --request`
-/// client-side precedent — the DEPLOYMENT's cap config is the faucet's
-/// gate — and the crank leg's authorization is the operator-set bearer
-/// token, fail-soft on refusal).
+/// Plan 117 as amended by riir-dapps Issue 094 D4: `cargo heal --refill` —
+/// the DEVNET-OPS faucet credit (the user daily faucet/drip tier is
+/// retired). The composition lives in [`riir_clippy::kat_refill`], which
+/// owns both postures: the client-side D4 gate below, and the wire posture
+/// the faucet/balance legs already had (the `faucet --request` precedent —
+/// the DEPLOYMENT's cap config is the faucet's server-side gate — with the
+/// crank leg authorized by the operator-set bearer token, fail-soft on
+/// refusal).
 ///
 /// The three things this bin adds around the flow:
 ///
