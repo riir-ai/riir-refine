@@ -108,6 +108,39 @@
 
 ## Post-mining intake (compact — full records in `.research/108_mining_queue_snapshot_history.md`)
 
+> **RECORD 2026-09-17 (perf-rematch pipeline read — llama.cpp OPEN-PR forward-look, two
+> ENGINE-LANE leads handed from the riir-ai league; no clippy-rule candidates, no batch).**
+> Source: GitHub search API over `ggml-org/llama.cpp` open PRs (title `cuda`), read during
+> the GPU-owned Plan-528 window (zero cargo; the riir-ai-side records live in
+> `.benchmarks/rematch/2026-09-17_watch.md` §Forward-look + Issue 971 there). Graded as
+> LEADS only — both are algorithm/kernel work in riir-gpu's territory, NOT kernel_opt
+> corpus rules:
+>
+> 1. **PR #26001 "CUDA: Support of GDN chunked kernel for prefill" (PRIMARY)** — the
+>    3-stage chunkwise GDN prefill (FP32 WY forward-substitution → BF16 WMMA masked
+>    attention → WMMA state update + fused output; Ampere+, GQA-aware; +9.9-10.3% e2e
+>    @ISL≥2000 on ad102 for H=48 27B GDN hybrids = the league Bonsai model class; PPL
+>    +0.27%, KL 0.0083 — near-lossless). Dual role: (a) the first identified BREAKER of
+>    the league's fresh pp2048 1.1447× hold (fork-adoption arithmetic → 1.042× FAIL); (b)
+>    the complete reference implementation of riir-ai Plan 533's DEFERRED Phase 2-4
+>    chunkwise recurrence — the "significant effort" (GPU WY forward substitution) is
+>    written, tested, benchmarked upstream. Mining channel: if riir-ai activates Issue 971,
+>    clone the PR tree under the `.raw` discipline (pin the PR head sha, `rm -rf` after
+>    the diff lands in their plan) — do NOT mine as corpus rules; the transplant target is
+>    `riir-gpu/src/cudarc_kernels/deltanet.rs` (multi-row r4w4 recurrent today).
+> 2. **PR #28702 "fuse dense Q4_K Gate/Up projections and SwiGLU for prefill"
+>    (SECONDARY, principle-transfer only)** — single-K-pass MMQ computing Gate+Up in one
+>    kernel with the shared quantized input read once + SwiGLU epilogue (+10.5-14.7%
+>    pp16K DGX Spark / +4.1% RTX 5090, PPL identical). Q4_K-specific; the league FFN is
+>    ternary Q2_0+v10t so the kernel does not transplant — the TRANSFERABLE decision
+>    content is the shared-activation-single-K-pass principle for a gate/up FFN MMQ family
+>    (dedup grep BEFORE any mining: `same-input-gemv-weight-concat-at-upload`,
+>    `cross-lane-column-packed-projections`, `fan-out-shared-input-single-sync` already
+>    carry the shared-input family for GEMV — the MMQ prefill twin may be the gap).
+>
+> Verdict: NO batch, NO research note — lane leads recorded; the riir-ai side owns the
+> threat/defense arithmetic (Issue 971, defer-marked on the fork-adoption trigger).
+
 > **RECORD 2026-09-17 (usage artifact, riir-chain — a `doc_markdown` suggestion
 > that BREAKS an intra-doc link, and the compile gate provably cannot catch it).**
 > `cargo heal --fix --write --verify` pointed at `riir-chain/src/programs/dispatch.rs`
