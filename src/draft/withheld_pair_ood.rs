@@ -585,7 +585,7 @@ pub fn rustc_errors_population() -> Vec<Binding> {
 /// — a role there is partly readable off the state. Here it is not, so a
 /// structure verdict on this arm is not exposed to that objection.
 ///
-/// [`KernelCategory`]: crate::domains::kernel_opt::KernelCategory
+/// [`KernelCategory`]: `crate::domains::kernel_opt::KernelCategory`
 #[cfg(feature = "kernel_heal")]
 #[must_use]
 pub fn kernel_opt_population() -> Vec<Binding> {
@@ -776,12 +776,69 @@ impl WithheldReport {
     }
 }
 
+/// Build the withheld index's patterns.
 fn build_index(items: &[&Binding]) -> RuleIndex {
     let patterns: Vec<(String, String)> = items
         .iter()
         .map(|b| (b.rule.clone(), b.text.clone()))
         .collect();
     RuleIndex::build_with(patterns, RetrievalConfig::default()).expect("index builds")
+}
+
+/// Rank of `rule` under the set-admission policy: the rule's position in
+/// the admitted slate (None when not admitted). Recovery-fired slates rank
+/// corpus rules that may never have been retrieved — the withheld-pair
+/// question ("is the role recoverable from the pattern alone?") is exactly
+/// what the recovery fan re-answers.
+#[cfg(feature = "set_rerank")]
+#[allow(clippy::too_many_arguments)] // index + items + query + cfg + scratch pair — the substrate's own shape
+fn rank_of_set(
+    index: &RuleIndex,
+    items: &[&Binding],
+    code: &str,
+    rule: &str,
+    cfg: &super::set_rerank::SetRerankConfig,
+    k: usize,
+    scratch: &mut katgpt_core::set_admission::AdmissionScratch,
+    fan: &mut katgpt_core::set_admission::FanScratch,
+) -> (Option<usize>, f32) {
+    use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+
+    let mut rules = index.suggest_deep(code, RERANK_POOL);
+    super::instantiation_rerank::rerank(&mut rules);
+
+    // The corpus = this index's own patterns (the withheld set).
+    let entries: Vec<(String, DomainId, String)> = items
+        .iter()
+        .map(|b| (b.rule.clone(), DomainId::Clippy, b.text.clone()))
+        .collect();
+    let corpus = super::set_rerank::RuleLatentCorpus::build(&entries);
+
+    let by_domain = vec![(DomainId::Clippy, rules)];
+    let latents = &corpus.latents;
+    let ids = &corpus.rule_ids;
+    let lookup = move |id: &str| {
+        ids.binary_search_by(|p| p.as_str().cmp(id))
+            .ok()
+            .map(|i| cfg.latent.project(latents[i]))
+    };
+    let query: [f32; LATENT_DIM] = ModellessEmbedder.embed(code);
+    let slate = super::set_rerank::counter_anchored_slate(
+        cfg,
+        &by_domain,
+        lookup,
+        &corpus,
+        query,
+        k,
+        scratch,
+        fan,
+    );
+    let rank = slate
+        .admitted
+        .iter()
+        .position(|m| m.rule_id == rule);
+    let score = rank.map_or(0.0, |i| slate.admitted[i].score.unwrap_or(0.0));
+    (rank, score)
 }
 
 /// Rank of `rule` for `code`, plus its fused score (0.0 when unretrieved).
@@ -813,16 +870,53 @@ fn rank_of(
 /// Panics if a withheld index still contains the withheld pair (the
 /// withholding assertion — never assumed), or if index construction fails.
 #[must_use]
-#[allow(clippy::needless_pass_by_value)]
-// One function on purpose: the population census, the eligibility filter and
-// the three-arm loop share the cell/role/filler maps, and splitting them would
-// either recompute those maps or hand them around as a struct that exists only
-// to be destructured. The protocol is one measurement.
-#[allow(clippy::too_many_lines)]
 pub fn run_withheld_pair(
     population: Vec<Binding>,
     probe: Option<DomainId>,
     mode: RerankMode,
+    mode_label: &'static str,
+) -> WithheldReport {
+    run_withheld_pair_under(
+        population,
+        |index, _items, code, rule| rank_of(index, code, rule, probe, mode),
+        mode_label,
+    )
+}
+
+/// Issue 121: the withheld-pair protocol under the counter-anchored
+/// set-admission policy — the OOD-rig A/B arm. Same protocol, same arms,
+/// same assertions; only the ranking differs (see [`rank_of_set`]).
+#[cfg(feature = "set_rerank")]
+#[must_use]
+pub fn run_withheld_pair_set_admission(
+    population: Vec<Binding>,
+    cfg: super::set_rerank::SetRerankConfig,
+    k: usize,
+    mode_label: &'static str,
+) -> WithheldReport {
+    let mut admission = katgpt_core::set_admission::AdmissionScratch::new();
+    let mut fan = katgpt_core::set_admission::FanScratch::new();
+    run_withheld_pair_under(
+        population,
+        |index, items, code, rule| {
+            rank_of_set(index, items, code, rule, &cfg, k, &mut admission, &mut fan)
+        },
+        mode_label,
+    )
+}
+
+/// The protocol body, parameterized over the ranking policy (the Issue 121
+/// refactor: the shipped closure vs the set-admission closure run the SAME
+/// arms so the A/B rows are comparable).
+// One function on purpose: the population census, the eligibility filter and
+// the three-arm loop share the cell/role/filler maps, and splitting them would
+// either recompute those maps or hand them around as a struct that exists only
+// to be destructured. The protocol is one measurement.
+#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::too_many_lines)]
+fn run_withheld_pair_under(
+    population: Vec<Binding>,
+    mut rank: impl FnMut(&RuleIndex, &[&Binding], &str, &str) -> (Option<usize>, f32),
     mode_label: &'static str,
 ) -> WithheldReport {
     // Distinct texts only — `RuleIndex` dedupes identical chunk content, so a
@@ -910,9 +1004,9 @@ pub fn run_withheld_pair(
             let id_index = build_index(&id_items);
             let id_null = AtomicNull::build(id_items.iter().copied());
 
-            let (id_rank, id_score) = rank_of(&id_index, &q.text, &rule, probe, mode);
-            let (ood_rank, ood_score) = rank_of(&ood_index, &q.text, &rule, probe, mode);
-            let (norole_rank, _) = rank_of(&norole_index, &q.text, &rule, probe, mode);
+            let (id_rank, id_score) = rank(&id_index, &id_items, &q.text, &rule);
+            let (ood_rank, ood_score) = rank(&ood_index, &ood_items, &q.text, &rule);
+            let (norole_rank, _) = rank(&norole_index, &norole_items, &q.text, &rule);
 
             rows.push(ArmRow {
                 rule: rule.clone(),

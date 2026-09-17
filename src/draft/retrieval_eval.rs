@@ -144,6 +144,33 @@ pub struct EvalReport {
     /// is untouched, this observes the ranking the eval already computed —
     /// so an empty list is the pre-T3 behaviour, byte for byte.
     pub collapsed_pools: Vec<CollapseRecord>,
+    /// Issue 121: the Vendi axis — the geometric diversity of the DELIVERED
+    /// slate (the per-domain top-[`PROBE_TOP_K`] latents, exact cosine-
+    /// kernel certificate via katgpt-core `set_admission`). `None` when the
+    /// `set_rerank` feature is off (the axis needs the primitive); beside
+    /// [`Self::collapsed_pools`], never replacing it — the family-entropy
+    /// detector and the geometric certificate are complementary axes (the
+    /// family space exceeds the 8-D latent dims).
+    #[cfg(feature = "set_rerank")]
+    pub vendi_axis: Option<VendiAxis>,
+}
+
+/// Issue 121: the geometric-diversity summary of the delivered slates —
+/// one exact-Vendi certificate per labeled span's own-domain top-k.
+#[cfg(feature = "set_rerank")]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct VendiAxis {
+    /// Spans certified (every labeled span whose domain is enabled).
+    pub n_spans: usize,
+    /// Mean exact Vendi score over the delivered top-k slates.
+    pub mean_vendi: f32,
+    /// Slates at the depth ceiling (`vendi >= 0.95·min(K, DIM)` — the
+    /// honest saturation flag, never silent).
+    pub n_saturated: usize,
+    /// Slates the certificate flags collapsed (`vendi < rho·min(K, DIM)`),
+    /// the GEOMETRIC axis — compare against `collapsed_pools.len()` (the
+    /// categorical axis) to see how often they agree.
+    pub n_cert_collapsed: usize,
 }
 
 /// The clean-span set: REAL production excerpts from this crate (shipped
@@ -612,6 +639,8 @@ pub fn run_eval_with(config: crate::draft::RetrievalConfig) -> EvalReport {
 ///
 /// Panics if [`LatentMatcher::from_enabled_domains_with`] fails.
 #[must_use]
+#[allow(clippy::too_many_lines)] // the measurement: every labeled span × every axis in one deterministic walk
+#[allow(clippy::cast_precision_loss)] // the vendi mean divides a count — display precision
 pub fn run_eval_inner(
     config: crate::draft::RetrievalConfig,
     rerank: crate::draft::RerankMode,
@@ -620,6 +649,9 @@ pub fn run_eval_inner(
         .expect("build matcher")
         .with_rerank_mode(rerank);
     let mut report = EvalReport::default();
+    // Issue 121: the Vendi-axis accumulator (feature-gated with the field).
+    #[cfg(feature = "set_rerank")]
+    let mut matcher_vendi: Option<VendiAxis> = None;
 
     let spans = labeled_eval_spans();
     for span in &spans {
@@ -635,6 +667,27 @@ pub fn run_eval_inner(
             .iter()
             .find(|(d, _)| *d == domain)
             .map_or(Vec::new(), |(_, rules)| canonical_rank(rules));
+
+        // Issue 121: the Vendi axis — certify the DELIVERED slate (this
+        // span's own-domain top-k latents). Measurement only: the axis rides
+        // the ranking the eval already computed, never reorders it.
+        #[cfg(feature = "set_rerank")]
+        {
+            use katgpt_core::set_admission::certify_set;
+            let cfg = super::set_rerank::SetRerankConfig::default();
+            let corpus = matcher.rule_latents();
+            let take = PROBE_TOP_K.min(ranked.len());
+            let latents: Vec<[f32; katgpt_core::set_admission::DIM]> = ranked[..take]
+                .iter()
+                .filter_map(|r| corpus.latent_of(cfg.latent, &r.rule_id))
+                .collect();
+            let cert = certify_set(&cfg.admission, &latents);
+            let axis = matcher_vendi.get_or_insert_with(VendiAxis::default);
+            axis.n_spans += 1;
+            axis.mean_vendi += cert.vendi;
+            axis.n_saturated += usize::from(cert.saturated);
+            axis.n_cert_collapsed += usize::from(cert.collapsed);
+        }
         let rank = ranked.iter().position(|r| r.rule_id == label);
         let top1 = ranked.first().map(|r| r.rule_id.clone());
 
@@ -716,12 +769,24 @@ pub fn run_eval_inner(
         report.clean_profile.push((tag, tops));
     }
 
+    // Finalize the Vendi axis (mean over the certified spans).
+    #[cfg(feature = "set_rerank")]
+    {
+        if let Some(axis) = &mut matcher_vendi {
+            if axis.n_spans > 0 {
+                axis.mean_vendi /= axis.n_spans as f32;
+            }
+        }
+        report.vendi_axis = matcher_vendi;
+    }
+
     report
 }
 
 /// Human-readable metrics table (the `--nocapture` output of the report
 /// test — the one-command harness).
 #[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
+#[allow(clippy::too_many_lines)] // one table per report — the measurement surface
 pub fn print_report(report: &EvalReport) {
     println!("== Issue 017 retrieval-precision eval ==");
     let names = ["clippy", "perf  ", "kernel", "sec   ", "docker", "dist  "];
@@ -811,6 +876,19 @@ pub fn print_report(report: &EvalReport) {
             c.pool_top_k,
             c.family,
             rule_family(&c.label),
+        );
+    }
+    // Issue 121: the geometric axis beside the categorical one.
+    #[cfg(feature = "set_rerank")]
+    if let Some(axis) = &report.vendi_axis {
+        println!("\n-- vendi axis (exact cosine-kernel certificate of the delivered top-k) --");
+        println!(
+            "  spans {} | mean vendi {:.3} | saturated {} | cert-collapsed {} (geometric) vs family-collapsed {} (categorical)",
+            axis.n_spans,
+            axis.mean_vendi,
+            axis.n_saturated,
+            axis.n_cert_collapsed,
+            report.collapsed_pools.len(),
         );
     }
     println!("\n-- clean-span false-positive profile (what tops real clean code) --");

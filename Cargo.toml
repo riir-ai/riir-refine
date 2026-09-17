@@ -188,6 +188,19 @@ kernel_heal = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 # Opt-in: heavy dep tree (riir-rag + riir-neuron-db + syn-pulled chunker).
 latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 
+# Issue 121 (katgpt-rs Plan 599 T4.2 — the first consumer of katgpt-core's
+# `set_admission` primitive): counter-anchored SET rerank of the merged
+# seven-domain span pool. The fan-out merge (`all_rules`' flat score sort)
+# is an unanchored set decision — one rule family can fill every slot; this
+# arm admits the slate greedily under alignment x diversity x groundedness
+# (Sherman-Morrison logdet + colinearity cap), certifies it with the exact
+# cosine-kernel Vendi score, and re-fans the theta-ladder when the
+# certificate flags collapse. `detect_collapse` (family entropy) stays the
+# EVAL axis, never the guard. Opt-in pending the A/B verdict (Bench 096);
+# same-binary kill-switch: RIIR_CLIPPY_NO_SET_RERANK=1 (the NO_TWO_STAGE
+# precedent).
+set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
+
 # Issue 062 T3 (Bench 063): TPR role-filler structure fit over the healer
 # corpus. Enables katgpt-core's `tpr` primitive (Issue 707) and measures
 # whether a TPR artifact is *admissible* on this corpus at all before T4
@@ -1116,6 +1129,15 @@ required-features = ["sec"]
 [[test]]
 name = "t40_fixer_regate_harness"
 required-features = ["cf_workers_ai"]
+
+# Issue 121 (katgpt-rs Plan 599 T4.2): the counter-anchored set-rerank A/B —
+# composite spans under real-clippy truth + the withheld-pair OOD rig under
+# the set-admission policy. Measurement, not a floor (the uncontaminated_g1
+# doctrine); the `required-features` row keeps a bare `cargo test --test
+# set_rerank_ab` honest instead of a green zero.
+[[test]]
+name = "set_rerank_ab"
+required-features = ["set_rerank", "clippy_verify", "clippy_lints", "rust_perf"]
 
 [[test]]
 name = "uncontaminated_g1"

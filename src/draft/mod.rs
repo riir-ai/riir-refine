@@ -29,6 +29,9 @@
 //!   directed cross-domain (clippy × perf) co-presence measurement — does
 //!   an anti-pattern retrieve its rule worse when another domain's
 //!   anti-pattern shares the span? (Research 484's switch-cost analog.)
+//! - [`set_rerank`] — Issue 121 (katgpt-rs Plan 599 T4.2): the
+//!   counter-anchored SET rerank of the merged seven-domain pool — the
+//!   first consumer of katgpt-core's `set_admission` primitive.
 
 #[cfg(feature = "clippy_verify")]
 pub mod clippy_oracle;
@@ -49,6 +52,8 @@ pub mod latent_matcher;
 pub mod margin_weight;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
+#[cfg(feature = "set_rerank")]
+pub mod set_rerank;
 pub mod span_source;
 pub mod switch_cost;
 #[cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
@@ -88,6 +93,13 @@ pub use retrieval_eval::{
     run_eval, run_eval_with, run_retrieval_sweep, run_router_eval,
     DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
 };
+#[cfg(feature = "set_rerank")]
+pub use retrieval_eval::VendiAxis;
+#[cfg(feature = "set_rerank")]
+pub use set_rerank::{
+    baseline_slate, counter_anchored_slate, merge_pool, AdmittedRule, LatentChoice, RuleLatentCorpus,
+    SetRerankConfig, SetSlate, DEFAULT_SLATE_K, NO_SET_RERANK_ENV,
+};
 pub use span_source::{collect_source_files, collect_source_files_sorted};
 pub use switch_cost::{
     cross_domain_spans, print_switch_cost_report, run_switch_cost_eval, SwitchCostReport,
@@ -96,3 +108,5 @@ pub use withheld_pair_ood::{
     atomic_keys, classify_rustc_shape, classify_shape, normalized_tokens, run_withheld_pair,
     ArmRow, AtomicNull, Binding, ShapeClass, WithheldReport,
 };
+#[cfg(feature = "set_rerank")]
+pub use withheld_pair_ood::run_withheld_pair_set_admission;

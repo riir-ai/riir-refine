@@ -59,7 +59,16 @@ pub struct SpanSuggestion {
 }
 
 impl SpanSuggestion {
-    /// All suggested rules across domains, best-score-first.
+    /// All suggested rules across domains, canonical order best-first
+    /// (`instantiates` desc, then score desc, then `rule_id` asc).
+    ///
+    /// Issue 121 (Bench 096): the key previously sorted by score ALONE,
+    /// contradicting this method's own doc ("same canonical order as
+    /// `rank_into`/`rerank`/`canonical_rank`") and silently DISCARDING the
+    /// per-domain instantiation re-rank at merge time — a clippy rule whose
+    /// proposer fired on the span could be buried under higher-BM25 perf
+    /// rules. Measured on the composite rig: +55.6pp top-1 / +40.7pp
+    /// recall@5 for the canonical key vs the score-only merge.
     #[must_use]
     pub fn all_rules(&self) -> Vec<&ScoredRule> {
         let mut all: Vec<&ScoredRule> = self
@@ -67,13 +76,14 @@ impl SpanSuggestion {
             .iter()
             .flat_map(|(_, rules)| rules.iter())
             .collect();
-        // rule_id tie-break: cross-domain concatenation is deterministic
-        // (DomainId::ALL order), but equal scores from DIFFERENT domains
-        // must still resolve identically every run — same canonical order
-        // as `rank_into`/`rerank`/`canonical_rank`.
+        // MUST match `instantiation_rerank::rerank`'s key order —
+        // instantiation first, then similarity, then rule_id. Sorting by
+        // score alone silently undoes the T3.5.4 re-rank at the merge
+        // (the exact defect the Issue 121 A/B caught).
         all.sort_unstable_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
+            b.instantiates
+                .cmp(&a.instantiates)
+                .then_with(|| b.score.total_cmp(&a.score))
                 .then_with(|| a.rule_id.cmp(&b.rule_id))
         });
         all
@@ -111,6 +121,18 @@ pub struct LatentMatcher {
     rule_book: std::collections::HashMap<String, RuleInfo>,
     /// G4 scratch — reused across every span + domain query.
     scratch: super::corpus_index::SuggestScratch,
+    /// Issue 121: the embedded rule corpus (snap targets for the recovery
+    /// fan + the latent lookup for pool entries), built from `rule_book`
+    /// deterministically at construction.
+    #[cfg(feature = "set_rerank")]
+    rule_latents: super::set_rerank::RuleLatentCorpus,
+    /// Issue 121: the admission + fan scratch, reused across set-rerank
+    /// calls (the G4 discipline — allocation-free steady state).
+    #[cfg(feature = "set_rerank")]
+    set_scratch: super::set_rerank::MatcherSetScratch,
+    /// Issue 121: the set-rerank weights (A/B knob).
+    #[cfg(feature = "set_rerank")]
+    set_cfg: super::set_rerank::SetRerankConfig,
 }
 
 impl LatentMatcher {
@@ -175,7 +197,7 @@ impl LatentMatcher {
     /// Returns an error `String` if no domain is feature-enabled, or if any
     /// enabled domain's [`RuleIndex::build_with`] fails.
     ///
-    /// [`from_enabled_domains_with_overlay`]: Self::from_enabled_domains_with_overlay
+    /// [`from_enabled_domains_with_overlay`]: `Self::from_enabled_domains_with_overlay`
     #[allow(clippy::too_many_lines)]
     fn build_with_config(
         config: super::corpus_index::RetrievalConfig,
@@ -367,6 +389,15 @@ impl LatentMatcher {
             );
         }
 
+        #[cfg(feature = "set_rerank")]
+        let rule_latents = {
+            let entries: Vec<(String, DomainId, String)> = rule_book
+                .iter()
+                .map(|(id, info)| (id.clone(), info.domain, info.buggy_code.clone()))
+                .collect();
+            super::set_rerank::RuleLatentCorpus::build(&entries)
+        };
+
         Ok(Self {
             // Issue 020 verdict (Bench 025): the annotation router uses the
             // token-frequency cosine block (69.3%/68.6% 2-domain/3-domain vs
@@ -389,6 +420,12 @@ impl LatentMatcher {
             shader_perf,
             rule_book,
             scratch: super::corpus_index::SuggestScratch::default(),
+            #[cfg(feature = "set_rerank")]
+            rule_latents,
+            #[cfg(feature = "set_rerank")]
+            set_scratch: super::set_rerank::MatcherSetScratch::default(),
+            #[cfg(feature = "set_rerank")]
+            set_cfg: super::set_rerank::SetRerankConfig::default(),
         })
     }
 
@@ -408,6 +445,30 @@ impl LatentMatcher {
 
     pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
         self.rule_book.get(rule_id)
+    }
+
+    /// Issue 121: the embedded rule corpus (pool-latent lookups + recovery
+    /// snap targets). Feature-gated with the set-rerank arm.
+    #[cfg(feature = "set_rerank")]
+    #[must_use]
+    pub fn rule_latents(&self) -> &super::set_rerank::RuleLatentCorpus {
+        &self.rule_latents
+    }
+
+    /// Issue 121: certify an arbitrary delivered slate (rule ids) with the
+    /// same exact-Vendi kernel the admission arm uses — the eval axis for
+    /// BASELINE slates the A/B compares against. Measurement only.
+    #[cfg(feature = "set_rerank")]
+    #[must_use]
+    pub fn certify_slate_ids(
+        &self,
+        ids: &[&str],
+    ) -> katgpt_core::set_admission::CertificateReport {
+        let latents: Vec<[f32; katgpt_core::set_admission::DIM]> = ids
+            .iter()
+            .filter_map(|id| self.rule_latents.latent_of(self.set_cfg.latent, id))
+            .collect();
+        katgpt_core::set_admission::certify_set(&self.set_cfg.admission, &latents)
     }
 
     /// The domains this matcher can route to.
@@ -560,6 +621,58 @@ impl LatentMatcher {
         );
         super::instantiation_rerank::rerank(&mut ranked);
         Some((pool, ranked))
+    }
+
+    /// Issue 121 (katgpt-rs Plan 599 T4.2): the counter-anchored SET slate
+    /// for one span — fan out at `RERANK_POOL` depth, merge the per-domain
+    /// pools, admit `k` under alignment × diversity × groundedness, certify
+    /// (exact Vendi), and re-fan the θ-ladder when the certificate flags
+    /// collapse. `detect_collapse` stays the eval axis — nothing here reads
+    /// its verdict.
+    ///
+    /// Kill-switch: `RIIR_CLIPPY_NO_SET_RERANK=1` returns the BASELINE
+    /// merged order with its certificate (the same-binary A/B control).
+    #[cfg(feature = "set_rerank")]
+    pub fn suggest_set_slate(&mut self, code: &str, k: usize) -> super::set_rerank::SetSlate {
+        use riir_rag::Embedder as _;
+        let (_, by_domain) = self.suggest_span(code, super::instantiation_rerank::RERANK_POOL);
+        let corpus = &self.rule_latents;
+        let cfg = self.set_cfg;
+        let latents = &corpus.latents;
+        let ids = &corpus.rule_ids;
+        let lookup = move |id: &str| {
+            ids.binary_search_by(|p| p.as_str().cmp(id))
+                .ok()
+                .map(|i| cfg.latent.project(latents[i]))
+        };
+        let query = riir_rag::ModellessEmbedder.embed(code);
+        let killed = std::env::var(super::set_rerank::NO_SET_RERANK_ENV).is_ok();
+        if killed {
+            super::set_rerank::baseline_slate(&cfg, &by_domain, lookup, k)
+        } else {
+            let super::set_rerank::MatcherSetScratch { admission, fan } = &mut self.set_scratch;
+            super::set_rerank::counter_anchored_slate(
+                &cfg,
+                &by_domain,
+                lookup,
+                corpus,
+                query,
+                k,
+                admission,
+                fan,
+            )
+        }
+    }
+
+    /// Issue 121: override the set-rerank weights (the A/B knob).
+    #[cfg(feature = "set_rerank")]
+    #[must_use]
+    pub fn with_set_config(
+        mut self,
+        cfg: super::set_rerank::SetRerankConfig,
+    ) -> Self {
+        self.set_cfg = cfg;
+        self
     }
 
     /// Suggest rules for every chunk of a real `.rs` file.
@@ -818,6 +931,43 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
                 .collect::<Vec<_>>()
         );
         let _ = routed;
+    }
+
+    /// Issue 121 (Bench 096): the merge MUST carry the per-domain rerank's
+    /// structural key — a fired proposer outranks a higher-BM25 rival from
+    /// another domain, exactly as `instantiation_rerank::rerank` orders
+    /// within one domain. The score-only merge measured -55.6pp top-1 on
+    /// the composite rig.
+    #[test]
+    fn all_rules_keeps_the_canonical_key_across_domains() {
+        use crate::draft::ScoredRule;
+        let mk = |id: &str, score: f32, fires: bool| ScoredRule {
+            rule_id: id.to_string(),
+            score,
+            instantiates: fires,
+        };
+        let s = SpanSuggestion {
+            path: "x.rs".to_string(),
+            start_line: 1,
+            end_line: 2,
+            routed_domain: DomainId::Clippy,
+            by_domain: vec![
+                (
+                    DomainId::Clippy,
+                    vec![mk("needless_return", 8.0, true), mk("needless_bool", 8.5, false)],
+                ),
+                (DomainId::Perf, vec![mk("vec-with-capacity", 9.0, false)]),
+            ],
+            anchored_rules: Vec::new(),
+            anchored_missing: Vec::new(),
+            heuristic_only: false,
+        };
+        let order: Vec<&str> = s.all_rules().iter().map(|r| r.rule_id.as_str()).collect();
+        assert_eq!(
+            order,
+            vec!["needless_return", "vec-with-capacity", "needless_bool"],
+            "the fired proposer must outrank higher-BM25 rivals across domains"
+        );
     }
 
     #[test]

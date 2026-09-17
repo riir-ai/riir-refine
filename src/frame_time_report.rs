@@ -797,7 +797,7 @@ mod tests {
         std::fs::write(nested.join("ocean.frames.json"), sidecar_text("ocean", 2.0, (1, 1)))
             .expect("write");
         std::fs::write(dir.join("ignored.json"), "{}").expect("write");
-        let (loaded, failures) = collect_sidecars(&[dir.clone()]);
+        let (loaded, failures) = collect_sidecars(std::slice::from_ref(&dir));
         assert!(failures.is_empty(), "{failures:?}");
         let effects: Vec<&str> = loaded.iter().map(|l| l.sidecar.effect.as_str()).collect();
         assert_eq!(effects.len(), 2, "{effects:?}");
