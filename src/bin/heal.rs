@@ -373,8 +373,10 @@ fn enforce_kat_soft_gate(args: &Args) {
         "cargo heal: REFUSED — the account's last synced KAT balance is {balance} \
          (depleted) and this machine has not yet contributed (Issue 075 soft gate)."
     );
-    eprintln!("Refuel with any of:");
-    eprintln!("  * refill:      cargo heal --refill   (the dev/test faucet refill — opens the faucet request, refreshes this gate from the server balance; Plan 117)");
+    // riir-dapps Issue 094 D4: the free daily faucet/drip tier is RETIRED
+    // and `--refill` retired with it (devnet-ops only). The refuel paths a
+    // user is offered are exactly two — contribute or pay.
+    eprintln!("Refuel with exactly one of:");
     eprintln!("  * contribute:  cargo heal --mine   (what mining is)  →  cargo heal sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
     eprintln!("  * top up:      {top_up}");
     eprintln!(
@@ -2287,15 +2289,51 @@ fn run_kat_faucet(qr: bool) {
 /// gate — and the crank leg's authorization is the operator-set bearer
 /// token, fail-soft on refusal).
 ///
-/// The two things this bin adds around the flow:
+/// The three things this bin adds around the flow:
 ///
-/// 1. the root-scoped ack refresh (T5): a confirmed server balance is
+/// 1. the riir-dapps Issue 094 D4 posture gate: `--refill` is a
+///    DEVNET-OPS tool now — the user daily faucet/drip tier is retired, so
+///    a mainnet (or unnameable) ledger gets a loud refusal naming the two
+///    surviving refuel paths, contribute and pay;
+/// 2. the root-scoped ack refresh (T5): a confirmed server balance is
 ///    written into the 075 gate's input file so the gate lifts without a
 ///    new burn push — the whole point of the command;
-/// 2. the exit contract: 0 iff the final synced balance is positive
-///    (explicit command — unlike the burn push, the outcome IS the code).
+/// 3. the exit contract: 0 iff the final synced balance is positive
+///    (explicit command — unlike the burn push, the outcome IS the code);
+///    a posture refusal exits 1.
 fn run_kat_refill(wait_secs: u64) {
     let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    // ── riir-dapps Issue 094 D4: the posture gate, FIRST ─────────────────
+    // Before the account load below, so a mainnet user meets the retirement
+    // sentence rather than "run `cargo heal login` first" — the refusal is
+    // about the LEDGER and is true whether or not this box holds a key. The
+    // posture signal is the one the client ALREADY has (the Plan 023
+    // service-URL resolution: env > `cargo heal config set` > the mainnet
+    // default); no second posture mechanism is invented here. An EMPTY
+    // refusal is the permission, so the rule lives in one place
+    // (`kat_refill::refill_refusal_lines`) rather than being restated as a
+    // posture comparison on this side.
+    #[cfg(feature = "kat_transport")]
+    {
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        // Best-effort: the account id only DECORATES the pay link, so a
+        // missing/unreadable account still gets the full refusal.
+        let account_id = riir_clippy::kat_account::KatAccount::load(&dir)
+            .map(|a| a.state().account_id.clone())
+            .unwrap_or_default();
+        let pay = riir_clippy::kat_lease_client::payment_url(&url, &account_id);
+        let refusal = riir_clippy::kat_refill::refill_refusal_lines(
+            riir_clippy::kat_refill::refill_posture(&url),
+            &url,
+            &pay,
+        );
+        if !refusal.is_empty() {
+            for line in refusal {
+                eprintln!("{line}");
+            }
+            std::process::exit(1);
+        }
+    }
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
@@ -3208,7 +3246,7 @@ USAGE:
     cargo heal --mine                                 <- what mining is + policy + how to earn KAT
     cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
     cargo heal --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
-    cargo heal --refill [--refill-wait <s>]           <- dev/test faucet refill when out of KAT (Plan 117; kat_transport)
+    cargo heal --refill [--refill-wait <s>]           <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
     cargo heal --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service)
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
@@ -3488,12 +3526,16 @@ USAGE:
                     rewards become permanently unclaimable (no recovery path),
                     and a purge + re-login cycle is the fresh-grant farm shape
                     (each new key gets a fresh once-per-key welcome grant).
-    --refill        Dev/test faucet refill (Plan 117): open a faucet request,
-                    force a crank settle pass when RIIR_HEAL_KAT_CRANK_TOKEN is
-                    set, then read the server balance and refresh the 075
-                    gate's input from that server truth. Exit 0 iff the final
-                    synced balance is positive. The refuel path the soft gate
-                    names beside contribute + the payment page.
+    --refill        DEVNET-OPS ONLY (riir-dapps Issue 094 D4): credit a TEST
+                    account on devnet — open a faucet request, force a crank
+                    settle pass when RIIR_HEAL_KAT_CRANK_TOKEN is set, then
+                    read the server balance and refresh the 075 gate's input
+                    from that server truth. Exit 0 iff the final synced
+                    balance is positive. It REFUSES on mainnet (and on any
+                    ledger this client cannot name as devnet): the free daily
+                    faucet/drip tier is retired, and the user refuel paths
+                    are exactly two — contribute (cargo heal --mine) or pay
+                    (KAT packs).
     --refill-wait <s>  With --refill ONLY: bound the settle poll (default 0 =
                     one after-read, no poll — the credit normally lands at the
                     hourly crank alarm, not synchronously).
@@ -3627,12 +3669,16 @@ struct Args {
     /// shape, so it is never the default). Removes the local key + record
     /// + the outbox + the sync watermark.
     purge: bool,
-    /// Plan 117: `--refill` — the dev/test faucet refill (the refuel path
-    /// the 075 gate names). Standalone early-return mode (before
-    /// `validate_mode_flags` AND before the soft gate — refill IS the
-    /// escape hatch). Composes the shipped faucet/crank/balance surfaces
-    /// and refreshes the gate's server-truth input; the module
-    /// (`kat_refill`) owns the wire, this flag owns the consent.
+    /// Plan 117 as amended by riir-dapps Issue 094 D4: `--refill` — the
+    /// **devnet-ops** faucet credit. It is NO LONGER "the refuel path the
+    /// 075 gate names": the daily faucet/drip user tier is retired, the
+    /// gate's menu is contribute-or-pay, and this refuses on any ledger
+    /// that is not devnet. Standalone early-return mode (before
+    /// `validate_mode_flags` AND before the soft gate — an ops tool must
+    /// not be gated by the balance it exists to repair). Composes the
+    /// shipped faucet/crank/balance surfaces and refreshes the gate's
+    /// server-truth input; the module (`kat_refill`) owns the wire AND the
+    /// posture rule, this flag owns the consent.
     refill: bool,
     /// Plan 117: `--refill-wait <secs>` — with `--refill` ONLY: the bounded
     /// settle-poll budget after the crank leg (default 0 = one after-read,
@@ -7068,12 +7114,13 @@ fn main() {
         return;
     }
 
-    // ── Plan 117: --refill — the dev/test faucet refill ───────────────────
+    // ── Plan 117 + Issue 094 D4: --refill — the DEVNET-OPS faucet credit ──
     // Standalone (early return before validate_mode_flags AND before the
-    // 075 soft gate: refill IS the refuel path the gate names — gating the
-    // escape hatch behind the gate would be a latched door). The money
-    // consent is the explicit flag itself; the crank leg's consent is the
-    // operator-set RIIR_HEAL_KAT_CRANK_TOKEN.
+    // 075 soft gate — an ops tool must not be gated by the balance it
+    // exists to repair). It is no longer a user refuel path: D4 retired the
+    // daily faucet/drip tier, and `run_kat_refill` refuses loudly off
+    // devnet. The money consent is the explicit flag itself; the crank
+    // leg's consent is the operator-set RIIR_HEAL_KAT_CRANK_TOKEN.
     if args.refill {
         run_kat_refill(args.refill_wait);
         return;
@@ -9902,7 +9949,9 @@ fn main() {
                     &riir_clippy::kat_lease_client::service_url_for_command(),
                     &acct,
                 );
-                eprintln!("kat-charge: top up — {url} (or: cargo heal --refill)");
+                eprintln!(
+                    "kat-charge: top up — {url} (KAT packs), or contribute: cargo heal --mine"
+                );
                 let qr = riir_clippy::kat_lease_client::render_qr_ascii(&url);
                 if !qr.is_empty() {
                     eprintln!("{qr}");

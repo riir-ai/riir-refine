@@ -7,7 +7,15 @@
 //! |---|---|---|
 //! | 1. refill, not logged in | (no account) | exit 1 + `no account` + `cargo heal login` named — nothing dials |
 //! | 2. refill, live mock | faucet 200 + crank 200 + balance 200 (0 → 10 KAT) | exit 0, `kat-fuel:` line carries the server truth, the ack's `last_balance_micro` is REFRESHED (the 075 gate's input — the whole point of the command), the crank POST carried the bearer token |
-//! | 3. the gate names the refill path | closed port, depleted ack | the refusal lists `cargo heal --refill` FIRST (Plan 117 T6) |
+//! | 3. the gate's refuel menu | closed port, depleted ack | the refusal lists contribute + pay and NEVER `--refill` (riir-dapps Issue 094 D4) |
+//! | 4. mainnet posture | mainnet URL, live mock, logged in | exit 1, `REFUSED`, both refuel paths named verbatim, ZERO requests captured (Issue 094 D4) |
+//!
+//! The devnet-ops side of D4 is phase 2 itself: its loopback mock URL is
+//! the `wrangler dev` posture, so a green phase 2 IS the assertion that the
+//! surviving devnet-ops tool still works end to end. The pinned-host
+//! classification (devnet opens, testnet/custom fail closed) is unit-armed
+//! in `riir-kat`'s `kat_refill::tests` rather than dialed from here — this
+//! file reaches no network by construction.
 //!
 //! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
 //! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`) + service URL; the lease/reheat lanes
@@ -321,10 +329,13 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Phase 3 (T6): the 075 refusal names `cargo heal --refill` as the first
-/// refuel path, beside the shipped contribute + payment-page paths.
+/// Phase 3, as amended by riir-dapps Issue 094 D4: the 075 refusal names
+/// exactly TWO refuel paths — contribute and pay — and must NOT name
+/// `--refill`, which retired with the daily faucet/drip tier it fuelled.
+/// (This arm previously asserted the opposite, that `--refill` was listed
+/// FIRST; the inversion is the D4 verdict, not a regression.)
 #[test]
-fn the_depleted_gate_names_the_refill_path() {
+fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     let dir = scratch("gatename");
     login(&dir);
     let ack_path = dir.join(".heal").join(KatBurnAck::FILE_NAME);
@@ -343,14 +354,54 @@ fn the_depleted_gate_names_the_refill_path() {
     let (code, text) = heal(&dir, CLOSED_PORT, &[], &[]);
     assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
     assert!(
-        text.contains("cargo heal --refill"),
-        "the refill path must be named. output:\n{text}"
+        !text.contains("cargo heal --refill"),
+        "D4: a retired user path must not be advertised. output:\n{text}"
     );
-    // Order: refill (the dev escape hatch) before contribute (the earn
-    // path) — the depleted dev wants fuel first.
-    let refill_at = text.find("cargo heal --refill").expect("refill named");
-    let mine_at = text.find("cargo heal --mine").expect("mine named");
-    assert!(refill_at < mine_at, "refill names first. output:\n{text}");
+    assert!(
+        text.contains("cargo heal --mine"),
+        "contribute must be named. output:\n{text}"
+    );
+    assert!(
+        text.contains("top up:"),
+        "pay must be named. output:\n{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Issue 094 D4, the mainnet half: `--refill` REFUSES on mainnet posture,
+/// names both surviving refuel paths, and dials NOTHING — the account is
+/// fully logged in, so the only thing standing between it and the faucet
+/// is the posture gate.
+#[test]
+fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
+    let dir = scratch("mainnet");
+    login(&dir);
+    let mock = spawn_refill_mock();
+    // The posture is read from the resolved SERVICE URL, so point the run
+    // at mainnet by name while a live faucet mock sits there unused: if
+    // the gate leaked, the mock would record a request.
+    let (code, text) = heal(
+        &dir,
+        riir_clippy::kat_service_urls::MAINNET_SERVICE_URL,
+        &[("RIIR_HEAL_KAT_CRANK_TOKEN", "ops-token")],
+        &["--refill"],
+    );
+    assert_eq!(code, Some(1), "mainnet refill must refuse. output:\n{text}");
+    assert!(text.contains("REFUSED"), "loudly. output:\n{text}");
+    assert!(text.contains("MAINNET"), "by posture. output:\n{text}");
+    assert!(
+        text.contains("cargo heal --mine"),
+        "contribute must be named verbatim. output:\n{text}"
+    );
+    assert!(
+        text.contains("/pay?acct="),
+        "pay (packs) must be named. output:\n{text}"
+    );
+    assert!(
+        mock.captured().is_empty(),
+        "the refusal must dial nothing. captured: {:?}",
+        mock.captured()
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
