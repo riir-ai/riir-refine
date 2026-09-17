@@ -79,6 +79,58 @@ hand-typed edit_file payloads, for any fixture with multi-line code.
 Box state: the sibling's T6 close-out live in parallel (doc phase); gates
 ran one-cargo-leg-at-a-time; score-bench compiled with the kat_service
 required-features trap honored.
+## 2026-09-18 — Plan 141: the devnet burn-process e2e, both machines live (Bench 097)
+
+The client burn path proven end-to-end against live devnet — metering,
+push, watermark, replay, clamp, depletion, the 075 soft-gate refusal, the
+D4 refuel arms, conservation, the hourly settle, repeatability — with
+server-observable assertions only. Full evidence:
+[`.benchmarks/097_devnet_burn_e2e_client_matrix.md`](.benchmarks/097_devnet_burn_e2e_client_matrix.md).
+The rerunnable instrument: [`scripts/burn_e2e.sh`](scripts/burn_e2e.sh) —
+9/9 hard assertions green twice consecutively; refuses off-devnet configs
+(the apex IS mainnet), hard-refuses fleet account ids, builds the release
+feature set and refuses to run on a stale binary.
+
+The headline, server-read: a 100 KAT grant burned to exactly **0.000000
+KAT** by 90 metered scans (≈1.18 KAT each, `wire_kat_total`'s sub-KAT
+floor observed end-to-end); the depleted + never-contributed account
+refused at run start (exit 1, the two D4 refuel paths named); the clamp
+held (a 1-KAT report on a 0-balance account debited `applied_micro: 0`,
+never negative); the contribute-now lift ran clean (accepted batch →
+`contributed: true` server-side → the burn drain carried the v3 flag into
+the ack → the ungated rerun exits 0); conservation
+`balance + Σ applied == grant` held on every measurable account; the
+hourly `KAT_FAST_SETTLE` leg observed advancing the pool
+(67.2 → 98.0 KAT `pool_available_micro` inside the session window); the
+22.39977 = 70% × 32 pool invariant still standing live.
+
+Findings recorded for follow-up (Bench 097 §4): (1) the grant-claim sync
+arms the contributed grace — a granted + synced account can never hit the
+075 refusal, a design consequence of T079-claim-rides-sync +
+contributed-on-accepted-batch; (2) the v3 grace flag is ack-carried, so a
+zero-delta depleted account learns `contributed=true` server-side but its
+local ack stays false until one more metered delta burns (the measured
+lift sequence is encoded in the runner); (3) the deployed devnet worker
+has NO faucet route (`kat_faucet` compiled out post-D4) — `--refill`
+surfaces the generic payreq matcher error verbatim, a minor UX follow-up;
+(4) `/leaderboard` on devnet renders HTML only (`KAT_WWW_HOST` equals the
+API host) — machine consumers read `/history` + `/health`.
+
+Fleet safety held throughout: the fleet accounts (`c79c…5345`,
+`7161…bd29`) were never touched (their balances byte-identical at session
+team start and close); all depletion/clamp/gate work ran on throwaway
+keys, and the runner's fleet guard makes that structural. The 4090 half
+ran over Tailscale with `-EncodedCommand` (the LAN was down all session);
+its build used another agent's dirty Batch-152 checkout untouched (the
+1-commit delta touches zero kat surfaces, verified before building), and
+the only processes killed were this session's own hung fetches, confirmed
+by command line first.
+
+Deferred (cadence-bound): the T4 full-epoch reconciliation and the D4a
+vest-cycle datum — both land at the epoch-2959 settle, where the test
+accounts' pending claims make them measurable. No per-account ops reset
+exists (treasury fund seeds the treasury only) — fresh keys per cycle are
+the runner's reset, per the no-improvised-mint rule.
 
 ## 2026-09-18 — Plan 035 wave 2 (T3/T10/T6-client/T12): the client becomes a typed µ consumer + the ×1_000_000 grep gate
 
