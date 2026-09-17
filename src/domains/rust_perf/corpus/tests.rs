@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 142); // Batch 153 (async-blocking distill) 139 → 142
+    assert_eq!(corpus.entries.len(), 145); // Batch 154 (tokio upstream-surface refresh) 142 → 145
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 50); // 142 total − 92 benchable (Batch 153 added 3 NotBenchable suggestion-only rules: the sleep twin, the rayon bridge, the nodelay io rule)
+    assert_eq!(without_spec.len(), 53); // 145 total − 92 benchable (Batch 154 added 3 NotBenchable suggestion-only rules: the vectored capability flag, the oneshot response-send, the bounded-cycle deadlock)
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1872,7 +1872,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 86, "expected 86 context-annotated rules (Batch 153 added the three async-blocking annotations and annotated async-yield-point, previously None; Batch 152 added the three dial9 tokio annotations)");
+    assert_eq!(annotated.len(), 89, "expected 89 context-annotated rules (Batch 154 added the three tokio upstream-surface annotations; Batch 153 added the three async-blocking annotations and annotated async-yield-point, previously None; Batch 152 added the three dial9 tokio annotations)");
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
     assert!(annotated.contains(&"batch-blocking-pool-segment")); // Batch 152 — the two-regime + global-resource annotation
     assert!(annotated.contains(&"adaptive-yield-consecutive-ready")); // Batch 152 — the dynamic-trigger + light-load anti-regime annotation
@@ -1936,7 +1936,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 56, "expected 56 unannotated rules (142 total - 86 annotated; Batches 145+146+147+153 rules all joined the ANNOTATED side, so the unannotated count only moved when Batch 153 annotated async-yield-point)");
+    assert_eq!(unannotated, 56, "expected 56 unannotated rules (145 total - 89 annotated; Batch 154's three rules all joined the ANNOTATED side)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1948,7 +1948,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 86); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86 (3 new + async-yield-point annotated)
+    assert_eq!(annotated, 89); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86 (3 new + async-yield-point annotated); Batch 154: 86 → 89 (3 new tokio upstream-surface rules)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1989,7 +1989,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 86, "expected 86 annotated rules (Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86)");
+    assert_eq!(annotated.len(), 89, "expected 89 annotated rules (Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86; Batch 154: 86 → 89)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2028,7 +2028,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 56, "expected 56 unannotated rules (142 total − 86 annotated, Batch 153: async-yield-point gained its annotation)");
+    assert_eq!(unannotated.len(), 56, "expected 56 unannotated rules (145 total − 89 annotated, Batch 154's three rules all joined the annotated side)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -4390,6 +4390,140 @@ fn batch153_distinct_rows_present() {
         assert!(
             notes.contains(neighbor),
             "batch-153 {id} distinct-from row must name {neighbor}"
+        );
+    }
+}
+
+#[test]
+fn batch154_rules_present_and_annotated() {
+    // Batch 154 (the tokio upstream-surface refresh — CHANGELOG 1.47–1.52.3
+    // + "Actors with Tokio"): 3 NotBenchable suggestion-only rules
+    // (the io syscall / panic-liveness / dataflow metric classes).
+    let corpus = build_perf_seed_corpus();
+    let expected = [
+        ("write-vectored-capability-flag", "io"),
+        ("oneshot-response-send-unwrap-panics", "concurrency"),
+        ("actor-bounded-channel-cycle-deadlock", "concurrency"),
+    ];
+    for (id, category) in expected {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-154 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-154 {id} category");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-154 {id} must carry context_notes (the annotation IS the content)"
+        );
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("suggestion-only") || notes.contains("SUGGESTION-ONLY"),
+            "batch-154 {id} annotation must state the suggestion-only verdict"
+        );
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-154 {id} must carry distinct-from rows"
+        );
+        #[cfg(feature = "rust_perf_bench")]
+        assert!(
+            e.bench_spec.is_none(),
+            "batch-154 {id} is NotBenchable as drafted (the io-syscall/panic/dataflow metric classes)"
+        );
+    }
+}
+
+#[test]
+fn batch154_pseudocode_parses() {
+    // G1 for Batch 154: syn-parse gate over both fixtures of every rule.
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        "write-vectored-capability-flag",
+        "oneshot-response-send-unwrap-panics",
+        "actor-bounded-channel-cycle-deadlock",
+    ];
+    for id in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-154 rule '{id}' missing"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-154 {id} buggy/fixed must both parse"
+        );
+    }
+}
+
+#[test]
+fn batch154_distinct_rows_present() {
+    // The dedup law, admission-time: nearest neighbors named BOTH
+    // directions where the pair is close (the capability flag vs the
+    // byte-coalescing family; the response-send vs the rayon bridge; the
+    // bounded cycle vs backpressure + the rayon steal-block deadlock).
+    let corpus = build_perf_seed_corpus();
+    for (id, neighbor) in [
+        ("write-vectored-capability-flag", "buffered-io"),
+        ("write-vectored-capability-flag", "bufwriter-batched"),
+        ("oneshot-response-send-unwrap-panics", "rayon-bridge-oneshot"),
+        (
+            "actor-bounded-channel-cycle-deadlock",
+            "bounded-channel-backpressure",
+        ),
+        (
+            "actor-bounded-channel-cycle-deadlock",
+            "nested-par-inside-channel-bridge-deadlocks",
+        ),
+    ] {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap();
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-154 {id} must carry a Distinct-from row"
+        );
+        assert!(
+            notes.contains(neighbor),
+            "batch-154 {id} distinct-from row must name {neighbor}"
+        );
+    }
+}
+
+#[test]
+fn batch154_annotation_folds_present() {
+    // The 4 annotation folds' landing pins: each fold's marker phrase must
+    // be present in its target rule's context_notes.
+    let corpus = build_perf_seed_corpus();
+    let pins = [
+        (
+            "batch-blocking-pool-segment",
+            "UPSTREAM REVERT DATUM (Batch 154 annotation",
+        ),
+        (
+            "tcp-nodelay-request-response-accepted-socket",
+            "SOCKET-OPTION FAMILY (Batch 154 annotation",
+        ),
+        (
+            "async-yield-point",
+            "SCHEDULER-TWEAK REVERT DATUM (Batch 154 annotation",
+        ),
+        ("async-yield-point", "COOP API (1.47.0 #7405)"),
+    ];
+    for (id, marker) in pins {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-154 fold target '{id}' missing"));
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains(marker),
+            "batch-154 fold on {id} must carry marker '{marker}'"
         );
     }
 }

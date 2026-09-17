@@ -1,6 +1,6 @@
 # Research 181 — tokio upstream-surface refresh distill (CHANGELOG 1.47–1.52.3 + "Actors with Tokio")
 
-**Status:** DISTILLED — pending owner decision (executing as Batch 154 / Plan 144 in the same session)
+**Status:** RECORD — executed 2026-09-18 as Batch 154 ([Plan 144](../.plans/144_batch154_tokio_upstream_refresh.md); gates + records in the HISTORY 09-18 entry)
 
 **Sources** (both surfaces read live 2026-09-18; the async-perf pool's designated NEXT POOL):
 

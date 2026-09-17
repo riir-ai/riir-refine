@@ -1,5 +1,85 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 154 / Plan 144: the tokio upstream-surface refresh (CHANGELOG 1.47–1.52.3 + "Actors with Tokio"), rust_perf 142 → 145
+
+The async-perf pool's designated NEXT POOL, verdicted and EXECUTED in one
+session ([Research 181](.research/181_tokio_upstream_surface_refresh_distill.md)
+— YES B− corpus / no lane mapping / tokio-family continuation). Two
+surfaces, one verdict: the tokio CHANGELOG releases 1.47.0→1.52.3 (+ PR
+#7871's diff read in the review thread — by Darksonn/Ryhl, merge SHA
+9dc9b53) + Alice Ryhl's blog index swept in full (the RFCs are
+compiler-territory; the two unconsumed candidates read and declined with
+recorded reasons).
+
+**3 new NotBenchable suggestion-only rules** (all three fail GOAT
+criterion 1 for DOMAIN reasons — io syscall / panic-liveness / dataflow,
+the Batch-136/152/153 standing):
+
+- `write-vectored-capability-flag` (io, B− lead) — a custom
+  AsyncWrite/Write impl with a real vectored path but `is_write_vectored()`
+  left at default false leaves the writev support DEAD CODE: adapters gate
+  on the flag, and since tokio 1.50 (#7871 — the diff in the review thread:
+  `let n = if me.writer.is_write_vectored() { … poll_write_vectored … }`)
+  write_buf/write_all_buf consult it too. ONE-LINE bounded fix
+  (`fn is_write_vectored(&self) -> bool { true }`); parse-visible trigger
+  (an impl block with poll_write_vectored but no flag override); dedup
+  ZERO corpus hits; the std twin since 1.36; the PR-review regime datum
+  (paolobarbolini: vectored pays when `chunk().len() < remaining()`).
+- `oneshot-response-send-unwrap-panics` (concurrency) — unwrap/expect on a
+  response oneshot send inside a handler panics when the requester was
+  CANCELLED (select!/timeout/abort dropped the receiver — a normal event);
+  the panic kills the ACTOR (the whole subsystem), not the requester;
+  `let _ =` is the article's canonical idiom (already exhibited in
+  rayon-bridge-oneshot's fixed code — the idiom in vivo).
+- `actor-bounded-channel-cycle-deadlock` (concurrency) — cycles of
+  channels WITH BOUNDED capacity deadlock (bounded send suspends; oneshot /
+  try_send / unbounded cannot participate — the matklad-credited analysis);
+  the fix breaks the TOPOLOGY (try_send back-edge / asymmetric select),
+  never the boundedness — in deliberate TENSION with
+  bounded-channel-backpressure, which IS the content. Distinct from
+  nested-par's rayon steal-block both directions.
+
+**4 annotation folds**: (a) batch-blocking-pool-segment += the 1.52.0
+#7757 → 1.52.1 #8057 spawn_blocking sharded-queue REVERT — the pool's own
+maintainers' scalability attempt HUNG (upstream provenance for the rule's
+global-contention premise); (b) async-yield-point += the 1.51.0 #7431 →
+1.52.2 #8100 LIFO-slot-steal REVERT (perf impact) — even runtime-authored
+scheduler tweaks ship-then-revert, the measure-don't-assume datum; (c)
+async-yield-point += coop::cooperative/poll_proceed public API (1.47.0
+#7405 — the 128-op budget system is now public); (d) tcp-nodelay += the
+socket-option family movement (quickack 1.48, set_linger DEPRECATED 1.49,
+set_zero_linger 1.50 — the accepted-socket option family keeps growing).
+
+**Declined + recorded** (Research 181): the in-place-initialization article
+(language proposal; today's mitigation is unsafe/unstable-shaped — the
+Box::new stack-then-move motivation noted as a hot-byval-move cite), the
+Cell::from_mut retain idiom (solves a COMPILE error, no silent bug;
+RefCell→Cell-for-Copy is type-info clippy territory), actor spawn-placement
+(compile-error-shaped — rustc IS the rule) + reader/writer split
+(architectural).
+
+**GOAT all green**: batch gates 3/3 · lib default **1738/0** (floor
+1734+4) · rust_perf_bench **1767/0** (1763+4) · latent_retrieval **1891/0**
+(1887+4) · clippy ×3 states clean on write-set · score-bench **96.36%
+byte-identical FLAT** (row #130 + frontier snapshot gen 7) · corpus-stats
+**145**. gen2/gen3 freeze tables UNTOUCHED (rust_perf-only, the B147/152/153
+precedent). Count pins walked ×11: entries.len 142→145, without_spec
+50→53, annotated ×3 asserts (86→89 — the serde-roundtrip pin at L1951 was
+found by the test run AGAIN, the B152/153 pattern), unannotated comment,
+mod.rs header + NotBenchable line 50/142→53/145 + docstring ledger, AGENTS
+×2, README, `.docs/11_domains/rust_perf.md` ×3. **Process note (the
+edit-tool escaping lesson)**: the three rules' fixtures initially landed
+with REAL newlines inside single-line Rust string literals (the corpus
+convention is `\n` escapes) — the repair script over-joined and mangled a
+neighbor rule; recovered by `git checkout --` + a deterministic Python
+insertion (`lit()` escaping from triple-quoted fixtures — no fuzzy
+matching). Future batches: build corpus entries with the Python path, not
+hand-typed edit_file payloads, for any fixture with multi-line code.
+
+Box state: the sibling's T6 close-out live in parallel (doc phase); gates
+ran one-cargo-leg-at-a-time; score-bench compiled with the kat_service
+required-features trap honored.
+
 ## 2026-09-18 — Plan 035 wave 2 (T3/T10/T6-client/T12): the client becomes a typed µ consumer + the ×1_000_000 grep gate
 
 riir-dapps Plan 035 wave-2 tasks, executed in this repo (work ONLY here;

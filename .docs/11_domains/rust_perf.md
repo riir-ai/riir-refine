@@ -23,9 +23,41 @@
 
 ## Corpus
 
-142 rules across 12 categories (rust-optimize skill checklist +
+145 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 142 rules — Batch 153 (2026-09-18,
+profiling guide, Research 032; **now 145 rules — Batch 154 (2026-09-18,
+Plan 144 / Research 181 — the tokio upstream-surface refresh, the async-perf
+pool's designated NEXT POOL: the CHANGELOG 1.47–1.52.3 surface + Alice Ryhl's
+"Actors with Tokio") added three NotBenchable suggestion-only rules:
+`write-vectored-capability-flag` (io — a custom AsyncWrite/Write impl with a
+real vectored path but `is_write_vectored()` at default false leaves the
+writev path DEAD CODE; tokio 1.50's write_buf/write_all_buf now gate on the
+flag — PR #7871 by Darksonn/Ryhl, merge 9dc9b53, diff verified; one-line
+bounded fix; the std twin since 1.36; the PR-review regime datum: vectored
+pays when `chunk().len() < remaining()`),
+`oneshot-response-send-unwrap-panics` (concurrency — unwrap on a response
+oneshot send inside a handler panics when the requester was CANCELLED via
+select!/timeout/abort; the panic kills the ACTOR, not the requester; `let _ =`
+is the canonical idiom, already exhibited in rayon-bridge-oneshot's fixed
+code), and `actor-bounded-channel-cycle-deadlock` (concurrency — cycles of
+channels with BOUNDED capacity deadlock: each full inbox suspends its sender
+awaiting the other; the fix breaks the TOPOLOGY (try_send back-edge /
+asymmetric select), never the boundedness — in deliberate TENSION with
+bounded-channel-backpressure, which is the content; matklad-credited
+analysis) — plus four annotation folds (the spawn_blocking sharded-queue
+REVERT 1.52.0 #7757 → 1.52.1 #8057 hang on batch-blocking-pool-segment — the
+pool's own maintainers' sharding attempt shipped broken; the LIFO-slot-steal
+REVERT 1.51.0 #7431 → 1.52.2 #8100 perf-impact on async-yield-point — the
+measure-don't-assume datum; the coop::cooperative/poll_proceed public API
+1.47.0 #7405 on async-yield-point — the 128-op budget is now public; the
+socket-option family movement — quickack 1.48, set_linger DEPRECATED 1.49,
+set_zero_linger 1.50 — on tcp-nodelay). No benchable candidate
+(io-syscall/panic-liveness/dataflow metric classes — the Batch-136/152/153
+precedent); gen2/gen3 freeze tables UNTOUCHED (rust_perf-only). Declined +
+recorded in Research 181: in-place-init (unsafe/unstable-shaped), the
+Cell::from_mut retain idiom (compile-error-shaped), spawn-placement +
+reader/writer split (compile-error/architectural). Previously 142 —
+Batch 153 (2026-09-18,
 Plan 143 / Research 180 — the async-blocking distill, the async-perf pool's
 execution) added three NotBenchable suggestion-only rules:
 `blocking-sleep-in-async` (concurrency — the canonical blocking bug:
@@ -707,7 +739,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 142 rules / 92 `BenchSpec`s — Batch 153 (the async-blocking distill): 3 NotBenchable suggestion-only rules (blocking-sleep-in-async, rayon-bridge-oneshot concurrency + tcp-nodelay io), no new BenchSpecs + 5 annotation folds (async-yield-point annotated, previously None); Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
+- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 145 rules / 92 `BenchSpec`s — Batch 154 (the tokio upstream-surface refresh): 3 NotBenchable suggestion-only rules (write-vectored-capability-flag io + oneshot-response-send-unwrap-panics + actor-bounded-channel-cycle-deadlock concurrency), no new BenchSpecs + 4 annotation folds (all three new rules annotated); Batch 153 (the async-blocking distill): 3 NotBenchable suggestion-only rules (blocking-sleep-in-async, rayon-bridge-oneshot concurrency + tcp-nodelay io), no new BenchSpecs + 5 annotation folds (async-yield-point annotated, previously None); Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
