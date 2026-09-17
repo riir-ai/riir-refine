@@ -245,7 +245,7 @@ def run_arm_a(port: int, n_predict: int, n_cases: int, tag: str) -> dict:
         # before a byte reaches us (katgpt-rs Issue 778).
         env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
     )
-    return json.loads(out.read_text())["aggregate"]
+    return json.loads(out.read_text(encoding="utf-8"))["aggregate"]
 
 
 # ── Arm B: katgpt ternary (fresh process per visit) ──
@@ -276,7 +276,7 @@ def run_arm_b(n_predict: int, n_cases: int, tag: str, target_dir: str) -> dict:
         env=env,
         stdout=subprocess.DEVNULL,
     )
-    rows = [json.loads(l) for l in jsonl.read_text().splitlines() if l.strip()]
+    rows = [json.loads(l) for l in jsonl.read_text(encoding="utf-8").splitlines() if l.strip()]
     pt = sum(r["prompt_tokens"] for r in rows)
     dt = sum(r["decode_tokens"] for r in rows)
     ps = sum(r["prefill_s"] for r in rows)
@@ -557,7 +557,7 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    args.out.write_text(json.dumps({"summary": summary, "pairs": pairs}, indent=2))
+    args.out.write_text(json.dumps({"summary": summary, "pairs": pairs}, indent=2), encoding="utf-8")
     print(f"\nwrote {args.out}", file=sys.stderr)
     return 0
 

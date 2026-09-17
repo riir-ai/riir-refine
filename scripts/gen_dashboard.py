@@ -122,7 +122,7 @@ def load_ledger() -> list[dict]:
     if not LEDGER.exists():
         log(f"ledger missing: {LEDGER}")
         return rows
-    for line in LEDGER.read_text().splitlines():
+    for line in LEDGER.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
@@ -239,7 +239,7 @@ def ledger_summary(rows: list[dict]) -> dict:
 def load_score_history() -> list[dict]:
     jsonl_rows: list[dict] = []
     if SCORE_HISTORY.exists():
-        for line in SCORE_HISTORY.read_text().splitlines():
+        for line in SCORE_HISTORY.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -357,12 +357,12 @@ CORPUS_HISTORY_JSONL = REPO_ROOT / ".benchmarks" / "corpus_history.jsonl"
 def _count_working_tree(path: str, needle: str) -> int:
     p = REPO_ROOT / path
     if p.suffix == ".rs":
-        return p.read_text().count(needle) if p.exists() else 0
+        return p.read_text(encoding="utf-8").count(needle) if p.exists() else 0
     n = 0
     if p.is_dir():
         for f in sorted(p.glob("*.rs")):
             if f.name != "mod.rs":
-                n += f.read_text().count(needle)
+                n += f.read_text(encoding="utf-8").count(needle)
     return n
 
 
@@ -436,7 +436,7 @@ def load_corpus_history(days: int = 35) -> list[dict]:
         # jsonl-only days kept). Rewrite the file as the exact projection —
         # sorted, compact separators, byte-stable when nothing changed.
         if CORPUS_HISTORY_JSONL.exists():
-            for line in CORPUS_HISTORY_JSONL.read_text().splitlines():
+            for line in CORPUS_HISTORY_JSONL.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line:
                     continue
@@ -451,14 +451,14 @@ def load_corpus_history(days: int = 35) -> list[dict]:
         payload = "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows)
         CORPUS_HISTORY_JSONL.parent.mkdir(parents=True, exist_ok=True)
         if (not CORPUS_HISTORY_JSONL.exists()
-                or CORPUS_HISTORY_JSONL.read_text() != payload):
-            CORPUS_HISTORY_JSONL.write_text(payload)
+                or CORPUS_HISTORY_JSONL.read_text(encoding="utf-8") != payload):
+            CORPUS_HISTORY_JSONL.write_text(payload, encoding="utf-8")
             log(f"corpus stamp: store projection written ({len(rows)} day(s))")
     else:
         # Legacy path (no healer binary / store unavailable): jsonl +
         # today's working-tree upsert, exactly as before the store flip.
         if CORPUS_HISTORY_JSONL.exists():
-            for line in CORPUS_HISTORY_JSONL.read_text().splitlines():
+            for line in CORPUS_HISTORY_JSONL.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line:
                     continue
@@ -479,7 +479,7 @@ def load_corpus_history(days: int = 35) -> list[dict]:
             rows = [recorded[d] for d in sorted(recorded)]
             CORPUS_HISTORY_JSONL.parent.mkdir(parents=True, exist_ok=True)
             CORPUS_HISTORY_JSONL.write_text(
-                "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows))
+                "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows), encoding="utf-8")
             log(f"corpus stamp: recorded {today} "
                 + " ".join(f"{n}={today_row[n]}" for n, _, _ in CORPUS_DOMAINS))
 
@@ -804,7 +804,7 @@ BILL_PIN = REPO_ROOT / ".benchmarks" / "cf_bill_pin.json"
 def _wrangler_oauth_token():
     if WRANGLER_TOKEN_FILE.exists():
         m = re.search(r'^oauth_token = "(.+)"$',
-                      WRANGLER_TOKEN_FILE.read_text(), re.MULTILINE)
+                      WRANGLER_TOKEN_FILE.read_text(encoding="utf-8"), re.MULTILINE)
         if m:
             return m.group(1)
     return None
@@ -886,7 +886,7 @@ def bill_reconciliation(usage: dict[str, float], period_start: str) -> dict:
     pin = {}
     if BILL_PIN.exists():
         try:
-            pin = json.loads(BILL_PIN.read_text())
+            pin = json.loads(BILL_PIN.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             log("cf_bill_pin.json is not valid JSON — skipping bill cross-check")
     return {"period_start": period_start,
@@ -1128,7 +1128,7 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
     cached = []
     if COVERAGE_CACHE.exists():
         try:
-            cached = json.loads(COVERAGE_CACHE.read_text()).get("repos", [])
+            cached = json.loads(COVERAGE_CACHE.read_text(encoding="utf-8")).get("repos", [])
         except json.JSONDecodeError:
             cached = []
     if not sweep or not HEAL_BIN.exists():
@@ -1179,7 +1179,7 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
     if merged:
         COVERAGE_CACHE.write_text(json.dumps(
             {"repos": merged, "updated": datetime.now(timezone.utc).isoformat()},
-            indent=1))
+            indent=1), encoding="utf-8")
         return merged
     return cached
 
@@ -1198,7 +1198,7 @@ def collect_training() -> list[dict]:
     rows: list[dict] = []
     if not path.exists():
         return rows
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
@@ -1224,7 +1224,7 @@ def load_fixer_quality() -> list[dict]:
     rows: list[dict] = []
     if not path.exists():
         return rows
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
@@ -2188,7 +2188,7 @@ def main() -> int:
     html = HTML_TEMPLATE.replace("__DATA__", payload).replace(
         "__DOMAINS__", json.dumps([n for n, _, _ in CORPUS_DOMAINS])
     )
-    out.write_text(html)
+    out.write_text(html, encoding="utf-8")
     log(f"wrote {out} ({len(html)//1024} KiB, "
         f"ledger={len(data['ledger']['rows'])} rows, "
         f"cf_days={len(data['cf_daily'])}, traj_repos={len(data['traj'])}, "

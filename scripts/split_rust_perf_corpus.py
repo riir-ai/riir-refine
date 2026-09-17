@@ -186,7 +186,7 @@ def comment_block_start(src: str, pos: int) -> int:
 def split(src_path: Path, out_dir: Path, expect_entries: int, shard_lines: int,
           write: bool, label: str) -> dict:
     """Parse src_path and (optionally) write the corpus/ folder. Returns a report."""
-    src = src_path.read_text()
+    src = src_path.read_text(encoding="utf-8")
     n = len(src)
     events = scan(src)
     positions = [p for p, _ in events]
@@ -448,7 +448,7 @@ def split(src_path: Path, out_dir: Path, expect_entries: int, shard_lines: int,
 
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, content in files.items():
-        (out_dir / name).write_text(content)
+        (out_dir / name).write_text(content, encoding="utf-8")
         scan(content)  # every generated file must itself scan clean
     src_path.unlink()
     print(f"[{label}] wrote {out_dir}/ (mod.rs + {len(shards)} slices + tests.rs), "
@@ -576,7 +576,7 @@ def self_test() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         fixture = tmp / "corpus.rs"
-        fixture.write_text(FIXTURE)
+        fixture.write_text(FIXTURE, encoding="utf-8")
         rep = split(fixture, tmp / "corpus", expect_entries=4, shard_lines=10,
                     write=True, label="self-test")
         files = rep["files"]

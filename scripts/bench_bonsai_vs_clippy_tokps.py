@@ -138,7 +138,7 @@ def main() -> int:
     ap.add_argument("--max-tokens", type=int, default=2048)
     args = ap.parse_args()
 
-    case_file = json.loads(args.cases.read_text())
+    case_file = json.loads(args.cases.read_text(encoding="utf-8"))
     cases = [(c["lint"], c["buggy"], c["want"]) for c in case_file["cases"]]
     print(
         f"=== fixture: {case_file['name']} ({len(cases)} cases) ===", file=sys.stderr
@@ -147,7 +147,7 @@ def main() -> int:
     # ── Load the clippy arm's emitted fixes + latencies ──────────────────
     clippy_rows = {}
     clippy_summary = {}
-    for line in args.clippy_jsonl.read_text().splitlines():
+    for line in args.clippy_jsonl.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         obj = json.loads(line)
@@ -266,7 +266,7 @@ def main() -> int:
                 "clippy_summary": clippy_summary,
             },
             indent=2,
-        )
+        ), encoding="utf-8"
     )
     print(f"\nwrote {args.out}")
     return 0

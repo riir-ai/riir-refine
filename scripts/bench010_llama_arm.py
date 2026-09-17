@@ -113,7 +113,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("/tmp/bench010_llama.json"))
     args = ap.parse_args()
 
-    case_file = json.loads(args.cases.read_text())
+    case_file = json.loads(args.cases.read_text(encoding="utf-8"))
     cases = case_file["cases"][: args.n_cases]
     print(
         f"=== Bench 010 llama arm — fixture={case_file['name']} "
@@ -181,7 +181,7 @@ def main() -> int:
         "prefill_tps": pt/ps if ps else 0.0,
         "decode_tps": dt/ds if ds else 0.0,
         "total_tps": (pt+dt)/(ps+ds) if (ps+ds) else 0.0,
-    }}, indent=2))
+    }}, indent=2), encoding="utf-8")
     print(f"\nwrote {args.out}", file=sys.stderr)
     return 0
 
