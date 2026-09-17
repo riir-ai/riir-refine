@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 136); // Batch 147 (staged agave batch) 131 → 136
+    assert_eq!(corpus.entries.len(), 139); // Batch 152 (dial9 tokio distill) 136 → 139
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 44); // 136 total − 92 benchable (Batch 147 added 4 NotBenchable suggestion-only rules)
+    assert_eq!(without_spec.len(), 47); // 139 total − 92 benchable (Batch 152 added 3 NotBenchable suggestion-only tokio rules)
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1807,6 +1807,9 @@ fn fourteen_rules_are_not_benchable() {
     assert!(without_spec.contains(&"compaction-tail-boundary-prefers-complete-turn")); // Batch 141 — boundary semantics, not an A/B axis
     assert!(without_spec.contains(&"streaming-prefix-holdback-bounded-buffer")); // Batch 141 — streaming-latency discipline, not an A/B axis
     assert!(without_spec.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — build-time emission content, no runtime A/B axis
+    assert!(without_spec.contains(&"batch-blocking-pool-segment")); // Batch 152 — blocking-pool coordination timing, the Batch-78 platform class
+    assert!(without_spec.contains(&"adaptive-yield-consecutive-ready")); // Batch 152 — fairness/p99-under-contention metric mismatch
+    assert!(without_spec.contains(&"bounded-fanout-semaphore")); // Batch 152 — external-resource concurrency budget, not wall-clock
     assert!(without_spec.contains(&"layout-reorder"));
     assert!(without_spec.contains(&"repr-u8-enum"));
     assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -1869,8 +1872,11 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 79, "expected 79 context-annotated rules (Batch 146 added the four read-lane annotations; Batch 147 added the five agave annotations)");
+    assert_eq!(annotated.len(), 82, "expected 82 context-annotated rules (Batch 146 added the four read-lane annotations; Batch 147 added the five agave annotations; Batch 152 added the three dial9 tokio annotations)");
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
+    assert!(annotated.contains(&"batch-blocking-pool-segment")); // Batch 152 — the two-regime + global-resource annotation
+    assert!(annotated.contains(&"adaptive-yield-consecutive-ready")); // Batch 152 — the dynamic-trigger + light-load anti-regime annotation
+    assert!(annotated.contains(&"bounded-fanout-semaphore")); // Batch 152 — the adopt-deliberately + resource-vs-task-count annotation
     assert!(annotated.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — the build-time rationale + the -Zmacro-stats instrument
     assert!(annotated.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — the io admission-policy annotation
     assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
@@ -1942,7 +1948,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 79); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79
+    assert_eq!(annotated, 82); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79; Batch 152: 79 → 82
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1983,7 +1989,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 79, "expected 79 annotated rules (Batch 147: 74 → 79)");
+    assert_eq!(annotated.len(), 82, "expected 82 annotated rules (Batch 147: 74 → 79; Batch 152: 79 → 82)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2022,7 +2028,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules");
+    assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules (139 total − 82 annotated, Batch 152)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -4187,6 +4193,100 @@ fn batch147_verify_ladder_semantics() {
         verify_batch(&[good(1), bad(), good(3)], &msg),
         vec![true, false, true]
     );
+}
+
+#[test]
+fn batch152_rules_present_and_annotated() {
+    // The dial9 tokio-principles distill: three suggestion-only concurrency
+    // rules seeding the world-facing tokio family (the product-coverage
+    // mandate, Research 179 §product-coverage).
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        "batch-blocking-pool-segment",
+        "adaptive-yield-consecutive-ready",
+        "bounded-fanout-semaphore",
+    ];
+    for id in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-152 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, "concurrency", "batch-152 {id} category");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-152 {id} must carry context_notes (the annotation IS the content)"
+        );
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("suggestion-only") || notes.contains("SUGGESTION-ONLY"),
+            "batch-152 {id} annotation must state the suggestion-only verdict"
+        );
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-152 {id} must carry distinct-from rows"
+        );
+        #[cfg(feature = "rust_perf_bench")]
+        assert!(
+            e.bench_spec.is_none(),
+            "batch-152 {id} is NotBenchable as drafted (the tokio fairness/coordination metric class)"
+        );
+    }
+}
+
+#[test]
+fn batch152_pseudocode_parses() {
+    // G1 for Batch 152: syn-parse gate over both fixtures of every rule.
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        "batch-blocking-pool-segment",
+        "adaptive-yield-consecutive-ready",
+        "bounded-fanout-semaphore",
+    ];
+    for id in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-152 rule '{id}' missing"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-152 {id} buggy/fixed must both parse"
+        );
+    }
+}
+
+#[test]
+fn batch152_distinct_rows_present() {
+    // The dedup law, admission-time: the tokio family's nearest neighbors
+    // named BOTH directions where the pair is close (rule 2 vs its static
+    // sibling; rule 3 vs the channel-bound sibling).
+    let corpus = build_perf_seed_corpus();
+    for (id, neighbor) in [
+        ("batch-blocking-pool-segment", "buffered-io"),
+        ("batch-blocking-pool-segment", "bufwriter-batched"),
+        ("batch-blocking-pool-segment", "channel-send-batching-unpark"),
+        ("adaptive-yield-consecutive-ready", "async-yield-point"),
+        ("adaptive-yield-consecutive-ready", "tokio-guard-across-await"),
+        ("bounded-fanout-semaphore", "bounded-channel-backpressure"),
+    ] {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap();
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-152 {id} must carry a Distinct-from row"
+        );
+        assert!(
+            notes.contains(neighbor),
+            "batch-152 {id} distinct-from row must name {neighbor}"
+        );
+    }
 }
 
 /// Batch 143 — G1 semantics: the level gate decides whether the log-only

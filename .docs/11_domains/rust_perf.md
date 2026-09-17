@@ -23,9 +23,32 @@
 
 ## Corpus
 
-127 rules across 12 categories (rust-optimize skill checklist +
+139 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 127 rules — Batch 145 (2026-09-16,
+profiling guide, Research 032; **now 139 rules — Batch 152 (2026-09-18,
+Plan 142 / Research 179 — the dial9-rs "Principles for fast Tokio
+applications" distill) added three NotBenchable suggestion-only concurrency
+rules seeding the world-facing tokio family (the product-coverage mandate):
+`batch-blocking-pool-segment` (a tight loop of small `tokio::fs`/
+`spawn_blocking` ops → ONE hoisted blocking segment or a dedicated OS
+thread — the blocking pool is ONE global runtime resource; distinct from
+buffered-io/bufwriter-batched SYSCALL batching; source-reported ≈50k
+blocking tasks/s ceiling on a 32-core host), `adaptive-yield-consecutive-ready`
+(pipelined instantly-Ready reads starve other connections → `yield_now`
+after K=4 CONSECUTIVE immediately-ready polls, reset on any real suspension
+— the dynamic-trigger sibling of async-yield-point's static await-less
+loop; the source's own anti-regime: long polls are benign under light
+load), and `bounded-fanout-semaphore` (unbounded task fan-out over an
+EXTERNAL resource → semaphore permits; the 3,000-concurrent-S3-connections
+shape; distinct from bounded-channel-backpressure — resource-path vs
+data-path bounding; adopt-deliberately). The mini-redis p50/p99 figures
+recorded in Research 179 are NOT on the live page at the 2026-09-18
+re-verification — the rule carries only the verifiable ≈10× and the K=4.
+No benchable candidate (tokio fairness metrics live outside the Pareto
+validator — the Batch-136 NotBenchable precedent); gen2/gen3 freeze tables
+UNTOUCHED (the atom table derives from the CLIPPY seed corpus — this batch
+is rust_perf-only). Previously 136 — Batch 147 (the agave distill, five
+rules); before that 127 — Batch 145 (2026-09-16,
 Plan 130 / Research 171 — the MTPLX `ple_row_gather` host lane of the
 Metal-shape pack) added the suggest-only caching rule
 `mincore-probe-routes-gather-arm` (per-call residency-probe ROUTING — the
@@ -673,7 +696,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 136 rules / 92 `BenchSpec`s — Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
+- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 139 rules / 92 `BenchSpec`s — Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)

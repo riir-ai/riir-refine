@@ -375,6 +375,64 @@ riir-clippy skill's Protocol A GOAT list. Gates: corpus_coverage 37/37,
 clippy `-D warnings` clean on the bin write set; no corpus delta → no
 freeze regen, no score-bench (flatness by construction). Plan 138.
 
+## 2026-09-18 — Batch 152: the dial9 tokio-principles distill lands (rust_perf 136 → 139)
+
+The staged seed of the world-facing tokio family ([Research 179](../.research/179_dial9_tokio_principles_distill.md)
+/ [Plan 142](../.plans/142_batch152_dial9_tokio_distill.md) — the verdict
+re-graded YES B− under owner challenge, both grades kept in the note as the
+resolved borderline-call precedent): three NotBenchable suggestion-only
+concurrency rules from the dial9-rs "Principles for fast Tokio applications"
+post (Russell, 2026-09-13; the RustConf Unconf + Alice Ryhl lineage — both
+cited in-rule):
+
+- `batch-blocking-pool-segment` (the lead): N small `tokio::fs`/
+  `spawn_blocking` ops in a tight loop → ONE hoisted blocking segment (a
+  dedicated OS thread when long-lived) — the blocking pool is ONE GLOBAL
+  runtime resource; source-reported ≈50k blocking tasks/s ceiling on a
+  32-core host. Distinct from `buffered-io`/`bufwriter-batched` (SYSCALL
+  batching) and `channel-send-batching-unpark` (channel wakeup
+  amortization) — the mechanism is blocking-pool COORDINATION batching.
+- `adaptive-yield-consecutive-ready`: pipelined instantly-Ready reads
+  starve other connections → `yield_now` after K=4 CONSECUTIVE
+  immediately-ready polls, reset on any real suspension — the DYNAMIC
+  trigger sibling of `async-yield-point`'s STATICALLY await-less loop
+  (distinct-from both directions, in-rule). The source's own anti-regime
+  encoded: long polls are BENIGN under light load (work stealing
+  compensates; breaks only under loaded runtime or loaded OS).
+- `bounded-fanout-semaphore`: unbounded task fan-out over an EXTERNAL
+  resource (the 3,000-concurrent-S3-connections shape) → semaphore
+  permits; distinct from `bounded-channel-backpressure` (resource-path vs
+  data-path bounding), adopt-deliberately annotation.
+
+Admission-time honesty corrections: the mini-redis p50/p99 figures recorded
+in Research 179 are NOT on the live page at the 2026-09-18 re-verification —
+the rule carries only the verifiable ≈10× and the K=4 (the article pins
+"yielding after four consecutive immediately-ready reads"). Standalone
+(rather than rider) adjudicated for rule 2 at mine time per the plan: the
+existing `async-yield-point` fixture is compact and single-shape
+(statically-await-less + fixed-interval yield); the new trigger
+(dynamically-instant awaits) + fix (consecutive-ready counter) + regime
+(light-load benign) are three distinct axes — a rider would have mudged the
+entry. Rule 3 admitted (not dropped) on fixture-level distinctness: spawn
+fan-out vs send loop, semaphore permits vs channel capacity — the
+same-family-distinct-fix-space precedent; product-coverage mandate (tokio
+is top-tier ecosystem infra; the family was 3 rules).
+
+Gates at landing: batch gates 3/3 (present+annotated / syn-parse both
+fixtures / distinct-rows) · lib default **1731/0** · rust_perf_bench
+**1760/0** · latent_retrieval **1884/0 + 1 ignored** (retrieval floors held
+— no re-pin) · clippy `-D warnings` clean ×3 states (default / rust_perf_bench
+/ latent_retrieval lib) · score-bench **96.4%** (row #128 appended, 127 prior; within-band of the
+96.2 record — the clippy lane does not contain these rules) · `--corpus-stats` **139** · gen2/gen3 freeze tables UNTOUCHED
+(the atom table derives from the CLIPPY seed corpus — a rust_perf-only
+batch does not move the stride windows; the Batch-147 precedent). Count
+pins walked: corpus total 136→139 (header + tests), concurrency 13→16,
+without_spec 44→47 (+3 rows), annotated 79→82 (+3 rows ×2 asserts),
+unannotated 57 (139−82), README 127→139 + annotated 70→82, AGENTS ×2,
+`.docs/11_domains/rust_perf.md` ×2 (ledger block + the split-note count).
+Provenance strata + cross-OOO axis print unchanged (12/17 unique features,
+3 absorption candidates — the standing calibration anchor).
+
 ## 2026-09-17 — Batch 151: the doc-line state-machine port lands (corpus 62 → 64, FIXABLE 45 → 47)
 
 The staged follow-up from Research 177 adjudication #7:

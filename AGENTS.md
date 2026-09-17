@@ -15,7 +15,7 @@ does-not-own / dep allowlist / drift ledger); on any conflict, BOUNDARY.md wins.
 Retrieval domains (Plan 001 + Plans 018/030; `rustc_errors` is a 6th, driver-based rather than retrieval) — batch-by-batch corpus narratives live in `HISTORY.md`:
 
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 64 corpus lints across style/complexity/perf/pedantic/nursery (47 `--fix`, 14 `--verify`, 3 self_evolve-only).
-- **`rust_perf`** (default-on) — heals Rust perf issues; 136 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
+- **`rust_perf`** (default-on) — heals Rust perf issues; 139 rules, promoted via the `rust_perf_bench` Pareto + alloc-count validator.
 - **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 619 rules.
 - **`sec`** (opt-in) — security-pattern bounded fixes (15 rules; 6 fixable + 9 suggest-only).
 - **`docker`** (default-on) — Dockerfile bounded-fix healing (31 rules, hadolint oracle).
@@ -156,7 +156,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `default` = `["clippy_lints"]`: clippy domain + L0 corpus + L1 ternary drafter + L2 native pruner.
 - `clippy_lints` (default-on): the clippy lint healing domain.
 - `clippy_verify` (opt-in): lint-resolution verification via real `cargo clippy` re-run (slow, needs cargo+clippy on PATH). Implies `clippy_lints`.
-- `rust_perf` (default-on): rust performance healing domain (136 rules measured by `--corpus-stats`; the feature list's older "105"/"112"/"114"/"117"/"120"/"121"/"124"/"126"/"127"/"131" was stale — Pareto + alloc-count promoted).
+- `rust_perf` (default-on): rust performance healing domain (139 rules measured by `--corpus-stats`; the feature list's older "105"/"112"/"114"/"117"/"120"/"121"/"124"/"126"/"127"/"131"/"136" was stale — Pareto + alloc-count promoted).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
 - `kernel_heal` (opt-in): GPU kernel optimization domain (619 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.

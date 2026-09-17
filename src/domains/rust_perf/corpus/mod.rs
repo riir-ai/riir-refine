@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 127 entries across 12 categories (complexity 21, allocation 24, simd 8,
-//! layout 10, iterators 10, concurrency 13, io 21, arithmetic 8, dispatch 5,
-//! caching 5, bevy 1, wasm 1). 91 are benchable; 36 are honestly
+//! 139 entries across 12 categories (complexity 22, allocation 26, simd 8,
+//! layout 12, iterators 10, concurrency 16, io 22, arithmetic 8, dispatch 5,
+//! caching 7, bevy 2, wasm 1). 92 are benchable; 47 are honestly
 //! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) (8 external-runtime/size-class + 2
@@ -364,30 +364,22 @@ mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 121 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 139 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (23 rules; Batch 86 added 2; Batch 135
-/// added the lifetime-reuse rule); complexity
-/// has 19 (Batch 76 + 91 added 1 each; Batch 109 added the measurement-
-/// honesty rule); iterators
-/// has 10 (Batch 66/67 added 2; Batch 91 added 1); simd has 8 (Batch 62 + 64 + 83 added 1
-/// each); layout has 10 (Batch 61 + 85 + 86 + 112 added); concurrency has 10
+/// wasm). Allocation is the deepest (26 rules); concurrency has 16
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
-/// contention rules; Batch 73 added 1; Batch 135 added the zero-cost
-/// atomic conversion + the zero-sync partition; Batch 136 added the
-/// dynamic-work ladder + the sender-termination idiom + the `par_bridge`
-/// deadlock);
+/// contention rules; Batch 135 added the zero-cost atomic conversion + the
+/// zero-sync partition; Batch 136 added the dynamic-work ladder + the
+/// sender-termination idiom + the `par_bridge` deadlock; Batch 152 added the
+/// three dial9 tokio rules — the blocking-pool segment hoist, the adaptive
+/// consecutive-ready yield, the semaphore fan-out bound);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76
-/// added 1 each); io has 21 (Batch 68/69 added 1 each + Batch 85 added 1 +
-/// Batch 94 added the cacheability-coupled coalescing rule + Batch 118
-/// added the disjoint-pread latency-overlap rule + Batch 122/123/129 added
-/// the measurement-honesty io rules + Batch 139 added the prefault-admission
-/// rule + Batch 141 added the tail-boundary and stream-holdback rules);
-/// bevy + wasm have 1 each. allocation has 24 (Batch 91 + 111 + 112 added;
-/// Batch 141 added the measured-reserve rule).
+/// the runtime-table handler-pair hoist); caching has 7; io has 22 (the
+/// measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
+/// prefault-admission rule; Batch 141 added the tail-boundary and
+/// stream-holdback rules); bevy has 2; wasm has 1.
 #[must_use]
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     let mut entries = entries_01::entries();

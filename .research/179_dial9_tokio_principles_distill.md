@@ -1,6 +1,6 @@
 # Research 179 — the dial9-rs "Principles for fast Tokio applications" distill verdict
 
-**Status:** DISTILLED — pending owner decision (2026-09-17; verdict re-graded same day under owner challenge — both grades recorded below)
+**Status:** RECORD — batch landed 2026-09-18 as Batch 152 ([Plan 142](../.plans/142_batch152_dial9_tokio_distill.md); the HISTORY entry carries the gates). Verdict re-graded 2026-09-17 under owner challenge — both grades recorded below (the reusable borderline-call precedent).
 
 ## Verdict (corrected)
 
@@ -64,6 +64,15 @@ Checked before recording: (a) league scoreboard rows are all GPU kernel lanes (M
 **Accumulation clause:** if any pool source is read before this batch's window opens, fold its candidates into the same batch — the Batch-145/146 staged-charter precedent ("not batch-justifying alone" is a staging note, not a gate).
 
 ## Honest caveats
+
+- **Mine-time live re-verification (2026-09-18, recorded at landing):** the
+  article's quotes re-verified live; the K pinned ("yielding after four
+  consecutive immediately-ready reads") and the ≈10× figure ARE on the page;
+  the mini-redis p50/p99 latency figures recorded in §The technique inventory
+  are NOT on the live page — the landed rules carry only the verifiable
+  numbers. Rule 2 adjudicated STANDALONE (not a rider) after re-reading the
+  `async-yield-point` fixture; rule 3 ADMITTED (not dropped) on fixture-level
+  distinctness — both calls recorded in the HISTORY entry.
 
 - **No benchable candidate** — the batch lands NotBenchable suggestion-only entries per domain precedent; its GOAT is decision-content strength + the batch gates (presence/parse/needles/NotBenchable-membership + lib floors + retrieval floors + clippy + score-bench FLAT), the Batch-146/147 shape, NOT a measured Pareto promotion.
 - **All numbers source-reported** — the mini-redis latency distributions and the ~50k tasks/s ceiling were never measured on our box; carry them as source-reported with the absolute-numbers caveat.
