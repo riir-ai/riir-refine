@@ -2,6 +2,8 @@
 
 **Status:** DISTILLED — pending owner decision (staged for the next open batch window, nominal Batch 153; no window open at verdict time — Batch 152 landed 2026-09-18 and the box carries a sibling GPU-run at ~17 GB RAM, so the corpus batch defers to a free window per the accumulation clause)
 
+> **Pool delta 2026-09-18 (post-verdict):** the pool the header names "1 of 3" grew to 5 and is now COMPLETE — source 4 (tokio.rs/blog/2020-04-preemption, MARGINAL C+, annotation payload staged for Batch 153) lives in the `.distill/001` pool row (`c4b5f0b5`), and source 5 (name-corrected: `carllerche/tokio-perf-experiments` @ `f3a6d3b8`, MARGINAL C+, the `tcp-nodelay` B− lead + two annotation-class leads staged for Batch 153 adjudication) closed it (`638f2681`). The header's "of 3" is the write-time count, superseded by the pool row.
+
 ## Source
 
 - URL: <https://ryhl.io/blog/async-what-is-blocking/> ("Async: What is blocking?", 2020-12-21, Alice Ryhl — Tokio core maintainer)
