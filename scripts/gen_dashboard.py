@@ -713,7 +713,7 @@ def settle_reconciliation() -> int:
                      "aggregate remainder — aiInferenceAdaptiveGroups has NO model "
                      "dimension, per-model attribution is not derivable"),
         }
-        with LEDGER.open("a") as f:
+        with LEDGER.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row) + "\n")
         appended += 1
         log(f"settlement: {day} appended {diff:+.2f} n "
