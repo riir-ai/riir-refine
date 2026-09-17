@@ -192,14 +192,29 @@ def run_clippy(crate_dir: str, target_dir: str, timeout_s: int) -> dict:
 
 def cmd_sample(a: argparse.Namespace) -> None:
     base = json.load(open(a.base_manifest, encoding="utf-8")) if a.base_manifest else {"crates": [], "compile_error_crates": []}
-    base_names = {c["name"] for c in base.get("crates", [])} | {c["name"] for c in base.get("compile_error_crates", [])}
+    # Cross-wave dedup uses the CONSTRUCTED key f"{name}-{ver}" — the base
+    # manifest's per-crate rows carry exactly that key (cmd_sample line ~242
+    # / cmd_merge line ~387 both build it the same way). The wave-4 fix: this
+    # used to compare the candidate's BARE name against those versioned keys
+    # — never a match, so the dedup was dead code and every cross-wave
+    # collision (rank drift at adjacent-band boundaries) would have been
+    # re-measured and DOUBLE-COUNTED by cmd_merge (whose exactness premise is
+    # disjoint crate sets). Same class as the wave-2/wave-3 resume-key
+    # incidents — exact keys close it. Residual, accepted: a same-crate-
+    # NEW-version re-entry creates a distinct-version row (a genuinely
+    # distinct published artifact), not a duplicate count; cmd_merge's
+    # base-collision refusal is the backstop for exact re-measures.
+    base_keys = frozenset(c["name"] for c in base.get("crates", [])) | frozenset(
+        c["name"] for c in base.get("compile_error_crates", [])
+    )
     pages = [int(p) for p in a.pages.split(",")]
     print(f"fetching pages {pages} ...", flush=True)
     rows, rows_seen = fetch_candidates(pages, a.per_page, a.min_downloads)
     deduped, skipped_dup = [], 0
     for r in rows:
         key = f"{r['name']}-{r['ver']}"
-        if r["name"] in base_names or any(d["name"] == r["name"] for d in deduped):
+        key = f"{r['name']}-{r['ver']}"
+        if key in base_keys or any(d["name"] == r["name"] for d in deduped):
             skipped_dup += 1
             continue
         deduped.append(r)
@@ -366,6 +381,24 @@ def cmd_merge(a: argparse.Namespace) -> None:
             continue  # keep-first: duplicate measurements never double-count
         seen[r["name"]] = r
     rows = list(seen.values())
+    # The merge arithmetic (count/spread add per lint; crates concatenate) is
+    # EXACT only for DISJOINT crate sets — the manifest's selection_rule says
+    # so explicitly. Enforce it rather than assume it: a partial row whose
+    # name already exists in the base means the sample-side cross-wave dedup
+    # missed (rank drift at an adjacent-band boundary), and merging it would
+    # double-count that crate's lints in every row it touches. Refuse loudly;
+    # the operator re-runs `sample` against the latest accumulated manifest
+    # (whose fixed dedup skips the crate at fetch time).
+    base_names = frozenset(c["name"] for c in base.get("crates", [])) | frozenset(
+        c["name"] for c in base.get("compile_error_crates", [])
+    )
+    collisions = sorted(r["name"] for r in rows if r["name"] in base_names)
+    if collisions:
+        raise SystemExit(
+            f"merge REFUSED: {len(collisions)} partial row(s) already in the base manifest "
+            f"(disjoint-set premise broken; would double-count): {', '.join(collisions[:10])}"
+            f"{' …' if len(collisions) > 10 else ''} — re-run `sample --base-manifest <latest tNN>`."
+        )
     if dup_total:
         print(f"dedup: {dup_total} duplicate row(s) collapsed keep-first; {dup_disagree} DISAGREED on lints/verdict", flush=True)
     ok = [r for r in rows if r["verdict"] == "ok"]
@@ -457,7 +490,7 @@ def main() -> None:
     s.add_argument("--target", type=int, default=200)
     s.add_argument("--per-page", type=int, default=100)
     s.add_argument("--min-downloads", type=int, default=1000)
-    s.add_argument("--base-manifest", default=".benchmarks/data/094_t01/manifest.json", help="wave-1 manifest: dedup source")
+    s.add_argument("--base-manifest", default=".benchmarks/data/094_t01/manifest.json", help="prior-waves ACCUMULATED manifest: dedup source — pass the latest tNN for every new wave")
     s.add_argument("--scratch", default=os.path.join(tempfile.gettempdir(), "b094wave"))
     s.add_argument("--workers", type=int, default=4)
     s.add_argument("--timeout", type=int, default=480, help="per-crate clippy wall cap (s)")
@@ -466,7 +499,7 @@ def main() -> None:
     s.set_defaults(fn=cmd_sample)
 
     m = sub.add_parser("merge", help="merge base manifest + partial JSONL into the extended manifest")
-    m.add_argument("--base-manifest", default=".benchmarks/data/094_t01/manifest.json")
+    m.add_argument("--base-manifest", default=".benchmarks/data/094_t01/manifest.json", help="prior-waves ACCUMULATED manifest — pass the latest tNN for every new wave")
     m.add_argument("--partial", required=True)
     m.add_argument("--meta-out", required=True)
     m.add_argument("--out-manifest", required=True)

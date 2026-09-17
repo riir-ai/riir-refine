@@ -6283,7 +6283,7 @@ fn load_default_fired_histogram(
     Vec<(String, u32)>,
     Option<riir_clippy::corpus_coverage::HistogramProvenance>,
 ) {
-    const REL: &str = ".benchmarks/data/094_t03/manifest.json";
+    const REL: &str = ".benchmarks/data/094_t04/manifest.json";
     let Ok(bytes) = std::fs::read(root.join(REL)) else {
         return (Vec::new(), None);
     };

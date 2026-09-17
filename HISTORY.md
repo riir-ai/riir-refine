@@ -1,5 +1,66 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — Bench 094 wave 4: the third default-eco extension (501 → 663 clean crates, flip 110/442 → 129/442) + the dead cross-wave base-dedup found by audit
+
+Plan 140 executed the Extend protocol's third run (the Plan-139 handoff's
+listed on-demand item): one page deeper per stratum again (pages 14/34/54/79/99
+→ ranks 1301-1400, 3301-3400, 5301-5400, 7801-7900, 9801-9900), same filters,
+toolchain verified byte-identical (clippy 0.1.98) before launch, known-dirty
+control re-run first (akin-0.4.0 → exactly its 3 recorded warnings, through
+the tracked driver's own functions).
+
+**The pre-launch incident — the GOAT of the unit.** Auditing the sampler for
+wave 4 found the cross-wave base-dedup in `cmd_sample` was DEAD CODE: it
+compared the candidate's BARE name against the base manifest's VERSIONED
+per-crate keys (`"akin-0.4.0"`) — never a match, in any wave. Wave 3's
+"0 base collisions" was a fetch with no boundary overlap, not the dedup
+working. Wave 4 samples pages ADJACENT to wave 3's across three prior
+fetches taken at different times — rank drift makes a boundary overlap
+realistic, and an undeduped re-measure would have been DOUBLE-COUNTED by
+`cmd_merge` (whose exactness premise is "crate sets are disjoint"), silently
+corrupting every per-lint count/spread the overlap touched. Same defect class
+as the wave-2/wave-3 resume-key incidents — the third place names meet.
+Fixed with the same exact constructed-key law (`f"{name}-{ver}"` against the
+base's versioned keys), PLUS a merge-time guard: `cmd_merge` now HARD-REFUSES
+(exit 1, naming rows) on any partial row already in the base — the
+premise enforced, not assumed (the merged manifest's own selection_rule text
+already claimed the dedup; the code now honors it). Both arms probe-tested
+against t03 as base before launch (base crate at its recorded version →
+skipped; fresh name → passes; refusal fires and names the row).
+
+Merged dataset `.benchmarks/data/094_t04/manifest.json` (waves 1+2+3+4):
+780 sampled / **663 compiled-clean** / 116 compile_error / 1 timeout /
+**2402 warnings / 186 distinct lints**; blake3 `296cf4d7…` (canonical JSON
+minus the field). Wave-4 standalone: 200 unique crates (162 ok / 38
+compile_error), 601 warnings, 90 distinct lints — 10.3 min wall at 6 workers.
+Reconstruction control ran BEFORE the merge (the wave-3 lesson applied): 499
+fetched, base_skip=0, expected 200 = file 200, no missing/extra. Loader
+repointed (`REL` → t04); `corpus_coverage.rs` module doc updated.
+
+**Flip: 110 of 442 → 129 of 442** default-firing uncovered lints carry
+evidence (+19 — MORE than wave 3's +16; the diminishing-returns estimate was
+beaten); uncited 614 → 594. Mining-grade head movements: `needless_borrow`
+**150/39** (was 92/30; now corpus-covered by Batch 151 so it left the
+UNCOVERED head), `redundant_field_names` **70/14** (was 58/9),
+`missing_safety_doc` 186/6, `manual_range_contains` 126/7,
+`legacy_numeric_constants` 73/19, `needless_return` 66/24. Wave 4's fresh
+multi-crate head entries (staged for the `.distill/001` intake, owner
+adjudication): **`io_other_error` 57/8** (style/warn — the biggest new row),
+`unit_arg` 46/2, `wrong_self_convention` 19/6, `redundant_static_lifetimes`
+33/6, `double_ended_iterator_last` 17 (perf), `match_ref_pats` 17.
+Single-crate new rows recorded, not staged: `absolute_paths` 30/1
+(restriction — crate-config artifact), `obfuscated_if_else` 10/1,
+`upper_case_acronyms` 8/1.
+
+Validation: dedup + refusal probes (real code paths), akin control, py_compile,
+bin rebuilt at the required feature set (the bare `cargo build --bin cargo-heal`
+at default features SKIPS the bin — required-features unmet — the stale-exe
+trap caught by grepping the binary for the t04 string), `corpus_coverage` lib
+tests 37/37, coverage report executed live with t04 verified in its output.
+Incident ledger: wave 2 — parser key bug + resume-key bug; wave 3 — resume
+prefix-collision; wave 4 — dead cross-wave base-dedup (found by audit, before
+it could bite). Plan 140 COMPLETE.
+
 ## 2026-09-17 — Bench 094 wave 3: the second default-eco extension (342 → 501 clean crates, flip 94/442 → 110/442) + the resume prefix-collision fix
 
 Plan 139 executed the Extend protocol's second run hours after wave 2: one

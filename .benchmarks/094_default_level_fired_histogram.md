@@ -1,6 +1,6 @@
 # Bench 094 — the default-level fired histogram (Issue 119's T4 successor)
 
-**Status:** RECORD — landed 2026-09-17 (data + corpus_coverage join + 3 new tests; lib 1694/0); **wave-2 extension same-day** (§Extend executed — 342 clean crates, 145 distinct lints, flip 74/448 → 94/442); **wave-3 extension same-day** (§Extend executed — 501 clean crates, 164 distinct lints, flip 94/442 → 110/442, resume prefix-collision fixed)
+**Status:** RECORD — landed 2026-09-17 (data + corpus_coverage join + 3 new tests; lib 1694/0); **wave-2 extension same-day** (§Extend executed — 342 clean crates, 145 distinct lints, flip 74/448 → 94/442); **wave-3 extension same-day** (§Extend executed — 501 clean crates, 164 distinct lints, flip 94/442 → 110/442, resume prefix-collision fixed); **wave-4 extension same-day** (§Extend executed — 663 clean crates, 186 distinct lints, flip 110/442 → 129/442, the dead cross-wave base-dedup found + fixed pre-launch)
 
 ## The question
 
@@ -260,6 +260,73 @@ above is post-repair. The incident ledger now reads: wave 2 — parser key
 bug + resume-key bug; wave 3 — resume prefix-collision. All caught before
 any number was used, each by a different control (known-dirty crate,
 duplicate rows in the table, reconstruction diff).
+
+## Extend executed — wave 4 (2026-09-17, same day)
+
+The third extension (Plan 140). The rank-band ladder moved one page deeper
+per stratum again (pages 14/34/54/79/99 → ranks 1301-1400, 3301-3400,
+5301-5400, 7801-7900, 9801-9900), same filters, same pinned toolchain
+(clippy 0.1.98, verified byte-identical before launch). Pre-flight
+controls: the known-dirty control re-ran first (akin-0.4.0 → exactly its 3
+recorded warnings, end-to-end through the tracked driver's own functions),
+and the wave-3 lesson was applied by running the reconstruction diff
+BEFORE the merge, not after.
+
+**Dataset: `.benchmarks/data/094_t04/manifest.json` = waves 1+2+3+4
+merged** (population 780 sampled / **663 compiled-clean** / 116
+compile_error / 1 timeout / **2402 warnings / 186 distinct lints**;
+`dataset_blake3
+296cf4d747f85ba94c23221ad74e0fc458cc7f63f483e8fa04f5734bc4d2f6bd`).
+Wave-4 standalone: 200 unique crates (162 ok / 38 compile_error), 601
+warnings, 90 distinct lints — the strongest wave yet by head-row yield.
+Loader repointed (`REL` → `094_t04`). Reconstruction control: 499 fetched,
+base_skip=0 (no cross-wave overlap this fetch), expected 200 = file 200,
+no missing, no extra.
+
+**Coverage-report flip: 110 of 442 → 129 of 442** default-firing
+uncovered lints now carry evidence (+19 — MORE than wave 3's +16; the
+diminishing-returns estimate was beaten). Post-merge mining-grade head
+(count/spread): `needless_borrow` **150/39** (was 92/30 — but now
+corpus-covered by Batch 151, so it left the UNCOVERED head),
+`redundant_field_names` **70/14** (was 58/9 — the wave-3 fresh row now
+solidly multi-crate), `missing_safety_doc` 186/6, `manual_range_contains`
+126/7, `legacy_numeric_constants` 73/19, `needless_return` 66/24,
+`useless_conversion` 69/18. Wave 4's fresh multi-crate head entries:
+**`io_other_error` 57/8** (style/warn — the biggest new row), `unit_arg`
+46/2, `wrong_self_convention` 19/6, `redundant_static_lifetimes` 33/6,
+`double_ended_iterator_last` 17 (perf group), `match_ref_pats` 17.
+New-to-histogram but single-crate (anecdotes per the concentration law,
+recorded not staged): `absolute_paths` 30/1 (restriction — a crate-config
+artifact), `obfuscated_if_else` 10/1, `upper_case_acronyms` 8/1.
+
+### The wave-4 pre-launch incident — the cross-wave base-dedup was dead code
+
+Auditing the sampler for wave 4 found the cross-wave base-dedup in
+`cmd_sample` compared the candidate's BARE name against the base
+manifest's VERSIOND per-crate keys (`"akin-0.4.0"`) — never a match, so
+the dedup had never fired in any wave. Wave 3's "0 base collisions" was a
+fetch with no boundary overlap, not the dedup working. Wave 4 samples
+pages ADJACENT to wave 3's across three prior fetches taken at different
+times — rank drift makes a boundary overlap realistic, and an undeduped
+re-measure would have been DOUBLE-COUNTED by `cmd_merge` (whose exactness
+premise is "crate sets are disjoint"), silently corrupting every per-lint
+count/spread the overlap touched. Same defect class as the wave-2/wave-3
+resume-key incidents — the third place names meet. Fixed with the same
+exact constructed-key law (`f"{name}-{ver}"` vs the base's versioned
+keys), PLUS a merge-time guard: `cmd_merge` now HARD-REFUSES (exit 1,
+naming rows) on any partial row already in the base — the disjoint-set
+premise enforced, not assumed (the merged manifest's own selection_rule
+text already claimed it). Both arms probe-tested against t03 as base
+before launch (base crate at its recorded version → skipped; fresh name →
+passes; refusal fires and names the row). Residual, accepted and
+documented in-code: a same-crate-NEW-version re-entry (rank drift + a
+release bump inside the window) creates a distinct-version row — a
+genuinely distinct published artifact — not a duplicate count. The
+incident ledger now reads: wave 2 — parser key bug + resume-key bug; wave
+3 — resume prefix-collision; wave 4 — the dead cross-wave base-dedup,
+found by audit BEFORE it could bite, each incident caught by a different
+control (known-dirty crate, duplicate rows, reconstruction diff, and this
+one by reading the code against the manifest's claimed provenance).
 
 ## Extend protocol
 

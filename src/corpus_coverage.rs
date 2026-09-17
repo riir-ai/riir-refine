@@ -59,7 +59,7 @@
 //!    rows are opt-in lints and it is structurally blind to the
 //!    default-firing debt.
 //! 2. **default-eco** — the Bench 094 default-level fired histogram
-//!    (`.benchmarks/data/094_t03/manifest.json`, waves 1+2+3 merged: 501
+//!    (`.benchmarks/data/094_t04/manifest.json`, waves 1+2+3+4 merged: 663
 //!    compiled-clean crates): plain `cargo clippy` (no `-W` flags) over a
 //!    stratified crates.io top-10K-downloads sample. This is the source the
 //!    default-firing uncovered set can actually carry — the T4 successor
