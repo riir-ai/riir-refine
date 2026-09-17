@@ -1,5 +1,51 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — Issue 121 RESOLVED: the set_rerank consumer landed, promotion REFUTED, the all_rules canonical-order fix is the GOAT (`2aa53e1d5`, Bench 096)
+
+katgpt-rs Plan 599's only remaining task (T4.2) was THIS repo's Issue 121
+(the counter-anchored set rerank of the merged seven-domain span pool). The
+substrate had landed the same day (`set_admission`, Bench 811 GOAT), so the
+issue's interim path (task 1: compose vendi+alignment by hand) was SKIPPED
+by design — substrate-first; the consumer consumed the real primitive
+(`admit_with_recovery_into` + the exact-Vendi certificate + the θ-ladder
+recovery, `src/draft/set_rerank.rs` behind opt-in `set_rerank`, kill-switch
+`RIIR_CLIPPY_NO_SET_RERANK=1`). The Vendi axis landed in `retrieval_eval`
+(`EvalReport.vendi_axis`) and the OOD rig gained a policy closure
+(`run_withheld_pair_under`; `run_withheld_pair`'s signature byte-identical
+as a delegate + `run_withheld_pair_set_admission`).
+
+The A/B ([Bench 096](.benchmarks/096_set_rerank_ab.md), real-clippy truth
+over 27 composite spans + the withheld-pair rig, with the defend-wrong
+canonical-merge CONTROL the first draft lacked) measured the promotion
+**REFUTED**: the canonical-merge control beat both admission arms on the
+composite rig (85.2% top-1 / 96.3% recall@5 vs 70.4/88.9 Full8 and
+74.1/85.2 Structural4 — the θ_coll=0.95 colinearity cap demotes the
+near-duplicate TRUE siblings a multi-lint span trips by design), and every
+α ∈ {0.6, 0.2, 0.0} ablation arm lost to shipped on the OOD rig (best
+83.3/33.3 vs 100/50 — the α-ablation pins the alignment anchor operating in
+the hash-noise space, and the residue is diversity pressure itself, a pure
+loss when the top-scored rule IS the answer). Collapse rate 0 in EVERY arm
+— the merge-depth crowding the issue was filed against does not
+materialize on today's corpus (Issue 024's crowding was at POOL depth,
+fixed by `RERANK_POOL=20`). NOROLE stayed 0.0% under every arm (grounding
+holds — the admission cannot invent an absent role). Feature stays
+opt-in; re-open trigger = the `pool_depth_rescue_guard` firing again.
+
+**The real defect the A/B caught**: `SpanSuggestion::all_rules` sorted by
+score ALONE while its own doc claimed "same canonical order as
+`rank_into`/`rerank`/`canonical_rank`" — the merge silently DISCARDED the
+T3.5.4 instantiation re-rank across domains. Canonical key restored on the
+DEFAULT path (both `all_rules` consumers verified order-independent first):
+**+55.6pp top-1 / +40.7pp recall@5** on the composite rig, regression test
+`all_rules_keeps_the_canonical_key_across_domains`. Gates: default lib
+1728/0 · latent set 1881/0 (6 new tests) · the A/B 2/2 · clippy
+`-D`-clean at both feature states (5 mechanical findings healed via
+`cargo heal`, the rest manual) · one committed-code residue
+(`cloned_ref_to_slice_refs` in `frame_time_report.rs`) fixed in passing.
+Katgpt-core `set_admission` correspondingly stays opt-in (its consumer
+eval — the plan's own promotion gate — is the record cited above). Issue
+file removed per the noise-reduction rule; this entry is the record.
+
 ## 2026-09-17 — Plan 134 T2.1 COMPLETE: the frame-time budget tier ships (Bench 095)
 
 The Tier-2 measurement leg of the `shader_perf` domain, unblocked the same
