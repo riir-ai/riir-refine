@@ -1,6 +1,6 @@
 # Research 180 — Alice Ryhl "Async: What is blocking?" distill verdict (async-perf source pool, source 1 of 3)
 
-**Status:** DISTILLED — pending owner decision (staged for the next open batch window, nominal Batch 153; no window open at verdict time — Batch 152 landed 2026-09-18 and the box carries a sibling GPU-run at ~17 GB RAM, so the corpus batch defers to a free window per the accumulation clause)
+**Status:** RECORD — executed 2026-09-18 as Batch 153 ([Plan 143](../.plans/143_batch153_async_blocking_pool.md)): `blocking-sleep-in-async` + `rayon-bridge-oneshot` landed as staged; candidate 3 (`spawn-blocking-cpu-pool-choice`) adjudicated ANNOTATION as predicted (folded into `batch-blocking-pool-segment`'s anti-regimes); candidate 5's 10–100 µs annotation landed on `async-yield-point`; the pool folds (source-4 payload, source-5 nodelay rule + uring cite) composed into the same batch per the accumulation clause. All quotes re-verified live at mine time — every figure carried. Full landing record: HISTORY.md Batch 153.
 
 > **Pool delta 2026-09-18 (post-verdict):** the pool the header names "1 of 3" grew to 5 and is now COMPLETE — source 4 (tokio.rs/blog/2020-04-preemption, MARGINAL C+, annotation payload staged for Batch 153) lives in the `.distill/001` pool row (`c4b5f0b5`), and source 5 (name-corrected: `carllerche/tokio-perf-experiments` @ `f3a6d3b8`, MARGINAL C+, the `tcp-nodelay` B− lead + two annotation-class leads staged for Batch 153 adjudication) closed it (`638f2681`). The header's "of 3" is the write-time count, superseded by the pool row.
 

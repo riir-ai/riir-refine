@@ -23,32 +23,43 @@
 
 ## Corpus
 
-139 rules across 12 categories (rust-optimize skill checklist +
+142 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 139 rules — Batch 152 (2026-09-18,
-Plan 142 / Research 179 — the dial9-rs "Principles for fast Tokio
-applications" distill) added three NotBenchable suggestion-only concurrency
-rules seeding the world-facing tokio family (the product-coverage mandate):
-`batch-blocking-pool-segment` (a tight loop of small `tokio::fs`/
-`spawn_blocking` ops → ONE hoisted blocking segment or a dedicated OS
-thread — the blocking pool is ONE global runtime resource; distinct from
-buffered-io/bufwriter-batched SYSCALL batching; source-reported ≈50k
-blocking tasks/s ceiling on a 32-core host), `adaptive-yield-consecutive-ready`
-(pipelined instantly-Ready reads starve other connections → `yield_now`
-after K=4 CONSECUTIVE immediately-ready polls, reset on any real suspension
-— the dynamic-trigger sibling of async-yield-point's static await-less
-loop; the source's own anti-regime: long polls are benign under light
-load), and `bounded-fanout-semaphore` (unbounded task fan-out over an
-EXTERNAL resource → semaphore permits; the 3,000-concurrent-S3-connections
-shape; distinct from bounded-channel-backpressure — resource-path vs
-data-path bounding; adopt-deliberately). The mini-redis p50/p99 figures
-recorded in Research 179 are NOT on the live page at the 2026-09-18
-re-verification — the rule carries only the verifiable ≈10× and the K=4.
-No benchable candidate (tokio fairness metrics live outside the Pareto
-validator — the Batch-136 NotBenchable precedent); gen2/gen3 freeze tables
-UNTOUCHED (the atom table derives from the CLIPPY seed corpus — this batch
-is rust_perf-only). Previously 136 — Batch 147 (the agave distill, five
-rules); before that 127 — Batch 145 (2026-09-16,
+profiling guide, Research 032; **now 142 rules — Batch 153 (2026-09-18,
+Plan 143 / Research 180 — the async-blocking distill, the async-perf pool's
+execution) added three NotBenchable suggestion-only rules:
+`blocking-sleep-in-async` (concurrency — the canonical blocking bug:
+std::thread::sleep in an async body parks the WORKER thread so join!
+siblings serialize; the async twin suspends the task; the family's missing
+most-basic member), `rayon-bridge-oneshot` (concurrency — the corpus's FIRST
+tokio×rayon boundary rule: inline par_iter/join/block_on in an async body →
+rayon::spawn + tokio oneshot + .await; the small-work-stays-inline
+anti-regime; distinct from the four Lattimore rayon-INTERNAL rules), and
+`tcp-nodelay-request-response-accepted-socket` (io — accepted sockets in
+small-write request-response servers without set_nodelay pay the
+Nagle×delayed-ACK 40–200 ms stall class; bulk-streaming anti-regime; pool
+source 5, tokio-perf-experiments @ f3a6d3b8, ideas-only/no-license) — plus
+five annotation folds (the Research-180 C+ `spawn-blocking-cpu-pool-choice`
+adjudicated ANNOTATION into batch-blocking-pool-segment's anti-regimes —
+CPU-bound closures belong on rayon, the blocking pool is for blocking IO;
+the 10–100 µs boundary + the 128-op runtime budget on async-yield-point
+(previously unannotated); the budget-regime note on
+adaptive-yield-consecutive-ready (K=4 user-side vs 128 runtime-side);
+the mini-redis accept-loop canonical cite on bounded-fanout-semaphore
+(acquire_owned BEFORE accept — the listener itself backpressures); the
+io_uring provided-buffer-group kernel-side twin cite on
+bounded-batch-buffer-pool — the third enforcement form, annotation only)
+and the en-passant repair of the mod.rs '36/127' NotBenchable ledger line
+(stale since Batch 145 → 50/142). No benchable candidate (scheduler/network
+metric classes — the Batch-136 precedent); gen2/gen3 freeze tables
+UNTOUCHED (the atom table derives from the CLIPPY seed corpus — rust_perf-
+only). Previously 139 — Batch 152 (2026-09-18, Plan 142 / Research 179 —
+the dial9-rs "Principles for fast Tokio applications" distill) added three
+NotBenchable suggestion-only concurrency rules seeding the world-facing
+tokio family (batch-blocking-pool-segment, adaptive-yield-consecutive-ready,
+bounded-fanout-semaphore; the mini-redis p50/p99 figures NOT on the live
+page at re-verification — only ≈10× + K=4 carried).
+Previously 136 — Batch 147 (the agave distill, five rules); before that 127 — Batch 145 (2026-09-16,
 Plan 130 / Research 171 — the MTPLX `ple_row_gather` host lane of the
 Metal-shape pack) added the suggest-only caching rule
 `mincore-probe-routes-gather-arm` (per-call residency-probe ROUTING — the
@@ -696,7 +707,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 139 rules / 92 `BenchSpec`s — Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
+- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 6 verbatim entry slices (`entries_01..06`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 142 rules / 92 `BenchSpec`s — Batch 153 (the async-blocking distill): 3 NotBenchable suggestion-only rules (blocking-sleep-in-async, rayon-bridge-oneshot concurrency + tcp-nodelay io), no new BenchSpecs + 5 annotation folds (async-yield-point annotated, previously None); Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)

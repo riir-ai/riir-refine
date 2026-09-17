@@ -227,7 +227,7 @@ pub(super) fn entries() -> Vec<PerfRule> {
             category: "iterators".to_string(),
             buggy_code: "async fn process_batch(items: &[Item]) {\n    for item in items {\n        process(item); // no .await → blocks executor for entire batch\n    }\n}".to_string(),
             fixed_code: "async fn process_batch(items: &[Item]) {\n    for (i, item) in items.iter().enumerate() {\n        process(item);\n        if i % 100 == 0 { tokio::task::yield_now().await; }\n    }\n}".to_string(),
-            context_notes: None,
+            context_notes: Some("REGIME BOUNDARY (Batch 153 annotation, async-perf pool): Ryhl's rule of thumb — 'no more than 10 to 100 microseconds between each .await' ('Async: What is blocking?', 2020-12-21) — is the canonical quantitative boundary for when an await-less stretch needs a yield; the fixed 100-iteration interval here is its coarse structural form. RUNTIME PRECEDENT (the same pool, source 4): tokio's own resources self-yield on a per-task budget of 128 ops per tick (since 0.2.14 — tokio.rs/blog/2020-04-preemption; source-reported 'almost 3x' tail-latency reduction, 'in some cases'); for fairness tighter than the runtime's 128 or for NON-tokio resources (no built-in budget) prefer the adaptive counter — see adaptive-yield-consecutive-ready. Fairness/p99 metric class — NotBenchable (throughput-neutral).".to_string()),
             // Not benchable: the win is p99 latency under contention (fairness),
             // not single-task throughput. Throughput-neutral or slightly negative.
             #[cfg(feature = "rust_perf_bench")]

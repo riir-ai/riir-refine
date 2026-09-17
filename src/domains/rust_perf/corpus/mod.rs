@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 139 entries across 12 categories (complexity 22, allocation 26, simd 8,
-//! layout 12, iterators 10, concurrency 16, io 22, arithmetic 8, dispatch 5,
-//! caching 7, bevy 2, wasm 1). 92 are benchable; 47 are honestly
+//! 142 entries across 12 categories (complexity 22, allocation 26, simd 8,
+//! layout 12, iterators 10, concurrency 18, io 23, arithmetic 8, dispatch 5,
+//! caching 7, bevy 2, wasm 1). 92 are benchable; 50 are honestly
 //! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) (8 external-runtime/size-class + 2
@@ -248,7 +248,10 @@
 //!   fail-closed direction + the mincore instrument refusal; page-cache state
 //!   dominates any microbench; Batch 139, ds4-metal PR #5 PLE prefault)
 //!
-//! Not benchable (36/127) — honest (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context + Batch 143 nnethercote build-time + Batch 145 mincore-routing rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
+//! Not benchable (50/142 — count repaired en passant by Batch 153: the line
+//! below had sat stale at 36/127 since Batch 145 while B146/B147/B152/B153
+//! grew both sides; the Batch-149 en-passant-pin-repair precedent) — honest
+//! (count repaired by Batch 135; the Batch 136 rayon-queue + Batch 139 prefault-admission + Batch 141 ds4-Part-B agent-context + Batch 143 nnethercote build-time + Batch 145 mincore-routing rules are the post-repair additions; the ledger below is the early-corpus list — the Batch 118–129 source-reported io annotations are in the header ledger, all `bench_spec: None`):
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -364,22 +367,25 @@ mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 139 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 142 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (26 rules); concurrency has 16
+/// wasm). Allocation is the deepest (26 rules); concurrency has 18
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 135 added the zero-cost atomic conversion + the
 /// zero-sync partition; Batch 136 added the dynamic-work ladder + the
 /// sender-termination idiom + the `par_bridge` deadlock; Batch 152 added the
 /// three dial9 tokio rules — the blocking-pool segment hoist, the adaptive
-/// consecutive-ready yield, the semaphore fan-out bound);
+/// consecutive-ready yield, the semaphore fan-out bound; Batch 153 added the
+/// blocking-sleep async twin + the rayon oneshot bridge — the corpus's first
+/// tokio×rayon boundary rule);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist); caching has 7; io has 22 (the
+/// the runtime-table handler-pair hoist); caching has 7; io has 23 (the
 /// measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
 /// prefault-admission rule; Batch 141 added the tail-boundary and
-/// stream-holdback rules); bevy has 2; wasm has 1.
+/// stream-holdback rules; Batch 153 added the `TCP_NODELAY` request-response
+/// rule); bevy has 2; wasm has 1.
 #[must_use]
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     let mut entries = entries_01::entries();

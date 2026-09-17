@@ -375,6 +375,79 @@ riir-clippy skill's Protocol A GOAT list. Gates: corpus_coverage 37/37,
 clippy `-D warnings` clean on the bin write set; no corpus delta → no
 freeze regen, no score-bench (flatness by construction). Plan 138.
 
+## 2026-09-18 — Batch 153: the async-blocking distill lands (rust_perf 139 → 142)
+
+The async-perf source pool's execution ([Research 180](../.research/180_ryhl_what_is_blocking_distill.md)
+/ [Plan 143](../.plans/143_batch153_async_blocking_pool.md) — Alice Ryhl
+"Async: What is blocking?" YES B+ + the pool folds): three NotBenchable
+suggestion-only rules + five annotation folds, extending the world-facing
+tokio family to 9 rules:
+
+- `blocking-sleep-in-async` (the lead, concurrency): `std::thread::sleep`
+  in an async body parks the WORKER thread — join!-composed siblings
+  serialize (the article's 3 s → 1 s timer demo, re-verified live at mine
+  time); the async twin suspends the task. The family's missing most-basic
+  member: the corpus had yield-POINT rules but not the blocking-SLEEP
+  replacement. Distinct-from async-yield-point / adaptive-yield / batch-
+  blocking-pool-segment, all three named in-rule.
+- `rayon-bridge-oneshot` (concurrency): the corpus's FIRST tokio×rayon
+  boundary rule — inline `par_iter`/`join`/`block_on` in an async body →
+  `rayon::spawn` + `tokio::sync::oneshot` + `.await`. Carries Ryhl's
+  danger quote + the tokio bridging-docs "parallel iterators are blocking"
+  line (both re-verified live); the small-work-stays-inline anti-regime
+  (the article's own "unless the array is very very large"); distinct-from
+  all four Lattimore rayon-INTERNAL rules.
+- `tcp-nodelay-request-response-accepted-socket` (io): accepted sockets
+  in small-write request-response servers without `set_nodelay` pay the
+  Nagle×delayed-ACK 40–200 ms stall class; bulk-streaming anti-regime
+  (Nagle coalescing is a WIN there); distinct-from buffered-io /
+  bufwriter-batched BOTH directions (user-level byte coalescing vs
+  kernel-level coalescing disable — they compose). From pool source 5
+  (carllerche/tokio-perf-experiments @ f3a6d3b8 — NO license, ideas-only,
+  fixtures original; both experiment bins set_nodelay as baseline hygiene).
+
+Annotation folds (no new entries): the Research-180 C+
+`spawn-blocking-cpu-pool-choice` adjudicated ANNOTATION into
+`batch-blocking-pool-segment`'s anti-regimes (CPU-bound closures belong on
+rayon — the blocking pool is for blocking IO; standalone declined on
+static-detectability); `async-yield-point` annotated (previously None) with
+the 10–100 µs boundary + the 128-op runtime budget precedent;
+`adaptive-yield-consecutive-ready` gained the budget-regime note (K=4
+user-side vs 128 runtime-side, since tokio 0.2.14 — the manual counter
+matters for non-tokio resources or tighter-than-128 fairness);
+`bounded-fanout-semaphore` gained the mini-redis accept-loop canonical cite
+(acquire_owned BEFORE accept — the listener itself backpressures);
+`bounded-batch-buffer-pool` gained the io_uring provided-buffer-group
+kernel-side twin cite (the third enforcement form — annotation only, the
+bounded fix-space law stops at the first two). The pool-5
+completion-context-packed-in-user_data lead DECLINED (unsafe-transmute-
+shaped, no natural entry to annotate) — recorded here.
+
+Admission-time honesty: all source quotes re-verified live at mine time
+(the Batch-152 lesson) — both articles carried every quoted figure
+(128 ops "picked mostly because it felt good", "almost 3x" "in some
+ cases", the 10–100 µs rule, the ~500-thread cap dated 2020 vs dial9's
+~#cores-toward-512 in 2026 — both carried as source-reported). En-passant
+pin repair: the mod.rs "Not benchable" ledger line had sat STALE at 36/127
+since Batch 145 (Batch 152's ×9 walk missed it) — repaired to 50/142.
+
+GOAT: batch gates 3/3 (present+annotated / syn-parse / distinct-rows) + lib
+default **1734/0** + rust_perf_bench **1763/0** + latent_retrieval
+**1887/0** (floors held, no re-pin) + clippy 0 on the write-set ×3 states
+(one doc_markdown on my own mod.rs line fixed same-run; the rest = the
+documented Windows hard-link env-noise class) + score-bench **96.36%
+BYTE-IDENTICAL FLAT** (row #129, the 129th jsonl row; frontier snapshot
+appended at gen 7) + `--corpus-stats` 142 + gen2/gen3 freeze UNTOUCHED
+(rust_perf-only; the atom table is clippy-derived — the Batch-147/152
+precedent). Count pins walked ×12: tests.rs entries.len() + without_spec +
+annotated ×3 (the forty_three test + the serde-roundtrip assert + the
+drafter-propagation count — the latter two found by the test run, the
+Batch-152 hidden-pin pattern repeating) + unannotated ×2 + mod.rs header
+×2 + the 36/127 repair + AGENTS.md ×2 + README + `.docs/11_domains/rust_perf.md`
+×2. The batch window opened with the sibling's Issue-972 T2 run live at
+17.5 GB (gates ran one-cargo-leg-at-a-time; the T2 run survived — 20.4 GB
+at close, its own workload growth).
+
 ## 2026-09-18 — Batch 152: the dial9 tokio-principles distill lands (rust_perf 136 → 139)
 
 The staged seed of the world-facing tokio family ([Research 179](../.research/179_dial9_tokio_principles_distill.md)

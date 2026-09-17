@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 139); // Batch 152 (dial9 tokio distill) 136 → 139
+    assert_eq!(corpus.entries.len(), 142); // Batch 153 (async-blocking distill) 139 → 142
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 47); // 139 total − 92 benchable (Batch 152 added 3 NotBenchable suggestion-only tokio rules)
+    assert_eq!(without_spec.len(), 50); // 142 total − 92 benchable (Batch 153 added 3 NotBenchable suggestion-only rules: the sleep twin, the rayon bridge, the nodelay io rule)
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1872,7 +1872,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 82, "expected 82 context-annotated rules (Batch 146 added the four read-lane annotations; Batch 147 added the five agave annotations; Batch 152 added the three dial9 tokio annotations)");
+    assert_eq!(annotated.len(), 86, "expected 86 context-annotated rules (Batch 153 added the three async-blocking annotations and annotated async-yield-point, previously None; Batch 152 added the three dial9 tokio annotations)");
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
     assert!(annotated.contains(&"batch-blocking-pool-segment")); // Batch 152 — the two-regime + global-resource annotation
     assert!(annotated.contains(&"adaptive-yield-consecutive-ready")); // Batch 152 — the dynamic-trigger + light-load anti-regime annotation
@@ -1936,7 +1936,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 57, "expected 57 unannotated rules (136 total - 79 annotated; Batches 145+146+147 rules all joined the ANNOTATED side, so the unannotated count is unchanged)");
+    assert_eq!(unannotated, 56, "expected 56 unannotated rules (142 total - 86 annotated; Batches 145+146+147+153 rules all joined the ANNOTATED side, so the unannotated count only moved when Batch 153 annotated async-yield-point)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1948,7 +1948,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 82); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79; Batch 152: 79 → 82
+    assert_eq!(annotated, 86); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86 (3 new + async-yield-point annotated)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1989,7 +1989,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 82, "expected 82 annotated rules (Batch 147: 74 → 79; Batch 152: 79 → 82)");
+    assert_eq!(annotated.len(), 86, "expected 86 annotated rules (Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2028,7 +2028,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules (139 total − 82 annotated, Batch 152)");
+    assert_eq!(unannotated.len(), 56, "expected 56 unannotated rules (142 total − 86 annotated, Batch 153: async-yield-point gained its annotation)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -4285,6 +4285,111 @@ fn batch152_distinct_rows_present() {
         assert!(
             notes.contains(neighbor),
             "batch-152 {id} distinct-from row must name {neighbor}"
+        );
+    }
+}
+
+#[test]
+fn batch153_rules_present_and_annotated() {
+    // The async-blocking distill (Ryhl "What is Blocking?" + the pool folds):
+    // two concurrency rules + one io rule, all suggestion-only NotBenchable
+    // (the scheduler/network metric classes).
+    let corpus = build_perf_seed_corpus();
+    let expected = [
+        ("blocking-sleep-in-async", "concurrency"),
+        ("rayon-bridge-oneshot", "concurrency"),
+        ("tcp-nodelay-request-response-accepted-socket", "io"),
+    ];
+    for (id, category) in expected {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-153 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-153 {id} category");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-153 {id} must carry context_notes (the annotation IS the content)"
+        );
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("suggestion-only") || notes.contains("SUGGESTION-ONLY"),
+            "batch-153 {id} annotation must state the suggestion-only verdict"
+        );
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-153 {id} must carry distinct-from rows"
+        );
+        #[cfg(feature = "rust_perf_bench")]
+        assert!(
+            e.bench_spec.is_none(),
+            "batch-153 {id} is NotBenchable as drafted (the scheduler/network metric class)"
+        );
+    }
+}
+
+#[test]
+fn batch153_pseudocode_parses() {
+    // G1 for Batch 153: syn-parse gate over both fixtures of every rule.
+    let corpus = build_perf_seed_corpus();
+    let ids = [
+        "blocking-sleep-in-async",
+        "rayon-bridge-oneshot",
+        "tcp-nodelay-request-response-accepted-socket",
+    ];
+    for id in ids {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-153 rule '{id}' missing"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-153 {id} buggy/fixed must both parse"
+        );
+    }
+}
+
+#[test]
+fn batch153_distinct_rows_present() {
+    // The dedup law, admission-time: nearest neighbors named BOTH
+    // directions where the pair is close (sleep vs the yield family; the
+    // bridge vs the rayon-internal four; nodelay vs the byte-coalescing
+    // family).
+    let corpus = build_perf_seed_corpus();
+    for (id, neighbor) in [
+        ("blocking-sleep-in-async", "async-yield-point"),
+        ("blocking-sleep-in-async", "adaptive-yield-consecutive-ready"),
+        ("blocking-sleep-in-async", "batch-blocking-pool-segment"),
+        ("rayon-bridge-oneshot", "partitioned-mut-slices-zero-sync"),
+        ("rayon-bridge-oneshot", "dynamic-work-parallelism-ladder"),
+        ("rayon-bridge-oneshot", "sender-per-work-item-terminates-channel"),
+        ("rayon-bridge-oneshot", "nested-par-inside-channel-bridge-deadlocks"),
+        ("rayon-bridge-oneshot", "batch-blocking-pool-segment"),
+        (
+            "tcp-nodelay-request-response-accepted-socket",
+            "buffered-io",
+        ),
+        (
+            "tcp-nodelay-request-response-accepted-socket",
+            "bufwriter-batched",
+        ),
+    ] {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap();
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(
+            notes.contains("Distinct from"),
+            "batch-153 {id} must carry a Distinct-from row"
+        );
+        assert!(
+            notes.contains(neighbor),
+            "batch-153 {id} distinct-from row must name {neighbor}"
         );
     }
 }
