@@ -42,6 +42,7 @@ cargo heal --fix <paths>                                  # REAL fix: writes + c
 cargo heal --fix --no-verify <paths>                      # write without the compile gate (syn-gated only)
 cargo heal --suggest <paths>                              # rule suggestions, no edits
 cargo heal --fix --verify --verify-args "--features <set>" <paths>   # gated code
+cargo heal --info                                        # ONE COMMAND stats: wallet + account + mining + local work
 ```
 
 - `--fix` WRITES by default now (the explicit flag is the consent) and

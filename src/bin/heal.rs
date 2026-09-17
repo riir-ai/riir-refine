@@ -46,6 +46,13 @@ use riir_clippy::draft::{
 use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::EvolveRecorder;
 
+/// `cargo heal --info` — the one-command stats view (the 2026-09-17 owner
+/// ask): account + consents, wallet, staking, this machine's mining queue
+/// outcomes, and the repo-local work state. Bin-local module (the
+/// composition is CLI surface, not lib API); read-only by contract.
+#[cfg(feature = "kat_service")]
+mod kat_info;
+
 /// Proposal 005 Phase 0 T0.1 (Plan 025) + Phase 1 T1.6 (Plan 040): the KAT
 /// subcommands — parsed unconditionally so a `kat_service`-off build errors
 /// cleanly instead of treating `login` as a scan path (the `--fix-compile`-off
@@ -1836,6 +1843,20 @@ fn run_kat_claim(sig: Option<&str>) {
 /// the intent, and prints the honest state. Nothing client-side mints,
 /// credits, or moves principal (the G9d posture held for staking too).
 #[cfg(feature = "kat_service")]
+/// The 32-hex LEDGER account id for the stake family's service reads and
+/// writes — the `/stake/*` routes require exactly 32 hex (`account_from_hex`
+/// both sides; a 64-hex id 400s, which the pre-fix commands silently read
+/// as their "service plane not yet live" fallbacks). The same truncation
+/// `/balance` + `/history` already use (`service_account_hex`); the raw id
+/// is kept when the local record is not the 64-hex derivation (behavior
+/// preserved for malformed records).
+#[cfg(feature = "kat_service")]
+fn service_acct_or_raw(account_id: &str) -> String {
+    riir_clippy::kat_account_client::service_account_hex(account_id)
+        .unwrap_or(account_id)
+        .to_string()
+}
+
 fn run_kat_stake(usd: Option<&str>, info: bool) {
     use riir_clippy::kat_stake_client as stake;
 
@@ -1847,7 +1868,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool) {
             std::process::exit(1);
         }
     };
-    let account_id = account.state().account_id.clone();
+    let account_id = service_acct_or_raw(&account.state().account_id);
     let root = resolve_heal_root(&[]);
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1971,7 +1992,7 @@ fn run_kat_unstake() {
             std::process::exit(1);
         }
     };
-    let account_id = account.state().account_id.clone();
+    let account_id = service_acct_or_raw(&account.state().account_id);
     let root = resolve_heal_root(&[]);
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -3188,6 +3209,7 @@ USAGE:
     cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
     cargo heal --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
     cargo heal --refill [--refill-wait <s>]           <- dev/test faucet refill when out of KAT (Plan 117; kat_transport)
+    cargo heal --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service)
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
@@ -3617,6 +3639,13 @@ struct Args {
     /// no spinning — the credit normally lands at the hourly alarm, not
     /// synchronously).
     refill_wait: u64,
+    /// `--info` — the one-command stats view: account + consents, wallet
+    /// (balance/grant/burned/contributed/receipts via `GET /history`),
+    /// staking, this machine's mining queue outcomes (`GET
+    /// /mining/adoption`), and the repo-local work state (store rows,
+    /// outbox, charge ledger, soft gate). READ-ONLY; standalone
+    /// early-return. `stake --info` keeps its own flag (the position).
+    info: bool,
     /// Set by parse_args when the bare no-mode default fired (the dry-run
     /// banner then prints once, from main). Not a user flag.
     bare_default: bool,
@@ -3887,6 +3916,7 @@ fn parse_args() -> Args {
         frame_vs: None,
         frame_delta_pct: None,
         account_history: false,
+        info: false,
         suggest: false,
         fix: false,
         mine: false,
@@ -4204,7 +4234,18 @@ fn parse_args() -> Args {
                 };
                 args.stake_usd = Some(value);
             }
-            "--info" => args.stake_info = true,
+            // `--info` is TWO surfaces: `stake --info` (the position) and
+            // the standalone stats view. The subcommand word parses FIRST
+            // when it leads (`cargo heal stake --info`), so this arm sees
+            // the command; a `--info` that LEADS before `stake` is caught
+            // by the post-parse combo guard (never a silent mode flip).
+            "--info" => {
+                if args.command == Some(KatCommand::Stake) {
+                    args.stake_info = true;
+                } else {
+                    args.info = true;
+                }
+            }
             "--proposal" => {
                 let Some(value) = it.next() else {
                     eprintln!("--proposal requires a value (the governance proposal id)");
@@ -4321,6 +4362,24 @@ fn parse_args() -> Args {
     if args.account_history && !matches!(args.command, Some(KatCommand::Account)) {
         eprintln!("--history requires the `account` command");
         usage();
+    }
+    if args.info {
+        if args.command.is_some() {
+            eprintln!(
+                "--info is the standalone stats view — the stake position is `cargo heal stake --info`"
+            );
+            usage();
+        }
+        if args.suggest || args.fix || args.fix_compile || args.write || args.dump_trajectories {
+            eprintln!("--info is a standalone read-only mode (no scan, no edits)");
+            usage();
+        }
+        if args.mine || args.unmine || args.stats_flag || args.refill {
+            eprintln!(
+                "--info is a standalone read-only view — run it without the consent/refill modes"
+            );
+            usage();
+        }
     }
     if args.config_url.is_some() && !(args.config_set && args.command == Some(KatCommand::Config)) {
         eprintln!("--url requires `config set`");
@@ -4470,6 +4529,7 @@ fn is_bare_posture(args: &Args) -> bool {
 fn standalone_mode(args: &Args) -> bool {
     args.dump_trajectories
         || args.refill
+        || args.info
         || args.score_bench
         || args.score_report
         || args.necessity_bench
@@ -7016,6 +7076,21 @@ fn main() {
     // operator-set RIIR_HEAL_KAT_CRANK_TOKEN.
     if args.refill {
         run_kat_refill(args.refill_wait);
+        return;
+    }
+
+    // ── 2026-09-17 owner ask: `--info` — the one-command stats view. ────
+    // Read-only composition of shipped surfaces (the kat_info module
+    // doc). Early return before validate_mode_flags AND before the 075
+    // soft gate — a read must never be refused by the gate it reports
+    // on. The stake position flag (`stake --info`) is unaffected.
+    if args.info {
+        #[cfg(feature = "kat_service")]
+        kat_info::run_kat_info(&args.paths);
+        #[cfg(not(feature = "kat_service"))]
+        {
+            riir_clippy::build_stamp::refuse("--info", &["kat_service"]);
+        }
         return;
     }
 
@@ -10991,6 +11066,7 @@ mod mode_flag_tests {
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
             ("--frame-time-report", Box::new(|m| m.frame_time_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),
+            ("--info", Box::new(|m| m.info = true)),
             (
                 "--dump-trajectories",
                 Box::new(|m| m.dump_trajectories = true),
