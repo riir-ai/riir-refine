@@ -216,11 +216,14 @@ def cmd_sample(a: argparse.Namespace) -> None:
             except json.JSONDecodeError:
                 pass
         print(f"resume: {len(done)} already measured", flush=True)
-    # row names are "name-version" (pre-release versions may contain '-'), so
-    # the candidate-side skip must prefix-match — the wave-2 bug was checking
-    # the BARE name against versioned keys, which never matched and re-measured
-    # 122 crates (caught by the per-lint crate lists printing each crate twice).
-    done_keys = tuple(done.keys())
+    # Row keys are exactly f"{name}-{ver}" and the candidate carries BOTH
+    # parts, so the resume skip matches the CONSTRUCTED key exactly. The
+    # wave-2 bug was the BARE name never matching versioned keys (re-measured
+    # 122 crates, caught by the per-lint crate lists printing each crate
+    # twice); the wave-3 bug was PREFIX-matching — done key gsk4-sys-0.11.4
+    # startswith("gsk4-") silently skipped the gsk4 crate (caught by the
+    # reconstruction diff before any number was used). Exact keys close both.
+    done_keys = frozenset(done.keys())
 
     extract_root = os.path.join(a.scratch, "extract")
     os.makedirs(extract_root, exist_ok=True)
@@ -228,7 +231,7 @@ def cmd_sample(a: argparse.Namespace) -> None:
     def work(idx_r):
         idx, r = idx_r
         name, ver = r["name"], r["ver"]
-        if any(k.startswith(name + "-") for k in done_keys):
+        if f"{name}-{ver}" in done_keys:
             return None
         crate_dir = None
         try:
@@ -404,20 +407,21 @@ def cmd_merge(a: argparse.Namespace) -> None:
         "schema_version": 1,
         "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00"),
         "generator": (
-            "riir-clippy scripts/sample_default_fired_histogram.py (tracked driver, "
-            "methodology + Extend protocol in .benchmarks/094_default_level_fired_histogram.md); "
-            "merged from 094_t01 (wave 1, carried byte-identical) + this script's wave-2 sample; "
-            "dataset_blake3 = blake3 over the canonical JSON (sort_keys, compact separators) of "
-            "this manifest with dataset_blake3 removed"
+            f"riir-clippy scripts/sample_default_fired_histogram.py (tracked driver, "
+            f"methodology + Extend protocol in .benchmarks/094_default_level_fired_histogram.md); "
+            f"merged from {a.base_manifest} (all prior waves, carried byte-identical) + this "
+            f"script's wave-{a.wave} sample; dataset_blake3 = blake3 over the canonical JSON "
+            f"(sort_keys, compact separators) of this manifest with dataset_blake3 removed"
         ),
         "clippy_version": clippy_v or base["clippy_version"],
         "cargo_version": cargo_v or base["cargo_version"],
         "bench": base["bench"],
         "selection_rule": (
-            f"wave 1: {base['selection_rule']} || wave 2 (this manifest): same filters, fresh pages "
-            f"{pages} of the same top-10k window (adjacent rank bands; crates already in wave 1 "
-            f"deduped by name and skipped — the crate sets are disjoint by construction, which makes "
-            f"the merged per-lint count/spread arithmetic exact)"
+            f"{base['selection_rule']} || wave {a.wave} (this manifest): "
+            f"same filters, fresh pages {pages} of the same top-10k window (adjacent rank "
+            f"bands; crates already in earlier waves deduped by name and skipped — the crate "
+            f"sets are disjoint by construction, which makes the merged per-lint "
+            f"count/spread arithmetic exact)"
         ),
         "lint_invocation": base["lint_invocation"],
         "row_schema": base["row_schema"],
@@ -466,6 +470,7 @@ def main() -> None:
     m.add_argument("--partial", required=True)
     m.add_argument("--meta-out", required=True)
     m.add_argument("--out-manifest", required=True)
+    m.add_argument("--wave", type=int, default=2, help="wave number stamped into generator/selection_rule provenance")
     m.set_defaults(fn=cmd_merge)
 
     r = sub.add_parser("retally", help="re-parse lints for measured rows via warm-target-dir replay")

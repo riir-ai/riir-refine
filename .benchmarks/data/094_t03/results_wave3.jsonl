@@ -1,0 +1,200 @@
+{"exit_code": 0, "lints": {"assign_op_pattern": 4, "collapsible_else_if": 1, "excessive_precision": 27, "explicit_auto_deref": 1, "mem_replace_with_default": 1, "needless_return": 1, "unnecessary_cast": 16}, "name": "speexdsp-resampler-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 16.2, "warnings": 51}
+{"exit_code": 0, "lints": {}, "name": "rand_isaac-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 16.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "newtype-uuid-1.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.0, "warnings": 0}
+{"exit_code": 0, "lints": {"implicit_saturating_sub": 1}, "name": "markdown-1.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.1, "warnings": 1}
+{"exit_code": 101, "lints": {}, "name": "gsk4-sys-0.11.4", "stderr_tail": "  If you did not expect this build to link to a pre-installed system library,\n  then check documentation of the gdk4-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n", "verdict": "compile_error", "wall_s": 20.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "gix-object-0.64.1", "stderr_tail": "error: could not compile `gix-hash` (lib) due to 16 previous errors\n", "verdict": "compile_error", "wall_s": 20.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "membrane-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 23.6, "warnings": 0}
+{"exit_code": 3221225786, "lints": {}, "name": "opencv-binding-generator-0.105.0", "stderr_tail": "", "verdict": "compile_error", "wall_s": 5.1, "warnings": 0}
+{"exit_code": 3221225786, "lints": {}, "name": "ntest_timeout-0.9.5", "stderr_tail": "", "verdict": "compile_error", "wall_s": 8.8, "warnings": 0}
+{"exit_code": 3221225786, "lints": {}, "name": "rocksdb-0.25.0", "stderr_tail": "info: syncing channel updates for 1.88.0-x86_64-pc-windows-msvc\ninfo: latest update on 2025-06-26 for version 1.88.0 (6b00bc388 2025-06-23)\ninfo: downloading 6 components\n", "verdict": "compile_error", "wall_s": 10.1, "warnings": 0}
+{"exit_code": 3221225786, "lints": {}, "name": "parity-crypto-0.9.0", "stderr_tail": "", "verdict": "compile_error", "wall_s": 10.3, "warnings": 0}
+{"exit_code": 3221225786, "lints": {}, "name": "esplora-client-0.13.0", "stderr_tail": "", "verdict": "compile_error", "wall_s": 12.0, "warnings": 0}
+{"exit_code": 3221225786, "lints": {}, "name": "run_script-0.11.2", "stderr_tail": "", "verdict": "compile_error", "wall_s": 12.6, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "pipeline-0.5.0", "stderr_tail": "error: could not compile `pipeline` (lib) due to 4 previous errors\n", "verdict": "compile_error", "wall_s": 0.1, "warnings": 0}
+{"exit_code": 0, "lints": {"assign_op_pattern": 2, "len_without_is_empty": 2, "manual_rotate": 2, "needless_return": 1, "new_without_default": 1, "result_unit_err": 17}, "name": "kiwi-schema-0.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 0.2, "warnings": 25}
+{"exit_code": 0, "lints": {}, "name": "solana-serialize-utils-4.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "prodash-31.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 12.6, "warnings": 0}
+{"exit_code": 0, "lints": {"collapsible_match": 1, "search_is_some": 1}, "name": "runtime-struct-field-names-as-array-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.2, "warnings": 2}
+{"exit_code": 0, "lints": {"mixed_attributes_style": 1, "needless_borrow": 1, "needless_return": 8, "only_used_in_recursion": 2, "single_char_add_str": 1, "useless_format": 1, "write_with_newline": 4}, "name": "clap-markdown-0.1.5", "stderr_tail": "", "verdict": "ok", "wall_s": 14.3, "warnings": 18}
+{"exit_code": 101, "lints": {}, "name": "stretch-0.3.2", "stderr_tail": "top\\AppData\\Local\\Temp\\b094wave\\extract\\stretch-0.3.2\\stretch-0.3.2\\Cargo.toml`\n\nCaused by:\n  can't find `complex` bench at `benches\\complex.rs` or `benches\\complex\\main.rs`. Please specify bench.path if you want to use a non-default path.\n", "verdict": "compile_error", "wall_s": 0.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "near-config-utils-0.37.4", "stderr_tail": "", "verdict": "ok", "wall_s": 16.1, "warnings": 0}
+{"exit_code": 101, "lints": {"collapsible_if": 1, "needless_borrows_for_generic_args": 4}, "name": "librocksdb-sys-6.20.3", "stderr_tail": "istry\\src\\index.crates.io-1949cf8c6b5b557f\\bindgen-0.59.2\\src\\ir\\context.rs:878:9:\n  \"enum_(unnamed_at_rocksdb/include/rocksdb/c_h_854_1)\" is not a valid Ident\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 17.5, "warnings": 5}
+{"exit_code": 0, "lints": {}, "name": "is_ci-1.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.8, "warnings": 0}
+{"exit_code": 0, "lints": {"redundant_field_names": 2}, "name": "msdos_time-0.1.6", "stderr_tail": "", "verdict": "ok", "wall_s": 6.9, "warnings": 2}
+{"exit_code": 0, "lints": {}, "name": "totp-rs-6.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "accessory-2.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 11.0, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_conversion": 1}, "name": "rexif-0.7.5", "stderr_tail": "", "verdict": "ok", "wall_s": 1.5, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "gix-tempfile-24.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 6.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wasm-bindgen-cli-support-0.2.128", "stderr_tail": "", "verdict": "ok", "wall_s": 23.3, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "jump-consistent-hash-0.1.0", "stderr_tail": "error: could not compile `jump-consistent-hash` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 11.1, "warnings": 0}
+{"exit_code": 0, "lints": {"wrong_self_convention": 6}, "name": "frost-core-3.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 10.8, "warnings": 6}
+{"exit_code": 0, "lints": {}, "name": "btleplug-0.13.0", "stderr_tail": "", "verdict": "ok", "wall_s": 11.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "vello_cpu-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bitcoin_hashes-1.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 15.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "oxiri-0.3.1", "stderr_tail": "", "verdict": "ok", "wall_s": 16.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "changesets-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 23.4, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_div_ceil": 1}, "name": "memory_units-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.4, "warnings": 1}
+{"exit_code": 101, "lints": {}, "name": "lmdb-zero-0.4.4", "stderr_tail": "- stderr\n\n  thread 'main' (59056) panicked at C:\\Users\\katop\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\gcc-0.3.39\\src\\lib.rs:984:5:\n  explicit panic\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 17.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "refinery-core-0.9.2", "stderr_tail": "", "verdict": "ok", "wall_s": 31.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "enum-display-derive-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 15.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rand_os-0.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 7.5, "warnings": 0}
+{"exit_code": 0, "lints": {"empty_line_after_doc_comments": 1}, "name": "urdf-rs-0.9.0", "stderr_tail": "", "verdict": "ok", "wall_s": 20.9, "warnings": 1}
+{"exit_code": 0, "lints": {"const_is_empty": 4}, "name": "tree-sitter-lua-0.5.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.0, "warnings": 4}
+{"exit_code": 101, "lints": {}, "name": "alpm-sys-5.0.1", "stderr_tail": "then check documentation of the alpm-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 1.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "protofetch-0.1.21", "stderr_tail": "", "verdict": "ok", "wall_s": 17.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-last-restart-slot-3.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pallet-collator-selection-30.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 48.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gix-date-0.16.0", "stderr_tail": "", "verdict": "ok", "wall_s": 28.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "fvm_ipld_encoding-0.5.4", "stderr_tail": "", "verdict": "ok", "wall_s": 11.3, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "ndk-0.9.0", "stderr_tail": "error: could not compile `ndk-sys` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 7.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pallet-authorship-48.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 31.0, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "graphene-sys-0.22.9", "stderr_tail": " you did not expect this build to link to a pre-installed system library,\n  then check documentation of the graphene-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n", "verdict": "compile_error", "wall_s": 2.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cumulus-primitives-utility-0.32.0", "stderr_tail": "", "verdict": "ok", "wall_s": 107.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "unsigned-varint-0.8.0", "stderr_tail": "", "verdict": "ok", "wall_s": 93.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "simple-dns-0.12.0", "stderr_tail": "", "verdict": "ok", "wall_s": 71.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "actix-multipart-0.8.1", "stderr_tail": "", "verdict": "ok", "wall_s": 14.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gtk4-macros-0.11.4", "stderr_tail": "", "verdict": "ok", "wall_s": 44.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "alacritty_terminal-0.26.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.9, "warnings": 0}
+{"exit_code": 0, "lints": {"into_iter_on_ref": 1, "len_without_is_empty": 1, "redundant_field_names": 4}, "name": "utf8-ranges-1.0.5", "stderr_tail": "", "verdict": "ok", "wall_s": 27.1, "warnings": 6}
+{"exit_code": 0, "lints": {}, "name": "winter-math-0.13.1", "stderr_tail": "", "verdict": "ok", "wall_s": 19.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "deno_fetch-0.283.0", "stderr_tail": "error: could not compile `deno_v8` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 28.7, "warnings": 0}
+{"exit_code": 0, "lints": {"empty_line_after_doc_comments": 1}, "name": "strip-ansi-escapes-0.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 3.9, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "geozero-0.15.1", "stderr_tail": "", "verdict": "ok", "wall_s": 31.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "refinery-0.9.2", "stderr_tail": "", "verdict": "ok", "wall_s": 9.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rrs-succinct-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.7, "warnings": 0}
+{"exit_code": 0, "lints": {"deprecated_clippy_cfg_attr": 2, "legacy_numeric_constants": 1, "manual_is_multiple_of": 3, "question_mark": 2}, "name": "ryu_floating_decimal-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.6, "warnings": 8}
+{"exit_code": 0, "lints": {}, "name": "solana-slot-history-3.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gix-glob-0.27.1", "stderr_tail": "", "verdict": "ok", "wall_s": 3.9, "warnings": 0}
+{"exit_code": 0, "lints": {"unnecessary_map_or": 2}, "name": "rustpython-parser-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 41.1, "warnings": 2}
+{"exit_code": 0, "lints": {}, "name": "anyerror-0.1.13", "stderr_tail": "info: syncing channel updates for nightly-2023-10-17-x86_64-pc-windows-msvc\ninfo: latest update on 2023-10-17 for version 1.75.0-nightly (49691b1f7 2023-10-16)\ninfo: downloading 6 components\n", "verdict": "ok", "wall_s": 40.8, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "wayland-egl-0.32.11", "stderr_tail": "n check documentation of the wayland-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 13.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "granit-parser-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.6, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_is_multiple_of": 1}, "name": "precomputed-map-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.0, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "gix-actor-0.42.0", "stderr_tail": "", "verdict": "ok", "wall_s": 20.7, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "iai-callgrind-runner-0.16.1", "stderr_tail": "error: could not compile `iai-callgrind-runner` (build script) due to 1 previous error; 1 warning emitted\n", "verdict": "compile_error", "wall_s": 24.0, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "libseat-sys-0.2.0", "stderr_tail": "n check documentation of the libseat-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 3.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "smallstr-0.3.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pkcs7-0.4.1", "stderr_tail": "", "verdict": "ok", "wall_s": 23.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "refinery-macros-0.9.2", "stderr_tail": "", "verdict": "ok", "wall_s": 26.1, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_borrow": 1, "needless_borrows_for_generic_args": 7, "needless_return": 6}, "name": "konst_proc_macros-0.4.1", "stderr_tail": "", "verdict": "ok", "wall_s": 3.4, "warnings": 14}
+{"exit_code": 0, "lints": {}, "name": "gix-utils-0.3.6", "stderr_tail": "", "verdict": "ok", "wall_s": 0.8, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "privdrop-0.5.6", "stderr_tail": "error: could not compile `privdrop` (lib) due to 26 previous errors\n", "verdict": "compile_error", "wall_s": 1.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bilge-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "arrow-avro-60.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 28.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "inferno-0.12.8", "stderr_tail": "", "verdict": "ok", "wall_s": 11.7, "warnings": 0}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 1}, "name": "rustpython-parser-vendored-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.9, "warnings": 1}
+{"exit_code": 101, "lints": {}, "name": "termios-0.3.3", "stderr_tail": "error: could not compile `termios` (lib) due to 31 previous errors; 1 warning emitted\n", "verdict": "compile_error", "wall_s": 7.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bilge-impl-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 8.7, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_overindented_list_items": 1, "needless_lifetimes": 1}, "name": "nom-derive-0.10.1", "stderr_tail": "", "verdict": "ok", "wall_s": 10.6, "warnings": 2}
+{"exit_code": 101, "lints": {"bind_instead_of_map": 1, "clone_on_copy": 1, "collapsible_else_if": 1, "derivable_impls": 1, "get_first": 2, "len_zero": 2, "missing_transmute_annotations": 1, "needless_borrow": 2, "needless_return": 3, "redundant_closure": 1, "redundant_field_names": 2, "should_implement_trait": 1, "single_match": 2, "unnecessary_cast": 1, "unnecessary_fallible_conversions": 2}, "name": "spq-core-1.0.6", "stderr_tail": "error: could not compile `spq-core` (lib) due to 1 previous error; 24 warnings emitted\n", "verdict": "compile_error", "wall_s": 11.5, "warnings": 23}
+{"exit_code": 0, "lints": {"unnecessary_map_or": 2}, "name": "rustpython-ast-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 17.7, "warnings": 2}
+{"exit_code": 101, "lints": {}, "name": "sea-query-sqlx-0.9.1", "stderr_tail": "error: rustc 1.93.0 is not supported by the following package:\n  sea-query-sqlx@0.9.1 requires rustc 1.94.0\n\n", "verdict": "compile_error", "wall_s": 11.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "gix-ref-0.67.1", "stderr_tail": "error: could not compile `gix-hash` (lib) due to 16 previous errors\n", "verdict": "compile_error", "wall_s": 12.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "orx-pseudo-default-2.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rustpython-parser-core-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.2, "warnings": 0}
+{"exit_code": 0, "lints": {"derivable_impls": 1}, "name": "ndk-macro-0.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.7, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "lingua-belarusian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "logging_timer-1.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 9.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-azerbaijani-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.9, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_borrow": 6, "single_char_add_str": 2}, "name": "man-0.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.7, "warnings": 8}
+{"exit_code": 0, "lints": {}, "name": "cssparser-color-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 11.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gix-lock-24.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-tpu-client-next-4.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 33.3, "warnings": 0}
+{"exit_code": 0, "lints": {"unnecessary_cast": 13}, "name": "libz-rs-sys-0.6.8", "stderr_tail": "", "verdict": "ok", "wall_s": 15.6, "warnings": 13}
+{"exit_code": 0, "lints": {}, "name": "lingua-irish-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "google-apis-common-8.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 16.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "spl-program-error-derive-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cmd_lib-2.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 6.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "sysexits-0.13.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.1, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 6, "multiple_bound_locations": 9}, "name": "indexmap-nostd-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.6, "warnings": 15}
+{"exit_code": 0, "lints": {"missing_transmute_annotations": 1}, "name": "lifetimed-bytes-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 10.8, "warnings": 1}
+{"exit_code": 101, "lints": {"doc_lazy_continuation": 1, "missing_transmute_annotations": 2, "transmute_ptr_to_ref": 2}, "name": "error-0.1.9", "stderr_tail": "error: could not compile `error` (lib) due to 1 previous error; 9 warnings emitted\n", "verdict": "compile_error", "wall_s": 6.6, "warnings": 5}
+{"exit_code": 0, "lints": {}, "name": "open-5.4.4", "stderr_tail": "", "verdict": "ok", "wall_s": 0.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "winit-0.30.13", "stderr_tail": "", "verdict": "ok", "wall_s": 13.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cynic-parser-0.11.2", "stderr_tail": "", "verdict": "ok", "wall_s": 13.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-afrikaans-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ironrdp-error-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gltf-derive-1.4.1", "stderr_tail": "", "verdict": "ok", "wall_s": 15.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "argon2-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 18.5, "warnings": 0}
+{"exit_code": 0, "lints": {"cmp_owned": 2, "doc_lazy_continuation": 3, "doc_overindented_list_items": 24, "test_attr_in_doctest": 1, "unnecessary_filter_map": 2}, "name": "maybe-async-0.2.11", "stderr_tail": "", "verdict": "ok", "wall_s": 4.0, "warnings": 32}
+{"exit_code": 101, "lints": {}, "name": "c2pa-0.90.22", "stderr_tail": "l\" \"--openssldir=SYS$MANAGER:[OPENSSL]\" \"no-shared\" \"no-module\" \"no-tests\" \"no-comp\" \"no-zlib\" \"no-zlib-dynamic\" \"--libdir=lib\" \"no-ssl3\" \"no-md2\" \"no-rc5\" \"no-weak-ssl-ciphers\" \"no-camellia\" \"no-idea\" \"no-seed\" \"no-capieng\" \"VC-WIN64A\"\n\n\n\n", "verdict": "compile_error", "wall_s": 27.2, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "krb5-src-0.3.4", "stderr_tail": "\n     Ended : Thursday, September 17, 2026 11:46:19\n\n\n  --- stderr\n\n  thread 'main' (57924) panicked at build.rs:233:29:\n  nmake prep failed: program not found\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 23.5, "warnings": 0}
+{"exit_code": 101, "lints": {"cast_slice_from_raw_parts": 1, "doc_lazy_continuation": 103, "doc_overindented_list_items": 96, "double_parens": 539, "duplicated_attributes": 1, "empty_docs": 152, "empty_line_after_doc_comments": 2, "four_forward_slashes": 3, "manual_is_ascii_check": 1, "manual_next_back": 1, "manual_non_exhaustive": 2, "missing_const_for_thread_local": 1, "multiple_bound_locations": 1, "needless_lifetimes": 7, "needless_maybe_sized": 1, "new_without_default": 1, "non_canonical_clone_impl": 1, "non_canonical_partial_ord_impl": 3, "result_large_err": 1, "unnecessary_cast": 5, "unneeded_struct_pattern": 18, "useless_transmute": 3}, "name": "abi_stable-0.11.3", "stderr_tail": "error: could not compile `abi_stable` (lib) due to 1 previous error; 988 warnings emitted\n", "verdict": "compile_error", "wall_s": 31.4, "warnings": 943}
+{"exit_code": 0, "lints": {}, "name": "lingua-esperanto-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 15.5, "warnings": 0}
+{"exit_code": 0, "lints": {"derivable_impls": 3, "legacy_numeric_constants": 3}, "name": "m3u8-rs-6.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 7.2, "warnings": 6}
+{"exit_code": 101, "lints": {}, "name": "esp-alloc-0.11.0", "stderr_tail": "es rustc 1.95.0\n  esp-metadata-generated@0.5.0 requires rustc 1.95.0\n  esp-metadata-generated@0.5.0 requires rustc 1.95.0\n  esp-sync@0.3.0 requires rustc 1.95.0\n  esp-sync@0.3.0 requires rustc 1.95.0\n  esp-sync@0.3.0 requires rustc 1.95.0\n\n", "verdict": "compile_error", "wall_s": 5.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "icu_plurals_data-2.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rand_jitter-0.6.1", "stderr_tail": "", "verdict": "ok", "wall_s": 5.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "miniscript-13.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 17.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-basque-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 6.8, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "gix-config-0.60.0", "stderr_tail": "error: could not compile `gix-hash` (lib) due to 16 previous errors\n", "verdict": "compile_error", "wall_s": 6.5, "warnings": 0}
+{"exit_code": 0, "lints": {"to_string_trait_impl": 2}, "name": "gltf-json-1.4.1", "stderr_tail": "", "verdict": "ok", "wall_s": 12.3, "warnings": 2}
+{"exit_code": 0, "lints": {"multiple_crate_versions": 4}, "name": "actix-governor-0.10.0", "stderr_tail": "", "verdict": "ok", "wall_s": 21.6, "warnings": 4}
+{"exit_code": 101, "lints": {}, "name": "dbus-codegen-0.12.0", "stderr_tail": "fig\n\n\n  thread 'main' (56024) panicked at C:\\Users\\katop\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\libdbus-sys-0.2.5\\build.rs:25:9:\n  explicit panic\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 2.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gix-path-0.12.6", "stderr_tail": "", "verdict": "ok", "wall_s": 2.1, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_repeat_n": 1, "needless_borrow": 4, "type_complexity": 1, "useless_vec": 6}, "name": "w3f-ring-proof-0.0.10", "stderr_tail": "", "verdict": "ok", "wall_s": 14.0, "warnings": 12}
+{"exit_code": 0, "lints": {}, "name": "ogg-0.9.2", "stderr_tail": "", "verdict": "ok", "wall_s": 0.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-zulu-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rust-s3-0.37.2", "stderr_tail": "", "verdict": "ok", "wall_s": 42.3, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 1, "len_zero": 1, "ptr_offset_with_cast": 3}, "name": "safemem-0.3.3", "stderr_tail": "", "verdict": "ok", "wall_s": 0.3, "warnings": 5}
+{"exit_code": 0, "lints": {}, "name": "goldenfile-1.11.0", "stderr_tail": "", "verdict": "ok", "wall_s": 30.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-welsh-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 10.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-cpi-3.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 8.2, "warnings": 0}
+{"exit_code": 0, "lints": {"extra_unused_lifetimes": 1, "int_plus_one": 2, "needless_borrow": 1, "type_complexity": 1}, "name": "w3f-plonk-common-0.0.10", "stderr_tail": "", "verdict": "ok", "wall_s": 10.9, "warnings": 5}
+{"exit_code": 0, "lints": {}, "name": "lingua-xhosa-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 6.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ocaml-derive-1.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "typeshare-annotation-1.0.5", "stderr_tail": "", "verdict": "ok", "wall_s": 2.5, "warnings": 0}
+{"exit_code": 0, "lints": {"len_without_is_empty": 3, "len_zero": 2, "let_and_return": 1, "manual_dangling_ptr": 1, "missing_safety_doc": 10, "missing_transmute_annotations": 4, "needless_late_init": 1, "needless_lifetimes": 8, "needless_return": 1, "ptr_offset_with_cast": 9, "redundant_field_names": 15, "transmute_ptr_to_ref": 8}, "name": "odds-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.6, "warnings": 63}
+{"exit_code": 0, "lints": {}, "name": "ironrdp-core-0.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 2.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gix-config-value-0.19.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.8, "warnings": 0}
+{"exit_code": 0, "lints": {"int_plus_one": 1, "len_zero": 1, "needless_borrow": 5, "op_ref": 2, "result_unit_err": 5, "type_complexity": 2, "unnecessary_lazy_evaluations": 4, "unnecessary_to_owned": 1, "unused_unit": 9, "useless_conversion": 7}, "name": "w3f-pcs-0.0.7", "stderr_tail": "", "verdict": "ok", "wall_s": 21.1, "warnings": 37}
+{"exit_code": 0, "lints": {}, "name": "lingua-shona-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-maori-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "s2n-quic-crypto-0.88.0", "stderr_tail": "", "verdict": "ok", "wall_s": 28.9, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "cargo-credential-wincred-0.4.24", "stderr_tail": "error: rustc 1.93.0 is not supported by the following package:\n  cargo-credential-wincred@0.4.24 requires rustc 1.96\n\n", "verdict": "compile_error", "wall_s": 6.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "owned_ttf_parser-0.25.1", "stderr_tail": "", "verdict": "ok", "wall_s": 21.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "orx-concurrent-iter-5.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.6, "warnings": 0}
+{"exit_code": 0, "lints": {"empty_line_after_doc_comments": 1, "enum_variant_names": 1, "get_first": 2, "io_other_error": 2, "len_zero": 2, "manual_is_multiple_of": 1, "map_clone": 1, "match_like_matches_macro": 1, "needless_borrow": 1, "needless_return": 1, "new_without_default": 1, "redundant_field_names": 13}, "name": "inflate-0.4.5", "stderr_tail": "", "verdict": "ok", "wall_s": 10.2, "warnings": 27}
+{"exit_code": 0, "lints": {}, "name": "typeable-0.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 0.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "dtor-1.0.6", "stderr_tail": "", "verdict": "ok", "wall_s": 4.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bitstream-io-4.10.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.7, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "aws-smithy-cbor-0.62.1", "stderr_tail": "@0.62.1 requires rustc 1.94.1\n  aws-smithy-runtime-api@1.16.2 requires rustc 1.94.1\n  aws-smithy-runtime-api-macros@1.1.0 requires rustc 1.94.1\n  aws-smithy-schema@0.2.1 requires rustc 1.94.1\n  aws-smithy-types@1.6.4 requires rustc 1.94.1\n\n", "verdict": "compile_error", "wall_s": 5.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "frost-rerandomized-3.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 6.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-ganda-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.9, "warnings": 0}
+{"exit_code": 0, "lints": {"redundant_static_lifetimes": 1}, "name": "osmesa-sys-0.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 4.1, "warnings": 1}
+{"exit_code": 0, "lints": {"missing_const_for_fn": 2, "redundant_else": 2}, "name": "stringmetrics-2.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 10.9, "warnings": 4}
+{"exit_code": 101, "lints": {}, "name": "bevy_ui_render-0.19.1", "stderr_tail": "evy_math@0.19.1 requires rustc 1.94.0\nEither upgrade rustc or select compatible dependency versions with\n`cargo update <name>@<current-ver> --precise <compatible-ver>`\nwhere `<compatible-ver>` is the latest version supporting rustc 1.93.0\n\n", "verdict": "compile_error", "wall_s": 8.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "timeout-readwrite-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 11.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-tswana-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.9, "warnings": 0}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 2, "manual_repeat_n": 2}, "name": "linregress-0.5.4", "stderr_tail": "", "verdict": "ok", "wall_s": 20.7, "warnings": 4}
+{"exit_code": 0, "lints": {"doc_overindented_list_items": 1, "into_iter_on_ref": 1, "len_without_is_empty": 3, "manual_ok_err": 1, "map_clone": 2, "match_like_matches_macro": 9, "needless_borrow": 1, "needless_lifetimes": 2, "needless_question_mark": 1, "needless_return": 1, "new_without_default": 4, "question_mark": 1, "redundant_field_names": 3, "unnecessary_cast": 3, "useless_conversion": 1}, "name": "ducc-0.1.5", "stderr_tail": "", "verdict": "ok", "wall_s": 15.8, "warnings": 34}
+{"exit_code": 0, "lints": {}, "name": "crc-fast-1.10.0", "stderr_tail": "", "verdict": "ok", "wall_s": 23.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "napi-3.12.6", "stderr_tail": "", "verdict": "ok", "wall_s": 16.2, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_borrow": 16, "single_component_path_imports": 1}, "name": "rusoto_batch-0.48.0", "stderr_tail": "", "verdict": "ok", "wall_s": 21.9, "warnings": 17}
+{"exit_code": 0, "lints": {}, "name": "lingua-sotho-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 18.9, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "revm-inspectors-0.43.0", "stderr_tail": "error: rustc 1.93.0 is not supported by the following package:\n  revm-inspectors@0.43.0 requires rustc 1.94\n\n", "verdict": "compile_error", "wall_s": 20.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ic-representation-independent-hash-3.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "eth-keystore-0.5.0", "stderr_tail": "", "verdict": "ok", "wall_s": 25.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rust-embed-8.12.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-yoruba-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.1, "warnings": 0}
+{"exit_code": 0, "lints": {"redundant_static_lifetimes": 7}, "name": "ducc-sys-0.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 7.5, "warnings": 7}
+{"exit_code": 101, "lints": {}, "name": "oboe-0.6.1", "stderr_tail": "\" \"-DOBOE_ENABLE_LOGGING=1\" \"-FoC:/Users/katop/AppData/Local/Temp/b094wave\\\\tgt-1\\\\debug\\\\build\\\\oboe-sys-a9c1dffe045833fd\\\\out\\\\library\\\\0e02ee5e1b288cf1-AudioStreamCallbackWrapper.o\" \"-c\" \"oboe-ext\\\\src\\\\AudioStreamCallbackWrapper.cpp\"\n\n\n", "verdict": "compile_error", "wall_s": 9.5, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 1, "large_enum_variant": 1, "match_like_matches_macro": 3, "needless_borrow": 3, "redundant_closure": 1, "to_string_in_format_args": 1}, "name": "impl-trait-for-tuples-0.2.3", "stderr_tail": "", "verdict": "ok", "wall_s": 4.0, "warnings": 10}
+{"exit_code": 0, "lints": {}, "name": "aws-region-0.28.1", "stderr_tail": "", "verdict": "ok", "wall_s": 2.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rspolib-0.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 9.9, "warnings": 0}
+{"exit_code": 0, "lints": {"int_plus_one": 7, "len_without_is_empty": 1}, "name": "unicode-bom-2.0.3", "stderr_tail": "", "verdict": "ok", "wall_s": 4.0, "warnings": 8}
+{"exit_code": 0, "lints": {}, "name": "fancy_constructor-2.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 6.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "force-send-sync-2.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bitbybit-2.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 6.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ntest_test_cases-0.9.5", "stderr_tail": "", "verdict": "ok", "wall_s": 3.0, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "graphene-rs-0.22.8", "stderr_tail": " you did not expect this build to link to a pre-installed system library,\n  then check documentation of the graphene-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n", "verdict": "compile_error", "wall_s": 4.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "reqwest-websocket-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 15.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-tsonga-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.4, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "inline-spirv-0.2.1", "stderr_tail": " C:\\Users\\katop\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\shaderc-sys-0.8.3\\build\\cmd_finder.rs:55:13:\n\n\n  couldn't find required command: \"ninja\"\n\n\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 17.2, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_ok_err": 1}, "name": "ntest-0.9.5", "stderr_tail": "", "verdict": "ok", "wall_s": 17.6, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "snowbridge-milagro-bls-1.5.4", "stderr_tail": "", "verdict": "ok", "wall_s": 19.1, "warnings": 0}
+{"exit_code": 0, "lints": {"allow_attributes": 1}, "name": "sentry-core-0.49.2", "stderr_tail": "", "verdict": "ok", "wall_s": 24.6, "warnings": 1}
+{"exit_code": 101, "lints": {}, "name": "ratatui-image-11.0.8", "stderr_tail": "check documentation of the ratatui-image crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 12.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "dylint_linting-6.0.4", "stderr_tail": ": removing previous version of component rust-docs\ninfo: removing previous version of component rust-std\ninfo: removing previous version of component rustc\ninfo: removing previous version of component rustfmt\ninfo: downloading 8 components\n", "verdict": "ok", "wall_s": 252.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "gsk4-0.11.4", "stderr_tail": " you did not expect this build to link to a pre-installed system library,\n  then check documentation of the graphene-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n", "verdict": "compile_error", "wall_s": 4.0, "warnings": 0}

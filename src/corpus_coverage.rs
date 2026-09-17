@@ -59,7 +59,7 @@
 //!    rows are opt-in lints and it is structurally blind to the
 //!    default-firing debt.
 //! 2. **default-eco** — the Bench 094 default-level fired histogram
-//!    (`.benchmarks/data/094_t02/manifest.json`, waves 1+2 merged: 452
+//!    (`.benchmarks/data/094_t03/manifest.json`, waves 1+2+3 merged: 501
 //!    compiled-clean crates): plain `cargo clippy` (no `-W` flags) over a
 //!    stratified crates.io top-10K-downloads sample. This is the source the
 //!    default-firing uncovered set can actually carry — the T4 successor
@@ -72,7 +72,7 @@
 //!    (top-5 > 80%) is citable, never a per-lint count.
 //!
 //! Every row outside all three is `uncited`. A count from one population is
-//! never summed with another (6 repos on one day ≠ 184 crates ≠ 100K
+//! never summed with another (6 repos on one day ≠ 501 crates ≠ 100K
 //! crates — adding them invents a fourth).
 
 use std::collections::{BTreeMap, BTreeSet};

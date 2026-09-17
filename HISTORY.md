@@ -1,5 +1,43 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — Bench 094 wave 3: the second default-eco extension (342 → 501 clean crates, flip 94/442 → 110/442) + the resume prefix-collision fix
+
+Plan 139 executed the Extend protocol's second run hours after wave 2: one
+page deeper per stratum (pages 13/33/53/78/98 → ranks 1201-1300, 3201-3300,
+5201-5300, 7701-7800, 9701-9800), same filters, toolchain verified
+byte-identical (clippy 0.1.98) before launch, known-dirty control re-run
+first (akin-0.4.0 → exactly 3 warnings, through the tracked driver's own
+functions).
+
+Merged dataset `.benchmarks/data/094_t03/manifest.json` (waves 1+2+3):
+580 sampled / **501 compiled-clean** / 78 compile_error / 1 timeout /
+**1801 warnings / 164 distinct lints**; blake3 `dd1bebee…` (canonical JSON
+minus the field). Wave-3 standalone: 200 unique crates (159 ok / 41
+compile_error), 467 warnings, 75 distinct lints. Loader repointed (`REL` →
+t03); `corpus_coverage.rs` module doc updated — also fixing the stale "452"
+the wave-2 docstring carried (the t02 manifest said 342).
+
+**Flip: 94 of 442 → 110 of 442** default-firing uncovered lints carry
+evidence (+16). Post-merge head: `needless_borrow` **92/30** (was 53/20 —
+the widest-spread row, +73%), `missing_safety_doc` 140/5,
+`manual_range_contains` 121/5, `redundant_field_names` **58/9** (wave 3's
+fresh mining-grade row — 37 of its count arrived with this wave),
+`legacy_numeric_constants` 55/15, `needless_return` 38/15,
+`doc_lazy_continuation` 38/13, `needless_lifetimes` 36/12.
+
+Two incidents this wave (full record: bench doc §wave 3). The launcher:
+MSYS nohup does not survive its launching shell on Windows — the run died
+once and the sampler's resume path got its first real cross-invocation
+test (passed). The measurement bug: the wave-2 resume repair's
+prefix-match over-matched — done key `gsk4-sys-0.11.4` startswith(`gsk4-`)
+and silently skipped the `gsk4` crate; caught by the reconstruction diff
+(re-fetch, replay the cut, diff against the file) BEFORE any number was
+used, fixed to the exact constructed key `f"{name}-{ver}"` (also O(1)),
+and the lost crate measured + appended. The incident ledger across waves
+now reads: wave 2 — parser key + resume-key bugs; wave 3 — resume
+prefix-collision; each caught by a different control (known-dirty crate,
+duplicate rows, reconstruction diff).
+
 ## 2026-09-17 — the fresh-pass pedantic residue closes (34 + 6 findings, the stale-cache bite confirmed on the Batch-150 close-out itself)
 
 Bench 095's "observed, not owned" residue is paid, and the pay-off is a

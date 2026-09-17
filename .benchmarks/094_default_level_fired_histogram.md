@@ -1,6 +1,6 @@
 # Bench 094 — the default-level fired histogram (Issue 119's T4 successor)
 
-**Status:** RECORD — landed 2026-09-17 (data + corpus_coverage join + 3 new tests; lib 1694/0); **wave-2 extension same-day** (§Extend executed — 342 clean crates, 145 distinct lints, flip 74/448 → 94/442)
+**Status:** RECORD — landed 2026-09-17 (data + corpus_coverage join + 3 new tests; lib 1694/0); **wave-2 extension same-day** (§Extend executed — 342 clean crates, 145 distinct lints, flip 74/448 → 94/442); **wave-3 extension same-day** (§Extend executed — 501 clean crates, 164 distinct lints, flip 94/442 → 110/442, resume prefix-collision fixed)
 
 ## The question
 
@@ -217,6 +217,49 @@ New mining-grade rows wave 2 surfaced: `needless_lifetimes` 25/9,
 Wave-2 standalone facts (180 unique crates, 158 ok): 573 warnings, 85
 distinct lints, 50/158 dirty — the wave-1 shape (median 0 warnings/crate,
 thin head) replicates at +80% population. The extend floor held: 342 ≫ 150.
+
+## Extend executed — wave 3 (2026-09-17, same day)
+
+The second extension, hours after the first — the rank-band ladder moved
+one page deeper per stratum (pages 13/33/53/78/98 → ranks 1201-1300,
+3201-3300, 5201-5300, 7701-7800, 9701-9800), same filters, same pinned
+toolchain (clippy 0.1.98, verified byte-identical before launch). The
+pre-flight known-dirty control re-ran first: akin-0.4.0 → exactly its 3
+recorded warnings, end-to-end through the tracked driver's own functions.
+
+**Dataset: `.benchmarks/data/094_t03/manifest.json` = waves 1+2+3 merged**
+(population 580 sampled / **501 compiled-clean** / 78 compile_error / 1
+timeout / **1801 warnings / 164 distinct lints**; `dataset_blake3
+dd1bebee542d787eca4c60649e309534f9de340d22604ed590559be730b14d77`).
+Wave-3 standalone: 200 unique crates (159 ok / 41 compile_error), 467
+warnings, 75 distinct lints. Loader repointed (`REL` → `094_t03`).
+
+**Coverage-report flip: 94 of 442 → 110 of 442** default-firing uncovered
+lints now carry evidence (+16). Post-merge head: `needless_borrow` **92/30**
+(was 53/20 — the widest-spread row strengthened +73%), `missing_safety_doc`
+140/5, `manual_range_contains` 121/5, `doc_overindented_list_items` 68/13,
+`useless_conversion` 62/13, **`redundant_field_names` 58/9 (wave 3's fresh
+mining-grade row — 37 of its count arrived with this wave)**,
+`legacy_numeric_constants` 55/15, `needless_return` 38/15,
+`doc_lazy_continuation` 38/13, `needless_lifetimes` 36/12.
+
+### The wave-3 measurement incident — the resume prefix-collision
+
+The run was killed once (background nohup did not survive its launching
+shell on Windows/MSYS — the sampler's resume path got its first real
+cross-invocation test). It resumed and completed 199 rows... and the
+reconstruction diff (re-fetch the same pages, replay the cut, diff against
+the file) found the 200th missing: **`gsk4` was silently skipped** because
+done key `gsk4-sys-0.11.4` satisfies `startswith("gsk4-")`. The wave-2
+resume fix (bare-name → prefix-match) over-corrected: the candidate carries
+BOTH name and version, so the skip now matches the exact constructed key
+`f"{name}-{ver}"` (also O(1)) — closing both the wave-2 bug (bare name
+never matching) and the wave-3 bug (prefix over-matching). The lost crate
+was measured through the same driver functions and appended; every number
+above is post-repair. The incident ledger now reads: wave 2 — parser key
+bug + resume-key bug; wave 3 — resume prefix-collision. All caught before
+any number was used, each by a different control (known-dirty crate,
+duplicate rows in the table, reconstruction diff).
 
 ## Extend protocol
 
