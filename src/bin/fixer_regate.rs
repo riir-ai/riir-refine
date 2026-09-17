@@ -58,6 +58,7 @@ use riir_clippy::cf_workers_ai::{
     self, reachable_samples, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass,
     RegateHarness, Sample, SampleSource,
 };
+use riir_clippy::kat_footer::TOKENS_PER_MTOK;
 use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_clippy::l4_daemon::DaemonL4;
 use riir_clippy::ClippyVerifier;
@@ -738,9 +739,13 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         );
         // Third meter: client tokens × published neuron rates — should land
         // within a few % of the server neurons (validated 2026-08-26: 165.04
-        // expected vs 165.037 server on the smoke run).
-        let neurons_from_client = summary.prompt_tokens as f64 / 1e6 * DEFAULT_NEURONS_IN_PER_M
-            + summary.completion_tokens as f64 / 1e6 * DEFAULT_NEURONS_OUT_PER_M;
+        // expected vs 165.037 server on the smoke run). TOKENS_PER_MTOK is
+        // the TOKEN million (per-Mtok rates) — never MICRO_PER_KAT
+        // (riir-dapps Plan 035 T10).
+        let neurons_from_client = summary.prompt_tokens as f64 / TOKENS_PER_MTOK as f64
+            * DEFAULT_NEURONS_IN_PER_M
+            + summary.completion_tokens as f64 / TOKENS_PER_MTOK as f64
+                * DEFAULT_NEURONS_OUT_PER_M;
         if neurons_from_client > 0.0 {
             println!(
                 "  neuron cross-check: client tokens → {:.2} neurons vs server {:.2} ({:+.0}% — server counts template tokens)",

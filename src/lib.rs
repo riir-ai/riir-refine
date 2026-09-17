@@ -220,7 +220,10 @@ pub use riir_kat::{
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
-#[cfg(feature = "kat_service")]
+// The unit vocabulary (MicroKat/WholeKat + the µ constants) is feature-free
+// by construction (kat_units' own module doc) — and the Plan 035 T3
+// newtype adoption makes the UNGATED footer a consumer, so the root
+// re-export is ungated too (the machine-local trio's posture).
 pub use riir_kat::kat_units;
 // The ungated machine-local trio + the free-tier protocol plumbing: the
 // member keeps them behind `client`, but riir-clippy's contract is

@@ -1,9 +1,11 @@
 //! The KAT run footer — the human readout of a heal run's billing.
 //!
-//! Pure presentation over primitives: numbers arrive as micro-KAT / token
-//! counts (canonical units owned by the sibling `riir-kat` leaf, rendered
-//! canonically by `render_kat`'s 6-decimal protocol shape — the form
-//! riir-dao/riir-dapps pin cross-repo). This module never touches those; it
+//! Pure presentation over primitives: amounts arrive as [`MicroKat`] µ
+//! counts (the riir-kat `kat_units` vocabulary) plus raw token counts,
+//! rendered through `render_kat`'s 6-decimal protocol shape — the form
+//! riir-dao/riir-dapps pin cross-repo. The µ/whole-KAT unit split is now a
+//! compile fact (riir-dapps Plan 035 T3): a whole-KAT count passed where µ
+//! is expected does not typecheck. This module never touches the wire; it
 //! renders the same facts for the terminal, where trailing `.000000`s and a
 //! twice-stated disclaimer were wall-of-text noise (the 2026-09-13
 //! redesign discussion).
@@ -41,6 +43,21 @@ pub const BAR_WIDTH: usize = 24;
 
 use std::io::IsTerminal as _;
 
+// The client-side unit vocabulary: the µ newtype every footer field
+// carries, the ONE µ↔KAT conversion (re-exported so the token-million
+// sites can name BOTH millions beside each other), and the token million
+// defined below (riir-dapps Plan 035 T3 + T10).
+pub use riir_kat::kat_units::{MicroKat, MICRO_PER_KAT};
+
+/// Tokens per **million tokens (Mtok)** — the pricing axis's million, NOT
+/// the money one. Per-Mtok $ rates and µ-per-Mtok KAT billing
+/// (`CHARGE_MICRO_KAT_PER_MILLION_TOKENS`) divide TOKEN counts by this;
+/// a µ↔KAT conversion uses [`MICRO_PER_KAT`]. Same VALUE (10⁶), different
+/// DIMENSION — that coincidence is exactly the unit-confusion class the
+/// µ/KAT gates exist to make findable (riir-dapps Plan 035 T10, the
+/// `micro_literal_gate`).
+pub const TOKENS_PER_MTOK: u64 = 1_000_000;
+
 const RESET: &str = "\x1b[0m";
 const DIM: &str = "\x1b[2m";
 /// The bar's burned-through track: dim + 256-color gray 240 — the bare
@@ -70,7 +87,7 @@ pub enum SyncState<'a> {
     /// never a stuck delta).
     Unsynced {
         /// The stacked delta, micro-KAT.
-        micro_kat: u64,
+        micro_kat: MicroKat,
         /// Mining batches queued in the outbox (0 = none).
         queued_batches: u32,
         /// The leaderboard page.
@@ -83,18 +100,18 @@ pub enum SyncState<'a> {
     Unknown,
 }
 
-/// The footer's inputs, all ledger primitives (micro-KAT / tokens).
+/// The footer's inputs: money as [`MicroKat`] µ, tokens raw.
 pub struct KatFooter<'a> {
     /// Code word tokens billed this run.
     pub run_tokens: u64,
-    /// KAT burned this run, micro-KAT.
-    pub run_micro_kat: u64,
-    /// Cumulative burn, micro-KAT (the charge ledger's `charged_kat`).
-    pub cum_micro_kat: u64,
-    /// The grant projection, micro-KAT.
-    pub grant_micro_kat: u64,
-    /// The v-rate, micro-KAT per million tokens.
-    pub rate_micro_per_mtok: u64,
+    /// KAT burned this run, µ.
+    pub run_micro_kat: MicroKat,
+    /// Cumulative burn, µ (the charge ledger's `charged_kat`).
+    pub cum_micro_kat: MicroKat,
+    /// The grant projection, µ.
+    pub grant_micro_kat: MicroKat,
+    /// The v-rate, µ per million tokens.
+    pub rate_micro_per_mtok: MicroKat,
     /// The meter version stamp (`MeterState::version`).
     pub meter_version: u32,
     /// The charge version stamp (`ChargeState::charge_version`).
@@ -120,10 +137,10 @@ impl KatFooter<'_> {
         // exact-integer range — this division is lossless at every real
         // ledger size.
         #[allow(clippy::cast_precision_loss)]
-        let frac = if self.grant_micro_kat == 0 {
+        let frac = if self.grant_micro_kat.0 == 0 {
             0.0
         } else {
-            left_micro as f64 / self.grant_micro_kat as f64
+            left_micro.0 as f64 / self.grant_micro_kat.0 as f64
         };
 
         let line1 = format!(
@@ -225,13 +242,17 @@ pub fn fmt_tokens(n: u64) -> String {
 
 /// Reading-friendly KAT amount, never the 6-decimal protocol shape: ≥ 1
 /// KAT renders at 2 decimals, below 1 at 4, trailing zeros trimmed
-/// (`100_000_000` → `100`, `15_080_719` → `15.08`, `8_791` → `0.0088`).
+/// (`MicroKat(100_000_000)` → `100`, `15_080_719` µ → `15.08`, `8_791` µ
+/// → `0.0088`). Takes [`MicroKat`] — a whole-KAT count passed by mistake
+/// is a compile error, not a 10⁶×-wrong display (riir-dapps Plan 035 T3).
 #[must_use]
-pub fn fmt_kat_display(micro: u64) -> String {
+pub fn fmt_kat_display(micro: MicroKat) -> String {
     // Display math on bounded values: micro-KAT ≤ ~10^14 sits inside f64's
     // exact-integer range — the cast is lossless at every real ledger size.
+    // MICRO_PER_KAT (the ONE µ↔KAT conversion — never a bare 1e6); the
+    // cast is exact at 10⁶ (u64→f64 has no From impl — lossy in general).
     #[allow(clippy::cast_precision_loss)]
-    let kat = micro as f64 / 1e6;
+    let kat = micro.0 as f64 / MICRO_PER_KAT as f64;
     let s = if kat >= 1.0 {
         format!("{kat:.2}")
     } else {
@@ -248,10 +269,10 @@ pub fn fmt_kat_display(micro: u64) -> String {
 /// Round micro-KAT to 2 KAT decimals (the caption's display grid), so the
 /// paired `grant − burned = left` identity survives rounding.
 #[must_use]
-fn round_kat_2dp(micro: u64) -> u64 {
-    let q = micro / 10_000;
-    let r = micro % 10_000;
-    (q + u64::from(r >= 5_000)).saturating_mul(10_000)
+fn round_kat_2dp(micro: MicroKat) -> MicroKat {
+    let q = micro.0 / 10_000;
+    let r = micro.0 % 10_000;
+    MicroKat((q + i64::from(r >= 5_000)).saturating_mul(10_000))
 }
 
 /// Bottom-up partial-cell ladder, 1–7 dots (8 is the full block): fills the
@@ -362,13 +383,13 @@ mod tests {
     const BOARD: &str = "https://devnet.ai.gist.rs/leaderboard";
     const ACCT: &str = "c79c93b8615af9cc25968be2d0595345d1f03790910a2605d853f93af6192fd6";
 
-    fn footer_left(left_micro: u64) -> KatFooter<'static> {
+    fn footer_left(left_micro: MicroKat) -> KatFooter<'static> {
         KatFooter {
             run_tokens: 8_791,
-            run_micro_kat: 8_791,
-            cum_micro_kat: 100_000_000 - left_micro,
-            grant_micro_kat: 100_000_000,
-            rate_micro_per_mtok: 1_000_000,
+            run_micro_kat: MicroKat(8_791),
+            cum_micro_kat: MicroKat(100_000_000 - left_micro.0),
+            grant_micro_kat: MicroKat(100_000_000),
+            rate_micro_per_mtok: MicroKat(1_000_000),
             meter_version: 1,
             charge_version: 1,
             account_hex: Some(ACCT),
@@ -378,12 +399,12 @@ mod tests {
 
     #[test]
     fn kat_display_trims_the_protocol_zeros() {
-        assert_eq!(fmt_kat_display(100_000_000), "100");
-        assert_eq!(fmt_kat_display(15_080_719), "15.08");
-        assert_eq!(fmt_kat_display(84_919_281), "84.92");
-        assert_eq!(fmt_kat_display(8_791), "0.0088");
-        assert_eq!(fmt_kat_display(500_000), "0.5");
-        assert_eq!(fmt_kat_display(0), "0");
+        assert_eq!(fmt_kat_display(MicroKat(100_000_000)), "100");
+        assert_eq!(fmt_kat_display(MicroKat(15_080_719)), "15.08");
+        assert_eq!(fmt_kat_display(MicroKat(84_919_281)), "84.92");
+        assert_eq!(fmt_kat_display(MicroKat(8_791)), "0.0088");
+        assert_eq!(fmt_kat_display(MicroKat(500_000)), "0.5");
+        assert_eq!(fmt_kat_display(MicroKat(0)), "0");
     }
 
     #[test]
@@ -396,7 +417,7 @@ mod tests {
 
     #[test]
     fn caption_rounds_as_a_pair() {
-        let out = footer_left(84_919_281).render(false);
+        let out = footer_left(MicroKat(84_919_281)).render(false);
         assert!(
             out.contains("84.92 KAT left · 15.08 of 100 burned"),
             "paired caption missing: {out}"
@@ -441,10 +462,10 @@ mod tests {
 
     #[test]
     fn color_mode_hyperlinks_the_board_label_plain_mode_spells_it() {
-        let colored = footer_left(84_919_281).render(true);
+        let colored = footer_left(MicroKat(84_919_281)).render(true);
         assert!(colored.contains("\x1b]8;;"), "no OSC-8 link: {colored:?}");
         assert!(colored.contains("(you: c79c…5345)"), "row hint missing");
-        let plain = footer_left(84_919_281).render(false);
+        let plain = footer_left(MicroKat(84_919_281)).render(false);
         assert!(plain.contains(BOARD), "plain mode must spell the URL");
         assert!(!plain.contains('\x1b'), "plain mode must be escape-free");
     }
@@ -466,7 +487,7 @@ mod tests {
         let out = KatFooter {
             account_hex: None,
             sync: SyncState::LoggedOut,
-            ..footer_left(84_919_281)
+            ..footer_left(MicroKat(84_919_281))
         }
         .render(false);
         assert!(!out.contains(BOARD));
@@ -477,11 +498,11 @@ mod tests {
     fn sync_states_render_their_story() {
         let unsynced = KatFooter {
             sync: SyncState::Unsynced {
-                micro_kat: 17_600,
+                micro_kat: MicroKat(17_600),
                 queued_batches: 1,
                 ledger_url: BOARD,
             },
-            ..footer_left(84_919_281)
+            ..footer_left(MicroKat(84_919_281))
         }
         .render(false);
         assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 mining batch(es) queued"));
@@ -489,14 +510,14 @@ mod tests {
 
         let logged_out = KatFooter {
             sync: SyncState::LoggedOut,
-            ..footer_left(84_919_281)
+            ..footer_left(MicroKat(84_919_281))
         }
         .render(false);
         assert!(logged_out.contains("local only — not logged in"));
 
         let unknown = KatFooter {
             sync: SyncState::Unknown,
-            ..footer_left(84_919_281)
+            ..footer_left(MicroKat(84_919_281))
         }
         .render(false);
         assert!(unknown.contains("reconciles at sync"));
@@ -507,10 +528,10 @@ mod tests {
     #[test]
     fn visual_print_every_state() {
         for (name, left) in [
-            ("green 84.92%", 84_919_281_u64),
-            ("amber 15.08%", 15_080_000),
-            ("red 9.02%", 9_020_000),
-            ("empty 0%", 0),
+            ("green 84.92%", MicroKat(84_919_281)),
+            ("amber 15.08%", MicroKat(15_080_000)),
+            ("red 9.02%", MicroKat(9_020_000)),
+            ("empty 0%", MicroKat(0)),
         ] {
             println!("── {name} ──");
             println!("{}", footer_left(left).render(true));
@@ -518,17 +539,17 @@ mod tests {
         println!("── unsynced (plain) ──");
         let unsynced = KatFooter {
             sync: SyncState::Unsynced {
-                micro_kat: 17_600,
+                micro_kat: MicroKat(17_600),
                 queued_batches: 1,
                 ledger_url: BOARD,
             },
-            ..footer_left(84_919_281)
+            ..footer_left(MicroKat(84_919_281))
         };
         println!("{}", unsynced.render(false));
         println!("── logged out (plain) ──");
         let out = KatFooter {
             sync: SyncState::LoggedOut,
-            ..footer_left(84_919_281)
+            ..footer_left(MicroKat(84_919_281))
         };
         println!("{}", out.render(false));
     }
@@ -542,7 +563,7 @@ mod tests {
                 ledger_url: BOARD,
             },
             SyncState::Unsynced {
-                micro_kat: 1,
+                micro_kat: MicroKat(1),
                 queued_batches: 0,
                 ledger_url: BOARD,
             },
@@ -551,7 +572,7 @@ mod tests {
         ] {
             let out = KatFooter {
                 sync: state,
-                ..footer_left(84_919_281)
+                ..footer_left(MicroKat(84_919_281))
             }
             .render(true);
             assert!(!out.contains('$'), "currency figure leaked: {out}");

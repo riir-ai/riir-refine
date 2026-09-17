@@ -54,6 +54,7 @@ use std::time::Duration;
 use crate::behavioural_equivalence::{self, Verdict};
 use crate::domain::HealEntry;
 use crate::draft::{DomainId, LatentMatcher};
+use crate::kat_footer::TOKENS_PER_MTOK;
 use crate::l4_daemon::TRAINED_INSTRUCTION;
 use crate::pruner::RustAnalyzerPruner;
 use crate::self_evolve::HealPipeline;
@@ -2129,10 +2130,12 @@ impl ArmSummary {
         self.prompt_tokens += prompt_tokens;
         self.completion_tokens += completion_tokens;
         // Cost accounting is a report figure, not a sync value — the u64 →
-        // f64 precision loss is irrelevant at token counts (< 2^32).
+        // f64 precision loss is irrelevant at token counts (< 2^32). The
+        // divisor is the TOKEN million (per-Mtok rates) — never
+        // MICRO_PER_KAT (riir-dapps Plan 035 T10).
         #[allow(clippy::cast_precision_loss)]
-        let cost = prompt_tokens as f64 / 1e6 * price_in_per_m
-            + completion_tokens as f64 / 1e6 * price_out_per_m;
+        let cost = prompt_tokens as f64 / TOKENS_PER_MTOK as f64 * price_in_per_m
+            + completion_tokens as f64 / TOKENS_PER_MTOK as f64 * price_out_per_m;
         self.cost_usd += cost;
     }
 

@@ -27,11 +27,13 @@
 
 #![cfg(feature = "kat_service")]
 
+use riir_clippy::kat_footer::TOKENS_PER_MTOK;
 use riir_clippy::kat_meter::{
     count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
     CHARGE_CHANGELOG, CHARGE_MICRO_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, METER_CHANGELOG,
     METER_VERSION,
 };
+use riir_clippy::kat_units::MicroKat;
 
 // ── G9a: purity + determinism ──────────────────────────────────────────────
 
@@ -287,10 +289,18 @@ fn g9_charge_is_deterministic_across_repeated_settles() {
 #[test]
 fn g9_charge_rate_arithmetic_matches_the_independent_mirror() {
     // Test-side mirror computed independently — pins the u128 mul-div
-    // arithmetic and the v1 identity.
+    // arithmetic and the v1 identity. The divisor is the TOKEN million
+    // (µ-per-Mtok rate × tokens ÷ tokens-per-Mtok) — TOKENS_PER_MTOK, not
+    // MICRO_PER_KAT (riir-dapps Plan 035 T10: the two millions, named).
     let mirror = |t: u64| {
-        u64::try_from((u128::from(t) * u128::from(CHARGE_MICRO_KAT_PER_MILLION_TOKENS)) / 1_000_000)
-            .unwrap_or(u64::MAX)
+        u64::try_from(
+            (u128::from(t)
+                // the rate is positive by construction — the `.0 as u128`
+                // read the newtype doc sanctions
+                * (CHARGE_MICRO_KAT_PER_MILLION_TOKENS.0 as u128))
+                / u128::from(TOKENS_PER_MTOK),
+        )
+        .unwrap_or(u64::MAX)
     };
     for t in [
         0u64,
@@ -309,7 +319,7 @@ fn g9_charge_rate_arithmetic_matches_the_independent_mirror() {
             "rate arithmetic diverged at {t}"
         );
     }
-    // v1 pin: the rate IS 1 KAT per token — identity for every input.
-    assert_eq!(CHARGE_MICRO_KAT_PER_MILLION_TOKENS, 1_000_000);
+    // v1 pin: the rate IS 1 KAT per MILLION tokens — identity for every input.
+    assert_eq!(CHARGE_MICRO_KAT_PER_MILLION_TOKENS, MicroKat(1_000_000));
     assert_eq!(kat_for_tokens(123_456_789), 123_456_789);
 }

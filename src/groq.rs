@@ -84,6 +84,8 @@
 
 use std::time::Duration;
 
+use crate::kat_footer::TOKENS_PER_MTOK;
+
 /// Mirrors `cf_workers_ai::REASONING_OVERFLOW` (same string, defined locally
 /// so this module compiles under `groq_first` alone). Drift is pinned by
 /// `the_overflow_prefix_matches_cf_clients` (both-features only).
@@ -996,8 +998,10 @@ pub mod router {
         price_in_per_m: f64,
         price_out_per_m: f64,
     ) -> f64 {
-        prompt_tokens as f64 / 1_000_000.0 * price_in_per_m
-            + completion_tokens as f64 / 1_000_000.0 * price_out_per_m
+        // The TOKEN million (per-Mtok rates) — never MICRO_PER_KAT
+        // (riir-dapps Plan 035 T10).
+        prompt_tokens as f64 / TOKENS_PER_MTOK as f64 * price_in_per_m
+            + completion_tokens as f64 / TOKENS_PER_MTOK as f64 * price_out_per_m
     }
 
     /// The ledger row's `providers` block: `groq` + `infron` sub-blocks

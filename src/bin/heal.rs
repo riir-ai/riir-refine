@@ -1067,6 +1067,7 @@ fn run_kat_login(import_key: Option<&Path>) {
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     use riir_clippy::kat_account::{history_lines, KatAccount};
     use riir_clippy::kat_meter::{ChargeState, KAT_WARN_REMAINING};
+    use riir_clippy::kat_units::MicroKat;
 
     let dir = KatAccount::default_dir();
     let account = match KatAccount::load(&dir) {
@@ -1105,16 +1106,16 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // Issue 081: the grant projection is the meter CONSTANT now — the
     // canonical record no longer carries a grant_kat field (it was never
     // mutated after first write, so the constant IS the projection).
+    // Plan 035 T3: the projection math runs in MicroKat — µ/whole mixing
+    // needs an explicit conversion to compile.
     let grant = riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT;
     match &charge {
         Some(charge) => {
-            let remaining = grant.saturating_sub(charge.charged_kat);
-            let kat = |micro: u64| {
-                riir_clippy::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
-            };
+            let remaining = grant.saturating_sub(MicroKat::from(charge.charged_kat));
+            let kat = |micro: MicroKat| riir_clippy::kat_payreq_client::render_kat(micro.0);
             println!(
                 "local burn:          {} charged this repo ({} tokens, watermark {})",
-                kat(charge.charged_kat),
+                kat(MicroKat::from(charge.charged_kat)),
                 charge.meter_watermark_tokens,
                 charge.meter_watermark_tokens
             );
@@ -1123,8 +1124,11 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 kat(remaining),
                 kat(grant)
             );
-            if remaining <= KAT_WARN_REMAINING {
-                println!("kat: WARN balance ≤ {} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)", kat(KAT_WARN_REMAINING));
+            if remaining <= MicroKat::from(KAT_WARN_REMAINING) {
+                println!(
+                    "kat: WARN balance ≤ {} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)",
+                    kat(MicroKat::from(KAT_WARN_REMAINING))
+                );
             }
         }
         None => {
@@ -1277,9 +1281,11 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 }
             }
             // The offline fallback — T0.2's local earned/spent view, which
-            // is honest about being a per-repo projection.
+            // is honest about being a per-repo projection. The grant is the
+            // µ constant, positive by construction — the `.0 as u64` read
+            // the newtype doc sanctions (the fn takes raw µ).
             None => {
-                for line in history_lines(grant, spent, tokens) {
+                for line in history_lines(grant.0 as u64, spent, tokens) {
                     println!("{line}");
                 }
             }
@@ -9913,6 +9919,8 @@ fn main() {
     // authority); the figures render in the kat_footer block below.
     #[cfg(feature = "kat_service")]
     if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_mut()) {
+        use riir_clippy::kat_units::MicroKat;
+
         c.settle(m.state());
         if let Err(e) = c.save() {
             eprintln!(
@@ -9920,11 +9928,12 @@ fn main() {
                 c.path().display()
             );
         }
-        let remaining = c.balance_projection();
-        let kat = |micro: u64| {
-            riir_clippy::kat_payreq_client::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
-        };
-        if remaining == 0 {
+        // Plan 035 T3: the projection renders in MicroKat — the µ constant
+        // passes to the renderer with no conversion, and a whole-KAT count
+        // reaching this closure is a compile error.
+        let remaining = MicroKat::from(c.balance_projection());
+        let kat = |micro: MicroKat| riir_clippy::kat_payreq_client::render_kat(micro.0);
+        if remaining.0 == 0 {
             // §KAT warn-and-pay (T1.6), as amended by the 075 soft gate:
             // at 0 the evolved-corpus hot-push pauses at epoch end + the
             // persistent warning fires — mining accrual/settlement CONTINUE.
@@ -10149,6 +10158,8 @@ fn main() {
     // crossing — by design, not a stuck delta).
     #[cfg(feature = "kat_service")]
     if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_ref()) {
+        use riir_clippy::kat_units::MicroKat;
+
         let account = riir_clippy::kat_account::KatAccount::load(
             &riir_clippy::kat_account::KatAccount::default_dir(),
         )
@@ -10190,7 +10201,11 @@ fn main() {
                 }
             } else {
                 riir_clippy::kat_footer::SyncState::Unsynced {
-                    micro_kat: (pushable_wire - ack.burn_kat_total).saturating_mul(wire),
+                    // The whole-KAT gap → µ at the ONE µ-per-whole-KAT factor
+                    // (explicit conversion — Plan 035 T3).
+                    micro_kat: MicroKat::from(
+                        (pushable_wire - ack.burn_kat_total).saturating_mul(wire),
+                    ),
                     queued_batches: 0,
                     ledger_url: &ledger_url,
                 }
@@ -10204,8 +10219,8 @@ fn main() {
         };
         let footer = riir_clippy::kat_footer::KatFooter {
             run_tokens: m.session_tokens(),
-            run_micro_kat: c.session_kat(),
-            cum_micro_kat: c.state().charged_kat,
+            run_micro_kat: MicroKat::from(c.session_kat()),
+            cum_micro_kat: MicroKat::from(c.state().charged_kat),
             grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
             rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
             meter_version: m.state().version,

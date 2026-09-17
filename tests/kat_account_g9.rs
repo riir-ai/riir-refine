@@ -85,7 +85,7 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     assert!(first.summary_lines().iter().any(|l| {
         l.contains("grant projection")
             && l.contains(&riir_clippy::kat_payreq_client::render_kat(
-                i64::try_from(FREE_TIER_GRANT_MICRO_KAT).unwrap_or(i64::MAX),
+                FREE_TIER_GRANT_MICRO_KAT.0,
             ))
     }));
 
@@ -140,16 +140,79 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     let persisted: ChargeState = serde_json::from_str(&text).unwrap();
     assert_eq!(persisted.charged_kat, tokens, "1 KAT/token at the v1 rate");
 
-    // Issue 081: the grant projection is the meter constant (G9d).
+    // Issue 081: the grant projection is the meter constant (G9d). The
+    // composition math runs in MicroKat — µ/whole mixing needs an explicit
+    // conversion to compile (riir-dapps Plan 035 T3).
     let grant = FREE_TIER_GRANT_MICRO_KAT;
-    let remaining = grant.saturating_sub(persisted.charged_kat);
-    assert_eq!(remaining, FREE_TIER_GRANT_MICRO_KAT - tokens);
+    let remaining = grant.saturating_sub(riir_clippy::kat_units::MicroKat::from(
+        persisted.charged_kat,
+    ));
+    assert_eq!(
+        remaining,
+        grant - riir_clippy::kat_units::MicroKat::from(tokens)
+    );
     // And the ledger files are distinct roots by design: the account is
     // machine-global, the charge is repo-local.
     assert_ne!(
         account.dir(),
         repo_dir.join(".heal"),
         "account (identity) and charge (per-repo burn) live in different roots"
+    );
+}
+
+// ── L4 (riir-dapps Plan 035 T6, client half): the display VALUE pin ────────
+
+/// Parse a `render_kat` shape ("100.000000 KAT") back to µ — the value half
+/// of the L4 pin. Independent of the renderer (string split + decimal
+/// parse), so a renderer bug cannot validate itself.
+fn parse_kat_micro(rendered: &str) -> Option<i64> {
+    let (amount, unit) = rendered.split_once(' ')?;
+    if unit != "KAT" {
+        return None;
+    }
+    let (whole, frac) = match amount.split_once('.') {
+        Some((w, f)) => (w, f),
+        None => (amount, ""),
+    };
+    if !frac.is_empty() && frac.len() != 6 {
+        return None;
+    }
+    if !frac.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let whole: i64 = whole.parse().ok()?;
+    let frac_micro: i64 = if frac.is_empty() { 0 } else { frac.parse().ok()? };
+    let per_kat = i64::try_from(riir_clippy::kat_units::MICRO_PER_KAT).ok()?;
+    whole
+        .checked_mul(per_kat)?
+        .checked_add(frac_micro)
+}
+
+/// L4 value-level pin (riir-dapps Plan 035 T6, client half). The g9d pin
+/// above is COUPLING-only: it asserts the line contains
+/// `render_kat(FREE_TIER_GRANT_MICRO_KAT)` and so passes at ANY constant
+/// value — the exact blind spot Plan 035 L7 names. This pin holds the
+/// VALUE: the client's rendered grant string is the committed
+/// "100.000000 KAT" the dao and dapps twins pin on their side, AND it
+/// parses back to exactly 100_000_000 µ — the 10⁸ × 10⁶ coincidence
+/// cannot survive string equality AND value equality together.
+#[test]
+fn l4_free_tier_grant_display_pins_string_and_value() {
+    let rendered = riir_clippy::kat_payreq_client::render_kat(FREE_TIER_GRANT_MICRO_KAT.0);
+    assert_eq!(
+        rendered, "100.000000 KAT",
+        "the free-tier grant display drifted from the committed cross-repo string"
+    );
+    let micro = parse_kat_micro(&rendered).expect("the pinned display shape parses");
+    assert_eq!(micro, 100_000_000, "the rendered grant must read back 10⁸ µ");
+    assert_eq!(micro, FREE_TIER_GRANT_MICRO_KAT.0);
+    // The µ→whole-KAT reading is exact at this value (the WholeKat contract).
+    assert_eq!(FREE_TIER_GRANT_MICRO_KAT.to_whole().map(|w| w.0), Some(100));
+    // The footer's trimmed reading of the SAME constant agrees ("100" — the
+    // other client display of the grant, the fuel-gauge caption).
+    assert_eq!(
+        riir_clippy::kat_footer::fmt_kat_display(FREE_TIER_GRANT_MICRO_KAT),
+        "100"
     );
 }
 

@@ -48,6 +48,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::kat_footer::TOKENS_PER_MTOK;
+
 /// The daily-cap default (Proposal 005 §Window gates, 2026-08-26).
 pub const DEFAULT_LLM_DAILY_CAP_USD: f64 = 1.0;
 
@@ -208,9 +210,13 @@ pub fn worst_case_usd(
     let p = price_for(model_id).ok_or_else(|| SpendError::UnknownModel(model_id.to_string()))?;
     // Pricing math is a report/bound figure, not a sync value — the u64 → f64
     // precision loss is irrelevant at token counts (< 2^32; the ArmSummary
-    // cost-column precedent).
+    // cost-column precedent). The divisor is the TOKEN million (per-Mtok
+    // rates) — never MICRO_PER_KAT (riir-dapps Plan 035 T10).
     #[allow(clippy::cast_precision_loss)]
-    Ok((est_in_tokens as f64 * p.input_per_m + max_tokens as f64 * p.output_per_m) / 1e6)
+    Ok(
+        (est_in_tokens as f64 * p.input_per_m + max_tokens as f64 * p.output_per_m)
+            / TOKENS_PER_MTOK as f64,
+    )
 }
 
 /// The cap was reached — terminal for the rest of the UTC day. The caller
