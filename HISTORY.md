@@ -1,5 +1,104 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Plan 035 wave 2 (T3/T10/T6-client/T12): the client becomes a typed µ consumer + the ×1_000_000 grep gate
+
+riir-dapps Plan 035 wave-2 tasks, executed in this repo (work ONLY here;
+sibling agents landed riir-kat wave 1 `89e31f2` and run riir-dapps/riir-dao
+concurrently).
+
+**T3 — surgical `MicroKat` adoption.** Wave 1 retyped
+`FREE_TIER_GRANT_MICRO_KAT` / `CHARGE_MICRO_KAT_PER_MILLION_TOKENS` to
+`MicroKat` in riir-kat, which broke 15 compile sites here (9 in the
+`cargo-heal` bin at the kat set, 6 in the kat g9 test suites) — the
+compatible-consumer posture was already red. The adoption makes the client
+TYPED, not just compatible:
+- `src/kat_footer.rs` — the footer is now the repo's unit-vocabulary
+  module: all four money fields (`run_micro_kat`, `cum_micro_kat`,
+  `grant_micro_kat`, `rate_micro_per_mtok`) and
+  `SyncState::Unsynced::micro_kat` carry `MicroKat`; `fmt_kat_display` and
+  `round_kat_2dp` take/return `MicroKat` (a whole-KAT count passed by
+  mistake is a compile error, not a 10⁶×-wrong display); the display
+  divide uses `MICRO_PER_KAT as f64`, never the bare `1e6`.
+- `src/bin/heal.rs` — `run_kat_account`'s grant projection math, the
+  end-of-run kat-charge warn path, and the footer construction all run in
+  `MicroKat`; the µ constants flow into the footer with NO conversion (the
+  point of the type). The whole-KAT wire delta converts explicitly at the
+  µ boundary (`MicroKat::from(whole.saturating_mul(WIRE_PER_CHARGE_UNITS))`).
+  Direct wire→render passes (claim/balance/ack renders, the soft-gate
+  inputs) stay raw by design — no unit decision is made there, and the
+  riir-kat signatures they feed are unchanged.
+- `src/lib.rs` — the `kat_units` root re-export moved from the
+  `kat_service` cfg to UNGATED: the vocabulary is feature-free by
+  construction (kat_units' own module doc), and the ungated footer is now
+  a consumer (the machine-local trio's posture).
+- Tests repaired: `tests/kat_account_g9.rs` (the g9d coupling pin STAYS,
+  per the plan; the composition test now runs `MicroKat` math),
+  `tests/kat_meter_g9.rs` (the independent rate mirror divides by
+  `TOKENS_PER_MTOK`; the v1 pin compares `MicroKat(1_000_000)`).
+
+**T6 client half — the L4 value-level display pin** (`tests/kat_account_g9.rs::
+l4_free_tier_grant_display_pins_string_and_value`): the g9d pin is
+COUPLING-only (it passes at any constant value — the L7 blind spot); this
+pin holds the VALUE. The client's rendered grant string must equal the
+committed `"100.000000 KAT"` (the same string the dao and dapps twins pin)
+AND parse back — through an independent string-split decimal parser — to
+exactly 100_000_000 µ, with the whole-KAT reading exact (`to_whole() ==
+Some(100)`) and the footer's trimmed reading (`"100"`) agreeing. The
+10⁸ × 10⁶ coincidence cannot survive string AND value equality together.
+
+**T10 clippy half — the anonymous-million grep gate**
+(`tests/micro_literal_gate.rs`, 10 tests, default features): scans every
+tracked `src/**/*.rs` for bare `1_000_000`/`1000000`/`1e6` (plus suffixed
+integer forms) after structurally stripping comments, string/raw-string/char
+literals, and `#[cfg(test)] mod` bodies. A literal on a line NAMING its
+constant is that constant's definition/pin — the gate bans the ANONYMOUS
+million. **The two-millions subtlety is encoded, not explained**:
+`TOKENS_PER_MTOK: u64 = 1_000_000` now lives in `kat_footer.rs` beside the
+`MICRO_PER_KAT` re-export (same value, different dimension — the token
+million prices per-Mtok; the money million converts µ↔KAT), and the four
+per-Mtok pricing sites converted to it: `src/groq.rs` `avoided_usd` (2),
+`src/llm_spend.rs` `worst_case_usd` (1), `src/cf_workers_ai.rs` cost
+accounting (2), `src/bin/fixer_regate.rs` neuron cross-check (2). The µ
+site (`kat_footer.rs::fmt_kat_display`) converted to `MICRO_PER_KAT`.
+**First-run finding count: 8 anonymous millions in non-test src** (the
+sites above) — all converted; the allowlist holds the honest remainder:
+`src/domains/rust_perf/corpus/entries_0*.rs` (mined perf-rule corpus:
+benchmark input-size ladders, not money), `src/domains/rust_perf/bench.rs`
+(1_000_000 ns = the 1 ms sample target — a TIME),
+`src/domains/kernel_opt/corpus/tests.rs` (f32 probe magnitudes). The gate
+asserts BOTH directions: ≥10 real findings must exist (a green zero is a
+broken lexer, not a pass), every allowlist row must still match a file AND
+still carry findings, planted-fixture arms prove the scanner fires on all
+four million costumes and stays quiet on comments/strings/raw
+strings/lifetimes/cfg-test bodies, and the sneaky-comment arm proves a
+trailing `// TOKENS_PER_MTOK` does NOT save an anonymous literal.
+
+**Latent pre-existing finding surfaced by the repair** (not caused by this
+work, left for its owner): at a kat set WITHOUT `kat_transport`,
+`src/bin/kat_info/mod.rs::wallet_lines`/`receipts_line` are dead code
+(their only caller, `network_sections`, is `#[cfg(feature =
+"kat_transport")]`) — the wave-1 compile errors had masked the lint. The
+validation set here includes `kat_transport` (the touched Unsynced-delta
+code lives behind it), where the pair is reachable and clippy is green.
+
+**Validation** (all `CARGO_TARGET_DIR=/tmp/plan035_clippy`): `cargo clippy
+--all-targets -- -D warnings` — 0 findings at default features AND at
+`latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport`; `cargo
+test` at default features — 1868 passed / 0 failed across 34 suites
+(baseline measured before any edit: 1858 / 0 across 33 — the delta is
+exactly the new gate's 10 tests); kat g9 suites 7 + 11 passed incl. the L4
+pin; the transport e2e suites over the touched paths — kat_burn_stack 3,
+kat_soft_gate_cli 1, kat_refill_cli 5, kat_issue088_cross_repo_pins 13,
+kat_pending_estimator_g4 1, kat_sync_payload_g4 21, kat_meter_g2_alloc 22,
+kat_redact_g4 6, kat_seed_corpus_printer 1, kat_redact_t32_external 11 —
+all passed.
+
+**Registry note for the wave-2 report:** one new money-ADJACENT constant,
+`riir-clippy src/kat_footer.rs TOKENS_PER_MTOK: u64 = 1_000_000` (the
+TOKEN million — dimension: tokens/Mtok; NOT the µKAT conversion) — the
+riir-kat `tests/unit_registry.rs` workspace registry grows this row
+elsewhere.
+
 ## 2026-09-17 — Bench 094 wave 4: the third default-eco extension (501 → 663 clean crates, flip 110/442 → 129/442) + the dead cross-wave base-dedup found by audit
 
 Plan 140 executed the Extend protocol's third run (the Plan-139 handoff's
