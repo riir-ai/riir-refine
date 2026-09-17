@@ -108,6 +108,28 @@
 
 ## Post-mining intake (compact — full records in `.research/108_mining_queue_snapshot_history.md`)
 
+> **INTAKE 2026-09-18 (divergence class, from the riir-ai Issue-973 session — test-module-only usage gets its import at FILE scope):**
+> healing mechanical findings in `crates/riir-games-mmorpg/src/item_catalog.rs`
+> (the touched-file sweep riding `1a500b256`), the healer's format-args fix for
+> a `write!` call inside `mod deploy_tests` inserted `use std::fmt::Write;` at
+> FILE scope — the only usage lives under `#[cfg(test)]`, so in every non-test
+> compilation the import is an `unused_imports` WARNING: the healer's own
+> `--verify` compile gate passes it (a check-shaped gate proves compilation,
+> not warning-cleanliness) and the repo's clippy `-D warnings` lane reds.
+> Hand-repaired in the same session (the import moved into the test module —
+> the shipped form is `use std::fmt::Write as _;` inside `deploy_tests`).
+> **Improvement shape:** when a mechanical edit needs an import to satisfy a
+> usage, place the `use` in the INNERMOST scope containing the usage — for a
+> `#[cfg(test)]`-module usage that is the test module, never the file root;
+> the file-scope placement is the exact shape that converts a passing
+> compile-gate into a failing `-D warnings` lane. Related standing rule this
+> confirms: the gate's compile verdict is not a lint-clean verdict (the
+> Issue-115 `--verify-args` lane and the cfg-audit report are the other faces
+> of that boundary). Priority: MEDIUM (every test-module `write!`/`writeln!`
+> fix is exposed; the modifier is small and scope-insertion is syn-visible).
+> Evidence: riir-ai `1a500b256` `item_catalog.rs` (`deploy_tests`), hand-move
+> recorded in the session summary.
+
 > **STAGED 2026-09-17 (distill verdict — the dial9-rs "Principles for fast Tokio
 > applications" blog, re-graded YES B− under owner challenge; [Research 179](../.research/179_dial9_tokio_principles_distill.md)
 > / [Plan 142](../.plans/142_batch152_dial9_tokio_distill.md)):** next rust_perf
