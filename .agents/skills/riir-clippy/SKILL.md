@@ -109,6 +109,13 @@ until the claims clear.
    - G1: parse/syn check (all new rules)
    - G2: lib tests pass
    - G3: no-regression — clippy 0 in BOTH feature states + CI guard
+   - **freeze-table regeneration (clippy-corpus batches, plan 137 T7.5):**
+     any `build_seed_corpus()` delta moves the deterministic stride windows —
+     regenerate the gen2/gen3 freeze tables in the SAME batch (the
+     `#[ignore]`d `generation_v2_freeze`/`generation_v3_freeze` e2e, which
+     spawn real clippy; labels/exclusions land as data) — the freeze-status
+     gates red on develop by design until then. Record paragraphs:
+     `src/score_bench/generations.rs`.
    - **retrieval-precision re-measure (Issue 017, kernel batches):** run
      `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN cargo test --features
      kernel_heal,latent_retrieval --lib retrieval -- --nocapture` (~1 min) —

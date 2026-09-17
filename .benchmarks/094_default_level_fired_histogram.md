@@ -1,6 +1,6 @@
 # Bench 094 — the default-level fired histogram (Issue 119's T4 successor)
 
-**Status:** RECORD — landed 2026-09-17 (data + corpus_coverage join + 3 new tests; lib 1694/0)
+**Status:** RECORD — landed 2026-09-17 (data + corpus_coverage join + 3 new tests; lib 1694/0); **wave-2 extension same-day** (§Extend executed — 342 clean crates, 145 distinct lints, flip 74/448 → 94/442)
 
 ## The question
 
@@ -159,6 +159,64 @@ questions and are both needed; neither substitutes for the other.
   the write set. Score-bench not run: no proposer or corpus entry changed —
   the fixture corpus and drafting are untouched, so flatness is by
   construction.
+
+## Extend executed — wave 2 (2026-09-17, same day)
+
+The Extend protocol ran its first extension the day it was written. The
+driver is now TRACKED (`scripts/sample_default_fired_histogram.py` — sample /
+retally / merge subcommands; wave 1's `.tmp_run_clippy.py` throwaway is
+retired). Wave 2 sampled the ADJACENT rank bands (pages 12/32/52/77/97 →
+ranks 1101-1200, 3101-3200, 5101-5200, 7601-7700, 9601-9700), same filters,
+same pinned toolchain (clippy 0.1.98).
+
+**Dataset: `.benchmarks/data/094_t02/manifest.json` = waves 1+2 merged**
+(population 380 sampled / **342 compiled-clean** / 37 compile_error / 1
+timeout / **1334 warnings / 145 distinct lints**; `dataset_blake3
+9eaab0cd57f7313613a5c4c5ba06613434ca72bf26ae942d75815536b4983591`; the
+blake3 is over the manifest's canonical JSON minus the field itself,
+definition pinned in the generator string). Wave-1 verdicts carried
+byte-identical; `094_t01` stays as the dated wave-1 record. Merge math is
+exact because the crate sets are disjoint after dedup (count/spread add per
+lint). Loader repointed (`load_default_fired_histogram` REL → `094_t02`).
+
+**Coverage-report flip: 74 of 448 → 94 of 442** default-firing uncovered
+lints now carry evidence. Post-merge head (count/spread):
+`missing_safety_doc` 130/4, `manual_range_contains` 121/5, **`needless_borrow`
+53/20 (the widest-spread row — the robust head)**, `useless_conversion` 53/10,
+`legacy_numeric_constants` 48/11, `doc_overindented_list_items` 42/10,
+`doc_lazy_continuation` 27/9 — the Batch-151 pair now carries 10- and 9-crate
+spread respectively, the strongest multi-crate validation that port has.
+New mining-grade rows wave 2 surfaced: `needless_lifetimes` 25/9,
+`unnecessary_map_or` 24/6 (now corpus-covered — Batch 150),
+`useless_borrows_in_formatting` 12+23=35/17 combined, `len_zero` 18/8,
+`tabs_in_doc_comments` 12/4.
+
+### Two measurement incidents, both caught before any number was used
+
+1. **The parser bug**: cargo's JSON carries the diagnostic under
+   `message`, not `msg` — the first parse tallied ZERO lints across all ok
+   crates. Caught by the known-dirty control (`akin-0.4.0`, 3 warnings in
+   wave 1, 0 in wave 2 — impossible). Recovery was cheap because cargo
+   REPLAYS cached diagnostics on a warm target dir (verified on the
+   control): a `retally` subcommand re-ran all rows against the warm
+   per-worker target dirs in ~10 min, no rebuilds. **A sampler without a
+   known-dirty control is a sampler that can silently report a clean
+   ecosystem.**
+2. **The resume-key bug**: the resume skip compared the BARE crate name
+   against versioned row keys (`name` vs `name-version`) — never matched,
+   so the second invocation re-measured 122 already-measured crates. Caught
+   by the concentration table printing each crate TWICE. The merge now
+   dedups keep-first (duplicate measurements never double-count); the 122
+   replay pairs agreed 119/122 — the 3 disagreements are heavy-crate
+   boundary flapping (`chromiumoxide` timeout↔ok, `solana-runtime` and
+   `sc-network-gossip` compile_error↔timeout; keep-first kept the
+   conservative verdict each time). Rank drift also moved the interleave
+   cut between the two fetches — the population is the 180-crates union,
+   recorded in the manifest's `selection_rule` + meta note.
+
+Wave-2 standalone facts (180 unique crates, 158 ok): 573 warnings, 85
+distinct lints, 50/158 dirty — the wave-1 shape (median 0 warnings/crate,
+thin head) replicates at +80% population. The extend floor held: 342 ≫ 150.
 
 ## Extend protocol
 

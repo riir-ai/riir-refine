@@ -1,0 +1,302 @@
+{"exit_code": 0, "lints": {"byte_char_slices": 3, "identity_op": 2, "len_zero": 1, "manual_is_multiple_of": 2, "needless_range_loop": 4}, "name": "binascii-0.1.4", "stderr_tail": "", "verdict": "ok", "wall_s": 24.2, "warnings": 12}
+{"exit_code": 0, "lints": {}, "name": "derive-where-1.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 44.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "proconio-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 25.3, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_range_loop": 1, "useless_borrows_in_formatting": 1}, "name": "wol-rs-1.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 38.7, "warnings": 2}
+{"exit_code": 0, "lints": {}, "name": "pix-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 4.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "fehler-1.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 42.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "test-log-0.2.21", "stderr_tail": "", "verdict": "ok", "wall_s": 41.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "derive_pod-0.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 3.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "better_io-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 0}
+{"exit_code": 0, "lints": {"clone_on_copy": 1, "collapsible_match": 1, "needless_borrow": 3, "question_mark": 1, "redundant_closure": 1, "unnecessary_unwrap": 1, "useless_conversion": 1, "wrong_self_convention": 6}, "name": "chrono-english-0.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 25.2, "warnings": 15}
+{"exit_code": 0, "lints": {"sliced_string_as_bytes": 7}, "name": "path-tree-0.8.3", "stderr_tail": "", "verdict": "ok", "wall_s": 20.2, "warnings": 7}
+{"exit_code": 0, "lints": {"empty_line_after_doc_comments": 2, "identity_op": 2, "len_zero": 4, "manual_div_ceil": 3, "manual_is_multiple_of": 3, "manual_range_contains": 1, "needless_borrow": 3, "needless_lifetimes": 2, "redundant_field_names": 3, "unnecessary_cast": 1}, "name": "repng-0.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 9.2, "warnings": 24}
+{"exit_code": 0, "lints": {}, "name": "unit-prefix-0.5.2", "stderr_tail": "", "verdict": "ok", "wall_s": 3.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "build-data-0.3.3", "stderr_tail": "", "verdict": "ok", "wall_s": 111.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "remain-0.2.16", "stderr_tail": "", "verdict": "ok", "wall_s": 118.8, "warnings": 0}
+{"exit_code": 0, "lints": {"from_over_into": 1}, "name": "lettre_email-0.9.4", "stderr_tail": "", "verdict": "ok", "wall_s": 154.2, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "arrow-csv-60.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 152.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "mysql-common-derive-0.32.2", "stderr_tail": "", "verdict": "ok", "wall_s": 31.3, "warnings": 0}
+{"exit_code": 0, "lints": {"cast_abs_to_unsigned": 12, "legacy_numeric_constants": 8}, "name": "muldiv-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 18.5, "warnings": 20}
+{"exit_code": 0, "lints": {"needless_borrow": 1, "unnecessary_lazy_evaluations": 2}, "name": "btparse-0.2.0", "stderr_tail": "                                                    ^^^^^^^^^\n    |\nhelp: to change the binary name to `kat-drain`, convert `bin.name`\n   --> E:\\git\\riir-clippy\\Cargo.toml:774:8\n    |\n774 - name = \"kat_drain\"\n774 + name = \"kat-drain\"\n    |\n", "verdict": "ok", "wall_s": 3.1, "warnings": 3}
+{"exit_code": 0, "lints": {}, "name": "ascii-canvas-4.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "panic-halt-1.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "sp-transaction-pool-43.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 262.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "local-channel-0.1.5", "stderr_tail": "", "verdict": "ok", "wall_s": 5.0, "warnings": 0}
+{"exit_code": 0, "lints": {"chunks_exact_to_as_chunks": 1}, "name": "wyhash-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.8, "warnings": 1}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 10, "doc_overindented_list_items": 4, "missing_safety_doc": 93, "needless_lifetimes": 1, "too_many_arguments": 2}, "name": "wasix-0.13.2", "stderr_tail": "", "verdict": "ok", "wall_s": 3.7, "warnings": 110}
+{"exit_code": 0, "lints": {}, "name": "proc-exit-2.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 27.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-mongolian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 29.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cow-utils-0.1.3", "stderr_tail": "", "verdict": "ok", "wall_s": 15.3, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_abs_diff": 1}, "name": "arraydeque-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 4.4, "warnings": 1}
+{"exit_code": 0, "lints": {"manual_rotate": 2}, "name": "cityhasher-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.5, "warnings": 2}
+{"exit_code": 0, "lints": {}, "name": "deno_config-0.109.0", "stderr_tail": "", "verdict": "ok", "wall_s": 167.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ruzstd-0.9.0", "stderr_tail": "", "verdict": "ok", "wall_s": 37.2, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_borrows_in_formatting": 1}, "name": "tauri-bundler-2.9.4", "stderr_tail": "", "verdict": "ok", "wall_s": 175.1, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "mysql-28.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 107.4, "warnings": 0}
+{"exit_code": 0, "lints": {"derivable_impls": 2, "identity_op": 1, "needless_borrow": 2, "unnecessary_mut_passed": 2}, "name": "expander-2.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 12.5, "warnings": 7}
+{"exit_code": 101, "lints": {}, "name": "iai-callgrind-0.16.1", "stderr_tail": "error: could not compile `iai-callgrind` (build script) due to 1 previous error; 1 warning emitted\n", "verdict": "compile_error", "wall_s": 4.4, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_borrows_in_formatting": 1}, "name": "rusqlite_migration-2.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.8, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "tango-bench-0.8.0", "stderr_tail": "", "verdict": "ok", "wall_s": 52.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "gif-dispose-6.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 13.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "validator-0.21.0", "stderr_tail": "", "verdict": "ok", "wall_s": 33.5, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_return": 4}, "name": "winutil-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 15.2, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "wasmtime-internal-cache-48.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 83.1, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_as_bytes": 2}, "name": "deunicode-1.6.2", "stderr_tail": "", "verdict": "ok", "wall_s": 5.7, "warnings": 2}
+{"exit_code": 0, "lints": {"question_mark": 5}, "name": "aws-sdk-resourcegroups-1.115.0", "stderr_tail": "", "verdict": "ok", "wall_s": 213.5, "warnings": 5}
+{"exit_code": 0, "lints": {}, "name": "piston-float-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "png_pong-0.12.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.8, "warnings": 0}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 3, "manual_next_back": 1, "needless_maybe_sized": 1, "needless_return": 1, "non_canonical_clone_impl": 1, "unnecessary_mut_passed": 1}, "name": "loom-0.7.2", "stderr_tail": "", "verdict": "ok", "wall_s": 45.4, "warnings": 8}
+{"exit_code": 0, "lints": {"map_identity": 1}, "name": "pom-3.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 16.8, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "tower-sessions-sqlx-store-0.15.0", "stderr_tail": "", "verdict": "ok", "wall_s": 164.8, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "harfbuzz-sys-0.8.0", "stderr_tail": " check documentation of the freetype-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 33.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bitmask-0.5.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.8, "warnings": 0}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 1, "needless_borrow": 1, "needless_lifetimes": 2}, "name": "rayon-scan-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 9.6, "warnings": 4}
+{"exit_code": 0, "lints": {"for_kv_map": 2}, "name": "burn-train-0.21.0", "stderr_tail": "", "verdict": "ok", "wall_s": 150.0, "warnings": 2}
+{"exit_code": 0, "lints": {"manual_next_back": 1, "non_canonical_clone_impl": 1, "non_canonical_partial_ord_impl": 1, "useless_conversion": 5}, "name": "smartstring-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 23.9, "warnings": 8}
+{"exit_code": 0, "lints": {}, "name": "swc_ecma_codegen_macros-2.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 28.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-latvian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 12.9, "warnings": 0}
+{"exit_code": null, "lints": {}, "name": "chromiumoxide-0.9.1", "stderr_tail": "", "verdict": "timeout", "wall_s": 480.5, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "dispatch2-0.3.1", "stderr_tail": "error: could not compile `objc2` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 5.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cargo-credential-0.4.10", "stderr_tail": "", "verdict": "ok", "wall_s": 18.1, "warnings": 0}
+{"exit_code": 0, "lints": {"inherent_to_string": 2, "useless_format": 2}, "name": "chic-1.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "http-serde-ext-1.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 38.9, "warnings": 0}
+{"exit_code": 0, "lints": {"elidable_lifetime_names": 2, "ignored_unit_patterns": 2, "non_minimal_cfg": 1, "uninlined_format_args": 6}, "name": "qoi-0.4.1", "stderr_tail": "", "verdict": "ok", "wall_s": 3.5, "warnings": 11}
+{"exit_code": 101, "lints": {}, "name": "solana-runtime-4.2.2", "stderr_tail": "mic\" \"--libdir=lib\" \"no-md2\" \"no-rc5\" \"no-weak-ssl-ciphers\" \"no-camellia\" \"no-idea\" \"no-seed\" \"no-capieng\" \"VC-WIN64A\"\n      Exit status: exit code: 2\n\n\n      \n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 448.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-program-memory-3.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.9, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "sc-network-gossip-0.59.0", "stderr_tail": "l\" \"--openssldir=SYS$MANAGER:[OPENSSL]\" \"no-shared\" \"no-module\" \"no-tests\" \"no-comp\" \"no-zlib\" \"no-zlib-dynamic\" \"--libdir=lib\" \"no-ssl3\" \"no-md2\" \"no-rc5\" \"no-weak-ssl-ciphers\" \"no-camellia\" \"no-idea\" \"no-seed\" \"no-capieng\" \"VC-WIN64A\"\n\n\n\n", "verdict": "compile_error", "wall_s": 436.4, "warnings": 0}
+{"exit_code": 0, "lints": {"collapsible_if": 1, "doc_lazy_continuation": 3, "doc_overindented_list_items": 2, "len_zero": 1, "map_clone": 1, "redundant_field_names": 3}, "name": "interval-heap-0.0.5", "stderr_tail": "", "verdict": "ok", "wall_s": 1.6, "warnings": 11}
+{"exit_code": 0, "lints": {}, "name": "winter-utils-0.13.1", "stderr_tail": "", "verdict": "ok", "wall_s": 11.1, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_range_contains": 108}, "name": "num-cmp-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 18.1, "warnings": 108}
+{"exit_code": 0, "lints": {"test_attr_in_doctest": 1}, "name": "concat-idents-1.1.5", "stderr_tail": "", "verdict": "ok", "wall_s": 31.9, "warnings": 1}
+{"exit_code": 101, "lints": {}, "name": "user32-sys-0.2.0", "stderr_tail": "inapi`\n\nCaused by:\n  unable to update E:\\git\\riir-clippy\\.raw\\b094\\scratch\\extract\n\nCaused by:\n  failed to read `E:\\git\\riir-clippy\\.raw\\b094\\scratch\\extract\\Cargo.toml`\n\nCaused by:\n  The system cannot find the file specified. (os error 2)\n", "verdict": "compile_error", "wall_s": 1.4, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "unwinding-0.2.10", "stderr_tail": "help: to change the binary name to `kat-drain`, convert `bin.name`\n   --> E:\\git\\riir-clippy\\Cargo.toml:774:8\n    |\n774 - name = \"kat_drain\"\n774 + name = \"kat-drain\"\n    |\nerror: could not compile `unwinding` (lib) due to 7 previous errors\n", "verdict": "compile_error", "wall_s": 45.4, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "core-graphics-types-0.2.0", "stderr_tail": "error: could not compile `core-foundation` (lib) due to 2 previous errors\n", "verdict": "compile_error", "wall_s": 32.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "datafusion-pruning-55.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 313.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "reactor-trait-3.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 6.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-tls-utils-4.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 125.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "google-cloud-lro-1.10.0", "stderr_tail": "", "verdict": "ok", "wall_s": 118.7, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_overindented_list_items": 1}, "name": "async_executors-0.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 58.0, "warnings": 1}
+{"exit_code": 0, "lints": {"if_same_then_else": 4, "manual_filter": 2, "missing_transmute_annotations": 2, "non_canonical_clone_impl": 1}, "name": "bitmaps-3.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 2.8, "warnings": 9}
+{"exit_code": 101, "lints": {}, "name": "myutil-7.3.0", "stderr_tail": "error: could not compile `myutil` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 2.9, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "wayland-protocols-misc-0.3.12", "stderr_tail": "error: could not compile `wayland-sys` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 8.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-lithuanian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 10.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "evcxr-0.22.0", "stderr_tail": "", "verdict": "ok", "wall_s": 78.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "selinux-sys-0.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 22.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pallet-staking-reward-fn-24.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 18.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "hyperlocal-0.9.1", "stderr_tail": "error: could not compile `hyperlocal` (lib) due to 3 previous errors\n", "verdict": "compile_error", "wall_s": 18.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "good_lp-1.15.3", "stderr_tail": "", "verdict": "ok", "wall_s": 1.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tracing-rolling-file-0.1.3", "stderr_tail": "", "verdict": "ok", "wall_s": 9.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "mongodb-internal-macros-3.9.1", "stderr_tail": "", "verdict": "ok", "wall_s": 19.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "miow-0.6.1", "stderr_tail": "", "verdict": "ok", "wall_s": 4.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "is_proc_translated-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 4}, "name": "embedded-dma-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.5, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "solana-clock-4.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.3, "warnings": 0}
+{"exit_code": 0, "lints": {"len_zero": 2, "manual_strip": 4, "needless_lifetimes": 2, "new_without_default": 1, "single_char_add_str": 2, "unnecessary_lazy_evaluations": 2}, "name": "go-flag-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.4, "warnings": 13}
+{"exit_code": 0, "lints": {}, "name": "sqlformat-0.5.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pdf-writer-0.15.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-estonian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 12.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-crate-features-1.8.16", "stderr_tail": "", "verdict": "ok", "wall_s": 81.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tonic-health-0.14.6", "stderr_tail": "", "verdict": "ok", "wall_s": 25.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "libp2p-upnp-0.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 33.6, "warnings": 0}
+{"exit_code": 0, "lints": {"extra_unused_lifetimes": 2, "implicit_saturating_sub": 1, "manual_div_ceil": 1, "redundant_pattern_matching": 1, "should_implement_trait": 1}, "name": "embassy-time-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 4.4, "warnings": 6}
+{"exit_code": 0, "lints": {}, "name": "tracing-actix-web-0.7.22", "stderr_tail": "", "verdict": "ok", "wall_s": 16.4, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_overindented_list_items": 8, "io_other_error": 1, "unbuffered_bytes": 1, "unnecessary_map_or": 1}, "name": "tiny_http-0.12.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.0, "warnings": 11}
+{"exit_code": 0, "lints": {}, "name": "paperclip-actix-0.7.4", "stderr_tail": "", "verdict": "ok", "wall_s": 13.6, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_lifetimes": 1}, "name": "lyon_geom-1.0.19", "stderr_tail": "", "verdict": "ok", "wall_s": 21.0, "warnings": 1}
+{"exit_code": 0, "lints": {"expect_used": 30, "map_unwrap_or": 1, "missing_errors_doc": 1, "missing_panics_doc": 4, "multiple_crate_versions": 1, "return_self_not_must_use": 1, "significant_drop_in_scrutinee": 1, "unnecessary_wraps": 1, "unused_self": 1}, "name": "fjall-3.1.10", "stderr_tail": "", "verdict": "ok", "wall_s": 44.2, "warnings": 41}
+{"exit_code": 0, "lints": {}, "name": "lingua-icelandic-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.6, "warnings": 0}
+{"exit_code": 0, "lints": {"chunks_exact_to_as_chunks": 2, "collapsible_if": 4, "derivable_impls": 1, "field_reassign_with_default": 4, "manual_is_multiple_of": 1, "too_many_arguments": 1, "useless_nonzero_new_unchecked": 1}, "name": "mp4ameta-0.13.0", "stderr_tail": "", "verdict": "ok", "wall_s": 8.5, "warnings": 14}
+{"exit_code": 0, "lints": {}, "name": "jsonrpsee-wasm-client-0.26.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wstd-0.6.8", "stderr_tail": "", "verdict": "ok", "wall_s": 25.1, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 1}, "name": "libfuzzer-sys-0.4.13", "stderr_tail": "", "verdict": "ok", "wall_s": 2.0, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "diesel-derive-newtype-2.1.3", "stderr_tail": "", "verdict": "ok", "wall_s": 9.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "camelpaste-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "com-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bevy_utils_proc_macros-0.15.3", "stderr_tail": "", "verdict": "ok", "wall_s": 9.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "spl-discriminator-derive-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 21.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "rust_hawktracer-0.7.0", "stderr_tail": "error: could not compile `rust_hawktracer` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 7.5, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "derive_builder_core_fork_arti-0.11.2", "stderr_tail": "error: could not compile `derive_builder_core_fork_arti` (lib) due to 25 previous errors\n", "verdict": "compile_error", "wall_s": 27.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "basic-toml-0.1.10", "stderr_tail": "", "verdict": "ok", "wall_s": 8.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pingora-timeout-0.9.0", "stderr_tail": "", "verdict": "ok", "wall_s": 22.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "chromiumoxide_types-0.9.1", "stderr_tail": "", "verdict": "ok", "wall_s": 37.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wagyu-zcash-parameters-4-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.4, "warnings": 0}
+{"exit_code": 0, "lints": {"derivable_impls": 1, "doc_overindented_list_items": 16, "empty_line_after_doc_comments": 5, "get_first": 1, "large_enum_variant": 1, "legacy_numeric_constants": 9, "needless_lifetimes": 5, "unwrap_or_default": 1, "use_self": 1, "useless_borrows_in_formatting": 7, "useless_conversion": 1}, "name": "trust-dns-proto-0.23.2", "stderr_tail": "", "verdict": "ok", "wall_s": 128.1, "warnings": 48}
+{"exit_code": 0, "lints": {}, "name": "frame-metadata-hash-extension-0.16.0", "stderr_tail": "", "verdict": "ok", "wall_s": 208.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "test-case-3.3.1", "stderr_tail": "", "verdict": "ok", "wall_s": 31.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "escargot-0.5.15", "stderr_tail": "", "verdict": "ok", "wall_s": 85.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "suppaftp-12.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 68.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "re_byte_size-0.38.1", "stderr_tail": "", "verdict": "ok", "wall_s": 44.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "derive_builder_macro_fork_arti-0.11.2", "stderr_tail": "", "verdict": "ok", "wall_s": 26.3, "warnings": 0}
+{"exit_code": 0, "lints": {"byte_char_slices": 12}, "name": "img-parts-0.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 13.1, "warnings": 12}
+{"exit_code": 0, "lints": {}, "name": "cobs-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 3.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wagyu-zcash-parameters-3-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.9, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "dbus-tokio-0.7.6", "stderr_tail": "fig\n\n\n  thread 'main' (56856) panicked at C:\\Users\\katop\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\libdbus-sys-0.2.4\\build.rs:25:9:\n  explicit panic\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 21.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "fd-lock-4.0.4", "stderr_tail": "", "verdict": "ok", "wall_s": 3.0, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "futures-retry-0.6.0", "stderr_tail": "error: could not compile `ntapi` (lib) due to 2 previous errors\n", "verdict": "compile_error", "wall_s": 14.4, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "derive_builder_fork_arti-0.11.2", "stderr_tail": "error: could not compile `derive_builder_fork_arti` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 21.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wstd-macro-0.6.8", "stderr_tail": "", "verdict": "ok", "wall_s": 12.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wagyu-zcash-parameters-2-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "const-default-derive-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 10.1, "warnings": 0}
+{"exit_code": 0, "lints": {"tabs_in_doc_comments": 9}, "name": "extfmt-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.8, "warnings": 9}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 3, "needless_borrow": 1, "needless_question_mark": 1, "redundant_guards": 1, "useless_borrows_in_formatting": 1}, "name": "audiopus-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.8, "warnings": 7}
+{"exit_code": 0, "lints": {}, "name": "wagyu-zcash-parameters-5-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "postcard-1.1.3", "stderr_tail": "", "verdict": "ok", "wall_s": 27.3, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 1, "manual_div_ceil": 1, "unnecessary_map_or": 1}, "name": "flurry-0.5.2", "stderr_tail": "", "verdict": "ok", "wall_s": 16.1, "warnings": 3}
+{"exit_code": 0, "lints": {}, "name": "cargo_toml-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 23.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "rsntp-4.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 9.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wagyu-zcash-parameters-1-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-tagalog-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cadence-1.8.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "manual_future-0.1.4", "stderr_tail": "", "verdict": "ok", "wall_s": 2.4, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_borrows_in_formatting": 1}, "name": "shadow-rs-2.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 32.3, "warnings": 1}
+{"exit_code": 101, "lints": {}, "name": "esp-synopsys-usb-otg-0.4.2", "stderr_tail": "error: could not compile `esp-synopsys-usb-otg` (lib) due to 75 previous errors; 57 warnings emitted\n", "verdict": "compile_error", "wall_s": 16.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tsify-next-0.5.6", "stderr_tail": "", "verdict": "ok", "wall_s": 38.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pallet-recovery-49.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 231.8, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_conversion": 1}, "name": "x11rb-0.14.0", "stderr_tail": "", "verdict": "ok", "wall_s": 14.0, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "lingua-serbian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 8.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "salvo-proxy-0.96.0", "stderr_tail": "", "verdict": "ok", "wall_s": 74.2, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_late_init": 1}, "name": "built-0.8.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.8, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "kube-leader-election-0.44.0", "stderr_tail": "", "verdict": "ok", "wall_s": 116.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "minicbor-derive-0.19.5", "stderr_tail": "", "verdict": "ok", "wall_s": 27.3, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "wasmer-cache-7.4.2", "stderr_tail": "error: could not compile `wasmer` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 81.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "wagyu-zcash-parameters-6-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 6.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "slot-range-helper-24.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 253.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-account-info-3.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 10.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "publicsuffix-2.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 99.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tauri-plugin-opener-2.5.5", "stderr_tail": "", "verdict": "ok", "wall_s": 318.9, "warnings": 0}
+{"exit_code": 101, "lints": {"into_iter_on_ref": 1, "let_and_return": 1, "ptr_offset_with_cast": 2}, "name": "shrev-1.1.3", "stderr_tail": "error: could not compile `shrev` (lib) due to 1 previous error; 6 warnings emitted\n", "verdict": "compile_error", "wall_s": 1.9, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "com_macros-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 22.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "byte-slice-cast-1.2.3", "stderr_tail": "", "verdict": "ok", "wall_s": 17.7, "warnings": 0}
+{"exit_code": 0, "lints": {"elidable_lifetime_names": 1}, "name": "wildcard-0.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 53.5, "warnings": 1}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 1, "needless_borrow": 1, "needless_return": 1, "single_char_add_str": 1}, "name": "com_macros_support-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 39.2, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "base45-3.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 0}
+{"exit_code": 0, "lints": {"drain_collect": 3, "manual_non_exhaustive": 1, "needless_borrow": 1, "needless_return": 2, "unwrap_or_default": 1}, "name": "dotenv-0.15.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.1, "warnings": 8}
+{"exit_code": 101, "lints": {}, "name": "polars-pipe-0.48.1", "stderr_tail": "error: could not compile `ethnum` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 52.6, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "evm-runtime-0.43.0", "stderr_tail": "error: could not compile `evm-runtime` (lib) due to 2 previous errors\n", "verdict": "compile_error", "wall_s": 55.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pallet-session-49.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 195.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "better_io-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.0, "warnings": 0}
+{"exit_code": 0, "lints": {"sliced_string_as_bytes": 7}, "name": "path-tree-0.8.3", "stderr_tail": "", "verdict": "ok", "wall_s": 8.2, "warnings": 7}
+{"exit_code": 0, "lints": {}, "name": "derive-where-1.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 37.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "fehler-1.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 30.7, "warnings": 0}
+{"exit_code": 0, "lints": {"chunks_exact_to_as_chunks": 1}, "name": "wyhash-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 20.2, "warnings": 1}
+{"exit_code": 0, "lints": {"clone_on_copy": 1, "collapsible_match": 1, "needless_borrow": 3, "question_mark": 1, "redundant_closure": 1, "unnecessary_unwrap": 1, "useless_conversion": 1, "wrong_self_convention": 6}, "name": "chrono-english-0.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 18.9, "warnings": 15}
+{"exit_code": 0, "lints": {}, "name": "test-log-0.2.21", "stderr_tail": "", "verdict": "ok", "wall_s": 30.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "derive_pod-0.1.2", "stderr_tail": "", "verdict": "ok", "wall_s": 17.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "proconio-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "remain-0.2.16", "stderr_tail": "", "verdict": "ok", "wall_s": 7.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "log-panics-2.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.3, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_rotate": 2}, "name": "cityhasher-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.0, "warnings": 2}
+{"exit_code": 0, "lints": {"needless_range_loop": 1, "useless_borrows_in_formatting": 1}, "name": "wol-rs-1.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.0, "warnings": 2}
+{"exit_code": 0, "lints": {}, "name": "unit-prefix-0.5.2", "stderr_tail": "", "verdict": "ok", "wall_s": 0.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "arrow-csv-60.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.6, "warnings": 0}
+{"exit_code": 0, "lints": {"empty_line_after_doc_comments": 2, "identity_op": 2, "len_zero": 4, "manual_div_ceil": 3, "manual_is_multiple_of": 3, "manual_range_contains": 1, "needless_borrow": 3, "needless_lifetimes": 2, "redundant_field_names": 3, "unnecessary_cast": 1}, "name": "repng-0.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 5.0, "warnings": 24}
+{"exit_code": 0, "lints": {}, "name": "pix-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ascii-canvas-4.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 8.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cow-utils-0.1.3", "stderr_tail": "", "verdict": "ok", "wall_s": 3.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "panic-halt-1.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 3.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "build-data-0.3.3", "stderr_tail": "", "verdict": "ok", "wall_s": 17.7, "warnings": 0}
+{"exit_code": 0, "lints": {"from_over_into": 1}, "name": "lettre_email-0.9.4", "stderr_tail": "", "verdict": "ok", "wall_s": 28.4, "warnings": 1}
+{"exit_code": 0, "lints": {"manual_abs_diff": 1}, "name": "arraydeque-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 2.9, "warnings": 1}
+{"exit_code": 0, "lints": {"cast_abs_to_unsigned": 12, "legacy_numeric_constants": 8}, "name": "muldiv-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 9.9, "warnings": 20}
+{"exit_code": 0, "lints": {}, "name": "deno_config-0.109.0", "stderr_tail": "", "verdict": "ok", "wall_s": 31.3, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_borrow": 1, "unnecessary_lazy_evaluations": 2}, "name": "btparse-0.2.0", "stderr_tail": "                                                    ^^^^^^^^^\n    |\nhelp: to change the binary name to `kat-drain`, convert `bin.name`\n   --> E:\\git\\riir-clippy\\Cargo.toml:774:8\n    |\n774 - name = \"kat_drain\"\n774 + name = \"kat-drain\"\n    |\n", "verdict": "ok", "wall_s": 3.7, "warnings": 3}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 10, "doc_overindented_list_items": 4, "missing_safety_doc": 93, "needless_lifetimes": 1, "too_many_arguments": 2}, "name": "wasix-0.13.2", "stderr_tail": "", "verdict": "ok", "wall_s": 2.5, "warnings": 110}
+{"exit_code": 0, "lints": {}, "name": "proc-exit-2.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 3.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-mongolian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "ruzstd-0.9.0", "stderr_tail": "", "verdict": "ok", "wall_s": 8.3, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_borrows_in_formatting": 1}, "name": "rusqlite_migration-2.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 16.9, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "mysql-common-derive-0.32.2", "stderr_tail": "", "verdict": "ok", "wall_s": 15.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "local-channel-0.1.5", "stderr_tail": "", "verdict": "ok", "wall_s": 1.2, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_borrows_in_formatting": 1}, "name": "tauri-bundler-2.9.4", "stderr_tail": "", "verdict": "ok", "wall_s": 74.2, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "wasmtime-internal-cache-48.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 15.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "is_proc_translated-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "mysql-28.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 103.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "sp-transaction-pool-43.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 189.0, "warnings": 0}
+{"exit_code": 0, "lints": {"map_identity": 1}, "name": "pom-3.4.0", "stderr_tail": "", "verdict": "ok", "wall_s": 6.8, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "validator-0.21.0", "stderr_tail": "", "verdict": "ok", "wall_s": 29.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tango-bench-0.8.0", "stderr_tail": "", "verdict": "ok", "wall_s": 54.6, "warnings": 0}
+{"exit_code": 0, "lints": {"question_mark": 5}, "name": "aws-sdk-resourcegroups-1.115.0", "stderr_tail": "", "verdict": "ok", "wall_s": 141.6, "warnings": 5}
+{"exit_code": 0, "lints": {"needless_as_bytes": 2}, "name": "deunicode-1.6.2", "stderr_tail": "", "verdict": "ok", "wall_s": 3.7, "warnings": 2}
+{"exit_code": 101, "lints": {}, "name": "iai-callgrind-0.16.1", "stderr_tail": "error: could not compile `iai-callgrind` (build script) due to 1 previous error; 1 warning emitted\n", "verdict": "compile_error", "wall_s": 13.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "piston-float-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 2.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tracing-rolling-file-0.1.3", "stderr_tail": "", "verdict": "ok", "wall_s": 13.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tower-sessions-sqlx-store-0.15.0", "stderr_tail": "", "verdict": "ok", "wall_s": 84.4, "warnings": 0}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 3, "manual_next_back": 1, "needless_maybe_sized": 1, "needless_return": 1, "non_canonical_clone_impl": 1, "unnecessary_mut_passed": 1}, "name": "loom-0.7.2", "stderr_tail": "", "verdict": "ok", "wall_s": 53.3, "warnings": 8}
+{"exit_code": 0, "lints": {}, "name": "swc_ecma_codegen_macros-2.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 8.1, "warnings": 0}
+{"exit_code": 0, "lints": {"for_kv_map": 2}, "name": "burn-train-0.21.0", "stderr_tail": "", "verdict": "ok", "wall_s": 112.4, "warnings": 2}
+{"exit_code": 0, "lints": {}, "name": "gif-dispose-6.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "bitmask-0.5.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.7, "warnings": 0}
+{"exit_code": 0, "lints": {"useless_borrows_in_formatting": 1}, "name": "chromiumoxide-0.9.1", "stderr_tail": "", "verdict": "ok", "wall_s": 75.6, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "lingua-latvian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.8, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_next_back": 1, "non_canonical_clone_impl": 1, "non_canonical_partial_ord_impl": 1, "useless_conversion": 5}, "name": "smartstring-1.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 7.6, "warnings": 8}
+{"exit_code": 0, "lints": {}, "name": "datafusion-pruning-55.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 172.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "png_pong-0.12.0", "stderr_tail": "", "verdict": "ok", "wall_s": 18.6, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_return": 4}, "name": "winutil-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 11.5, "warnings": 4}
+{"exit_code": 101, "lints": {}, "name": "dispatch2-0.3.1", "stderr_tail": "error: could not compile `objc2` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 11.7, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cargo-credential-0.4.10", "stderr_tail": "", "verdict": "ok", "wall_s": 6.8, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "harfbuzz-sys-0.8.0", "stderr_tail": " check documentation of the freetype-sys crate for an option to\n  build the library from source, or disable features or dependencies\n  that require pkg-config.\n  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n", "verdict": "compile_error", "wall_s": 11.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "http-serde-ext-1.0.2", "stderr_tail": "", "verdict": "ok", "wall_s": 6.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "google-cloud-lro-1.10.0", "stderr_tail": "", "verdict": "ok", "wall_s": 111.1, "warnings": 0}
+{"exit_code": 0, "lints": {"elidable_lifetime_names": 2, "ignored_unit_patterns": 2, "non_minimal_cfg": 1, "uninlined_format_args": 6}, "name": "qoi-0.4.1", "stderr_tail": "", "verdict": "ok", "wall_s": 15.4, "warnings": 11}
+{"exit_code": 0, "lints": {"derivable_impls": 2, "identity_op": 1, "needless_borrow": 2, "unnecessary_mut_passed": 2}, "name": "expander-2.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 33.5, "warnings": 7}
+{"exit_code": 0, "lints": {"legacy_numeric_constants": 1, "needless_borrow": 1, "needless_lifetimes": 2}, "name": "rayon-scan-0.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 32.0, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "base45-3.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.5, "warnings": 0}
+{"exit_code": 0, "lints": {"manual_range_contains": 108}, "name": "num-cmp-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.6, "warnings": 108}
+{"exit_code": 0, "lints": {}, "name": "solana-tls-utils-4.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 50.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pdf-writer-0.15.0", "stderr_tail": "", "verdict": "ok", "wall_s": 9.0, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "wayland-protocols-misc-0.3.12", "stderr_tail": "error: could not compile `wayland-sys` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 25.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "winter-utils-0.13.1", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 0}
+{"exit_code": 0, "lints": {"inherent_to_string": 2, "useless_format": 2}, "name": "chic-1.2.2", "stderr_tail": "", "verdict": "ok", "wall_s": 1.2, "warnings": 4}
+{"exit_code": 0, "lints": {}, "name": "solana-program-memory-3.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 0.7, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "core-graphics-types-0.2.0", "stderr_tail": "error: could not compile `core-foundation` (lib) due to 2 previous errors\n", "verdict": "compile_error", "wall_s": 3.2, "warnings": 0}
+{"exit_code": 0, "lints": {"collapsible_if": 1, "doc_lazy_continuation": 3, "doc_overindented_list_items": 2, "len_zero": 1, "map_clone": 1, "redundant_field_names": 3}, "name": "interval-heap-0.0.5", "stderr_tail": "", "verdict": "ok", "wall_s": 2.7, "warnings": 11}
+{"exit_code": null, "lints": {}, "name": "solana-runtime-4.2.2", "stderr_tail": "", "verdict": "timeout", "wall_s": 480.0, "warnings": 0}
+{"exit_code": 0, "lints": {"test_attr_in_doctest": 1}, "name": "concat-idents-1.1.5", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 1}
+{"exit_code": null, "lints": {}, "name": "sc-network-gossip-0.59.0", "stderr_tail": "", "verdict": "timeout", "wall_s": 480.5, "warnings": 0}
+{"exit_code": 0, "lints": {"if_same_then_else": 4, "manual_filter": 2, "missing_transmute_annotations": 2, "non_canonical_clone_impl": 1}, "name": "bitmaps-3.2.1", "stderr_tail": "", "verdict": "ok", "wall_s": 3.8, "warnings": 9}
+{"exit_code": 0, "lints": {}, "name": "lingua-lithuanian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 23.8, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "unwinding-0.2.10", "stderr_tail": "help: to change the binary name to `kat-drain`, convert `bin.name`\n   --> E:\\git\\riir-clippy\\Cargo.toml:774:8\n    |\n774 - name = \"kat_drain\"\n774 + name = \"kat-drain\"\n    |\nerror: could not compile `unwinding` (lib) due to 7 previous errors\n", "verdict": "compile_error", "wall_s": 15.0, "warnings": 0}
+{"exit_code": 0, "lints": {"len_zero": 2, "manual_strip": 4, "needless_lifetimes": 2, "new_without_default": 1, "single_char_add_str": 2, "unnecessary_lazy_evaluations": 2}, "name": "go-flag-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 7.0, "warnings": 13}
+{"exit_code": 0, "lints": {}, "name": "mongodb-internal-macros-3.9.1", "stderr_tail": "", "verdict": "ok", "wall_s": 73.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "hyperlocal-0.9.1", "stderr_tail": "error: could not compile `hyperlocal` (lib) due to 3 previous errors\n", "verdict": "compile_error", "wall_s": 106.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "reactor-trait-3.1.1", "stderr_tail": "", "verdict": "ok", "wall_s": 97.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "selinux-sys-0.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 108.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "fail-parallel-0.6.0", "stderr_tail": "", "verdict": "ok", "wall_s": 86.0, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "solana-clock-4.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 11.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "miow-0.6.1", "stderr_tail": "", "verdict": "ok", "wall_s": 11.1, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pallet-staking-reward-fn-24.0.1", "stderr_tail": "", "verdict": "ok", "wall_s": 119.3, "warnings": 0}
+{"exit_code": 0, "lints": {"extra_unused_lifetimes": 2, "implicit_saturating_sub": 1, "manual_div_ceil": 1, "redundant_pattern_matching": 1, "should_implement_trait": 1}, "name": "embassy-time-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 51.9, "warnings": 6}
+{"exit_code": 0, "lints": {}, "name": "sqlformat-0.5.0", "stderr_tail": "", "verdict": "ok", "wall_s": 20.7, "warnings": 0}
+{"exit_code": 0, "lints": {"needless_range_loop": 1}, "name": "libcrux-curve25519-0.0.8", "stderr_tail": "", "verdict": "ok", "wall_s": 11.9, "warnings": 1}
+{"exit_code": 0, "lints": {"needless_lifetimes": 1}, "name": "lyon_geom-1.0.19", "stderr_tail": "", "verdict": "ok", "wall_s": 11.3, "warnings": 1}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 4}, "name": "embedded-dma-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 5.1, "warnings": 4}
+{"exit_code": 101, "lints": {}, "name": "myutil-7.3.0", "stderr_tail": "error: could not compile `myutil` (lib) due to 1 previous error\n", "verdict": "compile_error", "wall_s": 7.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "tonic-health-0.14.6", "stderr_tail": "", "verdict": "ok", "wall_s": 58.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "evcxr-0.22.0", "stderr_tail": "", "verdict": "ok", "wall_s": 109.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "paperclip-actix-0.7.4", "stderr_tail": "", "verdict": "ok", "wall_s": 47.0, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "user32-sys-0.2.0", "stderr_tail": "inapi`\n\nCaused by:\n  unable to update E:\\git\\riir-clippy\\.raw\\b094\\scratch\\extract\n\nCaused by:\n  failed to read `E:\\git\\riir-clippy\\.raw\\b094\\scratch\\extract\\Cargo.toml`\n\nCaused by:\n  The system cannot find the file specified. (os error 2)\n", "verdict": "compile_error", "wall_s": 0.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "good_lp-1.15.3", "stderr_tail": "", "verdict": "ok", "wall_s": 5.8, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_overindented_list_items": 1}, "name": "async_executors-0.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 54.8, "warnings": 1}
+{"exit_code": 0, "lints": {}, "name": "tracing-actix-web-0.7.22", "stderr_tail": "", "verdict": "ok", "wall_s": 70.3, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_overindented_list_items": 8, "io_other_error": 1, "unbuffered_bytes": 1, "unnecessary_map_or": 1}, "name": "tiny_http-0.12.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.2, "warnings": 11}
+{"exit_code": 0, "lints": {}, "name": "suppaftp-12.0.0", "stderr_tail": "", "verdict": "ok", "wall_s": 19.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "pingora-timeout-0.9.0", "stderr_tail": "", "verdict": "ok", "wall_s": 4.0, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 1}, "name": "libfuzzer-sys-0.4.13", "stderr_tail": "", "verdict": "ok", "wall_s": 9.5, "warnings": 1}
+{"exit_code": 0, "lints": {"expect_used": 30, "map_unwrap_or": 1, "missing_errors_doc": 1, "missing_panics_doc": 4, "multiple_crate_versions": 1, "return_self_not_must_use": 1, "significant_drop_in_scrutinee": 1, "unnecessary_wraps": 1, "unused_self": 1}, "name": "fjall-3.1.10", "stderr_tail": "", "verdict": "ok", "wall_s": 15.0, "warnings": 41}
+{"exit_code": 0, "lints": {}, "name": "solana-crate-features-1.8.16", "stderr_tail": "", "verdict": "ok", "wall_s": 118.9, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-estonian-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.1, "warnings": 0}
+{"exit_code": 0, "lints": {"doc_lazy_continuation": 1, "manual_div_ceil": 1, "unnecessary_map_or": 1}, "name": "flurry-0.5.2", "stderr_tail": "", "verdict": "ok", "wall_s": 28.8, "warnings": 3}
+{"exit_code": 0, "lints": {}, "name": "near-stdx-0.37.4", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "spl-discriminator-derive-0.2.0", "stderr_tail": "", "verdict": "ok", "wall_s": 31.5, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "libp2p-upnp-0.7.0", "stderr_tail": "", "verdict": "ok", "wall_s": 54.2, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "lingua-icelandic-language-model-1.3.0", "stderr_tail": "", "verdict": "ok", "wall_s": 22.5, "warnings": 0}
+{"exit_code": 0, "lints": {"chunks_exact_to_as_chunks": 2, "collapsible_if": 4, "derivable_impls": 1, "field_reassign_with_default": 4, "manual_is_multiple_of": 1, "too_many_arguments": 1, "useless_nonzero_new_unchecked": 1}, "name": "mp4ameta-0.13.0", "stderr_tail": "", "verdict": "ok", "wall_s": 17.0, "warnings": 14}
+{"exit_code": 0, "lints": {}, "name": "chromiumoxide_types-0.9.1", "stderr_tail": "", "verdict": "ok", "wall_s": 8.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "jsonrpsee-wasm-client-0.26.0", "stderr_tail": "", "verdict": "ok", "wall_s": 1.3, "warnings": 0}
+{"exit_code": 0, "lints": {"derivable_impls": 1, "doc_overindented_list_items": 16, "empty_line_after_doc_comments": 5, "get_first": 1, "large_enum_variant": 1, "legacy_numeric_constants": 9, "needless_lifetimes": 5, "unwrap_or_default": 1, "use_self": 1, "useless_borrows_in_formatting": 7, "useless_conversion": 1}, "name": "trust-dns-proto-0.23.2", "stderr_tail": "", "verdict": "ok", "wall_s": 71.1, "warnings": 48}
+{"exit_code": 0, "lints": {}, "name": "basic-toml-0.1.10", "stderr_tail": "", "verdict": "ok", "wall_s": 16.4, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "camelpaste-0.1.0", "stderr_tail": "", "verdict": "ok", "wall_s": 2.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "re_byte_size-0.38.1", "stderr_tail": "", "verdict": "ok", "wall_s": 60.8, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "frame-metadata-hash-extension-0.16.0", "stderr_tail": "", "verdict": "ok", "wall_s": 67.1, "warnings": 0}
+{"exit_code": 101, "lints": {}, "name": "futures-retry-0.6.0", "stderr_tail": "error: could not compile `ntapi` (lib) due to 2 previous errors\n", "verdict": "compile_error", "wall_s": 13.6, "warnings": 0}
+{"exit_code": 0, "lints": {}, "name": "cobs-0.5.1", "stderr_tail": "", "verdict": "ok", "wall_s": 11.7, "warnings": 0}

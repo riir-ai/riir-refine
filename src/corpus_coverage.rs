@@ -59,10 +59,11 @@
 //!    rows are opt-in lints and it is structurally blind to the
 //!    default-firing debt.
 //! 2. **default-eco** — the Bench 094 default-level fired histogram
-//!    (`.benchmarks/data/094_t01/manifest.json`): plain `cargo clippy` (no
-//!    `-W` flags) over a stratified crates.io top-100K-window sample. This
-//!    is the source the default-firing uncovered set can actually carry —
-//!    the T4 successor lead Issue 119's first run filed.
+//!    (`.benchmarks/data/094_t02/manifest.json`, waves 1+2 merged: 452
+//!    compiled-clean crates): plain `cargo clippy` (no `-W` flags) over a
+//!    stratified crates.io top-10K-downloads sample. This is the source the
+//!    default-firing uncovered set can actually carry — the T4 successor
+//!    lead Issue 119's first run filed.
 //! 3. **study** — kornel's 100K-crate run (3 clippy-namespace rows) plus
 //!    Li et al. ICSE 2024 (8.09M warnings), the latter deliberately NOT
 //!    transcribed: its per-lint table is a figure with no printed value

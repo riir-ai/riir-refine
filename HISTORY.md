@@ -38,6 +38,56 @@ proven on fixtures + the self-A/B; the first real IMPROVED row awaits the
 first healed-effect re-sweep. Pre-existing clippy residue in
 `rust_perf/proposers/` (fresh-pass pedantic findings, Batch-150/151 files)
 observed and left to the owning session.
+## 2026-09-17 — Bench 094 wave 2: the default-eco histogram extension (184 → 342 clean crates, flip 74/448 → 94/442) + the T7.5 fold
+
+The Extend protocol's first run, executed the day it was written. The
+sampler is now TRACKED instrumentation (`scripts/sample_default_fired_histogram.py`
+— sample/retally/merge; wave 1's `.tmp_run_clippy.py` throwaway is retired,
+the protocol is rerunnable by design). Wave 2 sampled the adjacent rank
+bands (pages 12/32/52/77/97), same filters, same pinned clippy 0.1.98.
+
+Merged dataset `.benchmarks/data/094_t02/manifest.json`: 380 sampled /
+**342 compiled-clean** / 37 compile_error / 1 timeout / **1334 warnings /
+145 distinct lints**; blake3 `9eaab0cd…` (definition pinned: canonical JSON
+of the manifest minus the field). Wave-1 verdicts carried byte-identical
+(`094_t01` stays the dated wave-1 record); merge math exact (disjoint crate
+sets after dedup — counts and spreads add); loader repointed
+(`load_default_fired_histogram` REL → t02).
+
+**Two measurement incidents, both caught before any number was used:**
+
+1. **cargo's JSON carries the diagnostic under `message`, not `msg`** — the
+   first parse tallied ZERO lints across every ok crate. The known-dirty
+   control (`akin-0.4.0`: 3 warnings in wave 1, 0 in wave 2 — impossible)
+   caught it. Recovery was cheap because cargo REPLAYS cached diagnostics on
+   a warm target dir (verified on the control first): the `retally`
+   subcommand re-parsed all rows via warm replay, no rebuilds. **A sampler
+   without a known-dirty control is a sampler that can silently report a
+   clean ecosystem.**
+2. **The resume skip compared the BARE name against versioned row keys** —
+   never matched, so invocation 2 re-measured 122 already-measured crates.
+   Caught by the concentration table printing each crate TWICE. Merge now
+   dedups keep-first; the 122 replay pairs agreed 119/122 — the 3
+   disagreements are heavy-crate boundary flapping (chromiumoxide
+   timeout↔ok, solana-runtime + sc-network-gossip compile_error↔timeout;
+   keep-first kept the conservative verdict). Rank drift between the two
+   fetches also moved the interleave cut — population = the 180-unique union,
+   recorded in the manifest's selection_rule.
+
+Post-merge head (count/spread): `missing_safety_doc` 130/4,
+`manual_range_contains` 121/5, **`needless_borrow` 53/20 (the widest-spread
+row — the robust head)**, `useless_conversion` 53/10,
+`legacy_numeric_constants` 48/11, `doc_overindented_list_items` 42/10,
+`doc_lazy_continuation` 27/9 — the Batch-151 pair now carries 10- and
+9-crate spread, its strongest field validation. The extend floor held
+(342 ≫ 150).
+
+Same commit: the **T7.5 fold** — corpus-touching landings require the
+gen2/gen3 freeze-table regeneration in the SAME batch (the Batch-151
+twice-in-one-day lesson), folded into AGENTS.md's score-bench line + the
+riir-clippy skill's Protocol A GOAT list. Gates: corpus_coverage 37/37,
+clippy `-D warnings` clean on the bin write set; no corpus delta → no
+freeze regen, no score-bench (flatness by construction). Plan 138.
 
 ## 2026-09-17 — Batch 151: the doc-line state-machine port lands (corpus 62 → 64, FIXABLE 45 → 47)
 
