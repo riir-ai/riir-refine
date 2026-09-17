@@ -4,8 +4,8 @@
 //! (single-stmt then-block, no else, no attributes) → the statement
 //! `map.entry(k).or_insert(v);`.
 //!
-//! The rewrite merges two hash lookups (contains_key hashes + probes, then
-//! insert hashes + probes again) into one. Bench 013: ParetoDominant
+//! The rewrite merges two hash lookups (`contains_key` hashes + probes, then
+//! insert hashes + probes again) into one. Bench 013: `ParetoDominant`
 //! 1.5-2.4x. The leading `&` on the key is stripped (`contains_key(&k)`
 //! takes `&K`; `entry(k)` takes `K` by value — the corpus form).
 //!

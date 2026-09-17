@@ -1,10 +1,10 @@
-//! `fxhashmap` — std `HashMap` (SipHash) → `FxHashMap` (FxHash).
+//! `fxhashmap` — std `HashMap` (`SipHash`) → `FxHashMap` (`FxHash`).
 //!
 //! Pattern: a file with a private `use std::collections::HashMap;` (plain or
 //! `{.., HashMap, ..}` group) and at least one `HashMap` path reference in
 //! the body. The rewrite swaps the use to `use rustc_hash::FxHashMap;`,
 //! removes `HashMap` from any use group (preserving the sibling imports +
-//! appending the FxHashMap use), and rewrites every path reference:
+//! appending the `FxHashMap` use), and rewrites every path reference:
 //!
 //! | Body form | Rewritten |
 //! |---|---|
@@ -12,9 +12,9 @@
 //! | `HashMap::new()` / `HashMap::<K, V>::new()` | `FxHashMap::new()` (turbofish + trailing segments preserved — only the ident's span is replaced) |
 //! | `std::collections::HashMap::with_capacity(..)` | `rustc_hash::FxHashMap::with_capacity(..)` |
 //!
-//! FxHash is 1 multiply + 1 xor per hash vs SipHash-1-3's full compression
+//! `FxHash` is 1 multiply + 1 xor per hash vs SipHash-1-3's full compression
 //! rounds — the win for non-adversarial keys (game state, internal caches),
-//! used pervasively in rustc itself (Bench 013: ParetoDominant 3.3-4.2x).
+//! used pervasively in rustc itself (Bench 013: `ParetoDominant` 3.3-4.2x).
 //!
 //! **Honest scope limits:**
 //! - The proposer self-gates on an existing `rustc_hash` import in the
@@ -32,7 +32,7 @@
 //!   runs first, directly over `file.items`.
 //!
 //! Span-preserving: the use item is replaced by the swapped/slimmed text
-//! (with the appended FxHashMap use on its own line at the same indent),
+//! (with the appended `FxHashMap` use on its own line at the same indent),
 //! and each path edit replaces exactly the ident-prefix span.
 
 use syn::visit::Visit;
@@ -103,7 +103,7 @@ fn file_imports_rustc_hash(file: &File) -> bool {
 }
 
 /// Private (inherited-visibility) `use std::collections::<...>` — plain
-/// HashMap leaf or a group that may contain it.
+/// `HashMap` leaf or a group that may contain it.
 fn is_private_std_collections_prefix(u: &ItemUse) -> bool {
     if !matches!(u.vis, Visibility::Inherited) {
         return false;
@@ -123,8 +123,8 @@ fn is_private_std_collections_prefix(u: &ItemUse) -> bool {
 enum UseOutcome {
     /// `use std::collections::HashMap;` → `use rustc_hash::FxHashMap;`
     Swapped,
-    /// HashMap removed from a group; the kept siblings are returned (the
-    /// replacement appends the FxHashMap use on its own line).
+    /// `HashMap` removed from a group; the kept siblings are returned (the
+    /// replacement appends the `FxHashMap` use on its own line).
     GroupSlimmed(Vec<String>),
 }
 

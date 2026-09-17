@@ -354,7 +354,7 @@ mod tests {
         assert!(syn::parse_file(out).is_ok(), "output does not parse: {out}");
     }
 
-    /// The eval-span shape (PERF_SPANS): a GUESSED with_capacity hint trimmed
+    /// The eval-span shape (`PERF_SPANS)`: a GUESSED `with_capacity` hint trimmed
     /// by the real count. This is the Plan 049 T0.0c headroom span.
     #[test]
     fn eval_span_guessed_hint_fires() {
@@ -399,7 +399,7 @@ mod tests {
 
     /// `Vec::new()` + a derivable `0..n` range: the exact-capacity rewrite
     /// (vec-with-capacity) covers this binding — shrink stays silent, the
-    /// better fix wins. (The corpus buggy_code shape delegates to it.)
+    /// better fix wins. (The corpus `buggy_code` shape delegates to it.)
     #[test]
     fn derivable_range_delegates_to_vec_with_capacity() {
         let code = "fn build(n: usize) -> Vec<u32> {\n    \
@@ -528,7 +528,7 @@ mod tests {
     }
 
     /// A nested fn whose PARAMETER shares the binding's name must not
-    /// credit pushes to the outer binding (the Stmt::Item exclusion).
+    /// credit pushes to the outer binding (the `Stmt::Item` exclusion).
     #[test]
     fn nested_fn_same_name_stays_silent() {
         let code = "fn outer() -> Vec<u32> {\n    \

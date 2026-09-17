@@ -1,5 +1,47 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-17 — the fresh-pass pedantic residue closes (34 + 6 findings, the stale-cache bite confirmed on the Batch-150 close-out itself)
+
+Bench 095's "observed, not owned" residue is paid, and the pay-off is a
+measured confirmation of the stale-cache class recorded there. A fresh
+target-dir `cargo clippy --all-targets` at the then-HEAD `c8f74bc2` reported
+**33 doc_markdown + 1 cloned_ref_to_slice_refs** (default features) and
+**+5 doc_markdown (`rust_perf/bench.rs`) + 1 format_push_string
+(`shader_perf/scanner.rs`)** at `--all-features` — while the Batch-150
+debt-close session's own gate had read "clippy --all-features: 0 doc_markdown
+findings remain in the crate". Both were honest runs on the same tree: the
+close-out's checkout replayed cached diagnostic silence, this worktree's
+fresh compile emitted the findings. The class is not hypothetical and it bit
+the exact session that claimed the debt closed — a fresh worktree + empty
+target dir is the only clippy reading that means "0".
+
+Fix path, healer-first per the house rule: the landed `doc_markdown` rule
+healed **38 edits across 12 files, all compile-gated and kept** (`cargo heal
+--fix --write --verify` over `rust_perf/proposers/`, `frame_time_report.rs`,
+`rust_perf/bench.rs`) — the dogfood closing the loop: the rule now owns the
+exact residue its own close-out's blind instrument missed. The two code-shape
+findings are test-only and mechanical: `cloned_ref_to_slice_refs`
+(`[dir.clone()]` → `std::slice::from_ref(&dir)`, clippy --fix) and
+`format_push_string` (`push_str(&format!(…))` → `writeln!` with the scoped
+`use std::fmt::Write as _`).
+
+The unit also fixed the **one fresh lib-test failure at HEAD**:
+`downstream_hint::relative_target_fires` placed its fixture under
+`cwd.parent()`, which is OUTSIDE any repo on a main checkout (the test's
+premise) but INSIDE one under a linked worktree (`.worktrees/<wt>` has the
+real workspace root one climb above) — the topmost walk then correctly
+claims the outer repo and the hint goes empty. The fixture moved to the
+`fake_parent` temp_dir law its three sibling tests already use; the
+`..`-prefixed shape under test is now manufactured by walking `cwd` and the
+fixture to their common ancestor (cross-tree on every real box, `..`-heavy
+by construction). This un-blocks worktree-based validation of the whole
+crate — every prior fresh run here red this one test.
+
+Gates (fresh worktree, empty target dir): `cargo clippy --all-targets` 0 ·
+`cargo clippy --all-targets --all-features` 0 (only the third-party `block
+v0.1.6` future-Rust notice remains) · `cargo test --lib` 1728/0 ·
+`shader_perf` scanner tests 28/0. Mining side-effect: 17 trajectory rows
+pushed by the healer runs.
 ## 2026-09-17 — Issue 121 RESOLVED: the set_rerank consumer landed, promotion REFUTED, the all_rules canonical-order fix is the GOAT (`2aa53e1d5`, Bench 096)
 
 katgpt-rs Plan 599's only remaining task (T4.2) was THIS repo's Issue 121

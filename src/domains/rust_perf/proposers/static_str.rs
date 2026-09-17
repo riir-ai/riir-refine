@@ -3,7 +3,7 @@
 //! Pattern: a fn whose return type is `String` (bare or `std::string::String`)
 //! and whose body is a single tail expression returning a string literal —
 //! via `.to_string()`, `.to_owned()`, or `String::from(lit)`. The rewrite
-//! drops the per-call heap allocation entirely (Bench 013: ParetoDominant
+//! drops the per-call heap allocation entirely (Bench 013: `ParetoDominant`
 //! 36-43x).
 //!
 //! **`const` emission (2026-08-19)**: the rewritten shape (free/inherent-impl

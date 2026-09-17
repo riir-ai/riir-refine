@@ -25,9 +25,9 @@
 //!
 //! ## Batch 48 follow-up (2026-08-17): +3 proposer-covered rules
 //!
-//! The three parse-clean ParetoDominant candidates whose proposers were
+//! The three parse-clean `ParetoDominant` candidates whose proposers were
 //! deferred pending bench verdicts (Bench 020/B48 — all three measured
-//! ParetoDominant, so they are now `--fix` eligible):
+//! `ParetoDominant`, so they are now `--fix` eligible):
 //!
 //! | Rule | Rewrite | Signature-visible change? |
 //! |---|---|---|
@@ -35,12 +35,12 @@
 //! | `collect-append-to-extend` | `let mut staged = it.collect(); recv.append(&mut staged);` → `recv.extend(it);` (the staging `let` is deleted) | no |
 //! | `vec-macro-zero-fill` | `let mut v = Vec::new(); v.resize(n, 0);` → `let mut v = vec![0; n];` (resize stmt deleted; `v` stays alive) | no |
 //!
-//! `filter-count-to-any` stays proposer-less BY DESIGN (ParetoDominated
+//! `filter-count-to-any` stays proposer-less BY DESIGN (`ParetoDominated`
 //! 0.82-0.90x — never give a losing rewrite a `--fix` path).
 //!
 //! ## Batch 53 follow-up (2026-08-17): +2 proposer-covered rules
 //!
-//! The two Batch 53 ParetoDominant rules (Bench 038) land proposers:
+//! The two Batch 53 `ParetoDominant` rules (Bench 038) land proposers:
 //!
 //! | Rule | Rewrite | Signature-visible change? |
 //! |---|---|---|
@@ -95,7 +95,7 @@
 //!   heavily self-gated on an existing `rustc_hash` import — compile-gate
 //!   it if it ever fires wrong); `rust_perf_verify` (cargo test) validates
 //!   semantics either way.
-//! - Since T6.4 the clippy_lints proposers use the same edit-splice emitter
+//! - Since T6.4 the `clippy_lints` proposers use the same edit-splice emitter
 //!   (they were mutation-based + whole-file `ToTokens` re-emission before).
 
 use syn::{Expr, File, Stmt};
@@ -292,7 +292,7 @@ pub fn collect_edits_opts(
 
 /// One-line semantic-shift annotations for the signature-visible fixables
 /// (Issue 074 T2) — printed by the `--fix` review as
-/// `⚠ semantic change: {note}`. The other nine FIXABLE_RULES are
+/// `⚠ semantic change: {note}`. The other nine `FIXABLE_RULES` are
 /// semantics-preserving by construction and stay un-annotated (an
 /// annotation that fires on most fixes is warning fatigue).
 #[must_use]

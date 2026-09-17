@@ -8,7 +8,7 @@
 //! non-negative) — and the other side is a **pure threshold** expression:
 //! a path or a literal (parens unwrapped). The receiver text is reused
 //! verbatim (parens preserved) and the threshold text is duplicated as
-//! `t * t`. Bench 038/B53: ParetoDominant 1.21-1.24x — the fixed form
+//! `t * t`. Bench 038/B53: `ParetoDominant` 1.21-1.24x — the fixed form
 //! vectorizes; sqrt-then-compare serializes on the transcendental even
 //! where aarch64 f32 sqrt is a single NEON instruction.
 //!

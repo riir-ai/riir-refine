@@ -4,7 +4,7 @@
 //! tail expression `flags.iter().filter(<closure>).count()`. The rewrite
 //! changes the parameter to `&[u64]` (packed bits) + the body to
 //! `flags.iter().map(|w| w.count_ones() as usize).sum()` — one POPCNT per
-//! 64 bools instead of a per-byte comparison (Bench 013: ParetoDominant
+//! 64 bools instead of a per-byte comparison (Bench 013: `ParetoDominant`
 //! 8-12.5x).
 //!
 //! **Signature-visible change** (documented per the module caveat): callers

@@ -6,7 +6,7 @@
 //! intervening statement mentioning `VAR`) by `RECV.append(&mut VAR);`
 //! → the `let` is deleted and the append becomes `RECV.extend(<iter-expr>)`.
 //! The intermediate `Vec` allocation disappears entirely — Bench 020/B48:
-//! ParetoDominant 8.5-12.8x, allocs 6251→1 at the bench shape.
+//! `ParetoDominant` 8.5-12.8x, allocs 6251→1 at the bench shape.
 //!
 //! Gates (all load-bearing):
 //! - **Single-use staging:** `VAR` must occur exactly twice in the whole

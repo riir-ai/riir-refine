@@ -10,7 +10,7 @@
 //! slice — or a by-value `Vec`), `&path`, `path.iter()`, or
 //! `path.iter_mut()`. The initializer becomes
 //! `HashMap::with_capacity(PATH.len())` — the loop survives untouched.
-//! Bench 038/B53: ParetoDominant 2.4-3.1x, allocs 12→1 at n=4096 (the
+//! Bench 038/B53: `ParetoDominant` 2.4-3.1x, allocs 12→1 at n=4096 (the
 //! rehash ladder re-SipHashes ALL stored entries at each of ~log2(n)
 //! resizes — a different cost class from the Vec sibling's
 //! realloc+memcpy).
@@ -30,7 +30,7 @@
 //!   one (`s.rows`, `self.items`) with no generic arguments anywhere and
 //!   no leading `::`. Range loops (`for i in 0..n`) have no collection to
 //!   len — skip. `into_iter()` and arbitrary methods skip conservatively
-//!   (iter/iter_mut only).
+//!   (`iter/iter_mut` only).
 //! - **Body gate**: the loop body must mention `VAR.insert` — a loop
 //!   that doesn't insert into the map doesn't justify its capacity.
 //! - **Non-`mut` binding skips** (an insert loop over it would not
@@ -49,7 +49,7 @@
 //! statements with the same per-level gates (re-bind stops, first mention
 //! must be the loop), and collects every pre-loop local bind across levels
 //! for the use-before-decl gate — a root bound anywhere along the walked
-//! region still refuses (the katgpt-rs bomber_17 E0425 class, one level
+//! region still refuses (the katgpt-rs `bomber_17` E0425 class, one level
 //! deeper).
 
 use syn::visit::Visit;
@@ -825,7 +825,7 @@ mod tests {
 
     /// Plan 097 T4 — the use-before-decl gate across levels: a bind of the
     /// iterable root at the OUTER level (between map and the descended
-    /// loop) still refuses (the bomber_17 E0425 class, one level deeper).
+    /// loop) still refuses (the `bomber_17` E0425 class, one level deeper).
     #[test]
     fn root_bound_across_levels_still_refuses() {
         assert!(propose_fix(

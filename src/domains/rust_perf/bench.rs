@@ -21,7 +21,7 @@
 //! 3. Parse JSON lines:
 //!    `{"size":N,"buggy_ns":X,"fixed_ns":Y,"buggy_allocs":A,"buggy_bytes":B,"fixed_allocs":C,"fixed_bytes":D}`.
 //! 4. Compute per-size outcome (Faster/Slower/Tie at ±5% threshold).
-//! 5. Aggregate into a [`ParetoVerdict`] (ParetoDominant if faster on majority).
+//! 5. Aggregate into a [`ParetoVerdict`] (`ParetoDominant` if faster on majority).
 //!
 //! ## The deterministic alloc axis (Issue 014 T1, Research 032)
 //!
@@ -29,10 +29,10 @@
 //! Benches 015/016). Allocation count + bytes are **exact integers that are
 //! identical on every run** — the same code path allocates the same bytes
 //! deterministically. The generated crate installs a counting
-//! `#[global_allocator]` (alloc + realloc + alloc_zeroed counted; dealloc
+//! `#[global_allocator]` (alloc + realloc + `alloc_zeroed` counted; dealloc
 //! is free) and, after the timing loops, measures one steady-state call of
 //! each side with the counters reset — warmup has already settled one-time
-//! init paths (LazyLock compilation, first-use lazies).
+//! init paths (`LazyLock` compilation, first-use lazies).
 //!
 //! **Verdict axis unchanged**: timing stays the Pareto verdict axis; the alloc
 //! integers are reported + recorded, and gate rules whose timing is Tie-class
@@ -119,7 +119,7 @@ pub struct SizeResult {
     pub outcome: SizeOutcome,
     /// Steady-state allocation count for ONE `run_buggy` call (deterministic
     /// second axis, Issue 014 T1). Measured after warmup so one-time init
-    /// paths (LazyLock compile, first-use lazies) are excluded.
+    /// paths (`LazyLock` compile, first-use lazies) are excluded.
     #[serde(default)]
     pub buggy_allocs: u64,
     /// Steady-state allocated bytes for ONE `run_buggy` call.
@@ -718,7 +718,7 @@ static GLOBAL_COUNTING_ALLOCATOR: CountingAlloc = CountingAlloc;
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
-    /// Parse JSON lines from the bench subprocess into SizeResults.
+    /// Parse JSON lines from the bench subprocess into `SizeResults`.
     #[allow(clippy::cast_precision_loss)]
     fn parse_bench_output(stdout: &str) -> Vec<SizeResult> {
         let mut results = Vec::new();

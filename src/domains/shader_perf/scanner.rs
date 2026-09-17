@@ -714,11 +714,12 @@ mod tests {
 
     #[test]
     fn fragment_sample_budget_annotates_at_threshold() {
+        use std::fmt::Write as _;
         let mut src = String::from(
             "@fragment\nfn fs_main(t: texture_2d<f32>, s: sampler) -> @location(0) vec4<f32> {\n",
         );
         for i in 0..FRAGMENT_FETCH_BUDGET {
-            src.push_str(&format!("  let c{i} = textureSample(t, s, vec2<f32>(0.5));\n"));
+            let _ = writeln!(src, "  let c{i} = textureSample(t, s, vec2<f32>(0.5));");
         }
         src.push_str("  return c0;\n}\n");
         let rules = rule_ids(&src);

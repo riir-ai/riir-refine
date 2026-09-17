@@ -1,5 +1,5 @@
 //! `vec-macro-zero-fill` — `Vec::new()` + `resize(n, 0)` explicit memset →
-//! `vec![0; n]` alloc_zeroed (calloc).
+//! `vec![0; n]` `alloc_zeroed` (calloc).
 //!
 //! Pattern: within one block,
 //! `let mut VAR [: TY] = Vec::new();` (or `= vec![];`) whose first later
@@ -7,7 +7,7 @@
 //! `vec![ZERO_LIT; LEN]` (original texts verbatim) and the `resize`
 //! statement is deleted. `vec![0; n]` rides the `IsZero` specialization —
 //! the allocation goes through `alloc_zeroed` (calloc) and the explicit
-//! memset pass disappears. Bench 020/B48: ParetoDominant 32-2505x.
+//! memset pass disappears. Bench 020/B48: `ParetoDominant` 32-2505x.
 //!
 //! Unlike `collect-append-to-extend`, `VAR` stays alive: the rewrite only
 //! pre-sizes the same binding, so any number of later uses (pushes, reads,
@@ -112,7 +112,7 @@ impl BlockScan<'_> {
 }
 
 /// `let mut VAR [: TY] = Vec::new();` or `= vec![];` → the binding ident.
-/// Mirrors vec-with-capacity's `fresh_vec_binding` gates, plus Pat::Type
+/// Mirrors vec-with-capacity's `fresh_vec_binding` gates, plus `Pat::Type`
 /// unwrapping so annotated lets fire (a type annotation wraps the pattern).
 fn fresh_vec_binding(local: &Local) -> Option<String> {
     let mut pat = &local.pat;

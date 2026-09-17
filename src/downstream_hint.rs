@@ -492,24 +492,35 @@ mod tests {
     fn relative_target_fires() {
         // The scope_hint live-probe lesson: a relative target (the
         // `--config-audit ../sibling/repo` shape) must survive
-        // canonicalization. The fake goes DIRECTLY under the workspace
-        // root (cwd's parent — same volume, and holding no Cargo.toml,
-        // so the topmost walk stops at the fake repo). A fake under
-        // `target/` would nest inside THIS real repo and the walk would
-        // correctly claim the outer repo — the nested-repo shape, not
-        // the relative-path shape under test.
+        // canonicalization. The fixture root is `fake_parent` (temp_dir),
+        // like every sibling test here — a fixture placed under
+        // `cwd.parent()` nests inside a REAL repo when this crate is a
+        // linked worktree (`.worktrees/<wt>` has the workspace root one
+        // climb above it), and the topmost walk then correctly claims the
+        // outer repo — the nested-repo shape, not the relative-path shape
+        // under test. The `..`-prefix is manufactured by walking `cwd`
+        // and the fixture to their common ancestor; cross-tree on every
+        // real box, so the result is `..`-heavy by construction.
         let cwd = std::env::current_dir().unwrap();
-        let workspace = cwd.parent().unwrap().to_path_buf();
-        let parent = workspace.join(format!("dh_reltest_{}", std::process::id()));
-        let _ = fs::remove_dir_all(&parent);
-        fs::create_dir_all(&parent).unwrap();
+        let parent = fake_parent("rel");
         let a = fake_repo(&parent, "repoA", PKG);
         fake_repo(
             &parent,
             "repoB",
             &format!("{PKG}\n[dependencies]\nx = {{ path = \"../repoA\" }}\n"),
         );
-        let rel = PathBuf::from("..").join(a.join("src").strip_prefix(&workspace).unwrap());
+        let abs = a.join("src");
+        let mut rest: Vec<_> = abs.components().collect();
+        let mut from: Vec<_> = cwd.components().collect();
+        while !rest.is_empty() && !from.is_empty() && rest[0] == from[0] {
+            rest.remove(0);
+            from.remove(0);
+        }
+        let mut rel = PathBuf::new();
+        for _ in &from {
+            rel.push("..");
+        }
+        rel.extend(rest);
         let hint = downstream_consumers_hint(&[rel]);
         assert!(hint.contains("repoB"), "relative target fires: {hint}");
         let _ = fs::remove_dir_all(&parent);

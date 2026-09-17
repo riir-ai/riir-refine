@@ -10,7 +10,7 @@
 //! `HashSet::insert` returns `true` exactly when the value was newly
 //! inserted — i.e. when `!contains` held — so the branch taken is
 //! identical while the double lookup (contains hashes + probes, insert
-//! hashes + probes again) collapses to one. Bench 020/B48: ParetoDominant
+//! hashes + probes again) collapses to one. Bench 020/B48: `ParetoDominant`
 //! 1.19-1.31x. `BTreeSet::insert` has the same bool contract (the match is
 //! shape-based; any receiver type whose 1-arg `insert` returns bool works).
 //!
