@@ -1,0 +1,17 @@
+# Plan 142 — Batch 152: the dial9 Tokio-principles distill (staged)
+
+**Status:** STAGED — awaiting next mining window (verdict re-graded YES B− 2026-09-17; Research 179)
+
+Executes the distill verdict for `https://dial9-rs.github.io/blog/principles-for-fast-tokio-applications/` (Research 179). All fixtures ORIGINAL (the article's handler snippet is mini-redis-adjacent — never verbatim). No benchable candidate exists (tokio fairness metrics live outside the Pareto validator) — the batch lands NotBenchable suggestion-only entries per the Batch-136 precedent, gated on decision content + regime annotation + distinct-from rows.
+
+- [ ] Re-read `.distill/001_mining_queue_snapshot.md` state ON ORIGIN at plan-execution time (the Batch-149 staged-intake race rule); re-scan `.plans/.highwater` + `ls` the folder at write time
+- [ ] Read `../.docs/02_corpus/authoring_discipline.md` + the last 2–3 batch AGENTS.md entries for generator lessons (rule_id-anchored edit context, line-start `+` list-marker hazard, count-pin walks)
+- [ ] Re-verify quotes against the live article URL (prose source — the URL is the provenance; no `.raw` clone)
+- [ ] Dedup re-verification under BOTH vocabularies at mine time: `spawn_blocking|block_in_place|tokio::fs|blocking.?pool` and operator variants (`batch-blocking-segment`, `blocking-pool`, `dedicated.?thread`); re-read `async-yield-point`, `tokio-guard-across-await`, `bounded-channel-backpressure` fixtures in full before writing rule 2/3
+- [ ] Rule 1 `batch-blocking-pool-segment` (rust_perf io or concurrency): buggy = N small `tokio::fs`/`spawn_blocking` calls in a loop; fixed = one hoisted blocking segment; category, NotBenchable suggestion-only + context_notes (two-regime many-small vs few-large; source-reported ~50k tasks/s @ 32-core ceiling; Batch-78 platform-nondeterminism citation; distinct-from `buffered-io`/`bufwriter-batched` — SYSCALL batching vs BLOCKING-POOL batching)
+- [ ] Rule 2 adaptive-yield content (concurrency): decide standalone `adaptive-yield-consecutive-ready` vs rider on `async-yield-point` AFTER re-reading that entry's fixture; whichever form, encode the K-consecutive-ready threshold + the anti-regime (long polls benign under light load — work stealing compensates; breaks under loaded runtime / loaded OS) + distinct-from BOTH directions; source-reported mini-redis p50/p99 figures carried as source-reported
+- [ ] Rule 3 `bounded-fanout-semaphore`: admit ONLY if fixture-level distinctness from `bounded-channel-backpressure` holds after the re-read; expected DROP or demotion — record either way
+- [ ] Count pins walk: corpus header totals, `entries.len()`, category counts + sum, benchable/NotBenchable lists, annotated count, without_spec, AGENTS.md ×2, README, `.docs/11_domains/rust_perf.md` ledger
+- [ ] Batch gates: presence+parse+needles incl. NotBenchable-membership; lib default floors; rust_perf filter floors; retrieval floors (expect byte-identical blended 94.7/96.9 op-bigram unless corpus growth moves them per gate contract); clippy 0 on write-set ×states; score-bench run (expect FLAT — suggestion-only additions)
+- [ ] ONE landing commit: corpus + gates + Research 179 status update (DISTILLED → RECORD) + AGENTS.md batch entry + snapshot landing line; `docs:`/`feat:` prefix; push
+- [-] Lane-intel artifacts — NOT owed: the axis does not fire (0 tokio hits in riir-ai/.issues; league rows are GPU lanes; Research 179 records the adjacency honestly)

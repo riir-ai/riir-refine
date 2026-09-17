@@ -108,6 +108,28 @@
 
 ## Post-mining intake (compact — full records in `.research/108_mining_queue_snapshot_history.md`)
 
+> **STAGED 2026-09-17 (distill verdict — the dial9-rs "Principles for fast Tokio
+> applications" blog, re-graded YES B− under owner challenge; [Research 179](../.research/179_dial9_tokio_principles_distill.md)
+> / [Plan 142](../.plans/142_batch152_dial9_tokio_distill.md)):** next rust_perf
+> batch slot (150/151 claimed — nominal Batch 152, claim the number at execution,
+> the Batch-149 staged-intake race rule). 2 rule candidates + 1 expect-drop:
+> `batch-blocking-pool-segment` (the lead — N small `tokio::fs`/`spawn_blocking`
+> ops → one hoisted blocking segment; ZERO corpus hits for blocking-pool batching;
+> distinct from buffered-io/bufwriter-batched SYSCALL batching) + the
+> adaptive-yield-K-consecutive-ready content (distinct-from `async-yield-point`
+> BOTH directions — that rule's buggy shape is a statically-await-less loop, this
+> is dynamically-instant pipelined awaits + the threshold + the light/heavy-load
+> anti-regime; standalone-or-rider at mine time); `bounded-fanout-semaphore`
+> expected DROP (adjacent to bounded-channel-backpressure). GOAT-GATE NOTE
+> recorded honestly: NO benchable candidate (tokio fairness metrics outside the
+> Pareto validator) — graded on decision content per the **Batch-136 precedent**
+> (a no-numbers qualitative blog landing 3 NotBenchable rules); first-pass
+> MARGINAL B− retracted, both grades kept in Research 179 as the resolved
+> borderline-call precedent. All fixtures ORIGINAL; source numbers source-reported
+> (mini-redis p50 0.967→0.105 ms / p99 2.548→0.320 ms; ~50k blocking tasks/s @
+> 32-core). Lane-intel axis does NOT fire (0 tokio hits in riir-ai/.issues;
+> league rows are GPU lanes).
+
 > **RECORD 2026-09-17 (perf-rematch pipeline read — llama.cpp OPEN-PR forward-look, two
 > ENGINE-LANE leads handed from the riir-ai league; no clippy-rule candidates, no batch).**
 > Source: GitHub search API over `ggml-org/llama.cpp` open PRs (title `cuda`), read during
