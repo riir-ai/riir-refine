@@ -77,7 +77,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       re-arm's leads, each fixture the oracle-verified family pair;
 ///       BOTH groups style/default-on, pinned by the plan150 probe's
 ///       default-groups arms).
-// 76-entry data table, not logic — length is the point.
+///     + the 2 Batch 160 rows (2026-09-18, the frontier-lead mining pack VI
+///       — `from_str_radix_10` + `assign_op_pattern`, Plan 151; the Batch
+///       159 re-arm's leads, each fixture the oracle-verified family
+///       pair; BOTH groups style/default-on, pinned by the plan151
+///       probe's default-groups arms).
+// 78-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -743,6 +748,24 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }".to_string(),
             fixed_code: "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.clamp(3, 5) }".to_string(),
         },
+        // ── Batch 160 (2026-09-18, the frontier-lead mining pack VI — the
+        // Batch 159 re-arm's leads, Plan 151. Each fixture is the
+        // ORACLE-VERIFIED family (seed, broken) pair from the Batch 159
+        // re-arm probe: seed clean under all+pedantic+nursery, broken fires
+        // EXACTLY its target lint. Both style-group (default-on) — groups
+        // pinned by the plan151 probe's default-groups arms.) ──
+        ClippyFixEntry {
+            lint_name: "from_str_radix_10".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(s, 10) }".to_string(),
+            fixed_code: "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); s.parse::<u32>() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "assign_op_pattern".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }".to_string(),
+            fixed_code: "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y += 1; y }".to_string(),
+        },
     ])
 }
 
@@ -838,14 +861,16 @@ mod tests {
     /// and the 2 Batch 158 rows (`to_string_in_format_args`,
     /// `manual_range_contains` — the frontier-lead mining pack IV,
     /// Plan 149) + the 2 Batch 159 rows (`single_char_add_str`,
-    /// `manual_clamp` — the frontier-lead mining pack V, Plan 150) = 76.
+    /// `manual_clamp` — the frontier-lead mining pack V, Plan 150) + the
+    /// 2 Batch 160 rows (`from_str_radix_10`, `assign_op_pattern` — the
+    /// frontier-lead mining pack VI, Plan 151) = 78.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_76() {
+    fn corpus_size_is_78() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 76);
+        assert_eq!(corpus.entries.len(), 78);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

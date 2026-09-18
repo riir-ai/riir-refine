@@ -91,6 +91,8 @@
 //! `manual_range_contains` | `x >= 3 && x <= 5` → `(3..=5).contains(&x)` on proven scalar operands + literal bounds (Batch 158) |
 //! `single_char_add_str` | `s.push_str("!")` → `s.push('!')` on signature-proven `String`/`&mut String` receivers, VALUE-based single-char arg + `escape_default` emit (Batch 159) |
 //! `manual_clamp` | `x.max(3).min(5)` → `x.clamp(3, 5)` (+ the mirrored order twin) on proven int/char receivers, LITERAL bounds + the NaN-float and inverted-bounds panic guards (Batch 159) |
+//! `from_str_radix_10` | `u32::from_str_radix(s, 10)` → `s.parse::<u32>()` — construction identity (std's int `FromStr` IS radix-10 `from_str_radix`), receiver verbatim + paren-wrap (Batch 160) |
+//! `assign_op_pattern` | `y = y + 1` → `y += 1` on exactly-once-proven arithmetic scalars (params/annotated/init-transfer/suffixed-literal bindings), commutative swapped twin `+`/`*` only (Batch 160) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -150,9 +152,11 @@
 //! `iter_skip_next`, Plan 148 — and the 2 Batch 158 frontier-lead rules —
 //! `to_string_in_format_args` / `manual_range_contains`, Plan 149 — and
 //! the 2 Batch 159 frontier-lead rules — `single_char_add_str` /
-//! `manual_clamp`, Plan 150); future
+//! `manual_clamp`, Plan 150 — and the 2 Batch 160 frontier-lead rules —
+//! `from_str_radix_10` / `assign_op_pattern`, Plan 151); future
 //! lints drop in by extending the match.
 
+pub mod assign_op_pattern;
 pub mod byte_char_slices;
 pub mod cast_lossless;
 pub mod chunks_exact_to_as_chunks;
@@ -166,6 +170,7 @@ pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
 pub mod format_collect;
+pub mod from_str_radix_10;
 pub mod helpers;
 pub mod identity_op;
 pub mod io_other_error;
@@ -486,6 +491,36 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // divergence precedent). Style-group (default-on; group pinned by
     // the plan150 probe's default-groups arm).
     "manual_clamp",
+    // ── Batch 160 (the frontier-lead mining pack VI — Plan 151 — the
+    // Batch 159 re-arm's leads, 2026-09-18) ──
+    // `u32::from_str_radix(s, 10)` → `s.parse::<u32>()` — FIXABLE by
+    // CONSTRUCTION IDENTITY: std's `impl FromStr for {int}` IS
+    // `from_str_radix(src, 10)`, so `parse::<T>()` calls the SAME fn
+    // with the SAME input and returns the SAME `Result<T,
+    // ParseIntError>`; the turbofish re-spells the type the original
+    // already named (RESOLUTION-IDENTICAL — no new name resolution, no
+    // shadow guard needed, unlike legacy_numeric_constants which
+    // INTRODUCED the bare primitive path). Receiver = arg0 verbatim
+    // (paren-wrapped when not postfix-safe — autoderef reaches
+    // `str::parse` on every shape the `&str` coercion compiled on).
+    // Radix = int LITERAL value 10 (suffix rides). The 12 int
+    // primitives (exactly where both `from_str_radix` and the radix-10
+    // `FromStr` impl exist). Style-group (default-on; group pinned by
+    // the plan151 probe's default-groups arm).
+    "from_str_radix_10",
+    // `y = y + 1` → `y += 1` (+ the commutative swapped twin
+    // `y = 1 + y`, `+`/`*` only — the probe-measured boundary: `y = 1 - y`
+    // is clippy-SILENT and refused) — FIXABLE by construction on
+    // BUILT-IN ops: compound assignment IS the binary op + store (same
+    // overflow checks). The overloaded-operator hole is closed by TYPE
+    // DERIVATION (the LHS ident proven an ARITHMETIC scalar — ints +
+    // floats — via a NEW exactly-once-binding derivation: params,
+    // annotated lets, init-transfer lets `let mut y = <proven ident>`,
+    // and SUFFIXED-literal inits; bare `0`/`0.0` refuse the
+    // `{integer}`/f32-unification ambiguity class). Span-order guard +
+    // nested-item skip (fns don't capture). Style-group (default-on;
+    // group pinned by the plan151 probe's default-groups arm).
+    "assign_op_pattern",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -803,6 +838,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 159 (the frontier-lead mining pack V, Plan 150) ──
         "single_char_add_str" => single_char_add_str::collect_edits(source, file),
         "manual_clamp" => manual_clamp::collect_edits(source, file),
+        // ── Batch 160 (the frontier-lead mining pack VI, Plan 151) ──
+        "from_str_radix_10" => from_str_radix_10::collect_edits(source, file),
+        "assign_op_pattern" => assign_op_pattern::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -904,7 +942,11 @@ mod tests {
         // with the VALUE-based single-char arg + escape_default emit, and
         // the lattice-absorption clamp rewrite with the NaN-float +
         // inverted-bounds panic guards).
-        assert_eq!(FIXABLE_LINTS.len(), 57);
+        // + 2 Batch 160 (from_str_radix_10 + assign_op_pattern — the
+        // frontier-lead pack VI, Plan 151; the construction-identity
+        // parse rewrite + the exactly-once-binding derivation compound
+        // assign rewrite with the commutative-swapped boundary).
+        assert_eq!(FIXABLE_LINTS.len(), 59);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
@@ -1307,6 +1349,17 @@ impl S {
                 "manual_clamp",
                 "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }",
                 "x.clamp(3, 5)",
+            ),
+            // ── Batch 160 (the frontier-lead mining pack VI, Plan 151) ──
+            (
+                "from_str_radix_10",
+                "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(s, 10) }",
+                "s.parse::<u32>()",
+            ),
+            (
+                "assign_op_pattern",
+                "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }",
+                "y += 1",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

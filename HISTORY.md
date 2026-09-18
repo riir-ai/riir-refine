@@ -1,5 +1,80 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 160 / Plan 151: the frontier-lead mining pack VI (the FOURTH consecutive all-FIXABLE pack; corpus 76 → 78, clippy 57/16 → 59/16)
+
+The flywheel's sixth turn: the Batch 159 re-arm's 2 leads became rules,
+BOTH graduated (13 covered families now), 2 fresh oracle-verified leads
+re-armed the frontier. 2 new proposers:
+
+1. **`from_str_radix_10`** (FIXABLE, style/default-on — the group PINNED
+   by the plan151 default-groups arm; the plan150 probe had verified the
+   fixture only under the full `-W all -W pedantic -W nursery` union,
+   which cannot distinguish the group). `u32::from_str_radix(s, 10)` →
+   `s.parse::<u32>()` — **construction identity**: std's `impl FromStr
+   for {int}` IS `from_str_radix(src, 10)`, so `parse::<T>()` calls the
+   SAME fn with the SAME input and returns the SAME `Result<T,
+   ParseIntError>`; the turbofish re-spells the type the original already
+   named, making the rewrite RESOLUTION-IDENTICAL — no new name
+   resolution, so no shadow guard (unlike `legacy_numeric_constants`,
+   which INTRODUCED the bare primitive path). Receiver = arg0 verbatim
+   (paren-wrapped when not postfix-safe — autoderef reaches `str::parse`
+   on every shape the `&str` coercion compiled on). The 12 int
+   primitives; radix literal value 10 (suffix rides); path-shape +
+   arg-count + attrs + comment-in-glue guards.
+
+2. **`assign_op_pattern`** (FIXABLE, style/default-on — group pinned by
+   the plan151 default-groups arm; the family_cases "default-level"
+   comments written at Batch 159 were claims this batch measured).
+   `y = y + 1` → `y += 1` — builtin-op construction identity, the
+   overloaded-operator hole closed by a NEW **exactly-once binding
+   derivation**: the LHS ident proven an arithmetic scalar (ints +
+   floats) via (a) param annotations, (b) annotated lets (syn folds the
+   annotation into `Pat::Type` — unwrapped), (c) init-transfer lets
+   (`let mut y = <proven ident>`, in SOURCE order — chains work), (d)
+   SUFFIXED-literal inits (`0i32`; bare `0`/`0.0` refuse the
+   `{integer}`/f32-unification ambiguity). Exactly-once across the whole
+   fn incl. nested items (a rebind anywhere kills); span-order guard;
+   nested fns get their OWN pass via take/restore (fns don't capture).
+   **The swapped-operand boundary is probe-measured**: `y = 1 + y` /
+   `y = 2 * y` FIRE (commutative), `y = 1 - y` is SILENT — the proposer
+   mirrors exactly (+/* only on the swapped arm; the pre-probe
+   assumption that the swapped form fires `misrefactored_assign_op` was
+   wrong, measured round 1). All 10 assign-op pairs; `&&`/`||` refuse;
+   bool receivers refuse (the documented divergence).
+
+**Graduation:** BOTH families flipped `covered: true` — the heldout loop
+is now THIRTEEN families deep; the 2 consumed frontier rows archived
+(the Batch-159 KnownSet lesson). **Re-arm**
+(`scripts/plan151_frontier_probe.py`): **`unit_arg`** (the
+plan150-verified spare, third turn — the side-effect-block dodge) +
+**`string_lit_as_bytes`** (`"abc".as_bytes()` → `b"abc"`, perf-group,
+Bench-094-family default-level). Verified-but-not-armed alternates
+recorded: `manual_string_new`, `bool_comparison`, `bytes_count_to_len`,
+and `needless_late_init` — whose naive seed crossfires OUR OWN
+`let_and_return` (the twice-used-binding `x + x` dodge clears it; the
+recorded next spare).
+
+**Freeze regen (real oracle):** atoms 57 → 59 (both leads FIXABLE — the
+fourth consecutive all-pack). Neither new atom interferes (bad sets
+UNCHANGED 6/7): v2 82 labeled / 13 excluded, v3 83/16 (the count
+movement vs Batch 159's 78/15 + 80/17 is the benign window shuffle — 0
+newly excluded, 0 drift on both e2es). v2 e2e 34.1 s PASS; v3 e2e
+193.5 s PASS. **Instrument lesson (the regen path):** this box's pty
+CORRUPTS `cargo run > file` redirects (rows circularly rotated, headers
+lost — silent garbage, exit 0); the regen example now WRITES ITS OWN
+OUTPUT FILE (`fs::write`) and the built exe is invoked directly.
+
+GOAT: lib default **1917/0** (+25) · lib `latent_retrieval` **2070/0** ·
+lib `frontier_miner,score_bench` **2234/0** · clippy `-D` clean 4 states
+(2 doc_markdown findings in the new miner docs healed by our own healer
+mid-batch — the dogfood loop) · frontier e2e **VERDICT ✓** (32 seeds
+clean, 13 family loops, 2 fresh heldout admissions, the 2 re-arm leads
+admitted exact-fire, 11 committed rows 0 drift, 4 rows appended, band
+fold 13/13) · score-bench row **#136 96.36% FLAT** (vocab 57→59) +
+frontier snapshot generation 7. Plan
+[151](.plans/151_batch160_frontier_lead_pack6.md) · Research
+[187](.research/187_batch160_frontier_lead_pack6.md).
+
 ## 2026-09-18 — Batch 159 / Plan 150: the frontier-lead mining pack V (the THIRD consecutive all-FIXABLE pack; corpus 74 → 76, clippy 55/16 → 57/16)
 
 The flywheel's fifth turn: the Batch 158 re-arm's 2 leads became rules,
