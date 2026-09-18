@@ -1,6 +1,6 @@
 # Plan 153 — Batch 162: the frontier-lead mining pack VIII (bytes_count_to_len + bool_comparison)
 
-**Status:** IN PROGRESS — opened 2026-09-19 (riir-shader-t2 idle session, the
+**Status:** COMPLETE — Batch 162 landed at `b8605224` (2026-09-19; the full record: HISTORY.md 2026-09-19 + Research 189; the frontier population EMPTY, the next re-arm = the plan152 spares). — opened 2026-09-19 (riir-shader-t2 idle session, the
 Batch-161 re-arm leads; leads probe-verified by `scripts/plan152_frontier_probe.py`
 the same day: seed clean, broken fires EXACTLY its target under the full oracle).
 
@@ -50,7 +50,7 @@ the same day: seed clean, broken fires EXACTLY its target under the full oracle)
       (the fixpoint path's existing law).
 - [x] T9 — docs: AGENTS corpus counts (80 → 82), HISTORY record, queue
       snapshot update (consumed-lead rows flipped + next re-arm), commit+push.
-- [ ] T10 — `rm -rf` any scratch; final gate re-run.
+- [x] T10 — `rm -rf` any scratch; final gate re-run.
 
 ## Design sources
 
