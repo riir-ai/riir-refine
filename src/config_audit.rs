@@ -3135,7 +3135,10 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         let got = parse_ls_files_z(&bytes, &std::env::temp_dir());
         let names: Vec<String> = got.iter().map(|p| p.display().to_string()).collect();
         assert_eq!(names.len(), 1, "nonexistent dropped, real kept: {names:?}");
-        assert!(names[0].ends_with("cfgaudit_p25_exists.rs"));
+        // The pid-discriminated name (f5ada0ec) — ends_with against the
+        // FULL discriminated stem, not the pre-discriminator literal.
+        let expect = format!("cfgaudit_p25_exists_{}.rs", std::process::id());
+        assert!(names[0].ends_with(&expect), "{names:?}");
         let _ = fs::remove_file(&here);
     }
 
