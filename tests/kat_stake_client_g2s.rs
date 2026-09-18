@@ -164,7 +164,7 @@ fn read_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
             buf.extend_from_slice(&tmp[..n]);
         }
         let body = &buf[header_end + 4..];
-        body_prefix = Some(String::from_utf8_lossy(&body[..body.len().min(240)]).into_owned());
+        body_prefix = Some(String::from_utf8_lossy(&body[..body.len().min(512)]).into_owned());
     }
     Some(CapturedRequest {
         method,
@@ -382,7 +382,14 @@ fn unstake_posts_the_drain_request_and_renders_the_disclosure() {
     );
     let transport = MockStakeTransport { server };
     let root = temp_dir("unstake");
-    let out = kat_stake_client::unstake_flow(&transport, "acct42", &root, 1).expect("live unstake");
+    let out = kat_stake_client::unstake_flow(
+        &transport,
+        &ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]),
+        "acct42",
+        &root,
+        1,
+    )
+    .expect("live unstake");
     // The service-queued arm: the amount + the full disclosure.
     assert!(
         out.contains("unstake: queued by the service (100.00 USDC)"),
@@ -407,8 +414,14 @@ fn unstake_not_live_queues_and_still_discloses() {
     let server = spawn_stake_mock(ServeMode::Down, String::new());
     let transport = MockStakeTransport { server };
     let root = temp_dir("unstake-local");
-    let out = kat_stake_client::unstake_flow(&transport, "acct42", &root, 1)
-        .expect("not-live unstake queues");
+    let out = kat_stake_client::unstake_flow(
+        &transport,
+        &ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]),
+        "acct42",
+        &root,
+        1,
+    )
+    .expect("not-live unstake queues");
     assert!(
         out.contains("service plane not yet live — intent queued locally"),
         "{out}"
@@ -463,8 +476,14 @@ fn unstake_refusal_shape_renders_remaining_time() {
     });
     let transport = transport_at(&format!("http://{addr}"));
     let root = temp_dir("unstake-refuse");
-    let out = kat_stake_client::unstake_flow(&transport, "acct42", &root, 1)
-        .expect("refusal renders, not errors");
+    let out = kat_stake_client::unstake_flow(
+        &transport,
+        &ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]),
+        "acct42",
+        &root,
+        1,
+    )
+    .expect("refusal renders, not errors");
     assert!(out.contains("refused — lockup not expired"), "{out}");
     assert!(out.contains("2d 00h"), "{out}");
     std::fs::remove_dir_all(&root).ok();

@@ -2010,8 +2010,15 @@ fn run_kat_unstake() {
     {
         let url = riir_clippy::kat_lease_client::service_url_for_command();
         let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
-        match riir_clippy::kat_stake_client::unstake_flow(&transport, &account_id, &root, now_unix)
-        {
+        // Issue 096 (riir-dapps): the unstake route is signature-gated —
+        // the request signs with the account key (the claim key).
+        let flow = match account.signing_key() {
+            Ok(key) => {
+                riir_clippy::kat_stake_client::unstake_flow(&transport, &key, &account_id, &root, now_unix)
+            }
+            Err(e) => Err(format!("unstake: account key unreadable ({e}) — run `cargo heal login`")),
+        };
+        match flow {
             Ok(line) => println!("{line}"),
             Err(e) => {
                 eprintln!("unstake: {e}");
