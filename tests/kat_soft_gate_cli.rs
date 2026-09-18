@@ -313,6 +313,100 @@ fn the_refusal_surveys_what_it_would_have_fixed() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The survey's mining arm has TWO branches, and only `none queued` was
+/// exercised above (scratch dirs have no outbox). Seed one batch file into
+/// the sync outbox (the SAME root `cargo heal sync` drains —
+/// `RIIR_HEAL_TRAJ_ROOT`) and the refusal must name it queued — never
+/// "none queued".
+#[test]
+fn the_survey_mining_arm_counts_the_queued_outbox() {
+    let dir = scratch("outbox");
+    write_a_rs(&dir);
+    login(&dir);
+    seed_ack(&dir, 0);
+    let outbox = dir.join(".heal").join("outbox");
+    std::fs::create_dir_all(&outbox).expect("outbox dir");
+    std::fs::write(outbox.join("batch-0001.ndjson"), "{}\n").expect("seed batch");
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
+    assert!(
+        text.contains("mining: 1 batch(es) queued"),
+        "the queued count must render. output:\n{text}"
+    );
+    assert!(
+        !text.contains("none queued"),
+        "a seeded outbox must not read as empty. output:\n{text}"
+    );
+    assert!(
+        text.contains("within 7 days"),
+        "the payout clock must render beside the queue. output:\n{text}"
+    );
+    // The refused run must not touch the seeded outbox.
+    assert_eq!(
+        std::fs::read_dir(&outbox).map(|rd| rd.count()).unwrap_or(0),
+        1,
+        "the refusal must not drain or grow the outbox"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// No sources under the paths → `survey_fixable_count` returns None →
+/// the count line is SKIPPED entirely, never fabricated, while the
+/// mining + payout arms still render and the refusal still exits 1.
+#[test]
+fn the_survey_never_fabricates_a_count_without_sources() {
+    let dir = scratch("nosrc");
+    std::fs::write(dir.join("notes.txt"), "not rust\n").expect("non-rust file");
+    login(&dir);
+    seed_ack(&dir, 0);
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
+    assert!(
+        text.contains("count-only survey"),
+        "the survey header still renders. output:\n{text}"
+    );
+    assert!(
+        !text.contains("survey:"),
+        "no count line without sources. output:\n{text}"
+    );
+    assert!(
+        text.contains("mining:"),
+        "the mining arm does not depend on sources. output:\n{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The `Some(0)` arm: the survey counts SPANS WITH RETRIEVAL (the run
+/// summary's own "N with suggestions" metric), and the retrieval-first
+/// suggester returns nearest-corpus candidates for ANY span — measured:
+/// even a comment-only file yields one span and reads "1 fixable". A file
+/// that measures 0 must have NO spans at all: zero bytes.
+#[test]
+fn the_survey_zero_arm_renders_nothing_skipped() {
+    let dir = scratch("zero");
+    std::fs::write(dir.join("empty.rs"), "").expect("zero-byte fixture");
+    login(&dir);
+    seed_ack(&dir, 0);
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(1), "output:\n{text}");
+    assert!(
+        text.contains("survey: 0 fixable findings"),
+        "the zero arm must render its own wording. output:\n{text}"
+    );
+    assert!(
+        text.contains("nothing was skipped"),
+        "output:\n{text}"
+    );
+    assert!(
+        !text.contains("NOT applied"),
+        "zero fixable must not claim skipped work. output:\n{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Issue 079: the automation hook runs the contribute-now offer, then —
 /// with the service at a closed port and no trajectory store to build a
 /// batch from — the gate STILL refuses, honestly (no marker was written;
