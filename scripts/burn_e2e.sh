@@ -180,9 +180,17 @@ echo "$GRANT_OUT" | grep -q "balance:   100.000000 KAT" \
 # ── T1 + T2: metering + push/watermark on A ─────────────────────────────
 say "T1/T2: metered scan + burn push (account A)"
 T1_OUT=$(env $(acct_env a) sh -c "cd '$WORK/scratch_a' && '$BIN' 2>&1" || true)
-RUN_TOK=$(echo "$T1_OUT" | grep -oE 'this run +[0-9,]+ tok' | head -1 | grep -oE '[0-9,]+' | tr -d ',')
-PUSHED=$(echo "$T1_OUT" | grep -oE 'burn sync: [0-9]+ KAT reported \(server balance [0-9.]+ KAT\)' | head -1)
-FOOTER_KAT=$(echo "$T1_OUT" | grep -oE 'this run +[0-9,]+ tok → [0-9.]+ KAT' | head -1)
+# ⛔ `|| true` on each: under `set -euo pipefail` a legitimately-empty grep
+# exits 1, the pipeline inherits it, and the assignment KILLS the script —
+# after the measured run above and before any verdict below, so a failing T1
+# would report nothing at all (katgpt-rs Issue 796's pipefail-discard class).
+# `|| true` alone is sufficient HERE, and only because each capture is then
+# tested for emptiness with a fail-loud `else verdict FAIL` branch; where the
+# empty case is not handled, `|| true` converts a silent death into a silent
+# PASS, which is strictly worse than the defect.
+RUN_TOK=$(echo "$T1_OUT" | grep -oE 'this run +[0-9,]+ tok' | head -1 | grep -oE '[0-9,]+' | tr -d ',' || true)
+PUSHED=$(echo "$T1_OUT" | grep -oE 'burn sync: [0-9]+ KAT reported \(server balance [0-9.]+ KAT\)' | head -1 || true)
+FOOTER_KAT=$(echo "$T1_OUT" | grep -oE 'this run +[0-9,]+ tok → [0-9.]+ KAT' | head -1 || true)
 if [ -n "$RUN_TOK" ] && [ "$RUN_TOK" -gt 1000000 ] && [ -n "$FOOTER_KAT" ]; then
   verdict PASS "T1 metering — this run $RUN_TOK tokens billed; footer charged"
 else
