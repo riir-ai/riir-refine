@@ -228,6 +228,25 @@ fn depleted_never_contributed_refuses_at_run_start() {
         !text.contains("scanned "),
         "the refusal must precede the scan. output:\n{text}"
     );
+    // The 2026-09-18 owner amendment: the refusal SURVEYS what the run
+    // would have done — count-only (this clean fixture measures 0), the
+    // mining line renders, and the payout clock is named.
+    assert!(
+        text.contains("count-only survey"),
+        "the survey header must render. output:\n{text}"
+    );
+    assert!(
+        text.contains("survey:"),
+        "the survey count must render (the count itself is corpus-dependent). output:\n{text}"
+    );
+    assert!(
+        text.contains("mining:"),
+        "the mining line must render. output:\n{text}"
+    );
+    assert!(
+        text.contains("within 7 days"),
+        "the payout clock must render. output:\n{text}"
+    );
     // The gate reads, never writes: no charge ledger may appear.
     assert!(
         !dir.join(".heal").join("kat_charge.json").exists(),
@@ -249,6 +268,48 @@ fn the_gate_is_mode_wide_fix_refuses_too() {
     let (code, text) = heal(&dir, &[], &["--fix"]);
     assert_eq!(code, Some(1), "output:\n{text}");
     assert!(text.contains("REFUSED"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The 2026-09-18 owner amendment, measured against a FIXABLE fixture:
+/// the survey counts what the run would have fixed and says NOT applied,
+/// while no fix content, no scan summary, and no billing path may appear
+/// (the count is the advertisement; the fixes stay paid).
+#[test]
+fn the_refusal_surveys_what_it_would_have_fixed() {
+    let dir = scratch("survey");
+    std::fs::write(
+        dir.join("fixable.rs"),
+        "fn f() -> u32 {\n    let x = 1;\n    return x;\n}\n",
+    )
+    .expect("fixable fixture");
+    login(&dir);
+    seed_ack(&dir, 0);
+
+    let (code, text) = heal(&dir, &[], &[]);
+    assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
+    assert!(
+        text.contains("found \u{2014} NOT applied"),
+        "the fixable count must name it NOT applied. output:\n{text}"
+    );
+    assert!(
+        !text.contains("0 fixable"),
+        "the fixable fixture must measure ABOVE zero. output:\n{text}"
+    );
+    assert!(
+        text.contains("mining:"),
+        "the mining line must render. output:\n{text}"
+    );
+    // The pipeline never ran: no scan summary, no suggestion content.
+    assert!(!text.contains("scanned "), "output:\n{text}");
+    assert!(
+        !text.contains("return x;"),
+        "fix content must not leak from the count-only survey. output:\n{text}"
+    );
+    assert!(
+        !dir.join(".heal").join("kat_charge.json").exists(),
+        "the survey must not open the billing path"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -401,6 +401,10 @@ fn enforce_kat_soft_gate(args: &Args) {
     eprintln!("Refuel with exactly one of:");
     eprintln!("  * contribute:  cargo heal --mine   (what mining is)  →  cargo heal sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
     eprintln!("  * top up:      {top_up}");
+    // The owner's 2026-09-18 amendment: the refusal also SHOWS what the
+    // run would have done — count-only. Still no meter, no charge ledger,
+    // no fix content (the count is the advertisement; the fixes stay paid).
+    print_depleted_survey(args);
     eprintln!(
         "(logged-out / offline / never-synced machines are never gated — this reads the last \
          SYNCED server balance; RIIR_HEAL_KAT_GATE=0 disables the gate)"
@@ -412,6 +416,106 @@ fn enforce_kat_soft_gate(args: &Args) {
         );
     }
     std::process::exit(1);
+}
+
+/// The owner's 2026-09-18 depleted-run guidance (the 075 gate amended):
+/// the refusal stays at run start — no meter, no charge ledger, no fixes
+/// — but it now SURVEYS what the run would have done, count-only. The
+/// count is the advertisement; the fix content stays paid (the D4
+/// doctrine: contribute or pay, nothing is fixed for free). The survey
+/// reads the compiled-in corpus (the gate runs before the lease context
+/// builds) through the same suggest primitives the dry run uses, and
+/// never prints a count it could not compute.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn print_depleted_survey(args: &Args) {
+    eprintln!(
+        "What this run would have done (count-only survey — nothing was fixed, nothing was billed):"
+    );
+    // What it would have fixed — scan modes only (a bare run sets
+    // suggest=true; --fix and --fix-compile are the other scan modes).
+    if args.suggest || args.fix || args.fix_compile {
+        match survey_fixable_count(&args.paths) {
+            Some(0) => eprintln!(
+                "  * survey: 0 fixable findings on the requested paths — nothing was skipped"
+            ),
+            Some(n) => eprintln!(
+                "  * survey: {n} fixable finding(s) found — NOT applied (account depleted; the fixes stay gated)"
+            ),
+            None => {} // no sources under the paths / index unavailable — no fabricated count
+        }
+    }
+    // What mining can do about it, and when it pays. The count is the
+    // SYNC-time outbox (the same root `cargo heal sync` drains), so it is
+    // honest right after the contribute-now attempt above.
+    let queued = mining_queued_batches();
+    if queued > 0 {
+        eprintln!(
+            "  * mining: {queued} batch(es) queued — `cargo heal sync` pushes them (payouts land at the 7-day epoch settle)"
+        );
+    } else {
+        eprintln!(
+            "  * mining: none queued — `cargo heal --mine` contributes (payouts land at the 7-day epoch settle)"
+        );
+    }
+    let leaderboard = format!(
+        "{}/leaderboard",
+        riir_clippy::kat_lease_client::service_url_for_command().trim_end_matches('/')
+    );
+    eprintln!("  * payouts land within 7 days of a push — exact dates: {leaderboard}");
+}
+
+/// The survey half of the depleted guidance: the fixable-span count over
+/// the requested paths, measured the same way the run summary measures
+/// "N with suggestions" (span-level, any corpus rule or oracle anchor).
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn survey_fixable_count(paths: &[PathBuf]) -> Option<usize> {
+    let targets: Vec<PathBuf> = if paths.is_empty() {
+        vec![PathBuf::from(".")]
+    } else {
+        paths.to_vec()
+    };
+    let mut files = Vec::new();
+    for path in &targets {
+        collect_source_files(path, ".rs", &mut files);
+    }
+    files.sort();
+    files.dedup();
+    if files.is_empty() {
+        return None;
+    }
+    let mut matcher = LatentMatcher::from_enabled_domains().ok()?;
+    let mut fixable = 0usize;
+    for f in &files {
+        let Ok(src) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        for s in matcher.suggest_file(&src, &f.display().to_string(), 1) {
+            if !(s.all_rules().is_empty()
+                && s.anchored_rules.is_empty()
+                && s.anchored_missing.is_empty())
+            {
+                fixable += 1;
+            }
+        }
+    }
+    Some(fixable)
+}
+
+/// The mining half: batches queued in the sync outbox (the same root
+/// `cargo heal sync` drains), 0 when the dir does not exist yet.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn mining_queued_batches() -> u32 {
+    let outbox = resolve_heal_root(&[]).join(".heal").join("outbox");
+    u32::try_from(
+        std::fs::read_dir(&outbox)
+            .map(|rd| {
+                rd.filter_map(std::result::Result::ok)
+                    .filter(|e| e.path().is_file())
+                    .count()
+            })
+            .unwrap_or(0),
+    )
+    .unwrap_or(u32::MAX)
 }
 
 /// The `--yes` run-global (the flag form of `RIIR_HEAL_YES`): every y/N
