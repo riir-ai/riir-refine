@@ -17,8 +17,8 @@
 #
 # Precedent: `riir-neuron-db/scripts/standalone_dep_gate.sh` (3 entries, one
 # public sibling) and `riir-chain/scripts/standalone_dep_gate.sh` (twelve
-# entries, three siblings — its Issue 028). Here the surface is ten entries
-# across FOUR siblings, three of them private:
+# entries, three siblings — its Issue 028). Here the surface is twelve
+# entries across FIVE siblings, four of them private:
 #
 #   katgpt-rs      (public)   katgpt-core, katgpt-device-verify,
 #                            katgpt-micro-belief (Issue 093 T1 — opt-in
@@ -32,6 +32,9 @@
 #                             riir-auth left the set the same day: the row
 #                             swapped, not grown — the account substrate is
 #                             now riir-kat's dep, resolved transitively)
+#   riir-llm       (private)  riir-llm (issue 124 — the LLM-transport leaf;
+#                             optional, `groq_first`/`cf_workers_ai` enable
+#                             `riir-llm/transport`)
 #
 # Provisioning them is `.github/workflows/rust.yml`'s job (the feature-guard
 # job; the two private siblings need `SIBLING_REPOS_TOKEN`).
@@ -56,7 +59,7 @@ cd "$(dirname "$0")/.."
 
 # The pinned inventory: "<manifest-relative-path> <dep-name>", sorted.
 #
-# 11 entries as of 2026-09-12 (Issue 093 added katgpt-micro-belief). `[patch]` entries
+# 12 entries as of 2026-09-18 (Issue 124 added riir-llm). `[patch]` entries
 # resolve through the same lexical scan (their lines are `name = { path = "…" }`
 # exactly like dependency lines) and are pinned — a new vendor patch is a new
 # repo CI must provision. `katgpt-core` appears twice in the root manifest (the
@@ -72,6 +75,7 @@ Cargo.toml katgpt-micro-belief
 Cargo.toml riir-engine
 Cargo.toml riir-gpu
 Cargo.toml riir-kat
+Cargo.toml riir-llm
 Cargo.toml riir-neuron-db
 Cargo.toml riir-rag
 Cargo.toml wgpu-hal
@@ -142,7 +146,7 @@ if [ "$ACTUAL" = "$EXPECTED" ]; then
     n=$(printf '%s\n' "$ACTUAL" | grep -c . || true)
     echo "✓ standalone-dep gate PASSED — $n escaping path deps, matching the pin"
     echo "  (this repo is still NOT standalone-buildable; the gate pins the gap,"
-    echo "   it does not close it. CI provisions all four siblings —"
+    echo "   it does not close it. CI provisions all five siblings —"
     echo "   .github/workflows/rust.yml, feature-guard job.)"
     exit 0
 fi

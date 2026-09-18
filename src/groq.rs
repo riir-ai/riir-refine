@@ -82,12 +82,11 @@
 //! leg: every span passes the redaction gate (`crate::kat_redact`, v3)
 //! and the own-repo-only sync policy — no new egress class is opened.
 
-use std::time::Duration;
-
-/// Mirrors `cf_workers_ai::REASONING_OVERFLOW` (same string, defined locally
-/// so this module compiles under `groq_first` alone). Drift is pinned by
-/// `the_overflow_prefix_matches_cf_clients` (both-features only).
-pub const REASONING_OVERFLOW: &str = "reasoning-overflow";
+/// The error-prefix classifier for the thinking-model starvation class —
+/// ONE home now (the leaf; issue 124). Both this alias and
+/// `cf_workers_ai::REASONING_OVERFLOW` re-export `riir_llm::REASONING_OVERFLOW`,
+/// so the old cross-module drift-pin test retired with the duplication.
+pub const REASONING_OVERFLOW: &str = riir_llm::REASONING_OVERFLOW;
 
 /// Default Groq model — the owner's `.env` probe id.
 pub const DEFAULT_GROQ_MODEL: &str = "qwen/qwen3.8-27b";
@@ -101,12 +100,15 @@ pub const DEFAULT_INFRON_MODEL: &str = "qwen/qwen3.8-27b:free";
 /// OpenAI-compatible chat-completions service. Two consts exist —
 /// [`GROQ_CONF`] and [`INFRON_CONF`] — and [`OaiClient`] is
 /// provider-agnostic over them (Issue 106: the ladder is provider-list-
-/// shaped, not a hardcoded pair).
-#[derive(Clone, Copy)]
+/// shaped, not a hardcoded pair). The `base` is everything BEFORE the
+/// route — the leaf ([`riir_llm::Wire`]) owns the
+/// `/chat/completions` suffix (issue 124; the URL shape had already
+/// diverged once between the dao and clippy copies).
+#[derive(Clone, Copy, Debug)]
 struct EndpointConf {
     /// Ledger/log token ("groq" / "infron") — error attribution.
     label: &'static str,
-    url: &'static str,
+    base: &'static str,
     /// The env var holding the API key.
     key_env: &'static str,
     /// The env var holding the optional model override.
@@ -116,7 +118,7 @@ struct EndpointConf {
 
 const GROQ_CONF: EndpointConf = EndpointConf {
     label: "groq",
-    url: "https://api.groq.com/openai/v1/chat/completions",
+    base: "https://api.groq.com/openai/v1",
     key_env: "GROQ_API_KEY",
     model_env: "GROQ_MODEL",
     default_model: DEFAULT_GROQ_MODEL,
@@ -128,21 +130,18 @@ const GROQ_CONF: EndpointConf = EndpointConf {
 /// completion at that rate (~62 s) plus queueing headroom.
 const INFRON_CONF: EndpointConf = EndpointConf {
     label: "infron",
-    url: "https://llm.onerouter.pro/v1/chat/completions",
+    base: "https://llm.onerouter.pro/v1",
     key_env: "INFRON_API_KEY",
     model_env: "INFRON_MODEL",
     default_model: DEFAULT_INFRON_MODEL,
 };
 
-/// Overall per-call ceiling — a reasoning model at a 2k budget can legitimately
-/// take minutes (and the infron leg at ~33 tok/s takes ~62 s for a full 2k).
-const CALL_TIMEOUT: Duration = Duration::from_mins(3);
-/// Connect-phase ceiling. Load-bearing SEPARATELY from [`CALL_TIMEOUT`]: a
-/// blackholed TCP connect (dropped packets, DNS-to-nowhere) is indistinguishable
-/// from a slow model under a single overall timeout, so it would stall for the
-/// full 3 min — × every span in the window. A `--limit 25` run could hang 75
-/// minutes on a dead network. Connecting is fast or broken; nothing in between.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+// Overall per-call ceiling and the connect-phase ceiling — the LEAF's
+// consts now (issue 124; identical values, one home):
+// `riir_llm::transport::CALL_TIMEOUT` (180 s) and
+// `riir_llm::transport::CONNECT_TIMEOUT` (10 s, load-bearing
+// separately — a blackholed connect must not consume the per-call
+// ceiling x every span in the window).
 
 /// One OpenAI-compatible generation (either free leg).
 #[derive(Debug, Clone)]
@@ -150,74 +149,43 @@ pub struct OaiGen {
     pub text: String,
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
-    pub total_tokens: u64,
-    /// Thinking-token size diagnostic (the `message.reasoning` field; 0 when
-    /// the model doesn't reason or thinking is suppressed).
+    /// Thinking-token size diagnostic (the leaf's `Usage.reasoning_chars`
+    /// — the `message.reasoning` field; 0 when the model doesn't reason
+    /// or thinking is suppressed).
     pub reasoning_chars: usize,
     /// Whether the response carried a `usage` object.
     pub usage_reported: bool,
-    /// Remaining free-tier quota from the response headers (diagnostic —
-    /// the next call 429s when either hits 0; no pre-flight needed).
-    pub remaining_requests: Option<u64>,
-    pub remaining_tokens: Option<u64>,
     pub latency_ms: u128,
 }
 
-/// Why a free-leg call failed. The router's fallback decision keys on this.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OaiError {
-    /// Free-tier limit hit (HTTP 429, or the error body names rate limits) —
-    /// disable groq for the window, fall back this attempt.
-    RateLimited(String),
-    /// `finish_reason=length` with null/empty content — the thinking-model
-    /// starvation class. Surfaced, never fallen back (a budget problem).
-    Overflow(String),
-    /// Transport / non-429 HTTP / shape failure — transient-class; fall back
-    /// this attempt, groq stays armed.
-    Transport(String),
-}
-
-impl OaiError {
-    /// The message body (for logs and fallback notices). Never contains the
-    /// token (the `CfClient` rule — server error bodies don't echo auth).
-    #[must_use]
-    pub fn message(&self) -> &str {
-        match self {
-            Self::RateLimited(m) | Self::Overflow(m) | Self::Transport(m) => m,
-        }
-    }
-}
+/// Why a free-leg call failed — the leaf's [`riir_llm::LlmFailure`]
+/// verbatim (issue 124: one classification, one vocabulary). The router's
+/// fallback decision keys on the same four variants; `Auth` is the
+/// stop-class the leaf added and this router now honors (a 401 from a
+/// free leg is a config bug, surfaced — never silently shifted onto the
+/// paid CF leg the way a Transport-classification would).
+pub use riir_llm::LlmFailure as OaiError;
 
 /// Minimal blocking OpenAI-compatible chat-completions client — the
 /// substrate of BOTH free legs (groq + infron), parameterized by an
-/// [`EndpointConf`].
-///
-/// The token is held privately and NEVER appears in errors or Debug output.
+/// [`EndpointConf`]. Issue 124: the wire mechanics live in the
+/// [`riir_llm`] leaf — the leg (label/base/bearer/model/wire), the POST
+/// ([`riir_llm::transport::post_chat_on`]: auth header, both timeouts,
+/// bearer scrub, failure classification) and the response parse
+/// ([`riir_llm::Leg::parse`]). What remains HERE is env resolution and
+/// the [`OaiGen`] projection the router's stats consume. The bearer
+/// never appears in errors or Debug output (the leaf's `Leg` Debug
+/// hides it; `post_chat_on` scrubs it from server-controlled bodies).
 pub struct OaiClient {
-    agent: ureq::Agent,
-    url: String,
-    /// The pre-formatted `Bearer <token>` header value, built ONCE.
-    ///
-    /// Two reasons, both deliberate. Perf: `generate` no longer allocates a
-    /// fresh header String per call. Security: the secret exists in exactly
-    /// one heap location for the client's lifetime instead of being copied
-    /// into a new allocation per request and dropped un-zeroed, so it cannot
-    /// be smeared across freed heap pages.
-    auth: String,
-    /// The bare token, kept ONLY to scrub it out of outbound error strings
-    /// (defense in depth — see [`OaiClient::scrub`]).
-    token: String,
-    /// The per-leg redaction placeholder (`"<GROQ_API_KEY redacted>"` /
-    /// `"<INFRON_API_KEY redacted>"`), built once.
-    redacted: String,
-    /// The leg's ledger/log token ("groq" / "infron") — error attribution.
-    label: &'static str,
-    model: String,
+    leg: riir_llm::Leg,
+    /// One agent per client — connection reuse (keep-alive) across the
+    /// window's calls, with the leaf's two timeout ceilings applied.
+    agent: riir_llm::transport::Agent,
 }
 
 impl std::fmt::Debug for OaiClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Deliberately no token.
+        // Deliberately no leg internals (the bearer never renders).
         f.debug_struct("OaiClient").finish_non_exhaustive()
     }
 }
@@ -226,7 +194,7 @@ impl OaiClient {
     /// The model id this client targets (for ledger rows).
     #[must_use]
     pub fn model_id(&self) -> &str {
-        &self.model
+        &self.leg.model
     }
 
     /// True when `GROQ_API_KEY` is set (the router's groq arming check).
@@ -279,190 +247,49 @@ impl OaiClient {
             .or_else(|| std::env::var(conf.model_env).ok())
             .unwrap_or_else(|| conf.default_model.to_string());
         Ok(Self {
-            agent: ureq::AgentBuilder::new()
-                .timeout(CALL_TIMEOUT)
-                .timeout_connect(CONNECT_TIMEOUT)
-                .build(),
-            url: conf.url.to_string(),
-            auth: format!("Bearer {token}"),
-            redacted: format!("<{} redacted>", conf.key_env),
-            label: conf.label,
-            token,
-            model,
+            leg: riir_llm::Leg {
+                label: conf.label.to_string(),
+                base: conf.base.to_string(),
+                bearer: token,
+                model,
+                wire: riir_llm::Wire::OpenAi,
+            },
+            agent: riir_llm::transport::agent(),
         })
     }
 
-    /// Remove the token from a string bound for a log, error, or ledger row.
-    ///
-    /// Defense in depth: neither groq nor the onerouter aggregator echoes the
-    /// `Authorization` header in error bodies today, and every error path in
-    /// this module is hand-audited. This guard is for the paths that DON'T
-    /// exist yet — a future provider that echoes the request, a proxy that
-    /// inlines the header into a 502 page, a debug endpoint. A leaked key in
-    /// `.benchmarks/llm_cost_ledger.jsonl` would be a COMMITTED secret; the
-    /// cost of this check is one `contains` on an error path that is already
-    /// doing network I/O.
-    fn scrub(&self, s: String) -> String {
-        // Early return keeps the common (clean) path allocation-free.
-        if s.contains(self.token.as_str()) {
-            return s.replace(self.token.as_str(), &self.redacted);
-        }
-        s
-    }
-
-    /// One generation. Temperature 0 for reproducibility (the `CfClient` rule).
+    /// One generation. Temperature 0 for reproducibility (the leaf's body
+    /// builder). The qwen3 `/no_think` mitigation rides the leaf's
+    /// [`riir_llm::chat_body_for`] (it fires for both legs' qwen3 ids,
+    /// `:free` suffixes included).
     ///
     /// # Errors
     ///
-    /// [`OaiError`] — classified for the router's fallback decision.
+    /// [`OaiError`] — the leaf's classified failure, ready for the
+    /// router's fallback decision.
     pub fn generate(&self, prompt: &str, max_tokens: usize) -> Result<OaiGen, OaiError> {
         let t0 = std::time::Instant::now();
-        let body = build_oai_body(&self.model, prompt, max_tokens);
-        let resp = self
-            .agent
-            .post(&self.url)
-            .set("Authorization", &self.auth)
-            .send_json(body)
-            .map_err(|e| match e {
-                ureq::Error::Status(code, r) => {
-                    // Best-effort body extract for the message, scrubbed —
-                    // the body is SERVER-controlled, so it is the one error
-                    // string in this module we do not fully author.
-                    let detail = r
-                        .into_json::<serde_json::Value>()
-                        .ok()
-                        .and_then(|v| {
-                            v.pointer("/error/message")
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_string)
-                        })
-                        .map_or_else(|| format!("HTTP {code}"), |d| self.scrub(d));
-                    if code == 429 {
-                        OaiError::RateLimited(format!("HTTP 429: {detail}"))
-                    } else {
-                        OaiError::Transport(format!("HTTP {code}: {detail}"))
-                    }
-                }
-                // ureq embeds the URL in transport errors; the token lives in
-                // a header, not the URL, but scrub anyway — this is the path
-                // a future query-param-auth provider would leak through.
-                ureq::Error::Transport(other) => {
-                    OaiError::Transport(self.scrub(format!("transport: {other}")))
-                }
-            })?;
-        let remaining_requests = parse_quota_header(resp.header("x-ratelimit-remaining-requests"));
-        let remaining_tokens = parse_quota_header(resp.header("x-ratelimit-remaining-tokens"));
-        let v: serde_json::Value = resp
-            .into_json()
-            .map_err(|e| OaiError::Transport(self.scrub(format!("response was not JSON: {e}"))))?;
-        let (text, reasoning_chars, prompt_tokens, completion_tokens, total_tokens, usage_reported) =
-            parse_oai_result(&v, self.label).map_err(|e| match e {
-                ParseFail::Overflow(m) => OaiError::Overflow(m),
-                ParseFail::Shape(m) => OaiError::Transport(m),
-            })?;
+        let body = riir_llm::chat_body_for(
+            self.leg.wire,
+            &self.leg.model,
+            prompt,
+            u64::try_from(max_tokens).unwrap_or(u64::MAX),
+            false,
+        );
+        let raw = riir_llm::transport::post_chat_on(&self.agent, &self.leg, &body)?;
+        let (text, usage) = self.leg.parse(&raw)?;
         Ok(OaiGen {
             text,
-            prompt_tokens,
-            completion_tokens,
-            total_tokens,
-            reasoning_chars,
-            usage_reported,
-            remaining_requests,
-            remaining_tokens,
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            reasoning_chars: usage.reasoning_chars,
+            usage_reported: usage.reported,
             latency_ms: t0.elapsed().as_millis(),
         })
     }
 }
 
-/// Build the OpenAI-compatible request body (either free leg), carrying the
-/// qwen3 `/no_think` mitigation (the same soft switch `CfClient` applies —
-/// same serving family, and it fires for the infron leg's `:free`-suffixed
-/// ids too). Pure so the mitigation is unit-testable without a network.
-#[must_use]
-pub fn build_oai_body(model: &str, prompt: &str, max_tokens: usize) -> serde_json::Value {
-    let content = if model.contains("qwen3") {
-        format!("{prompt} /no_think")
-    } else {
-        prompt.to_string()
-    };
-    serde_json::json!({
-        "model": model,
-        "messages": [{ "role": "user", "content": content }],
-        "max_tokens": max_tokens,
-        "temperature": 0.0,
-    })
-}
-
-/// Parse an `x-ratelimit-remaining-*` header value (`None` = absent/unparseable).
-#[must_use]
-pub fn parse_quota_header(v: Option<&str>) -> Option<u64> {
-    v.and_then(|s| s.trim().parse::<u64>().ok())
-}
-
-/// Why [`parse_oai_result`] failed — overflow is a BUDGET verdict (surfaced
-/// to the drain's escalation path), shape is transient (fallback-class).
-#[derive(Debug)]
-enum ParseFail {
-    Overflow(String),
-    Shape(String),
-}
-
-/// Parse the OpenAI-compatible response into
-/// `(text, reasoning_chars, prompt_tokens, completion_tokens, total_tokens, usage_reported)`.
-///
-/// Null/absent/empty `content` with `finish_reason == "length"` is the
-/// thinking-model starvation class (same signature `cf_workers_ai::
-/// parse_chat_result` classifies) — the overflow error text starts with
-/// [`REASONING_OVERFLOW`] so `starts_with` classifies it without parsing.
-///
-/// # Errors
-///
-/// [`ParseFail::Overflow`] for the budget class; [`ParseFail::Shape`] for
-/// anything else (fallback-class).
-fn parse_oai_result(
-    v: &serde_json::Value,
-    label: &str,
-) -> Result<(String, usize, u64, u64, u64, bool), ParseFail> {
-    let content = v
-        .pointer("/choices/0/message/content")
-        .and_then(serde_json::Value::as_str);
-    let finish = v
-        .pointer("/choices/0/finish_reason")
-        .and_then(serde_json::Value::as_str);
-    if finish == Some("length") && content.is_none_or(|c| c.trim().is_empty()) {
-        return Err(ParseFail::Overflow(format!(
-            "{REASONING_OVERFLOW}: content null/empty with finish_reason=length — \
-             raise max_tokens or disable thinking"
-        )));
-    }
-    let Some(text) = content else {
-        return Err(ParseFail::Shape(format!(
-            "{label} response had no message content: {v}"
-        )));
-    };
-    let reasoning_chars = v
-        .pointer("/choices/0/message/reasoning")
-        .and_then(serde_json::Value::as_str)
-        .map_or(0, str::len);
-    let usage = v.get("usage");
-    let usage_reported = usage.is_some();
-    let get = |k: &str| {
-        usage
-            .and_then(|u| u.get(k))
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0)
-    };
-    Ok((
-        text.to_string(),
-        reasoning_chars,
-        get("prompt_tokens"),
-        get("completion_tokens"),
-        get("total_tokens"),
-        usage_reported,
-    ))
-}
-
-// ── Provider ladder (requires the CF fallback leg) ─────────────────────────
+// ── Provider ladder (requires the CF fallback leg) ─────────────────────────────────
 
 #[cfg(feature = "cf_workers_ai")]
 pub mod router {
@@ -533,6 +360,11 @@ pub mod router {
         pub completion_tokens: u64,
         pub rate_limited: u64,
         pub transport_errors: u64,
+        /// Present-but-rejected credentials (HTTP 401/403, the leaf's
+        /// stop-class) — issue 124. Distinct from `transport_errors` so a
+        /// broken key is readable in the ledger instead of wearing a
+        /// transient costume.
+        pub auth_errors: u64,
         /// Attempts that went to CF because this leg failed.
         pub fallbacks: u64,
     }
@@ -688,7 +520,8 @@ pub mod router {
             };
             // Creds present → build hard (propagate an unpriced-model
             // refusal). Absent → the leg is simply unarmed.
-            let cf = if Self::arm_plan(groq.is_some(), infron.is_some(), Self::cf_creds_present())? {
+            let cf = if Self::arm_plan(groq.is_some(), infron.is_some(), Self::cf_creds_present())?
+            {
                 Some(CfClient::from_env(cf_model)?)
             } else {
                 eprintln!(
@@ -858,6 +691,15 @@ pub mod router {
                 // Surface with the CF-compatible prefix so the drain's
                 // budget-escalation retry re-enters the ladder.
                 Err(OaiError::Overflow(msg)) => Err(msg),
+                // Stop-class (the leaf rule, issue 124): a credential that
+                // is PRESENT but rejected is a config bug — falling through
+                // would hide it behind the free tier and silently shift the
+                // window onto the paid leg. Surfaced verbatim (labeled);
+                // the window's spans decline loudly until the env is fixed.
+                Err(OaiError::Auth(msg)) => {
+                    stats.auth_errors += 1;
+                    Err(format!("{label}: {msg}"))
+                }
                 Err(OaiError::RateLimited(msg)) => {
                     stats.rate_limited += 1;
                     *disabled = true;
@@ -915,8 +757,11 @@ pub mod router {
         /// # Errors
         ///
         /// CF's error surface (the terminal leg). Free-leg overflow errors
-        /// are re-emitted with the same `reasoning-overflow` prefix. On a
-        /// free-only window with every free leg down, the
+        /// are re-emitted with the same `reasoning-overflow` prefix.
+        /// Free-leg auth rejections (401/403 — the leaf's stop-class,
+        /// issue 124) surface labeled and hard: a present-but-rejected
+        /// credential is a config bug, never silently degraded onto the
+        /// paid leg. On a free-only window with every free leg down, the
         /// [`FREE_TIER_EXHAUSTED`] prefix (terminal) or a plain per-span
         /// message (transient transport).
         pub fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<RouterGen, String> {
@@ -954,8 +799,7 @@ pub mod router {
                 // mirrors CF's cap-reached verdict — stop cleanly, keep the
                 // ledger row. A transport blip is transient: decline this
                 // span only, and let the next one retry the free legs.
-                let why =
-                    notice.unwrap_or_else(|| "free legs unavailable".to_string());
+                let why = notice.unwrap_or_else(|| "free legs unavailable".to_string());
                 return Err(if self.groq_disabled || self.infron_disabled {
                     let armed: Vec<&str> = [
                         self.groq.is_some().then_some("groq"),
@@ -1046,6 +890,7 @@ pub mod router {
             "usd_avoided_est": usd_avoided_est,
             "rate_limited": stats.rate_limited,
             "transport_errors": stats.transport_errors,
+            "auth_errors": stats.auth_errors,
             "fallbacks_to_cf": stats.fallbacks,
             "disabled_reason": serde_json::Value::Null,
         })
@@ -1056,141 +901,64 @@ pub mod router {
 mod tests {
     use super::*;
 
-    // ── body build ────────────────────────────────────────────────────────
+    // ── leaf wiring (issue 124) ─────────────────────────────────────
+    //
+    // The body builder, response parser, classification, timeouts and
+    // bearer hygiene moved to the riir-llm leaf and are tested THERE
+    // (26 leaf tests). What stays pinned HERE is the wiring: this
+    // module's client must ride the leaf with THIS module's confs —
+    // base URLs without the route suffix (the leaf appends
+    // /chat/completions) and the OpenAi wire.
 
     #[test]
-    fn qwen3_models_carry_the_no_think_suffix() {
-        let body = build_oai_body(DEFAULT_GROQ_MODEL, "fix this", 512);
-        let content = body
-            .pointer("/messages/0/content")
-            .and_then(serde_json::Value::as_str)
-            .expect("content");
-        assert_eq!(content, "fix this /no_think");
-        assert_eq!(
-            body.get("model").and_then(serde_json::Value::as_str),
-            Some(DEFAULT_GROQ_MODEL)
-        );
-        assert_eq!(
-            body.get("temperature").and_then(serde_json::Value::as_f64),
-            Some(0.0)
-        );
-        assert_eq!(
-            body.get("max_tokens").and_then(serde_json::Value::as_u64),
-            Some(512)
-        );
-    }
-
-    #[test]
-    fn non_qwen_models_pass_through_unchanged() {
-        let body = build_oai_body("llama-3.3-70b", "fix this", 64);
-        let content = body
-            .pointer("/messages/0/content")
-            .and_then(serde_json::Value::as_str)
-            .expect("content");
-        assert_eq!(content, "fix this");
-    }
-
-    #[test]
-    fn qwen_free_ids_carry_the_no_think_suffix_too() {
-        // The infron leg's default (Issue 106): the `:free` suffix must NOT
-        // dodge the qwen3 soft switch.
-        let body = build_oai_body(DEFAULT_INFRON_MODEL, "fix this", 512);
-        let content = body
-            .pointer("/messages/0/content")
-            .and_then(serde_json::Value::as_str)
-            .expect("content");
-        assert_eq!(content, "fix this /no_think");
-        assert_eq!(
-            body.get("model").and_then(serde_json::Value::as_str),
-            Some(DEFAULT_INFRON_MODEL)
-        );
-    }
-
-    // ── response parse ────────────────────────────────────────────────────
-
-    // `json!` consumes the arg by value — a reference would just force a
-    // clone at every call site.
-    #[allow(clippy::needless_pass_by_value)]
-    fn chat_response(content: serde_json::Value) -> serde_json::Value {
-        serde_json::json!({
-            "id": "chatcmpl-x",
-            "model": DEFAULT_GROQ_MODEL,
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": content,
-                    "reasoning": "let me think about the lint"
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 120,
-                "completion_tokens": 48,
-                "total_tokens": 168
-            }
-        })
-    }
-
-    #[test]
-    fn openai_shape_parses_with_usage_and_reasoning() {
-        let (text, rc, pt, ct, tt, reported) =
-            parse_oai_result(&chat_response(serde_json::json!("the fixed code")), "groq")
-                .expect("parses");
-        assert_eq!(text, "the fixed code");
-        assert_eq!(rc, "let me think about the lint".len());
-        assert_eq!((pt, ct, tt), (120, 48, 168));
-        assert!(reported);
-    }
-
-    #[test]
-    fn overflow_is_classified_not_shape() {
-        let mut v = chat_response(serde_json::Value::Null);
-        v["choices"][0]["finish_reason"] = serde_json::json!("length");
-        let err = parse_oai_result(&v, "groq").expect_err("overflow");
-        let ParseFail::Overflow(m) = err else {
-            panic!("expected Overflow, got {err:?}");
+    fn free_leg_confs_carry_base_urls_and_the_openai_wire() {
+        // The route suffix belongs to the leaf's Wire::url — a full URL
+        // in a conf would double it (the dao smoke's doubled-segment
+        // class). Assert the INVARIANT, not the exact host strings.
+        for (conf, host) in [
+            (GROQ_CONF, "api.groq.com"),
+            (INFRON_CONF, "llm.onerouter.pro"),
+        ] {
+            assert!(
+                !conf.base.ends_with("/chat/completions"),
+                "{conf:?} carries the leaf's route"
+            );
+            assert!(conf.base.contains(host));
+        }
+        let groq = OaiClient {
+            leg: riir_llm::Leg {
+                label: "groq".to_string(),
+                base: GROQ_CONF.base.to_string(),
+                bearer: "k".to_string(),
+                model: DEFAULT_GROQ_MODEL.to_string(),
+                wire: riir_llm::Wire::OpenAi,
+            },
+            agent: riir_llm::transport::agent(),
         };
-        assert!(m.starts_with(REASONING_OVERFLOW), "got: {m}");
+        assert_eq!(
+            groq.leg.url(),
+            "https://api.groq.com/openai/v1/chat/completions"
+        );
+        // The qwen3 mitigation rides the leaf's body builder (asserted
+        // there); pin one integration point: the client's model feeds it.
+        let body = riir_llm::chat_body(&groq.leg.model, "fix this", 512);
+        assert!(body.contains("fix this /no_think"), "{body}");
+        let infron_body = riir_llm::chat_body(DEFAULT_INFRON_MODEL, "fix this", 512);
+        assert!(infron_body.contains("fix this /no_think"), "{infron_body}");
     }
 
     #[test]
-    fn empty_content_with_length_finish_is_overflow_too() {
-        let mut v = chat_response(serde_json::json!("   "));
-        v["choices"][0]["finish_reason"] = serde_json::json!("length");
+    fn oai_error_is_the_leaf_failure_vocabulary() {
+        // The alias must stay an alias — a hand-rolled enum here would
+        // re-open the classification drift the leaf closed.
+        assert_eq!(
+            std::mem::discriminant(&OaiError::RateLimited(String::new())),
+            std::mem::discriminant(&riir_llm::LlmFailure::RateLimited(String::new()))
+        );
         assert!(matches!(
-            parse_oai_result(&v, "groq"),
-            Err(ParseFail::Overflow(_))
+            OaiError::Auth(String::new()),
+            riir_llm::LlmFailure::Auth(_)
         ));
-    }
-
-    #[test]
-    fn missing_content_is_shape_not_overflow() {
-        let v = serde_json::json!({ "choices": [] });
-        let err = parse_oai_result(&v, "infron").expect_err("shape");
-        // The shape error names the leg that produced it.
-        let ParseFail::Shape(m) = err else {
-            panic!("expected Shape, got {err:?}");
-        };
-        assert!(m.starts_with("infron response"), "got: {m}");
-    }
-
-    // ── quota headers ─────────────────────────────────────────────────────
-
-    #[test]
-    fn quota_headers_parse_and_tolerate_absence() {
-        assert_eq!(parse_quota_header(Some(" 17 ")), Some(17));
-        assert_eq!(parse_quota_header(Some("0")), Some(0));
-        assert_eq!(parse_quota_header(None), None);
-        assert_eq!(parse_quota_header(Some("n/a")), None);
-    }
-
-    // ── prefix drift pin (both-features only) ─────────────────────────────
-
-    #[cfg(feature = "cf_workers_ai")]
-    #[test]
-    fn the_overflow_prefix_matches_cf_clients() {
-        assert_eq!(REASONING_OVERFLOW, crate::cf_workers_ai::REASONING_OVERFLOW);
     }
 
     // ── router (both-features) ────────────────────────────────────────────
@@ -1202,23 +970,46 @@ mod tests {
         };
 
         // ── prod-grade hardening (T10) ────────────────────────────────
+        // ── prod-grade hardening (T10) ────────────────
 
         #[test]
         fn connect_timeout_is_bounded_well_under_the_call_timeout() {
             // The whole point: a dead network must not consume the per-call
-            // ceiling. If these ever converge, a blackholed connect stalls
-            // the window again.
+            // ceiling. The consts live in the leaf now (issue 124) — the
+            // invariant is asserted there too; this keeps it pinned from
+            // the consumer side.
+            let (call, connect) = (
+                riir_llm::transport::CALL_TIMEOUT,
+                riir_llm::transport::CONNECT_TIMEOUT,
+            );
             assert!(
-                super::super::CONNECT_TIMEOUT < super::super::CALL_TIMEOUT,
+                connect < call,
                 "connect must fail faster than a slow model completes"
             );
             assert!(
-                super::super::CONNECT_TIMEOUT.as_secs() <= 15,
+                connect.as_secs() <= 15,
                 "connecting is fast or broken; nothing in between"
             );
             // A full window must not be able to hang for hours on connects
             // alone: 25 spans × the connect ceiling stays inside ~5 min.
-            assert!(super::super::CONNECT_TIMEOUT.as_secs() * 25 <= 300);
+            assert!(connect.as_secs() * 25 <= 300);
+        }
+
+        #[test]
+        fn auth_errors_are_counted_and_distinct_from_transport() {
+            // Issue 124: the leaf's Auth stop-class is counted per leg so a
+            // broken key reads as itself in the ledger block (calls > 0,
+            // ok == 0, auth_errors == calls, transport_errors == 0 is the
+            // broken-key signature; previously it wore the transient
+            // costume and silently shifted the window onto the paid leg).
+            let stats = FreeTierStats {
+                calls: 4,
+                auth_errors: 4,
+                ..FreeTierStats::default()
+            };
+            let v = providers_json(&stats, Some("m"), 0.0, &FreeTierStats::default(), None, 0.0);
+            assert_eq!(v["groq"]["auth_errors"], serde_json::json!(4));
+            assert_eq!(v["groq"]["transport_errors"], serde_json::json!(0));
         }
 
         // ── Issue 051 fix: any subset of legs may be absent ──────────
@@ -1302,6 +1093,7 @@ mod tests {
                 completion_tokens: 50,
                 rate_limited: 1,
                 transport_errors: 0,
+                auth_errors: 0,
                 fallbacks: 1,
             };
             let infron = FreeTierStats {
@@ -1386,10 +1178,7 @@ mod tests {
                     b.get("enabled").and_then(serde_json::Value::as_bool),
                     Some(false)
                 );
-                assert_eq!(
-                    b.get("calls").and_then(serde_json::Value::as_u64),
-                    Some(0)
-                );
+                assert_eq!(b.get("calls").and_then(serde_json::Value::as_u64), Some(0));
             }
         }
     }
@@ -1409,14 +1198,13 @@ mod tests {
             .generate("Reply with exactly: OK", 32)
             .expect("groq live smoke");
         eprintln!(
-            "[groq-smoke] model={} text={:?} usage={}/{} tok (reported={}) quota-req={:?} quota-tok={:?} {}ms",
+            "[groq-smoke] model={} text={:?} usage={}/{} tok (reported={}) reasoning={} {}ms",
             client.model_id(),
             gen.text.trim(),
             gen.prompt_tokens,
             gen.completion_tokens,
             gen.usage_reported,
-            gen.remaining_requests,
-            gen.remaining_tokens,
+            gen.reasoning_chars,
             gen.latency_ms,
         );
         assert!(
@@ -1456,60 +1244,10 @@ mod tests {
             gen.text
         );
     }
-        #[test]
-    fn the_token_is_scrubbed_from_server_controlled_strings() {
-        // Built directly (not from_env) so the test never touches the real
-        // key and stays parallel-safe.
-        let c = OaiClient {
-            agent: ureq::AgentBuilder::new().build(),
-            url: "https://api.groq.com/openai/v1/chat/completions".to_string(),
-            auth: "Bearer gsk_secret".to_string(),
-            token: "gsk_secret".to_string(),
-            redacted: "<GROQ_API_KEY redacted>".to_string(),
-            label: "groq",
-            model: DEFAULT_GROQ_MODEL.to_string(),
-        };
-        let leaked = c.scrub("upstream rejected Bearer gsk_secret at /v1/chat".to_string());
-        assert!(
-            !leaked.contains("gsk_secret"),
-            "token must not survive: {leaked}"
-        );
-        assert!(leaked.contains("redacted"));
-        // The common case is untouched (and allocation-free in spirit — the
-        // no-match arm returns the same String).
-        let clean = c.scrub("HTTP 500: internal error".to_string());
-        assert_eq!(clean, "HTTP 500: internal error");
-    }
-
-    #[test]
-    fn the_auth_header_is_built_once_and_matches_the_token() {
-        let c = OaiClient {
-            agent: ureq::AgentBuilder::new().build(),
-            url: "https://api.groq.com/openai/v1/chat/completions".to_string(),
-            auth: "Bearer gsk_x".to_string(),
-            token: "gsk_x".to_string(),
-            redacted: "<GROQ_API_KEY redacted>".to_string(),
-            label: "groq",
-            model: DEFAULT_GROQ_MODEL.to_string(),
-        };
-        assert_eq!(c.auth, format!("Bearer {}", c.token));
-    }
-
-    #[test]
-    fn debug_output_never_carries_the_token() {
-        let c = OaiClient {
-            agent: ureq::AgentBuilder::new().build(),
-            url: "https://llm.onerouter.pro/v1/chat/completions".to_string(),
-            auth: "Bearer infron_topsecret".to_string(),
-            token: "infron_topsecret".to_string(),
-            redacted: "<INFRON_API_KEY redacted>".to_string(),
-            label: "infron",
-            model: DEFAULT_INFRON_MODEL.to_string(),
-        };
-        let d = format!("{c:?}");
-        assert!(!d.contains("infron_topsecret"), "Debug leaked the token: {d}");
-        assert!(!d.contains("Bearer"), "Debug leaked the header: {d}");
-    }
+    // Issue 124: the token-scrub / auth-header / Debug-hygiene tests moved
+    // with the code — the leaf's transport owns those paths and tests them
+    // (`scrub_bearer_redacts_and_keeps_the_clean_path`,
+    // `debug_never_carries_the_bearer`).
 
     /// The Issue 051 fix, on the real API: a GROQ-ONLY environment (no CF
     /// creds, no infron key) must ARM and SERVE. Before the fix this path
@@ -1525,6 +1263,10 @@ mod tests {
     /// cargo test --features cf_workers_ai,groq_first --lib \
     ///   groq::tests::live_router_groq_only -- --ignored --nocapture
     /// ```
+    // Needs the router + llm_spend — both cf_workers_ai-gated. The gate
+    // was missing while nothing compiled groq_first ALONE; issue 124 made
+    // that posture real (the leaf-transport feature) and rustc caught it.
+    #[cfg(feature = "cf_workers_ai")]
     #[test]
     #[ignore = "live API call — burns free quota; run manually with GROQ_API_KEY set and CF/infron creds unset"]
     // Exact-zero contract: a free-tier generation MUST bill exactly 0.0 CF

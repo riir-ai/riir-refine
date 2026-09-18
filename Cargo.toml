@@ -115,6 +115,13 @@ riir-rag = { path = "../riir-ai/crates/riir-rag", optional = true, default-featu
 # `local_kv` joined for Plan 019 T4.3 (the durable trajectory store — the
 # same substrate riir-dapps/riir-games persist through).
 riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features = false, features = ["bm25", "local_kv"] }
+# Issue 124: the shared LLM transport leaf (the Issue-051/106 extraction,
+# same shape as the riir-kat move) — wire URL/body/parse/classify + the
+# free-tier ladder walk + the ureq client (both timeouts, bearer scrub).
+# Protocol tier is wasm32-safe; `transport` is native-only (ureq), enabled
+# by groq_first + cf_workers_ai. Pricing/spend/windowed-router policy stay
+# HERE (llm_spend + the LlmRouter) — see the leaf's BOUNDARY.md.
+riir-llm = { path = "../riir-llm", optional = true, default-features = false }
 # NOTE: metal_tensor_gemm (Issue 663 T5, +1.21× prefill on M3 Metal) needs the
 # vendored wgpu-hal fork (adds `raw_handle()` on metal::Buffer). The fork lives
 # at `riir-ai/vendor/wgpu-hal-30.0.0/`. Per cargo's patch-inheritance rules,
@@ -333,15 +340,20 @@ pav_data = ["l4_lora", "score_bench"]
 # transport); adds only the ureq HTTP dep + the v2edit corpus loader.
 # Implies `kat_service` (T0.2): arms A/B SEND PROMPTS OFF-MACHINE — the
 # harness must never compile without the redaction gate it gates through.
-cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora", "kat_service"]
+# Issue 124: the CF client's wire half (URL/body/parse/classify) rides the
+# riir-llm leaf (`riir-llm/transport`); ureq stays a direct dep for the
+# GraphQL usage meter + the client's shared agent.
+cf_workers_ai = ["dep:ureq", "riir-llm/transport", "latent_retrieval", "clippy_verify", "l4_lora", "kat_service"]
 
 # Issue 051 — groq-first free-tier routing: the Groq chat client (OpenAI-
-# compatible REST) + the groq→CF provider ladder. ZERO new packages — reuses
-# the optional ureq dep (the cf_workers_ai edge). Opt-in per feature
-# discipline; without it (or without GROQ_API_KEY at runtime) the LLM
-# windows behave exactly as before (pure CF). The router half is additionally
-# gated on `cf_workers_ai` (it composes CfClient as the fallback leg).
-groq_first = ["dep:ureq"]
+# compatible REST) + the groq→CF provider ladder. Issue 124: the wire half
+# (URL/body/parse/classify/timeouts/bearer hygiene) is the riir-llm leaf —
+# this feature is just `riir-llm/transport` (which pulls the leaf + its
+# ureq); no direct ureq dep of its own. Opt-in per feature discipline;
+# without it (or without GROQ_API_KEY at runtime) the LLM windows behave
+# exactly as before (pure CF). The router half is additionally gated on
+# `cf_workers_ai` (it composes CfClient as the fallback leg).
+groq_first = ["riir-llm/transport"]
 
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +

@@ -105,7 +105,14 @@ pub const REACHABLE: &[(&str, &str)] = &[
         "option_if_let_else",
         "pub fn f(o: Option<u32>) -> u32 { if let Some(x) = o { x + 1 } else { 0 } }",
     ),
-    ("ptr_arg", "pub fn f(v: &Vec<u8>) -> usize { v.len() }"),
+    (
+        // Re-picked 2026-09-18 (Batch 155 made `ptr_arg` a corpus entry,
+        // breaking this list's off-corpus premise — the assert's own
+        // designed response: "the fixture must be re-picked"). Same
+        // signature-shape family, still off-corpus, real clippy lint.
+        "unused_self",
+        "pub struct S;\nimpl S { pub fn f(&self) {} }",
+    ),
 ];
 
 /// Assert the premise of the whole benchmark: these lints really are absent
@@ -1067,14 +1074,14 @@ pub struct CfGen {
 }
 
 /// Overall per-call ceiling — a reasoning model at a 2k budget can legitimately
-/// take minutes.
-const CALL_TIMEOUT: Duration = Duration::from_mins(3);
+/// take minutes. The leaf's const now (issue 124; same 180 s value, one home).
+const CALL_TIMEOUT: Duration = riir_llm::transport::CALL_TIMEOUT;
 /// Connect-phase ceiling, load-bearing SEPARATELY from [`CALL_TIMEOUT`]: under a
 /// single overall timeout a blackholed TCP connect is indistinguishable from a
 /// slow model, so it stalls for the full 3 min — × every span in the window.
-/// Connecting is fast or broken; nothing in between. (Issue 051 T10 fixed the
-/// same defect in the free leg; the fallback leg had it too.)
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Connecting is fast or broken; nothing in between. The leaf's const now
+/// (issue 124; same 10 s value, one home).
+const CONNECT_TIMEOUT: Duration = riir_llm::transport::CONNECT_TIMEOUT;
 /// Redaction placeholder, should the token ever surface in a payload.
 const TOKEN_REDACTED: &str = "<CF_API_TOKEN redacted>";
 /// Byte ceiling on a server-controlled payload entering an error string.
@@ -1102,9 +1109,21 @@ pub fn clip_payload(s: &str) -> String {
 /// Minimal blocking CF Workers AI REST client.
 ///
 /// The token is held privately and NEVER appears in errors or Debug output.
+/// Issue 124: the chat-generation wire half (URL shape, body builder,
+/// response parse, failure classification, bearer scrub on classified
+/// errors) is the [`riir_llm`] leaf; this client keeps the env/pricing
+/// resolution, the USD cap ledger, the GraphQL usage meter (which the
+/// leaf does not speak), and the `billed?` accounting the cap's
+/// reserve-then-reconcile needs.
 pub struct CfClient {
+    /// Shared across both request paths (chat POST via the leaf's
+    /// [`riir_llm::transport::post_chat_on`] + the GraphQL usage read).
     agent: ureq::Agent,
-    url: String,
+    /// Everything before the route — the leaf's `Wire::Cf::url` appends
+    /// `/ai/run/{model}` (the URL shape lives in ONE place now; the old
+    /// full-URL-in-a-field spelling is what the dao smoke caught
+    /// drifting elsewhere).
+    base: String,
     /// The pre-formatted `Bearer <token>` header value, built ONCE.
     ///
     /// Perf: the two request paths no longer allocate a header String per
@@ -1126,7 +1145,7 @@ pub struct CfClient {
 
 impl std::fmt::Debug for CfClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Deliberately no token, no url (url embeds the account id).
+        // Deliberately no token, no base (base embeds the account id).
         f.debug_struct("CfClient").finish_non_exhaustive()
     }
 }
@@ -1232,7 +1251,7 @@ impl CfClient {
                 .timeout(CALL_TIMEOUT)
                 .timeout_connect(CONNECT_TIMEOUT)
                 .build(),
-            url: format!("https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"),
+            base: format!("https://api.cloudflare.com/client/v4/accounts/{account}"),
             auth: format!("Bearer {token}"),
             token,
             account,
@@ -1354,120 +1373,27 @@ pub struct CfUsageToday {
     pub neurons: f64,
 }
 
-/// Build the OpenAI-compat request body, applying per-family thinking
-/// mitigations (both measured live — see the `generate` doc for provenance).
-/// Pure so the mitigations are unit-testable without a network.
-fn build_request_body(
-    model: &str,
-    prompt: &str,
-    max_tokens: usize,
-    glm_thinking: bool,
-) -> serde_json::Value {
-    let content = if model.contains("qwen3") {
-        format!("{prompt} /no_think")
-    } else {
-        prompt.to_string()
-    };
-    let mut body = serde_json::json!({
-        "messages": [{ "role": "user", "content": content }],
-        "max_tokens": max_tokens,
-        "temperature": 0.0,
-    });
-    if !glm_thinking {
-        if model.contains("glm-5") {
-            // GLM-5 generation: `reasoning_effort:"low"` is the honored
-            // switch (probed live 2026-08-28 — 3-token "OK" at ~0.37 n vs
-            // 48-token reasoning starvation without it). The GLM-4
-            // `enable_thinking` kwarg must NOT go here: the legacy switch
-            // 8005-errors on GLM-5 (the dao advisory lane's catalog
-            // finding, Plan 003).
-            body["reasoning_effort"] = serde_json::json!("low");
-        } else if model.contains("glm") {
-            body["chat_template_kwargs"] = serde_json::json!({ "enable_thinking": false });
-        }
-    }
-    body
-}
+/// Error-prefix classifier for the thinking-model starvation class — ONE
+/// home now (the leaf; issue 124). This alias and `groq::REASONING_OVERFLOW`
+/// re-export the same const, so the old both-features drift-pin test
+/// retired with the duplication. The leaf's [`riir_llm::parse_cf_result`]
+/// emits it.
+pub const REASONING_OVERFLOW: &str = riir_llm::REASONING_OVERFLOW;
 
-/// Error-prefix classifier for the thinking-model starvation class (see
-/// [`parse_chat_result`]). Distinct so harness runs can tell "budget too
-/// small" (recoverable, size it) from "unknown schema" (a real bug).
-pub const REASONING_OVERFLOW: &str = "reasoning-overflow";
-
-/// Parse the CF `result` object into `(text, reasoning_chars)`.
-///
-/// Two response schemas ship on Workers AI (measured 2026-08-26):
-///   legacy      — `result.response` (String | Array<String>)
-///                 e.g. llama-3.3-70b-instruct-fp8-fast
-///   chat-style  — `result.choices[0].message.content` + a separate reasoning
-///                 field for thinking models (`message.reasoning` for
-///                 qwen3.x, `message.reasoning_content` DeepSeek-style for
-///                 GLM — which emits BOTH at equal length)
-///
-/// The 169-request arm-A burn on 2026-08-26 was wasted to learning
-/// this: the qwen switch left `response` absent and every extraction
-/// returned nothing while completion tokens (thinking) billed.
-///
-/// Null/absent `content` with `finish_reason == "length"` is classified as
-/// [`REASONING_OVERFLOW`] — the thinking-model starvation class where
-/// reasoning consumed the whole `max_tokens` budget — so callers size the
-/// budget or disable thinking instead of misreading "model unusable"
-/// (the exact misread the 2026-08-26 GLM smoke + qwen incident shared).
-///
-/// Measured GLM-5.3-flash budget floor (2026-08-28 smoke, Bench 057): with
-/// `reasoning_effort:"low"` and `max_tokens` 32 the model still spends the
-/// WHOLE budget on `reasoning_content` → content null (length); 64 is
-/// marginal (1-in-N); ≥ 128 returned `finish_reason:stop` + a 3-token
-/// answer every time. Keep `max_tokens ≥ 128` on every GLM-5 call — the
-/// fixer harness's default `max_new = 128` sits exactly on this floor.
-///
-/// # Errors
-///
-/// Overflow/shape errors; the overflow message starts with
-/// [`REASONING_OVERFLOW`] so `starts_with` classifies it without parsing.
-fn parse_chat_result(result: &serde_json::Value) -> Result<(String, usize), String> {
-    if let Some(r) = result
-        .pointer("/choices/0/message/content")
-        .and_then(serde_json::Value::as_str)
-    {
-        let rc = [
-            result
-                .pointer("/choices/0/message/reasoning")
-                .and_then(serde_json::Value::as_str),
-            result
-                .pointer("/choices/0/message/reasoning_content")
-                .and_then(serde_json::Value::as_str),
-        ]
-        .iter()
-        .filter_map(|o| *o)
-        .map(str::len)
-        .max()
-        .unwrap_or(0);
-        return Ok((r.to_string(), rc));
-    }
-    let finish = result
-        .pointer("/choices/0/finish_reason")
-        .and_then(serde_json::Value::as_str);
-    if finish == Some("length") {
-        return Err(format!(
-            "{REASONING_OVERFLOW}: content null with finish_reason=length — raise max_tokens or disable thinking"
-        ));
-    }
-    match result.get("response") {
-        Some(serde_json::Value::String(s)) => Ok((s.clone(), 0)),
-        Some(serde_json::Value::Array(items)) => Ok((
-            items
-                .iter()
-                .filter_map(|i| i.as_str())
-                .collect::<Vec<_>>()
-                .join(""),
-            0,
-        )),
-        _ => Err(format!(
-            "CF result had neither chat nor legacy response shape: {result}"
-        )),
-    }
-}
+// Issue 124: `build_request_body` and `parse_chat_result` moved to the
+// leaf as `chat_body_for` + `parse_cf_result` (tests moved with them) —
+// one home for the measured thinking switches and the both-schema result
+// walk. The overflow-message wording is byte-identical (pinned by leaf
+// tests + kat_drain's `starts_with(REASONING_OVERFLOW)` escalation).
+//
+// The measured facts that justified the moved code, kept here for the
+// archaeology: the 169-request arm-A burn on 2026-08-26 (the qwen switch
+// left `response` absent, every extraction returned nothing, completion
+// tokens billed anyway); GLM emits BOTH `reasoning` and
+// `reasoning_content` at equal length (qwen emits only `reasoning`);
+// and the GLM-5.3-flash budget floor — max_tokens 32 starves, 64 is
+// marginal (1-in-N), >= 128 returns finish:stop + a 3-token answer every
+// time, so the harness default `max_new = 128` sits exactly on it.
 
 impl CfClient {
     /// One generation. Temperature 0 for reproducibility.
@@ -1551,18 +1477,25 @@ impl CfClient {
     /// `thinking:{type:disabled}` is ignored too (probed).
     /// `RIIR_CF_GLM_THINKING=1` opts back into budgeted reasoning (for
     /// gates comparing the reasoning mode) — read once per call, never
-    /// logged.
+    /// logged. All of those switches live in the leaf's body builder now
+    /// (issue 124); this call site just picks the mode.
     fn generate_billed(&self, prompt: &str, max_tokens: usize) -> Result<CfGen, (String, bool)> {
         let glm_thinking = std::env::var("RIIR_CF_GLM_THINKING").as_deref() == Ok("1");
-        let body = build_request_body(&self.model, prompt, max_tokens, glm_thinking);
-        let resp = self
-            .agent
-            .post(&self.url)
-            .set("Authorization", &self.auth)
-            .send_json(body)
-            .map_err(|e| (self.scrub(format!("CF request failed: {e}")), false))?;
-        let v: serde_json::Value = resp
-            .into_json()
+        let body = riir_llm::chat_body_for(
+            riir_llm::Wire::Cf,
+            &self.model,
+            prompt,
+            u64::try_from(max_tokens).unwrap_or(u64::MAX),
+            glm_thinking,
+        );
+        // The POST rides the leaf transport (auth header, both timeouts,
+        // failure classification, bearer scrub). `billed = false`: the
+        // request never completed or was refused at the HTTP layer —
+        // nothing to reconcile (the reserve releases).
+        let leg = self.wire_leg();
+        let raw = riir_llm::transport::post_chat_on(&self.agent, &leg, &body)
+            .map_err(|f| (f.message().to_string(), false))?;
+        let v: serde_json::Value = serde_json::from_str(&raw)
             .map_err(|e| (self.scrub(format!("CF response was not JSON: {e}")), false))?;
         let result = v.get("result").ok_or_else(|| {
             (
@@ -1573,7 +1506,11 @@ impl CfClient {
                 false,
             )
         })?;
-        let (text, reasoning_chars) = parse_chat_result(result).map_err(|e| (e, true))?;
+        // A `result` object existed — the schema walk is the leaf's
+        // [`riir_llm::parse_cf_result`]; a failure HERE is billed (the
+        // qwen-incident rule: tokens were consumed even if extraction
+        // produced nothing).
+        let (text, reasoning_chars) = riir_llm::parse_cf_result(result).map_err(|e| (e, true))?;
         let usage = result.get("usage");
         let usage_reported = usage.is_some();
         let get = |k: &str| {
@@ -1594,6 +1531,19 @@ impl CfClient {
             usage_reported,
             latency_ms: 0, // set by the caller (the gate wraps the clock)
         })
+    }
+
+    /// The leg view for the shared [`riir_llm`] transport — the CF wire:
+    /// the model rides the URL path (the leaf appends `/ai/run/{model}`),
+    /// the body is model-free.
+    fn wire_leg(&self) -> riir_llm::Leg {
+        riir_llm::Leg {
+            label: "cf".to_string(),
+            base: self.base.clone(),
+            bearer: self.token.clone(),
+            model: self.model.clone(),
+            wire: riir_llm::Wire::Cf,
+        }
     }
 }
 
@@ -2186,57 +2136,50 @@ impl ArmSummary {
 mod tests {
     use super::*;
 
-    // ── build_request_body / parse_chat_result (Issue 043 T3) ────────────
+    // ── body/parse wiring (issue 124) ─────────────────────────
+    //
+    // The eleven build_request_body / parse_chat_result tests moved to the
+    // riir-llm leaf with the code (qwen suffix, glm-4 kwarg, glm-5
+    // reasoning_effort, both thinking-mode arms, the llama pass-through,
+    // reasoning_content extraction + longer-field preference, the overflow
+    // prefix, the stop-finish shape error, the legacy string/array
+    // schemas). What stays pinned HERE is the consumer's half: the
+    // `RIIR_CF_GLM_THINKING` env read maps to the leaf's thinking flag,
+    // and the client's model/model-free body contract holds.
 
     #[test]
-    fn request_body_appends_no_think_for_qwen3_only() {
-        let q = build_request_body("@cf/qwen/qwen3.8-27b", "fix this", 128, false);
-        assert_eq!(
-            q.pointer("/messages/0/content").and_then(|v| v.as_str()),
-            Some("fix this /no_think")
-        );
-        assert!(q.get("chat_template_kwargs").is_none());
-    }
-
-    #[test]
-    fn request_body_disables_glm_thinking_by_default() {
-        let g = build_request_body("@cf/zai-org/glm-4.7-flash", "fix this", 512, false);
-        assert_eq!(
-            g.pointer("/messages/0/content").and_then(|v| v.as_str()),
-            Some("fix this")
-        );
-        assert_eq!(
-            g.pointer("/chat_template_kwargs/enable_thinking"),
-            Some(&serde_json::json!(false))
-        );
-    }
-
-    #[test]
-    fn request_body_glm5_uses_reasoning_effort_low() {
-        // GLM-5 takes the DIFFERENT switch: reasoning_effort (the GLM-4
-        // enable_thinking kwarg 8005-errors there — dao Plan 003 catalog
-        // finding). DEFAULT_MODEL is a glm-5, so this is the production
-        // body shape now.
-        let g = build_request_body(CfClient::DEFAULT_MODEL, "fix this", 512, false);
-        assert_eq!(
-            g.pointer("/messages/0/content").and_then(|v| v.as_str()),
-            Some("fix this")
-        );
-        assert_eq!(
-            g.pointer("/reasoning_effort").and_then(|v| v.as_str()),
-            Some("low")
+    fn generate_billed_body_mode_maps_the_glm_thinking_env() {
+        // The env read is the only policy left on this side; assert the
+        // two modes produce the leaf bodies this client sends (via the
+        // same fns generate_billed calls — an integration pin on the
+        // dispatch, not a re-test of the leaf).
+        let with_switches = riir_llm::chat_body_for(
+            riir_llm::Wire::Cf,
+            CfClient::DEFAULT_MODEL,
+            "fix this",
+            512,
+            false,
         );
         assert!(
-            g.get("chat_template_kwargs").is_none(),
-            "the GLM-4 kwarg must NOT ride a glm-5 request (8005-errors)"
+            with_switches.contains("reasoning_effort"),
+            "{with_switches}"
         );
-    }
-
-    #[test]
-    fn request_body_glm5_thinking_env_override_keeps_reasoning() {
-        let g = build_request_body(CfClient::DEFAULT_MODEL, "fix this", 512, true);
-        assert!(g.get("reasoning_effort").is_none());
-        assert!(g.get("chat_template_kwargs").is_none());
+        let thinking = riir_llm::chat_body_for(
+            riir_llm::Wire::Cf,
+            CfClient::DEFAULT_MODEL,
+            "fix this",
+            512,
+            true,
+        );
+        assert!(!thinking.contains("reasoning_effort"), "{thinking}");
+        // The CF wire stays model-free (the model rides the URL path).
+        for body in [with_switches, thinking] {
+            let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert!(
+                v.get("model").is_none(),
+                "CF body must stay model-free: {body}"
+            );
+        }
     }
 
     #[test]
@@ -2269,92 +2212,31 @@ mod tests {
     }
 
     #[test]
-    fn request_body_glm_thinking_env_override_keeps_reasoning() {
-        let g = build_request_body("@cf/zai-org/glm-4.7-flash", "fix this", 512, true);
-        assert!(g.get("chat_template_kwargs").is_none());
-    }
-
-    #[test]
-    fn request_body_leaves_non_thinking_models_alone() {
-        let l = build_request_body(
-            "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-            "fix this",
-            512,
-            false,
-        );
-        assert_eq!(
-            l.pointer("/messages/0/content").and_then(|v| v.as_str()),
-            Some("fix this")
-        );
-        assert!(l.get("chat_template_kwargs").is_none());
-    }
-
-    #[test]
-    fn parse_reads_reasoning_content_the_glm_shape() {
-        let v = serde_json::json!({
-            "choices": [{
-                "finish_reason": "stop",
-                "message": {
-                    "content": "fn fixed() {}",
-                    "reasoning": "",
-                    "reasoning_content": "think think"
-                }
-            }]
-        });
-        let (t, rc) = parse_chat_result(&v).unwrap();
+    fn parse_shapes_still_pin_through_the_leaf_result_walk() {
+        // Consumer-side pins on the moved parse: the CF result walk is the
+        // leaf's `parse_cf_result` now — assert the shapes THIS harness
+        // feeds it still parse (GLM reasoning_content, overflow prefix,
+        // legacy string/array), end to end through `parse_cf_chat`.
+        let glm = r#"{"result":{"choices":[{"finish_reason":"stop","message":{"content":"fn fixed() {}","reasoning":"","reasoning_content":"think think"}}]}}"#;
+        let (t, usage) = riir_llm::parse_cf_chat(glm).unwrap();
         assert_eq!(t, "fn fixed() {}");
-        assert_eq!(rc, "think think".len());
-    }
+        assert_eq!(usage.reasoning_chars, "think think".len());
 
-    #[test]
-    fn parse_prefers_the_longer_reasoning_field() {
-        let v = serde_json::json!({
-            "choices": [{
-                "finish_reason": "stop",
-                "message": {
-                    "content": "ok",
-                    "reasoning": "longer reasoning here",
-                    "reasoning_content": "short"
-                }
-            }]
-        });
-        let (_, rc) = parse_chat_result(&v).unwrap();
-        assert_eq!(rc, "longer reasoning here".len());
-    }
+        let starved = r#"{"result":{"choices":[{"finish_reason":"length","message":{"content":null,"reasoning":"x"}}]}}"#;
+        let e = riir_llm::parse_cf_chat(starved).expect_err("overflow");
+        match e {
+            riir_llm::LlmFailure::Overflow(m) => {
+                assert!(m.starts_with(REASONING_OVERFLOW), "got: {m}");
+            }
+            other => panic!("expected Overflow, got {other:?}"),
+        }
 
-    #[test]
-    fn parse_classifies_reasoning_overflow_distinctly() {
-        let v = serde_json::json!({
-            "choices": [{
-                "finish_reason": "length",
-                "message": { "content": null, "reasoning": "x" }
-            }]
-        });
-        let e = parse_chat_result(&v).unwrap_err();
-        assert!(
-            e.starts_with(REASONING_OVERFLOW),
-            "overflow must carry the classifier prefix, got: {e}"
-        );
-    }
-
-    #[test]
-    fn parse_null_content_with_stop_is_the_generic_shape_error() {
-        let v = serde_json::json!({
-            "choices": [{
-                "finish_reason": "stop",
-                "message": { "content": null }
-            }]
-        });
-        let e = parse_chat_result(&v).unwrap_err();
-        assert!(!e.starts_with(REASONING_OVERFLOW));
-    }
-
-    #[test]
-    fn parse_legacy_string_and_array_shapes_still_work() {
-        let s = serde_json::json!({ "response": "legacy text" });
-        assert_eq!(parse_chat_result(&s).unwrap().0, "legacy text");
-        let a = serde_json::json!({ "response": ["a", "b"] });
-        assert_eq!(parse_chat_result(&a).unwrap().0, "ab");
+        let legacy_string = r#"{"result":{"response":"legacy text"}}"#;
+        let (t, _) = riir_llm::parse_cf_chat(legacy_string).unwrap();
+        assert_eq!(t, "legacy text");
+        let legacy_array = r#"{"result":{"response":["a","b"]}}"#;
+        let (t, _) = riir_llm::parse_cf_chat(legacy_array).unwrap();
+        assert_eq!(t, "ab");
     }
 
     // ── prompt_module / extract / normalize ──────────────────────────────

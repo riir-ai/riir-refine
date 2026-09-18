@@ -172,7 +172,9 @@ pub mod l4_daemon;
 // fragment-parse / oracle-verified / verify-filtered acceptance) + the
 // modelless pre-pass prompt + the CF Workers AI REST client. Opt-in; pulls
 // `ureq` (third-party HTTP, not boundary-gated) + the retrieval + oracle
-// substrates it composes. See `.issues/040_*` + Bench 049.
+// substrates it composes. Issue 124: the wire half of the client (URL
+// shape, body builder, response parse, failure classification) rides the
+// `riir-llm` leaf. See `.issues/040_*` + Bench 049.
 #[cfg(feature = "cf_workers_ai")]
 pub mod cf_workers_ai;
 
@@ -183,14 +185,19 @@ pub mod cf_workers_ai;
 #[cfg(feature = "cf_workers_ai")]
 pub mod llm_spend;
 
-// Issue 051 — groq-first free-tier LLM routing: the Groq chat client
-// (OpenAI-compatible REST, reuses the optional ureq dep) + the groq→CF
+// Issue 051 — groq-first free-tier LLM routing + the groq→infron→CF
 // provider ladder (the `router` submodule, additionally gated on
 // `cf_workers_ai` — it composes CfClient as the paid fallback leg).
-// GROQ_API_KEY absent → the ladder starts at the next free leg (infron,
-// Issue 106) or pure-CF when no free key is set — byte-identical legacy
-// paths. See `.issues/051_groq_first_free_tier.md` (removed; git history)
-// + `.issues/106_infron_free_leg.md`.
+// Issue 124: the wire mechanics (OpenAI-compatible URL/body/parse, the
+// qwen3 `/no_think` mitigation, failure classification, both timeout
+// ceilings, bearer hygiene) are the `riir-llm` leaf — this module keeps
+// env resolution + the WINDOWED ladder policy (rate-limited legs disable
+// for the whole window; the leaf's ladder is stateless per attempt) +
+// the providers ledger contract. GROQ_API_KEY absent → the ladder starts
+// at the next free leg (infron, Issue 106) or pure-CF when no free key
+// is set — byte-identical legacy paths. See `.issues/051_groq_first_
+// free_tier.md` (removed; git history) + `.issues/106_infron_free_leg.md`
+// + `.issues/124_riir_llm_leaf_repoint.md`.
 #[cfg(feature = "groq_first")]
 pub mod groq;
 

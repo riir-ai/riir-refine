@@ -9585,3 +9585,59 @@ token level, and method-shaped serializers (`self.to_json()`), and the
 Deserialize-side `from_slice::<T>` schema classes — the last is the standing
 under-reported-consumer class, NOT cleared (a deserialized field's local
 reads may still be owed).
+
+## 2026-09-18 — Issue 124: the ops-plane ladder re-pointed at the riir-llm leaf
+
+The Issue-051/106 extraction leaf landed its first consumer (dao) the same
+morning; this closes the second: `src/groq.rs` + `src/cf_workers_ai.rs` no
+longer carry their own copies of anything the leaf owns.
+
+**The seam, stated** (it is the whole design decision): the leaf owns WIRE
+MECHANICS — URL shapes (EndpointConf now carries base URLs; the leaf's
+`Wire::url` appends the route — the URL shape had already diverged once
+between the dao and clippy copies), body builders (`chat_body_for`,
+wire-aware model placement: OpenAI carries the model in the body, CF is
+model-free), response parsers (`Leg::parse` / `parse_cf_result`), failure
+classification (`OaiError` is now an ALIAS of `riir_llm::LlmFailure` —
+one vocabulary, four variants incl. the Auth stop-class), both timeout
+ceilings, and bearer hygiene (`post_chat_on` scrubs; the three clippy-side
+scrub/auth/debug tests retired into the leaf's). riir-clippy keeps POLICY:
+the windowed-disable `LlmRouter` (a rate-limited leg disables for the
+whole WINDOW — the leaf's ladder is stateless per attempt; that asymmetry
+is deliberate, not duplication), FreeTierStats + the `providers.*`
+ledger/dashboard contract (new `auth_errors` key, additive), `avoided_usd`
+pricing, the USD cap + reserve-then-reconcile, the GraphQL usage meter
+(the leaf speaks chat-completions, not GraphQL), the regate harness.
+
+**Measured facts moved with their code**: the qwen3 `/no_think` suffix,
+the GLM-4/GLM-5 thinking-switch split, the both-schema CF result walk,
+and the eleven body/parse tests — now leaf tests. The clippy side keeps
+ONE wiring test per client (base-URL + wire + model-free-CF-body + the
+GLM-thinking env dispatch) and re-pins the overflow prefix end-to-end
+through the leaf parse.
+
+**Behavior changes, deliberate**: (1) a 401/403 from a free leg is now
+STOP-class (surfaced labeled, counted in `auth_errors`) — previously it
+wore the Transport costume and silently shifted the window onto the PAID
+CF leg; (2) an empty-content non-length OpenAI response falls through
+instead of "serving" an empty string; (3) `OaiGen` drops the dead
+diagnostics (`total_tokens`, the quota-header fields — only the live-smoke
+print ever read them); (4) `groq_first` no longer names `dep:ureq` (the
+leaf's transport IS the ureq now — surface shrink, 12 escaping deps across
+five siblings, `transport::Agent` re-exported so no consumer needs its own
+ureq dep for the type).
+
+**Live validation**: groq live smoke PASS through the new path
+(`post_chat_on` + `Leg::parse`, 3eb31e5 leaf) — the qwen body rides the
+leaf's builder byte-compatibly. The CF body is byte-identical to the
+measured shape by construction (same fields, same order, still
+model-free), so no CF call was burned.
+
+**The shared-worktree note**: `src/kat_footer.rs` carries a SIBLING
+session's in-flight D1 grant-bar removal (owner call 2026-09-18) — this
+change's one kat_footer fix (the `format_push_string` lint that pre-dated
+it, af5e5e87) was SUPERSEDED by that rework (the lint site was deleted
+with the function) and reverted here; the file belongs to that session's
+commit. `groq_first`-only also never compiled its live router smoke
+(missing `cf_workers_ai` cfg — latent since the test landed, surfaced by
+making the posture real); gated now.

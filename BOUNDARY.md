@@ -40,6 +40,8 @@ and `kat_promotion` (score_bench/domain).
 | riir-rag | `../riir-ai/crates/riir-rag` | opt-in `latent_retrieval` only |
 | riir-neuron-db | `../riir-neuron-db` | `optional = true`, `default-features = false` (measured 2026-08-21) |
 | riir-kat | `../riir-kat` | `default-features = false` (non-optional — root re-exports the member's free-tier trio ungated); `kat_service` enables `riir-kat/client`, `kat_transport` adds `riir-kat/kat_transport` (issue 088, 2026-09-10). riir-auth is no longer a ROOT dep — it enters the graph transitively through riir-kat's `account_key` (same sibling, resolution-load-bearing). |
+| riir-llm | `../riir-llm` | `optional = true`, `default-features = false` (issue 124, 2026-09-18 — the shared LLM-transport leaf, the Issue-051/106 extraction). `groq_first` = `riir-llm/transport` (no direct ureq of its own); `cf_workers_ai` adds `riir-llm/transport` beside its own ureq (the GraphQL usage meter stays clippy-side — the leaf speaks chat-completions, not GraphQL). Wire URL/body/parse/classify/timeouts/bearer hygiene live in the leaf; the windowed `LlmRouter` policy, FreeTierStats/providers ledger contract, pricing (`avoided_usd`, `llm_spend`) stay HERE. |
+
 ## Standing invariants
 
 - **Source secrecy**: this repo's source never becomes public. Distribution is
