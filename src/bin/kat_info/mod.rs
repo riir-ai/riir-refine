@@ -180,6 +180,10 @@ fn network_sections(acct32: Option<&str>) {
 /// The compact wallet view of a `ServiceHistory` — the position lines the
 /// full `account --history` render carries, minus the per-event log (the
 /// dashboard summary; the event log keeps its own command).
+/// Gated with its only caller (`network_sections`, kat_transport) so the
+/// kat_service-only lane compiles it to nothing instead of warning; tests
+/// keep it alive in every lane.
+#[cfg(any(test, feature = "kat_transport"))]
 fn wallet_lines(h: &riir_clippy::kat_protocol_account::ServiceHistory) -> Vec<String> {
     let kat = |micro: i64| riir_clippy::kat_units::render_kat(micro);
     let mut lines = vec![
@@ -234,6 +238,7 @@ fn wallet_lines(h: &riir_clippy::kat_protocol_account::ServiceHistory) -> Vec<St
 
 /// One receipts summary line: minted totals (final amounts are set), the
 /// allocated count (amounts set at settle), and the honest page bound.
+#[cfg(any(test, feature = "kat_transport"))]
 fn receipts_line(
     h: &riir_clippy::kat_protocol_account::ServiceHistory,
     kat: &dyn Fn(i64) -> String,
