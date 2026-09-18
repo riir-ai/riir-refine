@@ -261,6 +261,12 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
                 "burn sync: {} KAT reported (server balance {balance})",
                 ack.burn_kat_total
             );
+            // Issue 123: the plane split — how the server funded THIS
+            // report. `None` (pre-B2 server / 0-0 replay / KAT-only)
+            // renders nothing, so the tail keeps its one-line contract.
+            if let Some(note) = ack.plane_split_note() {
+                println!("{note}");
+            }
         }
         riir_clippy::kat_burn_client::BurnSync::Stacked { total, reason } => {
             println!(

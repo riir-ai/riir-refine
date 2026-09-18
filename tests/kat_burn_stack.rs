@@ -107,6 +107,15 @@ impl BurnMock {
 /// shape, echoing the reported total (what a monotone server does for a
 /// fresh report).
 fn spawn_burn_mock() -> BurnMock {
+    spawn_burn_mock_with("")
+}
+
+/// The same mock with an EXTRA raw-JSON fragment spliced into the 200
+/// body before the closing brace (leading comma supplied by the caller):
+/// the accepted shape grows additively (the B2 split, a TUNA position)
+/// and the mock must be able to say so.
+fn spawn_burn_mock_with(extra_fields: &str) -> BurnMock {
+    let extra_fields = extra_fields.to_string(); // owned — the thread outlives the caller's borrow
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let captured = Arc::new(Mutex::new(Vec::new()));
@@ -126,7 +135,7 @@ fn spawn_burn_mock() -> BurnMock {
                 .and_then(|v| v.get("burn_kat_total").and_then(serde_json::Value::as_u64))
                 .unwrap_or(0);
             let reply = format!(
-                "{{\"accepted\":true,\"burn_kat_total\":{total},\"increment_kat\":{total},\"balance_micro\":99000000000000}}"
+                "{{\"accepted\":true,\"burn_kat_total\":{total},\"increment_kat\":{total},\"balance_micro\":99000000000000{extra_fields}}}"
             );
             let resp = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
@@ -395,6 +404,44 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
         text2.contains("99000000.000000 KAT"),
         "the server balance must come from the push response. output:\n{text2}"
     );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Phase 2b (Issue 123): a B2 server answers with the per-report plane
+/// split; the tail names the draw (the TUNA→KAT handoff wording on a
+/// both-positive answer), and the TUNA position persists into the v4 ack
+/// while the split itself stays transient (a per-report fact, not acked).
+#[test]
+fn a_split_report_names_the_trial_credit_draw() {
+    let dir = scratch("split");
+    write_a_rs(&dir);
+    login(&dir);
+
+    let extra = ",\"charged_tuna_micro\":70000000,\"charged_kat_micro\":30000000,\
+                 \"tuna_balance_micro\":0,\"tuna_expires_unix\":1792281600";
+    let mock = spawn_burn_mock_with(extra);
+    let (code, text) = heal(&dir, &mock.base(), &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+
+    // ONE run bills exactly ONE_RUN_MICRO_KAT = one whole wire KAT, so
+    // the first run already pushes.
+    let captured = mock.captured();
+    assert_eq!(captured.len(), 1, "the run must push. output:\n{text}");
+
+    // The split line rides the report line (2 `burn sync:` lines total).
+    assert_eq!(burn_sync_lines(&text), 2, "output:\n{text}");
+    assert!(
+        text.contains(
+            "burn sync: drew 70.000000 TUNA + 30.000000 KAT — trial credit exhausted mid-report; billing KAT now"
+        ),
+        "the handoff wording must render. output:\n{text}"
+    );
+
+    // The position persists into the ack; the split does not.
+    let ack = ack_of(&dir).expect("the ack must exist after an accepted push");
+    assert_eq!(ack.tuna_balance_micro, Some(0));
+    assert_eq!(ack.tuna_expires_unix, Some(1_792_281_600));
 
     let _ = std::fs::remove_dir_all(&dir);
 }
