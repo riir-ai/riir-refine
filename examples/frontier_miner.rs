@@ -178,6 +178,15 @@ fn main() {
         }
     }
     let heldout_ok = holding_families.len() == heldout_families.len();
+    // The yield floor: the miner exists to FEED the batch pipeline, so a
+    // run commits something — a fresh admission OR a fresh pending lead.
+    // Once EVERY lead is graduated (Batch 162: the store holds 17 solved
+    // rows and the frontier table is empty), a verify-pass run commits
+    // nothing by construction, and the floor is satisfied by the store
+    // itself — `all_graduated` records that state explicitly instead of
+    // letting the yield arithmetic read zero as "nothing verified".
+    let all_graduated = !committed.is_empty()
+        && committed.iter().all(|r| r.solving_rule.is_some());
     let frontier_yield = frontier.admitted.len()
         + committed
             .iter()
@@ -186,14 +195,15 @@ fn main() {
 
     let mut fresh = heldout_admitted;
     fresh.extend(frontier.admitted.iter().cloned());
-    if heldout_ok && dirty_seeds == 0 && verify_failures == 0 && frontier_yield >= 1 {
+    if heldout_ok && dirty_seeds == 0 && verify_failures == 0 && (frontier_yield >= 1 || all_graduated) {
         if fresh.is_empty() {
             println!("\nstore: no new rows (families already committed this epoch)");
         } else {
             append_rows(path, &fresh).expect("append miner rows");
             println!("store: appended {} row(s) to {}", fresh.len(), MINER_ROWS_JSONL);
         }
-        println!("\n✓ e2e VERDICT: invariant loop holds; frontier yield {frontier_yield} lead(s)");
+        println!("\n✓ e2e VERDICT: invariant loop holds; frontier yield {frontier_yield} lead(s){}",
+            if all_graduated && frontier_yield == 0 { " — ALL LEADS GRADUATED (verify-pass; the next re-arm pair is owed)" } else { "" });
     } else {
         eprintln!(
             "\n✗ e2e VERDICT: heldout_ok={heldout_ok} dirty_seeds={dirty_seeds} verify_failures={verify_failures} frontier_yield={frontier_yield} — no rows committed"

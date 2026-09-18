@@ -135,23 +135,29 @@ pub struct Family {
 /// construction-identity parse rewrite + the exactly-once-binding
 /// compound-assign rewrite); and Batch 161 graduated BOTH pack VII leads
 /// (`unit_arg` + `string_lit_as_bytes`, Plan 152 — the syntactic-
-/// unit-typeness hoist + the coercion-identity byte literal); the retired
-/// rest (`ptr_arg` — VERIFY tier;
-/// `needless_borrow` — self_evolve-only; `wrong_self_convention` —
-/// VERIFY tier, the Batch 156 pack II retiree) have their leads consumed
-/// with regression homes in the proposer module tests + the
-/// `all_buggy_codes_fire_their_lint` corpus lockstep (rules outside the
-/// fixpoint dispatch cannot be loop-verified).
+/// unit-typeness hoist + the coercion-identity byte literal); and Batch
+/// 162 graduated BOTH pack VIII leads (`bytes_count_to_len` +
+/// `bool_comparison`, Plan 153 — the std-definition-identity chain collapse
+/// + the boolean-algebra literal comparison).
+///
+/// The retired rest (`ptr_arg` VERIFY tier, `needless_borrow`
+/// self_evolve-only, `wrong_self_convention` VERIFY tier and the Batch 156
+/// pack II retiree) has its leads consumed with regression homes in the
+/// proposer module tests + the `all_buggy_codes_fire_their_lint` corpus
+/// lockstep (rules outside the fixpoint dispatch cannot be loop-verified).
 /// `covered: false` = a genuine frontier family (target lint outside the
 /// compiled fix set AND outside the stock proposers — a PENDING mining
-/// lead). `bytes_count_to_len` + `bool_comparison` are the Batch 161
-/// re-arm — both probe-verified 2026-09-18
+/// lead). The Batch 161 re-arm — `bytes_count_to_len` +
+/// `bool_comparison` — GRADUATED at Batch 162 (Plan 153; both
+/// probe-verified 2026-09-18
 /// (`scripts/plan152_frontier_probe.py`: seed clean under
 /// all+pedantic+nursery incl. the const-ability discipline (the
-/// `Vec::push` dodge), broken fires EXACTLY its target lint; the round's
+/// `Vec::push` dodge), broken fires EXACTLY its target lint) and landed as
+/// FIXABLE rules with corpus lockstep 2026-09-19; the round's
 /// verified-but-not-armed alternates — `manual_string_new`,
 /// `needless_late_init` (seed dodge: the binding used twice, dodging the
-/// `let_and_return` crossfire) — are recorded in the probe script).
+/// `let_and_return` crossfire) — are recorded in the probe script and are
+/// the next re-arm's leads.
 /// `unit_arg` + `string_lit_as_bytes` graduated at Batch 161 (Plan 152;
 /// both probe fixtures unchanged, groups pinned by the plan152
 /// default-groups arms — complexity/default-on + NURSERY).
@@ -173,8 +179,14 @@ pub fn families() -> Vec<Family> {
         Family { id: "assign_op_pattern", target_lint: "assign_op_pattern", covered: true },
         Family { id: "unit_arg", target_lint: "unit_arg", covered: true },
         Family { id: "string_lit_as_bytes", target_lint: "string_lit_as_bytes", covered: true },
-        Family { id: "bytes_count_to_len", target_lint: "bytes_count_to_len", covered: false },
-        Family { id: "bool_comparison", target_lint: "bool_comparison", covered: false },
+        // ── Batch 162 graduation (Plan 153): both pack VIII leads landed —
+        // `bytes_count_to_len` + `bool_comparison` joined FIXABLE_LINTS with
+        // corpus lockstep; the heldout loop is 17 families deep. The NEXT
+        // re-arm is owed: the recorded spares are `manual_string_new` +
+        // `needless_late_init` (probe-verified in the plan152 script; the
+        // nli seed needs the twice-used-binding dodge).
+        Family { id: "bytes_count_to_len", target_lint: "bytes_count_to_len", covered: true },
+        Family { id: "bool_comparison", target_lint: "bool_comparison", covered: true },
     ]
 }
 
@@ -924,6 +936,13 @@ mod tests {
             "unit_arg"
         } else if code.contains(".as_bytes()") {
             "string_lit_as_bytes"
+        } else if code.contains(".bytes().count()") {
+            // The BROKEN-only shape: the collapsed chain. The healed form
+            // is `.len()` — never matches (the solved-after clause depends
+            // on this; the Batch-161 unit_arg marker lesson).
+            "bytes_count_to_len"
+        } else if code.contains("== true") {
+            "bool_comparison"
         } else {
             return verdict(true, true, &[]);
         };
@@ -966,13 +985,14 @@ mod tests {
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
         // HeldOut + Frontier partition by the family's covered flag —
-        // fifteen covered families (32 cases: 3+3+2×13)
-        // + the Batch 161 re-arm's two frontier families (4 cases).
+        // seventeen covered families (36 cases: 3+3+2×15)
+        // + 0 frontier families — the Batch 162 re-arm's two GRADUATED
+        // (the next re-arm pair is recorded, not yet admitted).
         assert_eq!(
             a.iter().filter(|c| c.mode == Mode::HeldOut).count(),
-            32,
+            36,
         );
-        assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 4);
+        assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 0);
     }
 
     #[test]
@@ -995,7 +1015,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 15, "the fifteen covered (FIXABLE-tier) families");
+        assert_eq!(families.len(), 17, "the seventeen covered (FIXABLE-tier) families");
         for fam in &families {
             let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
             let rule = fam_rule(fam);
@@ -1158,21 +1178,16 @@ mod tests {
 
     #[test]
     fn frontier_rows_are_pending_leads_and_default_view_cannot_heal() {
-        // Pipeline fact first: the default view leaves every frontier
-        // broken form untouched (no rule in the compiled set fires).
+        // Batch 162 GRADUATION: the population of PENDING frontier families
+        // is EMPTY (the Batch 161 re-arm's two leads landed as rules). The
+        // assertions below are the guard that re-arms with the next pair —
+        // when a new frontier family lands, restore the pending-lead
+        // assertions (one admission per family, `solving_rule: None`, the
+        // green-zero band shape) beside the new family's seed table rows.
         let cands = generate(&[Mode::Frontier]);
-        for c in &cands {
-            let (healed, edits, _) = heal_fixpoint_cfg(&c.broken, &[], &ComponentOverride::default());
-            assert_eq!(healed, c.broken, "family {} must be unhealable today", c.family);
-            assert_eq!(edits, 0);
-        }
+        assert!(cands.is_empty(), "no pending frontier leads until the next re-arm");
         let out = admit(&cands, &CorpusView::default(), None, &KnownSet::new(), &frontier_probe);
-        assert_eq!(out.admitted.len(), 2, "one per frontier family (K-minimality)");
-        assert!(out
-            .admitted
-            .iter()
-            .all(|r| r.mode == Mode::Frontier && r.solving_rule.is_none()));
-        // Band fold: frontier rows are NOT band evidence (no solving rule).
+        assert!(out.admitted.is_empty());
         assert!(band_rows(&out.admitted).is_empty());
         let summary = band_summary(&out.admitted);
         assert_eq!(summary.population, 0, "green-zero shape for frontier-only passes");

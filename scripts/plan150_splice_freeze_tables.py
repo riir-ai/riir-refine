@@ -45,6 +45,13 @@ def parse_sections() -> dict[str, list[str]]:
     return sections
 
 
+def normalize_excluded(rows: list[str]) -> list[str]:
+    """EXCLUDED rows arrive as bare `"id",` lines; the splice writes them
+    back in that form. Some earlier regen runs may carry stray LABELS rows
+    if the out file was appended twice — filter to plain id rows."""
+    return [r for r in rows if r.strip().startswith('"') and not r.strip().startswith('("')]
+
+
 def build_static(rows: list[str], tuple_form: bool) -> list[str]:
     out = ["&["]
     for row in rows:
@@ -64,6 +71,15 @@ def replace_static(src: str, header: str, new_lines: list[str]) -> str:
 
 def main() -> int:
     sec = parse_sections()
+    # The EXCLUDED sections must contain ONLY bare id rows — a stray LABELS
+    # row under an EXCLUDED header means the out file was appended twice;
+    # splice scrambled tables and the whole generations.rs freeze record is
+    # garbage (regenerate from a fresh out file, never hand-fix).
+    for key in ("v2_EXCLUDED", "v3_EXCLUDED"):
+        bad = [r for r in sec[key] if not r.strip().startswith('"') or r.strip().startswith('("')]
+        if bad:
+            print(f"⛔ {key} carries non-id rows — regenerate freeze_regen_out.txt fresh: {bad[:3]}")
+            return 1
     src = SRC.read_text(encoding="utf-8")
     # v2 tables
     src = replace_static(src, "pub static EXCLUDED_IDS: &[&str] = &[", build_static(sec["v2_EXCLUDED"], False))

@@ -50,7 +50,7 @@ use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, Ow
 
 /// Candidate-pool depths probed, ascending. `RERANK_POOL` (the production
 /// depth) must be one of them — it is the recall@1 reference point.
-pub const HEADROOM_DEPTHS: [usize; 6] = [8, 12, 16, 20, 24, 28];
+pub const HEADROOM_DEPTHS: [usize; 7] = [8, 12, 16, 20, 24, 28, 32];
 
 /// Index of the production depth within [`HEADROOM_DEPTHS`].
 /// 12 → 16 at the P10 re-pin (2026-09-13, `RERANK_POOL` 12 → 16 after the
@@ -58,13 +58,15 @@ pub const HEADROOM_DEPTHS: [usize; 6] = [8, 12, 16, 20, 24, 28];
 /// at the P11 re-pin (same day — the `format_collect` corpus entry crowded
 /// the casualty one further position, first-found at depth 17); 20 → 24 at
 /// the Batch 159 re-pin (2026-09-18, Plan 150 — the pack V pair crowded
-/// the casualty to first-found at depth 21); the array gained a rung each
-/// time (24, then 28) so the recoverable band (recall@deepest −
+/// the casualty to first-found at depth 21); 24 → 28 at the Batch 162
+/// re-pin (2026-09-19, Plan 153 — the pack VIII pair crowded the casualty
+/// to first-found at depth 25); the array gained a rung each time (24,
+/// 28, then 32) so the recoverable band (recall@deepest −
 /// recall@1) keeps a rung ABOVE production — the probe's whole reason
 /// to exist. Keeping production at the array's deep end would zero the
 /// band by construction, which reads as "no headroom" and is actually
 /// "no deeper probe".
-pub const PROD_DEPTH_IDX: usize = 4;
+pub const PROD_DEPTH_IDX: usize = 5;
 
 /// Plan 017 T1.2 stop bar: below this many percentage points of
 /// `recall@deepest − recall@1`, the band is noise and no selector is built.

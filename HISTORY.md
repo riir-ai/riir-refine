@@ -1,5 +1,18 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-19 — Batch 162 / Plan 153: the frontier-lead mining pack VIII (the SIXTH consecutive all-FIXABLE pack; corpus 80 → 82, clippy 61/16 → 63/16; THE FRONTIER IS EMPTY — all 17 leads graduated)
+
+**Batch 162 LANDED 2026-09-19** (Plan 153; the idle riir-shader-t2 session's mining unit — this commit).
+
+- **`bytes_count_to_len`** (complexity/default-on): `x.bytes().count()` → `x.len()` — std's own definition identity (`str::bytes` yields exactly the `as_bytes()` elements; `count()` on an ExactSizeIterator is `len()`), the EXACT two-call chain only (adapters/`chars()`/`bytes_mut()` refuse; turbofish/attrs/args refuse; interior comments refuse).
+- **`bool_comparison`** (complexity/default-on): `x == true` → `x`, `x != true` → `!x` + the `false` twins, both operand orders (`==` is commutative — one identity per (eq, lit) pair, unlike the range rule's two lattices) — boolean algebra on a proven-bool ident via the scalar-derivation provenance (`scalar_param_heads_over` already admits `bool`; the never-rebound guard is the soundness leg); calls/fields/casts/literal-only pairs refuse.
+- **GOAT**: G1 module tests ×23 + the three corpus lockstep tests at 82; G2 score-bench **#138 96.36% FLAT** vocab 63; G3 freeze e2es PASS 0 drift (29.9s + 26.2s) + frontier e2e **VERDICT ✓** (36 seeds clean, 17 family loops, 17 rows 0 drift, band fold 17/17) + retrieval floors HELD (15/15 + the regression gate); G4 span-preserving, no new deps. Gates: lib default **1966/0** · latent **2119/0** · miner+score **2283/0** · clippy `-D` clean ×3 states (4 heal-class findings in the new modules fixed: 2 doc backticks, 2 nonminimal_bool).
+- **Freeze regen v2 87/12 + v3 87/16** (atom table 61 → 63): the v2 exclusion count 13→12 is a **STRIDE SHUFFLE** (5 old ids out, 4 new ids in — the same interference composites at shifted windows; v3 shuffled 4↔4 net-zero); bad-atom set UNCHANGED (6). **En-route guard landed**: the first regen run appended into a stale out file and would have spliced LABELS rows into the exclusion tables — regenerated fresh; `plan150_splice_freeze_tables.py` now REFUSES non-id rows under an EXCLUDED header (fail loud, never splice scrambled tables).
+- **THE FRONTIER IS EMPTY**: the two graduates make 17 committed rows, every one `solving_rule`-set — the e2e's yield floor (`frontier_yield ≥ 1`) read zero on a verify-pass and exited 1; the example now records the **`all_graduated`** state explicitly (satisfied floor, `ALL LEADS GRADUATED` verdict line, exit 0). **The next re-arm's leads are the plan152-verified spares: `manual_string_new`, `needless_late_init` (the twice-used-binding dodge) — owed at the next mining window.**
+- **Fallout (the designed canary, third firing)**: `pool_depth_rescue_guard` re-fired — the pack VIII pair crowded the Issue-024 casualty to first-found at depth **25** (measured by the guard's discovery sweep before the assert); **RERANK_POOL 24 → 28 + HEADROOM_DEPTHS +32 rung + PROD_DEPTH_IDX 4 → 5** (25 measured minimum, 28 the rung with slack 3, the band keeps a rung above production).
+- Archive discipline held: the 2 consumed rows flipped `solving_rule: null → set` as a MINIMAL 2-line jsonl diff (a first pass rewrote the whole file in re-serialized form — 22-line whitespace churn — reverted to the targeted edit; the file's mixed spacing is history, not a schema).
+
+
 ## 2026-09-18 — Batch 161 / Plan 152: the frontier-lead mining pack VII (the FIFTH consecutive all-FIXABLE pack; corpus 78 → 80, clippy 59/16 → 61/16)
 
 The flywheel's seventh turn: the Batch 160 re-arm's 2 leads became rules,

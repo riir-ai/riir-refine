@@ -95,6 +95,8 @@
 //! `assign_op_pattern` | `y = y + 1` → `y += 1` on exactly-once-proven arithmetic scalars (params/annotated/init-transfer/suffixed-literal bindings), commutative swapped twin `+`/`*` only (Batch 160) |
 //! `unit_arg` | `touch({ hits.push(1); }, hits)` → hoist the syntactically-unit block + pass `()` — value/order identity by construction, clippy's own suggestion shape (Batch 161) |
 //! `string_lit_as_bytes` | `"abc".as_bytes()` → `b"abc"` — coercion identity; ASCII-only, `\u{` escape refused (clippy's suggestion there is invalid Rust — upstream bug); nursery group (Batch 161) |
+//! `bytes_count_to_len` | `x.bytes().count()` → `x.len()` — std-definition identity (`str::bytes` = the `as_bytes` elements; `count()` = `len()`); exact two-call chain only (Batch 162) |
+//! `bool_comparison` | `x == true` → `x`, `x != true` → `!x` (+ the `false` twins, both operand orders) — boolean algebra on a proven-bool ident (Batch 162) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -160,7 +162,9 @@
 //! 152); future lints drop in by extending the match.
 
 pub mod assign_op_pattern;
+pub mod bool_comparison;
 pub mod byte_char_slices;
+pub mod bytes_count_to_len;
 pub mod cast_lossless;
 pub mod chunks_exact_to_as_chunks;
 pub mod collapsible_else_if;
@@ -556,6 +560,30 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // arm — SILENT at default level, the Batch 160 miner comment's
     // "default-level perf" was wrong on both counts).
     "string_lit_as_bytes",
+    // ── Batch 162 (the frontier-lead mining pack VIII — Plan 153 — the
+    // Batch 161 re-arm's leads, 2026-09-19) ──
+    // `x.bytes().count()` → `x.len()` — FIXABLE by STD'S OWN DEFINITION
+    // IDENTITY: `str::bytes()` yields exactly the `as_bytes()` elements
+    // and `count()` on an ExactSizeIterator is `len()`, so the chain IS
+    // `as_bytes().len()` — which for `str` IS `len()` (the same u8
+    // slice); `&[u8]::bytes()` re-yields the slice's own items likewise.
+    // Bounded to the EXACT two-call chain — `.bytes().count()`, no args,
+    // no turbofish, no adapter between (the adapter-class shapes refuse;
+    // `chars().count()` is NOT the family — chars ≠ bytes).
+    // Complexity-group (default-on; group pinned by the plan152 probe's
+    // full-oracle arm + the lint's upstream group).
+    "bytes_count_to_len",
+    // `x == true` → `x`, `x != true` → `!x` (+ the `false` twins and both
+    // operand orders) — FIXABLE by BOOLEAN ALGEBRA on a proven-`bool`
+    // operand: the equality/inequality with a literal is the
+    // identity/negation law of the two-element algebra, and Rust's bool is
+    // exactly that (no third value, no NaN class). The non-literal operand
+    // must be a BARE IDENT proven `bool` by the enclosing fn's signature
+    // (the scalar_param_heads_over derivation admits `bool`; the
+    // never-rebound guard is the soundness leg). Calls/fields/casts and
+    // literal-only pairs refuse. Complexity-group (default-on; pinned by
+    // the plan152 probe arm).
+    "bool_comparison",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -879,6 +907,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 161 (the frontier-lead mining pack VII — Plan 152) ──
         "unit_arg" => unit_arg::collect_edits(source, file),
         "string_lit_as_bytes" => string_lit_as_bytes::collect_edits(source, file),
+        // ── Batch 162 (the frontier-lead mining pack VIII — Plan 153) ──
+        "bytes_count_to_len" => bytes_count_to_len::collect_edits(source, file),
+        "bool_comparison" => bool_comparison::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -988,7 +1019,11 @@ mod tests {
         // pack VII, Plan 152; the syntactic-unit-typeness hoist (clippy's
         // own suggestion shape, measured) + the coercion-identity byte
         // literal with the `\u{` upstream-suggestion-bug refusal).
-        assert_eq!(FIXABLE_LINTS.len(), 61);
+        // + 2 Batch 162 (bytes_count_to_len + bool_comparison — the
+        // frontier-lead pack VIII, Plan 153; the std-definition-identity
+        // chain collapse + the boolean-algebra literal comparison on a
+        // proven-bool ident).
+        assert_eq!(FIXABLE_LINTS.len(), 63);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
@@ -1413,6 +1448,17 @@ impl S {
                 "string_lit_as_bytes",
                 "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); \"abc\".as_bytes() }",
                 "b\"abc\"",
+            ),
+            // ── Batch 162 (the frontier-lead mining pack VIII, Plan 153) ──
+            (
+                "bytes_count_to_len",
+                "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.bytes().count() }",
+                "s.len()",
+            ),
+            (
+                "bool_comparison",
+                "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x == true }",
+                "hits.push(x); x }",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

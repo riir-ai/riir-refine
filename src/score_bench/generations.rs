@@ -327,9 +327,24 @@ pub fn specs() -> Vec<GenSpec> {
 // the sorted positions of `string_lit_as_bytes`/`unit_arg` shift nothing
 // upstream, 0 reshuffle this round). v2 e2e + v3 e2e re-verified: all
 // label fences PASS (0 drift — the assertions are the gate).
+// Batch 162 re-freeze (2026-09-19, the frontier-lead mining pack VIII —
+// Plan 153): the atom table 61→63 (`bytes_count_to_len` +
+// `bool_comparison`, both FIXABLE — the sixth consecutive all-pack). The
+// new atoms fire exactly their own lints (the plan152 probe's full-oracle
+// arms + the regen run's real-oracle pass — no new interference; the
+// bad-atom set stays 6). Deterministic regeneration, both tables: 87 v2
+// labels / 12 v2 exclusions, 87 v3 labels / 16 v3 exclusions. The v2
+// exclusion count moved 13→12: a STRIDE SHUFFLE, not a repair — the two
+// new atoms' sorted positions shifted the composite windows, so 5 old
+// exclusion ids dropped out and 4 new ids entered (the same interference
+// composites at shifted k + atom companions; the v3 table shuffled 4↔4
+// net-zero at 16). Both e2es re-verified after the splice: all label
+// fences PASS (0 drift — the assertions are the gate).
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]),
+    ("gen2-k1-bool_comparison", &["bool_comparison"]),
     ("gen2-k1-byte_char_slices", &["byte_char_slices"]),
+    ("gen2-k1-bytes_count_to_len", &["bytes_count_to_len"]),
     ("gen2-k1-collapsible_else_if", &["collapsible_else_if"]),
     ("gen2-k1-collapsible_if", &["collapsible_if"]),
     ("gen2-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),
@@ -383,7 +398,8 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-useless_format", &["useless_format"]),
     ("gen2-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),
     ("gen2-k1-write_with_newline", &["write_with_newline"]),
-    ("gen2-k2-assign_op_pattern+byte_char_slices", &["assign_op_pattern", "byte_char_slices"]),
+    ("gen2-k2-assign_op_pattern+bool_comparison", &["assign_op_pattern", "bool_comparison"]),
+    ("gen2-k2-byte_char_slices+bytes_count_to_len", &["byte_char_slices", "bytes_count_to_len"]),
     ("gen2-k2-collapsible_else_if+collapsible_if", &["collapsible_else_if", "collapsible_if"]),
     ("gen2-k2-doc_markdown+doc_overindented_list_items", &["doc_markdown", "doc_overindented_list_items"]),
     ("gen2-k2-double_parens+filter_next", &["double_parens", "filter_next"]),
@@ -396,22 +412,22 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k2-manual_slice_fill+manual_unwrap_or", &["manual_slice_fill", "manual_unwrap_or"]),
     ("gen2-k2-map_flatten+map_unwrap_or", &["map_flatten", "map_unwrap_or"]),
     ("gen2-k2-match_bool+needless_bool", &["match_bool", "needless_bool"]),
-    ("gen2-k2-needless_bool_assign+needless_lifetimes", &["needless_bool_assign", "needless_lifetimes"]),
-    ("gen2-k3-assign_op_pattern+byte_char_slices+collapsible_else_if", &["assign_op_pattern", "byte_char_slices", "collapsible_else_if"]),
-    ("gen2-k3-doc_markdown+doc_overindented_list_items+double_parens", &["doc_markdown", "doc_overindented_list_items", "double_parens"]),
-    ("gen2-k3-filter_next+from_str_radix_10+identity_op", &["filter_next", "from_str_radix_10", "identity_op"]),
-    ("gen2-k3-io_other_error+items_after_statements+iter_next_loop", &["io_other_error", "items_after_statements", "iter_next_loop"]),
-    ("gen2-k3-let_and_return+manual_clamp+manual_let_else", &["let_and_return", "manual_clamp", "manual_let_else"]),
-    ("gen2-k3-manual_map+manual_range_contains+manual_range_patterns", &["manual_map", "manual_range_contains", "manual_range_patterns"]),
-    ("gen2-k3-manual_slice_fill+manual_unwrap_or+map_flatten", &["manual_slice_fill", "manual_unwrap_or", "map_flatten"]),
-    ("gen2-k3-map_unwrap_or+match_bool+needless_bool", &["map_unwrap_or", "match_bool", "needless_bool"]),
-    ("gen2-k3-needless_range_loop+needless_return+print_with_newline", &["needless_range_loop", "needless_return", "print_with_newline"]),
-    ("gen2-k4-assign_op_pattern+byte_char_slices+collapsible_else_if+collapsible_if", &["assign_op_pattern", "byte_char_slices", "collapsible_else_if", "collapsible_if"]),
-    ("gen2-k4-double_parens+filter_next+from_str_radix_10+identity_op", &["double_parens", "filter_next", "from_str_radix_10", "identity_op"]),
-    ("gen2-k4-io_other_error+items_after_statements+iter_next_loop+iter_nth_zero", &["io_other_error", "items_after_statements", "iter_next_loop", "iter_nth_zero"]),
-    ("gen2-k4-manual_let_else+manual_map+manual_range_contains+manual_range_patterns", &["manual_let_else", "manual_map", "manual_range_contains", "manual_range_patterns"]),
-    ("gen2-k4-manual_slice_fill+manual_unwrap_or+map_flatten+map_unwrap_or", &["manual_slice_fill", "manual_unwrap_or", "map_flatten", "map_unwrap_or"]),
-    ("gen2-k4-match_bool+needless_bool+needless_bool_assign+needless_lifetimes", &["match_bool", "needless_bool", "needless_bool_assign", "needless_lifetimes"]),
+    ("gen2-k3-assign_op_pattern+bool_comparison+byte_char_slices", &["assign_op_pattern", "bool_comparison", "byte_char_slices"]),
+    ("gen2-k3-bytes_count_to_len+collapsible_else_if+collapsible_if", &["bytes_count_to_len", "collapsible_else_if", "collapsible_if"]),
+    ("gen2-k3-doc_overindented_list_items+double_parens+filter_next", &["doc_overindented_list_items", "double_parens", "filter_next"]),
+    ("gen2-k3-from_str_radix_10+identity_op+io_other_error", &["from_str_radix_10", "identity_op", "io_other_error"]),
+    ("gen2-k3-items_after_statements+iter_next_loop+iter_nth_zero", &["items_after_statements", "iter_next_loop", "iter_nth_zero"]),
+    ("gen2-k3-iter_skip_next+legacy_numeric_constants+let_and_return", &["iter_skip_next", "legacy_numeric_constants", "let_and_return"]),
+    ("gen2-k3-manual_clamp+manual_let_else+manual_map", &["manual_clamp", "manual_let_else", "manual_map"]),
+    ("gen2-k3-manual_range_contains+manual_range_patterns+manual_slice_fill", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill"]),
+    ("gen2-k3-manual_unwrap_or+map_flatten+map_unwrap_or", &["manual_unwrap_or", "map_flatten", "map_unwrap_or"]),
+    ("gen2-k3-match_bool+needless_bool+needless_bool_assign", &["match_bool", "needless_bool", "needless_bool_assign"]),
+    ("gen2-k4-assign_op_pattern+bool_comparison+byte_char_slices+bytes_count_to_len", &["assign_op_pattern", "bool_comparison", "byte_char_slices", "bytes_count_to_len"]),
+    ("gen2-k4-doc_markdown+doc_overindented_list_items+double_parens+filter_next", &["doc_markdown", "doc_overindented_list_items", "double_parens", "filter_next"]),
+    ("gen2-k4-from_str_radix_10+identity_op+io_other_error+items_after_statements", &["from_str_radix_10", "identity_op", "io_other_error", "items_after_statements"]),
+    ("gen2-k4-let_and_return+manual_clamp+manual_let_else+manual_map", &["let_and_return", "manual_clamp", "manual_let_else", "manual_map"]),
+    ("gen2-k4-manual_range_contains+manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),
+    ("gen2-k4-map_flatten+map_unwrap_or+match_bool+needless_bool", &["map_flatten", "map_unwrap_or", "match_bool", "needless_bool"]),
 ];
 
 /// Spec ids the freeze run EXCLUDED (real-clippy labels ≠ union gold): the
@@ -426,11 +442,10 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k1-unreadable_literal",
     "gen2-k2-deref_addrof+doc_lazy_continuation",
     "gen2-k2-iter_skip_next+legacy_numeric_constants",
-    "gen2-k3-collapsible_if+deref_addrof+doc_lazy_continuation",
-    "gen2-k3-iter_nth_zero+iter_skip_next+legacy_numeric_constants",
-    "gen2-k3-needless_bool_assign+needless_lifetimes+needless_match",
-    "gen2-k4-deref_addrof+doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
-    "gen2-k4-iter_skip_next+legacy_numeric_constants+let_and_return+manual_clamp",
+    "gen2-k3-deref_addrof+doc_lazy_continuation+doc_markdown",
+    "gen2-k3-needless_lifetimes+needless_match+needless_range_loop",
+    "gen2-k4-collapsible_else_if+collapsible_if+deref_addrof+doc_lazy_continuation",
+    "gen2-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
 ];
 
 /// Freeze readiness for one generation: Ok(admitted count) when every spec
@@ -707,11 +722,11 @@ pub static EXCLUDED_IDS_V3: &[&str] = &[
     "gen3-k2-deref_addrof+doc_lazy_continuation",
     "gen3-k2-iter_skip_next+legacy_numeric_constants",
     "gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist",
-    "gen3-k3-collapsible_else_if+collapsible_if+deref_addrof",
-    "gen3-k3-legacy_numeric_constants+let_and_return+manual_clamp",
+    "gen3-k3-collapsible_if+deref_addrof+doc_lazy_continuation",
+    "gen3-k3-iter_nth_zero+iter_skip_next+legacy_numeric_constants",
     "gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format",
-    "gen3-k4-deref_addrof+doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
-    "gen3-k4-iter_skip_next+legacy_numeric_constants+let_and_return+manual_clamp",
+    "gen3-k4-collapsible_else_if+collapsible_if+deref_addrof+doc_lazy_continuation",
+    "gen3-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
 ];
 
 /// The generation-3 frozen labels (spec id → vocabulary lints real clippy
@@ -724,7 +739,9 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-persist_comment_hoist", &["items_after_statements"]),
     ("gen3-k1-persist_useless_format", &["useless_format"]),
     ("gen3-k1-assign_op_pattern", &["assign_op_pattern"]),
+    ("gen3-k1-bool_comparison", &["bool_comparison"]),
     ("gen3-k1-byte_char_slices", &["byte_char_slices"]),
+    ("gen3-k1-bytes_count_to_len", &["bytes_count_to_len"]),
     ("gen3-k1-collapsible_else_if", &["collapsible_else_if"]),
     ("gen3-k1-collapsible_if", &["collapsible_if"]),
     ("gen3-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),
@@ -779,7 +796,8 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),
     ("gen3-k1-write_with_newline", &["write_with_newline"]),
     ("gen3-k2-persist_comment_hoist+persist_useless_format", &["items_after_statements", "useless_format"]),
-    ("gen3-k2-assign_op_pattern+byte_char_slices", &["assign_op_pattern", "byte_char_slices"]),
+    ("gen3-k2-assign_op_pattern+bool_comparison", &["assign_op_pattern", "bool_comparison"]),
+    ("gen3-k2-byte_char_slices+bytes_count_to_len", &["byte_char_slices", "bytes_count_to_len"]),
     ("gen3-k2-collapsible_else_if+collapsible_if", &["collapsible_else_if", "collapsible_if"]),
     ("gen3-k2-doc_markdown+doc_overindented_list_items", &["doc_markdown", "doc_overindented_list_items"]),
     ("gen3-k2-double_parens+filter_next", &["double_parens", "filter_next"]),
@@ -790,21 +808,20 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k2-manual_let_else+manual_map", &["manual_let_else", "manual_map"]),
     ("gen3-k2-manual_range_contains+manual_range_patterns", &["manual_range_contains", "manual_range_patterns"]),
     ("gen3-k2-manual_slice_fill+manual_unwrap_or", &["manual_slice_fill", "manual_unwrap_or"]),
-    ("gen3-k2-map_flatten+map_unwrap_or", &["map_flatten", "map_unwrap_or"]),
-    ("gen3-k3-persist_useless_format+assign_op_pattern+byte_char_slices", &["assign_op_pattern", "byte_char_slices", "useless_format"]),
-    ("gen3-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items"]),
-    ("gen3-k3-double_parens+filter_next+from_str_radix_10", &["double_parens", "filter_next", "from_str_radix_10"]),
-    ("gen3-k3-identity_op+io_other_error+items_after_statements", &["identity_op", "io_other_error", "items_after_statements"]),
-    ("gen3-k3-iter_next_loop+iter_nth_zero+iter_skip_next", &["iter_next_loop", "iter_nth_zero", "iter_skip_next"]),
-    ("gen3-k3-manual_let_else+manual_map+manual_range_contains", &["manual_let_else", "manual_map", "manual_range_contains"]),
-    ("gen3-k3-manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),
-    ("gen3-k3-map_flatten+map_unwrap_or+match_bool", &["map_flatten", "map_unwrap_or", "match_bool"]),
-    ("gen3-k3-needless_bool+needless_bool_assign+needless_lifetimes", &["needless_bool", "needless_bool_assign", "needless_lifetimes"]),
-    ("gen3-k4-assign_op_pattern+byte_char_slices+collapsible_else_if+collapsible_if", &["assign_op_pattern", "byte_char_slices", "collapsible_else_if", "collapsible_if"]),
-    ("gen3-k4-double_parens+filter_next+from_str_radix_10+identity_op", &["double_parens", "filter_next", "from_str_radix_10", "identity_op"]),
-    ("gen3-k4-io_other_error+items_after_statements+iter_next_loop+iter_nth_zero", &["io_other_error", "items_after_statements", "iter_next_loop", "iter_nth_zero"]),
-    ("gen3-k4-manual_let_else+manual_map+manual_range_contains+manual_range_patterns", &["manual_let_else", "manual_map", "manual_range_contains", "manual_range_patterns"]),
-    ("gen3-k4-manual_slice_fill+manual_unwrap_or+map_flatten+map_unwrap_or", &["manual_slice_fill", "manual_unwrap_or", "map_flatten", "map_unwrap_or"]),
+    ("gen3-k3-persist_useless_format+assign_op_pattern+bool_comparison", &["assign_op_pattern", "bool_comparison", "useless_format"]),
+    ("gen3-k3-byte_char_slices+bytes_count_to_len+collapsible_else_if", &["byte_char_slices", "bytes_count_to_len", "collapsible_else_if"]),
+    ("gen3-k3-doc_markdown+doc_overindented_list_items+double_parens", &["doc_markdown", "doc_overindented_list_items", "double_parens"]),
+    ("gen3-k3-filter_next+from_str_radix_10+identity_op", &["filter_next", "from_str_radix_10", "identity_op"]),
+    ("gen3-k3-io_other_error+items_after_statements+iter_next_loop", &["io_other_error", "items_after_statements", "iter_next_loop"]),
+    ("gen3-k3-let_and_return+manual_clamp+manual_let_else", &["let_and_return", "manual_clamp", "manual_let_else"]),
+    ("gen3-k3-manual_map+manual_range_contains+manual_range_patterns", &["manual_map", "manual_range_contains", "manual_range_patterns"]),
+    ("gen3-k3-manual_slice_fill+manual_unwrap_or+map_flatten", &["manual_slice_fill", "manual_unwrap_or", "map_flatten"]),
+    ("gen3-k3-map_unwrap_or+match_bool+needless_bool", &["map_unwrap_or", "match_bool", "needless_bool"]),
+    ("gen3-k4-assign_op_pattern+bool_comparison+byte_char_slices+bytes_count_to_len", &["assign_op_pattern", "bool_comparison", "byte_char_slices", "bytes_count_to_len"]),
+    ("gen3-k4-doc_markdown+doc_overindented_list_items+double_parens+filter_next", &["doc_markdown", "doc_overindented_list_items", "double_parens", "filter_next"]),
+    ("gen3-k4-from_str_radix_10+identity_op+io_other_error+items_after_statements", &["from_str_radix_10", "identity_op", "io_other_error", "items_after_statements"]),
+    ("gen3-k4-let_and_return+manual_clamp+manual_let_else+manual_map", &["let_and_return", "manual_clamp", "manual_let_else", "manual_map"]),
+    ("gen3-k4-manual_range_contains+manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),
 ];
 
 /// Freeze readiness for generation 3 — Err until the freeze e2e lands the

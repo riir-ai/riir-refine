@@ -792,6 +792,24 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); \"abc\".as_bytes() }".to_string(),
             fixed_code: "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); b\"abc\" }".to_string(),
         },
+        // ── Batch 162 (2026-09-19, the frontier-lead mining pack VIII —
+        // the Batch 161 re-arm's leads, Plan 153. Each fixture is the
+        // ORACLE-VERIFIED family pair from the Batch 159 re-arm probe
+        // (scripts/plan152_frontier_probe.py): seed clean, broken fires
+        // EXACTLY its target. Both complexity-group (default-on) — the
+        // group pinned by the probe's arms.) ──
+        ClippyFixEntry {
+            lint_name: "bytes_count_to_len".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.bytes().count() }".to_string(),
+            fixed_code: "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.len() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "bool_comparison".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x == true }".to_string(),
+            fixed_code: "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x }".to_string(),
+        },
     ])
 }
 
@@ -891,14 +909,16 @@ mod tests {
     /// 2 Batch 160 rows (`from_str_radix_10`, `assign_op_pattern` — the
     /// frontier-lead mining pack VI, Plan 151) + the 2 Batch 161 rows
     /// (`unit_arg`, `string_lit_as_bytes` — the frontier-lead mining pack
-    /// VII, Plan 152) = 80.
+    /// VII, Plan 152) + the 2 Batch 162 rows (`bytes_count_to_len`,
+    /// `bool_comparison` — the frontier-lead mining pack VIII, Plan 153)
+    /// = 82.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_80() {
+    fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 80);
+        assert_eq!(corpus.entries.len(), 82);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires
