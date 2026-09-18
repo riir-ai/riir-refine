@@ -96,16 +96,25 @@ use crate::traj_store::{shape_hash, TrajRowDoc};
 /// [`ESTIMATE_VERSION`] on purpose: a rate change must not invalidate the
 /// watermark, and a watermark scheme change must not read as a reprice (the
 /// meter/charge two-axis discipline).
-pub const SYNC_STATE_VERSION: u32 = 1;
+pub const SYNC_STATE_VERSION: u32 = 2;
 
 /// Versioned deltas of the watermark shape (the migration audit trail).
-pub const SYNC_STATE_CHANGELOG: &[(u32, &str)] = &[(
-    1,
-    "initial watermark (T0.4, 2026-08-26): {lint_key}:{shape_id} → \
-         blake3_12(PayloadRow JSON), + last_batch_commitment + payload_version. \
-         Recovery-to-empty on version mismatch is deliberate: digests from \
-         another scheme are uninterpretable and over-sync is the safe direction.",
-)];
+pub const SYNC_STATE_CHANGELOG: &[(u32, &str)] = &[
+    (
+        1,
+        "initial watermark (T0.4, 2026-08-26): {lint_key}:{shape_id} → \
+             blake3_12(PayloadRow JSON), + last_batch_commitment + payload_version. \
+             Recovery-to-empty on version mismatch is deliberate: digests from \
+             another scheme are uninterpretable and over-sync is the safe direction.",
+    ),
+    (
+        2,
+        "payload v3 (Issue 103): PayloadRow gains `domain`, so EVERY row digest \
+             moves — old digests stay uninterpretable-by-scheme, and bumping the \
+             version makes that explicit: one recovery-to-empty re-pend (the safe \
+             direction) instead of a silent whole-store mismatch read.",
+    ),
+];
 
 /// The accrual-estimate model version. Bump ONLY when the estimated KAT for
 /// the same pending-record set changes (a re-estimate), and record the delta
@@ -362,7 +371,9 @@ impl PendingEstimate {
 /// Projects every row through the payload builder's own gated-row projection
 /// ([`crate::kat_sync_payload::gate_row`] — same code path as the next real
 /// payload; no signed builder needed, row gating is envelope-independent)
-/// and compares the gated projection's digest against the watermark.
+/// and compares the gated projection's digest against the watermark. The
+/// domain table is the COMPILED one (v3 — Issue 103) — the same default the
+/// real builder uses, so estimator/payload digests agree by construction.
 #[must_use]
 pub fn estimate_pending(
     rows: &[TrajRowDoc],
@@ -370,10 +381,11 @@ pub fn estimate_pending(
     origin: SpanOrigin,
     watermark: &SyncWatermark,
 ) -> PendingEstimate {
+    let domains = crate::kat_sync_payload::RuleDomains::compiled();
     let mut est = PendingEstimate::default();
     for row in rows {
         let shape_id = shape_hash(&row.shape);
-        match crate::kat_sync_payload::gate_row(gate, origin, row) {
+        match crate::kat_sync_payload::gate_row(gate, origin, row, &domains) {
             Ok(pr) => {
                 let digest = row_digest(&pr);
                 if watermark.covers(&pr.lint_key, &shape_id, &digest) {

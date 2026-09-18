@@ -84,8 +84,6 @@
 
 use std::time::Duration;
 
-use crate::kat_footer::TOKENS_PER_MTOK;
-
 /// Mirrors `cf_workers_ai::REASONING_OVERFLOW` (same string, defined locally
 /// so this module compiles under `groq_first` alone). Drift is pinned by
 /// `the_overflow_prefix_matches_cf_clients` (both-features only).
@@ -473,6 +471,12 @@ pub mod router {
 
     use super::{OaiClient, OaiError};
     use crate::cf_workers_ai::CfClient;
+    // In-scope HERE, not at the file top: a top-level `use` never reaches a
+    // child module, and the 8fc52d22 µ-typing of `avoided_usd` relied on the
+    // file-level import — invisible until --all-features turned this
+    // cf_workers_ai-gated module on (E0425; the all-features lane has been
+    // red since that commit).
+    use crate::kat_footer::TOKENS_PER_MTOK;
 
     /// Which provider served a generation.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

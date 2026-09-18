@@ -78,7 +78,7 @@ use ed25519_dalek::{Signer as _, Verifier as _};
 /// The payload SCHEMA version (G9b). Bump ONLY when the wire shape changes
 /// (field added/removed/renamed, gating scope, commitment domain), and record
 /// the delta in [`PAYLOAD_CHANGELOG`] in the same change.
-pub const PAYLOAD_VERSION: u32 = 2;
+pub const PAYLOAD_VERSION: u32 = 3;
 
 /// Versioned deltas of the payload schema (G9b — "never a silent re-shape").
 pub const PAYLOAD_CHANGELOG: &[(u32, &str)] = &[
@@ -103,6 +103,21 @@ pub const PAYLOAD_CHANGELOG: &[(u32, &str)] = &[
          version, not a claimed one; the sync submitter is derived \
          blake3(pubkey)[..16] on the receiver, never trusted from the wire. \
          v1 is refused outright (hard cut — no deployed client fleet).",
+    ),
+    (
+        3,
+        "each row gains `domain` (Issue 103): the emitting domain's id from the \
+         client's COMPILED rule→domain table (clippy / rust_perf / kernel_opt / \
+         sec / docker / dist by corpus membership, rustc_errors by playbook \
+         code; empty string = unknown, which the receiver buckets as `other`). \
+         Kills the server-side seed mapping's staleness for attributed rules — \
+         a new domain's rules land in their exact slot the moment a v3 client \
+         ships, instead of degrading to `other` until the worker's seed export \
+         is re-run. NOT a gated field (a generated vocabulary id, never user \
+         bytes). The receiver still ingests v2 (domain = absent → seed \
+         mapping) — never a hard cutover; mixed fleets are the normal state. \
+         SYNC_SIGNING_DOMAIN keeps its historical `-v2` spelling: old clients \
+         verify against those exact bytes, so moving it WOULD be a hard cut.",
     ),
 ];
 
@@ -151,6 +166,13 @@ pub struct PayloadHeader {
 /// The sync-envelope signing domain — the mirror of riir-dapps
 /// `kat::mining::SYNC_SIGNING_DOMAIN` (no cargo dep between the repos; the
 /// dual-pinned golden payload is the byte-level drift tripwire).
+///
+/// ⚠ The `-v2` spelling is HISTORICAL and load-bearing (Issue 103): it is
+/// domain SEPARATION for the signature, not a schema-version marker — the
+/// schema version rides the signed `payload_version` field. Old (v2) clients
+/// sign with these exact bytes, so renaming it would refuse every
+/// pre-v3 payload at the signature check: a hard cut, exactly what the
+/// mixed-fleet rule forbids.
 pub const SYNC_SIGNING_DOMAIN: &[u8] = b"riir-kat-sync-payload-v2";
 
 impl PayloadHeader {
@@ -198,6 +220,13 @@ pub struct PayloadRow {
     /// original bytes are gone).
     pub shape_id: String,
     pub lint_key: String,
+    /// The emitting domain's id (v3 — Issue 103): attributed client-side from
+    /// the COMPILED rule→domain table (corpus membership; `rustc_errors` by
+    /// playbook code). Empty string = unknown — the receiver buckets it as
+    /// `other`. NOT a gated field: this is a generated vocabulary id, never
+    /// user bytes. A pre-v3 receiver ignores it; a v3 receiver treats absent
+    /// (v2 rows) and empty identically.
+    pub domain: String,
     /// The trigger text, gated (redacted in place when the policy allows).
     pub shape: String,
     /// The replacement text, gated.
@@ -215,6 +244,102 @@ pub struct PayloadRow {
     pub span_elo: f32,
     /// The gate's verdict metadata for THIS row.
     pub gate: RowGateMeta,
+}
+
+// ── The compiled rule→domain table (v3 — Issue 103) ─────────────────────
+
+/// The domain id a `rustc_errors`-attributed row carries — the receiver's
+/// registry appends it as its own slot (the corpus-view slot law).
+pub const RUSTC_ERRORS_DOMAIN: &str = "rustc_errors";
+
+/// The compiled rule→domain table: corpus membership per retrieval domain
+/// plus the `rustc_errors` playbook-code set. One source of truth for every
+/// payload-domain attribution (the sync builder AND the pending estimator
+/// project through the same instance, so estimator/payload agreement stays
+/// by construction).
+///
+/// `default()` is the COMPILED table, process-cached ([`Self::compiled`]) —
+/// deterministic per binary (a pure read of in-memory corpus tables; no
+/// cargo, no network, no clock). A domain whose feature is not compiled in
+/// contributes nothing: its rows cross as `""` → the receiver's `other`,
+/// the honest unknown, never a guess.
+///
+/// `shader_perf` is deliberately ABSENT (Issue 103's domain list predates
+/// it, and the receiver's 8-slot registry has exactly one free slot after
+/// `rustc_errors`): shader rows cross as `""` → `other` until a future
+/// change widens the registry. Honest, visible, never mislabeled.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RuleDomains {
+    /// `rule_id → domain id` for the retrieval-domain corpora.
+    pub rules: std::collections::BTreeMap<String, String>,
+    /// The compiled `rustc_errors` playbook codes (`E0502`, …). A row whose
+    /// `lint_key` is `"{code}:{strategy}"` ([`crate::domains::rustc_errors
+    /// ::evolve::traj_key`]) attributes to `rustc_errors` when its code half
+    /// is a member.
+    pub rustc_codes: std::collections::BTreeSet<String>,
+}
+
+impl RuleDomains {
+    /// The empty table — every row `""`. The golden fixture's explicit table
+    /// (and tests that need feature-independent bytes) use this or a
+    /// hand-built instance; production builds default to [`Self::compiled`].
+    #[must_use]
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// The COMPILED table, process-cached. Same binary → same table, so the
+    /// sync builder and the pending estimator never disagree about a row's
+    /// domain within one install.
+    #[must_use]
+    pub fn compiled() -> Self {
+        static TABLE: std::sync::OnceLock<RuleDomains> = std::sync::OnceLock::new();
+        TABLE.get_or_init(Self::build).clone()
+    }
+
+    fn build() -> Self {
+        use crate::domain::HealEntry as _;
+        let mut out = Self::empty();
+        macro_rules! corpus_domain {
+            ($feat:literal, $name:literal, $build:path) => {
+                #[cfg(feature = $feat)]
+                for e in $build().entries {
+                    out.rules
+                        .entry(e.rule_id().to_string())
+                        .or_insert_with(|| $name.to_string());
+                }
+            };
+        }
+        corpus_domain!("clippy_lints", "clippy", crate::build_seed_corpus);
+        corpus_domain!("rust_perf", "rust_perf", crate::build_perf_seed_corpus);
+        corpus_domain!("kernel_heal", "kernel_opt", crate::build_kernel_seed_corpus);
+        corpus_domain!("sec", "sec", crate::build_sec_seed_corpus);
+        corpus_domain!("docker", "docker", crate::build_docker_seed_corpus);
+        corpus_domain!("dist", "dist", crate::build_dist_seed_corpus);
+        #[cfg(feature = "rustc_errors")]
+        for (code, _) in crate::domains::rustc_errors::evolve::playbook_inventory() {
+            out.rustc_codes.insert(code);
+        }
+        out
+    }
+
+    /// The domain id for one store row's `lint_key`: exact corpus hit → that
+    /// domain; `{code}:{strategy}` with a compiled playbook code →
+    /// [`RUSTC_ERRORS_DOMAIN`]; otherwise `""` (the receiver's `other`).
+    #[must_use]
+    pub fn domain_for(&self, lint_key: &str) -> &str {
+        if let Some(d) = self.rules.get(lint_key) {
+            return d;
+        }
+        if !self.rustc_codes.is_empty() {
+            if let Some(code) = lint_key.split(':').next() {
+                if self.rustc_codes.contains(code) {
+                    return RUSTC_ERRORS_DOMAIN;
+                }
+            }
+        }
+        ""
+    }
 }
 
 /// Per-row gate metadata — the "gate fingerprints are recorded in payload
@@ -243,9 +368,16 @@ pub struct FindingMeta {
 
 // ── The builder ─────────────────────────────────────────────────────────────
 
-/// Builds SIGNED gated sync payloads (v2 — Issue 008). The sanctioned egress
+/// Builds SIGNED gated sync payloads (v3 — the schema is Issue 008's signed
+/// envelope plus each row's `domain`, Issue 103). The sanctioned egress
 /// path: a valid payload (commitment over gate-passed rows + the account-key
 /// signature) is only producible through here.
+///
+/// By default the builder attributes each row's `domain` from the COMPILED
+/// rule→domain table ([`RuleDomains::compiled`]) — the same table the
+/// pending estimator projects through, so watermark digests agree by
+/// construction. Tests needing feature-independent bytes (the cross-repo
+/// golden) override with [`Self::with_rule_domains`].
 ///
 /// ```
 /// # #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))] {
@@ -265,6 +397,9 @@ pub struct SyncPayloadBuilder<'g, 'k> {
     /// The account key every payload is signed with (v2 — Issue 008). The
     /// receiver derives the sync account id from its public half.
     signer: &'k ed25519_dalek::SigningKey,
+    /// The row→domain attribution table (v3 — Issue 103). Defaults to the
+    /// compiled table; overridden only where bytes must be feature-stable.
+    domains: RuleDomains,
 }
 
 /// A built payload + its per-input-row outcomes (input order — zip with the
@@ -344,6 +479,7 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
     /// A builder gating every row under `origin` through `gate`, signing the
     /// envelope with the KAT account key (v2 — Issue 008; `cargo heal login`
     /// provisions the key, [`crate::kat_account::KatAccount::signing_key`]).
+    /// Rows are domain-attributed from the COMPILED table.
     #[must_use]
     pub fn new(
         gate: &'g RedactionGate,
@@ -354,7 +490,17 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
             gate,
             origin,
             signer,
+            domains: RuleDomains::compiled(),
         }
+    }
+
+    /// Override the row→domain table (Issue 103). Production callers stay on
+    /// the compiled default; the cross-repo golden fixture uses an explicit
+    /// table so its pinned bytes never move with the reader's feature flags.
+    #[must_use]
+    pub fn with_rule_domains(mut self, domains: RuleDomains) -> Self {
+        self.domains = domains;
+        self
     }
 
     /// Build with the current time stamp. See [`Self::build_at`] for the
@@ -380,7 +526,7 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
         let mut included: Vec<PayloadRow> = Vec::new();
         for row in rows {
             let shape_id = shape_hash(&row.shape);
-            match gate_row(self.gate, self.origin, row) {
+            match gate_row(self.gate, self.origin, row, &self.domains) {
                 Ok(pr) => {
                     let redacted = pr.gate.decision == "redacted";
                     outcomes.push(RowOutcome::Included { shape_id, redacted });
@@ -448,11 +594,15 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
 /// The one gated-row projection (free fn so the pending-record estimator can
 /// project rows without constructing a signed builder — signing is envelope
 /// level, not row level; same code path as [`SyncPayloadBuilder::build_at`],
-/// no second projection to drift).
+/// no second projection to drift). The row's `domain` comes from `domains`
+/// (the caller's table — the builder passes its own; the estimator passes
+/// the compiled one) and is NOT gated: a generated vocabulary id, never
+/// user bytes.
 pub(crate) fn gate_row(
     gate: &RedactionGate,
     origin: SpanOrigin,
     row: &TrajRowDoc,
+    domains: &RuleDomains,
 ) -> Result<PayloadRow, (BlockReason, Vec<Finding>)> {
     let inputs = [
         (GATED_FIELDS[0], row.shape.as_str()),
@@ -496,6 +646,7 @@ pub(crate) fn gate_row(
     Ok(PayloadRow {
         shape_id: shape_hash(&row.shape),
         lint_key,
+        domain: domains.domain_for(row.lint_key.as_str()).to_string(),
         shape,
         fix,
         direction: row.direction.clone(),
@@ -534,7 +685,10 @@ pub fn verify_payload(ndjson: &str) -> Result<PayloadHeader, String> {
         .ok_or("payload has no header line")?;
     let header: PayloadHeader =
         serde_json::from_str(head).map_err(|e| format!("unparseable header: {e}"))?;
-    if header.payload_version != PAYLOAD_VERSION {
+    // v3 (Issue 103) is the current schema; v2 (the signed envelope without
+    // per-row domains) stays accepted for the fleet's transition window — the
+    // receiver-side mirror ingests BOTH. Never a hard cutover.
+    if header.payload_version != PAYLOAD_VERSION && header.payload_version != PAYLOAD_VERSION - 1 {
         return Err(format!(
             "payload version {} (this build defines {PAYLOAD_VERSION})",
             header.payload_version
@@ -791,6 +945,65 @@ mod tests {
         });
     }
 
+    /// v3 (Issue 103): the domain field is the rule→domain table's
+    /// attribution, resolved EXACT-match first, then the rustc playbook-code
+    /// prefix, then `""`. Feature-free: the table is hand-built, so this
+    /// holds in every feature configuration.
+    #[test]
+    fn domain_attribution_is_table_membership_then_rustc_code() {
+        let d = RuleDomains {
+            rules: [("needless_return".to_string(), "clippy".to_string())]
+                .into_iter()
+                .collect(),
+            rustc_codes: ["E0502".to_string(), "E0597".to_string()]
+                .into_iter()
+                .collect(),
+        };
+        assert_eq!(d.domain_for("needless_return"), "clippy");
+        assert_eq!(d.domain_for("totally_unknown_rule"), "");
+        assert_eq!(d.domain_for("E0502:hoist-to-first-use"), RUSTC_ERRORS_DOMAIN);
+        // A code NOT in the compiled playbook inventory stays unknown —
+        // attribution is membership, never the `E…` SHAPE.
+        assert_eq!(d.domain_for("E9999:not_a_playbook"), "");
+        // A BARE compiled code (no `:strategy` half) attributes too —
+        // membership is on the code half, whatever the key's shape.
+        assert_eq!(d.domain_for("E0502"), RUSTC_ERRORS_DOMAIN);
+    }
+
+    #[cfg(feature = "clippy_lints")]
+    #[test]
+    fn compiled_table_attributes_corpus_rules() {
+        let d = RuleDomains::compiled();
+        assert_eq!(d.domain_for("needless_return"), "clippy");
+        // A composite rustc key is NOT a corpus rule id.
+        assert_ne!(d.domain_for("E0502:hoist-to-first-use"), "clippy");
+    }
+
+    #[cfg(feature = "rustc_errors")]
+    #[test]
+    fn compiled_table_attributes_rustc_codes() {
+        let d = RuleDomains::compiled();
+        assert_eq!(d.domain_for("E0502:hoist-to-first-use"), RUSTC_ERRORS_DOMAIN);
+        assert_eq!(d.domain_for("E0614:deref-at-use"), RUSTC_ERRORS_DOMAIN);
+    }
+
+    /// v3 (Issue 103): a row built WITHOUT an override carries the COMPILED
+    /// table's attribution — the same default the estimator projects, which
+    /// is the estimator/payload agreement contract.
+    #[cfg(feature = "clippy_lints")]
+    #[test]
+    fn builder_default_attributes_from_the_compiled_table() {
+        let gate = RedactionGate::from_policy(allow_policy());
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer())
+            .build_at(&[row("needless_return", "fn g() { return 1; }", "fn g() { 1 }")], 1);
+        let parsed = parse_rows(&p.ndjson).unwrap();
+        assert_eq!(parsed[0].domain, "clippy");
+        // Unknown rules cross as the empty string (the receiver's `other`).
+        let p2 = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer())
+            .build_at(&[row("no_such_rule_anywhere", "fn h() {}", "fn h() {}")], 1);
+        assert_eq!(parse_rows(&p2.ndjson).unwrap()[0].domain, "");
+    }
+
     /// The CROSS-REPO GOLDEN PAYLOAD — the exact NDJSON bytes the
     /// `clean_rows_round_trip` fixture (2 rows, stamp `1_234_567`, own-repo
     /// allow policy, the golden signing seed) produces. Pinned IDENTICALLY on
@@ -803,11 +1016,28 @@ mod tests {
     /// which covers the row lines only) — a `REDACT_VERSION` bump re-pins
     /// this golden on BOTH sides. That re-pin is the attestation contract
     /// working as designed (Issue 008), not churn.
+    ///
+    /// Since v3 (Issue 103) each row also carries `domain`. The fixture pins
+    /// an EXPLICIT table (both rules → `clippy`) rather than the compiled
+    /// default, so the canonical bytes never move with the reader's feature
+    /// flags (a `--no-default-features` build would attribute `""` and the
+    /// golden would drift). The value `"clippy"` is the receiver-registry
+    /// name — the same string the corpus-view slot law keys on.
     #[test]
     fn golden_payload_bytes_are_pinned() {
         let gate = RedactionGate::from_policy(allow_policy());
         let signer = golden_signer();
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
+        let domains = RuleDomains {
+            rules: [
+                ("needless_return".to_string(), "clippy".to_string()),
+                ("uninlined_format_args".to_string(), "clippy".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+            rustc_codes: std::collections::BTreeSet::new(),
+        };
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer)
+            .with_rule_domains(domains);
         let rows = vec![
             row(
                 "uninlined_format_args",
@@ -819,28 +1049,28 @@ mod tests {
         let p = b.build_at(&rows, 1_234_567);
         assert_eq!(
             p.commitment,
-            "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d"
+            "bab3d27b5adee7427f696b8d8e66a52eb9690660b371c989d43507ecdf1dea1f"
         );
         let expected = concat!(
-            // payload_version 2 (signed — Issue 008). redact_version tracks
+            // payload_version 3 (Issue 103). redact_version tracks
             // REDACT_VERSION (3 since the Bench 053 declaration-scope bump).
-            // The batch_commitment is over the ROW lines only (unchanged from
-            // v1); the SIGNATURE covers the header — so a redact_version
-            // bump re-pins this golden (coordinated, both repos, same
-            // window). account_pubkey_hex + signature_hex are the golden
-            // seed's pubkey + its Ed25519 over the canonical message.
-            "{\"payload_version\":2,\"redact_version\":3,\"origin\":\"own-repo\",",
+            // The batch_commitment is over the ROW lines only; the SIGNATURE
+            // covers the header — so a redact_version bump re-pins this
+            // golden (coordinated, both repos, same window). Rows now carry
+            // `domain` (the fixture's EXPLICIT table — both rules → clippy),
+            // placed between lint_key and shape in the serde field order.
+            "{\"payload_version\":3,\"redact_version\":3,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
-            "\"batch_commitment\":\"d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d\",",
+            "\"batch_commitment\":\"bab3d27b5adee7427f696b8d8e66a52eb9690660b371c989d43507ecdf1dea1f\",",
             "\"account_pubkey_hex\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\",",
-            "\"signature_hex\":\"3c3912e5e09ee23d3daa7ee32bd6b0d280bd2dc20e9121dcae7d45da87b91e026b3b393daf21648b9e3f0e40a222a38b3f83af1562024f9179e79c94b6a3ef03\"}\n",
-            "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",",
+            "\"signature_hex\":\"47b05a0249632bc73f79d660d4281751db9c3a8e42e82e8f003fd61c3fb88b13effb0dc4248909843e2d2527cf87d2a46c84ae880a523d4d6a4192696f0e3208\"}\n",
+            "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",\"domain\":\"clippy\",",
             "\"shape\":\"fn g() { return 1; }\",\"fix\":\"fn g() { 1 }\",",
             "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",
             "\"consecutive_fails\":0,\"tier\":0,\"last_run_id\":\"run-abc123-42\",",
             "\"last_seen_at\":1700000000,\"elo\":1215.5,\"span_elo\":1188.25,",
             "\"gate\":{\"decision\":\"allow\",\"findings\":[]}}\n",
-            "{\"shape_id\":\"15ca779abbbc\",\"lint_key\":\"uninlined_format_args\",",
+            "{\"shape_id\":\"15ca779abbbc\",\"lint_key\":\"uninlined_format_args\",\"domain\":\"clippy\",",
             "\"shape\":\"fn f() { println!(\\\"{}\\\", x); }\",\"fix\":\"fn f() { println!(\\\"{x}\\\"); }\",",
             "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",
             "\"consecutive_fails\":0,\"tier\":0,\"last_run_id\":\"run-abc123-42\",",
