@@ -3683,7 +3683,7 @@ multi-shot revive). Replicated bit-identical across two code bases
 
 Issue file removed per the noise-reduction rule; this section is the record.
 
-## Issue 097 resolved — linking↔confusion PoC: NO-GO, the fusion idea retired as measured-refuted (2026-09-12)
+## Issue 097 — linking↔confusion PoC: NO-GO, the fusion idea retired as measured-refuted; RESOLVED (2026-09-12)
 
 The katgpt-rs Issue 757 follow-up gate ("no plan until a PoC on the
 oracle-labeled fixtures exists") ran as `examples/linking_confusion_poc.rs`
