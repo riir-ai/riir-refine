@@ -62,7 +62,7 @@ Counts: corpus 72 → 74 (2 new entries), FIXABLE 53 → 55, VERIFY unchanged
 - [x] T12 Docs: Research note, HISTORY batch entry, `.distill/001` queue
        line, AGENTS counts (74/55) + frontier_miner bullet, README row;
        commit + push
-- [ ] T13 Global fleet binary rebuild (release set, isolated worktree
+- [x] T13 Global fleet binary rebuild (release set, isolated worktree
        beside the repo + `/tmp` target) + `--corpus-stats` verify
 
 ## GOAT gates
