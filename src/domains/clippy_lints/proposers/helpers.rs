@@ -35,6 +35,36 @@ pub(crate) fn is_postfix_safe(e: &Expr) -> bool {
     )
 }
 
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+fn count_in(source: &str, ident: &str, skip_dot_prefixed: bool) -> usize {
+    let bytes = source.as_bytes();
+    let mut count = 0;
+    let mut from = 0;
+    while let Some(rel) = source[from..].find(ident) {
+        let at = from + rel;
+        let end = at + ident.len();
+        let before_ok = at == 0 || !is_ident_byte(bytes[at - 1]);
+        let after_ok = end >= bytes.len() || !is_ident_byte(bytes[end]);
+        let not_field_or_method = at == 0 || bytes[at - 1] != b'.';
+        if before_ok && after_ok && (!skip_dot_prefixed || not_field_or_method) {
+            count += 1;
+        }
+        from = end;
+    }
+    count
+}
+
+/// Word-boundary ident occurrence count EXCLUDING method/field positions
+/// (occurrences immediately preceded by `.`) — for binding-use analysis.
+/// `v.iter().sum()` contributes NOTHING to `sum`'s count: the method
+/// namespace is not the binding namespace (Batch 155, `let_and_return`).
+pub(crate) fn count_binding_occurrences(source: &str, ident: &str) -> usize {
+    count_in(source, ident, true)
+}
+
 /// Does `<expr>` need parens when negated (`!e`), `&&`-joined, or used as a
 /// replacement in operator position? The sets DIVERGE deliberately at casts:
 /// `x as u64 == y` parses fine (`as` binds tighter than binary operators)
@@ -255,5 +285,6 @@ pub(crate) fn doc_lines<'a>(source: &'a str, file: &File) -> Vec<DocLine<'a>> {
             new_block,
         });
     }
+    out.shrink_to_fit();
     out
 }

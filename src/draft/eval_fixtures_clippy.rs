@@ -450,9 +450,12 @@ pub const WAVE_PREFIX: &'static str = "wrath";
     ),
     (
         "needless_bool",
+        // Batch 155 reshape: the old `let lit = if .. { true } else { false };
+        // lit` wrapper legitimately fires `let_and_return` too (real clippy
+        // fires both) — the single-lint discipline (this fixture's OWN
+        // proposer fires, no other) needs the bare if-bool form.
         r#"pub fn is_daylight(hour: u32) -> bool {
-    let lit = if hour >= 6 && hour < 20 { true } else { false };
-    lit
+    if hour >= 6 && hour < 20 { true } else { false }
 }
 "#,
     ),

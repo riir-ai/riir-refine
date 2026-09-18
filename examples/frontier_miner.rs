@@ -7,17 +7,22 @@
 //!    family table; reported, never silently skipped — the
 //!    `corpus_interacting` lesson; the seeds are deliberately non-const-able
 //!    so nursery `missing_const_for_fn` stays silent).
-//! 2. **`HeldOut` pass** — the view holds out `needless_return`; the full
-//!    invariant loop (unsolved-before / solved-after via re-enable /
-//!    regression over all stock rows / exactly-once vs the committed
-//!    store) runs with oracle verdicts at every judgment point.
-//! 3. **Frontier pass** — the five uncovered-lint families; each admissible
-//!    row is a PENDING mining lead (clause 3 records `solving_rule: None`).
+//! 2. **`HeldOut` pass** — EVERY covered family runs its own held-out loop
+//!    (view = the family's rule disabled, solution = re-enable; Batch 155
+//!    graduated the five 2026-09-18 frontier leads alongside the original
+//!    `needless_return`); the full invariant loop (unsolved-before /
+//!    solved-after via re-enable / regression over all stock rows /
+//!    exactly-once vs the committed store) runs with oracle verdicts at
+//!    every judgment point.
+//! 3. **Frontier pass** — the current uncovered-lint families (`io_other_error` +
+//!    `wrong_self_convention`, the Batch 155 re-arm); each admissible row is
+//!    a PENDING mining lead (clause 3 records `solving_rule: None`).
 //! 4. **Committed-row verification** — rows already in the store are
 //!    RE-VERIFIED against the live oracle (clauses 1–3 re-checked on the
-//!    committed fixture): a committed row that no longer holds under the
-//!    current toolchain is a RED (the freeze-gate drift discipline), not a
-//!    silent skip. Reruns are therefore verify-passes, never stale failures.
+//!    committed fixture, against the ROW's own family rule): a committed row
+//!    that no longer holds under the current toolchain is a RED (the
+//!    freeze-gate drift discipline), not a silent skip. Reruns are therefore
+//!    verify-passes, never stale failures.
 //! 5. **Steering report + band fold** — per family: what fired, whether the
 //!    target is in the compiled fix set; the band fold covers committed +
 //!    fresh rows (the synthetic feed accumulates).
@@ -25,8 +30,8 @@
 //! Rows commit ONLY after the verdict passes (the first e2e run's lesson:
 //! a failed run must leave no rows behind).
 //!
-//! Exit 0 iff: seeds clean ∧ heldout loop holds (fresh or re-verified) ∧
-//! ≥1 frontier lead (fresh or re-verified).
+//! Exit 0 iff: seeds clean ∧ EVERY covered family's loop holds (fresh or
+//! re-verified) ∧ ≥1 frontier lead (fresh or re-verified).
 //!
 //! ```text
 //! cargo run --features frontier_miner --example frontier_miner
@@ -41,7 +46,7 @@ use std::collections::BTreeSet;
 use riir_clippy::draft::clippy_oracle::OracleVerdict;
 use riir_clippy::frontier_miner::{
     admit, append_rows, apply_solution, band_rows, generate, heal_under_view, load_known,
-    regression_perturbations, Solution, CorpusView, MinerRow, Mode, Rejection, MINER_ROWS_JSONL,
+    AdmittedRow, CorpusView, MinerRow, Mode, Rejection, Solution, MINER_ROWS_JSONL,
 };
 use riir_clippy::frontier_pairs::PROVENANCE;
 use riir_clippy::frontier_report;
@@ -78,10 +83,42 @@ fn main() {
     println!("seed-clean gate: {} seeds checked, {} dirty", all.len(), dirty_seeds);
 
     // ── 2+3. Fresh admission (both modes, exactly-once vs the store) ─────
-    let heldout_cands: Vec<_> = all.iter().filter(|c| c.mode == Mode::HeldOut).cloned().collect();
-    let sol = Solution::Reenable(riir_clippy::frontier_miner::HELD_OUT_RULE.to_string());
-    let heldout = admit(&heldout_cands, &CorpusView::held_out(), Some(&sol), &known, &probe);
-    report("HeldOut", &heldout.rejections);
+    // Batch 155: EVERY covered family runs its own held-out loop (view =
+    // its rule disabled, solution = re-enable) — the five graduated
+    // Batch 155 rules re-prove unsolved-before/solved-after/regression on
+    // every e2e rerun, alongside the needless_return original.
+    let covered: Vec<_> = all.iter().filter(|c| c.mode == Mode::HeldOut).cloned().collect();
+    let heldout_families: Vec<String> = covered
+        .iter()
+        .map(|c| c.family.to_string())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut heldout_fresh = 0usize;
+    let mut heldout_rejections = 0usize;
+    let mut heldout_admitted: Vec<AdmittedRow> = Vec::new();
+    let mut heldout_admitted_families: BTreeSet<String> = BTreeSet::new();
+    for fam in &heldout_families {
+        let fam_cands: Vec<_> = covered.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
+        let sol = Solution::Reenable(fam_target_lint(fam));
+        let view = CorpusView::holding_out(&fam_target_lint(fam));
+        let pass = admit(&fam_cands, &view, Some(&sol), &known, &probe);
+        heldout_rejections += pass.rejections.len();
+        heldout_fresh += pass.admitted.len();
+        for row in &pass.admitted {
+            heldout_admitted_families.insert(row.family.to_string());
+        }
+        heldout_admitted.extend(pass.admitted);
+        if !pass.rejections.is_empty() {
+            report(&format!("HeldOut[{fam}]"), &pass.rejections);
+        }
+    }
+    println!(
+        "HeldOut: {} family loop(s), {} fresh admission(s), {} rejection(s)",
+        heldout_families.len(),
+        heldout_fresh,
+        heldout_rejections
+    );
 
     let frontier_cands: Vec<_> = all.iter().filter(|c| c.mode == Mode::Frontier).cloned().collect();
     let frontier = admit(&frontier_cands, &CorpusView::default(), None, &known, &probe);
@@ -91,7 +128,7 @@ fn main() {
     let committed = load_rows(path);
     let mut verify_failures = 0usize;
     for row in &committed {
-        if !verify_committed(row, &sol, &probe) {
+        if !verify_committed(row, &probe) {
             verify_failures += 1;
             eprintln!("⛔ committed row {} no longer holds — toolchain drift?", row.blake3);
         }
@@ -115,7 +152,7 @@ fn main() {
         );
     }
 
-    let mut fold_rows = band_rows(&heldout.admitted);
+    let mut fold_rows = band_rows(&heldout_admitted);
     for row in committed.iter().filter(|r| r.solving_rule.is_some()) {
         if let Some(rule) = &row.solving_rule {
             fold_rows.push((rule.clone(), 1, 1));
@@ -128,17 +165,22 @@ fn main() {
     );
 
     // ── Verdict, THEN commit (a failed run leaves no rows) ───────────────
-    let heldout_ok = (heldout.admitted.len() == 1
-        && heldout.admitted[0].solving_rule.is_some()
-        && regression_perturbations(&sol).is_none())
-        || committed_heldout_holds(&committed);
+    // Every covered family must hold: a fresh admission THIS run or a
+    // re-verified committed row (verify_failures == 0 covers the latter).
+    let mut holding_families: BTreeSet<String> = heldout_admitted_families;
+    for row in &committed {
+        if row.solving_rule.is_some() {
+            holding_families.insert(row.family.clone());
+        }
+    }
+    let heldout_ok = holding_families.len() == heldout_families.len();
     let frontier_yield = frontier.admitted.len()
         + committed
             .iter()
             .filter(|r| r.solving_rule.is_none())
             .count();
 
-    let mut fresh = heldout.admitted.clone();
+    let mut fresh = heldout_admitted;
     fresh.extend(frontier.admitted.iter().cloned());
     if heldout_ok && dirty_seeds == 0 && verify_failures == 0 && frontier_yield >= 1 {
         if fresh.is_empty() {
@@ -156,8 +198,14 @@ fn main() {
     }
 }
 
+/// The dispatch rule a family holds out: the family's target lint (every
+/// covered family's rule is dispatched under its lint name).
+fn fam_target_lint(family: &str) -> String {
+    family.trim_end_matches("-heldout").to_string()
+}
+
 /// Re-verify a committed row against the live oracle (the drift gate).
-fn verify_committed(row: &MinerRow, sol: &Solution, probe: &dyn Fn(&str) -> OracleVerdict) -> bool {
+fn verify_committed(row: &MinerRow, probe: &dyn Fn(&str) -> OracleVerdict) -> bool {
     // Re-derive the fixture's candidate form from the current tables.
     let Some(cand) = generate(&[Mode::HeldOut, Mode::Frontier])
         .into_iter()
@@ -177,9 +225,12 @@ fn verify_committed(row: &MinerRow, sol: &Solution, probe: &dyn Fn(&str) -> Orac
         return false;
     }
     if cand.mode == Mode::HeldOut {
-        // Unsolved-by-view + solved-by-solution, re-judged.
-        let (_healed, cleared) = apply_solution(&cand, sol, probe);
-        let (under_view, _, _) = heal_under_view(&cand, &CorpusView::held_out());
+        // Unsolved-by-view + solved-by-solution, re-judged against the
+        // ROW's own family rule (Batch 155: one loop per covered family).
+        let rule = cand.target_lint.to_string();
+        let sol = Solution::Reenable(rule.clone());
+        let (_healed, cleared) = apply_solution(&cand, &sol, probe);
+        let (under_view, _, _) = heal_under_view(&cand, &CorpusView::holding_out(&rule));
         let view_v = probe(&under_view);
         let unsolved = !view_v.ran || !view_v.compiles || view_v.lints.contains(cand.target_lint);
         unsolved && cleared
@@ -188,10 +239,6 @@ fn verify_committed(row: &MinerRow, sol: &Solution, probe: &dyn Fn(&str) -> Orac
         let (healed_default, _, _) = heal_under_view(&cand, &CorpusView::default());
         healed_default == cand.broken
     }
-}
-
-fn committed_heldout_holds(committed: &[MinerRow]) -> bool {
-    committed.iter().any(|r| r.solving_rule.is_some())
 }
 
 fn load_rows(path: &std::path::Path) -> Vec<MinerRow> {

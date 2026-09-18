@@ -1,5 +1,57 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 155 / Plan 146: the frontier-lead mining pack (the miner's first 5 leads consumed; corpus 64 → 68, clippy 47/14 → 50/15)
+
+The frontier miner's designed flywheel turn: its first 5 committed leads
+became rules, the families graduated-or-retired, and 2 fresh oracle-verified
+leads re-armed the frontier. **4 new proposers** (`let_and_return`,
+`ptr_arg`, `redundant_slicing`, `map_flatten` — each landing with the
+oracle-verified family fixture as its corpus entry, the fixture IS the
+probe) + the `needless_borrow` receiver-whitelist extension (str-inherent
+`to_uppercase`/`to_lowercase`/`matches` — no `for &str` shadow impl exists
+in std, the whitelist's own criterion). Tier verdicts: FIXABLE += 3
+(`let_and_return` simple-let guards incl. the method-position-aware binding
+use counter; `redundant_slicing` same-file param resolver + local/closure
+shadow prepass — its own test suite caught the name-collision soundness
+hole; `map_flatten` the `filter_next` rebuild technique), VERIFY +=
+`ptr_arg` (type-blind callee/body shapes — E0308 the compile gate reverts).
+`needless_borrow` STAYS self_evolve-only (`clean_spans_fire_no_lint` —
+the free-fn shape over-matches, the documented BY-DESIGN exclusion).
+
+**The graduation's measured design correction:** `heal_fixpoint_cfg`
+dispatches `FIXABLE_LINTS` only, so the heldout loop (view + re-enable) can
+only loop-verify FIXABLE-tier rules — `ptr_arg` (VERIFY) and
+`needless_borrow` (self_evolve-only) families RETIRED (lead consumed;
+regression home = module tests + the `all_buggy_codes_fire_their_lint`
+corpus lockstep), the 3 FIXABLE families graduated to standing per-family
+heldout regression loops (every e2e rerun re-proves unsolved-before /
+solved-after / regression against REAL clippy). The 5 frontier rows were
+archived (git history keeps them); the e2e now runs one loop per covered
+family (`CorpusView::holding_out`), re-verifies committed rows against
+their OWN family rule, and requires EVERY covered family to hold.
+
+**Re-arm (probe-first, `scripts/plan146_frontier_probe.py`):**
+`io_other_error` + `wrong_self_convention` are the 2 fresh leads (both
+seed-clean under all+pedantic+nursery + exact-fire brokens;
+`assigning_clones` seed dirty — needless_pass_by_value; `unit_arg`
+refuted — does not fire on the `f(())` shape). **Freeze (the real-oracle
+half):** `let_and_return` measured BROAD — 3 pre-existing atoms' fixtures
+carry let-tails (`deref_addrof`, `legacy_numeric_constants`,
+`unreadable_literal`) and real clippy fires it on them too → bad-atom set
+2→5, v2 74 labeled/12 excluded, v3 76/14, both freeze e2es green (100%
+solve at every k, M4 PASS, zero drift) + the record paragraph; the
+needless_bool eval fixture reshaped (its let-tail wrapper legitimately
+fired the new rule — fix-before-repin, the Issue-022 discipline).
+
+GOAT: lib default **1773/0** · lib `frontier_miner` **2090/0** (retrieval
+floors HELD byte-identical, no re-pin) · clippy `-D` clean 3 states ·
+frontier e2e **VERDICT ✓ ×2** (graduation + verify-pass rerun, 6 rows
+0-drift) · score-bench row #130 **96.4%** (baseline 96.2% + the new atoms,
+FLAT-class). Plan [146](.plans/146_batch155_frontier_lead_mining_pack.md).
+Pre-existing, not fixed (unrelated lane): `cargo check --all-features` RED
+at HEAD from `8fc52d22` (groq.rs `TOKENS_PER_MTOK` combo break — the owning
+lane's guard will catch it).
+
 ## 2026-09-18 — Issue 122 / Plan 145: the PowerPlay frontier miner PoC (G1–G4 PASS, opt-in)
 
 The idle-loop cycle's unit (the only uncontended ungated issue in the

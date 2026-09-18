@@ -51,7 +51,26 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 /// (resp. `&mut self`) — for these, method resolution auto-refs the
 /// receiver, so stripping the explicit borrow is resolution-identical by
 /// construction (no `impl for &T` shadowing exists in std for them).
-const RECEIVER_METHODS: &[&str] = &["as_slice", "as_mut_slice", "len", "iter", "as_ptr"];
+///
+/// Batch 155 extension (Plan 146, the frontier-lead pack): the str-inherent
+/// `&self` trio `to_uppercase` / `to_lowercase` / `matches` — inherent `str`
+/// methods with NO `impl … for &str` twin in std, so the same
+/// no-shadowing argument holds. The family fixtures `(&s).to_uppercase()`
+/// and `(&s).matches(..)` fire exactly `needless_borrow` under
+/// all+pedantic+nursery (probe, 2026-09-18). Deliberately MINIMAL — each
+/// addition is its own no-shadowing proof (the `clone` class — a method
+/// that DOES have a `for &T` impl — would change resolution on strip and
+/// must never join).
+const RECEIVER_METHODS: &[&str] = &[
+    "as_slice",
+    "as_mut_slice",
+    "len",
+    "iter",
+    "as_ptr",
+    "to_uppercase",
+    "to_lowercase",
+    "matches",
+];
 
 struct Collector<'a> {
     source: &'a str,
@@ -145,6 +164,23 @@ mod tests {
             !out.contains("(&v)"),
             "parenthesized borrow must be gone: {out}"
         );
+    }
+
+    #[test]
+    fn strips_str_inherent_receiver_borrow() {
+        // Batch 155 (the frontier family fixtures): str-inherent methods
+        // with no `for &str` shadow impl in std — resolution-identical strip.
+        let input = "fn upper(s: &str) -> String { (&s).to_uppercase() }";
+        let out = propose_fix("needless_borrow", input).expect("matched");
+        assert!(out.contains("s.to_uppercase()"), "str receiver not stripped: {out}");
+
+        let input2 = "fn digits(s: &str) -> usize { (&s).matches(char::is_numeric).count() }";
+        let out2 = propose_fix("needless_borrow", input2).expect("matched");
+        assert!(
+            out2.contains("s.matches(char::is_numeric)"),
+            "matches receiver not stripped: {out2}"
+        );
+        assert!(syn::parse_file(&out2).is_ok(), "{out2}");
     }
 
     #[test]

@@ -132,13 +132,15 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 64 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 68 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
 //! `chunks_exact_to_as_chunks`) + the P15 `unnecessary_map_or` rule + the
 //! Issue 120 `doc_markdown` rule + the P31 `manual_range_patterns` rule + the
-//! 6 Batch 150 rows + the 2 Batch 151 doc-lint rows); future
+//! the 6 Batch 150 rows + the 2 Batch 151 doc-lint rows + the 4 Batch 155
+//! frontier-lead rules — `let_and_return` / `ptr_arg` / `redundant_slicing` /
+//! `map_flatten`, Plan 146); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -160,6 +162,8 @@ pub mod items_after_statements;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
 pub mod legacy_numeric_constants;
+pub mod let_and_return;
+pub mod map_flatten;
 pub mod manual_checked_ops;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
@@ -179,12 +183,14 @@ pub mod needless_range_loop;
 pub mod needless_return;
 pub mod partialeq_to_none;
 pub mod print_write_with_newline;
+pub mod ptr_arg;
 pub mod question_mark;
 pub mod range_plus_one;
 pub mod receiver_kind;
 pub mod redundant_closure;
 pub mod redundant_field_names;
 pub mod redundant_pattern_matching;
+pub mod redundant_slicing;
 pub mod redundant_static_lifetimes;
 pub mod semicolon_if_nothing_returned;
 pub mod single_char_pattern;
@@ -372,6 +378,23 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // pulldown reads it as paragraph text, so the dedent is render-stable
     // where it matters (the module doc carries the eyes-open note).
     "doc_overindented_list_items",
+    // ── Batch 155 (the frontier-lead mining pack, Plan 146 — the frontier
+    // miner's first 5 consumed leads; each family fixture verified to fire
+    // EXACTLY its lint under all+pedantic+nursery, 2026-09-18) ──
+    // `let x = expr; x` tail → `expr`. FIXABLE: simple-let guards (no
+    // annotation/mut/attrs/else, binding used exactly once — the tail,
+    // method-position excluded), parse-provable + inference-identical.
+    "let_and_return",
+    // `f(&s[..])` → `f(s)`. FIXABLE: fires only when the ident resolves to
+    // a same-file fn param typed `&str`/`&[T]` (the receiver_kind
+    // resolution precedent) — then the full-range slice is provably
+    // redundant. Locals/owned params refuse.
+    "redundant_slicing",
+    // `it.map(f).flatten()` → `it.flat_map(f)`. FIXABLE: Map's Item IS f's
+    // output and both adapters flatten through the same IntoIterator
+    // bound — semantics-identical whenever both compile (MachineApplicable
+    // in real clippy; attrs/turbofish/arg-count guards).
+    "map_flatten",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -526,10 +549,18 @@ pub const VERIFY_LINTS: &[&str] = &[
     // std's primitive impls (explicit table — incl. the measured
     // sign-change u32→i64 case), so the rewrite is value-identical to the
     // `as` cast whenever it compiles. A second binding of the same name
+    // A second binding of the same name
     // refuses (shadow). All other operands (fields, generics, complex
     // exprs) are the oracle lane's residue (clippy's suggestion is
     // MachineApplicable there); a wrong fire is E0277 — check-visible.
     "cast_lossless",
+    // ── Batch 155 (the frontier-lead mining pack, Plan 146) ──
+    // `&Vec<T>`/`&String` params → `&[T]`/`&str`. VERIFY: type-blind callee
+    // + body shapes (Vec-only methods like `capacity()`; `v` passed to a
+    // `&Vec`-expecting callee) are E0308/E0599 — check-visible, the compile
+    // gate reverts. The mut/lifetime/attr forms refuse up front; the inner
+    // type is spliced verbatim from the pointee's own span.
+    "ptr_arg",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -567,7 +598,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 64 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 68 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -654,6 +685,11 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         }
         // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS artifact) ──
         "manual_range_patterns" => manual_range_patterns::collect_edits(source, file),
+        // ── Batch 155 (the frontier-lead mining pack, Plan 146) ──
+        "let_and_return" => let_and_return::collect_edits(source, file),
+        "ptr_arg" => ptr_arg::collect_edits(source, file),
+        "redundant_slicing" => redundant_slicing::collect_edits(source, file),
+        "map_flatten" => map_flatten::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -707,6 +743,9 @@ mod tests {
             // P12 post-mining intake: nursery default-allow + parse-only body
             // analysis — VERIFY-tier only.
             "needless_pass_by_ref_mut",
+            // Batch 155: type-blind callee/body shapes (Vec-only methods,
+            // &Vec-expecting callees) — VERIFY-tier only.
+            "ptr_arg",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
@@ -729,12 +768,15 @@ mod tests {
         // + 2 Batch 151 (doc_lazy_continuation + doc_overindented_list_items
         // — the doc-line state-machine port, one module both lints, the
         // probe151 boundary matrix in Plan 137).
-        assert_eq!(FIXABLE_LINTS.len(), 47);
+        // + 3 Batch 155 (let_and_return + redundant_slicing + map_flatten —
+        // the frontier-lead mining pack, Plan 146; each family fixture
+        // oracle-verified to fire exactly its lint, 2026-09-18).
+        assert_eq!(FIXABLE_LINTS.len(), 50);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 64-row fixture table — length is the point.
+    /// 68-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1067,6 +1109,27 @@ impl S {
                 "doc_overindented_list_items",
                 "/// - the item text.\n///     an overindented cont.\nfn listed() {}",
                 "///   an overindented cont.",
+            ),
+            // ── Batch 155 (the frontier-lead mining pack, Plan 146) ──
+            (
+                "let_and_return",
+                "fn shout(s: &str) -> String { let out = s.to_uppercase(); out }",
+                "fn shout(s: &str) -> String { s.to_uppercase() }",
+            ),
+            (
+                "ptr_arg",
+                "fn total(v: &Vec<i32>) -> i32 { v.iter().sum() }",
+                "fn total(v: &[i32]) -> i32",
+            ),
+            (
+                "redundant_slicing",
+                "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(&s[..]) }",
+                "first_char(s)",
+            ),
+            (
+                "map_flatten",
+                "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }",
+                "xs.iter().flat_map(|x| x.split(' '))",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

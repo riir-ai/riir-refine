@@ -115,20 +115,32 @@ pub struct Family {
     pub covered: bool,
 }
 
-/// The family inventory. Frontier targets verified ABSENT from
-/// `FIXABLE_LINTS ∪ VERIFY_LINTS` at authoring time (clippy 1.98 era):
-/// `let_and_return`, `ptr_arg`, `needless_borrow`, `redundant_slicing`,
-/// `map_flatten` — all default-firing (style/complexity), so they surface
-/// on a plain `cargo clippy`, not only under pedantic/nursery.
+/// The family inventory. `covered: true` = the family's rule is a STOCK
+/// FIXABLE-tier dispatch proposer (the `HeldOut` arm's population — the
+/// fixpoint `heal_fixpoint_cfg` dispatches `FIXABLE_LINTS`, so only a
+/// FIXABLE-tier rule can be held out and re-enabled as the loop's
+/// solution). Batch 155 graduated three of the five 2026-09-18 frontier
+/// leads this way (`let_and_return`, `redundant_slicing`, `map_flatten`);
+/// the other two (`ptr_arg` — VERIFY tier, type-blind callee/body shapes;
+/// `needless_borrow` — self_evolve-only, the free-fn shape over-matches)
+/// RETIRED — their leads are consumed, their regression homes are the
+/// proposer module tests + the `all_buggy_codes_fire_their_lint` corpus
+/// lockstep (rules outside the fixpoint dispatch cannot be loop-verified).
+/// `covered: false` = a genuine frontier family (target lint outside the
+/// compiled fix set AND outside the stock proposers — a PENDING mining
+/// `io_other_error` + `wrong_self_convention` are the Batch 155
+/// re-arm — both probe-verified 2026-09-18 (seed clean under
+/// all+pedantic+nursery, broken fires EXACTLY its target lint;
+/// `scripts/plan146_frontier_probe.py`).
 #[must_use]
 pub fn families() -> Vec<Family> {
     vec![
         Family { id: "needless_return-heldout", target_lint: "needless_return", covered: true },
-        Family { id: "let_and_return", target_lint: "let_and_return", covered: false },
-        Family { id: "ptr_arg", target_lint: "ptr_arg", covered: false },
-        Family { id: "needless_borrow", target_lint: "needless_borrow", covered: false },
-        Family { id: "redundant_slicing", target_lint: "redundant_slicing", covered: false },
-        Family { id: "map_flatten", target_lint: "map_flatten", covered: false },
+        Family { id: "let_and_return", target_lint: "let_and_return", covered: true },
+        Family { id: "redundant_slicing", target_lint: "redundant_slicing", covered: true },
+        Family { id: "map_flatten", target_lint: "map_flatten", covered: true },
+        Family { id: "io_other_error", target_lint: "io_other_error", covered: false },
+        Family { id: "wrong_self_convention", target_lint: "wrong_self_convention", covered: false },
     ]
 }
 
@@ -202,21 +214,12 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         "let_and_return" => vec![
             ("fn shout(s: &str) -> String { s.to_uppercase() }", "fn shout(s: &str) -> String { let out = s.to_uppercase(); out }"),
             ("fn total(v: &[i32]) -> i32 { v.iter().sum() }", "fn total(v: &[i32]) -> i32 { let sum = v.iter().sum(); sum }"),
-            ("fn slug(s: &str) -> String { s.replace(' ', \"-\") }", "fn slug(s: &str) -> String { let made = s.replace(' ', \"-\"); made }"),
+            ("fn slug(s: &str) -> usize { s.trim().len() }", "fn slug(s: &str) -> usize { let made = s.trim().len(); made }"),
         ],
-        // 1-op: narrow `&[T]` to `&Vec<T>` in the signature.
-        "ptr_arg" => vec![
-            ("fn total(v: &[i32]) -> i32 { v.iter().sum() }", "fn total(v: &Vec<i32>) -> i32 { v.iter().sum() }"),
-            ("fn first_len(rows: &[String]) -> usize { rows.first().map_or(0, String::len) }", "fn first_len(rows: &Vec<String>) -> usize { rows.first().map_or(0, String::len) }"),
-            ("fn any_zero(v: &[u8]) -> bool { v.contains(&0) }", "fn any_zero(v: &Vec<u8>) -> bool { v.contains(&0) }"),
-        ],
-        // 1-op: wrap the receiver in a redundant borrow (non-const method
-        // receivers — the same missing_const_for_fn nursery discipline).
-        "needless_borrow" => vec![
-            ("fn upper(s: &str) -> String { s.to_uppercase() }", "fn upper(s: &str) -> String { (&s).to_uppercase() }"),
-            ("fn digits(s: &str) -> usize { s.matches(char::is_numeric).count() }", "fn digits(s: &str) -> usize { (&s).matches(char::is_numeric).count() }"),
-            ("fn head_len(s: &str) -> usize { s.trim().len() }", "fn head_len(s: &str) -> usize { (&s.trim()).len() }"),
-        ],
+        // (ptr_arg + needless_borrow RETIRED at Batch 155 — their frontier
+        // leads are consumed by the landed proposers; their case tables
+        // live on in the corpus fixtures + module tests, the regression
+        // homes for tiers the fixpoint dispatch cannot loop-verify.)
         // 1-op: pass a redundant full-slice `&s[..]` to a `&str` param.
         "redundant_slicing" => vec![
             ("fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(s) }", "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(&s[..]) }"),
@@ -227,6 +230,22 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         "map_flatten" => vec![
             ("fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().flat_map(|x| x.split(' ')).collect() }", "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }"),
             ("fn chunks(rows: &[String]) -> Vec<&str> { rows.iter().flat_map(|r| r.split(',')).collect() }", "fn chunks(rows: &[String]) -> Vec<&str> { rows.iter().map(|r| r.split(',')).flatten().collect() }"),
+        ],
+        // ── Batch 155 re-arm (probe-verified 2026-09-18, the frontier
+        // population after the five leads graduated). Seeds are
+        // non-const-able where the nursery const-ability lint would fire. ──
+        // 1-op: `io::Error::other(e)` → the legacy `new(ErrorKind::Other, e)`
+        // (both compile on the workspace toolchain; the broken form fires).
+        "io_other_error" => vec![
+            ("fn mk(e: String) -> std::io::Error { std::io::Error::other(e) }", "fn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }"),
+            ("fn bad(e: String) -> std::io::Error { std::io::Error::other(e) }", "fn bad(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }"),
+        ],
+        // 1-op: `into_*` taking self by value (the convention) → the broken
+        // form takes `&self` (fires wrong_self_convention; seed reads self,
+        // non-const — format! keeps the nursery const lint quiet).
+        "wrong_self_convention" => vec![
+            ("struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(self) -> String { format!(\"sig-{}\", self.code) }\n}", "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}"),
+            ("struct Tag { code: u32 }\nimpl Tag {\n    fn into_slug(self) -> String { format!(\"tag-{}\", self.code) }\n}", "struct Tag { code: u32 }\nimpl Tag {\n    fn into_slug(&self) -> String { format!(\"tag-{}\", self.code) }\n}"),
         ],
         _ => vec![],
     }
@@ -280,7 +299,15 @@ impl CorpusView {
     /// The `HeldOut` view: [`HELD_OUT_RULE`] disabled.
     #[must_use]
     pub fn held_out() -> Self {
-        Self { disabled: BTreeSet::from([HELD_OUT_RULE.to_string()]) }
+        Self::holding_out(HELD_OUT_RULE)
+    }
+
+    /// The generalized held-out view: ANY stock rule disabled by its
+    /// dispatch key (Batch 155 — the five graduated families each hold out
+    /// their OWN rule; `held_out()` is the `needless_return` specialization).
+    #[must_use]
+    pub fn holding_out(rule: &str) -> Self {
+        Self { disabled: BTreeSet::from([rule.to_string()]) }
     }
 
     fn override_for(&self) -> ComponentOverride {
@@ -683,14 +710,18 @@ mod tests {
         }
     }
 
-    /// The Frontier-mode probe: fires the family's target lint on any text
-    /// carrying the family's broken-shape marker (seeds never match; the
-    /// default-view heal leaves the text untouched — nothing fires — so the
-    /// healed verdict equals the broken verdict, which is the frontier
-    /// fact under test).
-    fn frontier_probe(code: &str) -> OracleVerdict {
-        // redundant_slicing BEFORE needless_borrow: `first_char(&s[..])`
-        // matches a bare `(&` too — the marker order is load-bearing.
+    /// The Batch 155 per-family probe: fires each covered family's target
+    /// lint on its broken-shape marker (the frontier_probe marker set + the
+    /// needless_return arm). Seeds never match; the family's OWN held-out
+    /// view leaves the marker (unsolved-before); the default heal removes
+    /// it (solved-after) — both sides hermetically exercised.
+    fn family_probe(code: &str) -> OracleVerdict {
+        if code.contains("return ") {
+            return verdict(true, true, &["needless_return"]);
+        }
+        // Marker order is load-bearing: slicing before borrow (`&s[..]`
+        // shares no text with the paren-borrow markers, but keep the
+        // documented order anyway).
         let lint = if code.contains("&s[..]") {
             "redundant_slicing"
         } else if code.contains("let out =") || code.contains("let sum =") || code.contains("let made =") {
@@ -701,6 +732,29 @@ mod tests {
             "needless_borrow"
         } else if code.contains(").flatten()") {
             "map_flatten"
+        } else {
+            return verdict(true, true, &[]);
+        };
+        verdict(true, true, &[lint])
+    }
+
+    /// The family's dispatch rule (== its target lint; the `-heldout`
+    /// suffix is the needless_return family's id convention).
+    fn fam_rule(family: &str) -> String {
+        family.trim_end_matches("-heldout").to_string()
+    }
+
+    /// The Frontier-mode probe: fires the family's target lint on any text
+    /// carrying the family's broken-shape marker (seeds never match; the
+    /// default-view heal leaves the text untouched — nothing fires — so the
+    /// healed verdict equals the broken verdict, which is the frontier
+    /// fact under test).
+    fn frontier_probe(code: &str) -> OracleVerdict {
+        // The Batch 155 frontier population: the two re-arm families.
+        let lint = if code.contains("ErrorKind::Other") {
+            "io_other_error"
+        } else if code.contains("(&self)") {
+            "wrong_self_convention"
         } else {
             return verdict(true, true, &[]);
         };
@@ -719,9 +773,11 @@ mod tests {
         assert_eq!(a, sorted);
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
-        // HeldOut + Frontier partition by the family's covered flag.
-        assert_eq!(a.iter().filter(|c| c.mode == Mode::HeldOut).count(), 3);
-        assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 13);
+        // HeldOut + Frontier partition by the family's covered flag — four
+        // covered families (10 cases: 3+3+2+2) + the Batch 155 re-arm's
+        // two frontier families (4 cases).
+        assert_eq!(a.iter().filter(|c| c.mode == Mode::HeldOut).count(), 10);
+        assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 4);
     }
 
     #[test]
@@ -734,50 +790,85 @@ mod tests {
 
     #[test]
     fn heldout_pass_admits_one_row_per_family_with_full_invariant() {
+        // Batch 155: EVERY covered family runs its OWN loop (view = its rule
+        // held out, solution = re-enable) — one admission, zero rejections,
+        // the solving rule IS the family rule.
         let cands = generate(&[Mode::HeldOut]);
-        let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let out = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &heldout_probe);
-        assert_eq!(out.admitted.len(), 1, "K-minimality: first admissible per family");
-        let row = &out.admitted[0];
-        assert_eq!(row.family, "needless_return-heldout");
-        assert_eq!(row.mode, Mode::HeldOut);
-        assert_eq!(row.solving_rule.as_deref(), Some(HELD_OUT_RULE));
-        assert!(out.rejections.is_empty(), "later family members are skipped, not rejected");
-        // The committed row is the canonical-first (lowest blake3 at ops=1).
-        let first = cands
+        let families: Vec<String> = cands
             .iter()
-            .min_by(|x, y| x.blake3.cmp(&y.blake3))
-            .expect("non-empty family");
+            .map(|c| c.family.to_string())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        assert_eq!(families.len(), 4, "the four covered (FIXABLE-tier) families");
+        for fam in &families {
+            let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
+            let rule = fam_rule(fam);
+            let sol = Solution::Reenable(rule.clone());
+            let view = CorpusView::holding_out(&rule);
+            let out = admit(&fam_cands, &view, Some(&sol), &KnownSet::new(), &family_probe);
+            assert_eq!(out.admitted.len(), 1, "K-minimality: first admissible per family {fam}");
+            assert!(out.rejections.is_empty(), "family {fam}: later members are skipped, not rejected");
+            let row = &out.admitted[0];
+            assert_eq!(row.mode, Mode::HeldOut);
+            assert_eq!(row.solving_rule.as_deref(), Some(rule.as_str()));
+        }
+        // The needless_return family's committed row is still its canonical-first.
+        let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
+        let nr: Vec<_> = cands.iter().filter(|c| c.family == "needless_return-heldout").cloned().collect();
+        let out = admit(&nr, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &family_probe);
+        let row = &out.admitted[0];
+        let first = nr.iter().min_by(|x, y| x.blake3.cmp(&y.blake3)).expect("non-empty family");
         assert_eq!(row.blake3, first.blake3);
     }
 
     #[test]
     fn unsolved_before_is_real_the_view_leaves_the_lint_firing() {
-        // Ground truth for the mock: the view-healed output IS the broken
-        // text (the only rule that could touch it is held out) — assert the
-        // pipeline fact the mock probe stands in for.
+        // Per covered family: the family's OWN held-out view leaves its
+        // fixture byte-untouched (the only rule that could touch it is held
+        // out), and the default view (the solution) DOES clear the marker.
         let cands = generate(&[Mode::HeldOut]);
-        let (healed, edits, _) = heal_fixpoint_cfg(
-            &cands[0].broken,
-            &[],
-            &CorpusView::held_out().override_for(),
-        );
-        assert_eq!(healed, cands[0].broken, "view heal must leave the fixture untouched");
-        assert_eq!(edits, 0);
-        // And the default view (the solution) DOES clear it.
-        let (solved, edits, _) = heal_fixpoint_cfg(
-            &cands[0].broken,
-            &[],
-            &ComponentOverride::default(),
-        );
-        assert_ne!(solved, cands[0].broken);
-        assert!(edits > 0);
+        let families: Vec<String> = cands
+            .iter()
+            .map(|c| c.family.to_string())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        for fam in &families {
+            let rule = fam_rule(fam);
+            let c = cands
+                .iter()
+                .find(|c| c.family == fam.as_str())
+                .expect("family candidate");
+            let (healed, edits, _) = heal_fixpoint_cfg(
+                &c.broken,
+                &[],
+                &CorpusView::holding_out(&rule).override_for(),
+            );
+            assert_eq!(healed, c.broken, "family {fam}: own-view heal must leave the fixture untouched");
+            assert_eq!(edits, 0);
+            let (solved, edits, _) = heal_fixpoint_cfg(
+                &c.broken,
+                &[],
+                &ComponentOverride::default(),
+            );
+            assert_ne!(solved, c.broken, "family {fam}: default heal must change the fixture");
+            assert!(edits > 0);
+        }
+        // The needless_return original shape, spelled directly.
+        let c = cands.iter().find(|c| c.family == "needless_return-heldout").unwrap();
+        let (solved, _, _) = heal_fixpoint_cfg(&c.broken, &[], &ComponentOverride::default());
         assert!(!solved.contains("return "));
     }
 
     #[test]
     fn duplicate_blake3_is_rejected_exactly_once_holds() {
-        let cands = generate(&[Mode::HeldOut]);
+        // Scoped to one family (the semantics are family-agnostic); Batch
+        // 155 made the heldout population six families deep.
+        let cands: Vec<_> = generate(&[Mode::HeldOut])
+            .into_iter()
+            .filter(|c| c.family == "needless_return-heldout")
+            .collect();
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
         let first = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &heldout_probe);
         assert_eq!(first.admitted.len(), 1);
@@ -881,7 +972,7 @@ mod tests {
             assert_eq!(edits, 0);
         }
         let out = admit(&cands, &CorpusView::default(), None, &KnownSet::new(), &frontier_probe);
-        assert_eq!(out.admitted.len(), 5, "one per frontier family (K-minimality)");
+        assert_eq!(out.admitted.len(), 2, "one per frontier family (K-minimality)");
         assert!(out
             .admitted
             .iter()

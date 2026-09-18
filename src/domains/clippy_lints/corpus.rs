@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 64 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 68 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -54,7 +54,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       the staged follow-up from the Batch 150 probe pack, Research 177
 ///       #7; one proposer module houses both, the probe151 boundary
 ///       matrix in Plan 137).
-// 64-entry data table, not logic — length is the point.
+///     + the 4 Batch 155 rows (2026-09-18, the frontier-lead mining pack —
+///       `let_and_return` + `ptr_arg` + `redundant_slicing` +
+///       `map_flatten`, Plan 146 / Research 182; each fixture is the
+///       oracle-verified frontier-family (seed, broken) pair, and
+///       `needless_borrow`'s receiver extension rides its existing entry).
+// 68-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -619,6 +624,36 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "/// - the item text.\n///     an overindented cont.\nfn listed() {}".to_string(),
             fixed_code: "/// - the item text.\n///   an overindented cont.\nfn listed() {}".to_string(),
         },
+        // ── Batch 155 (2026-09-18, the frontier-lead mining pack — the
+        // frontier miner's first 5 consumed leads, Plan 146 / Research 182.
+        // Each fixture is the ORACLE-VERIFIED family (seed, broken) pair:
+        // seed clean under all+pedantic+nursery, broken fires EXACTLY its
+        // target lint — the fixture IS the probe. needless_borrow's
+        // extension rides its existing seed entry.) ──
+        ClippyFixEntry {
+            lint_name: "let_and_return".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn shout(s: &str) -> String { let out = s.to_uppercase(); out }".to_string(),
+            fixed_code: "fn shout(s: &str) -> String { s.to_uppercase() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "ptr_arg".to_string(),
+            lint_group: "perf".to_string(),
+            buggy_code: "fn total(v: &Vec<i32>) -> i32 { v.iter().sum() }".to_string(),
+            fixed_code: "fn total(v: &[i32]) -> i32 { v.iter().sum() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "redundant_slicing".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(&s[..]) }".to_string(),
+            fixed_code: "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(s) }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "map_flatten".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }".to_string(),
+            fixed_code: "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().flat_map(|x| x.split(' ')).collect() }".to_string(),
+        },
     ])
 }
 
@@ -704,14 +739,16 @@ mod tests {
     /// `partialeq_to_none`, `cast_lossless` — the staged default-level +
     /// pedantic probe pack, Bench 094 evidence), and the 2 Batch 151
     /// rows (`doc_lazy_continuation`, `doc_overindented_list_items` —
-    /// the doc-line state-machine port, Research 177 #7) = 64.
+    /// the doc-line state-machine port, Research 177 #7), and the 4
+    /// Batch 155 rows (`let_and_return`, `ptr_arg`, `redundant_slicing`,
+    /// `map_flatten` — the frontier-lead mining pack, Plan 146) = 68.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_64() {
+    fn corpus_size_is_68() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 64);
+        assert_eq!(corpus.entries.len(), 68);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires
