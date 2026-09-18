@@ -257,6 +257,8 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
         last_balance_micro: Some(0),
         contributed: None,
         first_commitment_hex: None,
+        tuna_balance_micro: None,
+        tuna_expires_unix: None,
     };
     depleted.save(&ack_path).expect("seed depleted ack");
 
@@ -348,6 +350,8 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
         last_balance_micro: Some(0),
         contributed: None,
         first_commitment_hex: None,
+        tuna_balance_micro: None,
+        tuna_expires_unix: None,
     };
     ack.save(&ack_path).expect("seed depleted ack");
 

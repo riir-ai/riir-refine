@@ -319,7 +319,11 @@ fn enforce_kat_soft_gate(args: &Args) {
         account_present: riir_clippy::kat_account::KatAccount::load(&account_dir).is_ok(),
         last_synced_balance_micro: ack.last_balance_micro,
         contributed_and_synced: sticky_grace(&ack),
+        tuna_balance_micro: ack.tuna_balance_micro,
     });
+    // Which ack fed the FINAL verdict (the 079 attempt may reload it) —
+    // the refusal message names the trial-credit leg from the same truth.
+    let mut final_tuna = ack.tuna_balance_micro;
 
     // Issue 079 (owner ask, 2026-09-09): a flat refusal gives a depleted
     // user no choice — OFFER the contribute-now path first. One accepted
@@ -349,7 +353,9 @@ fn enforce_kat_soft_gate(args: &Args) {
                         .is_ok(),
                     last_synced_balance_micro: reloaded.last_balance_micro,
                     contributed_and_synced: sticky_grace(&reloaded),
+                    tuna_balance_micro: reloaded.tuna_balance_micro,
                 });
+            final_tuna = reloaded.tuna_balance_micro;
             (verdict, true)
         } else {
             (verdict, false)
@@ -373,6 +379,12 @@ fn enforce_kat_soft_gate(args: &Args) {
         "cargo heal: REFUSED — the account's last synced KAT balance is {balance} \
          (depleted) and this machine has not yet contributed (Issue 075 soft gate)."
     );
+    // Proposal 006: name the trial-credit leg when the server has said it
+    // is gone (Some ≤ 0 is a fact). `None` (a pre-v4 ack / pre-TUNA
+    // server) prints nothing — the pre-006 refusal, byte for byte.
+    if final_tuna.is_some_and(|tuna| tuna <= 0) {
+        eprintln!("Trial credit (TUNA) is exhausted too — healing draws it before KAT.");
+    }
     // riir-dapps Issue 094 D4: the free daily faucet/drip tier is RETIRED
     // and `--refill` retired with it (devnet-ops only). The refuel paths a
     // user is offered are exactly two — contribute or pay.
@@ -10186,6 +10198,12 @@ fn main() {
                 )
             })
             .unwrap_or_default();
+        // The trial-credit footer line (Proposal 006): from the SAME ack
+        // the sync state reads, so the footer never mixes sync generations.
+        // `None` (pre-v4 ack / pre-TUNA server / no transport) renders
+        // nothing — the 3-line footer, byte for byte.
+        #[cfg_attr(not(feature = "kat_transport"), allow(unused_mut))]
+        let mut tuna_line: Option<riir_clippy::kat_footer::TunaLine> = None;
         #[cfg(feature = "kat_transport")]
         let sync = if account.is_none() {
             riir_clippy::kat_footer::SyncState::LoggedOut
@@ -10195,6 +10213,18 @@ fn main() {
                 .join(".heal")
                 .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
             let (ack, _) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+            tuna_line = ack.tuna_balance_micro.zip(ack.tuna_expires_unix).map(
+                |(balance, expires)| riir_clippy::kat_footer::TunaLine {
+                    balance_micro: MicroKat(balance.max(0)),
+                    // The trial scale mirrors the KAT grant projection
+                    // until the server reports the real claim size (B2).
+                    grant_micro: riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
+                    expires_unix: expires,
+                    now_unix: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs()),
+                },
+            );
             // The burn wire is whole-KAT granular (wire_kat_total truncates),
             // so the sub-KAT sliver of `charged` is BY DESIGN unacked until
             // the next whole-KAT crossing — it is not a stuck delta. Current
@@ -10229,6 +10259,7 @@ fn main() {
             run_micro_kat: MicroKat::from(c.session_kat()),
             cum_micro_kat: MicroKat::from(c.state().charged_kat),
             grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
+            tuna: tuna_line,
             rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
             meter_version: m.state().version,
             charge_version: c.state().charge_version,

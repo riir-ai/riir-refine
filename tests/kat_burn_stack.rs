@@ -373,15 +373,19 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
 
     // The ack advanced to exactly what the server confirmed.
     let ack = ack_of(&dir).expect("the ack must exist after an accepted push");
-    assert_eq!(ack.version, 3);
+    assert_eq!(ack.version, riir_clippy::kat_burn_client::BURN_ACK_VERSION);
     assert_eq!(ack.burn_kat_total, sent);
     assert_eq!(ack.meter_watermark_tokens, watermark);
     assert!(ack.acked_unix > 0);
     assert_eq!(
         ack.last_balance_micro,
         Some(99_000_000_000_000),
-        "the v3 ack carries the last-synced server balance (the 075 gate input)"
+        "the ack carries the last-synced server balance (the 075 gate input)"
     );
+    // The mock server answers the pre-TUNA shape — the v4 ack persists the
+    // absence as None (never zero), the 123 degradation arm.
+    assert_eq!(ack.tuna_balance_micro, None);
+    assert_eq!(ack.tuna_expires_unix, None);
 
     // The success line: exactly one, carrying the fresh server balance
     // from the push response (99_000_000_000_000 micro = 99000000.000000 KAT).

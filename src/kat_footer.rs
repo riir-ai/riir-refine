@@ -15,8 +15,14 @@
 //! ```text
 //! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1)
 //!      grant     ⣿…⣄⣿⣿⣿  84.92 KAT left · 15.08 of 100 burned
+//!      tuna      ⣿…⣄⣿⣿⣿  47.20 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only
 //!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
+//!
+//! (The `tuna` line — the Proposal 006 trial credit — renders ONLY when
+//! the burn ack carries a server-reported TUNA balance; `None` (a pre-v4
+//! ack / pre-TUNA server) renders nothing and the footer stays
+//! byte-identical to the 3-line shape.)
 //!
 //! - The bar is a Braille fuel gauge: filled cells are the REMAINING grant
 //!   (bright, threshold-colored), the burned-through tail is dim full
@@ -100,6 +106,26 @@ pub enum SyncState<'a> {
     Unknown,
 }
 
+/// One trial-credit (TUNA) gauge line — Proposal 006: the footer's second
+/// tank, rendered between the grant bar and the sync line. Present ONLY
+/// when the burn ack carries a server-reported TUNA balance (ack v4);
+/// its absence renders nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TunaLine {
+    /// The trial-credit balance, µ (negative clamps to 0 at render —
+    /// `tuna:acct:` is burn-clamped server-side; the clamp is display
+    /// armor, not accounting).
+    pub balance_micro: MicroKat,
+    /// The claim scale the bar gauges against — the caller's projection
+    /// (B2's real claim size re-aims it when the server reports one).
+    pub grant_micro: MicroKat,
+    /// Stored-at-issue expiry (never recomputed — the D4a rule), unix
+    /// seconds.
+    pub expires_unix: u64,
+    /// Now, captured at construction so `render` stays pure.
+    pub now_unix: u64,
+}
+
 /// The footer's inputs: money as [`MicroKat`] µ, tokens raw.
 pub struct KatFooter<'a> {
     /// Code word tokens billed this run.
@@ -110,6 +136,9 @@ pub struct KatFooter<'a> {
     pub cum_micro_kat: MicroKat,
     /// The grant projection, µ.
     pub grant_micro_kat: MicroKat,
+    /// The trial-credit line (Proposal 006). `None` renders nothing — the
+    /// pre-TUNA footer, byte for byte.
+    pub tuna: Option<TunaLine>,
     /// The v-rate, µ per million tokens.
     pub rate_micro_per_mtok: MicroKat,
     /// The meter version stamp (`MeterState::version`).
@@ -125,9 +154,10 @@ pub struct KatFooter<'a> {
 }
 
 impl KatFooter<'_> {
-    /// Render the footer (3 lines; the `Unsynced` sync state adds a 4th).
-    /// No trailing newline. `color` gates all ANSI escapes; plain output is
-    /// byte-stable for pipes and `NO_COLOR`.
+    /// Render the footer (3 lines; a [`TunaLine`] adds one, the
+    /// `Unsynced` sync state adds one). No trailing newline. `color` gates
+    /// all ANSI escapes; plain output is byte-stable for pipes and
+    /// `NO_COLOR`.
     #[must_use]
     pub fn render(&self, color: bool) -> String {
         let grant_disp_micro = round_kat_2dp(self.grant_micro_kat);
@@ -164,7 +194,40 @@ impl KatFooter<'_> {
             fmt_kat_display(burned_micro),
             fmt_kat_display(grant_disp_micro),
         );
-        format!("{line1}\n{line2}\n{}", self.render_sync(color))
+        match self.render_tuna(color) {
+            Some(tuna) => format!("{line1}\n{line2}\n{tuna}\n{}", self.render_sync(color)),
+            None => format!("{line1}\n{line2}\n{}", self.render_sync(color)),
+        }
+    }
+
+    /// The trial-credit line — `None` renders nothing (the ack's absence
+    /// of TUNA truth is the 3-line footer, byte for byte).
+    fn render_tuna(&self, color: bool) -> Option<String> {
+        let t = self.tuna?;
+        let bal = MicroKat(t.balance_micro.0.max(0));
+        let bal_disp = round_kat_2dp(bal);
+        let grant_disp = round_kat_2dp(t.grant_micro);
+        // Grant-scale micro values sit far inside f64's exact-integer
+        // range — lossless at every real ledger size.
+        #[allow(clippy::cast_precision_loss)]
+        let frac = if t.grant_micro.0 == 0 {
+            0.0
+        } else {
+            bal_disp.0 as f64 / t.grant_micro.0 as f64
+        };
+        let (y, m, d) = ymd_from_unix(t.expires_unix);
+        let expiry = if t.expires_unix <= t.now_unix {
+            format!("expired {y:04}-{m:02}-{d:02} — the sweep reclaims the rest")
+        } else {
+            let days = (t.expires_unix - t.now_unix) / 86_400;
+            format!("expires {y:04}-{m:02}-{d:02} ({days}d)")
+        };
+        Some(format!(
+            "     tuna      {}  {} of {} TUNA left · {expiry} · trial credit — heals only",
+            braille_bar(frac, BAR_WIDTH, color),
+            fmt_kat_display(bal_disp),
+            fmt_kat_display(grant_disp),
+        ))
     }
 
     fn render_sync(&self, color: bool) -> String {
@@ -204,6 +267,26 @@ impl KatFooter<'_> {
             ),
         }
     }
+}
+
+/// Civil date from unix seconds — Howard Hinnant's `civil_from_days`
+/// (the well-known 20-line algorithm; no chrono dep for one label). The
+/// shared date helper for every TUNA expiry readout (footer + `--info`).
+#[must_use]
+pub fn ymd_from_unix(unix: u64) -> (i64, u32, u32) {
+    // u64 days → i64: a wrap needs unix ≈ 10^20 seconds; try_from is the
+    // honest form (saturating at i64::MAX, which no date reaches).
+    let days = i64::try_from(unix / 86_400).unwrap_or(i64::MAX);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (if m <= 2 { y + 1 } else { y }, u32::try_from(m).unwrap_or(1), u32::try_from(d).unwrap_or(1))
 }
 
 /// Whether the footer should colorize: `RIIR_HEAL_FOOTER_COLOR` forces on
@@ -389,6 +472,7 @@ mod tests {
             run_micro_kat: MicroKat(8_791),
             cum_micro_kat: MicroKat(100_000_000 - left_micro.0),
             grant_micro_kat: MicroKat(100_000_000),
+            tuna: None,
             rate_micro_per_mtok: MicroKat(1_000_000),
             meter_version: 1,
             charge_version: 1,
@@ -577,5 +661,89 @@ mod tests {
             .render(true);
             assert!(!out.contains('$'), "currency figure leaked: {out}");
         }
+    }
+
+    const TUNA_EXPIRES: u64 = 1_792_281_600; // 2026-10-18 UTC
+    const TUNA_NOW: u64 = TUNA_EXPIRES - 12 * 86_400;
+
+    fn tuna_line(balance_micro: i64) -> TunaLine {
+        TunaLine {
+            balance_micro: MicroKat(balance_micro),
+            grant_micro: MicroKat(100_000_000),
+            expires_unix: TUNA_EXPIRES,
+            now_unix: TUNA_NOW,
+        }
+    }
+
+    #[test]
+    fn civil_date_known_answers() {
+        assert_eq!(ymd_from_unix(0), (1970, 1, 1));
+        assert_eq!(ymd_from_unix(86_399), (1970, 1, 1));
+        assert_eq!(ymd_from_unix(86_400), (1970, 1, 2));
+        assert_eq!(ymd_from_unix(1_792_281_600), (2026, 10, 18));
+        // Leap day: 54*365 = 19710 + 13 leaps in [1970, 2024) = 19723
+        // days to 2024-01-01; +31 (Jan) = 19754 to Feb 1; +28 = 19782.
+        assert_eq!(ymd_from_unix(19_754 * 86_400), (2024, 2, 1));
+        assert_eq!(ymd_from_unix(19_782 * 86_400), (2024, 2, 29));
+        assert_eq!(ymd_from_unix(19_783 * 86_400), (2024, 3, 1));
+    }
+
+    #[test]
+    fn tuna_line_renders_only_when_present_and_the_absence_is_byte_identical() {
+        // None: the pre-TUNA 3-line footer, byte for byte.
+        let plain = footer_left(MicroKat(84_919_281)).render(false);
+        assert_eq!(plain.matches('\n').count(), 2, "no tuna line: {plain:?}");
+        assert!(!plain.contains("TUNA"));
+
+        // Some: the 4th line, between grant and sync.
+        let with = KatFooter {
+            tuna: Some(tuna_line(47_200_000)),
+            ..footer_left(MicroKat(84_919_281))
+        }
+        .render(false);
+        let lines: Vec<&str> = with.lines().collect();
+        assert_eq!(lines.len(), 4, "{with:?}");
+        assert!(lines[1].contains("grant"), "{with:?}");
+        assert!(
+            lines[2].contains("47.2 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only"),
+            "{with:?}"
+        );
+        assert!(lines[3].contains("sync"), "{with:?}");
+    }
+
+    #[test]
+    fn tuna_line_handles_the_edges() {
+        // Zero balance: the bar empties, the caption stays paired.
+        let out = KatFooter {
+            tuna: Some(tuna_line(0)),
+            ..footer_left(MicroKat(84_919_281))
+        }
+        .render(false);
+        assert!(out.contains("0 of 100 TUNA left"), "{out:?}");
+
+        // Negative (defensive): clamps to 0 at render, never prints a
+        // negative tank.
+        let out = KatFooter {
+            tuna: Some(tuna_line(-5)),
+            ..footer_left(MicroKat(84_919_281))
+        }
+        .render(false);
+        assert!(out.contains("0 of 100 TUNA left"), "{out:?}");
+        assert!(!out.contains("-5"));
+
+        // Expired (not yet swept): named, with the sweep note.
+        let expired = TunaLine {
+            now_unix: TUNA_EXPIRES + 86_400,
+            ..tuna_line(47_200_000)
+        };
+        let out = KatFooter {
+            tuna: Some(expired),
+            ..footer_left(MicroKat(84_919_281))
+        }
+        .render(false);
+        assert!(
+            out.contains("expired 2026-10-18 — the sweep reclaims the rest"),
+            "{out:?}"
+        );
     }
 }

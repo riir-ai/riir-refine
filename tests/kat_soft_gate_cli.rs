@@ -129,6 +129,8 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
         last_balance_micro: Some(balance_micro),
         contributed: None,
         first_commitment_hex: None,
+        tuna_balance_micro: None,
+        tuna_expires_unix: None,
     };
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
@@ -148,6 +150,8 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
         last_balance_micro: Some(balance_micro),
         contributed,
         first_commitment_hex: (contributed == Some(true)).then(|| "ab".repeat(32)),
+        tuna_balance_micro: None,
+        tuna_expires_unix: None,
     };
     let heal_dir = dir.join(".heal");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");

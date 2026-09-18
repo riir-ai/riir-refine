@@ -196,6 +196,21 @@ fn wallet_lines(h: &riir_clippy::kat_protocol_account::ServiceHistory) -> Vec<St
             }
         ),
     ];
+    // The trial-credit line (Proposal 006) — only when the server sent
+    // TUNA truth; a pre-TUNA deployment renders nothing here.
+    if let Some(tuna) = h.tuna_balance_micro {
+        let expiry = h
+            .tuna_expires_unix
+            .map(|u| {
+                let (y, m, d) = riir_clippy::kat_footer::ymd_from_unix(u);
+                format!(" · expires {y:04}-{m:02}-{d:02}")
+            })
+            .unwrap_or_default();
+        lines.push(format!(
+            "  tuna:        {}{expiry} · trial credit — heals only, non-transferable",
+            riir_clippy::kat_units::render_units(tuna, "TUNA")
+        ));
+    }
     lines.push(match h.burn_kat_total {
         Some(total) => format!(
             "  burned:      {total} KAT service credit lifetime{}",
@@ -325,17 +340,25 @@ fn local_section(paths: &[PathBuf]) {
             account_present: true,
             last_synced_balance_micro: ack.last_balance_micro,
             contributed_and_synced: ack.contributed == Some(true),
+            tuna_balance_micro: ack.tuna_balance_micro,
         },
     );
     use riir_clippy::kat_soft_gate::SoftGateVerdict;
     let kat = |micro: i64| riir_clippy::kat_units::render_kat(micro);
     match verdict {
-        SoftGateVerdict::Allow => println!(
-            "  soft gate:   ALLOW{}",
-            ack.last_balance_micro
-                .map(|b| format!(" (last synced balance {})", kat(b)))
-                .unwrap_or_default()
-        ),
+        SoftGateVerdict::Allow => {
+            let tuna = ack
+                .tuna_balance_micro
+                .map(|t| format!(" · trial credit {} TUNA", kat(t)))
+                .unwrap_or_default();
+            println!(
+                "  soft gate:   ALLOW{}{}",
+                ack.last_balance_micro
+                    .map(|b| format!(" (last synced balance {})", kat(b)))
+                    .unwrap_or_default(),
+                tuna
+            );
+        }
         SoftGateVerdict::WarnOnly(reason) => {
             use riir_clippy::kat_soft_gate::WarnOnlyReason;
             let why = match reason {
@@ -349,5 +372,60 @@ fn local_section(paths: &[PathBuf]) {
             "  soft gate:   REFUSED — depleted balance {} (refuel: `cargo heal --refill`, `--mine` + sync, or the payment page)",
             kat(balance_micro)
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wallet_lines_render_trial_credit_only_when_the_server_sends_it() {
+        let base = |tuna: (Option<i64>, Option<u64>)| riir_clippy::kat_protocol_account::ServiceHistory {
+            account_id: "ab".repeat(16),
+            balance_micro: 97_000_000,
+            granted: false,
+            burn_kat_total: Some(3),
+            burn_updated_tick: Some(9),
+            contributed: false,
+            first_commitment_hex: None,
+            receipts: vec![],
+            receipts_total_matching: 0,
+            receipts_truncated: false,
+            events: vec![],
+            events_total: 0,
+            events_truncated: false,
+            tuna_balance_micro: tuna.0,
+            tuna_expires_unix: tuna.1,
+        };
+
+        // Post-TUNA server: the line names the balance, the expiry, and
+        // the conditions — the Proposal 006 vocabulary, one line.
+        let with = wallet_lines(&base((Some(47_200_000), Some(1_792_281_600))));
+        let tuna_line = with
+            .iter()
+            .find(|l| l.contains("tuna:"))
+            .expect("the trial-credit line must render");
+        assert!(tuna_line.contains("47.200000 TUNA"), "{tuna_line}");
+        assert!(tuna_line.contains("expires 2026-10-18"), "{tuna_line}");
+        assert!(tuna_line.contains("heals only, non-transferable"), "{tuna_line}");
+        // And it sits beside the grant line, before the burn line.
+        let grant_idx = with.iter().position(|l| l.contains("grant:")).unwrap();
+        let tuna_idx = with.iter().position(|l| l.contains("tuna:")).unwrap();
+        let burn_idx = with.iter().position(|l| l.contains("burned:")).unwrap();
+        assert!(grant_idx < tuna_idx && tuna_idx < burn_idx);
+
+        // Pre-TUNA deployment: NO line, never an invented zero.
+        let pre = wallet_lines(&base((None, None)));
+        assert!(
+            !pre.iter().any(|l| l.contains("tuna:")),
+            "absence renders nothing: {pre:?}"
+        );
+
+        // Balance without expiry (defensive): the line renders, the
+        // expiry clause does not.
+        let no_expiry = wallet_lines(&base((Some(47_200_000), None)));
+        let line = no_expiry.iter().find(|l| l.contains("tuna:")).unwrap();
+        assert!(!line.contains("expires"), "{line}");
     }
 }
