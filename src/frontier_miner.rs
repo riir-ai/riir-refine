@@ -133,7 +133,10 @@ pub struct Family {
 /// panic guards), and Batch 160 graduated BOTH pack VI leads
 /// (`from_str_radix_10` + `assign_op_pattern`, Plan 151 — the
 /// construction-identity parse rewrite + the exactly-once-binding
-/// compound-assign rewrite); the retired rest (`ptr_arg` — VERIFY tier;
+/// compound-assign rewrite); and Batch 161 graduated BOTH pack VII leads
+/// (`unit_arg` + `string_lit_as_bytes`, Plan 152 — the syntactic-
+/// unit-typeness hoist + the coercion-identity byte literal); the retired
+/// rest (`ptr_arg` — VERIFY tier;
 /// `needless_borrow` — self_evolve-only; `wrong_self_convention` —
 /// VERIFY tier, the Batch 156 pack II retiree) have their leads consumed
 /// with regression homes in the proposer module tests + the
@@ -141,15 +144,17 @@ pub struct Family {
 /// fixpoint dispatch cannot be loop-verified).
 /// `covered: false` = a genuine frontier family (target lint outside the
 /// compiled fix set AND outside the stock proposers — a PENDING mining
-/// lead). `unit_arg` + `string_lit_as_bytes` are the Batch 160 re-arm —
-/// both probe-verified 2026-09-18
-/// (`scripts/plan151_frontier_probe.py`: seed clean under
+/// lead). `bytes_count_to_len` + `bool_comparison` are the Batch 161
+/// re-arm — both probe-verified 2026-09-18
+/// (`scripts/plan152_frontier_probe.py`: seed clean under
 /// all+pedantic+nursery incl. the const-ability discipline (the
-/// `Vec::push` dodge), broken fires EXACTLY its target lint; the
-/// round's verified-but-not-armed alternates — `manual_string_new`,
-/// `bool_comparison`, `bytes_count_to_len`, `needless_late_init` (seed
-/// dodge: the binding used twice, dodging the `let_and_return` crossfire)
-/// — are recorded in the probe script; spare: `needless_late_init`).
+/// `Vec::push` dodge), broken fires EXACTLY its target lint; the round's
+/// verified-but-not-armed alternates — `manual_string_new`,
+/// `needless_late_init` (seed dodge: the binding used twice, dodging the
+/// `let_and_return` crossfire) — are recorded in the probe script).
+/// `unit_arg` + `string_lit_as_bytes` graduated at Batch 161 (Plan 152;
+/// both probe fixtures unchanged, groups pinned by the plan152
+/// default-groups arms — complexity/default-on + NURSERY).
 #[must_use]
 pub fn families() -> Vec<Family> {
     vec![
@@ -166,8 +171,10 @@ pub fn families() -> Vec<Family> {
         Family { id: "manual_clamp", target_lint: "manual_clamp", covered: true },
         Family { id: "from_str_radix_10", target_lint: "from_str_radix_10", covered: true },
         Family { id: "assign_op_pattern", target_lint: "assign_op_pattern", covered: true },
-        Family { id: "unit_arg", target_lint: "unit_arg", covered: false },
-        Family { id: "string_lit_as_bytes", target_lint: "string_lit_as_bytes", covered: false },
+        Family { id: "unit_arg", target_lint: "unit_arg", covered: true },
+        Family { id: "string_lit_as_bytes", target_lint: "string_lit_as_bytes", covered: true },
+        Family { id: "bytes_count_to_len", target_lint: "bytes_count_to_len", covered: false },
+        Family { id: "bool_comparison", target_lint: "bool_comparison", covered: false },
     ]
 }
 
@@ -225,6 +232,9 @@ pub fn generate(modes: &[Mode]) -> Vec<Candidate> {
 
 /// The parametric case tables (seed, broken) per family. Idents vary per
 /// case so BLAKE3 distinguishes them (the exactly-once set stays honest).
+// 16-family fixture table, not logic — length is the point (the
+// build_seed_corpus precedent).
+#[allow(clippy::too_many_lines)]
 fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
     match fam.id {
         // 1-op: wrap the tail expression in `return …;`. Seeds are
@@ -343,13 +353,12 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
             ("fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y += 1; y }", "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }"),
             ("fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w += 2; w }", "fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w = w + 2; w }"),
         ],
-        // ── Batch 160 re-arm (probe-verified 2026-09-18,
-        // `scripts/plan151_frontier_probe.py`; seeds are non-const-able
-        // via the `Vec::push` dodge). ──
+        // ── Batch 160 re-arm — GRADUATED at Batch 161 (Plan 152; both
+        // probe fixtures unchanged, groups re-pinned by the plan152
+        // default-groups arms — complexity/default-on + NURSERY). ──
         // 1-op: `touch((), hits)` → `touch({ hits.push(1); }, hits)` (the
         // explicit-() call becomes a side-effect block — fires the
-        // default-level lint unit_arg; the plan150-verified spare with the
-        // side-effect-block dodge clearing both plan149 dirt classes).
+        // default-level complexity lint unit_arg).
         "unit_arg" => vec![
             (
                 "fn touch(x: (), hits: &mut Vec<u8>) { hits.push(0); }
@@ -364,9 +373,9 @@ fn run(hits: &mut Vec<u8>) { tap((), hits) }",
 fn run(hits: &mut Vec<u8>) { tap({ hits.push(2); }, hits) }",
             ),
         ],
-        // 1-op: `b"abc"` → `"abc".as_bytes()` (fires the default-level
-        // perf lint string_lit_as_bytes — the byte literal becomes the
-        // as_bytes call on the same literal).
+        // 1-op: `b"abc"` → `"abc".as_bytes()` (fires the NURSERY lint
+        // string_lit_as_bytes — the byte literal becomes the as_bytes
+        // call on the same literal).
         "string_lit_as_bytes" => vec![
             (
                 "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); b\"abc\" }",
@@ -375,6 +384,33 @@ fn run(hits: &mut Vec<u8>) { tap({ hits.push(2); }, hits) }",
             (
                 "fn dat(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); b\"k9\" }",
                 "fn dat(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); \"k9\".as_bytes() }",
+            ),
+        ],
+        // ── Batch 161 re-arm (probe-verified 2026-09-18,
+        // `scripts/plan152_frontier_probe.py`; seeds are non-const-able
+        // via the `Vec::push` / `&mut`-receiver dodges). ──
+        // 1-op: `s.len()` → `s.bytes().count()` (fires the default-level
+        // complexity lint bytes_count_to_len).
+        "bytes_count_to_len" => vec![
+            (
+                "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.len() }",
+                "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.bytes().count() }",
+            ),
+            (
+                "fn m(t: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); t.len() }",
+                "fn m(t: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); t.bytes().count() }",
+            ),
+        ],
+        // 1-op: `x` → `x == true` (fires the default-level complexity lint
+        // bool_comparison).
+        "bool_comparison" => vec![
+            (
+                "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x }",
+                "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x == true }",
+            ),
+            (
+                "fn gate(y: bool, hits: &mut Vec<bool>) -> bool { hits.push(y); y }",
+                "fn gate(y: bool, hits: &mut Vec<bool>) -> bool { hits.push(y); y == true }",
             ),
         ],
         _ => vec![],
@@ -880,6 +916,14 @@ mod tests {
             "from_str_radix_10"
         } else if code.contains("= y + ") || code.contains("= w + ") {
             "assign_op_pattern"
+        } else if code.contains("({ hits.push") {
+            // The BROKEN-only shape: the unit block INSIDE call parens. The
+            // healed hoist keeps the block text but moves it OUTSIDE the
+            // call — `({ hits.push` never matches the healed form (the
+            // solved-after clause depends on this).
+            "unit_arg"
+        } else if code.contains(".as_bytes()") {
+            "string_lit_as_bytes"
         } else {
             return verdict(true, true, &[]);
         };
@@ -898,11 +942,11 @@ mod tests {
     /// healed verdict equals the broken verdict, which is the frontier
     /// fact under test).
     fn frontier_probe(code: &str) -> OracleVerdict {
-        // The Batch 160 frontier population: the two re-arm families.
-        let lint = if code.contains("{ hits.push(1); }") || code.contains("{ hits.push(2); }") {
-            "unit_arg"
-        } else if code.contains(".as_bytes()") {
-            "string_lit_as_bytes"
+        // The Batch 161 frontier population: the two re-arm families.
+        let lint = if code.contains(".bytes().count()") {
+            "bytes_count_to_len"
+        } else if code.contains("== true") {
+            "bool_comparison"
         } else {
             return verdict(true, true, &[]);
         };
@@ -922,11 +966,11 @@ mod tests {
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
         // HeldOut + Frontier partition by the family's covered flag —
-        // thirteen covered families (28 cases: 3+3+2+2+2+2+2+2+2+2+2+2+2)
-        // + the Batch 160 re-arm's two frontier families (4 cases).
+        // fifteen covered families (32 cases: 3+3+2×13)
+        // + the Batch 161 re-arm's two frontier families (4 cases).
         assert_eq!(
             a.iter().filter(|c| c.mode == Mode::HeldOut).count(),
-            28,
+            32,
         );
         assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 4);
     }
@@ -951,7 +995,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 13, "the thirteen covered (FIXABLE-tier) families");
+        assert_eq!(families.len(), 15, "the fifteen covered (FIXABLE-tier) families");
         for fam in &families {
             let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
             let rule = fam_rule(fam);

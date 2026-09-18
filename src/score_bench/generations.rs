@@ -315,6 +315,18 @@ pub fn specs() -> Vec<GenSpec> {
 // redirects (rows circularly rotated, section headers lost, exit 0 —
 // measured at this batch; the splice script reads the file, so silent
 // garbage would have spliced scrambled tables).
+// Batch 161 re-freeze (2026-09-18, the frontier-lead mining pack VII —
+// Plan 152): the atom table 59→61 (`unit_arg` + `string_lit_as_bytes`,
+// both FIXABLE — the fifth consecutive all-pack). The new atoms fire
+// exactly their own lints (the plan152 probe's full-oracle arms + the
+// e2e's wrapped-form verification — no new interference; the bad-atom
+// sets stay 6 v2 / 7 v3). Deterministic regeneration, both tables: 84 v2
+// labels / 13 v2 exclusions, 85 v3 labels / 16 v3 exclusions — the count
+// movement vs Batch 160 (82/13 v2, 83/16 v3) is PURELY ADDITIVE (the two
+// new atoms' k1 labels; every composite window came out byte-identical —
+// the sorted positions of `string_lit_as_bytes`/`unit_arg` shift nothing
+// upstream, 0 reshuffle this round). v2 e2e + v3 e2e re-verified: all
+// label fences PASS (0 drift — the assertions are the gate).
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]),
     ("gen2-k1-byte_char_slices", &["byte_char_slices"]),
@@ -360,7 +372,9 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-single_char_add_str", &["single_char_add_str"]),
     ("gen2-k1-single_match", &["single_match"]),
     ("gen2-k1-single_match_else", &["single_match_else"]),
+    ("gen2-k1-string_lit_as_bytes", &["string_lit_as_bytes"]),
     ("gen2-k1-to_string_in_format_args", &["to_string_in_format_args"]),
+    ("gen2-k1-unit_arg", &["unit_arg"]),
     ("gen2-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),
     ("gen2-k1-unnecessary_map_or", &["unnecessary_map_or"]),
     ("gen2-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),
@@ -753,7 +767,9 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-single_char_add_str", &["single_char_add_str"]),
     ("gen3-k1-single_match", &["single_match"]),
     ("gen3-k1-single_match_else", &["single_match_else"]),
+    ("gen3-k1-string_lit_as_bytes", &["string_lit_as_bytes"]),
     ("gen3-k1-to_string_in_format_args", &["to_string_in_format_args"]),
+    ("gen3-k1-unit_arg", &["unit_arg"]),
     ("gen3-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),
     ("gen3-k1-unnecessary_map_or", &["unnecessary_map_or"]),
     ("gen3-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),

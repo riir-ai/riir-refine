@@ -82,6 +82,11 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       159 re-arm's leads, each fixture the oracle-verified family
 ///       pair; BOTH groups style/default-on, pinned by the plan151
 ///       probe's default-groups arms).
+///     + the 2 Batch 161 rows (2026-09-18, the frontier-lead mining pack VII
+///       — `unit_arg` + `string_lit_as_bytes`, Plan 152; the Batch 160
+///       re-arm's leads, each fixture the oracle-verified family pair;
+///       complexity/default-on + NURSERY groups pinned by the plan152
+///       probe's default-groups arms).
 // 78-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
@@ -766,6 +771,27 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }".to_string(),
             fixed_code: "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y += 1; y }".to_string(),
         },
+        // ── Batch 161 (2026-09-18, the frontier-lead mining pack VII — the
+        // Batch 160 re-arm's leads, Plan 152. Each fixture is the
+        // ORACLE-VERIFIED family (seed, broken) pair from the Batch 160
+        // re-arm probe: seed clean under all+pedantic+nursery, broken fires
+        // EXACTLY its target lint. `unit_arg` is complexity-group
+        // (default-on) and `string_lit_as_bytes` is NURSERY (allow-by-
+        // default) — BOTH groups pinned by the plan152 probe's
+        // default-groups arms; the Batch 160 miner comment's "default-level
+        // perf" for string_lit_as_bytes was wrong on both counts.) ──
+        ClippyFixEntry {
+            lint_name: "unit_arg".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn touch(x: (), hits: &mut Vec<u8>) { hits.push(0); }\nfn go(hits: &mut Vec<u8>) { touch({ hits.push(1); }, hits) }".to_string(),
+            fixed_code: "fn touch(x: (), hits: &mut Vec<u8>) { hits.push(0); }\nfn go(hits: &mut Vec<u8>) { { hits.push(1); };\ntouch((), hits) }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "string_lit_as_bytes".to_string(),
+            lint_group: "nursery".to_string(),
+            buggy_code: "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); \"abc\".as_bytes() }".to_string(),
+            fixed_code: "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); b\"abc\" }".to_string(),
+        },
     ])
 }
 
@@ -863,14 +889,16 @@ mod tests {
     /// Plan 149) + the 2 Batch 159 rows (`single_char_add_str`,
     /// `manual_clamp` — the frontier-lead mining pack V, Plan 150) + the
     /// 2 Batch 160 rows (`from_str_radix_10`, `assign_op_pattern` — the
-    /// frontier-lead mining pack VI, Plan 151) = 78.
+    /// frontier-lead mining pack VI, Plan 151) + the 2 Batch 161 rows
+    /// (`unit_arg`, `string_lit_as_bytes` — the frontier-lead mining pack
+    /// VII, Plan 152) = 80.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_78() {
+    fn corpus_size_is_80() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 78);
+        assert_eq!(corpus.entries.len(), 80);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

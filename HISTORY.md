@@ -1,5 +1,62 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 161 / Plan 152: the frontier-lead mining pack VII (the FIFTH consecutive all-FIXABLE pack; corpus 78 → 80, clippy 59/16 → 61/16)
+
+The flywheel's seventh turn: the Batch 160 re-arm's 2 leads became rules,
+BOTH graduated (15 covered families now), 2 fresh oracle-verified leads
+re-armed the frontier. 2 new proposers:
+
+1. **`unit_arg`** (FIXABLE, complexity/default-on — pinned by the plan152
+   default-groups arm). `touch({ hits.push(1); }, hits)` →
+   `{ hits.push(1); };\ntouch((), hits)` — the side-effect block HOISTED
+   before the call, the arg re-spelled as the unit literal. The identity
+   is **syntactic unit-typeness**: a block with no tail expression has
+   type `()` by the language definition, so the arg's value is already
+   unit; evaluation order is preserved BY CONSTRUCTION (args evaluate
+   left-to-right; the hoist arm is index-0-only). The probe measured
+   clippy's own `MachineApplicable` suggestion to be byte-for-byte this
+   shape. Probe-measured boundaries mirrored: the trailing-block shape
+   (`touch(hits, { .. })`) is clippy-SILENT on 1.98 (our index-0 scope
+   loses nothing live), value-tail blocks refuse (the same syntactic
+   check), unit-returning CALL args fire but refuse (v1). The
+   `({ hits.push` heldout marker lesson: the FIRST marker attempt
+   (`{ hits.push(1); }`) matched the healed hoist too — the solved-after
+   clause rejected the family until the marker became the in-parens
+   BROKEN-only shape.
+
+2. **`string_lit_as_bytes`** (FIXABLE, **NURSERY** — the plan152
+   default-groups arm corrected the Batch 160 miner comment's
+   "default-level perf" on BOTH counts: the bare arm is silent, the docs
+   say nursery). `"abc".as_bytes()` → `b"abc"` — construction identity in
+   every coercion context (`&[u8; N]` → `&[u8]`); clippy's own documented
+   known problem (inference-sensitive contexts) reverted by the `--fix
+   --verify` compile gate — the upstream posture. **The upstream suggestion
+   bug we refuse to inherit** (probe-measured): `"\u{41}".as_bytes()`
+   fires and clippy suggests `b"\u{41}"` — which DOES NOT COMPILE; the
+   proposer audits the snippet for `\u{` and refuses. Raw strings prefix
+   `b` before `r` (`br"a\nc"`, measured); escapes ride verbatim;
+   non-ASCII refuses (clippy's own ASCII scope, measured silent).
+
+Graduation + re-arm: both families flipped `covered` (15 family loops, 32
+cases); the 2 consumed rows archived (13 committed rows verified 0 drift);
+re-armed with `bytes_count_to_len` + `bool_comparison` (both
+complexity/default-on — `str::len` IS `bytes().count()` by std's own
+definition; boolean algebra on proven-bool operands; spares recorded:
+`manual_string_new`, `needless_late_init`).
+
+Freeze: 84 v2 labels / 13 exclusions + 85 v3 / 16 — **purely additive** vs
+Batch 160 (82/13 + 83/16): the 2 new k1 labels landed and every composite
+window came out byte-identical (0 reshuffle this round). Bad-atom sets
+UNCHANGED (6/7). Both e2es PASS 0 drift (28.9 s + 28.2 s).
+
+Gates: score-bench #137 heal_rate 96.36% FLAT (vocab 61); lib 1941/0 ·
+latent 2094/0 · frontier_miner+score_bench 2258/0; clippy clean ×4 (4
+structural fixes in the new modules; the transient regen example tripped an
+all-targets baseline failure class in the healer run — deleted first, the
+B160 transient pattern; the regen's own member-parse bug — `v3-k` prefix
+vs the `gen3-k` ids — was caught by the exclusion-count sanity check
+before any splice damage).
+
 ## 2026-09-18 — Batch 160 / Plan 151: the frontier-lead mining pack VI (the FOURTH consecutive all-FIXABLE pack; corpus 76 → 78, clippy 57/16 → 59/16)
 
 The flywheel's sixth turn: the Batch 159 re-arm's 2 leads became rules,

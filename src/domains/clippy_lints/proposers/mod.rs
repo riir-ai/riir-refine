@@ -93,6 +93,8 @@
 //! `manual_clamp` | `x.max(3).min(5)` → `x.clamp(3, 5)` (+ the mirrored order twin) on proven int/char receivers, LITERAL bounds + the NaN-float and inverted-bounds panic guards (Batch 159) |
 //! `from_str_radix_10` | `u32::from_str_radix(s, 10)` → `s.parse::<u32>()` — construction identity (std's int `FromStr` IS radix-10 `from_str_radix`), receiver verbatim + paren-wrap (Batch 160) |
 //! `assign_op_pattern` | `y = y + 1` → `y += 1` on exactly-once-proven arithmetic scalars (params/annotated/init-transfer/suffixed-literal bindings), commutative swapped twin `+`/`*` only (Batch 160) |
+//! `unit_arg` | `touch({ hits.push(1); }, hits)` → hoist the syntactically-unit block + pass `()` — value/order identity by construction, clippy's own suggestion shape (Batch 161) |
+//! `string_lit_as_bytes` | `"abc".as_bytes()` → `b"abc"` — coercion identity; ASCII-only, `\u{` escape refused (clippy's suggestion there is invalid Rust — upstream bug); nursery group (Batch 161) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -138,7 +140,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 74 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 76 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -153,8 +155,9 @@
 //! `to_string_in_format_args` / `manual_range_contains`, Plan 149 — and
 //! the 2 Batch 159 frontier-lead rules — `single_char_add_str` /
 //! `manual_clamp`, Plan 150 — and the 2 Batch 160 frontier-lead rules —
-//! `from_str_radix_10` / `assign_op_pattern`, Plan 151); future
-//! lints drop in by extending the match.
+//! `from_str_radix_10` / `assign_op_pattern`, Plan 151 — and the 2 Batch
+//! 161 frontier-lead rules — `unit_arg` / `string_lit_as_bytes`, Plan
+//! 152); future lints drop in by extending the match.
 
 pub mod assign_op_pattern;
 pub mod byte_char_slices;
@@ -217,6 +220,7 @@ pub mod single_char_add_str;
 pub mod single_char_pattern;
 pub mod single_match;
 pub mod single_match_else;
+pub mod string_lit_as_bytes;
 pub mod suboptimal_flops;
 pub mod to_string_in_format_args;
 pub mod uninlined_format_args;
@@ -226,6 +230,7 @@ pub mod unnecessary_map_or;
 pub mod unnecessary_mut_passed;
 pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
+pub mod unit_arg;
 pub mod unused_unit;
 pub mod use_self;
 pub mod useless_conversion;
@@ -521,6 +526,36 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // nested-item skip (fns don't capture). Style-group (default-on;
     // group pinned by the plan151 probe's default-groups arm).
     "assign_op_pattern",
+    // ── Batch 161 (the frontier-lead mining pack VII — Plan 152 — the
+    // Batch 160 re-arm's leads, 2026-09-18) ──
+    // `touch({ hits.push(1); }, hits)` → `{ hits.push(1); };
+    // touch((), hits)` — FIXABLE by SYNTACTIC UNIT-TYPERNESS: a block
+    // with NO tail expression has type `()` by the language definition,
+    // so the arg's value is already unit and re-spelling it as the
+    // literal is value-identical; the block HOISTS before the call with
+    // evaluation order identical BY CONSTRUCTION (args evaluate
+    // left-to-right, so hoisting the index-0 block preserves the exact
+    // sequence; later positions refuse — and clippy itself is SILENT on
+    // the trailing-block shape, measured). The empty-block arm
+    // `touch({}, hits)` → `touch((), hits)` is in-place. Byte-for-byte
+    // clippy's own MachineApplicable suggestion shape (measured by the
+    // plan152 probe). Complexity-group (default-on; group pinned by the
+    // plan152 probe's default-groups arm).
+    "unit_arg",
+    // `"abc".as_bytes()` → `b"abc"` — construction-identical in every
+    // coercion context (`&[u8; N]` → `&[u8]`); clippy's own documented
+    // known problem (inference-sensitive contexts) is reverted by the
+    // `--fix --verify` compile gate — the upstream MachineApplicable
+    // posture. Guards: literal receiver only; ASCII-only content
+    // (clippy's own scope, measured silent on non-ASCII); NO `\u{`
+    // escape (clippy's suggestion for the shape is `b"\u{41}"` —
+    // INVALID RUST, the upstream suggestion bug we are deliberately
+    // stricter than); raw strings prefix `b` before `r` (measured:
+    // `br"a\nc"`); escapes ride verbatim. NURSERY-group
+    // (allow-by-default; pinned by the plan152 probe's default-groups
+    // arm — SILENT at default level, the Batch 160 miner comment's
+    // "default-level perf" was wrong on both counts).
+    "string_lit_as_bytes",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -838,9 +873,12 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 159 (the frontier-lead mining pack V, Plan 150) ──
         "single_char_add_str" => single_char_add_str::collect_edits(source, file),
         "manual_clamp" => manual_clamp::collect_edits(source, file),
-        // ── Batch 160 (the frontier-lead mining pack VI, Plan 151) ──
+        // ── Batch 160 (the frontier-lead mining pack VI — Plan 151) ──
         "from_str_radix_10" => from_str_radix_10::collect_edits(source, file),
         "assign_op_pattern" => assign_op_pattern::collect_edits(source, file),
+        // ── Batch 161 (the frontier-lead mining pack VII — Plan 152) ──
+        "unit_arg" => unit_arg::collect_edits(source, file),
+        "string_lit_as_bytes" => string_lit_as_bytes::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -943,15 +981,19 @@ mod tests {
         // the lattice-absorption clamp rewrite with the NaN-float +
         // inverted-bounds panic guards).
         // + 2 Batch 160 (from_str_radix_10 + assign_op_pattern — the
-        // frontier-lead pack VI, Plan 151; the construction-identity
-        // parse rewrite + the exactly-once-binding derivation compound
-        // assign rewrite with the commutative-swapped boundary).
-        assert_eq!(FIXABLE_LINTS.len(), 59);
+        // frontier-lead pack VI, Plan 151; the construction-identity parse
+        // rewrite + the exactly-once-binding derivation compound-assign
+        // rewrite with the commutative-swapped boundary).
+        // + 2 Batch 161 (unit_arg + string_lit_as_bytes — the frontier-lead
+        // pack VII, Plan 152; the syntactic-unit-typeness hoist (clippy's
+        // own suggestion shape, measured) + the coercion-identity byte
+        // literal with the `\u{` upstream-suggestion-bug refusal).
+        assert_eq!(FIXABLE_LINTS.len(), 61);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 76-row fixture table — length is the point.
+    /// 78-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1360,6 +1402,17 @@ impl S {
                 "assign_op_pattern",
                 "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }",
                 "y += 1",
+            ),
+            // ── Batch 161 (the frontier-lead mining pack VII, Plan 152) ──
+            (
+                "unit_arg",
+                "fn touch(x: (), hits: &mut Vec<u8>) { hits.push(0); }\nfn go(hits: &mut Vec<u8>) { touch({ hits.push(1); }, hits) }",
+                "touch((), hits)",
+            ),
+            (
+                "string_lit_as_bytes",
+                "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); \"abc\".as_bytes() }",
+                "b\"abc\"",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
