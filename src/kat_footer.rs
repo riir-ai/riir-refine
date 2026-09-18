@@ -13,17 +13,20 @@
 //! Shape (spec v2 + the dim-track Braille amendments):
 //!
 //! ```text
-//! tuna this run  8,791 tok → 0.0088 TUNA   (1 TUNA / 1M tokens · meter v1 · charge v1)
+//!      fixed     8,791 tokens → 0.0088 TUNA   (1 TUNA or KAT / 1M tokens)
 //!      tuna      ⣿…⣄⣿⣿⣿  47% (expires in 12d)
 //!      kat       84.92 KAT · server balance at the last sync
 //!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
 //!
-//! The run line names the TANK the metered µ draws from — the server's
-//! draw order (B3): `tuna`/TUNA while spendable trial credit is left,
-//! `kat`/KAT once it is exhausted, expired, or the ack carries no TUNA
-//! truth. The meter itself is plane-agnostic µ; a mid-run handoff is
-//! named exactly by the burn-sync split line from the server response
+//! The run line is FIXED-RATE: a neutral `fixed` label, and a static
+//! `(N TUNA or KAT / 1M tokens)` annotation so the reader never has to
+//! wonder which tank pays — the server draws TUNA first and lands on KAT
+//! automatically (B3). The AMOUNT unit names the tank this run's metered
+//! µ will draw from (TUNA while spendable trial credit is left, KAT once
+//! it is exhausted, expired, or the ack carries no TUNA truth). The meter
+//! itself is plane-agnostic µ; a mid-run handoff is named exactly by the
+//! burn-sync split line from the server response
 //! (`drew X TUNA + Y KAT — trial credit exhausted mid-report`).
 //!
 //! (The `tuna` line — the Proposal 006 trial credit — renders ONLY when
@@ -159,12 +162,9 @@ pub struct KatFooter<'a> {
     /// "X of grant burned" would be a lie in both directions. `None`
     /// (never synced, pre-truth ack) renders nothing.
     pub kat_balance_micro: Option<MicroKat>,
-    /// The v-rate, µ per million tokens.
+    /// The v-rate, µ per million tokens — FIXED in either currency: the
+    /// server draws the same µ from TUNA first, then KAT (B3).
     pub rate_micro_per_mtok: MicroKat,
-    /// The meter version stamp (`MeterState::version`).
-    pub meter_version: u32,
-    /// The charge version stamp (`ChargeState::charge_version`).
-    pub charge_version: u32,
     /// The client account id (64-hex, BLAKE3(pubkey)) — the leaderboard
     /// row hint derives from its ledger-width prefix. `None` when logged
     /// out (no hint renders).
@@ -180,30 +180,27 @@ impl KatFooter<'_> {
     /// is byte-stable for pipes and `NO_COLOR`.
     #[must_use]
     pub fn render(&self, color: bool) -> String {
-        // The run line bills the tank the metered µ will draw from — the
-        // server's draw order (B3): TUNA while spendable trial credit is
-        // left (present, positive, unexpired), KAT once it is gone or the
-        // ack carries no TUNA truth. A mid-run handoff (TUNA exhausting
-        // mid-report) is named exactly by the burn-sync split line the
-        // server response produces, not by this projection.
+        // The owner's 2026-09-18 format: a neutral `fixed` label (the rate
+        // is fixed in either currency), `tokens` spelled out, the AMOUNT
+        // unit naming the tank the metered µ will draw from (TUNA while
+        // spendable trial credit is left, KAT once it is gone or the ack
+        // carries no TUNA truth), and a STATIC annotation that tells the
+        // fallback story — the draw hits TUNA first and lands on KAT
+        // without the user doing anything (B3). A mid-run handoff is
+        // named exactly by the burn-sync split line the server response
+        // produces, not by this projection.
         let tuna_primary = self
             .tuna
             .is_some_and(|t| t.balance_micro.0 > 0 && t.expires_unix > t.now_unix);
-        let (label, unit) = if tuna_primary {
-            ("tuna", "TUNA")
-        } else {
-            ("kat", "KAT")
-        };
+        let unit = if tuna_primary { "TUNA" } else { "KAT" };
         let line1 = format!(
-            "{label:<4} this run  {} tok → {} {unit}{}",
+            "     fixed     {} tokens → {} {unit}{}",
             fmt_tokens(self.run_tokens),
             fmt_kat_display(self.run_micro_kat),
             paint_dim(
                 &format!(
-                    "   ({} {unit} / 1M tokens · meter v{} · charge v{})",
-                    fmt_kat_display(self.rate_micro_per_mtok),
-                    self.meter_version,
-                    self.charge_version
+                    "   ({} TUNA or KAT / 1M tokens)",
+                    fmt_kat_display(self.rate_micro_per_mtok)
                 ),
                 color
             )
@@ -513,8 +510,6 @@ mod tests {
             tuna: None,
             kat_balance_micro: None,
             rate_micro_per_mtok: MicroKat(1_000_000),
-            meter_version: 1,
-            charge_version: 1,
             account_hex: Some(ACCT),
             sync: SyncState::Current { ledger_url: BOARD },
         }
@@ -534,8 +529,6 @@ mod tests {
             }),
             kat_balance_micro: Some(MicroKat(84_919_281)),
             rate_micro_per_mtok: MicroKat(1_000_000),
-            meter_version: 1,
-            charge_version: 1,
             account_hex: Some(ACCT),
             sync: SyncState::Current { ledger_url: BOARD },
         }
@@ -578,19 +571,19 @@ mod tests {
         assert!(tuna < kat, "tuna must render before kat: {out}");
     }
 
-    /// The unit-honesty follow-up: the RUN LINE bills the tank the
-    /// server actually draws — TUNA while spendable trial credit is
-    /// left, not a KAT figure for a TUNA draw. Gutter label and µ unit
-    /// flip together; the kat balance line below keeps its own unit.
+    /// The unit-honesty follow-up, in the owner's 2026-09-18 format: a
+    /// neutral `fixed` label, `tokens` spelled out, the AMOUNT unit naming
+    /// the tank the server actually draws (TUNA while spendable trial
+    /// credit is left), and the STATIC `TUNA or KAT` annotation telling
+    /// the fallback story. The kat balance line below keeps its own unit.
     #[test]
     fn the_run_line_bills_the_tank_the_server_draws() {
         let out = footer_mixed().render(false);
         assert!(
-            out.starts_with("tuna this run"),
-            "the run line must bill TUNA while the tank has credit: {out:?}"
+            out.starts_with("     fixed     8,791 tokens → 0.0088 TUNA"),
+            "the run line must name the active tank in the amount: {out:?}"
         );
-        assert!(out.contains("→ 0.0088 TUNA"), "{out:?}");
-        assert!(out.contains("(1 TUNA / 1M tokens"), "{out:?}");
+        assert!(out.contains("(1 TUNA or KAT / 1M tokens)"), "{out:?}");
         assert!(
             out.contains("kat       84.92 KAT · server balance at the last sync"),
             "{out:?}"
@@ -598,7 +591,8 @@ mod tests {
     }
 
     /// Exhausted (0 left) or expired trial credit bills KAT again — the
-    /// flip is the server's draw order rendered, not a projection lag.
+    /// amount unit flips, the `fixed` label and the static annotation do
+    /// not (the reader never has to wonder which tank pays next).
     #[test]
     fn an_exhausted_or_expired_tuna_tank_bills_kat_again() {
         let exhausted = KatFooter {
@@ -606,9 +600,12 @@ mod tests {
             ..footer_plain()
         }
         .render(false);
-        assert!(exhausted.starts_with("kat  this run"), "{exhausted:?}");
+        assert!(exhausted.starts_with("     fixed     "), "{exhausted:?}");
         assert!(exhausted.contains("→ 0.0088 KAT"), "{exhausted:?}");
-        assert!(exhausted.contains("(1 KAT / 1M tokens"), "{exhausted:?}");
+        assert!(
+            exhausted.contains("(1 TUNA or KAT / 1M tokens)"),
+            "{exhausted:?}"
+        );
 
         let mut expired_t = tuna_line(47_200_000);
         expired_t.now_unix = expired_t.expires_unix; // the expiry boundary
@@ -617,13 +614,14 @@ mod tests {
             ..footer_plain()
         }
         .render(false);
-        assert!(expired.starts_with("kat  this run"), "{expired:?}");
         assert!(expired.contains("→ 0.0088 KAT"), "{expired:?}");
     }
 
     /// Absence honesty: without the ack's truth (never synced, pre-TUNA
     /// server) NEITHER tank renders — no fabricated balance, and the
     /// pre-TUNA two-line footer (meter + sync) survives byte for byte.
+    /// (The static `TUNA or KAT` rate annotation always mentions the
+    /// word — the pin is on the TANK LINES, not the vocabulary.)
     #[test]
     fn no_ack_truth_renders_no_tank_lines() {
         let out = KatFooter {
@@ -632,9 +630,9 @@ mod tests {
             ..footer_mixed()
         }
         .render(false);
-        assert!(!out.contains("TUNA"), "{out}");
-        assert!(!out.contains("server balance"), "{out}");
-        assert!(out.contains("this run"), "{out}");
+        assert!(!out.contains("(expires"), "no tuna gauge: {out}");
+        assert!(!out.contains("server balance"), "no kat line: {out}");
+        assert!(out.contains("fixed     "), "{out}");
         assert!(out.contains("✓ current"), "{out}");
     }
 
@@ -829,9 +827,11 @@ mod tests {
     #[test]
     fn tuna_line_renders_only_when_present_and_the_absence_is_byte_identical() {
         // None (and no kat balance): the two-line footer, byte for byte.
+        // (The static `TUNA or KAT` annotation always mentions the word —
+        // the pin is the LINE COUNT and the absent gauge, not vocabulary.)
         let plain = footer_plain().render(false);
         assert_eq!(plain.matches('\n').count(), 1, "no tank lines: {plain:?}");
-        assert!(!plain.contains("TUNA"));
+        assert!(!plain.contains("(expires"));
 
         // Some: the tank line, between the meter and sync.
         let with = KatFooter {
@@ -841,7 +841,7 @@ mod tests {
         .render(false);
         let lines: Vec<&str> = with.lines().collect();
         assert_eq!(lines.len(), 3, "{with:?}");
-        assert!(lines[0].contains("this run"), "{with:?}");
+        assert!(lines[0].contains("fixed     "), "{with:?}");
         assert!(
             lines[1].contains("47% (expires in 12d)"),
             "{with:?}"

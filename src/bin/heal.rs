@@ -10380,8 +10380,6 @@ fn main() {
             tuna: tuna_line,
             kat_balance_micro: kat_balance,
             rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
-            meter_version: m.state().version,
-            charge_version: c.state().charge_version,
             account_hex: account.as_ref().map(|a| a.state().account_id.as_str()),
             sync,
         };

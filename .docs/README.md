@@ -16,7 +16,7 @@ co-equal path.
 
 | # | Folder | Scope |
 |---|---|---|
-| 01 | [`01_orientation/`](01_orientation/README.md) | Crate role, sibling layout, boundary rationale, build commands |
+| 01 | [`01_orientation/`](01_orientation/README.md) | Crate role, sibling layout, boundary rationale, build commands, KAT billing + TUNA surfaces |
 | 02 | [`02_corpus/`](02_corpus/README.md) | L0 rule distillation: `Corpus<D>` (generic) + BLAKE3 commitment + per-domain seed corpora |
 | 03 | [`03_drafter/`](03_drafter/README.md) | L1 ternary SIMD matvec drafter (`TernaryDrafter`, generic over `E: HealEntry`) + BLAKE3 modelless embedder + Plan 005 latent retrieval (`RuleIndex`/`DomainRouter`/`LatentMatcher`, `--suggest` MVP) |
 | 04 | [`04_pruner/`](04_pruner/README.md) | L2 `syn`-based syntax validator (domain-agnostic) |
