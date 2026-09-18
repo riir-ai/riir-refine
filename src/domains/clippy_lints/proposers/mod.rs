@@ -97,6 +97,8 @@
 //! `string_lit_as_bytes` | `"abc".as_bytes()` → `b"abc"` — coercion identity; ASCII-only, `\u{` escape refused (clippy's suggestion there is invalid Rust — upstream bug); nursery group (Batch 161) |
 //! `bytes_count_to_len` | `x.bytes().count()` → `x.len()` — std-definition identity (`str::bytes` = the `as_bytes` elements; `count()` = `len()`); exact two-call chain only (Batch 162) |
 //! `bool_comparison` | `x == true` → `x`, `x != true` → `!x` (+ the `false` twins, both operand orders) — boolean algebra on a proven-bool ident (Batch 162) |
+//! `manual_string_new` | `String::from("")` → `String::new()` — empty-String construction identity (zero capacity, no allocation); 2-segment path + explicit turbofish only, empty-literal arg only (Batch 163) |
+//! `needless_late_init` | `let x[: T]; x = v;` → `let x[: T] = v;` — the adjacent non-mut pair merged (E0384 makes the adjacent assignment THE initialization); annotation + initializer verbatim (Batch 163) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -173,6 +175,8 @@ pub mod comparison_to_empty;
 pub mod deref_addrof;
 pub mod doc_lazy_continuation;
 pub mod doc_markdown;
+pub mod manual_string_new;
+pub mod needless_late_init;
 pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
@@ -584,6 +588,37 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // literal-only pairs refuse. Complexity-group (default-on; pinned by
     // the plan152 probe arm).
     "bool_comparison",
+    // ── Batch 163 (the frontier-lead mining pack IX — Plan 154 — the
+    // Batch 162 re-arm's recorded spares, 2026-09-19) ──
+    // `String::from("")` → `String::new()` — FIXABLE by EMPTY-STRING
+    // CONSTRUCTION IDENTITY: `String::from("")` is `"".to_owned()` = an
+    // empty String over `Vec::with_capacity(0)` (no allocation) — the same
+    // value, capacity, and cost as `String::new()`, no side effects on
+    // either side; the rewrite mirrors clippy's own MachineApplicable
+    // suggestion (probe-measured). Bounded to the 2-segment path
+    // `String::from` + the explicit turbofish `<String as From<..>>::from`
+    // (probe: clippy fires both) with the EMPTY literal arg only
+    // (`from("x")`/`from(s)`/`let s = ""; from(s)` are SILENT upstream);
+    // `From::from` (inference could be Cow/Box) and longer paths refuse;
+    // `"".to_string()` fires upstream but is a different seam — refused
+    // (documented narrower-than-clippy divergence). Pedantic-group
+    // (allow-by-default; pinned by the plan154 probe's group arms — fires
+    // under -W clippy::pedantic only; the bench oracle passes that flag).
+    "manual_string_new",
+    // `let x[: T]; x = v;` → `let x[: T] = v;` — FIXABLE by STATEMENT-
+    // POSITION IDENTITY: the let initializer evaluates at exactly the
+    // position the assignment statement evaluated (same position, same
+    // temporaries, same drops — there is no intermediate value), and for a
+    // NON-mut binding an adjacent assignment IS the initialization by the
+    // language's own definition (E0384 forbids re-assignment). Bounded to
+    // the ADJACENT pair (an intervening statement silences clippy —
+    // probe-pinned); `mut` bindings refuse (clippy's own scope — its fix
+    // would also drop the mut); plain-ident patterns only (destructure/
+    // ref refuse); branch initializers refuse (the actionable upstream
+    // suggestion there is useless_let_if_seq's — a different seam);
+    // annotation + initializer re-emit verbatim. Style-group (default-on;
+    // pinned by the plan154 probe's default-groups arm).
+    "needless_late_init",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -910,6 +945,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 162 (the frontier-lead mining pack VIII — Plan 153) ──
         "bytes_count_to_len" => bytes_count_to_len::collect_edits(source, file),
         "bool_comparison" => bool_comparison::collect_edits(source, file),
+        // ── Batch 163 (the frontier-lead mining pack IX — Plan 154) ──
+        "manual_string_new" => manual_string_new::collect_edits(source, file),
+        "needless_late_init" => needless_late_init::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1023,12 +1061,15 @@ mod tests {
         // frontier-lead pack VIII, Plan 153; the std-definition-identity
         // chain collapse + the boolean-algebra literal comparison on a
         // proven-bool ident).
-        assert_eq!(FIXABLE_LINTS.len(), 63);
+        // + 2 Batch 163 (manual_string_new + needless_late_init — the
+        // frontier-lead pack IX, Plan 154; the empty-String construction
+        // identity + the adjacent non-mut let/assign merge).
+        assert_eq!(FIXABLE_LINTS.len(), 65);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 78-row fixture table — length is the point.
+    /// 80-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1459,6 +1500,17 @@ impl S {
                 "bool_comparison",
                 "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x == true }",
                 "hits.push(x); x }",
+            ),
+            // ── Batch 163 (the frontier-lead mining pack IX, Plan 154) ──
+            (
+                "manual_string_new",
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::from(\"\") }",
+                "String::new()",
+            ),
+            (
+                "needless_late_init",
+                "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x; x = 5u32; x + x }",
+                "let x = 5u32;",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

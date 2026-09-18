@@ -87,7 +87,15 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       re-arm's leads, each fixture the oracle-verified family pair;
 ///       complexity/default-on + NURSERY groups pinned by the plan152
 ///       probe's default-groups arms).
-// 78-entry data table, not logic — length is the point.
+///     + the 2 Batch 162 rows (2026-09-19, the frontier-lead mining pack
+///       VIII — `bytes_count_to_len` + `bool_comparison`, Plan 153; the
+///       Batch 161 re-arm's leads, both complexity/default-on, pinned by
+///       the plan152 probe arms).
+///     + the 2 Batch 163 rows (2026-09-19, the frontier-lead mining pack IX
+///       — `manual_string_new` + `needless_late_init`, Plan 154; the
+///       Batch 162 re-arm's recorded spares; pedantic + style groups
+///       pinned by the plan154 probe's group arms).
+// 84-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -810,6 +818,28 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x == true }".to_string(),
             fixed_code: "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x }".to_string(),
         },
+        // ── Batch 163 (2026-09-19, the frontier-lead mining pack IX —
+        // the Batch 162 re-arm's recorded spares, Plan 154. Each fixture is
+        // the ORACLE-VERIFIED family pair from the plan154 probe
+        // (scripts/plan154_frontier_probe.py): seed clean, broken fires
+        // EXACTLY its target. manual_string_new is PEDANTIC-group
+        // (allow-by-default; pinned by the probe's group arms — the bench
+        // oracle passes -W clippy::pedantic); needless_late_init is
+        // style/default-on. The nli fixture's twice-used-binding `x + x`
+        // tail dodges our own let_and_return — the recorded plan152 spare
+        // dodge.) ──
+        ClippyFixEntry {
+            lint_name: "manual_string_new".to_string(),
+            lint_group: "pedantic".to_string(),
+            buggy_code: "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::from(\"\") }".to_string(),
+            fixed_code: "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::new() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "needless_late_init".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x; x = 5u32; x + x }".to_string(),
+            fixed_code: "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x = 5u32; x + x }".to_string(),
+        },
     ])
 }
 
@@ -910,15 +940,16 @@ mod tests {
     /// frontier-lead mining pack VI, Plan 151) + the 2 Batch 161 rows
     /// (`unit_arg`, `string_lit_as_bytes` — the frontier-lead mining pack
     /// VII, Plan 152) + the 2 Batch 162 rows (`bytes_count_to_len`,
-    /// `bool_comparison` — the frontier-lead mining pack VIII, Plan 153)
-    /// = 82.
+    /// `bool_comparison` — the frontier-lead mining pack VIII, Plan 153) +
+    /// the 2 Batch 163 rows (`manual_string_new`, `needless_late_init`,
+    /// the frontier-lead mining pack IX, Plan 154) = 84.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 82);
+        assert_eq!(corpus.entries.len(), 84);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

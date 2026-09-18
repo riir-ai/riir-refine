@@ -147,17 +147,21 @@ pub struct Family {
 /// lockstep (rules outside the fixpoint dispatch cannot be loop-verified).
 /// `covered: false` = a genuine frontier family (target lint outside the
 /// compiled fix set AND outside the stock proposers — a PENDING mining
-/// lead). The Batch 161 re-arm — `bytes_count_to_len` +
+/// The Batch 161 re-arm — `bytes_count_to_len` +
 /// `bool_comparison` — GRADUATED at Batch 162 (Plan 153; both
 /// probe-verified 2026-09-18
 /// (`scripts/plan152_frontier_probe.py`: seed clean under
 /// all+pedantic+nursery incl. the const-ability discipline (the
 /// `Vec::push` dodge), broken fires EXACTLY its target lint) and landed as
-/// FIXABLE rules with corpus lockstep 2026-09-19; the round's
-/// verified-but-not-armed alternates — `manual_string_new`,
-/// `needless_late_init` (seed dodge: the binding used twice, dodging the
-/// `let_and_return` crossfire) — are recorded in the probe script and are
-/// the next re-arm's leads.
+/// FIXABLE rules with corpus lockstep 2026-09-19. The Batch 163 re-arm —
+/// the recorded spares `manual_string_new` + `needless_late_init` —
+/// GRADUATED same day (Plan 154; probe-verified in the plan154 script with
+/// the group pins: pedantic + style/default-on; the nli seed keeps the
+/// twice-used-binding `x + x` dodge — the `let_and_return` crossfire
+/// clearer). With the frontier table EMPTY and no further recorded
+/// spares, the NEXT re-arm owes a fresh probe round (mine clippy's live
+/// lint surface for uncovered families — the `--coverage-report`
+/// derivation feeding the next `plan1NN_frontier_probe.py`).
 /// `unit_arg` + `string_lit_as_bytes` graduated at Batch 161 (Plan 152;
 /// both probe fixtures unchanged, groups pinned by the plan152
 /// default-groups arms — complexity/default-on + NURSERY).
@@ -181,12 +185,15 @@ pub fn families() -> Vec<Family> {
         Family { id: "string_lit_as_bytes", target_lint: "string_lit_as_bytes", covered: true },
         // ── Batch 162 graduation (Plan 153): both pack VIII leads landed —
         // `bytes_count_to_len` + `bool_comparison` joined FIXABLE_LINTS with
-        // corpus lockstep; the heldout loop is 17 families deep. The NEXT
-        // re-arm is owed: the recorded spares are `manual_string_new` +
-        // `needless_late_init` (probe-verified in the plan152 script; the
-        // nli seed needs the twice-used-binding dodge).
+        // corpus lockstep; the heldout loop is 17 families deep. The Batch
+        // 163 re-arm — the recorded plan152 spares — GRADUATED same day
+        // (Plan 154; probe-verified in the plan154 script: seed clean,
+        // broken fires exactly its target; the nli seed keeps the
+        // twice-used-binding `x + x` dodge).
         Family { id: "bytes_count_to_len", target_lint: "bytes_count_to_len", covered: true },
         Family { id: "bool_comparison", target_lint: "bool_comparison", covered: true },
+        Family { id: "manual_string_new", target_lint: "manual_string_new", covered: true },
+        Family { id: "needless_late_init", target_lint: "needless_late_init", covered: true },
     ]
 }
 
@@ -423,6 +430,34 @@ fn run(hits: &mut Vec<u8>) { tap({ hits.push(2); }, hits) }",
             (
                 "fn gate(y: bool, hits: &mut Vec<bool>) -> bool { hits.push(y); y }",
                 "fn gate(y: bool, hits: &mut Vec<bool>) -> bool { hits.push(y); y == true }",
+            ),
+        ],
+        // ── Batch 163 re-arm (probe-verified 2026-09-19,
+        // `scripts/plan154_frontier_probe.py`; seeds non-const-able via the
+        // `Vec::push` / `&mut`-receiver dodges; the nli tail is the
+        // twice-used-binding `x + x` dodge). ──
+        // 1-op: `String::new()` → `String::from("")` (fires the pedantic-
+        // group lint manual_string_new).
+        "manual_string_new" => vec![
+            (
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::new() }",
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::from(\"\") }",
+            ),
+            (
+                "fn tag(hits: &mut Vec<u8>) -> String { hits.push(0); String::new() }",
+                "fn tag(hits: &mut Vec<u8>) -> String { hits.push(0); String::from(\"\") }",
+            ),
+        ],
+        // 1-op: `let x = 5u32;` → `let x; x = 5u32;` (fires the default-
+        // level style lint needless_late_init).
+        "needless_late_init" => vec![
+            (
+                "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x = 5u32; x + x }",
+                "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x; x = 5u32; x + x }",
+            ),
+            (
+                "fn wait(hits: &mut Vec<u8>) -> u32 { hits.push(0); let y = 9u32; y + y }",
+                "fn wait(hits: &mut Vec<u8>) -> u32 { hits.push(0); let y; y = 9u32; y + y }",
             ),
         ],
         _ => vec![],
@@ -943,6 +978,14 @@ mod tests {
             "bytes_count_to_len"
         } else if code.contains("== true") {
             "bool_comparison"
+        } else if code.contains("String::from(\"\")") {
+            // BROKEN-only: the healed form is String::new() — never
+            // contains from("") (Batch 163).
+            "manual_string_new"
+        } else if code.contains("let x;") || code.contains("let y;") {
+            // BROKEN-only: the init-less let. The healed form is
+            // `let x = ...` — never matches `let x;` (Batch 163).
+            "needless_late_init"
         } else {
             return verdict(true, true, &[]);
         };
@@ -985,12 +1028,13 @@ mod tests {
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
         // HeldOut + Frontier partition by the family's covered flag —
-        // seventeen covered families (36 cases: 3+3+2×15)
-        // + 0 frontier families — the Batch 162 re-arm's two GRADUATED
-        // (the next re-arm pair is recorded, not yet admitted).
+        // nineteen covered families (40 cases: 3+3+2×17)
+        // + 0 frontier families — the Batch 163 re-arm's two GRADUATED
+        // (the next re-arm owes a fresh probe round — no recorded spares
+        // remain).
         assert_eq!(
             a.iter().filter(|c| c.mode == Mode::HeldOut).count(),
-            36,
+            40,
         );
         assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 0);
     }
@@ -1015,7 +1059,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 17, "the seventeen covered (FIXABLE-tier) families");
+        assert_eq!(families.len(), 19, "the nineteen covered (FIXABLE-tier) families");
         for fam in &families {
             let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
             let rule = fam_rule(fam);
