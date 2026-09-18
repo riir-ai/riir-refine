@@ -900,8 +900,8 @@ freeze regen, no score-bench (flatness by construction). Plan 138.
 
 ## 2026-09-18 — Batch 153: the async-blocking distill lands (rust_perf 139 → 142)
 
-The async-perf source pool's execution ([Research 180](../.research/180_ryhl_what_is_blocking_distill.md)
-/ [Plan 143](../.plans/143_batch153_async_blocking_pool.md) — Alice Ryhl
+The async-perf source pool's execution ([Research 180](.research/180_ryhl_what_is_blocking_distill.md)
+/ [Plan 143](.plans/143_batch153_async_blocking_pool.md) — Alice Ryhl
 "Async: What is blocking?" YES B+ + the pool folds): three NotBenchable
 suggestion-only rules + five annotation folds, extending the world-facing
 tokio family to 9 rules:
@@ -973,8 +973,8 @@ at close, its own workload growth).
 
 ## 2026-09-18 — Batch 152: the dial9 tokio-principles distill lands (rust_perf 136 → 139)
 
-The staged seed of the world-facing tokio family ([Research 179](../.research/179_dial9_tokio_principles_distill.md)
-/ [Plan 142](../.plans/142_batch152_dial9_tokio_distill.md) — the verdict
+The staged seed of the world-facing tokio family ([Research 179](.research/179_dial9_tokio_principles_distill.md)
+/ [Plan 142](.plans/142_batch152_dial9_tokio_distill.md) — the verdict
 re-graded YES B− under owner challenge, both grades kept in the note as the
 resolved borderline-call precedent): three NotBenchable suggestion-only
 concurrency rules from the dial9-rs "Principles for fast Tokio applications"
