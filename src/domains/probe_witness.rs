@@ -368,7 +368,10 @@ mod tests {
 
     #[test]
     fn write_probe_source_reports_change_then_stability() {
-        let dir = std::env::temp_dir().join("riir_clippy_probe_witness_write");
+        let dir = std::env::temp_dir().join(format!(
+            "riir_clippy_probe_witness_write_{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("lib.rs");
         let _ = std::fs::remove_file(&path);

@@ -1200,7 +1200,10 @@ mod tests {
 
     #[test]
     fn jsonl_round_trips_and_dedups() {
-        let dir = std::env::temp_dir().join("riir_frontier_miner_tests");
+        let dir = std::env::temp_dir().join(format!(
+            "riir_frontier_miner_tests_{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("rows.jsonl");
         let cands = generate(&[Mode::HeldOut]);

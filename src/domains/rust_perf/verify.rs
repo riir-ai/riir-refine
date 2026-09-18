@@ -484,7 +484,10 @@ mod tests {
 
     #[test]
     fn prepare_crate_writes_valid_scaffold() {
-        let root = std::env::temp_dir().join("riir_perf_verify_test_scaffold");
+        let root = std::env::temp_dir().join(format!(
+            "riir_perf_verify_test_scaffold_{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
         let code = "pub fn add(a: i32, b: i32) -> i32 { a + b }";
@@ -509,7 +512,10 @@ mod tests {
 
     #[test]
     fn prepare_crate_stable_dir_for_same_code() {
-        let root = std::env::temp_dir().join("riir_perf_verify_test_stable");
+        let root = std::env::temp_dir().join(format!(
+            "riir_perf_verify_test_stable_{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
         let code = "pub fn id(x: i32) -> i32 { x }";
@@ -527,7 +533,8 @@ mod tests {
 
     #[test]
     fn prepare_crate_different_code_different_dir() {
-        let root = std::env::temp_dir().join("riir_perf_verify_test_diff");
+        let root =
+            std::env::temp_dir().join(format!("riir_perf_verify_test_diff_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
         let (dir1, _) = v.prepare_crate("pub fn a() {}").unwrap();
@@ -543,7 +550,8 @@ mod tests {
     /// compile errors for a crate that was never built.
     #[test]
     fn prepare_crate_different_code_different_package_name() {
-        let root = std::env::temp_dir().join("riir_perf_verify_test_unit");
+        let root =
+            std::env::temp_dir().join(format!("riir_perf_verify_test_unit_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let v = PerfVerifier::new().with_work_root(&root);
         let name_of = |dir: &std::path::Path| {

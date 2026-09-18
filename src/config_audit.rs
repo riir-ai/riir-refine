@@ -3112,7 +3112,10 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
     #[test]
     fn parse_ls_files_z_splits_joins_and_drops_missing() {
         let _base = Path::new("/base");
-        let here = std::env::temp_dir().join("cfgaudit_p25_exists.rs");
+        let here = std::env::temp_dir().join(format!(
+            "cfgaudit_p25_exists_{}.rs",
+            std::process::id()
+        ));
         fs::write(&here, b"x").unwrap();
         let rel = here
             .strip_prefix(std::env::temp_dir())
