@@ -1,6 +1,6 @@
 # Issue 123 — TUNA trial-credit client surfaces: ack v4, the 075 soft gate's second plane, footer + `--info` readouts
 
-**Status:** OPEN — client half LANDED 2026-09-18 (ack v4 + gate + footer + `--info`, all additive with byte-identical degradation pinned by tests); server half BLOCKED on the riir-dapps TUNA plane (Proposal 006 Stage B — [riir-dapps Issue 097](../riir-dapps/.issues/097_tuna_wire_fields_burn_response_history.md)). Until a post-B server sends the fields, every new consumer reads `None` and the behavior is unchanged.
+**Status:** OPEN — client half LANDED 2026-09-18 (ack v4 + gate + footer + `--info`, all additive with byte-identical degradation pinned by tests); **server wire half LANDED 2026-09-18** (riir-dapps `90cfb0e` — [Issue 097](../riir-dapps/.issues/097_tuna_wire_fields_burn_response_history.md): `/burn` + `/history` carry the zipped `tuna_balance_micro`/`tuna_expires_unix` pair (spendable-only) + the `charged_tuna_micro`/`charged_kat_micro` split; the worker manifest now pins `kat_tuna`). Remaining here, all CLIENT-side: the **plane-split run line** (footer names which plane funded a charge — needs `charged_*` on the parsed response struct in riir-kat + the footer render here; unblocked by `90cfb0e`, deploys byte-identical until the routes ship), **light-up** (nothing renders until a post-route deploy exists), TUNA bar scale, and grant-plane honesty (D1-gated). Until a deployed server sends the fields, every consumer reads `None` and the behavior is unchanged.
 
 ## Why
 
