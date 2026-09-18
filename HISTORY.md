@@ -1,5 +1,81 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 156 / Plan 147: the frontier-lead mining pack II (the re-armed 2 leads consumed; corpus 68 → 70, clippy 50/15 → 51/16)
+
+The flywheel's second turn, one day after the first: the Batch 155 re-arm's
+2 committed leads became rules, `io_other_error` graduated to the heldout
+loop, `wrong_self_convention` retired (VERIFY tier), and 2 fresh
+oracle-verified leads re-armed the frontier. **2 new proposers**, each
+landing with the oracle-verified family fixture as its corpus entry (the
+fixture IS the probe):
+
+- **`io_other_error` (FIXABLE)** — `io::Error::new(io::ErrorKind::Other,
+  e)` → `io::Error::other(e)`. Inference-identical by construction: std's
+  `new` and `other` carry the IDENTICAL
+  `E: Into<Box<dyn Error + Send + Sync>>` payload bound. Shadow guard (the
+  `legacy_numeric_constants` pattern): files carrying items or non-std
+  use-aliases named `Error`/`ErrorKind`/`io` refuse whole-file; path-form
+  only (bare glob-imported `Other` refuses — the documented divergence);
+  turbofish/arity/comment-in-range guards. MSRV floor 1.74 documented.
+- **`wrong_self_convention` (VERIFY)** — `fn into_*(&self)` → `fn into_*(self)`.
+  The receiver flip is type-blind (body borrows past the move → E0515;
+  callers passing borrows → E0308/E0382 — all check-visible, the compile
+  gate reverts; the `ptr_arg` precedent). v1 conservative scope: inherent
+  impls, `into_` prefix, NO-vis methods only (clippy's
+  avoid_breaking_exported_api default skips exported items and the API
+  break COMPILES — refused up front, a documented divergence: clippy lints
+  pub(crate), we refuse it), no method/impl attrs, plain receivers only
+  (`&'a self` rides the lifetime in `reference` — found by the own module
+  test suite). The `to_*`/`is_*`/`from_*` rows deliberately out of scope
+  (`to_*(self)` fires only on non-Copy — typeck-driven, a parse-only
+  proposer would fire where clippy is silent AND the rewrite compiles: a
+  silent false positive).
+
+**Graduation:** `io_other_error` flipped `covered: true` and joined the
+heldout per-family loop (the e2e's 5th family loop — every rerun re-proves
+unsolved-before/solved-after/regression against real clippy);
+`wrong_self_convention` RETIRED (the fixpoint dispatch is FIXABLE-only;
+regression home = module tests + the `all_buggy_codes_fire_their_lint`
+corpus lockstep). The 2 consumed frontier rows archived (git history).
+
+**Re-arm (probe-first, 3 rounds, `scripts/plan147_frontier_probe.py`):**
+round-1 candidates all refuted on measurement (`double_ended_iterator_last`
++ `match_ref_pats` + `manual_strip` SILENT on their shapes;
+`redundant_closure_for_method_calls` v1 co-fired `implicit_clone`;
+`obfuscated_if_else` seed dirty — needless_pass_by_value). Round-3 picks:
+**`redundant_closure_for_method_calls`** (`.map(|s| s.len())` →
+`.map(String::len)`, seed clean, exact-fire) + **`iter_skip_next`**
+(`.skip(n).next()` — with the SEED as `v.get(n)`, NOT clippy's own
+suggested `.nth(n)`: `.nth(n)` fires `iter_nth` on slice iters, measured —
+the oracle-clean inverse is one step further than clippy's fix). Verified
+spare on record for the next re-arm: `to_string_in_format_args`. The
+`len_zero`/`iter_count` candidates died on const-ability (their clean
+forms are const fn → nursery `missing_const_for_fn` dirties the seed —
+`&mut` params no longer block const since const_mut_refs stabilized).
+
+**Freeze regen (the real-oracle half):** atom table 50→51 (`io_other_error`
+FIXABLE — `wrong_self_convention` never enters the atom set, both corpus
+entries reshuffle the stride windows). Bad-atom set UNCHANGED at 5 — the
+new atom fires exactly its own lint. Deterministic regen: v2 73
+labeled/14 excluded, v3 77/14; v2 e2e 29.6 s: 73 verified/0 newly
+excluded/0 drift, solve 100.0% at every k (46/46, 26/26, 27/27, 20/20),
+M4 PASS; v3 e2e: 77 verified/0 newly excluded, 92.0/84.6/85.2/80.0%
+across k (reported, not asserted — the pre-registered posture),
+stratification gate PASS.
+
+GOAT: lib default **1797/0** (+24 tests) · lib `latent_retrieval`
+**1950/0** · lib `frontier_miner` **2114/0** (retrieval floors HELD, no
+re-pin) · clippy `-D` clean 3 states · frontier e2e **VERDICT ✓ ×2**
+(graduation + verify-pass, 7 committed rows 0 drift) · score-bench row
+**#131 96.36% FLAT** (baseline 96.36% — the new atom neither moved the
+aggregate; vocab 50→51). Pre-existing, not fixed (unrelated lane): the
+v1-frozen `quantile_balance_router-*-clean` fixtures drifted `doc_markdown`
+under the current toolchain (fresh-wins, the bench self-heals); the
+`--all-features` groq.rs combo break from `8fc52d22` (the owning lane's
+guard will catch it). Plan
+[147](.plans/147_batch156_frontier_lead_pack2.md) · Research
+[183](.research/183_batch156_frontier_lead_pack2.md).
+
 ## 2026-09-18 — Batch 155 / Plan 146: the frontier-lead mining pack (the miner's first 5 leads consumed; corpus 64 → 68, clippy 47/14 → 50/15)
 
 The frontier miner's designed flywheel turn: its first 5 committed leads

@@ -132,7 +132,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 68 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 70 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -140,7 +140,8 @@
 //! Issue 120 `doc_markdown` rule + the P31 `manual_range_patterns` rule + the
 //! the 6 Batch 150 rows + the 2 Batch 151 doc-lint rows + the 4 Batch 155
 //! frontier-lead rules — `let_and_return` / `ptr_arg` / `redundant_slicing` /
-//! `map_flatten`, Plan 146); future
+//! `map_flatten`, Plan 146 — and the 2 Batch 156 frontier-lead rules —
+//! `io_other_error` / `wrong_self_convention`, Plan 147); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -158,6 +159,7 @@ pub mod filter_next;
 pub mod format_collect;
 pub mod helpers;
 pub mod identity_op;
+pub mod io_other_error;
 pub mod items_after_statements;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
@@ -211,6 +213,7 @@ pub mod useless_format;
 pub mod vec_init_then_push;
 pub mod while_let_on_iterator;
 pub mod wildcard_in_or_patterns;
+pub mod wrong_self_convention;
 
 pub use crate::edit_emitter::{
     apply_edits, delete_stmt_edit, edit, for_each_fn, src, swallow_following_space, RuleEdit,
@@ -395,6 +398,15 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // bound — semantics-identical whenever both compile (MachineApplicable
     // in real clippy; attrs/turbofish/arg-count guards).
     "map_flatten",
+    // ── Batch 156 (the frontier-lead mining pack II, Plan 147 — the
+    // frontier miner's re-armed leads, 2026-09-18) ──
+    // `io::Error::new(io::ErrorKind::Other, e)` → `io::Error::other(e)`.
+    // FIXABLE: std's `new` and `other` carry the IDENTICAL
+    // `E: Into<Box<dyn Error + Send + Sync>>` payload bound —
+    // inference-identical whenever the kind is the literal
+    // `ErrorKind::Other` path; shadow guard refuses files carrying items
+    // or non-std use-aliases named Error/ErrorKind/io. MSRV floor 1.74.
+    "io_other_error",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -561,6 +573,14 @@ pub const VERIFY_LINTS: &[&str] = &[
     // gate reverts. The mut/lifetime/attr forms refuse up front; the inner
     // type is spliced verbatim from the pointee's own span.
     "ptr_arg",
+    // ── Batch 156 (the frontier-lead mining pack II, Plan 147) ──
+    // `fn into_*(&self)` → `fn into_*(self)`. VERIFY: the receiver flip is
+    // type-blind (body borrows self past the move → E0515; callers passing
+    // borrows → E0308/E0382) — all check-visible, the compile gate reverts
+    // (the ptr_arg precedent). Inherent impls, `into_` prefix, no-vis
+    // methods only (clippy's avoid_breaking_exported_api default skips
+    // exported items, and the API break compiles — refused up front).
+    "wrong_self_convention",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -598,7 +618,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 68 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 70 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -690,6 +710,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "ptr_arg" => ptr_arg::collect_edits(source, file),
         "redundant_slicing" => redundant_slicing::collect_edits(source, file),
         "map_flatten" => map_flatten::collect_edits(source, file),
+        // ── Batch 156 (the frontier-lead mining pack II, Plan 147) ──
+        "io_other_error" => io_other_error::collect_edits(source, file),
+        "wrong_self_convention" => wrong_self_convention::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -746,6 +769,9 @@ mod tests {
             // Batch 155: type-blind callee/body shapes (Vec-only methods,
             // &Vec-expecting callees) — VERIFY-tier only.
             "ptr_arg",
+            // Batch 156: the receiver flip's body/caller shapes are type-blind
+            // (E0515/E0308/E0382) — VERIFY-tier only.
+            "wrong_self_convention",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
@@ -771,12 +797,15 @@ mod tests {
         // + 3 Batch 155 (let_and_return + redundant_slicing + map_flatten —
         // the frontier-lead mining pack, Plan 146; each family fixture
         // oracle-verified to fire exactly its lint, 2026-09-18).
-        assert_eq!(FIXABLE_LINTS.len(), 50);
+        // + 1 Batch 156 (io_other_error — the frontier-lead pack II, Plan
+        // 147; inference-identical `Error::other` splice with the
+        // legacy_numeric_constants shadow-guard pattern).
+        assert_eq!(FIXABLE_LINTS.len(), 51);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 68-row fixture table — length is the point.
+    /// 70-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1130,6 +1159,17 @@ impl S {
                 "map_flatten",
                 "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }",
                 "xs.iter().flat_map(|x| x.split(' '))",
+            ),
+            // ── Batch 156 (the frontier-lead mining pack II, Plan 147) ──
+            (
+                "io_other_error",
+                "fn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }",
+                "std::io::Error::other(e)",
+            ),
+            (
+                "wrong_self_convention",
+                "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}",
+                "fn into_label(self)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
