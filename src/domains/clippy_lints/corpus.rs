@@ -18,7 +18,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 70 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 72 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
@@ -63,6 +63,10 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       — `io_other_error` + `wrong_self_convention`, Plan 147; the
 ///       re-armed frontier leads, each fixture the oracle-verified family
 ///       pair).
+///     + the 2 Batch 157 rows (2026-09-18, the frontier-lead mining pack III
+///       — `redundant_closure_for_method_calls` + `iter_skip_next`, Plan
+///       148; the Batch 156 re-arm's leads, each fixture the
+///       oracle-verified family pair).
 // 70-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
@@ -675,6 +679,23 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}".to_string(),
             fixed_code: "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(self) -> String { format!(\"sig-{}\", self.code) }\n}".to_string(),
         },
+        // ── Batch 157 (2026-09-18, the frontier-lead mining pack III — the
+        // Batch 156 re-arm's leads, Plan 148. Each fixture is the
+        // ORACLE-VERIFIED family (seed, broken) pair from the Batch 156
+        // re-arm probe: seed clean under all+pedantic+nursery, broken fires
+        // EXACTLY its target lint.) ──
+        ClippyFixEntry {
+            lint_name: "redundant_closure_for_method_calls".to_string(),
+            lint_group: "pedantic".to_string(),
+            buggy_code: "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(|s| s.len()).collect() }".to_string(),
+            fixed_code: "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(String::len).collect() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "iter_skip_next".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }".to_string(),
+            fixed_code: "fn at(v: &[u8], n: usize) -> Option<&u8> { v.get(n) }".to_string(),
+        },
     ])
 }
 
@@ -764,14 +785,16 @@ mod tests {
     /// Batch 155 rows (`let_and_return`, `ptr_arg`, `redundant_slicing`,
     /// `map_flatten` — the frontier-lead mining pack, Plan 146), and the 2
     /// Batch 156 rows (`io_other_error`, `wrong_self_convention` — the
-    /// frontier-lead mining pack II, Plan 147) = 70.
+    /// frontier-lead mining pack II, Plan 147), and the 2
+    /// Batch 157 rows (`redundant_closure_for_method_calls`,
+    /// `iter_skip_next` — the frontier-lead mining pack III, Plan 148) = 72.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_70() {
+    fn corpus_size_is_72() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 70);
+        assert_eq!(corpus.entries.len(), 72);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

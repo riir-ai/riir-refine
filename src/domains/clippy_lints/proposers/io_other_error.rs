@@ -34,12 +34,10 @@
 //!   shadowing. Plain `use std::io::…` re-openings (incl. grouped trees and
 //!   `use std::io;` itself) are exempt — same module, semantics preserved.
 
-use proc_macro2::TokenTree;
-use quote::ToTokens;
 use syn::visit::Visit;
-use syn::{Expr, File, ItemUse, UseTree};
+use syn::{Expr, File};
 
-use super::helpers::{byte_range, drops_interior_comment};
+use super::helpers::{byte_range, drops_interior_comment, file_shadows};
 use super::SourceEdit;
 
 /// Names whose file-level shadowing makes the rewrite meaning-changing.
@@ -47,7 +45,7 @@ const SHADOW_NAMES: &[&str] = &["Error", "ErrorKind", "io"];
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    if shadows_std_names(file) {
+    if file_shadows(file, SHADOW_NAMES) {
         return Vec::new(); // conservatively empty — the guard refused the file
     }
     let mut v = Collector { source, edits: Vec::new() };
@@ -137,68 +135,9 @@ fn is_error_kind_other(e: &Expr) -> bool {
         && segs[segs.len() - 2].ident == "ErrorKind"
         && segs.iter().all(|s| s.arguments.is_none())
 }
-
-/// The shadow guard: any item named like a shadowable std name refuses the
-/// whole file, and any NON-std use tree mentioning one of the names refuses
-/// it too (aliases, glob sources, aliased module paths). `use std::…`
-/// re-openings are exempt (same module — semantics preserved).
-fn shadows_std_names(file: &File) -> bool {
-    struct Shadow {
-        hit: bool,
-    }
-    impl<'ast> Visit<'ast> for Shadow {
-        fn visit_item(&mut self, i: &'ast syn::Item) {
-            let name = match i {
-                syn::Item::Mod(x) => Some(&x.ident),
-                syn::Item::Struct(x) => Some(&x.ident),
-                syn::Item::Enum(x) => Some(&x.ident),
-                syn::Item::Union(x) => Some(&x.ident),
-                syn::Item::Trait(x) => Some(&x.ident),
-                syn::Item::Type(x) => Some(&x.ident),
-                syn::Item::Fn(x) => Some(&x.sig.ident),
-                syn::Item::Const(x) => Some(&x.ident),
-                syn::Item::Static(x) => Some(&x.ident),
-                _ => None,
-            };
-            if name.is_some_and(|n| SHADOW_NAMES.contains(&n.to_string().as_str())) {
-                self.hit = true;
-            }
-            syn::visit::visit_item(self, i);
-        }
-
-        fn visit_item_use(&mut self, u: &'ast ItemUse) {
-            if !tree_is_std_reopening(&u.tree) {
-                for tt in u.tree.to_token_stream() {
-                    if let TokenTree::Ident(id) = tt {
-                        if SHADOW_NAMES.contains(&id.to_string().as_str()) {
-                            self.hit = true;
-                        }
-                    }
-                }
-            }
-            syn::visit::visit_item_use(self, u);
-        }
-    }
-
-    fn tree_is_std_reopening(tree: &UseTree) -> bool {
-        let mut cur = tree;
-        loop {
-            match cur {
-                UseTree::Path(p) => {
-                    if p.ident == "std" {
-                        return true;
-                    }
-                    cur = &p.tree;
-                }
-                _ => return false,
-            }
-        }
-    }
-
-    let mut s = Shadow { hit: false };
-    s.visit_file(file);
-    s.hit
-}
+// (The shadow guard lives at `helpers::file_shadows` — factored at the
+// Batch 157 second consumer, same semantics this module shipped in
+// Batch 156.)
 
 #[cfg(test)]
 mod tests {

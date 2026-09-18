@@ -132,7 +132,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 70 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 72 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -141,7 +141,9 @@
 //! the 6 Batch 150 rows + the 2 Batch 151 doc-lint rows + the 4 Batch 155
 //! frontier-lead rules — `let_and_return` / `ptr_arg` / `redundant_slicing` /
 //! `map_flatten`, Plan 146 — and the 2 Batch 156 frontier-lead rules —
-//! `io_other_error` / `wrong_self_convention`, Plan 147); future
+//! `io_other_error` / `wrong_self_convention`, Plan 147 — and the 2 Batch 157
+//! frontier-lead rules — `redundant_closure_for_method_calls` /
+//! `iter_skip_next`, Plan 148); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -160,6 +162,7 @@ pub mod format_collect;
 pub mod helpers;
 pub mod identity_op;
 pub mod io_other_error;
+pub mod iter_skip_next;
 pub mod items_after_statements;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
@@ -190,6 +193,7 @@ pub mod question_mark;
 pub mod range_plus_one;
 pub mod receiver_kind;
 pub mod redundant_closure;
+pub mod redundant_closure_for_method_calls;
 pub mod redundant_field_names;
 pub mod redundant_pattern_matching;
 pub mod redundant_slicing;
@@ -398,7 +402,7 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // bound — semantics-identical whenever both compile (MachineApplicable
     // in real clippy; attrs/turbofish/arg-count guards).
     "map_flatten",
-    // ── Batch 156 (the frontier-lead mining pack II, Plan 147 — the
+    // ── Batch 156 (the frontier-lead mining pack II — Plan 147 — the
     // frontier miner's re-armed leads, 2026-09-18) ──
     // `io::Error::new(io::ErrorKind::Other, e)` → `io::Error::other(e)`.
     // FIXABLE: std's `new` and `other` carry the IDENTICAL
@@ -407,6 +411,21 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // `ErrorKind::Other` path; shadow guard refuses files carrying items
     // or non-std use-aliases named Error/ErrorKind/io. MSRV floor 1.74.
     "io_other_error",
+    // ── Batch 157 (the frontier-lead mining pack III — Plan 148 — the
+    // Batch 156 re-arm's leads, 2026-09-18) ──
+    // `v.iter().map(|s| s.len())` → `v.iter().map(String::len)` — FIXABLE
+    // via the SIGNATURE-PROVEN element type (`&[T]`/`&[T; N]`/`&Vec<T>`
+    // param, never rebound) + a construction-identity whitelist
+    // (String/Vec/HashMap/HashSet × len/is_empty/capacity, inherent &self
+    // 0-arg std methods): the emitted fn item carries exactly the closure's
+    // `fn(&T) -> _` signature. Shadow guard on the four head names.
+    "redundant_closure_for_method_calls",
+    // `x.skip(n).next()` → `x.nth(n)` (every iterator — `Iterator::nth`
+    // IS `skip(n).next()`), with the ORACLE-CLEAN slice upgrade
+    // `v.iter().skip(n).next()` → `v.get(n)` on signature-proven
+    // slice-container receivers (`.nth(n)` itself fires `iter_nth` on
+    // slice iters — measured, the Batch 156 round-3 probe).
+    "iter_skip_next",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -713,6 +732,11 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 156 (the frontier-lead mining pack II, Plan 147) ──
         "io_other_error" => io_other_error::collect_edits(source, file),
         "wrong_self_convention" => wrong_self_convention::collect_edits(source, file),
+        // ── Batch 157 (the frontier-lead mining pack III, Plan 148) ──
+        "redundant_closure_for_method_calls" => {
+            redundant_closure_for_method_calls::collect_edits(source, file)
+        }
+        "iter_skip_next" => iter_skip_next::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -800,12 +824,16 @@ mod tests {
         // + 1 Batch 156 (io_other_error — the frontier-lead pack II, Plan
         // 147; inference-identical `Error::other` splice with the
         // legacy_numeric_constants shadow-guard pattern).
-        assert_eq!(FIXABLE_LINTS.len(), 51);
+        // + 2 Batch 157 (redundant_closure_for_method_calls + iter_skip_next
+        // — the frontier-lead pack III, Plan 148; the signature-proven
+        // element type + construction-identity whitelist, and the
+        // two-arm skip/nth rule with the oracle-clean `.get` slice arm).
+        assert_eq!(FIXABLE_LINTS.len(), 53);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 70-row fixture table — length is the point.
+    /// 72-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1170,6 +1198,17 @@ impl S {
                 "wrong_self_convention",
                 "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}",
                 "fn into_label(self)",
+            ),
+            // ── Batch 157 (the frontier-lead mining pack III, Plan 148) ──
+            (
+                "redundant_closure_for_method_calls",
+                "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(|s| s.len()).collect() }",
+                "v.iter().map(String::len)",
+            ),
+            (
+                "iter_skip_next",
+                "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }",
+                "v.get(n)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

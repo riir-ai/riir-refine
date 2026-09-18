@@ -8,9 +8,11 @@
 //! (the `manual_map` precedent kept these private — with 30 lints the
 //! duplication stopped being trivial).
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, TokenTree};
+use quote::ToTokens;
 use syn::spanned::Spanned;
-use syn::{Attribute, Expr, ExprLit, File, Lit, Macro, Pat};
+use syn::visit::Visit;
+use syn::{Attribute, Expr, ExprLit, File, ItemUse, Lit, Macro, Pat, UseTree};
 
 /// Can `<expr>.method(...)` be appended without changing grouping? Postfix
 /// chains (paths, calls, field/index access, `?`, awaits, literals, macros)
@@ -212,6 +214,207 @@ pub(crate) fn macro_expr_args(mac: &Macro) -> Vec<Expr> {
 /// Span helper: byte range of any spanned node (kept-fragment input).
 pub(crate) fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
     t.span().byte_range()
+}
+
+/// File-level std-name shadow guard (the `legacy_numeric_constants` /
+/// `io_other_error` pattern, factored at the second consumer — Batch 157).
+/// Path resolution prefers in-scope items, and a rewrite that spells a std
+/// path COMPILES UNDER SHADOWING with a different meaning — the silent-FP
+/// class. So the whole file refuses when: (a) any item (mod/struct/enum/
+/// union/trait/type/fn/const/static) is named in `names`, or (b) any NON-std
+/// use tree mentions one of them (aliases, glob sources, aliased module
+/// paths). Plain `use std::…` re-openings (incl. grouped trees and
+/// `use std::io;` itself) are exempt — same module, semantics preserved.
+pub(crate) fn file_shadows(file: &File, names: &[&str]) -> bool {
+    struct Shadow<'n> {
+        names: &'n [&'n str],
+        hit: bool,
+    }
+    impl<'ast> Visit<'ast> for Shadow<'_> {
+        fn visit_item(&mut self, i: &'ast syn::Item) {
+            let name = match i {
+                syn::Item::Mod(x) => Some(&x.ident),
+                syn::Item::Struct(x) => Some(&x.ident),
+                syn::Item::Enum(x) => Some(&x.ident),
+                syn::Item::Union(x) => Some(&x.ident),
+                syn::Item::Trait(x) => Some(&x.ident),
+                syn::Item::Type(x) => Some(&x.ident),
+                syn::Item::Fn(x) => Some(&x.sig.ident),
+                syn::Item::Const(x) => Some(&x.ident),
+                syn::Item::Static(x) => Some(&x.ident),
+                _ => None,
+            };
+            if name.is_some_and(|n| self.names.contains(&n.to_string().as_str())) {
+                self.hit = true;
+            }
+            syn::visit::visit_item(self, i);
+        }
+
+        fn visit_item_use(&mut self, u: &'ast ItemUse) {
+            if !tree_is_std_reopening(&u.tree) {
+                for tt in u.tree.to_token_stream() {
+                    if let TokenTree::Ident(id) = tt {
+                        if self.names.contains(&id.to_string().as_str()) {
+                            self.hit = true;
+                        }
+                    }
+                }
+            }
+            syn::visit::visit_item_use(self, u);
+        }
+    }
+
+    fn tree_is_std_reopening(tree: &UseTree) -> bool {
+        let mut cur = tree;
+        loop {
+            match cur {
+                UseTree::Path(p) => {
+                    if p.ident == "std" {
+                        return true;
+                    }
+                    cur = &p.tree;
+                }
+                _ => return false,
+            }
+        }
+    }
+
+    let mut s = Shadow { names, hit: false };
+    s.visit_file(file);
+    s.hit
+}
+
+/// Signature-proven slice-container bindings of `f`, as `{ident → element
+/// head}` (Batch 157 — shared by the `redundant_closure_for_method_calls`
+/// whitelist and the `iter_skip_next` slice arm).
+///
+/// A param qualifies when it is a plain `Pat::Ident` typed `&[T]`, `&[T; N]`
+/// or `&Vec<T>` — SHARED reference only (an `&mut [T]` iter yields `&mut T`,
+/// and a by-ref fn-item signature does not match a `&mut`-taking closure
+/// param) — and `T` is a SINGLE-SEGMENT path type (generic args allowed:
+/// `&[Vec<u8>]` → head `Vec`; multi-segment `&[std::string::String]` and
+/// non-path elements `&[&str]` refuse, the conservative direction).
+///
+/// **The rebind guard is the soundness leg**: the ident must never be
+/// rebound or assigned anywhere in the fn body (let/match/closure/for
+/// bindings, plain + compound assignments — nested items included, the
+/// over-conservative direction). With zero rebinds, a use of the ident at
+/// any point of the body has exactly the signature's type, which makes the
+/// derived element type a CONSTRUCTION fact rather than an inference — the
+/// FIXABLE-tier bar.
+/// The split derivation core (free fns + impl-item methods share it; the
+/// `self` receiver is a `Receiver` arg, skipped by the Typed-only scan).
+pub(crate) fn slice_param_heads_over<'i>(
+    inputs: impl Iterator<Item = &'i syn::FnArg>,
+    block: &syn::Block,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for arg in inputs {
+        let syn::FnArg::Typed(p) = arg else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        if pi.by_ref.is_some() || pi.subpat.is_some() {
+            continue;
+        }
+        let Some(head) = elem_head_of(&p.ty) else { continue };
+        if body_rebinds(block, &pi.ident.to_string()) {
+            continue;
+        }
+        out.insert(pi.ident.to_string(), head.clone());
+    }
+    out
+}
+
+/// The element head of a shared `&[T]` / `&[T; N]` / `&Vec<T>` type.
+fn elem_head_of(ty: &syn::Type) -> Option<String> {
+    let syn::Type::Reference(r) = ty else { return None };
+    if r.mutability.is_some() {
+        return None;
+    }
+    let inner: &syn::Type = match &*r.elem {
+        syn::Type::Slice(s) => &s.elem,
+        syn::Type::Array(a) => &a.elem,
+        syn::Type::Path(p) => {
+            if p.qself.is_some()
+                || p.path.leading_colon.is_some()
+                || p.path.segments.len() != 1
+            {
+                return None;
+            }
+            let seg = p.path.segments.first()?;
+            if seg.ident != "Vec" {
+                return None;
+            }
+            let syn::PathArguments::AngleBracketed(ab) = &seg.arguments else {
+                return None;
+            };
+            let Some(syn::GenericArgument::Type(t)) = ab.args.first() else {
+                return None;
+            };
+            t
+        }
+        _ => return None,
+    };
+    let syn::Type::Path(ip) = inner else { return None };
+    if ip.qself.is_some() || ip.path.leading_colon.is_some() || ip.path.segments.len() != 1 {
+        return None;
+    }
+    Some(ip.path.segments.first()?.ident.to_string())
+}
+
+/// Does the fn body rebind or assign `ident` anywhere (nested items
+/// included — the over-conservative direction: an inner fn's same-name
+/// param kills the outer derivation too, which only narrows fires)?
+fn body_rebinds(block: &syn::Block, ident: &str) -> bool {
+    struct R {
+        ident: String,
+        hit: bool,
+    }
+    impl<'ast> Visit<'ast> for R {
+        fn visit_pat_ident(&mut self, p: &'ast syn::PatIdent) {
+            if p.ident == self.ident {
+                self.hit = true;
+            }
+            syn::visit::visit_pat_ident(self, p);
+        }
+        fn visit_expr_assign(&mut self, a: &'ast syn::ExprAssign) {
+            if path_is_ident(&a.left, &self.ident) {
+                self.hit = true;
+            }
+            syn::visit::visit_expr_assign(self, a);
+        }
+        fn visit_expr_binary(&mut self, b: &'ast syn::ExprBinary) {
+            use syn::BinOp;
+            if matches!(
+                b.op,
+                BinOp::AddAssign(_)
+                    | BinOp::SubAssign(_)
+                    | BinOp::MulAssign(_)
+                    | BinOp::DivAssign(_)
+                    | BinOp::RemAssign(_)
+                    | BinOp::BitXorAssign(_)
+                    | BinOp::BitAndAssign(_)
+                    | BinOp::BitOrAssign(_)
+                    | BinOp::ShlAssign(_)
+                    | BinOp::ShrAssign(_)
+            ) && path_is_ident(&b.left, &self.ident)
+            {
+                self.hit = true;
+            }
+            syn::visit::visit_expr_binary(self, b);
+        }
+    }
+    let mut v = R { ident: ident.to_string(), hit: false };
+    v.visit_block(block);
+    v.hit
+}
+
+/// Single-segment plain path expression with this ident.
+fn path_is_ident(e: &Expr, ident: &str) -> bool {
+    let Expr::Path(p) = e else { return false };
+    p.qself.is_none()
+        && p.path.leading_colon.is_none()
+        && p.path.segments.len() == 1
+        && p.path.segments.first().is_some_and(|s| s.ident == ident)
 }
 
 /// One comment-style doc line, resolved for the doc-lint proposers

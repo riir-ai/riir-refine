@@ -1,5 +1,76 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 157 / Plan 148: the frontier-lead mining pack III (the first all-FIXABLE pack; corpus 70 → 72, clippy 51/16 → 53/16)
+
+The flywheel's third turn, same day as the second: the Batch 156 re-arm's
+2 leads became rules, BOTH graduated to the heldout loop (the first pack
+with zero retirees — both FIXABLE), and 2 fresh oracle-verified leads
+re-armed the frontier. **2 new proposers, both carrying a NEW soundness
+substrate** — the SIGNATURE-PROVEN element-type derivation
+(`helpers::slice_param_heads_over`, factored for both rules: fn/impl-method
+params typed `&[T]`/`&[T; N]`/`&Vec<T>`, proven never-rebound in the body —
+the derivation is a CONSTRUCTION fact, not an inference, which is what
+makes parse-only FIXABLE-tier possible where the general rewrite would be
+type-blind):
+
+- **`redundant_closure_for_method_calls` (FIXABLE)** —
+  `v.iter().map(|s| s.len())` → `v.iter().map(String::len)`. The emit is
+  restricted to a construction-identity whitelist (String/Vec/HashMap/
+  HashSet × len/is_empty/capacity — inherent shared-&self 0-arg std
+  methods): the emitted fn item carries exactly the closure's
+  `fn(&T) -> _` signature. Shadow guard on the four heads (the
+  io_other_error pattern, factored to `helpers::file_shadows` and
+  io_other_error refactored onto it); generic type params named like the
+  head refuse; multi-segment/arg-carrying receivers, closure attrs,
+  `mut`/tuple params, method args, interior comments all refuse. v1
+  divergences documented: non-whitelisted methods/element types stay
+  silent (clippy is type-aware and fires — our surface is provable-only).
+- **`iter_skip_next` (FIXABLE)** — TWO arms, ladder-ordered: proven
+  slice-container receivers heal `v.iter().skip(n).next()` → `v.get(n)`
+  (the ORACLE-CLEAN inverse, ONE STEP BETTER than clippy's own `.nth(n)`
+  suggestion — which fires `iter_nth` on slice iters, measured in the
+  Batch 156 round-3 probe); every other receiver → `X.nth(A)` (identical
+  for every iterator — `Iterator::nth(n)` IS `skip(n).next()`; the
+  `iter_nth_zero`/`filter_next` parse-only precedent). Skip-arg text
+  rides verbatim; comments in the deleted ranges refuse.
+
+**Graduation:** BOTH families flipped `covered: true` — the heldout loop
+is now SEVEN families deep (5+1+2); the 2 consumed frontier rows archived.
+**Re-arm** (`scripts/plan148_frontier_probe.py`, 1 round):
+**`to_string_in_format_args`** (the verified spare, re-verified — the seed
+MUST be the inlined `format!("n={x}")` form; the `format!("n={}", x)`
+inverse is dirty via `uninlined_format_args`) + **`manual_range_contains`**
+(121 warnings / 5 crates on Bench 094 wave 2 — the highest-body re-arm
+lead yet; seed dodges const-ability via `Vec::push`). Verified spare:
+`single_char_add_str`. Rejects: manual_range_contains' iterator form
+(double-deref silent) + `iter_next_slice` (format-context silent).
+
+**Freeze regen (real oracle):** atoms 51 → 53 (both leads FIXABLE — the
+first pack where every lead joins the atom set). **The new rcmfc atom is
+BROAD as an oracle lint**: clippy fires it on `unnecessary_sort_by`'s
+fixture (`v.sort_by(|a, b| a.cmp(b))` — a 2-param closure OUR proposer
+rightly refuses), so `unnecessary_sort_by` joined the bad-atom set (v2
+5→6, v3 6→7) and the ladder narrows — v2 75 labeled / 20 excluded, v3
+76/23 (vs 73/14 and 77/14). v2 e2e: 75 verified / 6 newly excluded / 0
+drift, solve 100.0% at every k, M4 PASS; v3: 76 verified / 9 newly
+excluded, 94.0/92.3/95.8/100.0%, stratification PASS. **12 orphaned
+EXCLUDED rows pruned** — the old-layout windows the 53-atom builder no
+longer produces; the e2e's printed record carries the pre-excluded set
+blindly and the gen-2/gen-3 score-bench lanes' orphan check
+(`freeze_status_for`) refused until pruned. Process note landed: paste the
+record, then RUN the generation lane before claiming green.
+
+GOAT: lib default **1829/0** (+32) · lib `latent_retrieval` **1982/0** ·
+lib `frontier_miner` **2146/0** (retrieval floors HELD) · clippy `-D`
+clean 3 states · frontier e2e **VERDICT ✓ ×2** (graduation + verify-pass,
+9 committed rows 0 drift) · score-bench row **#132 96.36% FLAT** (vocab
+51→53) + an honest gen-3 lane row at 95.0% (the orphan-check run, history
+133). Pre-existing, not fixed (unrelated lanes): the 2 known v1-frozen
+quantile fixtures' doc_markdown drift; `src/bin/kat_info/mod.rs`'s 2
+dead-fn warnings under the `score_bench,kat_service` bin combo (the
+`--info` lane). Plan [148](.plans/148_batch157_frontier_lead_pack3.md) ·
+Research [184](.research/184_batch157_frontier_lead_pack3.md).
+
 ## 2026-09-18 — Batch 156 / Plan 147: the frontier-lead mining pack II (the re-armed 2 leads consumed; corpus 68 → 70, clippy 50/15 → 51/16)
 
 The flywheel's second turn, one day after the first: the Batch 155 re-arm's

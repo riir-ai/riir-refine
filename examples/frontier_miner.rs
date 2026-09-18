@@ -9,13 +9,15 @@
 //!    so nursery `missing_const_for_fn` stays silent).
 //! 2. **`HeldOut` pass** — EVERY covered family runs its own held-out loop
 //!    (view = the family's rule disabled, solution = re-enable; Batch 155
-//!    graduated the five 2026-09-18 frontier leads alongside the original
-//!    `needless_return`); the full invariant loop (unsolved-before /
+//!    graduated five frontier leads, Batch 156 one, Batch 157 BOTH pack III
+//!    leads — seven covered families alongside the original `needless_return`);
+//!    the full invariant loop (unsolved-before /
 //!    solved-after via re-enable / regression over all stock rows /
 //!    exactly-once vs the committed store) runs with oracle verdicts at
 //!    every judgment point.
-//! 3. **Frontier pass** — the current uncovered-lint families (`io_other_error` +
-//!    `wrong_self_convention`, the Batch 155 re-arm); each admissible row is
+//! 3. **Frontier pass** — the current uncovered-lint families
+//!    (`to_string_in_format_args` + `manual_range_contains`, the Batch 157
+//!    re-arm); each admissible row is
 //!    a PENDING mining lead (clause 3 records `solving_rule: None`).
 //! 4. **Committed-row verification** — rows already in the store are
 //!    RE-VERIFIED against the live oracle (clauses 1–3 re-checked on the
@@ -84,8 +86,8 @@ fn main() {
 
     // ── 2+3. Fresh admission (both modes, exactly-once vs the store) ─────
     // Batch 155: EVERY covered family runs its own held-out loop (view =
-    // its rule disabled, solution = re-enable) — the five graduated
-    // Batch 155 rules re-prove unsolved-before/solved-after/regression on
+    // its rule disabled, solution = re-enable) — the graduated rules
+    // re-prove unsolved-before/solved-after/regression on
     // every e2e rerun, alongside the needless_return original.
     let covered: Vec<_> = all.iter().filter(|c| c.mode == Mode::HeldOut).cloned().collect();
     let heldout_families: Vec<String> = covered

@@ -120,23 +120,25 @@ pub struct Family {
 /// fixpoint `heal_fixpoint_cfg` dispatches `FIXABLE_LINTS`, so only a
 /// FIXABLE-tier rule can be held out and re-enabled as the loop's
 /// solution). Batch 155 graduated three of the five 2026-09-18 frontier
-/// leads this way (`let_and_return`, `redundant_slicing`, `map_flatten`)
-/// and Batch 156 graduated `io_other_error` (the pack II lead, Plan 147);
-/// the retired rest (`ptr_arg` — VERIFY tier; `needless_borrow` —
-/// self_evolve-only; `wrong_self_convention` — VERIFY tier, the Batch 156
-/// pack II retiree) have their leads consumed with regression homes in
-/// the proposer module tests + the `all_buggy_codes_fire_their_lint`
-/// corpus lockstep (rules outside the fixpoint dispatch cannot be
-/// loop-verified).
+/// leads this way (`let_and_return`, `redundant_slicing`, `map_flatten`),
+/// Batch 156 graduated `io_other_error` (the pack II lead, Plan 147), and
+/// Batch 157 graduated BOTH pack III leads
+/// (`redundant_closure_for_method_calls` + `iter_skip_next`, Plan 148 —
+/// both FIXABLE, the first pack with zero retirees); the retired rest
+/// (`ptr_arg` — VERIFY tier; `needless_borrow` — self_evolve-only;
+/// `wrong_self_convention` — VERIFY tier, the Batch 156 pack II retiree)
+/// have their leads consumed with regression homes in the proposer module
+/// tests + the `all_buggy_codes_fire_their_lint` corpus lockstep (rules
+/// outside the fixpoint dispatch cannot be loop-verified).
 /// `covered: false` = a genuine frontier family (target lint outside the
 /// compiled fix set AND outside the stock proposers — a PENDING mining
-/// lead). `redundant_closure_for_method_calls` + `iter_skip_next` are the
-/// Batch 156 re-arm — both probe-verified 2026-09-18
-/// (`scripts/plan147_frontier_probe.py`: seed clean under
+/// lead). `to_string_in_format_args` + `manual_range_contains` are the
+/// Batch 157 re-arm — both probe-verified 2026-09-18
+/// (`scripts/plan148_frontier_probe.py`: seed clean under
 /// all+pedantic+nursery incl. the const-ability discipline, broken fires
-/// EXACTLY its target lint; the round-1/2 rejects — `match_ref_pats`,
-/// `manual_strip`, `double_ended_iterator_last` silent; `implicit_clone`/
-/// `iter_nth`-dirty co-fires — are recorded in the probe script).
+/// EXACTLY its target lint; the round-1 rejects — `iter_next_slice` +
+/// `manual_range_contains`'s iterator form SILENT on their shapes — are
+/// recorded in the probe script; verified spare: `single_char_add_str`).
 #[must_use]
 pub fn families() -> Vec<Family> {
     vec![
@@ -145,8 +147,10 @@ pub fn families() -> Vec<Family> {
         Family { id: "redundant_slicing", target_lint: "redundant_slicing", covered: true },
         Family { id: "map_flatten", target_lint: "map_flatten", covered: true },
         Family { id: "io_other_error", target_lint: "io_other_error", covered: true },
-        Family { id: "redundant_closure_for_method_calls", target_lint: "redundant_closure_for_method_calls", covered: false },
-        Family { id: "iter_skip_next", target_lint: "iter_skip_next", covered: false },
+        Family { id: "redundant_closure_for_method_calls", target_lint: "redundant_closure_for_method_calls", covered: true },
+        Family { id: "iter_skip_next", target_lint: "iter_skip_next", covered: true },
+        Family { id: "to_string_in_format_args", target_lint: "to_string_in_format_args", covered: false },
+        Family { id: "manual_range_contains", target_lint: "manual_range_contains", covered: false },
     ]
 }
 
@@ -249,9 +253,10 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
             ("fn mk(e: String) -> std::io::Error { std::io::Error::other(e) }", "fn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }"),
             ("fn bad(e: String) -> std::io::Error { std::io::Error::other(e) }", "fn bad(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }"),
         ],
-        // ── Batch 156 re-arm (probe-verified 2026-09-18,
-        // `scripts/plan147_frontier_probe.py`; seeds are non-const-able
-        // where the nursery const-ability lint would fire). ──
+        // ── Batch 157 graduation (Plan 148): BOTH pack III leads graduated
+        // — `redundant_closure_for_method_calls` + `iter_skip_next` (both
+        // FIXABLE, the first pack with zero retirees; the signature-proven
+        // element whitelist and the two-arm get/nth rule). ──
         // 1-op: `.map(String::len)` → the closure form `|s| s.len()` (the
         // seed is the fn-path form — clean; the broken fires the pedantic
         // method-forwarding lint).
@@ -265,6 +270,27 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         "iter_skip_next" => vec![
             ("fn at(v: &[u8], n: usize) -> Option<&u8> { v.get(n) }", "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }"),
             ("fn pick(v: &[u8], k: usize) -> Option<&u8> { v.get(k) }", "fn pick(v: &[u8], k: usize) -> Option<&u8> { v.iter().skip(k).next() }"),
+        ],
+        // ── Batch 157 re-arm (probe-verified 2026-09-18,
+        // `scripts/plan148_frontier_probe.py`; seeds are non-const-able
+        // where the nursery const-ability lint would fire — `&mut` params
+        // no longer dodge it since const_mut_refs stabilized, so the dodges
+        // here are non-const OPS: format!/Vec::push). ──
+        // 1-op: `format!("n={x}")` (the inlined clean form) → the explicit
+        // `format!("n={}", x.to_string())` (fires the pedantic
+        // to_string-in-format-args lint; the inlined seed dodges
+        // uninlined_format_args, the literal prefix dodges useless_format).
+        "to_string_in_format_args" => vec![
+            ("fn show(x: u32) -> String { format!(\"n={x}\") }", "fn show(x: u32) -> String { format!(\"n={}\", x.to_string()) }"),
+            ("fn tag(y: u32) -> String { format!(\"t={y}\") }", "fn tag(y: u32) -> String { format!(\"t={}\", y.to_string()) }"),
+        ],
+        // 1-op: `(3..=5).contains(&x)` → the spelled-out `x >= 3 && x <= 5`
+        // (fires manual_range_contains; `hits.push(x)` keeps the fn
+        // non-const-able — the wave-2-evidenced default-level lint,
+        // 121 warnings / 5 crates on Bench 094).
+        "manual_range_contains" => vec![
+            ("fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); (3..=5).contains(&x) }", "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 && x <= 5 }"),
+            ("fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); (7..=9).contains(&n) }", "fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); n >= 7 && n <= 9 }"),
         ],
         _ => vec![],
     }
@@ -753,6 +779,10 @@ mod tests {
             "needless_borrow"
         } else if code.contains(").flatten()") {
             "map_flatten"
+        } else if code.contains(".skip(") {
+            "iter_skip_next"
+        } else if code.contains(".map(|") && code.contains(".len()") {
+            "redundant_closure_for_method_calls"
         } else {
             return verdict(true, true, &[]);
         };
@@ -771,11 +801,11 @@ mod tests {
     /// healed verdict equals the broken verdict, which is the frontier
     /// fact under test).
     fn frontier_probe(code: &str) -> OracleVerdict {
-        // The Batch 156 frontier population: the two re-arm families.
-        let lint = if code.contains(".skip(") {
-            "iter_skip_next"
-        } else if code.contains(".map(|") {
-            "redundant_closure_for_method_calls"
+        // The Batch 157 frontier population: the two re-arm families.
+        let lint = if code.contains(".to_string())") {
+            "to_string_in_format_args"
+        } else if code.contains(">= 3 &&") || code.contains(">= 7 &&") {
+            "manual_range_contains"
         } else {
             return verdict(true, true, &[]);
         };
@@ -794,10 +824,10 @@ mod tests {
         assert_eq!(a, sorted);
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
-        // HeldOut + Frontier partition by the family's covered flag — five
-        // covered families (12 cases: 3+3+2+2+2) + the Batch 156 re-arm's
+        // HeldOut + Frontier partition by the family's covered flag — seven
+        // covered families (16 cases: 3+3+2+2+2+2+2) + the Batch 157 re-arm's
         // two frontier families (4 cases).
-        assert_eq!(a.iter().filter(|c| c.mode == Mode::HeldOut).count(), 12);
+        assert_eq!(a.iter().filter(|c| c.mode == Mode::HeldOut).count(), 16);
         assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 4);
     }
 
@@ -821,7 +851,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 5, "the five covered (FIXABLE-tier) families");
+        assert_eq!(families.len(), 7, "the seven covered (FIXABLE-tier) families");
         for fam in &families {
             let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
             let rule = fam_rule(fam);
