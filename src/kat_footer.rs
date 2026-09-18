@@ -14,7 +14,7 @@
 //!
 //! ```text
 //! tuna this run  8,791 tok → 0.0088 TUNA   (1 TUNA / 1M tokens · meter v1 · charge v1)
-//!      tuna      ⣿…⣄⣿⣿⣿  47.20 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only
+//!      tuna      ⣿…⣄⣿⣿⣿  47% (expires in 12d)
 //!      kat       84.92 KAT · server balance at the last sync
 //!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
@@ -226,12 +226,14 @@ impl KatFooter<'_> {
     }
 
     /// The trial-credit line — `None` renders nothing (the ack's absence
-    /// of TUNA truth is the 3-line footer, byte for byte).
+    /// of TUNA truth is the 3-line footer, byte for byte). Owner call
+    /// 2026-09-18: the tank line is a FUEL GAUGE — `{pct}% ({expiry})` —
+    /// not a ledger readout; the exact µ numbers live in `--info` /
+    /// `account`.
     fn render_tuna(&self, color: bool) -> Option<String> {
         let t = self.tuna?;
         let bal = MicroKat(t.balance_micro.0.max(0));
         let bal_disp = round_kat_2dp(bal);
-        let grant_disp = round_kat_2dp(t.grant_micro);
         // Grant-scale micro values sit far inside f64's exact-integer
         // range — lossless at every real ledger size.
         #[allow(clippy::cast_precision_loss)]
@@ -240,18 +242,25 @@ impl KatFooter<'_> {
         } else {
             bal_disp.0 as f64 / t.grant_micro.0 as f64
         };
-        let (y, m, d) = ymd_from_unix(t.expires_unix);
+        // Display-clamped: a multi-tranche account can hold more than the
+        // gauge's claim scale — the bar never overfills. The casts are the
+        // same bounded display math as the frac cast below (frac ∈ [0,1] —
+        // the µ denominator keeps it far from any truncation edge).
+        #[allow(clippy::cast_possible_truncation)]
+        let pct = ((frac * 100.0).round() as i64).clamp(0, 100);
         let expiry = if t.expires_unix <= t.now_unix {
-            format!("expired {y:04}-{m:02}-{d:02} — the sweep reclaims the rest")
+            "expired — the sweep reclaims the rest".to_string()
         } else {
             let days = (t.expires_unix - t.now_unix) / 86_400;
-            format!("expires {y:04}-{m:02}-{d:02} ({days}d)")
+            if days == 0 {
+                "expires today".to_string()
+            } else {
+                format!("expires in {days}d")
+            }
         };
         Some(format!(
-            "     tuna      {}  {} of {} TUNA left · {expiry} · trial credit — heals only",
+            "     tuna      {}  {pct}% ({expiry})",
             braille_bar(frac, BAR_WIDTH, color),
-            fmt_kat_display(bal_disp),
-            fmt_kat_display(grant_disp),
         ))
     }
 
@@ -558,7 +567,7 @@ mod tests {
         let out = footer_mixed().render(false);
         assert!(!out.contains("grant"), "the obsolete grant bar rendered: {out}");
         assert!(!out.contains("of 100 burned"), "a burn-vs-grant caption rendered: {out}");
-        assert!(out.contains("47.2 of 100 TUNA left"), "tuna tank missing: {out}");
+        assert!(out.contains("47% (expires in 12d)"), "tuna tank missing: {out}");
         assert!(
             out.contains("kat       84.92 KAT · server balance at the last sync"),
             "kat balance line missing: {out}"
@@ -834,9 +843,7 @@ mod tests {
         assert_eq!(lines.len(), 3, "{with:?}");
         assert!(lines[0].contains("this run"), "{with:?}");
         assert!(
-            lines[1].contains(
-                "47.2 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only"
-            ),
+            lines[1].contains("47% (expires in 12d)"),
             "{with:?}"
         );
         assert!(lines[2].contains("sync"), "{with:?}");
@@ -850,7 +857,7 @@ mod tests {
             ..footer_plain()
         }
         .render(false);
-        assert!(out.contains("0 of 100 TUNA left"), "{out:?}");
+        assert!(out.contains("0% (expires in 12d)"), "{out:?}");
 
         // Negative (defensive): clamps to 0 at render, never prints a
         // negative tank.
@@ -859,7 +866,7 @@ mod tests {
             ..footer_plain()
         }
         .render(false);
-        assert!(out.contains("0 of 100 TUNA left"), "{out:?}");
+        assert!(out.contains("0% (expires in 12d)"), "{out:?}");
         assert!(!out.contains("-5"));
 
         // Expired (not yet swept): named, with the sweep note.
@@ -873,9 +880,35 @@ mod tests {
         }
         .render(false);
         assert!(
-            out.contains("expired 2026-10-18 — the sweep reclaims the rest"),
+            out.contains("(expired — the sweep reclaims the rest)"),
             "{out:?}"
         );
+    }
+
+    /// Owner call 2026-09-18: the tank line is a fuel gauge — the
+    /// percentage display-clamps (a multi-tranche account can hold more
+    /// than the claim scale; the bar never overfills) and the sub-day
+    /// remainder reads "expires today", never "expires in 0d".
+    #[test]
+    fn the_tank_gauge_clamps_and_names_today() {
+        let out = KatFooter {
+            tuna: Some(tuna_line(147_000_000)),
+            ..footer_plain()
+        }
+        .render(false);
+        assert!(out.contains("100% (expires in 12d)"), "{out:?}");
+
+        let today = TunaLine {
+            now_unix: TUNA_EXPIRES - 86_400 / 2,
+            ..tuna_line(47_200_000)
+        };
+        let out = KatFooter {
+            tuna: Some(today),
+            ..footer_plain()
+        }
+        .render(false);
+        assert!(out.contains("(expires today)"), "{out:?}");
+        assert!(!out.contains("expires in 0d"), "{out:?}");
     }
 
     /// The removed grant bar's tombstone: the old projection ("X of grant
