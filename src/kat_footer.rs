@@ -13,11 +13,18 @@
 //! Shape (spec v2 + the dim-track Braille amendments):
 //!
 //! ```text
-//! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1)
+//! tuna this run  8,791 tok → 0.0088 TUNA   (1 TUNA / 1M tokens · meter v1 · charge v1)
 //!      tuna      ⣿…⣄⣿⣿⣿  47.20 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only
 //!      kat       84.92 KAT · server balance at the last sync
 //!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
+//!
+//! The run line names the TANK the metered µ draws from — the server's
+//! draw order (B3): `tuna`/TUNA while spendable trial credit is left,
+//! `kat`/KAT once it is exhausted, expired, or the ack carries no TUNA
+//! truth. The meter itself is plane-agnostic µ; a mid-run handoff is
+//! named exactly by the burn-sync split line from the server response
+//! (`drew X TUNA + Y KAT — trial credit exhausted mid-report`).
 //!
 //! (The `tuna` line — the Proposal 006 trial credit — renders ONLY when
 //! the burn ack carries a server-reported TUNA balance; `None` (a pre-v4
@@ -47,6 +54,7 @@
 /// Bar width in cells. 24 × 8 dots = 192 steps ≈ 0.52% per dot.
 pub const BAR_WIDTH: usize = 24;
 
+use std::fmt::Write as _;
 use std::io::IsTerminal as _;
 
 // The client-side unit vocabulary: the µ newtype every footer field
@@ -138,8 +146,8 @@ pub struct TunaLine {
 pub struct KatFooter<'a> {
     /// Code word tokens billed this run.
     pub run_tokens: u64,
-    /// KAT metered this run, µ (the session's own meter — display, not
-    /// a server debit claim).
+    /// µ metered this run (the session's own meter — display, not a
+    /// server debit claim; the unit LABEL follows the active tank).
     pub run_micro_kat: MicroKat,
     /// The trial-credit tank (Proposal 006) — the PRIMARY burn tank:
     /// server truth from the burn ack (v4), and the server draws it
@@ -172,13 +180,27 @@ impl KatFooter<'_> {
     /// is byte-stable for pipes and `NO_COLOR`.
     #[must_use]
     pub fn render(&self, color: bool) -> String {
+        // The run line bills the tank the metered µ will draw from — the
+        // server's draw order (B3): TUNA while spendable trial credit is
+        // left (present, positive, unexpired), KAT once it is gone or the
+        // ack carries no TUNA truth. A mid-run handoff (TUNA exhausting
+        // mid-report) is named exactly by the burn-sync split line the
+        // server response produces, not by this projection.
+        let tuna_primary = self
+            .tuna
+            .is_some_and(|t| t.balance_micro.0 > 0 && t.expires_unix > t.now_unix);
+        let (label, unit) = if tuna_primary {
+            ("tuna", "TUNA")
+        } else {
+            ("kat", "KAT")
+        };
         let line1 = format!(
-            "kat  this run  {} tok → {} KAT{}",
+            "{label:<4} this run  {} tok → {} {unit}{}",
             fmt_tokens(self.run_tokens),
             fmt_kat_display(self.run_micro_kat),
             paint_dim(
                 &format!(
-                    "   ({} KAT / 1M tokens · meter v{} · charge v{})",
+                    "   ({} {unit} / 1M tokens · meter v{} · charge v{})",
                     fmt_kat_display(self.rate_micro_per_mtok),
                     self.meter_version,
                     self.charge_version
@@ -194,10 +216,11 @@ impl KatFooter<'_> {
             tanks.push('\n');
         }
         if let Some(bal) = self.kat_balance_micro {
-            tanks.push_str(&format!(
-                "     kat       {} KAT · server balance at the last sync\n",
+            let _ = writeln!(
+                tanks,
+                "     kat       {} KAT · server balance at the last sync",
                 fmt_kat_display(round_kat_2dp(bal))
-            ));
+            );
         }
         format!("{line1}\n{tanks}{}", self.render_sync(color))
     }
@@ -544,6 +567,49 @@ mod tests {
         let tuna = out.find("tuna ").expect("tuna");
         let kat = out.find("server balance").expect("kat balance");
         assert!(tuna < kat, "tuna must render before kat: {out}");
+    }
+
+    /// The unit-honesty follow-up: the RUN LINE bills the tank the
+    /// server actually draws — TUNA while spendable trial credit is
+    /// left, not a KAT figure for a TUNA draw. Gutter label and µ unit
+    /// flip together; the kat balance line below keeps its own unit.
+    #[test]
+    fn the_run_line_bills_the_tank_the_server_draws() {
+        let out = footer_mixed().render(false);
+        assert!(
+            out.starts_with("tuna this run"),
+            "the run line must bill TUNA while the tank has credit: {out:?}"
+        );
+        assert!(out.contains("→ 0.0088 TUNA"), "{out:?}");
+        assert!(out.contains("(1 TUNA / 1M tokens"), "{out:?}");
+        assert!(
+            out.contains("kat       84.92 KAT · server balance at the last sync"),
+            "{out:?}"
+        );
+    }
+
+    /// Exhausted (0 left) or expired trial credit bills KAT again — the
+    /// flip is the server's draw order rendered, not a projection lag.
+    #[test]
+    fn an_exhausted_or_expired_tuna_tank_bills_kat_again() {
+        let exhausted = KatFooter {
+            tuna: Some(tuna_line(0)),
+            ..footer_plain()
+        }
+        .render(false);
+        assert!(exhausted.starts_with("kat  this run"), "{exhausted:?}");
+        assert!(exhausted.contains("→ 0.0088 KAT"), "{exhausted:?}");
+        assert!(exhausted.contains("(1 KAT / 1M tokens"), "{exhausted:?}");
+
+        let mut expired_t = tuna_line(47_200_000);
+        expired_t.now_unix = expired_t.expires_unix; // the expiry boundary
+        let expired = KatFooter {
+            tuna: Some(expired_t),
+            ..footer_plain()
+        }
+        .render(false);
+        assert!(expired.starts_with("kat  this run"), "{expired:?}");
+        assert!(expired.contains("→ 0.0088 KAT"), "{expired:?}");
     }
 
     /// Absence honesty: without the ack's truth (never synced, pre-TUNA
