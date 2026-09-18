@@ -18,6 +18,20 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Every verdict below prints non-ASCII glyphs. On a console whose encoding is
+# not UTF-8 — the Windows workstation that runs these is cp874 — print() raises
+# UnicodeEncodeError and this script dies with NO output at all, so its
+# findings are not *unknown* but *unlooked at* (katgpt-rs Issue 804).
+# backslashreplace degrades the glyph to a visible escape and keeps every ASCII
+# character exact, so a verdict line stays greppable; forcing UTF-8 instead
+# gives mojibake, which is the silent direction.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="backslashreplace")
+    except (AttributeError, ValueError):
+        pass  # not a TextIOWrapper (embedded / detached); keep old behavior
+
+
 CASES = {
     # ── to_string_in_format_args (pedantic; the Batch 156 verified spare,
     #    re-verified for the record): inlined seed dodges
@@ -80,7 +94,8 @@ def probe(name: str, code: str) -> list[str]:
         out = subprocess.run(
             ["cargo", "clippy", "--message-format=json", "--",
              "-W", "clippy::all", "-W", "clippy::pedantic", "-W", "clippy::nursery"],
-            cwd=root, capture_output=True, text=True, timeout=120,
+            cwd=root, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=120,
         )
         lints = set()
         for line in out.stdout.splitlines():
