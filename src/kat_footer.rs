@@ -187,13 +187,21 @@ impl KatFooter<'_> {
                 color
             )
         );
-        let line2 = format!(
+        let mut line2 = format!(
             "     grant     {}  {} KAT left · {} of {} burned",
             braille_bar(frac, BAR_WIDTH, color),
             fmt_kat_display(left_micro),
             fmt_kat_display(burned_micro),
             fmt_kat_display(grant_disp_micro),
         );
+        // The 2-dp display floor flattens any burn below 0.005 KAT to
+        // "0" — and the footer reads the REPO-LOCAL charge ledger (per-repo
+        // by design, Plans 023/024, until server aggregation), so a fresh
+        // repo reads as a perfect untouched grant while µ are metered and
+        // carried. Name the sliver when the rounding flattened one.
+        if self.cum_micro_kat > MicroKat(0) && burned_micro == MicroKat(0) {
+            line2.push_str(&format!(" ({} µKAT)", self.cum_micro_kat.0));
+        }
         match self.render_tuna(color) {
             Some(tuna) => format!("{line1}\n{line2}\n{tuna}\n{}", self.render_sync(color)),
             None => format!("{line1}\n{line2}\n{}", self.render_sync(color)),
@@ -506,6 +514,31 @@ mod tests {
             out.contains("84.92 KAT left · 15.08 of 100 burned"),
             "paired caption missing: {out}"
         );
+    }
+
+    /// The µ-sliver arm: a burn the 2-dp display floor flattens to "0"
+    /// still names its µ — a fresh repo ledger (per-repo by design) must
+    /// not read as a perfect untouched grant while µ are metered.
+    #[test]
+    fn a_sub_display_floor_sliver_names_its_micro() {
+        let out = KatFooter {
+            cum_micro_kat: MicroKat(17),
+            ..footer_left(MicroKat(100_000_000))
+        }
+        .render(false);
+        assert!(
+            out.contains("100 KAT left · 0 of 100 burned (17 µKAT)"),
+            "µ sliver unnamed: {out}"
+        );
+    }
+
+    /// Byte-stability the other way: a genuinely untouched ledger renders
+    /// no qualifier.
+    #[test]
+    fn a_zero_burn_renders_no_sliver_qualifier() {
+        let out = footer_left(MicroKat(100_000_000)).render(false);
+        assert!(out.contains("0 of 100 burned"), "{out}");
+        assert!(!out.contains("µKAT"), "qualifier on an empty ledger: {out}");
     }
 
     #[test]
