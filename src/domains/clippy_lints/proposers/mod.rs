@@ -99,6 +99,8 @@
 //! `bool_comparison` | `x == true` → `x`, `x != true` → `!x` (+ the `false` twins, both operand orders) — boolean algebra on a proven-bool ident (Batch 162) |
 //! `manual_string_new` | `String::from("")` → `String::new()` — empty-String construction identity (zero capacity, no allocation); 2-segment path + explicit turbofish only, empty-literal arg only (Batch 163) |
 //! `needless_late_init` | `let x[: T]; x = v;` → `let x[: T] = v;` — the adjacent non-mut pair merged (E0384 makes the adjacent assignment THE initialization); annotation + initializer verbatim (Batch 163) |
+//! `match_like_matches_macro` | `match x { P => true, _ => false }` → `matches!(x, P)` (+ the `!` twin + the arm-1 guard) — the macro IS that match; scrutinee/pattern/guard verbatim (Batch 164) |
+//! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -144,7 +146,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 76 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 86 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -161,7 +163,12 @@
 //! `manual_clamp`, Plan 150 — and the 2 Batch 160 frontier-lead rules —
 //! `from_str_radix_10` / `assign_op_pattern`, Plan 151 — and the 2 Batch
 //! 161 frontier-lead rules — `unit_arg` / `string_lit_as_bytes`, Plan
-//! 152); future lints drop in by extending the match.
+//! 152 — and the 2 Batch 162 frontier-lead rules — `bytes_count_to_len` /
+//! `bool_comparison`, Plan 153 — and the 2 Batch 163 frontier-lead rules —
+//! `manual_string_new` / `needless_late_init`, Plan 154 — and the 2 Batch
+//! 164 frontier-lead rules — `match_like_matches_macro` /
+//! `excessive_precision`, Plan 155); future lints drop in by extending the
+//! match.
 
 pub mod assign_op_pattern;
 pub mod bool_comparison;
@@ -175,7 +182,9 @@ pub mod comparison_to_empty;
 pub mod deref_addrof;
 pub mod doc_lazy_continuation;
 pub mod doc_markdown;
+pub mod excessive_precision;
 pub mod manual_string_new;
+pub mod match_like_matches_macro;
 pub mod needless_late_init;
 pub mod double_parens;
 pub mod filter_map_bool_then;
@@ -619,6 +628,36 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // annotation + initializer re-emit verbatim. Style-group (default-on;
     // pinned by the plan154 probe's default-groups arm).
     "needless_late_init",
+    // ── Batch 164 (the frontier-lead mining pack X — Plan 155 — the
+    // coverage-report re-arm leads, 2026-09-19) ──
+    // `match x { P => true, _ => false }` → `matches!(x, P)` (+ the `!`
+    // twin + the arm-1 guard carried verbatim) — FIXABLE because the macro
+    // IS that match: `matches!` expands to exactly the two-arm match, the
+    // scrutinee evaluates once at the same position, and the pattern/guard
+    // ride through `$pattern:pat` / `$guard:expr` unchanged. Guards:
+    // exactly 2 arms, wildcard-only arm 2 with NO guard, bool-literal
+    // bodies of opposite polarity, arm 1 not `_`, match/arm attrs refuse,
+    // guard-on-wildcard refuses. Named catch-alls + 3-arm + non-bool shapes
+    // are SILENT upstream (probe-pinned) and refuse — upstream-exact scope.
+    // Style-group (default-on; pinned by the plan155 probe's no-flags arm).
+    "match_like_matches_macro",
+    // `2.141592653589793238462643f32` → `2.1415927f32` — FIXABLE by
+    // SUFFIX-PINNED SHORTEST-ROUND-TRIP: the literal's suffix names its
+    // type (no type check anywhere), `format!("{:?}")` is std's shortest
+    // round-trip formatting, and the proposer RE-PARSES the shortened text
+    // and compares bits — the edit lands only when the two literals are the
+    // identical f32/f64 value (same suffix + same value ⇒ inference,
+    // const-eval, consumers unchanged). Guards: suffix REQUIRED (upstream
+    // also fires on annotation-typed literals — the documented
+    // narrower-than-clippy divergence); digit separators refuse
+    // (upstream-silent, unreadable_literal's territory); INTEGRAL values
+    // refuse (`1.0000000f32` silent upstream — the check is on the VALUE's
+    // fract, not the text, because `3.000…e-10f32` fires despite all-zero
+    // mantissa fraction); exponent-presence must agree between original and
+    // shortest; already-shortest literals refuse; the bit re-parse is the
+    // soundness leg. Style-group (default-on; pinned by the plan155 probe's
+    // no-flags arm).
+    "excessive_precision",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -830,7 +869,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 72 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 86 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -948,6 +987,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 163 (the frontier-lead mining pack IX — Plan 154) ──
         "manual_string_new" => manual_string_new::collect_edits(source, file),
         "needless_late_init" => needless_late_init::collect_edits(source, file),
+        // ── Batch 164 (the frontier-lead mining pack X — Plan 155) ──
+        "match_like_matches_macro" => match_like_matches_macro::collect_edits(source, file),
+        "excessive_precision" => excessive_precision::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1064,12 +1106,16 @@ mod tests {
         // + 2 Batch 163 (manual_string_new + needless_late_init — the
         // frontier-lead pack IX, Plan 154; the empty-String construction
         // identity + the adjacent non-mut let/assign merge).
-        assert_eq!(FIXABLE_LINTS.len(), 65);
+        // + 2 Batch 164 (match_like_matches_macro + excessive_precision —
+        // the frontier-lead pack X, Plan 155; the macro-IS-the-match
+        // verbatim rebuild + the suffix-pinned shortest-round-trip literal
+        // rewrite with the in-proposer bit-identity proof).
+        assert_eq!(FIXABLE_LINTS.len(), 67);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 80-row fixture table — length is the point.
+    /// 84-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1511,6 +1557,17 @@ impl S {
                 "needless_late_init",
                 "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x; x = 5u32; x + x }",
                 "let x = 5u32;",
+            ),
+            // ── Batch 164 (the frontier-lead mining pack X, Plan 155) ──
+            (
+                "match_like_matches_macro",
+                "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); match x { 0 => true, _ => false } }",
+                "matches!(x, 0)",
+            ),
+            (
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.141592653589793238462643f32 }",
+                "2.1415927f32",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

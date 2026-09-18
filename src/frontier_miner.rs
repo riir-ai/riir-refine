@@ -194,6 +194,15 @@ pub fn families() -> Vec<Family> {
         Family { id: "bool_comparison", target_lint: "bool_comparison", covered: true },
         Family { id: "manual_string_new", target_lint: "manual_string_new", covered: true },
         Family { id: "needless_late_init", target_lint: "needless_late_init", covered: true },
+        // ── Batch 164 graduation (Plan 155): the coverage-report RE-ARM —
+        // the recorded-spare queue ran empty, so the leads came from the
+        // fresh `--coverage-report` derivation probe-verified in
+        // `scripts/plan155_frontier_probe.py` (seed clean, broken fires
+        // exactly its target; both default-level style — mlmm's seed keeps
+        // the `Vec::push` dodge, the ep seed's 7-digit float sits UNDER
+        // unreadable_literal's threshold). ──
+        Family { id: "match_like_matches_macro", target_lint: "match_like_matches_macro", covered: true },
+        Family { id: "excessive_precision", target_lint: "excessive_precision", covered: true },
     ]
 }
 
@@ -458,6 +467,44 @@ fn run(hits: &mut Vec<u8>) { tap({ hits.push(2); }, hits) }",
             (
                 "fn wait(hits: &mut Vec<u8>) -> u32 { hits.push(0); let y = 9u32; y + y }",
                 "fn wait(hits: &mut Vec<u8>) -> u32 { hits.push(0); let y; y = 9u32; y + y }",
+            ),
+        ],
+        // ── Batch 164 (Plan 155 — the coverage-report re-arm; both pairs
+        // full-oracle-probed before landing: seed clean, broken fires its
+        // target). ──
+        // 1-op: `match x { 0 => true, _ => false }` → `matches!(x, 0)`;
+        // case 2 the negated twin (`7 => false, _ => true` → `!matches!`).
+        // The pattern-proposition direction — the seed is the macro form.
+        "match_like_matches_macro" => vec![
+            (
+                "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); matches!(x, 0) }",
+                "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); match x { 0 => true, _ => false } }",
+            ),
+            (
+                "fn g(used: &mut Vec<u8>, k: u32) -> bool { used.push(1); !matches!(k, 7) }",
+                "fn g(used: &mut Vec<u8>, k: u32) -> bool { used.push(1); match k { 7 => false, _ => true } }",
+            ),
+        ],
+        // 1-op: digit padding past the shortest round-trip, in EXPONENT
+        // notation (`2.5e-7f32` → `2.5000000000000001e-7f32` — the padding
+        // rounds away, so the heal recovers the seed byte-identically). The
+        // exponent form is LOAD-BEARING: every plain-decimal ep shape has
+        // >3 frac digits, which the in-corpus `unreadable_literal` proposer
+        // regroups — touching the fixture under the held-out view (the
+        // unsolved-before gate refuses); unreadable's own exponent guard is
+        // the one separable shape (measured, plan155 seed probe; the same
+        // structural co-fire that makes `excessive_precision` a freeze
+        // bad atom). The corpus-fixture pair (`2.141592653589793238462643f32`)
+        // is likewise not seed-usable: its own fixed form `2.1415927f32`
+        // fires the pedantic unreadable_literal under the full oracle.
+        "excessive_precision" => vec![
+            (
+                "fn g(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.5e-7f32 }",
+                "fn g(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.5000000000000001e-7f32 }",
+            ),
+            (
+                "fn h(hits: &mut Vec<u8>) -> f32 { hits.push(0); 4.75e-7f32 }",
+                "fn h(hits: &mut Vec<u8>) -> f32 { hits.push(0); 4.7500000000000001e-7f32 }",
             ),
         ],
         _ => vec![],
@@ -986,6 +1033,16 @@ mod tests {
             // BROKEN-only: the init-less let. The healed form is
             // `let x = ...` — never matches `let x;` (Batch 163).
             "needless_late_init"
+        } else if code.contains("=> true") {
+            // BROKEN-only: the 2-arm bool match (both twins). The healed
+            // form is `matches!(..)` / `!matches!(..)` — never contains
+            // `=> true` (Batch 164).
+            "match_like_matches_macro"
+        } else if code.contains("0000000001e-7f") {
+            // BROKEN-only: the over-precise padded exponent literal. The
+            // healed form is the seed (`2.5e-7f32` / `4.75e-7f32`) — never
+            // matches the 11-zero padding (Batch 164).
+            "excessive_precision"
         } else {
             return verdict(true, true, &[]);
         };
@@ -1028,13 +1085,14 @@ mod tests {
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
         // HeldOut + Frontier partition by the family's covered flag —
-        // nineteen covered families (40 cases: 3+3+2×17)
-        // + 0 frontier families — the Batch 163 re-arm's two GRADUATED
-        // (the next re-arm owes a fresh probe round — no recorded spares
-        // remain).
+        // twenty-one covered families (44 cases: 3+3+2×19)
+        // + 0 frontier families — the Batch 164 re-arm's two leads
+        // (match_like_matches_macro + excessive_precision) GRADUATED at
+        // landing (the next re-arm owes a fresh probe round — no recorded
+        // spares remain).
         assert_eq!(
             a.iter().filter(|c| c.mode == Mode::HeldOut).count(),
-            40,
+            44,
         );
         assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 0);
     }
@@ -1059,7 +1117,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 19, "the nineteen covered (FIXABLE-tier) families");
+        assert_eq!(families.len(), 21, "the twenty-one covered (FIXABLE-tier) families");
         for fam in &families {
             let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
             let rule = fam_rule(fam);
