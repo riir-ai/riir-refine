@@ -55,6 +55,14 @@
 //! - `cargo check` fails to RUN (bad `--verify-args`, broken manifest):
 //!   all edits are reverted + the error reported — unverified writes are
 //!   never left behind by a failed verification.
+//! - A check that exits non-zero with NO attributable diagnostics (the
+//!   cargo process killed mid-run — OOM, user kill — output lost, or a
+//!   cargo-level refusal that emitted artifact JSON): the same refusal as
+//!   the arm above. A killed re-check is indistinguishable from a clean
+//!   pass on the JSON alone and USED to read as one — every kept edit
+//!   would have ridden an incomplete verification (katgpt-rs Issue 841).
+//!   The exit status is the completion sentinel: no keep may ride a
+//!   check that did not complete ([`check_verdict`]).
 //! - Warnings do not fail the check (no `-D warnings`): verification
 //!   proves the edits COMPILE, not that they are warning-free.
 
@@ -66,9 +74,11 @@ use serde::Deserialize;
 // Plan 019 T0.3: the subprocess + path-walk substrate moved to
 // `compile_oracle` so the `rustc_errors` driver can consume it without the
 // `latent_retrieval` tree. Re-exported here for back-compat — the bin and
+// Re-exported here for back-compat — the bin and
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
-    owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+    CheckVerdict,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -165,6 +175,15 @@ impl FixVerifier {
         self
     }
 
+    /// Explicit cargo binary (test/diagnostic seam — the kill-path e2e
+    /// points this at a fake cargo; production callers use [`Self::new`]).
+    #[must_use]
+    pub fn with_cargo_bin(bin: impl Into<String>) -> Self {
+        Self {
+            runner: CheckRunner::new().with_cargo_bin(bin),
+        }
+    }
+
     /// Run the verify loop over `files`. On return, disk holds: the fixed
     /// content for files whose edits survived + the original content for
     /// reverted files. See the module docs for the algorithm.
@@ -231,19 +250,17 @@ impl FixVerifier {
             let mut error_lines: HashMap<PathBuf, Vec<(usize, usize)>> = HashMap::new();
             let mut run_err: Option<String> = None;
             for pkg in &pkgs {
-                match self.run_check(pkg) {
-                    Ok(outcome) => {
-                        report.n_checks += 1;
-                        if outcome.exit_ok && parse_error_locations(&outcome.json).is_empty() {
-                            continue; // this package is clean
-                        }
-                        merge_error_locations(
-                            &outcome.json,
-                            workspace_root(pkg).as_deref(),
-                            pkg,
-                            &mut error_lines,
-                        );
-                    }
+                match self.classified_check(pkg, &mut report) {
+                    // Errors present: merge them for attribution. Clean:
+                    // nothing to do. Err (unrunnable or incomplete — Issue
+                    // 841): restore everything, keep nothing unverified.
+                    Ok(Some(json)) => merge_error_locations(
+                        &json,
+                        workspace_root(pkg).as_deref(),
+                        pkg,
+                        &mut error_lines,
+                    ),
+                    Ok(None) => {}
                     Err(e) => run_err = Some(e),
                 }
             }
@@ -297,13 +314,46 @@ impl FixVerifier {
             let outcome = self.run_check(pkg)?;
             report.n_checks += 1;
             let errors = parse_error_locations(&outcome.json);
-            if !outcome.exit_ok || !errors.is_empty() {
-                report.baseline_clean = false;
-                return Ok(()); // message set by the caller from the flag
+            // The shared verdict's Errors and Incomplete arms both refuse
+            // the baseline: a broken tree cannot host a verification, and a
+            // KILLED baseline check must not pass as clean either (Issue
+            // 841).
+            if check_verdict(outcome.exit_ok, !errors.is_empty()) == CheckVerdict::Clean {
+                continue;
             }
+            report.baseline_clean = false;
+            return Ok(()); // message set by the caller from the flag
         }
         report.baseline_clean = true;
         Ok(())
+    }
+
+    /// One package check, classified through the shared verdict (Issue
+    /// 841): `Ok(None)` = the package is clean; `Ok(Some(json))` = error
+    /// diagnostics present — the caller merges them for attribution; `Err`
+    /// = the check cannot be trusted — cargo unrunnable, or the check did
+    /// not COMPLETE (non-zero exit, zero parseable diagnostics: the
+    /// process was killed mid-run, the output was lost, or cargo refused
+    /// after emitting artifact JSON). That incomplete shape is
+    /// indistinguishable from a clean pass on the JSON alone and used to
+    /// read as one — the caller restores everything and keeps nothing.
+    fn classified_check(
+        &self,
+        pkg: &Path,
+        report: &mut VerifyReport,
+    ) -> Result<Option<String>, String> {
+        let outcome = self.run_check(pkg)?;
+        report.n_checks += 1;
+        match check_verdict(outcome.exit_ok, !parse_error_locations(&outcome.json).is_empty()) {
+            CheckVerdict::Clean => Ok(None),
+            CheckVerdict::Errors => Ok(Some(outcome.json)),
+            CheckVerdict::Incomplete => Err(format!(
+                "cargo check in {} exited unsuccessfully with no error \
+                 diagnostics — the check did not complete (killed, output \
+                 lost, or a cargo-level refusal); nothing kept as verified",
+                pkg.display()
+            )),
+        }
     }
 
     /// One `cargo check --all-targets --message-format=json` run in `pkg`,
@@ -1899,6 +1949,99 @@ mod tests {
             "bad u8 edit reverted"
         );
         assert!(on_disk.contains("|b| **b"), "bad closure edit reverted");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Issue 841 kill-path e2e: a check that exits non-zero with JSON
+    /// artifact lines but NO error diagnostics must REFUSE — restore
+    /// everything, keep nothing — never read as a clean pass. Before the
+    /// fix, the killed re-check fell into `merge_error_locations` with an
+    /// empty parse, `error_lines` stayed empty, the loop broke, and every
+    /// still-applied edit was tallied as verified. Driven by a fake cargo
+    /// (first invocation = the baseline: exit 0; every later one: one
+    /// artifact JSON line + exit 1 — exactly the mid-check-death shape), so
+    /// this runs in the normal suite: no compilation, milliseconds.
+    #[test]
+    #[cfg(unix)]
+    fn fix_verify_kill_path_check_refuses_and_restores() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = std::env::temp_dir().join(format!("fv_kill_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src_dir = tmp.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            tmp.join("Cargo.toml"),
+            "[package]\nname = \"fv_kill_fixture\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\
+             [lib]\npath = \"src/lib.rs\"\n",
+        )
+        .unwrap();
+
+        let original = "pub fn existing() -> usize {\n    1\n}\n";
+        std::fs::write(src_dir.join("lib.rs"), original).unwrap();
+
+        // Fake cargo: the FIRST invocation (the baseline) exits 0 silently;
+        // every later one (the post-edit re-check) emits an artifact JSON
+        // line and exits 1 with no error diagnostics — the killed-after-
+        // flushing-artifacts shape `is_json_line` lets past the Err arm.
+        let marker = tmp.join("baseline_done");
+        let script = tmp.join("fake_cargo.sh");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\n\
+                 if [ -f \"{}\" ]; then\n\
+                  echo '{{\"reason\":\"compiler-artifact\",\"package_id\":\"fv_kill\"}}'\n\
+                  exit 1\n\
+                 fi\n\
+                 touch \"{}\"\n\
+                 exit 0\n",
+                marker.display(),
+                marker.display(),
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let fixed = original.replace("    1\n", "    2\n");
+        let set = FileEditSet {
+            path: src_dir.join("lib.rs"),
+            original: original.to_string(),
+            fixed,
+            edits: vec![edit("some-rule", 2, "2", "1")],
+        };
+        let report = FixVerifier::with_cargo_bin(script.display().to_string()).verify(&[set]);
+
+        assert!(report.ran);
+        assert!(
+            report.baseline_clean,
+            "baseline must pass so the loop path is exercised: {report:?}"
+        );
+        assert!(
+            report.n_checks >= 2,
+            "the post-edit re-check must have run: {report:?}"
+        );
+        let err = report
+            .error
+            .as_deref()
+            .expect("an incomplete check must refuse, not keep");
+        assert!(
+            err.contains("did not complete"),
+            "the error names the incomplete check: {err}"
+        );
+        assert_eq!(
+            report.kept_edits, 0,
+            "nothing kept on an incomplete check: {report:?}"
+        );
+        assert_eq!(report.kept_files, 0);
+        assert!(
+            report.reverted.is_empty(),
+            "a refusal restores whole, it does not attribute: {report:?}"
+        );
+        // Disk: the file is back to its original bytes — nothing unverified
+        // left behind.
+        let on_disk = std::fs::read_to_string(src_dir.join("lib.rs")).unwrap();
+        assert_eq!(on_disk, original, "tree restored");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

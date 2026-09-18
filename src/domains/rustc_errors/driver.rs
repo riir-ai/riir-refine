@@ -40,7 +40,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::compile_oracle::{
-    owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+    CheckVerdict,
 };
 use crate::span_embed::{span_embed as embed_shape, SPAN_EMBED_DIMS};
 
@@ -601,6 +602,16 @@ impl CompileDriver {
         self
     }
 
+    /// Explicit cargo binary (test/diagnostic seam — mirrors
+    /// [`crate::fix_verify::FixVerifier::with_cargo_bin`]).
+    #[must_use]
+    pub fn with_cargo_bin(bin: impl Into<String>) -> Self {
+        Self {
+            runner: CheckRunner::new().with_cargo_bin(bin),
+            ..Self::new()
+        }
+    }
+
     /// Run over the packages owning `paths`.
     ///
     /// `write == false` → review mode: one check + one proposal pass,
@@ -917,7 +928,11 @@ impl CompileDriver {
     }
 
     /// Check every package, parse + dedupe + resolve diagnostics to
-    /// absolute paths. `Err` only when cargo could not run.
+    /// absolute paths. `Err` when cargo could not run, AND when a check
+    /// did not complete (non-zero exit, zero parseable diagnostics — the
+    /// Issue 841 kill shape: a killed recheck with no attributable errors
+    /// reads as (0, 0) on the keep rule's lexicographic measure, the
+    /// maximum decrease, and would keep a fix nothing verified).
     fn check_all(
         &self,
         pkgs: &[PathBuf],
@@ -927,7 +942,16 @@ impl CompileDriver {
         for pkg in pkgs {
             let outcome = self.runner.run_check(pkg)?;
             report.n_checks += 1;
-            for d in dedupe_by_site(&parse_error_diags(&outcome.json)) {
+            let diags = dedupe_by_site(&parse_error_diags(&outcome.json));
+            if check_verdict(outcome.exit_ok, !diags.is_empty()) == CheckVerdict::Incomplete {
+                return Err(format!(
+                    "cargo check in {} exited unsuccessfully with no error diagnostics — the \
+                     check did not complete (killed, output lost, or a cargo-level refusal); \
+                     no fix is kept on an incomplete recheck",
+                    pkg.display()
+                ));
+            }
+            for d in diags {
                 out.push(ResolvedDiag {
                     diag: d,
                     pkg: pkg.clone(),

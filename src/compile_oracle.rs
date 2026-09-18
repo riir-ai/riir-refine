@@ -41,6 +41,43 @@ pub struct CheckOutcome {
     pub exit_ok: bool,
 }
 
+/// The three-way read of a check's completion (katgpt-rs Issue 841 — the
+/// `fix_verify` refusal-vs-truncation audit).
+///
+/// The `Err` arm of [`CheckRunner::run_check`] fires only when cargo fails
+/// WITHOUT emitting JSON; a cargo process killed mid-run (OOM, user kill,
+/// disk-full rustc abort) that already flushed an artifact line comes back
+/// as `Ok` with `exit_ok == false` and a PARTIAL stream. From the JSON
+/// alone that state is indistinguishable from a clean pass — and both
+/// decision consumers (the `--fix --verify` loop, the `--fix-compile`
+/// driver) used to read it as one. The exit status is the completion
+/// sentinel: a non-zero exit with no attributable diagnostics means the
+/// gate did not complete, and no keep may ride it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckVerdict {
+    /// Exited 0 with no error diagnostics — clean.
+    Clean,
+    /// Error diagnostics present (any exit status) — attribute + revert.
+    Errors,
+    /// Exited unsuccessfully with NO error diagnostics — the check did not
+    /// complete. Every decision consumer must treat this as a refusal
+    /// (restore + loud error), never as clean.
+    Incomplete,
+}
+
+/// Classify a check result. `has_error_diags` comes from the consumer's OWN
+/// diagnostic parser (`fix_verify`'s `parse_error_locations`, the
+/// `rustc_errors` driver's `parse_error_diags`) — the same predicate the
+/// pending keep/revert decision reads.
+#[must_use]
+pub fn check_verdict(exit_ok: bool, has_error_diags: bool) -> CheckVerdict {
+    match (exit_ok, has_error_diags) {
+        (true, false) => CheckVerdict::Clean,
+        (_, true) => CheckVerdict::Errors,
+        (false, false) => CheckVerdict::Incomplete,
+    }
+}
+
 /// Runs `cargo check --all-targets --message-format=json` in a package root.
 ///
 /// `--all-targets` is load-bearing, not cargo-default cargo-culting: edit
@@ -93,6 +130,15 @@ impl CheckRunner {
     #[must_use]
     pub fn with_extra_args(mut self, args: Vec<String>) -> Self {
         self.extra_args = args;
+        self
+    }
+
+    /// Explicit cargo binary override (defaults to `$CARGO`, then `cargo`).
+    /// The kill-path e2e points this at a fake cargo that simulates a
+    /// mid-check death; production callers never need it.
+    #[must_use]
+    pub fn with_cargo_bin(mut self, bin: impl Into<String>) -> Self {
+        self.cargo_bin = bin.into();
         self
     }
 
@@ -360,6 +406,19 @@ mod tests {
             Some(tmp.join("ws").as_path())
         );
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The Issue 841 verdict matrix: all four (exit, diagnostics) cells.
+    /// `Incomplete` is the kill/truncation shape — non-zero exit, zero
+    /// parseable diagnostics, indistinguishable from clean on the JSON
+    /// alone — and is its own verdict precisely so no consumer can fold it
+    /// into `Clean` by accident.
+    #[test]
+    fn check_verdict_matrix() {
+        assert_eq!(check_verdict(true, false), CheckVerdict::Clean);
+        assert_eq!(check_verdict(true, true), CheckVerdict::Errors);
+        assert_eq!(check_verdict(false, true), CheckVerdict::Errors);
+        assert_eq!(check_verdict(false, false), CheckVerdict::Incomplete);
     }
 
     /// The container-tick-test shape: a memberless nested crate under a
