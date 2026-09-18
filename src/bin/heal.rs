@@ -10211,9 +10211,14 @@ fn main() {
         // The trial-credit footer line (Proposal 006): from the SAME ack
         // the sync state reads, so the footer never mixes sync generations.
         // `None` (pre-v4 ack / pre-TUNA server / no transport) renders
-        // nothing — the 3-line footer, byte for byte.
+        // nothing. The ack's `last_balance_micro` feeds the kat line the
+        // same way — both tanks are SERVER truth (the old local grant
+        // projection is GONE: post-D1 the grant is TUNA, and the server
+        // draws TUNA-first, so a local KAT-drain bar was a fiction).
         #[cfg_attr(not(feature = "kat_transport"), allow(unused_mut))]
         let mut tuna_line: Option<riir_clippy::kat_footer::TunaLine> = None;
+        #[cfg_attr(not(feature = "kat_transport"), allow(unused_mut))]
+        let mut kat_balance: Option<MicroKat> = None;
         #[cfg(feature = "kat_transport")]
         let sync = if account.is_none() {
             riir_clippy::kat_footer::SyncState::LoggedOut
@@ -10223,6 +10228,7 @@ fn main() {
                 .join(".heal")
                 .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
             let (ack, _) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+            kat_balance = ack.last_balance_micro.map(MicroKat);
             tuna_line = ack.tuna_balance_micro.zip(ack.tuna_expires_unix).map(
                 |(balance, expires)| riir_clippy::kat_footer::TunaLine {
                     balance_micro: MicroKat(balance.max(0)),
@@ -10267,9 +10273,8 @@ fn main() {
         let footer = riir_clippy::kat_footer::KatFooter {
             run_tokens: m.session_tokens(),
             run_micro_kat: MicroKat::from(c.session_kat()),
-            cum_micro_kat: MicroKat::from(c.state().charged_kat),
-            grant_micro_kat: riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
             tuna: tuna_line,
+            kat_balance_micro: kat_balance,
             rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
             meter_version: m.state().version,
             charge_version: c.state().charge_version,

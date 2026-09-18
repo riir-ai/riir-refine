@@ -14,8 +14,8 @@
 //!
 //! ```text
 //! kat  this run  8,791 tok → 0.0088 KAT   (1 KAT / 1M tokens · meter v1 · charge v1)
-//!      grant     ⣿…⣄⣿⣿⣿  84.92 KAT left · 15.08 of 100 burned
 //!      tuna      ⣿…⣄⣿⣿⣿  47.20 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only
+//!      kat       84.92 KAT · server balance at the last sync
 //!      sync      ✓ current — ledger matches · mint settles hourly · leaderboard ↗ (you: c79c…5345)
 //! ```
 //!
@@ -106,10 +106,10 @@ pub enum SyncState<'a> {
     Unknown,
 }
 
-/// One trial-credit (TUNA) gauge line — Proposal 006: the footer's second
-/// tank, rendered between the grant bar and the sync line. Present ONLY
-/// when the burn ack carries a server-reported TUNA balance (ack v4);
-/// its absence renders nothing.
+/// One trial-credit (TUNA) gauge line — Proposal 006: the PRIMARY burn
+/// tank (the server draws it first, B3), rendered between the run meter
+/// and the KAT balance line. Present ONLY when the burn ack carries a
+/// server-reported TUNA balance (ack v4); its absence renders nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TunaLine {
     /// The trial-credit balance, µ (negative clamps to 0 at render —
@@ -127,18 +127,30 @@ pub struct TunaLine {
 }
 
 /// The footer's inputs: money as [`MicroKat`] µ, tokens raw.
+///
+/// **Post-D1 (owner call, 2026-09-18): the KAT grant bar is GONE.** The
+/// grant concept is TUNA now — new users claim trial credit, never a KAT
+/// grant — and the old bar was a LOCAL meter projection that drained KAT
+/// per token regardless of what the server actually debited (the server
+/// draws TUNA-first, B3), which read as a KAT burn that never happened.
+/// The tanks render in SERVER DRAW ORDER from SERVER truth (the burn
+/// ack): TUNA first, then the plain KAT balance. No grant bar.
 pub struct KatFooter<'a> {
     /// Code word tokens billed this run.
     pub run_tokens: u64,
-    /// KAT burned this run, µ.
+    /// KAT metered this run, µ (the session's own meter — display, not
+    /// a server debit claim).
     pub run_micro_kat: MicroKat,
-    /// Cumulative burn, µ (the charge ledger's `charged_kat`).
-    pub cum_micro_kat: MicroKat,
-    /// The grant projection, µ.
-    pub grant_micro_kat: MicroKat,
-    /// The trial-credit line (Proposal 006). `None` renders nothing — the
-    /// pre-TUNA footer, byte for byte.
+    /// The trial-credit tank (Proposal 006) — the PRIMARY burn tank:
+    /// server truth from the burn ack (v4), and the server draws it
+    /// FIRST (B3). `None` renders nothing.
     pub tuna: Option<TunaLine>,
+    /// The server-reported KAT balance (the burn ack's
+    /// `last_balance_micro`) — a PLAIN balance, never a grant bar: a
+    /// mixed account's balance is grant + mining + legacy remainder, so
+    /// "X of grant burned" would be a lie in both directions. `None`
+    /// (never synced, pre-truth ack) renders nothing.
+    pub kat_balance_micro: Option<MicroKat>,
     /// The v-rate, µ per million tokens.
     pub rate_micro_per_mtok: MicroKat,
     /// The meter version stamp (`MeterState::version`).
@@ -154,25 +166,12 @@ pub struct KatFooter<'a> {
 }
 
 impl KatFooter<'_> {
-    /// Render the footer (3 lines; a [`TunaLine`] adds one, the
-    /// `Unsynced` sync state adds one). No trailing newline. `color` gates
-    /// all ANSI escapes; plain output is byte-stable for pipes and
-    /// `NO_COLOR`.
+    /// Render the footer: the run meter, then the tanks in SERVER DRAW
+    /// ORDER (TUNA first — B3 — then the plain KAT balance), then sync.
+    /// No trailing newline. `color` gates all ANSI escapes; plain output
+    /// is byte-stable for pipes and `NO_COLOR`.
     #[must_use]
     pub fn render(&self, color: bool) -> String {
-        let grant_disp_micro = round_kat_2dp(self.grant_micro_kat);
-        let burned_micro = round_kat_2dp(self.cum_micro_kat);
-        let left_micro = grant_disp_micro.saturating_sub(burned_micro);
-        // Grant-scale micro values (≤ 10^14) sit far inside f64's
-        // exact-integer range — this division is lossless at every real
-        // ledger size.
-        #[allow(clippy::cast_precision_loss)]
-        let frac = if self.grant_micro_kat.0 == 0 {
-            0.0
-        } else {
-            left_micro.0 as f64 / self.grant_micro_kat.0 as f64
-        };
-
         let line1 = format!(
             "kat  this run  {} tok → {} KAT{}",
             fmt_tokens(self.run_tokens),
@@ -187,25 +186,20 @@ impl KatFooter<'_> {
                 color
             )
         );
-        let mut line2 = format!(
-            "     grant     {}  {} KAT left · {} of {} burned",
-            braille_bar(frac, BAR_WIDTH, color),
-            fmt_kat_display(left_micro),
-            fmt_kat_display(burned_micro),
-            fmt_kat_display(grant_disp_micro),
-        );
-        // The 2-dp display floor flattens any burn below 0.005 KAT to
-        // "0" — and the footer reads the REPO-LOCAL charge ledger (per-repo
-        // by design, Plans 023/024, until server aggregation), so a fresh
-        // repo reads as a perfect untouched grant while µ are metered and
-        // carried. Name the sliver when the rounding flattened one.
-        if self.cum_micro_kat > MicroKat(0) && burned_micro == MicroKat(0) {
-            line2.push_str(&format!(" ({} µKAT)", self.cum_micro_kat.0));
+        // The tanks in server draw order — TUNA first, KAT second — each
+        // rendering only when the ack carries its truth.
+        let mut tanks = String::new();
+        if let Some(tuna) = self.render_tuna(color) {
+            tanks.push_str(&tuna);
+            tanks.push('\n');
         }
-        match self.render_tuna(color) {
-            Some(tuna) => format!("{line1}\n{line2}\n{tuna}\n{}", self.render_sync(color)),
-            None => format!("{line1}\n{line2}\n{}", self.render_sync(color)),
+        if let Some(bal) = self.kat_balance_micro {
+            tanks.push_str(&format!(
+                "     kat       {} KAT · server balance at the last sync\n",
+                fmt_kat_display(round_kat_2dp(bal))
+            ));
         }
+        format!("{line1}\n{tanks}{}", self.render_sync(color))
     }
 
     /// The trial-credit line — `None` renders nothing (the ack's absence
@@ -267,12 +261,12 @@ impl KatFooter<'_> {
                     link("leaderboard ↗", ledger_url, color) + &you
                 )
             }
-            SyncState::LoggedOut => format!(
-                "{gutter}local only — not logged in · nothing pushed (`cargo heal login`)"
-            ),
-            SyncState::Unknown => format!(
-                "{gutter}local accounting only — the server ledger reconciles at sync"
-            ),
+            SyncState::LoggedOut => {
+                format!("{gutter}local only — not logged in · nothing pushed (`cargo heal login`)")
+            }
+            SyncState::Unknown => {
+                format!("{gutter}local accounting only — the server ledger reconciles at sync")
+            }
         }
     }
 }
@@ -294,7 +288,11 @@ pub fn ymd_from_unix(unix: u64) -> (i64, u32, u32) {
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (if m <= 2 { y + 1 } else { y }, u32::try_from(m).unwrap_or(1), u32::try_from(d).unwrap_or(1))
+    (
+        if m <= 2 { y + 1 } else { y },
+        u32::try_from(m).unwrap_or(1),
+        u32::try_from(d).unwrap_or(1),
+    )
 }
 
 /// Whether the footer should colorize: `RIIR_HEAL_FOOTER_COLOR` forces on
@@ -474,13 +472,35 @@ mod tests {
     const BOARD: &str = "https://devnet.ai.gist.rs/leaderboard";
     const ACCT: &str = "c79c93b8615af9cc25968be2d0595345d1f03790910a2605d853f93af6192fd6";
 
-    fn footer_left(left_micro: MicroKat) -> KatFooter<'static> {
+    /// The no-truth fixture: no ack (never synced / pre-TUNA) — meter +
+    /// sync only. Every tank test overlays its truth onto this.
+    fn footer_plain() -> KatFooter<'static> {
         KatFooter {
             run_tokens: 8_791,
             run_micro_kat: MicroKat(8_791),
-            cum_micro_kat: MicroKat(100_000_000 - left_micro.0),
-            grant_micro_kat: MicroKat(100_000_000),
             tuna: None,
+            kat_balance_micro: None,
+            rate_micro_per_mtok: MicroKat(1_000_000),
+            meter_version: 1,
+            charge_version: 1,
+            account_hex: Some(ACCT),
+            sync: SyncState::Current { ledger_url: BOARD },
+        }
+    }
+
+    /// The mixed-plane fixture (grandpa post-grace: TUNA tank + a KAT
+    /// server balance), the shape every tank test builds from.
+    fn footer_mixed() -> KatFooter<'static> {
+        KatFooter {
+            run_tokens: 8_791,
+            run_micro_kat: MicroKat(8_791),
+            tuna: Some(TunaLine {
+                balance_micro: MicroKat(47_200_000),
+                grant_micro: MicroKat(100_000_000),
+                expires_unix: 1_792_281_600,
+                now_unix: 1_792_281_600 - 12 * 86_400,
+            }),
+            kat_balance_micro: Some(MicroKat(84_919_281)),
             rate_micro_per_mtok: MicroKat(1_000_000),
             meter_version: 1,
             charge_version: 1,
@@ -507,38 +527,52 @@ mod tests {
         assert_eq!(fmt_tokens(0), "0");
     }
 
+    /// THE post-D1 shape: no "grant" bar at all — the tanks render in
+    /// SERVER DRAW ORDER (TUNA first, B3), and KAT is a plain server
+    /// balance, never "X of grant burned".
     #[test]
-    fn caption_rounds_as_a_pair() {
-        let out = footer_left(MicroKat(84_919_281)).render(false);
+    fn no_grant_bar_tanks_render_in_server_draw_order() {
+        let out = footer_mixed().render(false);
+        assert!(!out.contains("grant"), "the obsolete grant bar rendered: {out}");
+        assert!(!out.contains("of 100 burned"), "a burn-vs-grant caption rendered: {out}");
+        assert!(out.contains("47.2 of 100 TUNA left"), "tuna tank missing: {out}");
         assert!(
-            out.contains("84.92 KAT left · 15.08 of 100 burned"),
-            "paired caption missing: {out}"
+            out.contains("kat       84.92 KAT · server balance at the last sync"),
+            "kat balance line missing: {out}"
         );
+        // The ORDER is the draw order: tuna line before the kat line.
+        let tuna = out.find("tuna ").expect("tuna");
+        let kat = out.find("server balance").expect("kat balance");
+        assert!(tuna < kat, "tuna must render before kat: {out}");
     }
 
-    /// The µ-sliver arm: a burn the 2-dp display floor flattens to "0"
-    /// still names its µ — a fresh repo ledger (per-repo by design) must
-    /// not read as a perfect untouched grant while µ are metered.
+    /// Absence honesty: without the ack's truth (never synced, pre-TUNA
+    /// server) NEITHER tank renders — no fabricated balance, and the
+    /// pre-TUNA two-line footer (meter + sync) survives byte for byte.
     #[test]
-    fn a_sub_display_floor_sliver_names_its_micro() {
+    fn no_ack_truth_renders_no_tank_lines() {
         let out = KatFooter {
-            cum_micro_kat: MicroKat(17),
-            ..footer_left(MicroKat(100_000_000))
+            tuna: None,
+            kat_balance_micro: None,
+            ..footer_mixed()
         }
         .render(false);
-        assert!(
-            out.contains("100 KAT left · 0 of 100 burned (17 µKAT)"),
-            "µ sliver unnamed: {out}"
-        );
+        assert!(!out.contains("TUNA"), "{out}");
+        assert!(!out.contains("server balance"), "{out}");
+        assert!(out.contains("this run"), "{out}");
+        assert!(out.contains("✓ current"), "{out}");
     }
 
-    /// Byte-stability the other way: a genuinely untouched ledger renders
-    /// no qualifier.
+    /// A zero KAT balance still renders — it is server truth, not a
+    /// display convenience.
     #[test]
-    fn a_zero_burn_renders_no_sliver_qualifier() {
-        let out = footer_left(MicroKat(100_000_000)).render(false);
-        assert!(out.contains("0 of 100 burned"), "{out}");
-        assert!(!out.contains("µKAT"), "qualifier on an empty ledger: {out}");
+    fn a_zero_kat_balance_still_renders() {
+        let out = KatFooter {
+            kat_balance_micro: Some(MicroKat(0)),
+            ..footer_mixed()
+        }
+        .render(false);
+        assert!(out.contains("kat       0 KAT · server balance"), "{out}");
     }
 
     #[test]
@@ -565,7 +599,10 @@ mod tests {
     fn colored_bar_carries_dim_track_and_tone() {
         let bar = braille_bar(0.8492, 24, true);
         assert!(bar.contains(GREEN), "green tone missing: {bar:?}");
-        assert!(bar.contains(TRACK_DIM), "dim gray-240 track missing: {bar:?}");
+        assert!(
+            bar.contains(TRACK_DIM),
+            "dim gray-240 track missing: {bar:?}"
+        );
         // The dim tail is full blocks, never the dotted track.
         assert!(!bar.contains('\u{28C0}'));
     }
@@ -578,23 +615,10 @@ mod tests {
     }
 
     #[test]
-    fn color_mode_hyperlinks_the_board_label_plain_mode_spells_it() {
-        let colored = footer_left(MicroKat(84_919_281)).render(true);
-        assert!(colored.contains("\x1b]8;;"), "no OSC-8 link: {colored:?}");
-        assert!(colored.contains("(you: c79c…5345)"), "row hint missing");
-        let plain = footer_left(MicroKat(84_919_281)).render(false);
-        assert!(plain.contains(BOARD), "plain mode must spell the URL");
-        assert!(!plain.contains('\x1b'), "plain mode must be escape-free");
-    }
-
-    #[test]
     fn pseudonym_mirrors_the_server_projection() {
         // dapps routes::pseudonym over the ledger-width (first-32-hex) id:
         // first 4 + last 4 with an ellipsis.
-        assert_eq!(
-            leaderboard_pseudonym(ACCT).as_deref(),
-            Some("c79c…5345")
-        );
+        assert_eq!(leaderboard_pseudonym(ACCT).as_deref(), Some("c79c…5345"));
         assert_eq!(leaderboard_pseudonym("c79c93b8"), None);
         assert_eq!(leaderboard_pseudonym(""), None);
     }
@@ -604,7 +628,7 @@ mod tests {
         let out = KatFooter {
             account_hex: None,
             sync: SyncState::LoggedOut,
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_mixed()
         }
         .render(false);
         assert!(!out.contains(BOARD));
@@ -619,7 +643,7 @@ mod tests {
                 queued_batches: 1,
                 ledger_url: BOARD,
             },
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_mixed()
         }
         .render(false);
         assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 mining batch(es) queued"));
@@ -627,14 +651,14 @@ mod tests {
 
         let logged_out = KatFooter {
             sync: SyncState::LoggedOut,
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_mixed()
         }
         .render(false);
         assert!(logged_out.contains("local only — not logged in"));
 
         let unknown = KatFooter {
             sync: SyncState::Unknown,
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         }
         .render(false);
         assert!(unknown.contains("reconciles at sync"));
@@ -644,14 +668,22 @@ mod tests {
     /// every grant level and sync state, colored + plain.
     #[test]
     fn visual_print_every_state() {
-        for (name, left) in [
-            ("green 84.92%", MicroKat(84_919_281)),
-            ("amber 15.08%", MicroKat(15_080_000)),
-            ("red 9.02%", MicroKat(9_020_000)),
-            ("empty 0%", MicroKat(0)),
+        for (name, tuna, kat) in [
+            ("full tuna + kat balance", Some(tuna_line(100_000_000)), Some(MicroKat(84_919_281))),
+            ("drained tuna", Some(tuna_line(0)), Some(MicroKat(84_919_281))),
+            ("expired tuna", Some(TunaLine { now_unix: TUNA_EXPIRES + 86_400, ..tuna_line(47_200_000) }), None),
+            ("no truth at all", None, None),
         ] {
             println!("── {name} ──");
-            println!("{}", footer_left(left).render(true));
+            println!(
+                "{}",
+                KatFooter {
+                    tuna,
+                    kat_balance_micro: kat,
+                    ..footer_plain()
+                }
+                .render(true)
+            );
         }
         println!("── unsynced (plain) ──");
         let unsynced = KatFooter {
@@ -660,13 +692,13 @@ mod tests {
                 queued_batches: 1,
                 ledger_url: BOARD,
             },
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         };
         println!("{}", unsynced.render(false));
         println!("── logged out (plain) ──");
         let out = KatFooter {
             sync: SyncState::LoggedOut,
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         };
         println!("{}", out.render(false));
     }
@@ -676,9 +708,7 @@ mod tests {
     #[test]
     fn footer_carries_no_currency_figure() {
         for state in [
-            SyncState::Current {
-                ledger_url: BOARD,
-            },
+            SyncState::Current { ledger_url: BOARD },
             SyncState::Unsynced {
                 micro_kat: MicroKat(1),
                 queued_batches: 0,
@@ -689,7 +719,7 @@ mod tests {
         ] {
             let out = KatFooter {
                 sync: state,
-                ..footer_left(MicroKat(84_919_281))
+                ..footer_plain()
             }
             .render(true);
             assert!(!out.contains('$'), "currency figure leaked: {out}");
@@ -723,25 +753,27 @@ mod tests {
 
     #[test]
     fn tuna_line_renders_only_when_present_and_the_absence_is_byte_identical() {
-        // None: the pre-TUNA 3-line footer, byte for byte.
-        let plain = footer_left(MicroKat(84_919_281)).render(false);
-        assert_eq!(plain.matches('\n').count(), 2, "no tuna line: {plain:?}");
+        // None (and no kat balance): the two-line footer, byte for byte.
+        let plain = footer_plain().render(false);
+        assert_eq!(plain.matches('\n').count(), 1, "no tank lines: {plain:?}");
         assert!(!plain.contains("TUNA"));
 
-        // Some: the 4th line, between grant and sync.
+        // Some: the tank line, between the meter and sync.
         let with = KatFooter {
             tuna: Some(tuna_line(47_200_000)),
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         }
         .render(false);
         let lines: Vec<&str> = with.lines().collect();
-        assert_eq!(lines.len(), 4, "{with:?}");
-        assert!(lines[1].contains("grant"), "{with:?}");
+        assert_eq!(lines.len(), 3, "{with:?}");
+        assert!(lines[0].contains("this run"), "{with:?}");
         assert!(
-            lines[2].contains("47.2 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only"),
+            lines[1].contains(
+                "47.2 of 100 TUNA left · expires 2026-10-18 (12d) · trial credit — heals only"
+            ),
             "{with:?}"
         );
-        assert!(lines[3].contains("sync"), "{with:?}");
+        assert!(lines[2].contains("sync"), "{with:?}");
     }
 
     #[test]
@@ -749,7 +781,7 @@ mod tests {
         // Zero balance: the bar empties, the caption stays paired.
         let out = KatFooter {
             tuna: Some(tuna_line(0)),
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         }
         .render(false);
         assert!(out.contains("0 of 100 TUNA left"), "{out:?}");
@@ -758,7 +790,7 @@ mod tests {
         // negative tank.
         let out = KatFooter {
             tuna: Some(tuna_line(-5)),
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         }
         .render(false);
         assert!(out.contains("0 of 100 TUNA left"), "{out:?}");
@@ -771,12 +803,24 @@ mod tests {
         };
         let out = KatFooter {
             tuna: Some(expired),
-            ..footer_left(MicroKat(84_919_281))
+            ..footer_plain()
         }
         .render(false);
         assert!(
             out.contains("expired 2026-10-18 — the sweep reclaims the rest"),
             "{out:?}"
         );
+    }
+
+    /// The removed grant bar's tombstone: the old projection ("X of grant
+    /// burned") must never come back — it drained KAT per local token
+    /// regardless of the server's TUNA-first draw, and post-D1 the grant
+    /// concept is TUNA (owner call, 2026-09-18).
+    #[test]
+    fn the_local_grant_projection_never_returns() {
+        let out = footer_mixed().render(false);
+        assert!(!out.contains("grant"), "{out}");
+        assert!(!out.contains("burned"), "{out}");
+        assert!(!out.contains("KAT left"), "{out}");
     }
 }
