@@ -74,6 +74,95 @@ fold 13/13) · score-bench row **#136 96.36% FLAT** (vocab 57→59) +
 frontier snapshot generation 7. Plan
 [151](.plans/151_batch160_frontier_lead_pack6.md) · Research
 [187](.research/187_batch160_frontier_lead_pack6.md).
+## 2026-09-18 — Issue 103: sync payload v3 — the per-row `domain` (the corpus-view Phase-2 axis)
+
+The corpus view's Phase 1 maps rule → domain SERVER-side from the committed
+seed export — the staleness class its own plan named: a new domain's rules
+degrade to `other` until the worker's export is re-run and redeployed (the
+card carried `other: 24` doing exactly that). Phase 2 moves the attribution
+CLIENT-side, where the compiled corpus already knows the answer:
+
+- **`PayloadRow.domain`** (payload_version 2 → 3, changelog entry recorded):
+  the emitting domain's id from the NEW `RuleDomains` table — the six
+  retrieval corpora by membership (`clippy`, `rust_perf`, `kernel_opt`,
+  `sec`, `docker`, `dist`) + `rustc_errors` by playbook-code membership
+  (`traj_key`'s `{code}:{strategy}` composite splits on `:`). NOT a gated
+  field — a generated vocabulary id, never user bytes. `shader_perf`
+  deliberately absent (Issue 103's domain list predates it; the receiver's
+  8-slot registry has exactly one free slot after `rustc_errors`) — its
+  rows cross as `""` → `other`, visible, never mislabeled.
+- **One table, every consumer** (`RuleDomains::compiled()`, OnceLock-cached,
+  deterministic per binary): the builder defaults to it AND the pending
+  estimator projects through it, so watermark digests agree by construction
+  (the T0.4 "no second projection" law survives the new field).
+  `SYNC_STATE_VERSION` 1 → 2 with a changelog row: every row digest moves,
+  so the version bump makes the one-time re-pend explicit (recovery-to-empty
+  is the documented safe direction).
+- **Receiver (riir-dapps, same window)**: `verify_sync_payload` accepts
+  {2, 3} (`MIN_SYNC_PAYLOAD_VERSION = 2`) — never a hard cutover; a v2 row
+  parses with domain `None` and falls back to the seed mapping. Empty-string
+  domains normalize to `None` (one "no domain truth" shape). `QueueRow`
+  gains the field as a codec TAIL (always-written len-prefixed; legacy rows
+  decode `None`; the strict trailing-bytes refusal stays for anything after
+  the tail). The refresh path merges MONOTONE: a v3 refresh attributes a
+  row, a domain-less (old-client) refresh never wipes a known domain.
+- **Corpus view**: the fold now carries (min-arrival epoch, that row's
+  domain) per class; the row's own domain wins, the seed map is the
+  fallback, neither → `other`. Row-supplied domains the registry has never
+  seen APPEND (sorted — scan order must not decide registry order), the
+  registry-anchored never-re-label law unchanged. **Cap hardening found
+  en route**: the pre-103 `truncate` could evict `other` ITSELF once named
+  domains exceeded the 8 slots — every unattributed class would silently
+  re-label as the last named slot. The last appended named domain now gives
+  way first; `other` always survives, the evicted domain's rows count under
+  `other` visibly (`unseeded`).
+- **The golden dual-pin re-pinned to v3 bytes** (the `bab3d27b…`
+  batch commitment; the exact bytes are the pin): the clippy fixture pins
+  an EXPLICIT two-rule table (both →
+  `clippy`) so the canonical bytes never move with the reader's feature
+  flags; dapps `GOLDEN_PAYLOAD`/`GOLDEN_COMMITMENT` + `kat_replay`'s copy
+  carry the same bytes; the OLD v2 golden is preserved verbatim as
+  `GOLDEN_PAYLOAD_V2` — the mixed-fleet fixture. Route-level: the worker
+  contract keeps its v2 one-row payload (now the live v2-acceptance
+  fixture) and gains a v3-with-domain arm (attribution lands through the
+  deployed surface).
+- **Receiver validation**: all-features 54/54 targets (241 lib), default
+  29/29 (129 lib), worker 253 lib + wasm32 green, clippy clean at both
+  postures, direction gate OK; the corpus-view suite gained the Issue-103
+  verification hooks (v3-row-exact-slot with NO seed mapping, the
+  mixed-fleet pair, monotone refresh merge, the cap-never-evicts-other
+  arm). Client-side: 1892 default / 2077 kat-feature lib + all 52
+  integration targets + doc-tests green.
+- ⚠ **Deploy order matters once**: the worker must carry the {2,3} build
+  BEFORE the fleet's cargo-heal binaries update to a v3-emitting release —
+  a v3 client against a pre-103 worker gets 400s (rows stay pending, the
+  safe direction; the next sync after the deploy lands them).
+
+**En-route fix — the all-features lane has been red since `8fc52d22`:**
+that µ-typing commit replaced `avoided_usd`'s `1_000_000.0` literal with
+`TOKENS_PER_MTOK` but put the import at groq.rs TOP level — and
+`avoided_usd` lives inside `mod router` (cfg `cf_workers_ai`), which a
+top-level `use` never reaches. Only `--all-features` compiles that module,
+so every all-features clippy/test run since has died on E0425 while the
+batch lane's "clippy clean x4" (default + per-feature sets that never turn
+`cf_workers_ai` on) stayed green — the katgpt-rs Issue-819 sibling shape
+(a repair applied to the arm somebody can see). The import moved into the
+module that uses it.
+
+**En-route fix — the Issue-088 cross-repo pin was keying on a
+coincidence:** `the_redact_floor_matches_the_service_envelope_version`
+asserted riir-kat's `MIN_REDACT_VERSION` == clippy's `PAYLOAD_VERSION` —
+true while both were 2, and the equality MASKED a real drift: the service
+floor moved to 3 at the Bench 053 declaration-scope bump and the riir-kat
+mirror stayed at 2, so the wetrun's §7-step-4 pre-flight would have pushed
+redact-2 payloads the service 400s. The pin now asserts what it means
+(floor == the GATE version it floors — `REDACT_VERSION`), the riir-kat
+mirror is 3, and the v3 bump fired the latent break on schedule — a
+version pin earning its keep by being wrong for the right reason.
+
+The pre-103 payload shape stays documented in git history (`GOLDEN_PAYLOAD_V2`)
+and in the issue's removed file; the receiver's v2-acceptance retires when
+the fleet's v2 share is zero (a future change, never silently).
 
 ## 2026-09-18 — Batch 159 / Plan 150: the frontier-lead mining pack V (the THIRD consecutive all-FIXABLE pack; corpus 74 → 76, clippy 55/16 → 57/16)
 
