@@ -249,6 +249,10 @@ fn open_kat_charge(
 
 /// Issue 076 client half: the ONE burn-sync status line (the
 /// consent-heartbeat contract — one line, never an exit-code change).
+/// Issue 123 rider: when the B2 server names the per-report plane split,
+/// ONE `plane_split_note()` line renders beneath it (never on a 0-0
+/// replay / pre-B2 server / KAT-only report, so the one-line contract
+/// holds wherever it was pinned).
 /// Success carries the fresh server balance straight from the push
 /// response — the ONLY fresh-balance source, so a skipped push adds no
 /// network GET (the no-dial-when-nothing-to-send rule).
