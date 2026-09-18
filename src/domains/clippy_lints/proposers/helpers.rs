@@ -408,6 +408,97 @@ fn body_rebinds(block: &syn::Block, ident: &str) -> bool {
     v.hit
 }
 
+/// Signature-proven SCALAR bindings of `f`, as `{ident → type text}` (the
+/// scalar twin of [`slice_param_heads_over`], Batch 158 — shared by the
+/// `to_string_in_format_args` Display-blanket derivation and the
+/// `manual_range_contains` same-type-range derivation).
+///
+/// A param qualifies when it is a plain `Pat::Ident` typed one of the
+/// PROVABLE scalars, spelled exactly as written: a bare primitive path
+/// (`u8`/`i32`/`f64`/`bool`/`char`/…), `&str`, `String`, or `&String`.
+/// Multi-segment paths (`std::string::String`), generics, and every other
+/// shape refuse — the conservative direction. The same never-rebound
+/// guard applies (see [`slice_param_heads_over`] for why that is the
+/// soundness leg: zero rebinds make the annotation a CONSTRUCTION fact).
+pub(crate) fn scalar_param_heads_over<'i>(
+    inputs: impl Iterator<Item = &'i syn::FnArg>,
+    block: &syn::Block,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for arg in inputs {
+        let syn::FnArg::Typed(p) = arg else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        if pi.by_ref.is_some() || pi.subpat.is_some() {
+            continue;
+        }
+        let Some(head) = scalar_head_of(&p.ty) else { continue };
+        if body_rebinds(block, &pi.ident.to_string()) {
+            continue;
+        }
+        out.insert(pi.ident.to_string(), head);
+    }
+    out
+}
+
+/// The normalized scalar type text of a provable scalar annotation.
+fn scalar_head_of(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Path(p) => {
+            if p.qself.is_some()
+                || p.path.leading_colon.is_some()
+                || p.path.segments.len() != 1
+            {
+                return None;
+            }
+            let seg = p.path.segments.first()?;
+            if !seg.arguments.is_none() {
+                return None;
+            }
+            let id = seg.ident.to_string();
+            if PRIMITIVE_SCALARS.contains(&id.as_str()) || id == "String" {
+                Some(id)
+            } else {
+                None
+            }
+        }
+        syn::Type::Reference(r) => {
+            if r.mutability.is_some() {
+                return None;
+            }
+            let id = match &*r.elem {
+                syn::Type::Path(p) => {
+                    if p.qself.is_some()
+                        || p.path.leading_colon.is_some()
+                        || p.path.segments.len() != 1
+                        || !p.path.segments.first()?.arguments.is_none()
+                    {
+                        return None;
+                    }
+                    p.path.segments.first()?.ident.to_string()
+                }
+                _ => return None,
+            };
+            if id == "str" {
+                Some("&str".to_string())
+            } else if id == "String" {
+                Some("&String".to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The bare primitive names the scalar derivation admits, plus the owned
+/// `String` (a single-segment path like the primitives; a bare `str` param
+/// is unsized and cannot compile; `&str`/`&String` are handled as the
+/// reference forms in [`scalar_head_of`]).
+const PRIMITIVE_SCALARS: &[&str] = &[
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
+    "isize", "f32", "f64", "bool", "char",
+];
+
 /// Single-segment plain path expression with this ident.
 fn path_is_ident(e: &Expr, ident: &str) -> bool {
     let Expr::Path(p) = e else { return false };

@@ -67,7 +67,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       — `redundant_closure_for_method_calls` + `iter_skip_next`, Plan
 ///       148; the Batch 156 re-arm's leads, each fixture the
 ///       oracle-verified family pair).
-// 70-entry data table, not logic — length is the point.
+///     + the 2 Batch 158 rows (2026-09-18, the frontier-lead mining pack IV
+///       — `to_string_in_format_args` + `manual_range_contains`, Plan
+///       149; the Batch 157 re-arm's leads, each fixture the
+///       oracle-verified family pair; the perf-group pin rode the plan149
+///       probe's default-groups arm).
+// 74-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -696,6 +701,25 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }".to_string(),
             fixed_code: "fn at(v: &[u8], n: usize) -> Option<&u8> { v.get(n) }".to_string(),
         },
+        // ── Batch 158 (2026-09-18, the frontier-lead mining pack IV — the
+        // Batch 157 re-arm's leads, Plan 149. Each fixture is the
+        // ORACLE-VERIFIED family (seed, broken) pair from the Batch 157
+        // re-arm probe: seed clean under all+pedantic+nursery, broken fires
+        // EXACTLY its target lint. `to_string_in_format_args` is a PERF-
+        // group (default-on) lint — the group pinned by the plan149
+        // probe's default-groups arm.) ──
+        ClippyFixEntry {
+            lint_name: "to_string_in_format_args".to_string(),
+            lint_group: "perf".to_string(),
+            buggy_code: "fn show(x: u32) -> String { format!(\"n={}\", x.to_string()) }".to_string(),
+            fixed_code: "fn show(x: u32) -> String { format!(\"n={}\", x) }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_range_contains".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 && x <= 5 }".to_string(),
+            fixed_code: "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); (3..=5).contains(&x) }".to_string(),
+        },
     ])
 }
 
@@ -787,14 +811,17 @@ mod tests {
     /// Batch 156 rows (`io_other_error`, `wrong_self_convention` — the
     /// frontier-lead mining pack II, Plan 147), and the 2
     /// Batch 157 rows (`redundant_closure_for_method_calls`,
-    /// `iter_skip_next` — the frontier-lead mining pack III, Plan 148) = 72.
+    /// `iter_skip_next` — the frontier-lead mining pack III, Plan 148),
+    /// and the 2 Batch 158 rows (`to_string_in_format_args`,
+    /// `manual_range_contains` — the frontier-lead mining pack IV,
+    /// Plan 149) = 74.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_72() {
+    fn corpus_size_is_74() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 72);
+        assert_eq!(corpus.entries.len(), 74);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

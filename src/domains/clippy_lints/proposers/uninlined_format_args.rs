@@ -389,6 +389,39 @@ pub(super) fn post_template_expr_args(mac: &Macro) -> Option<Vec<ExprMacroArg>> 
     )
 }
 
+/// The template literal's RAW text (between the quotes) + the post-template
+/// args of a known format-family macro invocation — shared with
+/// `to_string_in_format_args` (Batch 158), which must walk the template's
+/// placeholders exactly the way `inline_args` does to know WHICH positional
+/// arg each one consumes. `None` when the macro isn't in the family, the arg
+/// list is malformed, or the template isn't a single plain string literal
+/// (the same `"`-opening shape check `inline_args` applies). Args here are
+/// RAW token slices (not pre-parsed): named `k = v` args parse as `Assign`
+/// expressions, which the CALLER aborts on — the positional mapping must be
+/// exact or the whole macro is skipped.
+pub(super) fn template_and_post_template_args(mac: &Macro) -> Option<(String, Vec<ExprMacroArg>)> {
+    let pos = macro_family(&mac.path)?;
+    let toks: Vec<TokenTree> = mac.tokens.clone().into_iter().collect();
+    let args = split_args(&toks)?;
+    let template_arg = args.get(pos.index())?;
+    if template_arg.toks.len() != 1 {
+        return None;
+    }
+    let text = match &template_arg.toks[0] {
+        TokenTree::Literal(l) if l.to_string().starts_with('"') => l.to_string(),
+        _ => return None,
+    };
+    syn::parse_str::<LitStr>(&text).ok()?;
+    let raw = text[1..text.len() - 1].to_string();
+    Some((
+        raw,
+        args.into_iter()
+            .skip(pos.index() + 1)
+            .map(|a| ExprMacroArg { toks: a.toks })
+            .collect(),
+    ))
+}
+
 /// EVERY argument of a known format-family macro as expression tokens —
 /// pre-template operands INCLUDED (`assert!`/`write!` conditions,
 /// `assert_eq!` comparands). Shared with sibling proposers whose lint
@@ -536,7 +569,7 @@ fn build_inlined(
     Some((out, next_arg))
 }
 
-enum Placeholder<'a> {
+pub(super) enum Placeholder<'a> {
     /// `{}` — implicit positional, consumes the next arg.
     Empty,
     /// `{:spec}` — implicit positional with a format spec, consumes the
@@ -548,7 +581,7 @@ enum Placeholder<'a> {
     NotInlinable,
 }
 
-fn classify_placeholder(content: &str) -> Placeholder<'_> {
+pub(super) fn classify_placeholder(content: &str) -> Placeholder<'_> {
     if content.is_empty() {
         return Placeholder::Empty;
     }
@@ -588,7 +621,7 @@ fn is_named_content(content: &str) -> bool {
 ///
 /// Scope-captured NAME refs (`{:>width$}`) and fill chars (`{:*<5}` — a
 /// `*` NOT preceded by `.`) carry fine.
-fn has_dynamic_spec_ref(spec: &str) -> bool {
+pub(super) fn has_dynamic_spec_ref(spec: &str) -> bool {
     let chars: Vec<char> = spec.chars().collect();
     for (i, &c) in chars.iter().enumerate() {
         if c == '$' && i > 0 && chars[i - 1].is_ascii_digit() {

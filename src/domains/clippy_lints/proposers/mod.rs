@@ -86,7 +86,9 @@
 //! | `items_after_statements` | block items hoisted above the statements (order-independent resolution; guards: macro items, leading-gap / same-line-trailing comments) |
 //! | `manual_let_else` | let-bound 2-arm match with visibly diverging fallback → `let .. else` (guards: binding-use fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes, visible-divergence whitelist) |
 //! | `doc_markdown` | identifier-shaped words in `///`/`//!` docs → backtick wrap (comment-local — the edit cannot change compilation; clippy's own word predicates ported verbatim, context approximated per line) |
-//! | `manual_range_patterns` | or-pattern → `min..=max` (clippy's own algorithm ported verbatim incl. range alternatives, duplicates, negatives + the coverage walk; boundary literals spliced verbatim — probe-matrixed on 0.1.93 + 0.1.98) |
+//! `manual_range_patterns` | or-pattern → `min..=max` (clippy's own algorithm ported verbatim incl. range alternatives, duplicates, negatives + the coverage walk; boundary literals spliced verbatim — probe-matrixed on 0.1.93 + 0.1.98) |
+//! `to_string_in_format_args` | `format!("{}", x.to_string())` → `format!("{}", x)` on signature-proven scalar receivers + the bare-`{}` placeholder guard (Batch 158) |
+//! `manual_range_contains` | `x >= 3 && x <= 5` → `(3..=5).contains(&x)` on proven scalar operands + literal bounds (Batch 158) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -132,7 +134,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 72 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 74 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -143,7 +145,8 @@
 //! `map_flatten`, Plan 146 — and the 2 Batch 156 frontier-lead rules —
 //! `io_other_error` / `wrong_self_convention`, Plan 147 — and the 2 Batch 157
 //! frontier-lead rules — `redundant_closure_for_method_calls` /
-//! `iter_skip_next`, Plan 148); future
+//! `iter_skip_next`, Plan 148 — and the 2 Batch 158 frontier-lead rules —
+//! `to_string_in_format_args` / `manual_range_contains`, Plan 149); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -173,6 +176,7 @@ pub mod manual_checked_ops;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
 pub mod manual_map;
+pub mod manual_range_contains;
 pub mod manual_range_patterns;
 pub mod manual_slice_fill;
 pub mod manual_unwrap_or;
@@ -203,6 +207,7 @@ pub mod single_char_pattern;
 pub mod single_match;
 pub mod single_match_else;
 pub mod suboptimal_flops;
+pub mod to_string_in_format_args;
 pub mod uninlined_format_args;
 pub mod unreadable_literal;
 pub mod unnecessary_lazy_evaluations;
@@ -426,6 +431,30 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // slice-container receivers (`.nth(n)` itself fires `iter_nth` on
     // slice iters — measured, the Batch 156 round-3 probe).
     "iter_skip_next",
+    // ── Batch 158 (the frontier-lead mining pack IV — Plan 149 — the
+    // Batch 157 re-arm's leads, 2026-09-18) ──
+    // `format!("n={}", x.to_string())` → `format!("n={}", x)` — FIXABLE
+    // via the SIGNATURE-PROVEN scalar receiver (primitive/`&str`/`String`
+    // param annotation, never rebound: the only in-scope `to_string` for
+    // such a type IS the std Display blanket — a second in-scope trait
+    // `to_string` would be E0031 ambiguity in the ORIGINAL) + the
+    // bare-`{}` placeholder guard (spec placeholders change the trait —
+    // Debug String ≠ Debug u32 — and refuse). The string-literal
+    // receiver arm is construction-identical. Perf-group (default-on;
+    // group pinned by the plan149 probe). Composes with
+    // `uninlined_format_args` by design: uninlined skips method-call
+    // args, this strips exactly there, uninlined inlines the result on
+    // the next fixpoint iteration.
+    "to_string_in_format_args",
+    // `x >= 3 && x <= 5` → `(3..=5).contains(&x)` (+ the exclusive twin
+    // and both mirrored operand orders) — FIXABLE via std's own
+    // `contains` definition (exactly the two leg comparisons, NaN/∞
+    // included) + the SIGNATURE-PROVEN scalar operand + literal bounds
+    // (both range ends unify with the operand's type — every impl is
+    // same-type, closing the mixed-PartialOrd compile-direction hole).
+    // Variable bounds refuse (the documented narrower-than-clippy
+    // divergence, pending the same derivation for bound idents).
+    "manual_range_contains",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -737,6 +766,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
             redundant_closure_for_method_calls::collect_edits(source, file)
         }
         "iter_skip_next" => iter_skip_next::collect_edits(source, file),
+        // ── Batch 158 (the frontier-lead mining pack IV, Plan 149) ──
+        "to_string_in_format_args" => to_string_in_format_args::collect_edits(source, file),
+        "manual_range_contains" => manual_range_contains::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -828,12 +860,17 @@ mod tests {
         // — the frontier-lead pack III, Plan 148; the signature-proven
         // element type + construction-identity whitelist, and the
         // two-arm skip/nth rule with the oracle-clean `.get` slice arm).
-        assert_eq!(FIXABLE_LINTS.len(), 53);
+        // + 2 Batch 158 (to_string_in_format_args + manual_range_contains
+        // — the frontier-lead pack IV, Plan 149; the signature-proven
+        // Display-blanket scalar receiver with the bare-`{}` placeholder
+        // guard, and the contains rewrite closed by the same scalar
+        // derivation + literal bounds).
+        assert_eq!(FIXABLE_LINTS.len(), 55);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 72-row fixture table — length is the point.
+    /// 74-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1209,6 +1246,17 @@ impl S {
                 "iter_skip_next",
                 "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }",
                 "v.get(n)",
+            ),
+            // ── Batch 158 (the frontier-lead mining pack IV, Plan 149) ──
+            (
+                "to_string_in_format_args",
+                "fn show(x: u32) -> String { format!(\"n={}\", x.to_string()) }",
+                "format!(\"n={}\", x)",
+            ),
+            (
+                "manual_range_contains",
+                "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 && x <= 5 }",
+                "(3..=5).contains(&x)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

@@ -1,5 +1,70 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 158 / Plan 149: the frontier-lead mining pack IV (the second all-FIXABLE pack; corpus 72 → 74, clippy 53/16 → 55/16)
+
+The flywheel's fourth turn: the Batch 157 re-arm's 2 leads became rules,
+BOTH graduated to the heldout loop (9 covered families now), and 2 fresh
+oracle-verified leads re-armed the frontier. **2 new proposers, both built
+on a GENERALIZED signature-derivation substrate**
+(`helpers::scalar_param_heads_over` — the scalar twin of Batch 157's
+`slice_param_heads_over`, landing beside it in helpers.rs):
+
+1. **`to_string_in_format_args`** (FIXABLE, perf-group — the group was
+   PINNED this batch by the plan149 default-groups arm: the lint fires
+   under DEFAULT clippy; the old probe comment's "pedantic" was stale).
+   `format!("n={}", x.to_string())` → `format!("n={}", x)`. Soundness:
+   the receiver is SIGNATURE-PROVEN scalar (primitive/`&str`/`String`/
+   `&String` param annotation, never rebound) — the only in-scope
+   `to_string` for such a type IS the std Display blanket (a second
+   in-scope trait `to_string` would be E0031 ambiguity in the ORIGINAL),
+   so `{x.to_string()}` ≡ `{x}` for every compiling input. The
+   string-LITERAL receiver arm is construction-identical. PLACEHOLDER
+   GUARD: only bare-`{}` args fire — `{:spec}` placeholders change the
+   trait (Debug String ≠ Debug u32) and refuse; `{:1$}`/`{:.*}` abort
+   the macro (positional-mapping exactness). COMPOSITION BY DESIGN:
+   `uninlined_format_args` skips method-call args (both clippy's and
+   our envelope) — this rule fires exactly on that skipped shape, and
+   uninlined inlines the plain-ident result on the NEXT fixpoint
+   iteration: `…x.to_string())` → `…x)` → `…{x})`. One anti-pattern per
+   proposer; the fixpoint composes (no ping-pong — the inlined form has
+   no args left for either rule).
+2. **`manual_range_contains`** (FIXABLE, style/default-on — the
+   strongest default-eco evidence of any lead so far, 121 warnings /
+   5 crates on Bench 094 wave 2). `x >= 3 && x <= 5` →
+   `(3..=5).contains(&x)` + the exclusive twin + both mirrored operand
+   orders. Soundness: `contains` IS the two leg comparisons by std's own
+   definition (NaN/∞ included); the mixed-PartialOrd compile-direction
+   hole is closed by the SAME scalar derivation on the shared operand +
+   LITERAL-only bounds — both range ends unify with the operand's type.
+   Mixed pairs, variable bounds, leading-`&`/paren operands, `||`, and
+   comments in the deleted glue refuse (the documented
+   narrower-than-clippy divergences).
+
+The re-arm probe (`scripts/plan149_frontier_probe.py`): accepted
+**`single_char_add_str`** (the twice-verified spare, third turn —
+default-level confirmed by the new group arm) + **`manual_clamp`**
+(`x.max(lo).min(hi)` — the natural sibling of the just-landed contains
+rule). Rejects recorded: `unit_arg` (the explicit-`()` seed is dirty via
+`missing_const_for_fn`, the block-expr broken crossfires `no_effect` —
+needs a shape dodging both) + `from_str_radix_10` (const rider on the
+broken form; SPARE with the `Vec::push` dodge noted).
+
+Gates: corpus 72→74 (`corpus_size_is_74`), FIXABLE 53→55 (tier test),
+`all_lints_fire_and_parse` 74 rows; freeze v2/v3 regen (real oracle) —
+55 atoms (bad 6 UNCHANGED — no new broad atom; 77 verified / 17
+pre-excluded, solve 100% ×4, M4 PASS) + v3 (59 atoms bad 7; 78/18;
+94.2/92.3/95.8/100.0; stratification PASS) — the splice pruned the
+old-layout excluded windows (20→17 / 23→18) with 0 newly-excluded
+re-verification; frontier e2e **VERDICT ✓ ×2** (graduation: 24 seeds
+clean, 9 loops, 2 fresh heldout admissions + 2 frontier rows appended;
+verify-pass: 11 rows, 0 drift; the 2 consumed frontier rows archived
+per the KnownSet re-open contract); score-bench **#133 96.36%
+byte-identical FLAT** (vocab 55, gen-7 snapshot appended); lib default
+**1865/0** (+36) · latent **2018/0** · frontier_miner **2182/0**
+(retrieval floors held); clippy `-D` clean in 4 states (5 en-route lint
+repairs in the new modules: similar-names, doc backticks ×2, let-else,
+lifetime elision). Plan 149 COMPLETE.
+
 ## 2026-09-18 — Batch 157 / Plan 148: the frontier-lead mining pack III (the first all-FIXABLE pack; corpus 70 → 72, clippy 51/16 → 53/16)
 
 The flywheel's third turn, same day as the second: the Batch 156 re-arm's

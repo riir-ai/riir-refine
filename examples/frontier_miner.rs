@@ -10,14 +10,15 @@
 //! 2. **`HeldOut` pass** — EVERY covered family runs its own held-out loop
 //!    (view = the family's rule disabled, solution = re-enable; Batch 155
 //!    graduated five frontier leads, Batch 156 one, Batch 157 BOTH pack III
-//!    leads — seven covered families alongside the original `needless_return`);
+//!    leads, Batch 158 BOTH pack IV leads — nine covered families alongside
+//!    the original `needless_return`);
 //!    the full invariant loop (unsolved-before /
 //!    solved-after via re-enable / regression over all stock rows /
 //!    exactly-once vs the committed store) runs with oracle verdicts at
 //!    every judgment point.
 //! 3. **Frontier pass** — the current uncovered-lint families
-//!    (`to_string_in_format_args` + `manual_range_contains`, the Batch 157
-//!    re-arm); each admissible row is
+//!    (`single_char_add_str` + `manual_clamp`, the Batch 158 re-arm); each
+//!    admissible row is
 //!    a PENDING mining lead (clause 3 records `solving_rule: None`).
 //! 4. **Committed-row verification** — rows already in the store are
 //!    RE-VERIFIED against the live oracle (clauses 1–3 re-checked on the
