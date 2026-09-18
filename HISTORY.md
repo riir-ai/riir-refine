@@ -1,5 +1,102 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-18 — Batch 159 / Plan 150: the frontier-lead mining pack V (the THIRD consecutive all-FIXABLE pack; corpus 74 → 76, clippy 55/16 → 57/16)
+
+The flywheel's fifth turn: the Batch 158 re-arm's 2 leads became rules,
+BOTH graduated (11 covered families now), 2 fresh oracle-verified leads
+re-armed the frontier — and the batch's gates caught THREE pre-existing
+gaps en route (the RERANK_POOL crowding canary, a missing record
+paragraph, a stale highwater). 2 new proposers:
+
+1. **`single_char_add_str`** (FIXABLE, style/default-on — the group
+   pinned by the plan150 default-groups arm). `s.push_str("!")` →
+   `s.push('!')`. Soundness: the receiver is SIGNATURE-PROVEN
+   mutable-String via the NEW third derivation twin
+   `helpers::mut_string_param_heads_over` (`String` by value + `&mut
+   String`, the `body_rebinds` soundness leg) — on such a receiver the
+   ONLY in-scope `push_str`/`push` pair is `String`'s own inherent
+   `&str`/`char` methods, so `push_str(c)` appends exactly the UTF-8
+   bytes `push(c)` does for any single-`char` string VALUE. The arg
+   resolves by VALUE (`LitStr::value()` — `"\n"`, `"\u{41}"`→`'A'`,
+   multi-byte all qualify); the emit re-escapes via
+   `char::escape_default` (`'`/`\`/controls escaped, ASCII printables
+   verbatim, non-ASCII as `\u{..}` — always VALUE-identical, never
+   textual — the multibyte test caught this: escape_default is NOT
+   verbatim for non-ASCII). Locals/fields/custom-type receivers, UFCS,
+   byte/C strings, empty/multi-char args, glued comments all refuse
+   (the custom-type hole IS the derivation's reason: a foreign
+   `push_str(&str)` with no `push(char)` compiles the original but
+   breaks the rewrite).
+2. **`manual_clamp`** (FIXABLE, style/default-on — the pin plan149 never
+   ran, owed and landed this batch). `x.max(3).min(5)` →
+   `x.clamp(3, 5)` + the mirrored `x.min(hi).max(lo)` order twin.
+   Soundness: the lattice absorption law on TOTAL orders (ints +
+   `char`, all through the same `partial_cmp`). TWO REAL divergences
+   REFUSE by design, both carried in-rule as anti-regime witnesses:
+   (a) FLOATS — `NaN.max(3).min(5) == 3.0` (max/min IGNORE NaN) vs
+   `NaN.clamp(3,5) == NaN` (clamp PROPAGATES it) — `f32`/`f64`
+   receivers refuse; (b) PANIC — clamp asserts `min <= max` (release
+   too) while the manual chain silently returns `hi` — closed by
+   LITERAL-bounds-only with a decidable `lo <= hi` compare (int digits
+   as i128 / char as u32; mixed kinds refuse). Variable bounds refuse
+   (the manual_range_contains divergence precedent).
+
+The re-arm probe (`scripts/plan150_frontier_probe.py`): accepted
+**`from_str_radix_10`** (the plan149-recorded SPARE, its `Vec::push`
+const-dodge added — second-turn arm) + **`assign_op_pattern`** (`y = y +
+1` ↔ `y += 1`). Rejects recorded: `string_extend` (fires NOTHING on the
+shape under the full oracle — the lint has moved/renamed on this
+toolchain) + `double_neg` (`!!x` fires `nonminimal_bool` — the predicted
+crossfire). `unit_arg` VERIFIED this round (the side-effect-block dodge
+cleared both plan149 dirt classes) — kept as the recorded spare.
+
+**The archive step is LOAD-BEARING (measured)**: the first e2e run read
+`heldout_ok=false` with 0 fresh admissions — the 2 consumed frontier
+rows (solving_rule null) left their FAMILIES in the KnownSet
+(family-done guard) while never counting as holding (null solving_rule
+never enters `holding_families`) — a deadlock only archiving breaks.
+The 2 rows were removed from the store (git history preserves them) and
+the rerun admitted both graduated loops fresh: VERDICT ✓, 28 seeds
+clean, 11 family loops, 2 fresh heldout admissions + 2 frontier rows
+appended, band fold population 11.
+
+Gates: corpus 74→76 (`corpus_size_is_76`), FIXABLE 55→57 (tier test),
+`all_lints_fire_and_parse` 76 rows; freeze v2/v3 REGEN (the corpus moved
+— the Batch-151 law; the regen rode a temporary example computing both
+tables deterministically from `specs()` + the bad sets, spliced by the
+kept `scripts/plan150_splice_freeze_tables.py`) — 57 atoms, bad sets
+UNCHANGED 6/7 (neither new atom interferes; the exclusion DROP 17→15 v2
+/ 18→17 v3 is the benign stride shuffle — two straddling composites no
+longer straddle); v2 e2e 78 verified / 0 newly excluded / 15
+pre-excluded, solve 100% at every k, M4 PASS; v3 80/0/17, solve
+94.4/92.3/95.8/100.0, stratification PASS; score-bench row #135 —
+heal_rate 96.4% FLAT (vocab 57), parse_safety 100.0%, strata repo
+75.0% / authored 98.0%; lib default 1892/0 · latent_retrieval 2045/0
+(floors held) · frontier_miner 2209/0 · score_bench 2196/0 · clippy
+`-D` clean ×4 states. En-route lint heals in the new modules: 5 findings
+(healer 4 — question_mark, doc_markdown ×2, manual_let_else; 1 manual —
+a redundant closure OUTSIDE our own Batch-157 rule's whitelist, refused
+CORRECTLY by the shipped rule, fixed by hand as `i128::checked_neg`).
+
+**Fallout repair — RERANK_POOL 20 → 24 + the HEADROOM_DEPTHS 28 rung**
+(the P10/P11 precedent, second re-fire): the `pool_depth_rescue_guard`
+canary fired under `--features score_bench` — the +2 corpus entries
+crowded the Issue-024 casualty (`needless_return`×`vec-with-capacity`)
+to first-found at depth **21**, one past the pool floor. The ladder
+re-ran exactly as designed (depth 15→pool 16, 17→20, 21→24 — slack 3
+each rung); `HEADROOM_DEPTHS` gained the 28 rung + `PROD_DEPTH_IDX`
+3→4 (a rung must stay above production or the recoverable band zeroes
+by construction). Also repaired: Batch 158's freeze record paragraph was
+missing from `generations.rs` (the commit carried the numbers; the
+in-file paragraph was missed) — landed with this batch's; and
+`.research/.highwater` was STALE at 184 (Batch 158 used 185 without
+bumping) — now 186.
+
+Research note: [186](../.research/186_batch159_frontier_lead_pack5.md);
+plan: [150](../.plans/150_batch159_frontier_lead_pack5.md). NEXT POOL:
+the re-arm's leads (`from_str_radix_10` + `assign_op_pattern`; spare
+`unit_arg`) + arxiv walk #10 (Mon 09-21).
+
 ## 2026-09-18 — Batch 158 / Plan 149: the frontier-lead mining pack IV (the second all-FIXABLE pack; corpus 72 → 74, clippy 53/16 → 55/16)
 
 The flywheel's fourth turn: the Batch 157 re-arm's 2 leads became rules,

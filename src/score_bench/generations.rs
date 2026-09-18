@@ -274,84 +274,109 @@ pub fn specs() -> Vec<GenSpec> {
 // (reported, not asserted — the pre-registered v3 posture), stratification
 // gate PASS. `iter_skip_next` fires exactly its own lint on every window it
 // lands in (no interference of its own).
+//
+// Batch 158 re-freeze (2026-09-18, the frontier-lead mining pack IV — Plan
+// 149; record paragraph repaired at Batch 159 — the landing commit carries
+// the numbers, the in-file paragraph was missed): the atom table 53→55
+// (`to_string_in_format_args` + `manual_range_contains`, both FIXABLE).
+// Tables regenerated: 77 v2 labels / 17 v2 exclusions, 78 v3 labels / 18
+// v3; bad sets unchanged at 6/7 (neither new atom interferes).
+//
+// Batch 159 re-freeze (2026-09-18, the frontier-lead mining pack V — Plan
+// 150): the atom table 55→57 (`single_char_add_str` + `manual_clamp`, both
+// FIXABLE — every lead joins the atom set, the third consecutive all-pack).
+// The new atoms fire exactly their own lints (the plan150 probe's full-
+// oracle arms + the e2e's wrapped-form verification — no new interference;
+// the bad-atom sets stay 6 v2 / 7 v3). Deterministic regeneration, both
+// tables: 78 v2 labels / 15 v2 exclusions, 80 v3 labels / 17 v3 — the
+// exclusion count DROP vs Batch 158 (17→15 v2, 18→17 v3) is the window
+// shuffle: two composite windows that straddled bad-atom members at the
+// 55-atom stride positions no longer do at 57 (a benign reshuffle — 0
+// newly excluded, 0 drift on both e2es proves it). v2 e2e 35.2 s: 78
+// verified / 0 newly excluded / 15 pre-excluded, solve 100.0% at every k
+// (51/51, 26/26, 27/27, 20/20), M4 PASS; v3 e2e 40.9 s: 80 verified / 0
+// newly excluded / 17 pre-excluded, solve 94.4/92.3/95.8/100.0% across k
+// (reported, not asserted — the pre-registered v3 posture), stratification
+// gate PASS.
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
-    ("gen2-k1-byte_char_slices", &["byte_char_slices"]),  // k=1
-    ("gen2-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1
-    ("gen2-k1-collapsible_if", &["collapsible_if"]),  // k=1
-    ("gen2-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),  // k=1
-    ("gen2-k1-doc_markdown", &["doc_markdown"]),  // k=1
-    ("gen2-k1-doc_overindented_list_items", &["doc_overindented_list_items"]),  // k=1
-    ("gen2-k1-double_parens", &["double_parens"]),  // k=1
-    ("gen2-k1-filter_next", &["filter_next"]),  // k=1
-    ("gen2-k1-identity_op", &["identity_op"]),  // k=1
-    ("gen2-k1-io_other_error", &["io_other_error"]),  // k=1
-    ("gen2-k1-items_after_statements", &["items_after_statements"]),  // k=1
-    ("gen2-k1-iter_next_loop", &["iter_next_loop"]),  // k=1
-    ("gen2-k1-iter_nth_zero", &["iter_nth_zero"]),  // k=1
-    ("gen2-k1-iter_skip_next", &["iter_skip_next"]),  // k=1
-    ("gen2-k1-let_and_return", &["let_and_return"]),  // k=1
-    ("gen2-k1-manual_let_else", &["manual_let_else"]),  // k=1
-    ("gen2-k1-manual_map", &["manual_map"]),  // k=1
-    ("gen2-k1-manual_range_contains", &["manual_range_contains"]),  // k=1
-    ("gen2-k1-manual_range_patterns", &["manual_range_patterns"]),  // k=1
-    ("gen2-k1-manual_slice_fill", &["manual_slice_fill"]),  // k=1
-    ("gen2-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1
-    ("gen2-k1-map_flatten", &["map_flatten"]),  // k=1
-    ("gen2-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1
-    ("gen2-k1-match_bool", &["match_bool"]),  // k=1
-    ("gen2-k1-needless_bool", &["needless_bool"]),  // k=1
-    ("gen2-k1-needless_bool_assign", &["needless_bool_assign"]),  // k=1
-    ("gen2-k1-needless_lifetimes", &["needless_lifetimes"]),  // k=1
-    ("gen2-k1-needless_range_loop", &["needless_range_loop"]),  // k=1
-    ("gen2-k1-needless_return", &["needless_return"]),  // k=1
-    ("gen2-k1-print_with_newline", &["print_with_newline"]),  // k=1
-    ("gen2-k1-question_mark", &["question_mark"]),  // k=1
-    ("gen2-k1-range_plus_one", &["range_plus_one"]),  // k=1
-    ("gen2-k1-redundant_closure_for_method_calls", &["redundant_closure_for_method_calls"]),  // k=1
-    ("gen2-k1-redundant_field_names", &["redundant_field_names"]),  // k=1
-    ("gen2-k1-redundant_pattern_matching", &["redundant_pattern_matching"]),  // k=1
-    ("gen2-k1-redundant_slicing", &["redundant_slicing"]),  // k=1
-    ("gen2-k1-redundant_static_lifetimes", &["redundant_static_lifetimes"]),  // k=1
-    ("gen2-k1-semicolon_if_nothing_returned", &["semicolon_if_nothing_returned"]),  // k=1
-    ("gen2-k1-single_match", &["single_match"]),  // k=1
-    ("gen2-k1-single_match_else", &["single_match_else"]),  // k=1
-    ("gen2-k1-to_string_in_format_args", &["to_string_in_format_args"]),  // k=1
-    ("gen2-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1
-    ("gen2-k1-unnecessary_map_or", &["unnecessary_map_or"]),  // k=1
-    ("gen2-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1
-    ("gen2-k1-unused_unit", &["unused_unit"]),  // k=1
-    ("gen2-k1-use_self", &["use_self"]),  // k=1
-    ("gen2-k1-useless_format", &["useless_format"]),  // k=1
-    ("gen2-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),  // k=1
-    ("gen2-k1-write_with_newline", &["write_with_newline"]),  // k=1
-    ("gen2-k2-byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if"]),  // k=2
-    ("gen2-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),  // k=2
-    ("gen2-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),  // k=2
-    ("gen2-k2-filter_next+identity_op", &["filter_next", "identity_op"]),  // k=2
-    ("gen2-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),  // k=2
-    ("gen2-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2
-    ("gen2-k2-let_and_return+manual_let_else", &["let_and_return", "manual_let_else"]),  // k=2
-    ("gen2-k2-manual_map+manual_range_contains", &["manual_map", "manual_range_contains"]),  // k=2
-    ("gen2-k2-manual_range_patterns+manual_slice_fill", &["manual_range_patterns", "manual_slice_fill"]),  // k=2
-    ("gen2-k2-manual_unwrap_or+map_flatten", &["manual_unwrap_or", "map_flatten"]),  // k=2
-    ("gen2-k2-map_unwrap_or+match_bool", &["map_unwrap_or", "match_bool"]),  // k=2
-    ("gen2-k2-needless_bool+needless_bool_assign", &["needless_bool", "needless_bool_assign"]),  // k=2
-    ("gen2-k2-needless_range_loop+needless_return", &["needless_range_loop", "needless_return"]),  // k=2
-    ("gen2-k3-byte_char_slices+collapsible_else_if+collapsible_if", &["byte_char_slices", "collapsible_else_if", "collapsible_if"]),  // k=3
-    ("gen2-k3-doc_overindented_list_items+double_parens+filter_next", &["doc_overindented_list_items", "double_parens", "filter_next"]),  // k=3
-    ("gen2-k3-identity_op+io_other_error+items_after_statements", &["identity_op", "io_other_error", "items_after_statements"]),  // k=3
-    ("gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next", &["iter_next_loop", "iter_nth_zero", "iter_skip_next"]),  // k=3
-    ("gen2-k3-legacy_numeric_constants+let_and_return+manual_let_else", &["legacy_numeric_constants", "let_and_return", "manual_let_else"]),  // k=3
-    ("gen2-k3-manual_map+manual_range_contains+manual_range_patterns", &["manual_map", "manual_range_contains", "manual_range_patterns"]),  // k=3
-    ("gen2-k3-manual_slice_fill+manual_unwrap_or+map_flatten", &["manual_slice_fill", "manual_unwrap_or", "map_flatten"]),  // k=3
-    ("gen2-k3-map_unwrap_or+match_bool+needless_bool", &["map_unwrap_or", "match_bool", "needless_bool"]),  // k=3
-    ("gen2-k3-needless_range_loop+needless_return+print_with_newline", &["needless_range_loop", "needless_return", "print_with_newline"]),  // k=3
-    ("gen2-k3-question_mark+range_plus_one+redundant_closure_for_method_calls", &["question_mark", "range_plus_one", "redundant_closure_for_method_calls"]),  // k=3
-    ("gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=4
-    ("gen2-k4-filter_next+identity_op+io_other_error+items_after_statements", &["filter_next", "identity_op", "io_other_error", "items_after_statements"]),  // k=4
-    ("gen2-k4-let_and_return+manual_let_else+manual_map+manual_range_contains", &["let_and_return", "manual_let_else", "manual_map", "manual_range_contains"]),  // k=4
-    ("gen2-k4-manual_range_patterns+manual_slice_fill+manual_unwrap_or+map_flatten", &["manual_range_patterns", "manual_slice_fill", "manual_unwrap_or", "map_flatten"]),  // k=4
-    ("gen2-k4-map_unwrap_or+match_bool+needless_bool+needless_bool_assign", &["map_unwrap_or", "match_bool", "needless_bool", "needless_bool_assign"]),  // k=4
+    ("gen2-k1-byte_char_slices", &["byte_char_slices"]),  // k=1,
+    ("gen2-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1,
+    ("gen2-k1-collapsible_if", &["collapsible_if"]),  // k=1,
+    ("gen2-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),  // k=1,
+    ("gen2-k1-doc_markdown", &["doc_markdown"]),  // k=1,
+    ("gen2-k1-doc_overindented_list_items", &["doc_overindented_list_items"]),  // k=1,
+    ("gen2-k1-double_parens", &["double_parens"]),  // k=1,
+    ("gen2-k1-filter_next", &["filter_next"]),  // k=1,
+    ("gen2-k1-identity_op", &["identity_op"]),  // k=1,
+    ("gen2-k1-io_other_error", &["io_other_error"]),  // k=1,
+    ("gen2-k1-items_after_statements", &["items_after_statements"]),  // k=1,
+    ("gen2-k1-iter_next_loop", &["iter_next_loop"]),  // k=1,
+    ("gen2-k1-iter_nth_zero", &["iter_nth_zero"]),  // k=1,
+    ("gen2-k1-iter_skip_next", &["iter_skip_next"]),  // k=1,
+    ("gen2-k1-let_and_return", &["let_and_return"]),  // k=1,
+    ("gen2-k1-manual_clamp", &["manual_clamp"]),  // k=1,
+    ("gen2-k1-manual_let_else", &["manual_let_else"]),  // k=1,
+    ("gen2-k1-manual_map", &["manual_map"]),  // k=1,
+    ("gen2-k1-manual_range_contains", &["manual_range_contains"]),  // k=1,
+    ("gen2-k1-manual_range_patterns", &["manual_range_patterns"]),  // k=1,
+    ("gen2-k1-manual_slice_fill", &["manual_slice_fill"]),  // k=1,
+    ("gen2-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1,
+    ("gen2-k1-map_flatten", &["map_flatten"]),  // k=1,
+    ("gen2-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1,
+    ("gen2-k1-match_bool", &["match_bool"]),  // k=1,
+    ("gen2-k1-needless_bool", &["needless_bool"]),  // k=1,
+    ("gen2-k1-needless_bool_assign", &["needless_bool_assign"]),  // k=1,
+    ("gen2-k1-needless_lifetimes", &["needless_lifetimes"]),  // k=1,
+    ("gen2-k1-needless_range_loop", &["needless_range_loop"]),  // k=1,
+    ("gen2-k1-needless_return", &["needless_return"]),  // k=1,
+    ("gen2-k1-print_with_newline", &["print_with_newline"]),  // k=1,
+    ("gen2-k1-question_mark", &["question_mark"]),  // k=1,
+    ("gen2-k1-range_plus_one", &["range_plus_one"]),  // k=1,
+    ("gen2-k1-redundant_closure_for_method_calls", &["redundant_closure_for_method_calls"]),  // k=1,
+    ("gen2-k1-redundant_field_names", &["redundant_field_names"]),  // k=1,
+    ("gen2-k1-redundant_pattern_matching", &["redundant_pattern_matching"]),  // k=1,
+    ("gen2-k1-redundant_slicing", &["redundant_slicing"]),  // k=1,
+    ("gen2-k1-redundant_static_lifetimes", &["redundant_static_lifetimes"]),  // k=1,
+    ("gen2-k1-semicolon_if_nothing_returned", &["semicolon_if_nothing_returned"]),  // k=1,
+    ("gen2-k1-single_char_add_str", &["single_char_add_str"]),  // k=1,
+    ("gen2-k1-single_match", &["single_match"]),  // k=1,
+    ("gen2-k1-single_match_else", &["single_match_else"]),  // k=1,
+    ("gen2-k1-to_string_in_format_args", &["to_string_in_format_args"]),  // k=1,
+    ("gen2-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1,
+    ("gen2-k1-unnecessary_map_or", &["unnecessary_map_or"]),  // k=1,
+    ("gen2-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1,
+    ("gen2-k1-unused_unit", &["unused_unit"]),  // k=1,
+    ("gen2-k1-use_self", &["use_self"]),  // k=1,
+    ("gen2-k1-useless_format", &["useless_format"]),  // k=1,
+    ("gen2-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),  // k=1,
+    ("gen2-k1-write_with_newline", &["write_with_newline"]),  // k=1,
+    ("gen2-k2-byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if"]),  // k=2,
+    ("gen2-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),  // k=2,
+    ("gen2-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),  // k=2,
+    ("gen2-k2-filter_next+identity_op", &["filter_next", "identity_op"]),  // k=2,
+    ("gen2-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),  // k=2,
+    ("gen2-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2,
+    ("gen2-k2-let_and_return+manual_clamp", &["let_and_return", "manual_clamp"]),  // k=2,
+    ("gen2-k2-manual_let_else+manual_map", &["manual_let_else", "manual_map"]),  // k=2,
+    ("gen2-k2-manual_range_contains+manual_range_patterns", &["manual_range_contains", "manual_range_patterns"]),  // k=2,
+    ("gen2-k2-manual_slice_fill+manual_unwrap_or", &["manual_slice_fill", "manual_unwrap_or"]),  // k=2,
+    ("gen2-k2-map_flatten+map_unwrap_or", &["map_flatten", "map_unwrap_or"]),  // k=2,
+    ("gen2-k2-match_bool+needless_bool", &["match_bool", "needless_bool"]),  // k=2,
+    ("gen2-k2-needless_bool_assign+needless_lifetimes", &["needless_bool_assign", "needless_lifetimes"]),  // k=2,
+    ("gen2-k3-byte_char_slices+collapsible_else_if+collapsible_if", &["byte_char_slices", "collapsible_else_if", "collapsible_if"]),  // k=3,
+    ("gen2-k3-doc_overindented_list_items+double_parens+filter_next", &["doc_overindented_list_items", "double_parens", "filter_next"]),  // k=3,
+    ("gen2-k3-identity_op+io_other_error+items_after_statements", &["identity_op", "io_other_error", "items_after_statements"]),  // k=3,
+    ("gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next", &["iter_next_loop", "iter_nth_zero", "iter_skip_next"]),  // k=3,
+    ("gen2-k3-manual_let_else+manual_map+manual_range_contains", &["manual_let_else", "manual_map", "manual_range_contains"]),  // k=3,
+    ("gen2-k3-manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),  // k=3,
+    ("gen2-k3-map_flatten+map_unwrap_or+match_bool", &["map_flatten", "map_unwrap_or", "match_bool"]),  // k=3,
+    ("gen2-k3-needless_bool+needless_bool_assign+needless_lifetimes", &["needless_bool", "needless_bool_assign", "needless_lifetimes"]),  // k=3,
+    ("gen2-k3-print_with_newline+question_mark+range_plus_one", &["print_with_newline", "question_mark", "range_plus_one"]),  // k=3,
+    ("gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=4,
+    ("gen2-k4-filter_next+identity_op+io_other_error+items_after_statements", &["filter_next", "identity_op", "io_other_error", "items_after_statements"]),  // k=4,
+    ("gen2-k4-let_and_return+manual_clamp+manual_let_else+manual_map", &["let_and_return", "manual_clamp", "manual_let_else", "manual_map"]),  // k=4,
+    ("gen2-k4-manual_range_contains+manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),  // k=4,
+    ("gen2-k4-map_flatten+map_unwrap_or+match_bool+needless_bool", &["map_flatten", "map_unwrap_or", "match_bool", "needless_bool"]),  // k=4,
 ];
 
 /// Spec ids the freeze run EXCLUDED (real-clippy labels ≠ union gold): the
@@ -366,15 +391,13 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k1-unreadable_literal",
     "gen2-k2-collapsible_if+deref_addrof",
     "gen2-k2-iter_skip_next+legacy_numeric_constants",
-    "gen2-k2-needless_lifetimes+needless_match",
     "gen2-k2-needless_match+needless_range_loop",
     "gen2-k3-deref_addrof+doc_lazy_continuation+doc_markdown",
-    "gen2-k3-needless_bool_assign+needless_lifetimes+needless_match",
-    "gen2-k3-needless_lifetimes+needless_match+needless_range_loop",
+    "gen2-k3-legacy_numeric_constants+let_and_return+manual_clamp",
+    "gen2-k3-needless_match+needless_range_loop+needless_return",
     "gen2-k4-byte_char_slices+collapsible_else_if+collapsible_if+deref_addrof",
     "gen2-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
-    "gen2-k4-needless_lifetimes+needless_match+needless_range_loop+needless_return",
-    "gen2-k4-needless_match+needless_range_loop+needless_return+print_with_newline",
+    "gen2-k4-needless_bool_assign+needless_lifetimes+needless_match+needless_range_loop",
 ];
 
 /// Freeze readiness for one generation: Ok(admitted count) when every spec
@@ -640,24 +663,23 @@ pub fn specs_v3() -> Vec<GenSpec> {
 // 155 let_and_return broad-rule additions ride in the same tables); the
 // windows reshuffled past `io_other_error`'s sorted position — 14 rows.
 pub static EXCLUDED_IDS_V3: &[&str] = &[
+    "gen3-k1-persist_array_default",
     "gen3-k1-deref_addrof",
     "gen3-k1-legacy_numeric_constants",
     "gen3-k1-needless_match",
-    "gen3-k1-persist_array_default",
     "gen3-k1-uninlined_format_args",
     "gen3-k1-unnecessary_sort_by",
     "gen3-k1-unreadable_literal",
+    "gen3-k2-persist_array_default+persist_comment_arm",
     "gen3-k2-collapsible_if+deref_addrof",
     "gen3-k2-iter_skip_next+legacy_numeric_constants",
-    "gen3-k2-persist_array_default+persist_comment_arm",
+    "gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist",
     "gen3-k3-collapsible_if+deref_addrof+doc_lazy_continuation",
     "gen3-k3-iter_skip_next+legacy_numeric_constants+let_and_return",
-    "gen3-k3-needless_bool_assign+needless_lifetimes+needless_match",
-    "gen3-k3-needless_match+needless_range_loop+needless_return",
-    "gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist",
+    "gen3-k3-needless_lifetimes+needless_match+needless_range_loop",
+    "gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format",
     "gen3-k4-byte_char_slices+collapsible_else_if+collapsible_if+deref_addrof",
     "gen3-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
-    "gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format",
 ];
 
 /// The generation-3 frozen labels (spec id → vocabulary lints real clippy
@@ -666,84 +688,86 @@ pub static EXCLUDED_IDS_V3: &[&str] = &[
 // specs (38 corpus atoms + 4 persist atoms, and all k>=2 composites),
 // oracle labels == union-of-atom gold 72/72 against real clippy.
 pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
-    ("gen3-k1-byte_char_slices", &["byte_char_slices"]),  // k=1
-    ("gen3-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1
-    ("gen3-k1-collapsible_if", &["collapsible_if"]),  // k=1
-    ("gen3-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),  // k=1
-    ("gen3-k1-doc_markdown", &["doc_markdown"]),  // k=1
-    ("gen3-k1-doc_overindented_list_items", &["doc_overindented_list_items"]),  // k=1
-    ("gen3-k1-double_parens", &["double_parens"]),  // k=1
-    ("gen3-k1-filter_next", &["filter_next"]),  // k=1
-    ("gen3-k1-identity_op", &["identity_op"]),  // k=1
-    ("gen3-k1-io_other_error", &["io_other_error"]),  // k=1
-    ("gen3-k1-items_after_statements", &["items_after_statements"]),  // k=1
-    ("gen3-k1-iter_next_loop", &["iter_next_loop"]),  // k=1
-    ("gen3-k1-iter_nth_zero", &["iter_nth_zero"]),  // k=1
-    ("gen3-k1-iter_skip_next", &["iter_skip_next"]),  // k=1
-    ("gen3-k1-let_and_return", &["let_and_return"]),  // k=1
-    ("gen3-k1-manual_let_else", &["manual_let_else"]),  // k=1
-    ("gen3-k1-manual_map", &["manual_map"]),  // k=1
-    ("gen3-k1-manual_range_contains", &["manual_range_contains"]),  // k=1
-    ("gen3-k1-manual_range_patterns", &["manual_range_patterns"]),  // k=1
-    ("gen3-k1-manual_slice_fill", &["manual_slice_fill"]),  // k=1
-    ("gen3-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1
-    ("gen3-k1-map_flatten", &["map_flatten"]),  // k=1
-    ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1
-    ("gen3-k1-match_bool", &["match_bool"]),  // k=1
-    ("gen3-k1-needless_bool", &["needless_bool"]),  // k=1
-    ("gen3-k1-needless_bool_assign", &["needless_bool_assign"]),  // k=1
-    ("gen3-k1-needless_lifetimes", &["needless_lifetimes"]),  // k=1
-    ("gen3-k1-needless_range_loop", &["needless_range_loop"]),  // k=1
-    ("gen3-k1-needless_return", &["needless_return"]),  // k=1
-    ("gen3-k1-persist_comment_arm", &["single_match_else"]),  // k=1
-    ("gen3-k1-persist_comment_hoist", &["items_after_statements"]),  // k=1
-    ("gen3-k1-persist_useless_format", &["useless_format"]),  // k=1
-    ("gen3-k1-print_with_newline", &["print_with_newline"]),  // k=1
-    ("gen3-k1-question_mark", &["question_mark"]),  // k=1
-    ("gen3-k1-range_plus_one", &["range_plus_one"]),  // k=1
-    ("gen3-k1-redundant_closure_for_method_calls", &["redundant_closure_for_method_calls"]),  // k=1
-    ("gen3-k1-redundant_field_names", &["redundant_field_names"]),  // k=1
-    ("gen3-k1-redundant_pattern_matching", &["redundant_pattern_matching"]),  // k=1
-    ("gen3-k1-redundant_slicing", &["redundant_slicing"]),  // k=1
-    ("gen3-k1-redundant_static_lifetimes", &["redundant_static_lifetimes"]),  // k=1
-    ("gen3-k1-semicolon_if_nothing_returned", &["semicolon_if_nothing_returned"]),  // k=1
-    ("gen3-k1-single_match", &["single_match"]),  // k=1
-    ("gen3-k1-single_match_else", &["single_match_else"]),  // k=1
-    ("gen3-k1-to_string_in_format_args", &["to_string_in_format_args"]),  // k=1
-    ("gen3-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1
-    ("gen3-k1-unnecessary_map_or", &["unnecessary_map_or"]),  // k=1
-    ("gen3-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1
-    ("gen3-k1-unused_unit", &["unused_unit"]),  // k=1
-    ("gen3-k1-use_self", &["use_self"]),  // k=1
-    ("gen3-k1-useless_format", &["useless_format"]),  // k=1
-    ("gen3-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),  // k=1
-    ("gen3-k1-write_with_newline", &["write_with_newline"]),  // k=1
-    ("gen3-k2-byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if"]),  // k=2
-    ("gen3-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),  // k=2
-    ("gen3-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),  // k=2
-    ("gen3-k2-filter_next+identity_op", &["filter_next", "identity_op"]),  // k=2
-    ("gen3-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),  // k=2
-    ("gen3-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2
-    ("gen3-k2-let_and_return+manual_let_else", &["let_and_return", "manual_let_else"]),  // k=2
-    ("gen3-k2-manual_map+manual_range_contains", &["manual_map", "manual_range_contains"]),  // k=2
-    ("gen3-k2-manual_range_patterns+manual_slice_fill", &["manual_range_patterns", "manual_slice_fill"]),  // k=2
-    ("gen3-k2-manual_unwrap_or+map_flatten", &["manual_unwrap_or", "map_flatten"]),  // k=2
-    ("gen3-k2-map_unwrap_or+match_bool", &["map_unwrap_or", "match_bool"]),  // k=2
-    ("gen3-k2-needless_bool+needless_bool_assign", &["needless_bool", "needless_bool_assign"]),  // k=2
-    ("gen3-k2-persist_comment_hoist+persist_useless_format", &["items_after_statements", "useless_format"]),  // k=2
-    ("gen3-k3-doc_markdown+doc_overindented_list_items+double_parens", &["doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=3
-    ("gen3-k3-filter_next+identity_op+io_other_error", &["filter_next", "identity_op", "io_other_error"]),  // k=3
-    ("gen3-k3-items_after_statements+iter_next_loop+iter_nth_zero", &["items_after_statements", "iter_next_loop", "iter_nth_zero"]),  // k=3
-    ("gen3-k3-manual_let_else+manual_map+manual_range_contains", &["manual_let_else", "manual_map", "manual_range_contains"]),  // k=3
-    ("gen3-k3-manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),  // k=3
-    ("gen3-k3-map_flatten+map_unwrap_or+match_bool", &["map_flatten", "map_unwrap_or", "match_bool"]),  // k=3
-    ("gen3-k3-needless_bool+needless_bool_assign+needless_lifetimes", &["needless_bool", "needless_bool_assign", "needless_lifetimes"]),  // k=3
-    ("gen3-k3-persist_useless_format+byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if", "useless_format"]),  // k=3
-    ("gen3-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=4
-    ("gen3-k4-filter_next+identity_op+io_other_error+items_after_statements", &["filter_next", "identity_op", "io_other_error", "items_after_statements"]),  // k=4
-    ("gen3-k4-let_and_return+manual_let_else+manual_map+manual_range_contains", &["let_and_return", "manual_let_else", "manual_map", "manual_range_contains"]),  // k=4
-    ("gen3-k4-manual_range_patterns+manual_slice_fill+manual_unwrap_or+map_flatten", &["manual_range_patterns", "manual_slice_fill", "manual_unwrap_or", "map_flatten"]),  // k=4
-    ("gen3-k4-map_unwrap_or+match_bool+needless_bool+needless_bool_assign", &["map_unwrap_or", "match_bool", "needless_bool", "needless_bool_assign"]),  // k=4
+    ("gen3-k1-persist_comment_arm", &["single_match_else"]),  // k=1,
+    ("gen3-k1-persist_comment_hoist", &["items_after_statements"]),  // k=1,
+    ("gen3-k1-persist_useless_format", &["useless_format"]),  // k=1,
+    ("gen3-k1-byte_char_slices", &["byte_char_slices"]),  // k=1,
+    ("gen3-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1,
+    ("gen3-k1-collapsible_if", &["collapsible_if"]),  // k=1,
+    ("gen3-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),  // k=1,
+    ("gen3-k1-doc_markdown", &["doc_markdown"]),  // k=1,
+    ("gen3-k1-doc_overindented_list_items", &["doc_overindented_list_items"]),  // k=1,
+    ("gen3-k1-double_parens", &["double_parens"]),  // k=1,
+    ("gen3-k1-filter_next", &["filter_next"]),  // k=1,
+    ("gen3-k1-identity_op", &["identity_op"]),  // k=1,
+    ("gen3-k1-io_other_error", &["io_other_error"]),  // k=1,
+    ("gen3-k1-items_after_statements", &["items_after_statements"]),  // k=1,
+    ("gen3-k1-iter_next_loop", &["iter_next_loop"]),  // k=1,
+    ("gen3-k1-iter_nth_zero", &["iter_nth_zero"]),  // k=1,
+    ("gen3-k1-iter_skip_next", &["iter_skip_next"]),  // k=1,
+    ("gen3-k1-let_and_return", &["let_and_return"]),  // k=1,
+    ("gen3-k1-manual_clamp", &["manual_clamp"]),  // k=1,
+    ("gen3-k1-manual_let_else", &["manual_let_else"]),  // k=1,
+    ("gen3-k1-manual_map", &["manual_map"]),  // k=1,
+    ("gen3-k1-manual_range_contains", &["manual_range_contains"]),  // k=1,
+    ("gen3-k1-manual_range_patterns", &["manual_range_patterns"]),  // k=1,
+    ("gen3-k1-manual_slice_fill", &["manual_slice_fill"]),  // k=1,
+    ("gen3-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1,
+    ("gen3-k1-map_flatten", &["map_flatten"]),  // k=1,
+    ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1,
+    ("gen3-k1-match_bool", &["match_bool"]),  // k=1,
+    ("gen3-k1-needless_bool", &["needless_bool"]),  // k=1,
+    ("gen3-k1-needless_bool_assign", &["needless_bool_assign"]),  // k=1,
+    ("gen3-k1-needless_lifetimes", &["needless_lifetimes"]),  // k=1,
+    ("gen3-k1-needless_range_loop", &["needless_range_loop"]),  // k=1,
+    ("gen3-k1-needless_return", &["needless_return"]),  // k=1,
+    ("gen3-k1-print_with_newline", &["print_with_newline"]),  // k=1,
+    ("gen3-k1-question_mark", &["question_mark"]),  // k=1,
+    ("gen3-k1-range_plus_one", &["range_plus_one"]),  // k=1,
+    ("gen3-k1-redundant_closure_for_method_calls", &["redundant_closure_for_method_calls"]),  // k=1,
+    ("gen3-k1-redundant_field_names", &["redundant_field_names"]),  // k=1,
+    ("gen3-k1-redundant_pattern_matching", &["redundant_pattern_matching"]),  // k=1,
+    ("gen3-k1-redundant_slicing", &["redundant_slicing"]),  // k=1,
+    ("gen3-k1-redundant_static_lifetimes", &["redundant_static_lifetimes"]),  // k=1,
+    ("gen3-k1-semicolon_if_nothing_returned", &["semicolon_if_nothing_returned"]),  // k=1,
+    ("gen3-k1-single_char_add_str", &["single_char_add_str"]),  // k=1,
+    ("gen3-k1-single_match", &["single_match"]),  // k=1,
+    ("gen3-k1-single_match_else", &["single_match_else"]),  // k=1,
+    ("gen3-k1-to_string_in_format_args", &["to_string_in_format_args"]),  // k=1,
+    ("gen3-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1,
+    ("gen3-k1-unnecessary_map_or", &["unnecessary_map_or"]),  // k=1,
+    ("gen3-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1,
+    ("gen3-k1-unused_unit", &["unused_unit"]),  // k=1,
+    ("gen3-k1-use_self", &["use_self"]),  // k=1,
+    ("gen3-k1-useless_format", &["useless_format"]),  // k=1,
+    ("gen3-k1-wildcard_in_or_patterns", &["wildcard_in_or_patterns"]),  // k=1,
+    ("gen3-k1-write_with_newline", &["write_with_newline"]),  // k=1,
+    ("gen3-k2-persist_comment_hoist+persist_useless_format", &["items_after_statements", "useless_format"]),  // k=2,
+    ("gen3-k2-byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if"]),  // k=2,
+    ("gen3-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),  // k=2,
+    ("gen3-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),  // k=2,
+    ("gen3-k2-filter_next+identity_op", &["filter_next", "identity_op"]),  // k=2,
+    ("gen3-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),  // k=2,
+    ("gen3-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2,
+    ("gen3-k2-let_and_return+manual_clamp", &["let_and_return", "manual_clamp"]),  // k=2,
+    ("gen3-k2-manual_let_else+manual_map", &["manual_let_else", "manual_map"]),  // k=2,
+    ("gen3-k2-manual_range_contains+manual_range_patterns", &["manual_range_contains", "manual_range_patterns"]),  // k=2,
+    ("gen3-k2-manual_slice_fill+manual_unwrap_or", &["manual_slice_fill", "manual_unwrap_or"]),  // k=2,
+    ("gen3-k2-map_flatten+map_unwrap_or", &["map_flatten", "map_unwrap_or"]),  // k=2,
+    ("gen3-k2-match_bool+needless_bool", &["match_bool", "needless_bool"]),  // k=2,
+    ("gen3-k3-persist_useless_format+byte_char_slices+collapsible_else_if", &["byte_char_slices", "collapsible_else_if", "useless_format"]),  // k=3,
+    ("gen3-k3-doc_markdown+doc_overindented_list_items+double_parens", &["doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=3,
+    ("gen3-k3-filter_next+identity_op+io_other_error", &["filter_next", "identity_op", "io_other_error"]),  // k=3,
+    ("gen3-k3-items_after_statements+iter_next_loop+iter_nth_zero", &["items_after_statements", "iter_next_loop", "iter_nth_zero"]),  // k=3,
+    ("gen3-k3-manual_clamp+manual_let_else+manual_map", &["manual_clamp", "manual_let_else", "manual_map"]),  // k=3,
+    ("gen3-k3-manual_range_contains+manual_range_patterns+manual_slice_fill", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill"]),  // k=3,
+    ("gen3-k3-manual_unwrap_or+map_flatten+map_unwrap_or", &["manual_unwrap_or", "map_flatten", "map_unwrap_or"]),  // k=3,
+    ("gen3-k3-match_bool+needless_bool+needless_bool_assign", &["match_bool", "needless_bool", "needless_bool_assign"]),  // k=3,
+    ("gen3-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=4,
+    ("gen3-k4-filter_next+identity_op+io_other_error+items_after_statements", &["filter_next", "identity_op", "io_other_error", "items_after_statements"]),  // k=4,
+    ("gen3-k4-let_and_return+manual_clamp+manual_let_else+manual_map", &["let_and_return", "manual_clamp", "manual_let_else", "manual_map"]),  // k=4,
+    ("gen3-k4-manual_range_contains+manual_range_patterns+manual_slice_fill+manual_unwrap_or", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill", "manual_unwrap_or"]),  // k=4,
+    ("gen3-k4-map_flatten+map_unwrap_or+match_bool+needless_bool", &["map_flatten", "map_unwrap_or", "match_bool", "needless_bool"]),  // k=4,
 ];
 
 /// Freeze readiness for generation 3 — Err until the freeze e2e lands the

@@ -89,6 +89,8 @@
 //! `manual_range_patterns` | or-pattern → `min..=max` (clippy's own algorithm ported verbatim incl. range alternatives, duplicates, negatives + the coverage walk; boundary literals spliced verbatim — probe-matrixed on 0.1.93 + 0.1.98) |
 //! `to_string_in_format_args` | `format!("{}", x.to_string())` → `format!("{}", x)` on signature-proven scalar receivers + the bare-`{}` placeholder guard (Batch 158) |
 //! `manual_range_contains` | `x >= 3 && x <= 5` → `(3..=5).contains(&x)` on proven scalar operands + literal bounds (Batch 158) |
+//! `single_char_add_str` | `s.push_str("!")` → `s.push('!')` on signature-proven `String`/`&mut String` receivers, VALUE-based single-char arg + `escape_default` emit (Batch 159) |
+//! `manual_clamp` | `x.max(3).min(5)` → `x.clamp(3, 5)` (+ the mirrored order twin) on proven int/char receivers, LITERAL bounds + the NaN-float and inverted-bounds panic guards (Batch 159) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -146,7 +148,9 @@
 //! `io_other_error` / `wrong_self_convention`, Plan 147 — and the 2 Batch 157
 //! frontier-lead rules — `redundant_closure_for_method_calls` /
 //! `iter_skip_next`, Plan 148 — and the 2 Batch 158 frontier-lead rules —
-//! `to_string_in_format_args` / `manual_range_contains`, Plan 149); future
+//! `to_string_in_format_args` / `manual_range_contains`, Plan 149 — and
+//! the 2 Batch 159 frontier-lead rules — `single_char_add_str` /
+//! `manual_clamp`, Plan 150); future
 //! lints drop in by extending the match.
 
 pub mod byte_char_slices;
@@ -173,6 +177,7 @@ pub mod legacy_numeric_constants;
 pub mod let_and_return;
 pub mod map_flatten;
 pub mod manual_checked_ops;
+pub mod manual_clamp;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
 pub mod manual_map;
@@ -203,6 +208,7 @@ pub mod redundant_pattern_matching;
 pub mod redundant_slicing;
 pub mod redundant_static_lifetimes;
 pub mod semicolon_if_nothing_returned;
+pub mod single_char_add_str;
 pub mod single_char_pattern;
 pub mod single_match;
 pub mod single_match_else;
@@ -455,6 +461,31 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // Variable bounds refuse (the documented narrower-than-clippy
     // divergence, pending the same derivation for bound idents).
     "manual_range_contains",
+    // ── Batch 159 (the frontier-lead mining pack V — Plan 150 — the
+    // Batch 158 re-arm's leads, 2026-09-18) ──
+    // `s.push_str("!")` → `s.push('!')` — FIXABLE via the
+    // SIGNATURE-PROVEN mutable-String receiver (`String`/`&mut String`
+    // param, never rebound: the only in-scope `push_str`/`push` pair is
+    // `String`'s own inherent `&str`/`char` methods — a custom type's
+    // `push_str` is excluded by the derivation itself) + the VALUE-based
+    // single-`char` arg (escapes resolve through `LitStr::value()`; the
+    // emit re-escapes via `char::escape_default`). Style-group
+    // (default-on; group pinned by the plan150 probe's default-groups
+    // arm). Local `String::new()` bindings + UFCS refuse (the documented
+    // divergence, pending a local-binding derivation).
+    "single_char_add_str",
+    // `x.max(3).min(5)` → `x.clamp(3, 5)` (+ the mirrored
+    // `x.min(5).max(3)` order twin) — FIXABLE via the lattice absorption
+    // law on TOTAL orders (ints + `char`, same `partial_cmp` under
+    // max/min/clamp) + the SIGNATURE-PROVEN scalar receiver + LITERAL
+    // bounds with the decidable `lo <= hi` panic guard. TWO divergences
+    // REFUSE by design: `f32`/`f64` (NaN.max(3).min(5) == 3.0 but
+    // NaN.clamp == NaN — the anti-regime witness) and inverted bounds
+    // (clamp asserts `min <= max` release-too; the manual chain never
+    // panics). Variable bounds refuse (the manual_range_contains
+    // divergence precedent). Style-group (default-on; group pinned by
+    // the plan150 probe's default-groups arm).
+    "manual_clamp",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -666,7 +697,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 70 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 72 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -769,6 +800,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 158 (the frontier-lead mining pack IV, Plan 149) ──
         "to_string_in_format_args" => to_string_in_format_args::collect_edits(source, file),
         "manual_range_contains" => manual_range_contains::collect_edits(source, file),
+        // ── Batch 159 (the frontier-lead mining pack V, Plan 150) ──
+        "single_char_add_str" => single_char_add_str::collect_edits(source, file),
+        "manual_clamp" => manual_clamp::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -865,12 +899,17 @@ mod tests {
         // Display-blanket scalar receiver with the bare-`{}` placeholder
         // guard, and the contains rewrite closed by the same scalar
         // derivation + literal bounds).
-        assert_eq!(FIXABLE_LINTS.len(), 55);
+        // + 2 Batch 159 (single_char_add_str + manual_clamp — the
+        // frontier-lead pack V, Plan 150; the mut-string derivation twin
+        // with the VALUE-based single-char arg + escape_default emit, and
+        // the lattice-absorption clamp rewrite with the NaN-float +
+        // inverted-bounds panic guards).
+        assert_eq!(FIXABLE_LINTS.len(), 57);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 74-row fixture table — length is the point.
+    /// 76-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1257,6 +1296,17 @@ impl S {
                 "manual_range_contains",
                 "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 && x <= 5 }",
                 "(3..=5).contains(&x)",
+            ),
+            // ── Batch 159 (the frontier-lead mining pack V, Plan 150) ──
+            (
+                "single_char_add_str",
+                "fn mark(s: &mut String) { s.push_str(\"!\") }",
+                "s.push('!')",
+            ),
+            (
+                "manual_clamp",
+                "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }",
+                "x.clamp(3, 5)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

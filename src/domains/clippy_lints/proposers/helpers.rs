@@ -499,6 +499,67 @@ const PRIMITIVE_SCALARS: &[&str] = &[
     "isize", "f32", "f64", "bool", "char",
 ];
 
+/// Signature-proven MUTABLE-STRING bindings of `f`, as `{ident → type text}`
+/// (the mutable twin of [`scalar_param_heads_over`], Batch 159 — the
+/// `single_char_add_str` inherent-method derivation: on a proven `String`
+/// view the ONLY in-scope `push_str`/`push` pair is `String`'s own
+/// `&str`/`char` inherent methods).
+///
+/// A param qualifies when it is a plain `Pat::Ident` typed exactly `String`
+/// (owned, by value) or `&mut String`. Shared `&String`, multi-segment paths
+/// (`std::string::String`), generics, and every other shape refuse — the
+/// conservative direction. The same never-rebound guard applies (see
+/// [`slice_param_heads_over`] for why that is the soundness leg: zero
+/// rebinds make the annotation a CONSTRUCTION fact).
+pub(crate) fn mut_string_param_heads_over<'i>(
+    inputs: impl Iterator<Item = &'i syn::FnArg>,
+    block: &syn::Block,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for arg in inputs {
+        let syn::FnArg::Typed(p) = arg else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        if pi.by_ref.is_some() || pi.subpat.is_some() {
+            continue;
+        }
+        let Some(head) = mut_string_head_of(&p.ty) else { continue };
+        if body_rebinds(block, &pi.ident.to_string()) {
+            continue;
+        }
+        out.insert(pi.ident.to_string(), head);
+    }
+    out
+}
+
+/// The normalized type text of a provable mutable-String annotation.
+fn mut_string_head_of(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Path(p) => {
+            if p.qself.is_some()
+                || p.path.leading_colon.is_some()
+                || p.path.segments.len() != 1
+                || !p.path.segments.first()?.arguments.is_none()
+            {
+                return None;
+            }
+            (p.path.segments.first()?.ident == "String").then(|| "String".to_string())
+        }
+        syn::Type::Reference(r) => {
+            r.mutability?;
+            let syn::Type::Path(p) = &*r.elem else { return None };
+            if p.qself.is_some()
+                || p.path.leading_colon.is_some()
+                || p.path.segments.len() != 1
+                || !p.path.segments.first()?.arguments.is_none()
+            {
+                return None;
+            }
+            (p.path.segments.first()?.ident == "String").then(|| "&mut String".to_string())
+        }
+        _ => None,
+    }
+}
+
 /// Single-segment plain path expression with this ident.
 fn path_is_ident(e: &Expr, ident: &str) -> bool {
     let Expr::Path(p) = e else { return false };

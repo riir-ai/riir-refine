@@ -124,25 +124,29 @@ pub struct Family {
 /// Batch 156 graduated `io_other_error` (the pack II lead, Plan 147),
 /// Batch 157 graduated BOTH pack III leads
 /// (`redundant_closure_for_method_calls` + `iter_skip_next`, Plan 148 —
-/// both FIXABLE, the first pack with zero retirees), and Batch 158
+/// both FIXABLE, the first pack with zero retirees), Batch 158
 /// graduated BOTH pack IV leads (`to_string_in_format_args` +
 /// `manual_range_contains`, Plan 149 — the signature-derivation scalar
-/// twin); the retired rest (`ptr_arg` — VERIFY tier; `needless_borrow` —
-/// self_evolve-only; `wrong_self_convention` — VERIFY tier, the Batch 156
-/// pack II retiree) have their leads consumed with regression homes in
-/// the proposer module tests + the `all_buggy_codes_fire_their_lint`
-/// corpus lockstep (rules outside the fixpoint dispatch cannot be
-/// loop-verified).
+/// twin), and Batch 159 graduated BOTH pack V leads
+/// (`single_char_add_str` + `manual_clamp`, Plan 150 — the mut-string
+/// derivation twin + the lattice-absorption clamp with the NaN/inverted
+/// panic guards); the retired rest (`ptr_arg` — VERIFY tier;
+/// `needless_borrow` — self_evolve-only; `wrong_self_convention` —
+/// VERIFY tier, the Batch 156 pack II retiree) have their leads consumed
+/// with regression homes in the proposer module tests + the
+/// `all_buggy_codes_fire_their_lint` corpus lockstep (rules outside the
+/// fixpoint dispatch cannot be loop-verified).
 /// `covered: false` = a genuine frontier family (target lint outside the
 /// compiled fix set AND outside the stock proposers — a PENDING mining
-/// lead). `single_char_add_str` + `manual_clamp` are the Batch 158 re-arm
-/// — both probe-verified 2026-09-18 (`scripts/plan149_frontier_probe.py`:
-/// seed clean under all+pedantic+nursery incl. the const-ability
-/// discipline (`String::push` / `Vec::push` dodges), broken fires EXACTLY
-/// its target lint; the round-1 rejects — `unit_arg` (the `no_effect`
-/// crossfire + a dirty seed) + `from_str_radix_10` (the const-ability
-/// rider on the broken form) — are recorded in the probe script; spare:
-/// `from_str_radix_10` with a `Vec::push` dodge).
+/// lead). `from_str_radix_10` + `assign_op_pattern` are the Batch 159
+/// re-arm — both probe-verified 2026-09-18
+/// (`scripts/plan150_frontier_probe.py`: seed clean under
+/// all+pedantic+nursery incl. the const-ability discipline (the
+/// `Vec::push` dodge), broken fires EXACTLY its target lint; the round-1
+/// rejects — `string_extend` (fires nothing on the shape) + `double_neg`
+/// (the nonminimal_bool crossfire) — are recorded in the probe script;
+/// spare: `unit_arg` with the side-effect-block dodge, verified same
+/// round).
 #[must_use]
 pub fn families() -> Vec<Family> {
     vec![
@@ -155,8 +159,10 @@ pub fn families() -> Vec<Family> {
         Family { id: "iter_skip_next", target_lint: "iter_skip_next", covered: true },
         Family { id: "to_string_in_format_args", target_lint: "to_string_in_format_args", covered: true },
         Family { id: "manual_range_contains", target_lint: "manual_range_contains", covered: true },
-        Family { id: "single_char_add_str", target_lint: "single_char_add_str", covered: false },
-        Family { id: "manual_clamp", target_lint: "manual_clamp", covered: false },
+        Family { id: "single_char_add_str", target_lint: "single_char_add_str", covered: true },
+        Family { id: "manual_clamp", target_lint: "manual_clamp", covered: true },
+        Family { id: "from_str_radix_10", target_lint: "from_str_radix_10", covered: false },
+        Family { id: "assign_op_pattern", target_lint: "assign_op_pattern", covered: false },
     ]
 }
 
@@ -297,8 +303,9 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
             ("fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); (7..=9).contains(&n) }", "fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); n >= 7 && n <= 9 }"),
         ],
         // ── Batch 158 re-arm (probe-verified 2026-09-18,
-        // `scripts/plan149_frontier_probe.py`; seeds are non-const-able
-        // via the non-const OPS String::push / Vec::push). ──
+        // `scripts/plan149_frontier_probe.py`) — GRADUATED at Batch 159
+        // (Plan 150; both probe fixtures unchanged, groups re-pinned by
+        // the plan150 default-groups arms). ──
         // 1-op: `s.push('!')` → `s.push_str("!")` (fires the default-level
         // style lint single_char_add_str — the Batch 156/157 verified
         // spare, armed on the third turn).
@@ -312,6 +319,22 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         "manual_clamp" => vec![
             ("fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.clamp(3, 5) }", "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }"),
             ("fn roof(n: i32, hits: &mut Vec<i32>) -> i32 { hits.push(n); n.clamp(7, 9) }", "fn roof(n: i32, hits: &mut Vec<i32>) -> i32 { hits.push(n); n.max(7).min(9) }"),
+        ],
+        // ── Batch 159 re-arm (probe-verified 2026-09-18,
+        // `scripts/plan150_frontier_probe.py`; seeds are non-const-able
+        // via the `Vec::push` dodge). ──
+        // 1-op: `s.parse::<u32>()` → `u32::from_str_radix(s, 10)` (fires
+        // the default-level style lint from_str_radix_10 — the plan149
+        // recorded spare, armed with the const-dodge on the second turn).
+        "from_str_radix_10" => vec![
+            ("fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); s.parse::<u32>() }", "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(s, 10) }"),
+            ("fn val(t: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); t.parse::<u32>() }", "fn val(t: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(t, 10) }"),
+        ],
+        // 1-op: `y += 1` → `y = y + 1` (fires the default-level style lint
+        // assign_op_pattern; `hits.push(x)` keeps the fn non-const-able).
+        "assign_op_pattern" => vec![
+            ("fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y += 1; y }", "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }"),
+            ("fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w += 2; w }", "fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w = w + 2; w }"),
         ],
         _ => vec![],
     }
@@ -808,6 +831,10 @@ mod tests {
             "to_string_in_format_args"
         } else if code.contains(">= 3 &&") || code.contains(">= 7 &&") {
             "manual_range_contains"
+        } else if code.contains(".push_str(\"") {
+            "single_char_add_str"
+        } else if code.contains(".max(") {
+            "manual_clamp"
         } else {
             return verdict(true, true, &[]);
         };
@@ -826,11 +853,11 @@ mod tests {
     /// healed verdict equals the broken verdict, which is the frontier
     /// fact under test).
     fn frontier_probe(code: &str) -> OracleVerdict {
-        // The Batch 158 frontier population: the two re-arm families.
-        let lint = if code.contains(".push_str(\"") {
-            "single_char_add_str"
-        } else if code.contains(".max(") {
-            "manual_clamp"
+        // The Batch 159 frontier population: the two re-arm families.
+        let lint = if code.contains("from_str_radix(") {
+            "from_str_radix_10"
+        } else if code.contains("= y + ") || code.contains("= w + ") {
+            "assign_op_pattern"
         } else {
             return verdict(true, true, &[]);
         };
@@ -849,12 +876,12 @@ mod tests {
         assert_eq!(a, sorted);
         // Every candidate is 1-op (the table invariant; ops≥2 is future work).
         assert!(a.iter().all(|c| c.ops == 1));
-        // HeldOut + Frontier partition by the family's covered flag — nine
-        // covered families (20 cases: 3+3+2+2+2+2+2+2+2) + the Batch 158
-        // re-arm's two frontier families (4 cases).
+        // HeldOut + Frontier partition by the family's covered flag —
+        // eleven covered families (24 cases: 3+3+2+2+2+2+2+2+2+2+2) + the
+        // Batch 159 re-arm's two frontier families (4 cases).
         assert_eq!(
             a.iter().filter(|c| c.mode == Mode::HeldOut).count(),
-            20,
+            24,
         );
         assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 4);
     }
@@ -879,7 +906,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 9, "the nine covered (FIXABLE-tier) families");
+        assert_eq!(families.len(), 11, "the eleven covered (FIXABLE-tier) families");
         for fam in &families {
             let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
             let rule = fam_rule(fam);
