@@ -1,6 +1,6 @@
 # Plan 155 — Batch 164: the frontier-lead mining pack X (the coverage-report re-arm)
 
-**Status:** IN PROGRESS (T1–T8 DONE 2026-09-19 — freeze regen landed with TWO bad-atom joins, GOAT green, frontier e2e 2 admissions, score-bench FLAT; T9 commit + push pending)
+**Status:** COMPLETE (2026-09-19 — Batch 164 landed at `f84037c2`, pushed; global binary rebuilt to the full release set — `--version` reports complete)
 
 The recorded-spare queue ran EMPTY at Batch 163 (`6408ea44`) — the snapshot's
 NEXT POOL line owes a fresh probe round over clippy's live lint surface, derived
@@ -53,7 +53,9 @@ deferred as a future lead).
 - [x] T8: Research note 191 (RECORD) + AGENTS.md batch entry + corpus-count bump
   + `.docs/11_domains/` (no clippy_lints domain doc exists — the counts
   live in AGENTS.md, updated there) + snapshot update.
-- [ ] T9: commit + push + global binary rebuild (same-session rule).
+- [x] T9: commit + push + global binary rebuild (same-session rule). (`f84037c2`
+  pushed to origin/develop; binary rebuilt in the `.wbin` worktree with
+  latent_retrieval,kat_service,kat_transport,fix_verify — was 6 batches stale.)
 
 ## T1 probe verdict (2026-09-19, clippy 0.1.98)
 
