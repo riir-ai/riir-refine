@@ -111,6 +111,9 @@ pub struct PerfVerifier {
     /// Path to the cargo binary.
     cargo_bin: String,
     /// Root directory for temp crates (default: `std::env::temp_dir()/riir_perf_verify/`).
+    /// DELIBERATE fixed root — `[documented-fixed-root]`: BLAKE3 content-addressed
+    /// crate dirs, per-crate `target/`, read-before-write; see
+    /// `clippy_lints::verify::ClippyVerifier::work_root` (katgpt-rs Issue 832 T5).
     work_root: PathBuf,
 }
 
@@ -124,6 +127,7 @@ impl PerfVerifier {
     /// Create a verifier using system cargo from PATH + default temp root.
     #[must_use]
     pub fn new() -> Self {
+        // [documented-fixed-root] — see `work_root` above (Issue 832 T5).
         let work_root = std::env::temp_dir().join("riir_perf_verify");
         Self {
             cargo_bin: "cargo".to_string(),
@@ -134,6 +138,7 @@ impl PerfVerifier {
     /// Create a verifier with an explicit cargo binary path.
     #[must_use]
     pub fn with_cargo_bin(cargo: impl Into<String>) -> Self {
+        // [documented-fixed-root] — see `work_root` above (Issue 832 T5).
         let work_root = std::env::temp_dir().join("riir_perf_verify");
         Self {
             cargo_bin: cargo.into(),

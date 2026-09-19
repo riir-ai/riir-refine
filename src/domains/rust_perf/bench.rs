@@ -271,6 +271,10 @@ impl PerfBenchValidator {
     /// Create a validator using system cargo + default temp root.
     #[must_use]
     pub fn new() -> Self {
+        // [documented-fixed-root] — BLAKE3-keyed crate dirs, per-crate
+        // `target/`, keyed package/bin names; a pid suffix would kill the
+        // cross-run cargo cache (see clippy_lints::verify::ClippyVerifier;
+        // katgpt-rs Issue 832 T5).
         Self {
             cargo_bin: "cargo".to_string(),
             work_root: std::env::temp_dir().join("riir_perf_bench"),
@@ -280,6 +284,7 @@ impl PerfBenchValidator {
     /// Override the cargo binary path.
     #[must_use]
     pub fn with_cargo_bin(cargo: impl Into<String>) -> Self {
+        // [documented-fixed-root] — see `new` above (Issue 832 T5).
         Self {
             cargo_bin: cargo.into(),
             work_root: std::env::temp_dir().join("riir_perf_bench"),
@@ -481,14 +486,16 @@ impl PerfBenchValidator {
             format!("{cargo_toml}\n[dependencies]\n{}", deps.join("\n"))
         };
 
-        std::fs::write(dir.join("Cargo.toml"), cargo_toml)
-            .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
+        // Read-before-write: the scaffold is a pure function of the dir key,
+        // so an unchanged repeat must not bump mtimes — the cargo cache hit
+        // the BLAKE3 key exists to provide dies otherwise (the verify.rs
+        // lesson; also what makes concurrent same-key processes benign).
+        crate::domains::probe_witness::write_probe_source(&dir.join("Cargo.toml"), &cargo_toml)?;
 
         // Generate src/main.rs: harness code + timing loop, carrying this
         // crate's key so the program states which probe it is (Issue 112).
         let main_rs = Self::generate_main_rs(spec, stem);
-        std::fs::write(src_dir.join("main.rs"), main_rs)
-            .map_err(|e| format!("write main.rs failed: {e}"))?;
+        crate::domains::probe_witness::write_probe_source(&src_dir.join("main.rs"), &main_rs)?;
 
         Ok((dir, stem.to_string()))
     }
@@ -1130,5 +1137,43 @@ some garbage line
         let results = PerfBenchValidator::parse_bench_output(stdout);
         assert_eq!(results.len(), 1);
         assert!((results[0].speedup - 1.0).abs() < 0.001); // guard against div-by-zero
+    }
+
+    #[test]
+    fn prepare_crate_repeats_do_not_touch_scaffold_mtimes() {
+        // katgpt-rs Issue 832 T5: the scaffold is a pure function of the
+        // (rule, harness, sizes) key, so an unchanged repeat must write
+        // NOTHING — the read-before-write guard (write_probe_source) keeps
+        // the repeat a cargo cache hit instead of an mtime-bumped rebuild.
+        // mtime equality is exact under the guard: no write, no metadata
+        // change at all.
+        let root =
+            std::env::temp_dir().join(format!("riir_perf_bench_mtime_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let v = PerfBenchValidator::new().with_work_root(&root);
+        let spec = BenchSpec {
+            sizes: vec![8],
+            harness: "fn mtime_probe() {}".to_string(),
+        };
+        let mtime = |p: &std::path::Path| {
+            std::fs::metadata(p)
+                .expect("scaffold file must exist")
+                .modified()
+                .unwrap()
+        };
+
+        let (dir, stem) = v.prepare_crate("rule_mtime", &spec).unwrap();
+        let (main_t, toml_t) = (mtime(&dir.join("src/main.rs")), mtime(&dir.join("Cargo.toml")));
+        let (dir2, stem2) = v.prepare_crate("rule_mtime", &spec).unwrap();
+        assert_eq!(dir, dir2, "same key must reuse one crate dir");
+        assert_eq!(stem, stem2);
+        assert_eq!(
+            mtime(&dir2.join("src/main.rs")),
+            main_t,
+            "unchanged repeat must not bump main.rs mtime — the cargo cache hit dies otherwise"
+        );
+        assert_eq!(mtime(&dir2.join("Cargo.toml")), toml_t);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

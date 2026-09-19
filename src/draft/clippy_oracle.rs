@@ -110,6 +110,10 @@ impl ClippyOracle {
     /// System cargo, temp work root.
     #[must_use]
     pub fn new() -> Self {
+        // [documented-fixed-root] — BLAKE3-keyed crate dirs, each with its own
+        // `target/` (the child DROPS CARGO_TARGET_DIR); a pid suffix would kill
+        // the cross-run cargo cache (see clippy_lints::verify::ClippyVerifier;
+        // katgpt-rs Issue 832 T5).
         Self {
             cargo_bin: "cargo".to_string(),
             // Distinct from ClippyVerifier's root so a concurrent
@@ -273,15 +277,16 @@ impl ClippyOracle {
     }
 
     /// BLAKE3-keyed temp crate so repeat calls reuse cargo's build cache.
+    /// Scaffold writes are read-before-write (`write_probe_source`): an
+    /// unchanged repeat must not bump mtimes, or that cache hit stops being
+    /// one — and concurrent same-key processes then write nothing at all.
     fn prepare_crate(&self, code: &str) -> Result<PathBuf, String> {
         let hex = blake3::hash(code.as_bytes()).to_hex();
         let dir = self.work_root.join(&hex[..16]);
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
-        std::fs::write(dir.join("Cargo.toml"), ORACLE_CARGO_TOML)
-            .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
-        std::fs::write(src_dir.join("lib.rs"), code)
-            .map_err(|e| format!("write lib.rs failed: {e}"))?;
+        crate::domains::probe_witness::write_probe_source(&dir.join("Cargo.toml"), ORACLE_CARGO_TOML)?;
+        crate::domains::probe_witness::write_probe_source(&src_dir.join("lib.rs"), code)?;
         Ok(dir)
     }
 
@@ -309,16 +314,14 @@ impl ClippyOracle {
         let dir = self.work_root.join(format!("{prefix}{}", &hex[..16]));
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
-        std::fs::write(dir.join("Cargo.toml"), ORACLE_CARGO_TOML)
-            .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
+        // Read-before-write, same contract as `prepare_crate` above.
+        crate::domains::probe_witness::write_probe_source(&dir.join("Cargo.toml"), ORACLE_CARGO_TOML)?;
         let mut lib = String::new();
         for (i, s) in snippets.iter().enumerate() {
             let _ = writeln!(lib, "pub mod s{i};");
-            std::fs::write(src_dir.join(format!("s{i}.rs")), s)
-                .map_err(|e| format!("write s{i}.rs failed: {e}"))?;
+            crate::domains::probe_witness::write_probe_source(&src_dir.join(format!("s{i}.rs")), s)?;
         }
-        std::fs::write(src_dir.join("lib.rs"), lib)
-            .map_err(|e| format!("write lib.rs failed: {e}"))?;
+        crate::domains::probe_witness::write_probe_source(&src_dir.join("lib.rs"), &lib)?;
         Ok(dir)
     }
 
@@ -856,5 +859,51 @@ mod tests {
 
         // Empty input stays a no-op (the offline contract).
         assert!(oracle.compiles_batch(&[]).is_empty());
+    }
+
+    #[test]
+    fn prepare_repeats_do_not_touch_scaffold_mtimes() {
+        // katgpt-rs Issue 832 T5: the scaffold is a pure function of the dir
+        // key, so an unchanged repeat must write NOTHING — the old
+        // unconditional rewrite bumped mtimes and defeated the very cargo
+        // cache the BLAKE3 key exists to provide (the verify.rs
+        // write_probe_source lesson, ported here). mtime equality is exact
+        // under the guard: no write means no metadata change at all.
+        let root =
+            std::env::temp_dir().join(format!("riir_clippy_oracle_mtime_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let oracle = ClippyOracle::new().with_work_root(&root);
+        let mtime = |p: &std::path::Path| {
+            std::fs::metadata(p)
+                .expect("scaffold file must exist")
+                .modified()
+                .unwrap()
+        };
+
+        let code = "pub fn oracle_mtime_probe(x: i32) -> i32 { x }";
+        let dir = oracle.prepare_crate(code).expect("prepare");
+        let (lib_t, toml_t) = (mtime(&dir.join("src/lib.rs")), mtime(&dir.join("Cargo.toml")));
+        let dir2 = oracle.prepare_crate(code).expect("prepare repeat");
+        assert_eq!(dir, dir2, "same code must key the same crate dir");
+        assert_eq!(
+            mtime(&dir2.join("src/lib.rs")),
+            lib_t,
+            "unchanged repeat must not bump lib.rs mtime — the cargo cache hit dies otherwise"
+        );
+        assert_eq!(mtime(&dir2.join("Cargo.toml")), toml_t);
+
+        // The batch lane: same snippet sequence → same key → zero writes.
+        let snippets = [
+            "pub fn a(x: i32) -> i32 { x }",
+            "pub fn b(x: u8) -> u8 { x }",
+        ];
+        let bdir = oracle.prepare_batch_crate(&snippets).expect("batch prepare");
+        let (blib_t, bs0_t) = (mtime(&bdir.join("src/lib.rs")), mtime(&bdir.join("src/s0.rs")));
+        let bdir2 = oracle.prepare_batch_crate(&snippets).expect("batch repeat");
+        assert_eq!(bdir, bdir2, "same snippet sequence must key the same crate dir");
+        assert_eq!(mtime(&bdir2.join("src/lib.rs")), blib_t);
+        assert_eq!(mtime(&bdir2.join("src/s0.rs")), bs0_t);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

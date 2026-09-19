@@ -88,6 +88,14 @@ pub struct ClippyVerifier {
     /// Path to the cargo binary.
     cargo_bin: String,
     /// Root directory for temp crates (default: `std::env::temp_dir()/riir_clippy_verify/`).
+///
+/// DELIBERATE fixed root — `[documented-fixed-root]` (katgpt-rs Issue 832 T5
+/// adjudication): the crate dirs under it are BLAKE3 content-addressed and each
+/// carries its own `target/`, so two concurrent processes share the root safely
+/// — different code lands in different dirs, identical code writes nothing
+/// (read-before-write via `write_probe_source`), and cargo's per-target build
+/// lock serializes any same-dir race. A pid suffix here would kill the
+/// cross-run cargo cache, which is the design's point.
     work_root: PathBuf,
 }
 
@@ -101,6 +109,7 @@ impl ClippyVerifier {
     /// Create a verifier using system cargo from PATH + default temp root.
     #[must_use]
     pub fn new() -> Self {
+        // [documented-fixed-root] — see `work_root` above (Issue 832 T5).
         let work_root = std::env::temp_dir().join("riir_clippy_verify");
         Self {
             cargo_bin: "cargo".to_string(),
@@ -111,6 +120,7 @@ impl ClippyVerifier {
     /// Create a verifier with an explicit cargo binary path.
     #[must_use]
     pub fn with_cargo_bin(cargo: impl Into<String>) -> Self {
+        // [documented-fixed-root] — see `work_root` above (Issue 832 T5).
         let work_root = std::env::temp_dir().join("riir_clippy_verify");
         Self {
             cargo_bin: cargo.into(),

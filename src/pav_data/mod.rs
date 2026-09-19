@@ -526,6 +526,8 @@ fn emit_span_pairs(
 /// I/O creating the work root.
 pub fn ground_truth(pairs: &mut [PavPair]) -> Result<usize, String> {
     let oracle = crate::draft::clippy_oracle::ClippyOracle::new()
+        // [documented-fixed-root] — keyed crate dirs under it; see
+        // clippy_lints::verify::ClippyVerifier (katgpt-rs Issue 832 T5).
         .with_work_root(std::env::temp_dir().join("riir_clippy_pav_ground"));
     if !oracle.is_available() {
         return Ok(0);
