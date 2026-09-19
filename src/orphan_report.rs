@@ -62,8 +62,11 @@
 //! sources ([`wire_consumption`]): a struct-literal of type T inside a fn
 //! that also makes a `serde_json::to_*` / `serde_yaml::to_*` path call
 //! marks T's fields derive-consumed (**fn-scoped literal co-occurrence**);
-//! a `Vec<T>`/`Option<T>` field of a literal-constructed wire struct marks
-//! T consumed transitively (**the wrapping clause** — the
+//! a crate-rooted `serde_json::json!` macro counts as that serialization
+//! call too (**the macro-as-serializer arm** — each interpolated arg goes
+//! through `to_value` at runtime; the riir-kat `shop_seed_body` FP,
+//! 2026-09-17); a `Vec<T>`/`Option<T>` field of a literal-constructed wire
+//! struct marks T consumed transitively (**the wrapping clause** — the
 //! `SelfReportWire { targets: Vec<ReportTarget> }` shape, where the inner
 //! type's literals live only in tests). Measured on the 8 pinned rows:
 //! swallow rate 1/8 — the sole swallow is a field hardcoded `true` at its
@@ -398,10 +401,12 @@ pub fn subject_looks_like_optimization(subject: &str) -> bool {
 pub struct WireConsumption {
     /// Fields PROVEN consumed by a serialization path: the struct (or a
     /// `Vec<_>`/`Option<_>` wrapper of it) is literal-constructed inside a
-    /// fn that also makes a `serde_json::to_*`/`serde_yaml::to_*` call, OR
+    /// fn that also makes a `serde_json::to_*`/`serde_yaml::to_*` call OR a
+    /// crate-rooted `serde_json::json!` macro invocation, OR
     /// the type is a CONCRETE param serde-serialized by some fn (the
     /// sibling-fn link: literal in the flow, `to_string(&intent)` in the
-    /// queue writer — the fn-A/fn-B repair), AND the field carries a
+    /// queue writer — the fn-A/fn-B repair, extended to json! interpolation),
+    /// AND the field carries a
     /// non-literal-constant value at some construction site. Stillborn
     /// rows matching here are cleared.
     pub cleared: HashSet<(String, String)>,
@@ -440,6 +445,21 @@ fn is_serde_to_path(path: &syn::Path) -> bool {
     idents.len() >= 2
         && matches!(idents[0].to_string().as_str(), "serde_json" | "serde_yaml")
         && idents[idents.len() - 1].to_string().starts_with("to_")
+}
+
+/// Is this macro invocation `serde_json::json!` (crate-rooted form) — the
+/// macro that IS a serializer? `json!({"items": items})` interpolates each
+/// non-literal arg through `serde_json::to_value` at runtime, so a wire
+/// struct interpolated into it is serialized with no `to_*` path call
+/// anywhere in the fn (the riir-kat `shop_seed_body` shape, recorded
+/// 2026-09-17 in `.distill/001` §post-mining intake). Conservative on
+/// purpose: only the crate-rooted two-segment form counts — a bare `json!`
+/// behind `use serde_json::json` is one import away from ambiguity with a
+/// local macro, and the pinned evidence is crate-rooted.
+fn macro_is_serde_json_value(mac: &syn::Macro) -> bool {
+    let segs: Vec<String> =
+        mac.path.segments.iter().map(|s| s.ident.to_string()).collect();
+    segs.len() == 2 && segs[0] == "serde_json" && segs[1] == "json"
 }
 
 /// One construction-site entry: the field was set at an `ExprStruct` of the
@@ -620,13 +640,13 @@ fn block_has_serde_call(block: &syn::Block) -> bool {
             syn::visit::visit_expr_call(self, c);
         }
         fn visit_expr_macro(&mut self, m: &'ast syn::ExprMacro) {
-            if token_stream_has_serde_to(&m.mac.tokens) {
+            if token_stream_has_serde_to(&m.mac.tokens) || macro_is_serde_json_value(&m.mac) {
                 self.0 = true;
             }
             syn::visit::visit_expr_macro(self, m);
         }
         fn visit_item_macro(&mut self, m: &'ast syn::ItemMacro) {
-            if token_stream_has_serde_to(&m.mac.tokens) {
+            if token_stream_has_serde_to(&m.mac.tokens) || macro_is_serde_json_value(&m.mac) {
                 self.0 = true;
             }
             syn::visit::visit_item_macro(self, m);
@@ -804,13 +824,19 @@ fn block_serializes_param(block: &syn::Block, params: &[String]) -> bool {
             syn::visit::visit_expr_call(self, c);
         }
         fn visit_expr_macro(&mut self, m: &'ast syn::ExprMacro) {
-            if token_stream_serde_to_mentions(&m.mac.tokens, self.params) {
+            if token_stream_serde_to_mentions(&m.mac.tokens, self.params)
+                || (macro_is_serde_json_value(&m.mac)
+                    && group_mentions_ident(m.mac.tokens.clone(), self.params))
+            {
                 self.hit = true;
             }
             syn::visit::visit_expr_macro(self, m);
         }
         fn visit_item_macro(&mut self, m: &'ast syn::ItemMacro) {
-            if token_stream_serde_to_mentions(&m.mac.tokens, self.params) {
+            if token_stream_serde_to_mentions(&m.mac.tokens, self.params)
+                || (macro_is_serde_json_value(&m.mac)
+                    && group_mentions_ident(m.mac.tokens.clone(), self.params))
+            {
                 self.hit = true;
             }
             syn::visit::visit_item_macro(self, m);
@@ -844,9 +870,33 @@ fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
                 syn::Type::Reference(r) => ty = &r.elem,
                 syn::Type::Group(g) => ty = &g.elem,
                 syn::Type::Paren(p) => ty = &p.elem,
+                // `&[T]` slice params (the riir-kat `shop_seed_body` shape:
+                // `items: &[ShopSeedItemWire]` interpolated into json!):
+                // the SLICE is the wire vessel, T is the consumed type.
+                syn::Type::Slice(s) => {
+                    ty = &s.elem;
+                    break;
+                }
                 _ => break,
             }
         }
+        // `&Vec<T>` params: Vec is a path, extract the element.
+        let vec_elem: Option<String> = match ty {
+            syn::Type::Path(tp) => tp.path.segments.last().and_then(|seg| {
+                if seg.ident != "Vec" {
+                    return None;
+                }
+                if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if args.args.len() == 1 {
+                        if let syn::GenericArgument::Type(syn::Type::Path(inner)) = &args.args[0] {
+                            return inner.path.segments.last().map(|s| s.ident.to_string());
+                        }
+                    }
+                }
+                None
+            }),
+            _ => None,
+        };
         let syn::Type::Path(tp) = ty else { continue };
         let Some(seg) = tp.path.segments.last() else { continue };
         let name = seg.ident.to_string();
@@ -855,7 +905,13 @@ fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
         }
         let ident = pi.ident.to_string();
         if block_serializes_param(&i.block, &[ident]) {
-            out.push(name);
+            match vec_elem {
+                // `&Vec<T>`: only the ELEMENT is the wire type — a bare
+                // `Vec` name would clear nothing real.
+                Some(elem) if !generics.contains(&elem) => out.push(elem),
+                Some(_) => {}
+                None => out.push(name),
+            }
         }
     }
     out
@@ -1228,7 +1284,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape — OR a crate-rooted serde_json::json! macro whose tokens mention the param: the macro IS a serializer, each interpolated arg goes through to_value at runtime, the riir-kat shop_seed_body shape) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
         );
         out
     }
@@ -1848,6 +1904,87 @@ pub const VOTE_VERSION: u32 = 1;
         assert!(
             wire.cleared.contains(&("VoteIntent".to_string(), "queued_unix".to_string())),
             "variable-valued field clears through the sibling-fn param link"
+        );
+    }
+
+    /// The `serde_json::json!`-as-serializer shape (the 2026-09-17 intake,
+    /// riir-kat `shop_seed_body`): the macro IS the serializer — each
+    /// interpolated non-literal arg goes through `to_value` at runtime, no
+    /// `to_*` path call exists anywhere. Before this repair the interpolating
+    /// fn was not a serde fn at all and the param's fields read `[stillborn]`.
+    /// The literal lives in the CALLER (the flow fn) — the sibling-fn shape
+    /// with json! as the serializer half.
+    #[test]
+    fn json_macro_interpolated_param_clears() {
+        let src = r#"
+#[derive(serde::Serialize)]
+pub struct ShopSeedItemWire {
+    pub item_id: u64,
+    pub price_micro: i64,
+}
+pub fn seed_flow(item_id: u64, price_micro: i64) -> String {
+    let item = ShopSeedItemWire { item_id, price_micro };
+    shop_seed_body(7, &[item])
+}
+pub fn shop_seed_body(seq: u64, items: &[ShopSeedItemWire]) -> String {
+    serde_json::json!({"seq": seq, "items": items}).to_string()
+}
+"#;
+        let wire = wire_of(src);
+        assert!(
+            wire.cleared.contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
+            "json!-interpolated param fields are wire-consumed (the recorded FP specimen)"
+        );
+        assert!(
+            wire.cleared.contains(&("ShopSeedItemWire".to_string(), "item_id".to_string())),
+            "both fields of the interpolated slice param clear"
+        );
+    }
+
+    /// The same macro, with the param NOT interpolated — the conservative
+    /// direction must survive: a fn that builds a json! body not mentioning
+    /// the param does not clear a merely-received param's type. (A bare
+    /// `items.len()` INSIDE the json! tokens WOULD mention `items` — the
+    /// same name-appearance stance the `to_*` arm documents — so this
+    /// fixture keeps the ident out of the tokens entirely.)
+    #[test]
+    fn json_macro_without_param_mention_does_not_clear() {
+        let src = r#"
+#[derive(serde::Serialize)]
+pub struct ShopSeedItemWire {
+    pub item_id: u64,
+    pub price_micro: i64,
+}
+pub fn shop_seed_body(seq: u64, items: &[ShopSeedItemWire], count: usize) -> String {
+    let _ = items; // received but NOT interpolated
+    serde_json::json!({"seq": seq, "count": count}).to_string()
+}
+"#;
+        let wire = wire_of(src);
+        assert!(
+            !wire.cleared.contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
+            "a json! body that does not mention the param must not clear it"
+        );
+    }
+
+    /// Only the crate-rooted `serde_json::json!` counts — a bare `json!`
+    /// (one import away from a local macro of the same name) does not.
+    #[test]
+    fn bare_json_macro_does_not_clear() {
+        let src = r#"
+#[derive(serde::Serialize)]
+pub struct ShopSeedItemWire {
+    pub item_id: u64,
+    pub price_micro: i64,
+}
+pub fn shop_seed_body(seq: u64, items: &[ShopSeedItemWire]) -> String {
+    json!({"seq": seq, "items": items}).to_string()
+}
+"#;
+        let wire = wire_of(src);
+        assert!(
+            !wire.cleared.contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
+            "the conservative crate-rooted-only rule: bare json! is not a serializer signal"
         );
     }
 

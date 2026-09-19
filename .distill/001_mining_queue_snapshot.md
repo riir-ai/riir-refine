@@ -559,3 +559,21 @@ negated comparisons, cfg-attributed trailing returns).
 > `serde_json::Value` construction sites as serialize-calls — an interpolated ident arg
 > of concrete wire type marks that type's fields consumed, same standing as `to_*`.**
 > Specimen pins: riir-kat `216d342` (post-rebase tree), `kat_shop_client.rs:48-50`.
+
+> **DONE 2026-09-19 (post-mining unit, riir-clippy `src/orphan_report.rs`)** — the
+> json!-as-serializer arm landed: `macro_is_serde_json_value` (crate-rooted
+> `serde_json::json!` ONLY — the conservative two-segment form, a bare `json!` is one
+> import away from a local macro) fires in BOTH the fn-classification half
+> (`block_has_serde_call`) and the per-param mention half (`block_serializes_param`,
+> `group_mentions_ident` over the macro tokens — the same name-appearance stance the
+> `to_*` arm documents). En route the param harvest learned `&[T]` SLICE params
+> (`items: &[ShopSeedItemWire]` — the specimen's own shape, previously skipped by the
+> `Type::Path` guard) + `&Vec<T>` params (element-only — a bare `Vec` name clears
+> nothing real). Fixtures: 3 new (interpolated-clears / no-mention-does-not-clear /
+> bare-json!-does-not-count), 44/44 orphan tests, 2023/2023 lib, clippy `-D` clean.
+> **Live re-validation on the recorded specimen**: `ShopSeedItemWire.price_micro` no
+> longer reads `[stillborn]` (0 stillborn on riir-kat) — it now reads `[wire-const]`,
+> the documented weak class, and that is the HONEST in-scope answer (the only
+> in-scope construction sites pass literal constants; the variable-valued ctor lives
+> in riir-clippy `src/bin/heal.rs` — cross-repo invisible by construction, the same
+> intake row's second leg). The FP class (wire-live field reading stillborn) is closed.
