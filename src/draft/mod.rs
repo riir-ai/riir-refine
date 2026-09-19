@@ -37,6 +37,8 @@
 pub mod clippy_oracle;
 pub mod clippy_feed;
 pub mod corpus_index;
+#[cfg(feature = "choice_scorer_poc")]
+pub mod choice_scorer;
 pub mod domain_router;
 pub mod eval_fixtures_clippy;
 pub mod eval_fixtures_composite;

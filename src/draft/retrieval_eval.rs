@@ -372,7 +372,9 @@ pub struct VendiAxis {
 /// The clean-span set: REAL production excerpts from this crate (shipped
 /// code, not synthetic). None may fire any of the 40 corpus lints — the
 /// committed clean test below enforces it against the proposers.
-const CLEAN_SPANS: &[(&str, &str)] = &[
+///
+/// `pub` for the issue-125 harness (skip-row rendering).
+pub const CLEAN_SPANS: &[(&str, &str)] = &[
     (
         "clean:suggest_scratch_capacity",
         r#"pub struct SuggestScratch {

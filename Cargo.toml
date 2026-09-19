@@ -240,6 +240,18 @@ tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_
 # (R135/Bench-047 doctrine — no wiring until the PoC verdict).
 gw_corpus = ["katgpt-core/gw_alignment", "clippy_lints", "rust_perf"]
 
+# Issue 125: the CUA-S1 specialist option-scorer PoC — a trained tinyx
+# clone (byte-level, ~700k params) as a CHALLENGER arm against the shipped
+# modelless `RerankMode::Structural` rerank on healer rule selection.
+# Research 573 (the open Jev recipe) is the source; Bench 096's 85.2%
+# composite top-1 is the baseline to beat. Gates
+# `examples/choice_scorer_poc.rs` (render/train/eval/selftest) + the model
+# module `src/draft/choice_scorer.rs` (forward/backward/AdamW + gradient
+# checks). Opt-in, measurement-only: the modelless default is NOT
+# challenged until the GOAT gates pass (G1/G1-OOD/G2/control/calibration);
+# a Bench-065 memorization signature = REFUTED, no widen-and-retry.
+choice_scorer_poc = ["latent_retrieval", "clippy_lints", "rust_perf"]
+
 # Issue 097: linking↔retrieval-confusion PoC — does topological linking
 # (PCA-3D, katgpt-core's Issue-757-tuned detector) between two rules'
 # span-embedding clouds predict retrieval top-1 confusion between those
@@ -600,6 +612,12 @@ required-features = ["frontier_miner"]
 [[example]]
 name = "linking_confusion_poc"
 required-features = ["linking_confusion_poc"]
+
+# Issue 125 — the CUA-S1 specialist option-scorer PoC (render/train/eval/
+# selftest; measurement-only, never in default runs).
+[[example]]
+name = "choice_scorer_poc"
+required-features = ["choice_scorer_poc"]
 
 [[example]]
 name = "nonergodic_driver_poc"
