@@ -203,6 +203,38 @@
 > Verdict: NO batch, NO research note — lane leads recorded; the riir-ai side owns the
 > threat/defense arithmetic (Issue 971, defer-marked on the fork-adoption trigger).
 
+> **RECORD 2026-09-19 (perf-rematch 4090 watch pass — three merged-PR leads, graded; NO
+> batch, no research note).** Source: `perf_rematch.sh watch --since 2026-09-18` on the
+> 4090 box ([the run record](../riir-ai/.benchmarks/rematch/2026-09-19_4090_watch.md));
+> sibling-GPU-gated watch-only pass (the 981 session held the box — no matrix cell). All
+> three grades below; the 971 trigger did NOT fire (fork still exactly +24 past
+> `7dffb158d`, zero `ggml-cuda/` diffs) and the Bonsai-2 HF sha256 pins are GREEN.
+>
+> 1. **vLLM `fbe8a15` "[ROCm][Perf] Enable the AITER GDN decode fast path for flat qkvz
+>    layouts" (#53623)** — LEAD-INTEL ONLY. The kernel is ROCm/AITER (AMD) → no 4090
+>    threat and NO mining lane (we do not mine ROCm kernels). Value is ecosystem SIGNAL
+>    (serving stacks are landing dedicated GDN decode fast paths — confirms the GDN
+>    decode axis riir-ai Issue 987's G-rungs target) + one layout concept for the future:
+>    "flat qkvz layout" is ZERO corpus vocabulary (dedup grep over riir-gpu: only
+>    `ssm_conv1d.weight` tensor-upload hits exist in `qwen38_dense_cudarc.rs`, a different
+>    concept — the flat q/k/v/z fused-state layout is ungoverned). If a CUDA cousin ever
+>    lands (vLLM CUDA or llama.cpp ggml-cuda), it joins the 971-class reference set, not
+>    the corpus.
+> 2. **llama.cpp `5b59b83` "metal : add MoE and SSM_CONV fusion optimizations" (#28948)** —
+>    M3-LANE ENGINE LEAD, graded at the M3's next watch cycle (M3 is watch-only per the
+>    09-13 owner call; this box cannot measure Metal). Their Metal backend fusing MoE +
+>    SSM-conv ops lands on the exact model class the M3 lanes bench — qwen38 is a
+>    dense+SSM hybrid and `ssm_conv1d` is a live tensor in our own
+>    `qwen38_dense_cudarc.rs` path. Read when an M3 batch window opens; not 4090.
+> 3. **llama.cpp `b23701f` "cuda : fix CUB argsort corruption caused by in-place keys"
+>    (#28389)** — NO-BATCH, no annotation. A C++/CUB API footgun inside llama.cpp's own
+>    usage; kernel_opt's argsort family (B94 sort-consumer-routes-by-physical-slot, B115
+>    ordinal-map-exact-tail-selection, B110 mechanics) governs WHEN to sort/reorder in
+>    Rust-shaped code, not CUB call-site misuse. Recorded here so the next watch pass
+>    does not re-triage it.
+>
+> Verdict: NO batch — lane records only; nothing enters the corpus from this pass.
+
 > **RECORD 2026-09-17 (usage artifact, riir-chain — a `doc_markdown` suggestion
 > that BREAKS an intra-doc link, and the compile gate provably cannot catch it).**
 > `cargo heal --fix --write --verify` pointed at `riir-chain/src/programs/dispatch.rs`
