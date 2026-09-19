@@ -108,6 +108,24 @@ activation.
   row (honesty arriving early), but nothing pays. **Do not advertise
   replay earnings** until the owner ratifies a live cut (the decision
   brief is riir-dapps Bench 013 §T5; recommended v1 posture = keep 0).
+- **Arming constraint (found in review 2026-09-19 — riir-dapps Issue 098 +
+  the Bench 013 addendum):** the ratification memo's canary step
+  ("canary 10%") is **20× above the shipped public bound**
+  (`REPLAY_CANARY_RATE_BOUND_PERMYRIAD = 50` = 0.5%, enforced at config
+  validation — the "≤ 5‰" rate above). Raising the bound is part of the
+  same owner act, and by the memo's own F4 arithmetic arming under the
+  current bound is unsafe at every rate it permits (per-lease survival
+  ≥ ~92% at ≤0.5%, vs the 2% rung already failing the ≤5% zero-work-capture
+  tolerance at ≥30% adversary share).
+- **What "credit gates on structural soundness" means, precisely** (the
+  residual owner-gated with the cut): `plan_proofs` refuses an
+  empty-or-no-op fix, and the sole shipped verifier `C1BootstrapVerifier`
+  checks only that the span/fix hashes are nonzero and distinct, then
+  **ratifies the submitter's own `verdict_vector`** (its doc comment says
+  exactly that). No compile gate, no oracle, one replica — the service
+  never re-runs the fix before credit; the real oracle exists only on
+  THIS side (the verifier rig). That near-ungated state is the exact
+  content of the credit-gating question.
 
 ## Repeatable e2e — `scripts/replay_e2e.sh`
 
