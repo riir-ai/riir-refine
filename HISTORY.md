@@ -1,5 +1,12 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-19 — the two cross-repo hardening fixes (katgpt-rs Issues 832 T5 + 841): scratch-root read-before-write + verify's incomplete-check refusal
+
+Both landed the morning after Batch 164, recorded comprehensively on the katgpt-rs side (832: `3f2239f84`; 841: `fee243ec8`); this row is the local half of the bidirectional record.
+
+- **`651728c0` — `verify` refuses an incomplete check.** A killed/truncated recheck (process death mid-`cargo` re-run) previously read as a VERIFIED keep — the truncation was indistinguishable from a clean pass in the exit-path logic. Now a recheck that did not run to completion is a REFUSAL, never a keep. Found by the katgpt-rs 841 fix_verify refusal-vs-truncation audit, which measured the hazard LIVE in both consumers (healer + the fix-verify gate consumer).
+- **`83f4cd89` — scratch-crate work roots get the read-before-write guard.** The oracle + bench scaffolds' scratch crates (healer's own temp workspaces) gained the same read-before-write mtime guard the 832 T5 adjudication ported, and the fixed roots were marked deliberate (the `83f4cd89` adjudicated set — riir-clippy's 9 re-offers = deliberate scratch-crate roots, not missed fixes). Closes the riir-clippy half of the katgpt-rs 832 T5 cross-repo census (the deployer 5-site fix rode `b551028` there; the remaining 2 owner-referenced sites sit in seal-game-editor/seal-remake).
+
 ## 2026-09-19 — Batch 164 / Plan 155: the coverage-report re-arm — the frontier-lead mining pack X (the EIGHTH consecutive all-FIXABLE pack; corpus 84 → 86, clippy 65/16 → 67/16; TWO freeze bad-atom joins — a first for one batch)
 
 **Batch 164 LANDED 2026-09-19** (`f84037c2`; Plan 155; the session's mining unit — the plan-complete commit `33c799d1`). Full record: [Research 191](.research/191_batch164_coverage_report_rearm.md).
