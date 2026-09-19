@@ -104,6 +104,31 @@
 //! the enclosing fn's parameters (the only source of truth available):
 //! a `&`-typed param iterates as `v`, an owned param as `&v`. Anything the
 //! resolver cannot pin (locals, fields, non-ident paths) skips the rewrite.
+//!
+//! ## Length-mismatch hazard (P34 — riir-ai Issue 981, live evidence)
+//!
+//! An iterator-shaped rewrite of `for i in 0..N { slice[i] }` is
+//! mechanically identical ONLY when `N == slice.len()`. A slice offset into
+//! a LARGER buffer (`let gs = &mut grad_s[h * sph..]` — runs to the END of
+//! the parent) has `len > N`, and the full-iteration form multiplies later
+//! elements the index form never touched: the 981 corruption (one head's
+//! decay leaked into every later head's BPTT slab, misread as a GPU kernel
+//! failure for a forensic session) was exactly this rewrite applied by hand
+//! in a heal-session commit. Two load-bearing refusals hold this class
+//! closed HERE, and both are pinned by fixtures as matcher-widening
+//! preconditions, not accidents:
+//!
+//! - the range end must be `coll.len()` itself ([`check_range_end_len`]) —
+//!   the bound names the collection it indexes, so equality is syntactic;
+//! - the collection resolves against fn params only — a LOCAL tail slice
+//!   can never match, and a computed bound (`len() / heads`, `0..sph`)
+//!   never names the slice it indexes.
+//!
+//! Any future widening (local resolution, computed bounds) must carry a
+//! length proof or stay refused. The sound manual forms keep the range
+//! visible: `&mut buf[base..][..N]` or `.take(N)`. The oracle door carries
+//! the mirror guard (`clippy_feed::range_loop_len_proof` — clippy's own
+//! cross-binding length proofs are declined as untrustable there).
 
 use super::uninlined_format_args::{all_expr_args, post_template_expr_args, ExprMacroArg};
 use super::{apply_edits, edit, for_each_fn, src, SourceEdit};
@@ -981,6 +1006,31 @@ mod tests {
             out.is_none(),
             "unresolvable local collection must skip: {out:?}"
         );
+    }
+
+    /// P34 / riir-ai Issue 981 — THE live-burned shape: a local tail slice
+    /// (`&mut grad_s[h * sph..]` runs to the parent's END, len > sph) indexed
+    /// under a plain-ident bound. The full-iteration `iter_mut()` rewrite
+    /// multiplied every later head's slab by this head's decay and was
+    /// misread as a GPU kernel failure. This fixture pins BOTH refusals
+    /// (non-`len()` bound; local collection) as LOAD-BEARING: any matcher
+    /// widening must carry a length proof or stay refused.
+    #[test]
+    fn local_tail_slice_plain_bound_stays_refused() {
+        let input = "fn decay(grad_s: &mut [f32], h: usize, sph: usize, d: f32) {\n    let gs = &mut grad_s[h * sph..];\n    for i in 0..sph {\n        gs[i] *= d;\n    }\n}";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "the 981 shape must stay refused: {out:?}");
+    }
+
+    /// P34 sibling shape: the bound IS a `len()` call — of the PARENT
+    /// buffer. `grad_s.len() / heads` is not the tail slice's len for any
+    /// offset head; a `len()` that does not name the collection it indexes
+    /// is not a length proof, and the local collection refuses anyway.
+    #[test]
+    fn parent_len_bound_over_local_slice_stays_refused() {
+        let input = "fn decay(grad_s: &mut [f32], h: usize, heads: usize, d: f32) {\n    let gs = &mut grad_s[h * (grad_s.len() / heads)..];\n    for i in 0..(grad_s.len() / heads) {\n        gs[i] *= d;\n    }\n}";
+        let out = propose_fix("needless_range_loop", input);
+        assert!(out.is_none(), "parent-len bound must stay refused: {out:?}");
     }
 
     /// `minimum` contains but is not `i` — the old token heuristic treated

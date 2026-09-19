@@ -8965,6 +8965,23 @@ fn main() {
                                 lane.dropped
                             );
                         }
+                        // P34 (riir-ai Issue 981): needless_range_loop
+                        // suggestions declined for lack of a LOCAL length
+                        // proof — a range-dropping rewrite is mechanical only
+                        // when the bound equals the iterated collection's
+                        // length. Declined is not dropped: the suggestion is
+                        // well-formed, the proof is not auditable here. The
+                        // manual path keeps the range visible.
+                        if lane.range_declined > 0 {
+                            eprintln!(
+                                "oracle lane: declined {} needless_range_loop \
+                                 suggestion(s) for {display} (P34 length proof — the \
+                                 range end is not a syntactic zero-arg .len() call; the \
+                                 981 tail-slice class. Fix manually with a bounded \
+                                 slice: &mut buf[base..][..n] or .take(n))",
+                                lane.range_declined
+                            );
+                        }
                         // Issue 118 T2: the oracle lane rides the same bench-guard
                         // door as rust_perf (P30) — a MachineApplicable
                         // suggestion consumed verbatim can be structural (the

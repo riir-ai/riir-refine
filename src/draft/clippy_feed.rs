@@ -275,6 +275,12 @@ pub struct OracleLane {
     /// an empty/short `edits` usually means the feed predates the current
     /// file state — the caller should surface that loudly.
     pub dropped: usize,
+    /// `needless_range_loop` candidates declined by the P34 length proof
+    /// (range end is not a syntactic zero-arg `.len()` call). Reported
+    /// separately from `dropped`: a decline is a DELIBERATE refusal of a
+    /// well-formed suggestion, never staleness — the caller names the
+    /// manual path (bounded slice) instead of questioning the feed.
+    pub range_declined: usize,
 }
 
 /// Compute the oracle-anchored edits for ONE scanned file (P21).
@@ -301,6 +307,13 @@ pub struct OracleLane {
 ///   `{{x}}`) — the exact class the intake recorded after it corrupted a
 ///   JSON fixture. Mirrors the proposer's v1 brace-abort; the manual fix
 ///   unescapes, never consumes verbatim;
+/// - the P34 `needless_range_loop` length guard ([`range_loop_len_proof`]) —
+///   a range-dropping rewrite is mechanical only when the range end is the
+///   iterated collection's length, and clippy's cross-binding proof of that
+///   is not auditable here. The end must be a syntactic zero-arg `.len()`
+///   call (literal-0 start, half-open limits); everything else declines
+///   (riir-ai Issue 981 — the tail-slice `0..sph` corruption). The manual
+///   path keeps the range visible: `&mut buf[base..][..n]` or `.take(n)`;
 /// - merged range out of bounds / off a char boundary (a stale feed);
 /// - oracle-vs-oracle overlap (leftmost wins);
 /// - the parse-gate refusal (drops the file's whole oracle set).
@@ -313,6 +326,7 @@ pub fn oracle_edits(
 ) -> OracleLane {
     let mut candidates: Vec<(usize, usize, String, String)> = Vec::new();
     let mut dropped = 0usize;
+    let mut range_declined = 0usize;
     for d in feed {
         if !lane_lints.contains(&d.lint.as_str()) {
             continue;
@@ -343,6 +357,20 @@ pub fn oracle_edits(
                     dropped += 1;
                     continue;
                 }
+                // P34 (riir-ai Issue 981, live evidence): a
+                // `needless_range_loop` suggestion DROPS the loop's range —
+                // the rewrite is mechanical only when the range end equals
+                // the iterated collection's length, and clippy proves that
+                // with cross-binding analysis this lane cannot see. Require
+                // a LOCAL SYNTACTIC proof (zero-arg `.len()` end, literal-0
+                // start, exclusive limits); every other bound shape is
+                // declined — the 981 corruption was exactly this rewrite
+                // over `let gs = &mut buf[h * sph..]` (a tail slice whose
+                // len > sph). Drops the edit, never produces a wrong one.
+                if d.lint == "needless_range_loop" && !range_loop_len_proof(src, edit.start) {
+                    range_declined += 1;
+                    continue;
+                }
                 candidates.push((edit.start, edit.end, edit.replacement, d.lint.clone()));
             }
             None => dropped += 1, // stale offsets / misaligned boundaries
@@ -363,7 +391,7 @@ pub fn oracle_edits(
         kept.push(cand);
     }
     if kept.is_empty() {
-        return OracleLane { edits: Vec::new(), dropped };
+        return OracleLane { edits: Vec::new(), dropped, range_declined };
     }
     // The whole-file syntax gate: the oracle edits ALONE must leave the
     // file parseable. All-or-nothing on failure.
@@ -380,6 +408,7 @@ pub fn oracle_edits(
         return OracleLane {
             edits: Vec::new(),
             dropped: dropped + kept.len(),
+            range_declined,
         };
     }
     let edits = edits
@@ -390,7 +419,136 @@ pub fn oracle_edits(
             edit,
         })
         .collect();
-    OracleLane { edits, dropped }
+    OracleLane { edits, dropped, range_declined }
+}
+
+/// P34 (riir-ai Issue 981, live evidence): does the for-loop containing
+/// `edit_start` carry a LOCAL, SYNTACTIC length proof — a half-open range
+/// from literal `0` whose end is a zero-argument `.len()` method call?
+///
+/// A `needless_range_loop` suggestion replaces `for i in 0..N { coll[i] }`
+/// with full-iteration `for x in coll`, mechanically identical ONLY when
+/// `N == coll.len()`. clippy establishes that equality with type-aware
+/// cross-binding analysis this parse-only lane cannot audit; the 981
+/// corruption (`let gs = &mut buf[h * sph..]`, len > sph — one head's decay
+/// multiplied into every later head's slab, misread as a GPU kernel bug for
+/// a forensic session) is the cost of trusting a proof you cannot see. The
+/// only bounds this lane accepts are ones whose equality is syntactic:
+/// `0..coll.len()` where `coll` is also the ident every body slot
+/// `<coll>[<loop ident>]` indexes — a `len()` of the PARENT buffer over a
+/// tail-slice slot (`0..buf.len() { gs[i] }`, `gs = &mut buf[base..]`)
+/// passes the end-shape check and declines on receiver identity.
+/// Computed bounds (`n`, `a * b`, `len() / heads`),
+/// non-zero starts, and inclusive limits (`0..=n` iterates n+1 — a `len()`
+/// end there is off by one) all decline; the sound manual forms keep the
+/// range visible (`&mut buf[base..][..n]`, `.take(n)`).
+///
+/// The INNERMOST containing loop is the one judged — a suggestion inside a
+/// nested loop belongs to the inner header, not the outer. Unparseable
+/// source declines (the whole-file parse gate drops it anyway).
+fn range_loop_len_proof(src: &str, edit_start: usize) -> bool {
+    use syn::spanned::Spanned;
+    use syn::visit::Visit as _;
+    /// Receiver-identity slot scan: counts `<coll>[<loop ident>]` positions
+    /// and whether every one indexes the bound's ident.
+    struct Slots<'a> {
+        idx: &'a syn::Ident,
+        bound: &'a str,
+        n: usize,
+        all_match: bool,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for Slots<'ast> {
+        fn visit_expr_index(&mut self, ix: &'ast syn::ExprIndex) {
+            let bare = matches!(&*ix.index, syn::Expr::Path(p) if p.path.is_ident(self.idx));
+            if bare {
+                self.n += 1;
+                if single_ident(&ix.expr).is_none_or(|b| b != self.bound) {
+                    self.all_match = false;
+                }
+            }
+            syn::visit::visit_expr_index(self, ix);
+        }
+    }
+    struct InnermostFor<'a> {
+        start: usize,
+        /// (whole-loop span len, loop) — smallest containing loop wins.
+        best: Option<(usize, &'a syn::ExprForLoop)>,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for InnermostFor<'ast> {
+        fn visit_expr(&mut self, e: &'ast syn::Expr) {
+            if let syn::Expr::ForLoop(fl) = e {
+                // The WHOLE loop span (pat + iterable + body): a suggestion's
+                // first part may target the pat, which sits outside the
+                // iterable's own span.
+                let span = e.span().byte_range();
+                if span.start <= self.start && self.start < span.end {
+                    let smaller = self.best.is_none_or(|(len, _)| span.len() < len);
+                    if smaller {
+                        self.best = Some((span.len(), fl));
+                    }
+                }
+            }
+            syn::visit::visit_expr(self, e);
+        }
+    }
+    let Ok(file) = syn::parse_file(src) else {
+        return false;
+    };
+    let mut v = InnermostFor { start: edit_start, best: None };
+    v.visit_file(&file);
+    let Some((_, fl)) = v.best else {
+        return false;
+    };
+    // Plain-ident loop pat only (the proposer's posture).
+    let syn::Pat::Ident(pi) = &*fl.pat else {
+        return false;
+    };
+    if pi.by_ref.is_some() || pi.subpat.is_some() {
+        return false;
+    }
+    let syn::Expr::Range(range) = &*fl.expr else {
+        return false;
+    };
+    // Full-prefix iteration only: literal-0 start, half-open limits (a
+    // `0..=len()` end iterates one EXTRA element — inclusive limits carry
+    // no proof this lane accepts).
+    let zero_start = matches!(
+        range.start.as_deref(),
+        Some(syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Int(li), .. }))
+            if li.base10_digits() == "0"
+    );
+    let half_open = matches!(range.limits, syn::RangeLimits::HalfOpen(..));
+    if !zero_start || !half_open {
+        return false;
+    }
+    // The bound must be a zero-arg `.len()` on a single ident ...
+    let Some(syn::Expr::MethodCall(mc)) = range.end.as_deref() else {
+        return false;
+    };
+    if mc.method != "len" || !mc.args.is_empty() {
+        return false;
+    }
+    let Some(bound) = single_ident(&mc.receiver) else {
+        return false;
+    };
+    // ... AND it must name the collection it indexes: every body slot
+    // `<coll>[<loop ident>]` (the positions a range-dropping rewrite
+    // substitutes) indexes that same ident. A `len()` of the PARENT buffer
+    // over a tail-slice slot (`0..buf.len() { gs[i] }`, `gs = &mut
+    // buf[1..]`) passes the end-shape check and is exactly as unsound as
+    // the plain-ident bound — the receiver identity is the proof.
+    let mut slots = Slots { idx: &pi.ident, bound: &bound, n: 0, all_match: true };
+    slots.visit_block(&fl.body);
+    slots.n >= 1 && slots.all_match
+}
+
+/// The single ident an expression is (a bare path), else `None` — the
+/// receiver-identity seam of [`range_loop_len_proof`].
+fn single_ident(e: &syn::Expr) -> Option<String> {
+    if let syn::Expr::Path(p) = e {
+        return p.path.get_ident().map(ToString::to_string);
+    }
+    None
 }
 
 /// Merge one suggestion's parts into a single atomic edit against `src`.
@@ -719,6 +877,111 @@ mod tests {
         let src = probe_src();
         let lane = oracle_edits(&mapor_feed(&src), "other/mod.rs", &src, &["unnecessary_map_or"]);
         assert!(lane.edits.is_empty());
+    }
+
+    // ── P34: the needless_range_loop length proof (riir-ai Issue 981) ──
+
+    /// One `needless_range_loop` diagnostic whose suggestion rewrites the
+    /// loop header `header_old` → `header_new` plus one index slot
+    /// `slot_old` → `slot_new` (both located by substring).
+    fn range_loop_feed(
+        src: &str,
+        header_old: &str,
+        header_new: &str,
+        slot_old: &str,
+        slot_new: &str,
+    ) -> Vec<ClippyDiagnostic> {
+        let h = src.find(header_old).expect("header marker");
+        let s = src.find(slot_old).expect("slot marker");
+        vec![ClippyDiagnostic {
+            file: "src/lib.rs".to_string(),
+            line: 1,
+            lint: "needless_range_loop".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![
+                    (h, h + header_old.len(), header_new.to_string()),
+                    (s, s + slot_old.len(), slot_new.to_string()),
+                ],
+            }),
+        }]
+    }
+
+    #[test]
+    fn oracle_edits_decline_range_loop_with_computed_bound() {
+        // The 981 shape: `for i in 0..sph { gs[i] *= d }` over
+        // `let gs = &mut buf[h * sph..]` — a tail slice whose len > sph.
+        // Whether clippy proved sph == gs.len() by cross-binding analysis
+        // is untrustable here; the rewrite multiplied every later head's
+        // slab by this head's decay and was misread as a GPU kernel bug
+        // for a forensic session. Declined, loudly counted, never applied.
+        let src = "fn decay(buf: &mut [f32], h: usize, sph: usize) {\n    let gs = &mut buf[h * sph..];\n    for i in 0..sph {\n        gs[i] *= 0.5;\n    }\n}\n";
+        let feed = range_loop_feed(src, "i in 0..sph", "g in gs.iter_mut()", "gs[i]", "*g");
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        assert!(lane.edits.is_empty(), "981 shape must not be applied");
+        assert_eq!(lane.range_declined, 1);
+        assert_eq!(lane.dropped, 0, "a decline is a deliberate refusal, not staleness");
+    }
+
+    #[test]
+    fn oracle_edits_consume_range_loop_with_len_end() {
+        // The syntactic proof: the bound IS the iterated collection's
+        // `len()` — full-prefix iteration is identical by construction.
+        let src = "fn sum(v: Vec<i32>) -> i32 {\n    let mut t = 0;\n    for i in 0..v.len() {\n        t += v[i];\n    }\n    t\n}\n";
+        let feed = range_loop_feed(src, "i in 0..v.len()", "x in &v", "v[i]", "*x");
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        assert_eq!(lane.range_declined, 0);
+        assert_eq!(lane.edits.len(), 1, "len-proven rewrite must be consumed");
+        let patched = splice_sorted(src, std::slice::from_ref(&lane.edits[0].edit));
+        assert!(patched.contains("for x in &v"), "{patched}");
+        syn::parse_file(&patched).expect("parses");
+    }
+
+    #[test]
+    fn oracle_edits_decline_parent_len_and_inclusive_bounds() {
+        // (a) the bound is a len() of the PARENT buffer — `grad_s.len() /
+        // heads` is not the tail slice's len for any offset head;
+        // (b) `0..=n` — even a len() end there iterates one EXTRA element
+        // (n+1 vs len): inclusive limits carry no proof this lane accepts.
+        let parent = "fn f(grad_s: &mut [f32], h: usize, heads: usize) {\n    let sph = grad_s.len() / heads;\n    let gs = &mut grad_s[h * sph..];\n    for i in 0..(grad_s.len() / heads) {\n        gs[i] *= 0.5;\n    }\n}\n";
+        let feed = range_loop_feed(parent, "i in 0..(grad_s.len() / heads)", "g in gs.iter_mut()", "gs[i]", "*g");
+        let lane = oracle_edits(&feed, "src/lib.rs", parent, &["needless_range_loop"]);
+        assert!(lane.edits.is_empty(), "parent-len bound must decline");
+        assert_eq!(lane.range_declined, 1);
+
+        let incl = "fn s(v: &[i32]) -> i32 {\n    let mut t = 0;\n    for i in 0..=v.len() {\n        t += v[i];\n    }\n    t\n}\n";
+        let feed = range_loop_feed(incl, "i in 0..=v.len()", "x in v", "v[i]", "*x");
+        let lane = oracle_edits(&feed, "src/lib.rs", incl, &["needless_range_loop"]);
+        assert!(lane.edits.is_empty(), "inclusive limit must decline");
+        assert_eq!(lane.range_declined, 1);
+    }
+
+    #[test]
+    fn oracle_edits_decline_len_bound_over_different_collection() {
+        // The receiver-identity case: the bound IS a zero-arg `.len()` (the
+        // end-shape check alone passes) but of the PARENT buffer, while the
+        // body slots index `gs`, a tail slice — `gs.len() < buf.len()` and
+        // the suggestion iterates gs. The 981 hazard wearing a len() bound;
+        // the receiver identity is the proof the end-shape cannot supply.
+        let src = "fn decay(buf: &mut [f32], base: usize, sph: usize) {\n    let gs = &mut buf[base..];\n    for i in 0..buf.len() {\n        gs[i] *= 0.5;\n    }\n}\n";
+        let feed = range_loop_feed(src, "i in 0..buf.len()", "g in gs.iter_mut()", "gs[i]", "*g");
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        assert!(
+            lane.edits.is_empty(),
+            "len() of the parent over a tail-slice slot must decline"
+        );
+        assert_eq!(lane.range_declined, 1);
+    }
+
+    #[test]
+    fn oracle_edits_range_guard_judges_the_innermost_loop() {
+        // A suggestion inside a nested loop is judged by the INNER header:
+        // the outer loop carries the len proof, the inner does not — the
+        // guard must not be satisfied by the enclosing loop's proof.
+        let src = "fn f(v: Vec<Vec<i32>>, n: usize) -> i32 {\n    let mut t = 0;\n    for r in 0..v.len() {\n        for i in 0..n {\n            t += v[r][i];\n        }\n    }\n    t\n}\n";
+        let feed = range_loop_feed(src, "i in 0..n", "(r, row) in v.iter().enumerate()", "v[r][i]", "row[i]");
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
+        assert!(lane.edits.is_empty(), "inner unproven bound must decline");
+        assert_eq!(lane.range_declined, 1);
     }
 
     #[test]
