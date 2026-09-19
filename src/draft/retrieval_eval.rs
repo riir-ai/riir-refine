@@ -112,6 +112,197 @@ pub struct CollapseRecord {
     pub pool_top_k: usize,
 }
 
+/// Issue 125 (CUA-S1 `evals/metrics.py` adoption): the decision-outcome
+/// taxonomy over labeled spans — provider-neutral, derived entirely from
+/// facts the eval already computes (rank of gold, rank of acceptable
+/// alternatives, the `instantiates` flags of the ranked window). No new
+/// inference, no threshold: `ScoredRule::score` is documented (Bench 018
+/// addendum) to carry NO confidence signal, so the decline axis rides the
+/// instantiation probe instead — the only measured rule-instantiation gate.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ChoiceTaxonomy {
+    /// Labeled spans the taxonomy covered (same population as `blended`).
+    pub labeled: usize,
+    /// Gold rule ranked #1 — strict ([`ChoiceOutcome::CorrectRule`]).
+    /// Cross-checkable: equals `blended.hits_at_1` while no acceptable
+    /// sets are authored.
+    pub correct_rule: usize,
+    /// An authored acceptable-alternative won top-1
+    /// ([`ChoiceOutcome::CorrectAcceptable`]).
+    pub correct_via_acceptable: usize,
+    /// Gold (or an acceptable alternative) surfaced but was outranked
+    /// ([`ChoiceOutcome::WrongRule`]) — the fix is discrimination.
+    pub wrong_rule: usize,
+    /// Neither gold nor any acceptable alternative surfaced
+    /// ([`ChoiceOutcome::WrongSpan`]) — the fix is the span pipeline.
+    pub wrong_span: usize,
+    /// Decline axis (three-way over the span's own-domain ranked window):
+    /// at least one candidate's proposer FIRED — the span is actionable.
+    /// `canonical_rank` sorts `instantiates` first, so covered ⇒ top-1
+    /// instantiated. CUA-S1 `coverage`.
+    pub covered: usize,
+    /// Probeable candidates were present but NONE fired — a REAL decline:
+    /// the proposers looked at the span and did not act on it. CUA-S1
+    /// `abstention_rate` numerator.
+    pub declined: usize,
+    /// The window holds no probeable rule at all (kernel/dist spans, or a
+    /// clippy window outside `FIXABLE_LINTS`) — the instantiation signal is
+    /// ABSENT, not negative; excluded from coverage/abstention denominators
+    /// and reported beside them so the split is honest.
+    pub proposer_blind: usize,
+    /// Top-1 correct (strict or acceptable) among COVERED spans — CUA-S1
+    /// `selective_accuracy` numerator.
+    pub selective_correct: usize,
+}
+
+impl ChoiceTaxonomy {
+    /// Fraction of signal-bearing spans that were actionable (covered /
+    /// (covered + declined)); proposer-blind spans are excluded from the
+    /// denominator — the axis does not speak for them.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // span counts — display metric
+    pub fn coverage(&self) -> Option<f32> {
+        let d = self.covered + self.declined;
+        (d > 0).then(|| self.covered as f32 / d as f32)
+    }
+
+    /// Fraction of signal-bearing spans where the system would decline
+    /// (declined / (covered + declined)) — the complement of coverage.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // span counts — display metric
+    pub fn abstention_rate(&self) -> Option<f32> {
+        let d = self.covered + self.declined;
+        (d > 0).then(|| self.declined as f32 / d as f32)
+    }
+
+    /// Accuracy over answered (covered) spans — correct / covered.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // span counts — display metric
+    pub fn selective_accuracy(&self) -> Option<f32> {
+        (self.covered > 0).then(|| self.selective_correct as f32 / self.covered as f32)
+    }
+
+    /// Absorb one span's classification (the per-span facts come from
+    /// [`classify_choice_span`]).
+    pub fn absorb(&mut self, s: SpanChoice) {
+        self.labeled += 1;
+        match s.outcome {
+            ChoiceOutcome::CorrectRule => self.correct_rule += 1,
+            ChoiceOutcome::CorrectAcceptable => self.correct_via_acceptable += 1,
+            ChoiceOutcome::WrongRule => self.wrong_rule += 1,
+            ChoiceOutcome::WrongSpan => self.wrong_span += 1,
+        }
+        let correct = matches!(
+            s.outcome,
+            ChoiceOutcome::CorrectRule | ChoiceOutcome::CorrectAcceptable
+        );
+        match s.decline {
+            DeclineClass::Covered => {
+                self.covered += 1;
+                self.selective_correct += usize::from(correct);
+            }
+            DeclineClass::Declined => self.declined += 1,
+            DeclineClass::ProposerBlind => self.proposer_blind += 1,
+        }
+    }
+}
+
+/// The three-way decline classification for one span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclineClass {
+    /// ≥1 window candidate instantiated — actionable.
+    Covered,
+    /// Probeable candidates present, none fired — a real decline.
+    Declined,
+    /// No probeable candidate — the signal is absent.
+    ProposerBlind,
+}
+
+/// One span's classification facts (the pure seam — no matcher needed).
+/// The outcome is categorical by construction: the four verdicts partition
+/// the labeled set, so an enum (not flags) makes a span with two outcomes
+/// unrepresentable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpanChoice {
+    pub outcome: ChoiceOutcome,
+    pub decline: DeclineClass,
+}
+
+/// The four decision outcomes (CUA-S1's `wrong_action`/`wrong_target`
+/// decomposition adopted; the two correct halves separated so an authored
+/// acceptable alternative stays visible beside strict gold).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChoiceOutcome {
+    /// Gold rule ranked #1 — strict.
+    CorrectRule,
+    /// An authored acceptable-alternative won top-1 (counted correct; the
+    /// strict number stays `correct_rule`). CUA-S1 `acceptable` in gold.
+    CorrectAcceptable,
+    /// Gold (or an acceptable alternative) surfaced in the window but was
+    /// outranked — the fix is discrimination (rerank/scorer). CUA-S1
+    /// `wrong_action` → mis-ranked rule.
+    WrongRule,
+    /// Neither gold nor any acceptable alternative surfaced in the probe
+    /// window — the fix is the span pipeline (chunk/embed/index). CUA-S1
+    /// `wrong_target` → mis-targeted span.
+    WrongSpan,
+}
+
+/// Classify one labeled span against its own-domain ranked window.
+///
+/// Pure over its inputs — unit-testable without a matcher. `ranked` is the
+/// canonical-ranked window the eval already computed; `probeable` is
+/// [`super::instantiation_rerank::probeable`] threaded in as a closure so
+/// this function compiles under every feature combination.
+pub fn classify_choice_span<'a, I, F>(
+    label: &str,
+    acceptable: &[String],
+    ranked: I,
+    probeable: F,
+) -> SpanChoice
+where
+    I: IntoIterator<Item = &'a crate::draft::ScoredRule>,
+    F: Fn(&str) -> bool,
+{
+    let ranked: Vec<&crate::draft::ScoredRule> = ranked.into_iter().collect();
+    let rank_strict = ranked.iter().position(|r| r.rule_id == label);
+    let rank_acceptable = acceptable
+        .iter()
+        .filter_map(|a| ranked.iter().position(|r| r.rule_id == *a))
+        .min();
+    let best_correct_rank = match (rank_strict, rank_acceptable) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    };
+    let correct_strict = rank_strict == Some(0);
+    let correct_acceptable =
+        !correct_strict && rank_acceptable == Some(0) && rank_strict != Some(0);
+    let surfaced = best_correct_rank.is_some();
+
+    let any_fires = ranked.iter().any(|r| r.instantiates);
+    let any_probeable = ranked.iter().any(|r| probeable(&r.rule_id));
+    let decline = if any_fires {
+        DeclineClass::Covered
+    } else if any_probeable {
+        DeclineClass::Declined
+    } else {
+        DeclineClass::ProposerBlind
+    };
+
+    SpanChoice {
+        outcome: if correct_strict {
+            ChoiceOutcome::CorrectRule
+        } else if correct_acceptable {
+            ChoiceOutcome::CorrectAcceptable
+        } else if !surfaced {
+            ChoiceOutcome::WrongSpan
+        } else {
+            ChoiceOutcome::WrongRule
+        },
+        decline,
+    }
+}
+
 /// The full eval output.
 #[derive(Debug, Default)]
 pub struct EvalReport {
@@ -144,6 +335,11 @@ pub struct EvalReport {
     /// is untouched, this observes the ranking the eval already computed —
     /// so an empty list is the pre-T3 behaviour, byte for byte.
     pub collapsed_pools: Vec<CollapseRecord>,
+    /// Issue 125 (CUA-S1 metric adoption): the decision-outcome taxonomy —
+    /// wrong-rule vs wrong-span decomposition, acceptable-alternative hits,
+    /// and the three-way decline axis (covered / declined / proposer-blind)
+    /// over the same labeled population as `blended`.
+    pub taxonomy: ChoiceTaxonomy,
     /// Issue 121: the Vendi axis — the geometric diversity of the DELIVERED
     /// slate (the per-domain top-[`PROBE_TOP_K`] latents, exact cosine-
     /// kernel certificate via katgpt-core `set_admission`). `None` when the
@@ -535,6 +731,14 @@ pub struct OwnedEvalSpan {
     pub label: String,
     pub domain: DomainId,
     pub code: String,
+    /// Issue 125 (CUA-S1 metric adoption): authored acceptable-alternative
+    /// gold rules — rules a human would score as CORRECT for this span even
+    /// though the fixture's primary label differs. Empty everywhere today:
+    /// the axis ships with the scoring semantics and ZERO authored sets,
+    /// because an acceptable set is a corpus claim (two rules produce a fix
+    /// a reviewer would accept for THIS span), never a heuristic guess.
+    /// The `PoC`'s choice-row rendering (issue 125 T1) is the intended author.
+    pub acceptable: Vec<String>,
 }
 
 pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
@@ -545,6 +749,7 @@ pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
             label: lint.to_string(),
             domain: DomainId::Clippy,
             code: code.to_string(),
+            acceptable: Vec::new(),
         });
     }
     #[cfg(feature = "rust_perf")]
@@ -553,6 +758,7 @@ pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
             label: rule.to_string(),
             domain: DomainId::Perf,
             code: code.to_string(),
+            acceptable: Vec::new(),
         });
     }
     #[cfg(feature = "kernel_heal")]
@@ -561,6 +767,7 @@ pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
             label: rule,
             domain: DomainId::Kernel,
             code,
+            acceptable: Vec::new(),
         });
     }
     spans
@@ -753,6 +960,20 @@ pub fn run_eval_inner(
                 component,
             });
         }
+
+        // Issue 125 taxonomy: classify the span against the SAME ranked
+        // window the recall axes above consumed. The decline axis reads the
+        // `instantiates` flags as this run marked them (Structural by
+        // default; under `RerankMode::Off` nothing is marked, so every
+        // signal-bearing span reads Declined — the honest reading of a run
+        // that ran no probe).
+        let choice = classify_choice_span(
+            label,
+            &span.acceptable,
+            ranked.iter().copied(),
+            |rule_id| super::instantiation_rerank::probeable(domain, rule_id),
+        );
+        report.taxonomy.absorb(choice);
     }
 
     for (tag, code) in CLEAN_SPANS {
@@ -899,6 +1120,33 @@ pub fn print_report(report: &EvalReport) {
             .collect::<Vec<_>>()
             .join(", ");
         println!("  {tag} -> {tops}");
+    }
+    // Issue 125 (CUA-S1 metrics.py adoption): the decision-outcome taxonomy
+    // — wrong-rule/wrong-span split, acceptable-alternative hits, and the
+    // three-way decline axis. Percentages only where the denominator speaks.
+    println!("\n-- Issue 125 choice taxonomy (CUA-S1 metric adoption) --");
+    let t = &report.taxonomy;
+    println!(
+        "  labeled {} | correct-rule {} (strict) | via-acceptable {} | wrong-rule {} (discrimination) | wrong-span {} (span pipeline)",
+        t.labeled, t.correct_rule, t.correct_via_acceptable, t.wrong_rule, t.wrong_span,
+    );
+    let pct = |o: Option<f32>| o.map_or("-".to_string(), |v| format!("{:.1}%", v * 100.0));
+    println!(
+        "  decline axis: covered {} | declined {} | proposer-blind {} | coverage {} | abstention {} | selective-accuracy {}",
+        t.covered,
+        t.declined,
+        t.proposer_blind,
+        pct(t.coverage()),
+        pct(t.abstention_rate()),
+        pct(t.selective_accuracy()),
+    );
+    if t.correct_via_acceptable == 0 {
+        // Cross-check invariant while no acceptable sets are authored: the
+        // strict axis must equal the recall table's blended top-1 exactly.
+        debug_assert_eq!(
+            t.correct_rule, report.blended.hits_at_1,
+            "taxonomy strict hits diverged from blended top-1 — one of the two axes is miscomputed"
+        );
     }
 }
 
@@ -2188,5 +2436,109 @@ mod tests {
             "C alpha>=2 (All mode, upper bound): {agree_alpha_all}/{measurable} = {:.1}%",
             pct(agree_alpha_all)
         );
+    }
+
+    // ── Issue 125: the choice-taxonomy seam (pure, no matcher) ───────────
+
+    fn scored(rule_id: &str, instantiates: bool) -> crate::draft::ScoredRule {
+        crate::draft::ScoredRule {
+            rule_id: rule_id.to_string(),
+            score: 0.0,
+            instantiates,
+        }
+    }
+
+    #[test]
+    fn taxonomy_classifies_the_four_outcomes() {
+        use super::{classify_choice_span, ChoiceOutcome, DeclineClass};
+
+        let acc = vec!["needless_return".to_string()];
+        // strict hit: gold top-1
+        let ranked = vec![scored("let_and_return", true), scored("other", false)];
+        let c = classify_choice_span("let_and_return", &[], &ranked, |_| true);
+        assert_eq!(c.outcome, ChoiceOutcome::CorrectRule);
+        assert_eq!(c.decline, DeclineClass::Covered);
+
+        // acceptable hit: an authored alternative wins top-1, gold lower
+        let ranked = vec![scored("needless_return", true), scored("let_and_return", false)];
+        let c = classify_choice_span("let_and_return", &acc, &ranked, |_| true);
+        assert_eq!(c.outcome, ChoiceOutcome::CorrectAcceptable);
+
+        // wrong-rule: gold surfaced but outranked (no acceptable rescue)
+        let ranked = vec![scored("other", true), scored("let_and_return", false)];
+        let c = classify_choice_span("let_and_return", &[], &ranked, |_| true);
+        assert_eq!(c.outcome, ChoiceOutcome::WrongRule);
+
+        // wrong-span: neither gold nor the acceptable alternative ever
+        // surfaced — the span pipeline, not discrimination
+        let ranked = vec![scored("other", true), scored("b", false)];
+        let c = classify_choice_span("let_and_return", &acc, &ranked, |_| true);
+        assert_eq!(c.outcome, ChoiceOutcome::WrongSpan);
+    }
+
+    #[test]
+    fn taxonomy_decline_axis_is_three_way() {
+        use super::{classify_choice_span, DeclineClass};
+
+        // covered: something fired
+        let ranked = vec![scored("a", false), scored("b", true)];
+        assert_eq!(
+            classify_choice_span("gold", &[], &ranked, |_| false).decline,
+            DeclineClass::Covered
+        );
+        // declined: probeable present, none fired — the real decline
+        let ranked = vec![scored("a", false), scored("b", false)];
+        assert_eq!(
+            classify_choice_span("gold", &[], &ranked, |_| true).decline,
+            DeclineClass::Declined
+        );
+        // proposer-blind: nothing probeable — the signal is absent
+        assert_eq!(
+            classify_choice_span("gold", &[], &ranked, |_| false).decline,
+            DeclineClass::ProposerBlind
+        );
+        // empty window: blind (no candidates at all)
+        assert_eq!(
+            classify_choice_span("gold", &[], Vec::<&crate::draft::ScoredRule>::new(), |_| true)
+                .decline,
+            DeclineClass::ProposerBlind
+        );
+    }
+
+    #[test]
+    fn taxonomy_ratios_and_partition() {
+        use super::ChoiceTaxonomy;
+
+        let mut t = ChoiceTaxonomy::default();
+        // A: covered, strict-correct — gold top-1 and firing
+        let ranked = vec![scored("gold", true), scored("other", false)];
+        t.absorb(super::classify_choice_span("gold", &[], &ranked, |_| true));
+        // B: covered, wrong-rule — another rule fires above gold
+        let ranked = vec![scored("other", true), scored("gold", false)];
+        t.absorb(super::classify_choice_span("gold", &[], &ranked, |_| true));
+        // C: declined, wrong-span — gold absent, probeable candidates none fired
+        let ranked = vec![scored("other", false), scored("x", false)];
+        t.absorb(super::classify_choice_span("gold", &[], &ranked, |_| true));
+        // D: proposer-blind, wrong-rule — gold surfaced but nothing probeable
+        let ranked = vec![scored("other", false), scored("gold", false)];
+        t.absorb(super::classify_choice_span("gold", &[], &ranked, |_| false));
+        // E: covered, acceptable-correct — an authored alternative wins top-1
+        let ranked = vec![scored("alt", true), scored("gold", false)];
+        let acc = vec!["alt".to_string()];
+        t.absorb(super::classify_choice_span("gold", &acc, &ranked, |_| true));
+
+        assert_eq!(t.labeled, 5);
+        assert_eq!((t.correct_rule, t.correct_via_acceptable, t.wrong_rule, t.wrong_span), (1, 1, 2, 1));
+        assert_eq!((t.covered, t.declined, t.proposer_blind), (3, 1, 1));
+        assert_eq!(t.selective_correct, 2);
+        assert!((t.coverage().unwrap() - 0.75).abs() < 1e-6);
+        assert!((t.abstention_rate().unwrap() - 0.25).abs() < 1e-6);
+        assert!((t.selective_accuracy().unwrap() - 2.0 / 3.0).abs() < 1e-6);
+        // outcomes partition the labeled set exactly
+        assert_eq!(
+            t.correct_rule + t.correct_via_acceptable + t.wrong_rule + t.wrong_span,
+            t.labeled
+        );
+        assert_eq!(t.covered + t.declined + t.proposer_blind, t.labeled);
     }
 }

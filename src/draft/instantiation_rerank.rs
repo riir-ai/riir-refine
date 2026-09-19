@@ -172,6 +172,42 @@ pub const RERANK_POOL: usize = 28;
 /// "no proposer" and "no match" indistinguishable, which is the correct
 /// conservative reading: absence of evidence is not evidence.
 #[allow(unused_variables)] // `file`/`code` are unused when no domain feature is on
+/// Could this rule EVER instantiate in this domain under
+/// [`RerankMode::Structural`] — i.e. does the Structural probe admit it at
+/// all? The single source of the Structural admission sets, consumed by
+/// [`instantiates`]'s gate and by the eval's decline axis (Issue 125: a span
+/// whose window holds NO probeable rule is proposer-blind — the abstention
+/// signal is absent, which is a different row from a real decline).
+///
+/// Mirrors the per-domain admission exactly: clippy = `FIXABLE_LINTS`,
+/// perf = every rule (all probeable), sec = `FIXABLE_SEC`, docker =
+/// `FIXABLE_DOCKER`; kernel and dist ship no proposers, so no rule is
+/// probeable there. Under [`RerankMode::All`] the type-blind proposers ALSO
+/// probe (Bench 022) — probeability here is the Structural reading.
+#[must_use]
+pub fn probeable(domain: DomainId, rule_id: &str) -> bool {
+    match domain {
+        #[cfg(feature = "clippy_lints")]
+        DomainId::Clippy => {
+            use crate::domains::clippy_lints::proposers::FIXABLE_LINTS;
+            FIXABLE_LINTS.contains(&rule_id)
+        }
+        #[cfg(feature = "rust_perf")]
+        DomainId::Perf => true,
+        #[cfg(feature = "sec")]
+        DomainId::Sec => {
+            use crate::domains::sec::proposers::FIXABLE_SEC;
+            FIXABLE_SEC.contains(&rule_id)
+        }
+        #[cfg(feature = "docker")]
+        DomainId::Docker => {
+            use crate::domains::docker::rules::FIXABLE_DOCKER;
+            FIXABLE_DOCKER.contains(&rule_id)
+        }
+        _ => false,
+    }
+}
+
 fn instantiates(
     domain: DomainId,
     rule_id: &str,
@@ -179,13 +215,13 @@ fn instantiates(
     file: &syn::File,
     mode: RerankMode,
 ) -> bool {
+    if mode == RerankMode::Structural && !probeable(domain, rule_id) {
+        return false;
+    }
     match domain {
         #[cfg(feature = "clippy_lints")]
         DomainId::Clippy => {
-            use crate::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
-            if mode == RerankMode::Structural && !FIXABLE_LINTS.contains(&rule_id) {
-                return false;
-            }
+            use crate::domains::clippy_lints::proposers::collect_edits;
             !collect_edits(rule_id, code, file).is_empty()
         }
         #[cfg(feature = "rust_perf")]
@@ -196,11 +232,6 @@ fn instantiates(
         #[cfg(feature = "sec")]
         DomainId::Sec => {
             use crate::domains::sec::proposers::collect_edits;
-            if mode == RerankMode::Structural
-                && !crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule_id)
-            {
-                return false;
-            }
             !collect_edits(rule_id, code, file).is_empty()
         }
         #[cfg(feature = "docker")]
@@ -208,11 +239,6 @@ fn instantiates(
             // The docker proposers read TEXT, not the parsed `syn::File` —
             // the only domain whose probe ignores `file` entirely.
             use crate::domains::docker::proposers::collect_edits;
-            if mode == RerankMode::Structural
-                && !crate::domains::docker::rules::FIXABLE_DOCKER.contains(&rule_id)
-            {
-                return false;
-            }
             !collect_edits(rule_id, code).is_empty()
         }
         // Kernel has no proposers (Plan 005 Phase 5 deferred — the corpus is

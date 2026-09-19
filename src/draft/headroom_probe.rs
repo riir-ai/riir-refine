@@ -833,11 +833,13 @@ mod tests {
                 label: "needless_return".to_string(),
                 domain: DomainId::Clippy,
                 code: "fn f(x: i32) -> i32 { return x; }".to_string(),
+                acceptable: Vec::new(),
             },
             OwnedEvalSpan {
                 label: "unused_unit".to_string(),
                 domain: DomainId::Clippy,
                 code: "pub fn g() -> () { () }".to_string(),
+                acceptable: Vec::new(),
             },
         ];
 

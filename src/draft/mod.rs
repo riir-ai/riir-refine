@@ -91,7 +91,7 @@ pub use margin_weight::{
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
 pub use retrieval_eval::{
     run_eval, run_eval_with, run_retrieval_sweep, run_router_eval,
-    DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
+    ChoiceTaxonomy, DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
 };
 #[cfg(feature = "set_rerank")]
 pub use retrieval_eval::VendiAxis;

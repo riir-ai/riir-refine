@@ -1,6 +1,6 @@
 # Issue 125 — Specialist option-scorer PoC: healer rule selection as one-pass choice classification (CUA-S1 recipe)
 
-**Status:** OPEN — research-derived PoC task, no code yet. Source: [katgpt-rs Research 573](../katgpt-rs/.research/573_CUA_S1_Open_Jev_Recipe_Specialist_Option_Scorer.md) (trycua CUA-S1 @ `83f142c4`, MIT — the open Jev replication; Research 562's reopen trigger). Modelless default is NOT challenged — this is a challenger arm, promote only on measured GOAT gain.
+**Status:** OPEN — research-derived PoC task; the metric-taxonomy half LANDED 2026-09-20 (see the section + the task tick below), the scorer/training half has no code yet. Source: [katgpt-rs Research 573](../katgpt-rs/.research/573_CUA_S1_Open_Jev_Recipe_Specialist_Option_Scorer.md) (trycua CUA-S1 @ `83f142c4`, MIT — the open Jev replication; Research 562's reopen trigger). Modelless default is NOT challenged — this is a challenger arm, promote only on measured GOAT gain.
 
 ## Why
 
@@ -23,7 +23,7 @@ Serving envelope (TTPO rule): the heal path is not the 20 Hz tick — spans are 
    - **Calibration**: report decision-level ECE/Brier vs the sigmoid floor — CUA-S1 ships uncalibrated by its own admission; do not inherit that (ties katgpt-rs Issue 810).
 5. **If GOAT**: freeze/thaw the 2.8 MB checkpoint (BLAKE3 envelope), wire as a rerank arm behind a feature flag, promote on measured gain, demote the loser per house rule. **If REFUTED**: record numbers in Research 573, keep modelless default, reopen only on a corpus-order-of-magnitude change.
 
-## Metric-taxonomy adoption (small, independent of the PoC's outcome)
+## Metric-taxonomy adoption (small, independent of the PoC's outcome) — LANDED 2026-09-20
 
 Adopt CUA-S1 `evals/metrics.py` rows into `retrieval_eval` reporting (provider-neutral, no inference):
 - `wrong_rule` vs `wrong_span` decomposition (their `wrong_action`/`wrong_target`) — mis-ranked rule vs mis-targeted span have different fixes.
@@ -46,5 +46,5 @@ vLLM PR #57250 (unmerged, `ready`) + its `examples/features/diffusion_reads/stru
 - [ ] Confuser-pair augmentation + shuffled-context control arm
 - [ ] tinyx scorer + training loop (isolated `CARGO_TARGET_DIR`, /tmp)
 - [ ] G1 / G1-OOD / G2 / control / calibration gates, numbers recorded
-- [ ] Metric-taxonomy rows in `retrieval_eval` (independent of PoC verdict)
+- [x] Metric-taxonomy rows in `retrieval_eval` (independent of PoC verdict) — **landed 2026-09-20**: `ChoiceTaxonomy` on `EvalReport` (wrong-rule/wrong-span decomposition via `ChoiceOutcome`, acceptable-alternative gold via `OwnedEvalSpan.acceptable` — semantics shipped, ZERO sets authored by design: an acceptable set is a corpus claim, never a heuristic guess; the PoC's T1 row rendering is the intended author) + the three-way decline axis (`covered`/`declined`/`proposer-blind` over the instantiation probe — the only measured non-confidence gate, since `ScoredRule::score` is documented to carry none). `probeable()` extracted from `instantiates`'s Structural gates as the single admission source. First live numbers (default eval, 101 spans): correct-rule 94 / wrong-rule 5 / wrong-span 2; coverage 50.5%, abstention 49.5%, **selective-accuracy 100%** — every error lives in the declined half, the circularity diagnostic's story restated as a first-class axis (the fixture invariant makes instantiation ≈ correctness; the PoC challenger must beat this OOD, not on fixtures).
 - [ ] Verdict recorded in Research 573; issue closed under the noise-reduction rule with the commit hash

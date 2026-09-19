@@ -53,6 +53,7 @@ fn t023_stop_verdict_over_the_real_repo_dataset() {
                 label: l.clone(),
                 domain: DomainId::Clippy,
                 code: r.code.clone(),
+                acceptable: Vec::new(),
             })
         })
         .collect();
