@@ -30,6 +30,10 @@ Adopt CUA-S1 `evals/metrics.py` rows into `retrieval_eval` reporting (provider-n
 - `acceptable` alternatives in gold — multiple correct rules for a span stop being scored as errors.
 - `coverage` / `abstention_rate` / `selective_accuracy` split — decline behavior becomes a measured axis (score-bench's `persist/broken/created` already covers the `unsafe_action` analog).
 
+## Reference implementation (2026-09-20 addendum — Research 574)
+
+vLLM PR #57250 (unmerged, `ready`) + its `examples/features/diffusion_reads/structured_server.py` interposer = the first **self-hostable** Jev-shaped decision server on open weights (DiffusionGemma 26B-A4B). Relevant here, no scope change: (a) the interposer's question types (yes/no, scale, multiple-choice) are the Noul/Choice/Score contract Research 562 distilled — a live oracle for decision-contract shapes if this PoC is ever validated against a hosted endpoint; (b) its `samples=auto` policy (label-entropy H1 > 0.1 → 4 reads, answer as mean ± bars) implements the metric-taxonomy rows below (`abstention_rate`/`selective_accuracy`) as **agreement-across-reads** — a self-hosted confidence proxy needing no ground truth; (c) measured datapoints + our-silicon validation plan (4090, NVFP4-marlin float16 workaround): katgpt-rs Research 574 + Issue 859.
+
 ## Notes
 
 - Softmax-over-options is the categorical-choice exception to the house sigmoid rule (mutually exclusive rule choice per span); all gating/projection consumers stay sigmoid.
