@@ -89,16 +89,38 @@ const MAX_ANCESTOR_STEPS: usize = 4;
 #[must_use]
 pub fn detect_project_root(paths: &[PathBuf], cwd: &Path) -> Option<PathBuf> {
     let start: &Path = paths.first().map_or(cwd, |p| p.as_path());
-    let mut dir: &Path = if start.is_dir() {
-        start
+    let mut dir: PathBuf = if start.is_dir() {
+        start.to_path_buf()
     } else {
-        start.parent()?
+        start.parent()?.to_path_buf()
     };
+    // Anchor to the caller's cwd BEFORE walking up: a RELATIVE 1-component
+    // target (`cargo heal --suggest src/` — the documented invocation form)
+    // parents to the EMPTY path, and `"".join("Cargo.toml")` then resolves
+    // against the process cwd — returning `Some("")` as the "root", whose
+    // `Command::current_dir("")` spawn fails with os error 123 on Windows /
+    // ENOENT on Unix. The exact class `compile_oracle::owning_package_root`
+    // already fixed for the --fix-compile lane (the Issue 015 GOAT run's
+    // spawn failure); ported here when the 2026-09-20 4090 sweep hit it on
+    // the auto-oracle.
+    if dir.as_os_str().is_empty() {
+        dir = cwd.to_path_buf();
+    } else if dir.is_relative() {
+        // `cwd.join(".")` would leave a trailing CurDir component
+        // ("<cwd>/." — spawns fine but is neither displayable nor
+        // PathBuf-equal to the root it names); normalize the bare-dot
+        // input to cwd itself.
+        dir = if dir == Path::new(".") {
+            cwd.to_path_buf()
+        } else {
+            cwd.join(dir)
+        };
+    }
     for _ in 0..=MAX_ANCESTOR_STEPS {
         if dir.join("Cargo.toml").is_file() {
-            return Some(dir.to_path_buf());
+            return Some(dir);
         }
-        dir = dir.parent()?;
+        dir = dir.parent()?.to_path_buf();
     }
     None
 }
@@ -262,6 +284,51 @@ mod tests {
         let nested = base.join("a").join("b");
         fs::create_dir_all(&nested).unwrap();
         assert_eq!(detect_project_root(&[nested], Path::new("/nowhere")), None);
+    }
+
+    #[test]
+    fn one_component_relative_target_resolves_against_cwd_never_empty() {
+        // The documented invocation shape: `cargo heal --suggest src/` run
+        // from the repo root. Before the cwd-anchor fix the walk went
+        // `src` → `""` → `"".join("Cargo.toml")` resolves against the
+        // process cwd → `Some("")` — an empty "root" whose spawn failed
+        // with os error 123 (the 2026-09-20 4090 sweep find). Both arms of
+        // the start ("src" resolves as a dir at process level, or not)
+        // must now converge on the ABSOLUTE project root.
+        let d = tmp_dir("relative");
+        fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        fs::create_dir_all(d.join("src")).unwrap();
+        let root =
+            detect_project_root(&[PathBuf::from("src")], &d).expect("root found via cwd");
+        assert_eq!(root, d, "the cwd-anchored walk finds the tmp project");
+        assert!(root.is_absolute(), "a relative root would spawn against the healer's own cwd");
+    }
+
+    #[test]
+    fn relative_file_target_resolves_via_cwd_not_the_empty_parent() {
+        // `cargo heal --suggest src/lib.rs` from the repo root: the file's
+        // parent ("src") is relative; the empty-path walk used to fire only
+        // for 1-component DIRS, but the anchor must hold for files too.
+        let d = tmp_dir("relative-file");
+        fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        fs::create_dir_all(d.join("src")).unwrap();
+        fs::write(d.join("src").join("lib.rs"), "").unwrap();
+        let root = detect_project_root(&[PathBuf::from("src/lib.rs")], &d)
+            .expect("root found via cwd");
+        assert_eq!(root, d);
+        assert!(root.is_absolute());
+    }
+
+    #[test]
+    fn bare_dot_target_is_the_cwd_project() {
+        // `cargo heal --suggest .` — the dir "." is relative; anchored to
+        // cwd it IS the project. Must never walk through "" to find it.
+        let d = tmp_dir("dot");
+        fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        let root =
+            detect_project_root(&[PathBuf::from(".")], &d).expect("root found via cwd");
+        assert_eq!(root, d);
+        assert!(root.is_absolute());
     }
 
     #[test]
