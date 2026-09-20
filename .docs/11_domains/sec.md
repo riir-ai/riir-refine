@@ -51,7 +51,7 @@ a fixture. The `!=` form stays out of Phase-2 scope.
 
 | Rule | Family | `--fix` | The bounded fix / gate |
 |---|---|---|---|
-| `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated) | `partial_cmp(..).unwrap_or(Equal)` (or `.unwrap()`) inside a sort comparator → `total_cmp(..)` — NaN becomes deterministically ordered instead of equal-to-everything (an inconsistent order the std sorts MAY PANIC on since 1.81). Gates: enclosing fn contains a `sort_by`/`sort_unstable_by`/`select_nth_unstable_by` call + exact chain shape + `Equal`-only default + comment guard + macro args refuse. The arg carries over VERBATIM (`PartialOrd::partial_cmp` pins `(&self, other: &Self)` — the same shape `total_cmp` takes), so the output is the idiomatic human form; non-float receivers (`Option<f32>`, other Ord primitives) fail E0599 → the `--verify` gate auto-reverts. Probe 2026-09-01: zero clippy lints fire on the shape (real clippy 1.97, pedantic+nursery+perf+suspicious+correctness+style) — the boundary holds with margin. Source: riir-ai Issue 832 T5's P8 intake (≈300 sibling library sites); the intake's type-blindness concern dissolved by `total_cmp` (direction-preserving recv/arg order + name-identical on f32/f64) — recorded in the intake close-out. Honest recall limit: a comparator defined in a helper fn and passed to `sort_by(helper)` by name is not detected — the sort call and the chain must share the enclosing fn.
+| `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated) | `partial_cmp(..).unwrap_or(Equal)` (or `.unwrap()`) inside a sort comparator → `total_cmp(..)` — NaN becomes deterministically ordered instead of equal-to-everything (an inconsistent order the std sorts MAY PANIC on since 1.81). Gates: enclosing fn contains a `sort_by`/`sort_unstable_by`/`select_nth_unstable_by` call + exact chain shape + `Equal`-only default + comment guard + macro args refuse. The arg carries over VERBATIM (`PartialOrd::partial_cmp` pins `(&self, other: &Self)` — the same shape `total_cmp` takes), so the output is the idiomatic human form; non-float receivers (`Option<f32>`, other Ord primitives) fail E0599 → the `--verify` gate auto-reverts. Probe 2026-09-01: zero clippy lints fire on the shape (real clippy 1.97, pedantic+nursery+perf+suspicious+correctness+style) — the boundary holds with margin. Source: riir-ai Issue 832 T5's P8 intake (≈300 sibling library sites); the intake's type-blindness concern dissolved by `total_cmp` (direction-preserving recv/arg order + name-identical on f32/f64) — recorded in the intake close-out. Honest recall limit: a comparator defined in a helper fn and passed to `sort_by(helper)` by name is not detected — the sort call and the chain must share the enclosing fn. Property: KANI-VERIFIED (harnesses g1a/g1b/g1c, Issue 127 — see the "Property evidence" section below)
 
 ## Batch 131 (2026-09-08) — the `InputValidation` family opens, suggest-only
 
@@ -109,6 +109,48 @@ neither weakened silently. En-route fix on develop: `ce74bac`'s healer
 (`&String` → `&str` deref-coercion — the documented healer escape class) and
 compiled to nothing under default features; restored + verified via the
 score-bench run itself.
+
+## Property evidence — machine-checked (Kani, Issue 127)
+
+A second evidence axis beside probe evidence: Kani (model checking over
+CBMC) decides the property BOTH ways on real MIR — the buggy form must
+VIOLATE it (existence witness), the fixed form must SATISFY it. The
+harness crate is deliberately DETACHED:
+[`.proofs/kani_sec_poc/`](../../.proofs/kani_sec_poc/README.md)
+(`[workspace]`-marked, zero deps, Kani 0.68.0 / CBMC 6.11.0 / its own
+pinned `nightly-2026-08-21` — never the workspace's stable
+`rust-toolchain.toml`), run on the 4090 box's WSL2 lane only
+(Windows-native Kani is unsupported), **never in CI, never a per-push
+gate** — a dev-time oracle. Measured 2026-09-20; witnesses captured via
+`-Z concrete-playback --concrete-playback print`.
+
+| Rule | Family | Harness | Property | Verdict | Solver |
+|---|---|---|---|---|---|
+| `nan-unsafe-sort-comparator` | `PanicSafety` | `g1a_buggy_cmp_violates_transitivity_of_equal` | the `partial_cmp(..).unwrap_or(Equal)` comparator is non-total | **VIOLATED + witness** — x=`-inf`, y=`+NaN`, z=`+inf`: cmp(x,y)=Equal, cmp(y,z)=Equal, cmp(x,z)=Less | 0.046 s |
+| `nan-unsafe-sort-comparator` | `PanicSafety` | `g1b_total_cmp_equal_is_transitive` | `total_cmp` transitive on Equal | **VERIFIED** | 0.060 s |
+| `nan-unsafe-sort-comparator` | `PanicSafety` | `g1c_total_cmp_is_total_antisymmetric_nan_self_equal` | `total_cmp` total + antisymmetric + NaN-self-Equal | **VERIFIED** | 0.074 s |
+
+### Pre-validation (staged leads, NOT shipped rules)
+
+This block is deliberately separate: a machine-checked property on a rule
+that does not exist yet is the strongest-looking row in the section and
+the weakest claim in it — it must never read as corpus coverage.
+
+| Staged lead | Harness | Property | Verdict | Solver |
+|---|---|---|---|---|
+| `unchecked-wire-arithmetic` (InputValidation; staged, Research 193 → Plan 156 / Batch 165) | `g2a_buggy_wire_sum_reaches_overflow` | bare `+` on `u32::from_le_bytes` operands reaches overflow | **VIOLATED + witness** — a=b=`0xFFFFFFFF` (2 × u32::MAX) | 0.050 s |
+| `unchecked-wire-arithmetic` (as above) | `g2b_checked_wire_sum_never_silently_wraps` | the checked form is exact two-sided: Some ⟺ u64-exact sum, None ⟺ true sum > u32::MAX | **VERIFIED** | 0.050 s |
+
+On the lead's batch landing, its row moves UP into the shipped table
+under the landed rule's name — the pre-validation block returns to empty.
+
+**Scope caveat (verbatim from the POC record):** these numbers are the
+FLOOR, not the ceiling. The harnesses are loop-free, dependency-free,
+≤6 symbolic variables, and needed no unwinding config; solver times of
+0.03–0.07 s say nothing about loop/unwind bounds, heap structures, or
+workspace-real-code harnesses — the "minutes per fixture" ceiling was
+never approached and remains UNMEASURED. Every cost figure in this
+section is a loop-free-fixture figure.
 
 ## The boundary discipline (non-negotiable)
 
