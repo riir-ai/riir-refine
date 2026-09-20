@@ -22,7 +22,7 @@ Two-track verdict, one note, because both skills (research + distill) share the 
 
 ## Track A — distill/corpus verdict
 
-**Verdict line: MARGINAL C+ (SEC_SEED) / ORACLE B− / no lane mapping / product-coverage weak-fire.**
+**Verdict line: MARGINAL C+ (SEC_SEED) / ORACLE B− / no lane mapping / product-coverage fires on the FAMILY, not this source (branch picked below).**
 
 **Domain routing:** `sec` — explicitly NOT `rust_perf`/`kernel_opt` (nothing here moves cycles), NOT `clippy_lints` (spec macro syntax carries no lint shapes), NOT `rustc_errors` (killed below — proof failures are not rustc error codes).
 
