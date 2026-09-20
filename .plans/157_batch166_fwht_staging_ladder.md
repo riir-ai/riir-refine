@@ -38,7 +38,7 @@ corrected in the same batch.
 - [x] T8 — score-bench: heal_rate 96.4% ≈ FLAT vs the recorded 96.2% (row #119) — the expected near-flat (kernel rules don't move the clippy fixture bench); one jsonl row appended (gen-8 frontier snapshot deduped on the second run), artifacts committed with the batch.
 - [x] T9 — Research 194 addendum: dedup correction (the Batch-96 rule exists; complementary-regime adjudication; the grep-mechanism lesson), GOAT results, the ×9 count-pin walk (router.rs found by execution).
 - [x] T10 — `.distill/001`: my-blob committed (HEAD + my hunks only — the LANDED row + the intake-row dedup correction/CONSUMED note); the sibling's 09-20 fix_verify intake block stays uncommitted in the worktree (verified: staged diff = 3 insertions/1 deletion, their marker absent from the staged blob).
-- [x] T11 — commit `feat: Batch 166: FWHT butterfly staging ladder (kernel_opt 619→620)` + push; the snapshot updated in the SAME commit. **Commit hash: `23a1a92c`.**
+- [x] T11 — commit `feat: Batch 166: FWHT butterfly staging ladder (kernel_opt 619→620)` + push; the snapshot updated in the SAME commit. **Final commit hash: `ecc8d5a5`** (the `23a1a92c` originally written here was the pre-amend hash — an in-commit document cannot cite its own amended hash; recorded in this follow-up).
 
 ## Constraints
 
