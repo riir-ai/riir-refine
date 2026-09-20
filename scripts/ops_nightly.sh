@@ -477,6 +477,24 @@ if [ -d "${REPO}/cloudflare/housekeeping/test" ]; then
   fi
 fi
 
+# ── 4c. corpus days sync (riir-dapps Issue 102) — git → the kat-service
+# corpus card. Mines THIS repo's corpus git history (the miner runs inside
+# this checkout) and POSTs the series to each env's merge door. WARN-only,
+# by design: a corpus-sync failure must never stop the dashboard refresh.
+# OPS_NIGHTLY_NO_CORPUS_SYNC=1 skips (the run-once-by-hand escape hatch).
+if [ "${OPS_NIGHTLY_NO_CORPUS_SYNC:-0}" != "1" ]; then
+  if [ -x "${REPO}/../riir-dapps/scripts/corpus_days_sync.sh" ]; then
+    log "corpus days sync starting"
+    if "${REPO}/../riir-dapps/scripts/corpus_days_sync.sh" >> "${LOG}" 2>&1; then
+      log "corpus days sync ok"
+    else
+      log "WARN corpus days sync FAILED (see above; riir-dapps Issue 102) — continuing"
+    fi
+  else
+    log "WARN corpus days sync skipped — no ../riir-dapps checkout beside this repo"
+  fi
+fi
+
 # ── 5. keep the log bounded (this runs unattended, forever) ──
 if [ "$(wc -l < "${LOG}")" -gt 5000 ]; then
   tail -n 2000 "${LOG}" > "${LOG}.tmp" && mv "${LOG}.tmp" "${LOG}"
