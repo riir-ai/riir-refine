@@ -51,15 +51,30 @@ off-lane (VLA tokenizers 2609.18259/2609.18487, flood-seg distillation
 scaling 2609.19499, Rosetta LLM-perf-models 2609.19376, diagonal-attention
 image gen 2609.19702, DeepSeek-V4.1 read as KV family + opponent row above).
 
+## Listing cross-check (cs.PF recent, the walk-#9 method's second half)
+
+The category LISTING surfaced 3 boundary rows announced Wed 09-16 (submitted ~09-14/15 —
+nominally walk #9's window, absent from its graded table; graded here for completeness):
+
+| # | ID | Title (short) | Grade | Mechanism / relevance | Action |
+|---|---|---|---|---|---|
+| 14 | **2609.16085** | Is INT8 Portable? Cross-Platform Quantized Inference Measurement | **B doctrine** | Controlled study across 7 hardware classes (ARM/x86 CPUs, dGPU, Jetson iGPU+NVDLA, 2 NPUs) with the ONNX artifact + quantization scales HELD FIXED — only the integer kernel/ISA varies. **The SIGN of the INT8 speedup is set by the CPU's dot-product ISA** (ARM dotprod/SDOT, x86 VNNI: with it up to 2.1×, without it a slowdown). | External confirmation of our platform-axis doctrine — "a platform is part of the claim, exactly as the profile is" (katgpt-rs full_gate / x86_64_execution_matrix / wasm32-simd128 double-gating family). Cite at the next platform-lane doc touch. Also league-methodology adjacent (same artifact, different ISA → different verdict — the pinned-cell rule). |
+| 15 | 2609.17179 | Discovering Performance Archetypes: Critical-Path-Aware Regression Detection | C+ | Static complexity metrics explain only **10.4%** of critical-path execution-time variance across 6 real C/C++ apps; multi-signal (static + dynamic traces + kernel resource data) required. | Doctrine echo of our static-vs-execution rule (arm_reach's "arm QUALITY is not statically decidable"; the check_validation_gate limit). No action. |
+| 16 | **2609.17475** | JustFit: 200K-Token LLM Serving on a 24 GiB Laptop (MLX) | **B− league watch** | MLX runtime (KVExec compressed-KV execution + PhaseSwap component residency + StateTrans): 196,608-in/16,384-out tokens on **Qwen3.8-27B MXFP4 on a 24 GiB M4 Pro**, 6.93× the mlx-vlm baseline context. | Our exact model + silicon class on a different stack — local-capacity league watch row (same-model/same-silicon reference, the mlx-serve class). Capacity engineering, not a scored lane; no trigger. |
+
+Other listing rows were duplicates of the graded table or skip classes (queueing,
+FPGA, thermal/serving schedulers, cross-list off-lane).
+
 ## Yield summary (part 1)
 
 **0 rule-batch** (nothing batch-justifying — consistent with sources thin) ·
 **1 thin rule-lead** (Splyce predication shape, needs a Rust specimen) ·
 **2 doctrine pairs/citations queued** (SDC post-hoc verification pair →
 bit-identity family; judge-calibration → GOAT/league; PrefixBench → cache
-lane; score-centering → riir-train drift) · **1 high-value lane-intel route**
-(game-NPC memory maintenance → riir-ai research candidate) · 2 watch rows
-(DeepSeek-V4.1-Flash, Zarya/diffusion-LM).
+lane; score-centering → riir-train drift; INT8-portability → platform-axis
+doctrine) · **1 high-value lane-intel route** (game-NPC memory maintenance →
+watch+citation with promotion trigger, gate run) · 3 watch rows (DeepSeek-
+V4.1-Flash, Zarya/diffusion-LM, JustFit/MLX local-capacity).
 
 Part 2 (Mon 09-21): re-run the five lanes with the window extended through
 09-20, grade the delta, fold into this table, close the walk.
