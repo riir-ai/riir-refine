@@ -110,6 +110,40 @@ neither weakened silently. En-route fix on develop: `ce74bac`'s healer
 compiled to nothing under default features; restored + verified via the
 score-bench run itself.
 
+## Batch 165 (2026-09-20) — the overflow sink, the family's 4th suggest-only rule
+
+One rule from Research 193's staged lead (Plan 156; the Issue-127 Kani
+pre-validation carried it through the probe gate): unchecked arithmetic on
+wire-byte origins — the overflow SINK beside the alloc sink, on the SHARED
+walker. `proposers::wire_taint` extracts the Batch-131 taint walk as a
+`WireSink`-parameterized substrate (`length_prefix_alloc` consumes the same
+walker — its 14-test suite pins the extraction behavior-identical);
+`unchecked_wire_arithmetic` adds the arithmetic sink: `+ - * << >>` and the
+syn-2 assign spellings (`len += 8` parses as `Expr::Binary` with an
+assign-suffixed `BinOp`) where either operand is a tracked, unvalidated
+bare ident. The repair is the checked op + an INVENTED error path
+(`len.checked_add(FRAME_OVERHEAD)` — the Option/Result type the fn may not
+carry), so suggest-only like the rest of the family.
+
+| Rule | Family | `--fix` | The detection + the bounded form |
+|---|---|---|---|
+| `unchecked-wire-arithmetic` | `InputValidation` | suggest-only | a wire-byte-origin integer (`from_{be,le,ne}_bytes` / header `.parse()`) through a BARE overflow-prone operator with no intervening bound check — panic in debug, silent WRAP in release, and the wrapped length corrupts the frame parse ("check the multiplication, not just the result": the derived-validated shape's post-hoc range check validates the WRAPPED value). Bounded form: `checked_add`/`checked_sub`/`checked_mul`/`checked_shl` + an error path. Sink-distinct from `length-prefix-validate-before-alloc` (Plan 156 T2, recorded): distinct defect classes, distinct repairs, no composition gate — both sinks fire on the unvalidated composition shape with disjoint spans, and in the derived-validated shape the alloc rule is correctly silent while this one correctly still fires. Boundary (measured, Plan 156 T1 + T7 refinement): `arithmetic_side_effects` is SILENT on literal/const operands (`len + 8`, `len + CONST`) and where it fires (variable operands) it is blanket/unscoped/no-suggestion, restriction/allow-by-default; `manual_checked_ops` is Div-only at this pin; Div/Rem are NOT this sink. Honest recall limits: same-fn bare-ident origins only; `vec![0u8; len + 8]` (arithmetic INLINE in the repeat) is unreached — the shared walk never descends into macro tokens |
+
+Gates at landing: sec lib 2156/0 (batch165 suite 15/15; the walker-extraction
+pinned by the unchanged 131 suite); clippy 0 default + sec (--all-targets sec);
+boundary gate 2/2 (real clippy over the grown probe crate — our fixture adds
+NO banned-lint firing at all: the restriction is silent on const operands);
+score-bench FLAT 96.36 (suggest-only adds no fixer, 15th consecutive FLAT);
+corpus-stats sec 15 → 16; retrieval floors HELD zero re-pins (blended
+93.1/95.0/96.0 of 101 vs floors 93/95/97), sec self-variant top-1 holds for
+the new rule, ROUTER ANNOTATION re-measured per the Issue-020 contract —
+sec+docker 31/101 (30.7%, was 34/101 at B140; the sec-centroid drift ticks
+−3 spans; floor 29/101 STANDS, not weakened) and full state 78/131 (59.5%,
+was 77/131 — +1, the kernel-vocabulary raise dominating; floor 72/131
+stands). Property evidence: the landed rule's Kani row pair (g2c/g2d)
+passed both ways on the WSL2 lane — see §Property evidence; the
+pre-validation block returns to EMPTY.
+
 ## Property evidence — machine-checked (Kani, Issue 127)
 
 A second evidence axis beside probe evidence: Kani (model checking over
@@ -121,7 +155,8 @@ harness crate is deliberately DETACHED:
 pinned `nightly-2026-08-21` — never the workspace's stable
 `rust-toolchain.toml`), run on the 4090 box's WSL2 lane only
 (Windows-native Kani is unsupported), **never in CI, never a per-push
-gate** — a dev-time oracle. Measured 2026-09-20; witnesses captured via
+gate** — a dev-time oracle. Measured 2026-09-20 (5 harnesses at the POC
+landing; 7 after the Batch 165 g2c/g2d extension); witnesses captured via
 `-Z concrete-playback --concrete-playback print`.
 
 | Rule | Family | Harness | Property | Verdict | Solver |
@@ -129,6 +164,8 @@ gate** — a dev-time oracle. Measured 2026-09-20; witnesses captured via
 | `nan-unsafe-sort-comparator` | `PanicSafety` | `g1a_buggy_cmp_violates_transitivity_of_equal` | the `partial_cmp(..).unwrap_or(Equal)` comparator is non-total | **VIOLATED + witness** — x=`-inf`, y=`+NaN`, z=`+inf`: cmp(x,y)=Equal, cmp(y,z)=Equal, cmp(x,z)=Less | 0.046 s |
 | `nan-unsafe-sort-comparator` | `PanicSafety` | `g1b_total_cmp_equal_is_transitive` | `total_cmp` transitive on Equal | **VERIFIED** | 0.060 s |
 | `nan-unsafe-sort-comparator` | `PanicSafety` | `g1c_total_cmp_is_total_antisymmetric_nan_self_equal` | `total_cmp` total + antisymmetric + NaN-self-Equal | **VERIFIED** | 0.074 s |
+| `unchecked-wire-arithmetic` | `InputValidation` | `g2c_buggy_framed_len_reaches_overflow` | the corpus fixture's bare `parse + FRAME_OVERHEAD` reaches overflow (its u32-domain twin — the fixture's `as usize` widening absorbs the overflow on 64-bit hosts, so the machine-checkable property lives in the wire-width domain the rule's advice targets: checked_add BEFORE any widening) | **VIOLATED + witness** — `"attempt to add with overflow"` inside the buggy callee (any header above `u32::MAX - 8`) | 0.023 s |
+| `unchecked-wire-arithmetic` | `InputValidation` | `g2d_checked_framed_len_never_silently_wraps` | the bounded repair is exact two-sided: Some ⟺ u64-exact length, None ⟺ true length > u32::MAX | **VERIFIED** (every check SUCCESS, 0 failures) | 0.027 s |
 
 ### Pre-validation (staged leads, NOT shipped rules)
 
@@ -136,13 +173,12 @@ This block is deliberately separate: a machine-checked property on a rule
 that does not exist yet is the strongest-looking row in the section and
 the weakest claim in it — it must never read as corpus coverage.
 
-| Staged lead | Harness | Property | Verdict | Solver |
-|---|---|---|---|---|
-| `unchecked-wire-arithmetic` (InputValidation; staged, Research 193 → Plan 156 / Batch 165) | `g2a_buggy_wire_sum_reaches_overflow` | bare `+` on `u32::from_le_bytes` operands reaches overflow | **VIOLATED + witness** — a=b=`0xFFFFFFFF` (2 × u32::MAX) | 0.050 s |
-| `unchecked-wire-arithmetic` (as above) | `g2b_checked_wire_sum_never_silently_wraps` | the checked form is exact two-sided: Some ⟺ u64-exact sum, None ⟺ true sum > u32::MAX | **VERIFIED** | 0.050 s |
-
-On the lead's batch landing, its row moves UP into the shipped table
-under the landed rule's name — the pre-validation block returns to empty.
+**EMPTY — as designed.** The `unchecked-wire-arithmetic` rows moved UP
+into the shipped table at the Batch 165 landing (Plan 156 T6): the
+g2a/g2b probe-shape harnesses (two parses summed) pre-validated the
+Research-193 staged lead; the g2c/g2d fixture-shape harnesses
+post-validate the shipped rule. The block refills when the next staged
+lead earns machine-checked pre-validation before its batch.
 
 **Scope caveat (verbatim from the POC record):** these numbers are the
 FLOOR, not the ceiling. The harnesses are loop-free, dependency-free,

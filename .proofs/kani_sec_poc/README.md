@@ -19,7 +19,7 @@ cargo install --locked kani-verifier   # 8.6 s (warm cargo cache; cold is minute
 cargo kani setup                       # 51.2 s — installs pinned nightly-2026-08-21
 
 # per run, from the crate root:
-cargo kani            # all 5 harnesses, ~2 s wall total
+cargo kani            # all 7 harnesses, ~2 s wall total
 cargo kani --harness g1a_buggy_cmp_violates_transitivity_of_equal
 ```
 
@@ -38,6 +38,10 @@ graph.
 | `g1c_total_cmp_is_total_antisymmetric_nan_self_equal` | SUCCESS | **SUCCESSFUL** | 0.074 s | 0.21 s |
 | `g2a_buggy_wire_sum_reaches_overflow` | FAILURE + witness | **FAILED** — `"attempt to add with overflow"` inside the buggy callee | 0.050 s | 0.19 s |
 | `g2b_checked_wire_sum_never_silently_wraps` | SUCCESS | **SUCCESSFUL** | 0.050 s | 0.44 s |
+| `g2c_buggy_framed_len_reaches_overflow` (Batch 165 — the LANDED rule's fixture shape) | FAILURE + witness | **FAILED** — `"attempt to add with overflow"` at `buggy_framed_len` (Check 3; the harness's own wrapped-value assert stays SUCCESS — the overflow check fires first) | 0.023 s | — |
+| `g2d_checked_framed_len_never_silently_wraps` (Batch 165) | SUCCESS | **SUCCESSFUL** — every check SUCCESS, 0 failures | 0.027 s | — |
+
+The g2c/g2d run (2026-09-20, Plan 156 T6): the whole-suite run reported **4 verified / 3 failures / 7 total** — the three failures are exactly the EXPECTED-FAILURE witnesses (g1a, g2a, g2c), the four successes the totality/impossibility side (g1b, g1c, g2b, g2d). The g2 row set now pre-validates AND post-validates the shipped rule: the g2a/g2b probe shape (two parses summed) predates the landing; g2c/g2d mirror the corpus fixture (one `from_be_bytes` parse + a constant header-size add) in its u32-domain twin — the fixture's `as usize` widening absorbs the overflow on 64-bit hosts, so the machine-checkable property lives in the wire-width domain the rule's advice targets (checked_add BEFORE any widening).
 
 Kani-exhibited witnesses (`-Z concrete-playback --concrete-playback print`):
 
