@@ -1,0 +1,1 @@
+{"seq":0,"code":"E0597","span_hash":"8fe6c6d9ec200cb1","strategy_id":"e0597-scope-hoist","outcome":"Kept","errors":[1,0],"masking":[0,0],"journey_residual_sum":0,"terminal_residual":0,"span_embed":[0,10,-58,10,29,0,0,10,19,-10,39,-10,0,0,0,0,-29,29,-10,-39,0,39,-29,0,-39,48,10,0,0,0,10,0]}
