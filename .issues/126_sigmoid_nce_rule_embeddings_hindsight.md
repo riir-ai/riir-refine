@@ -1,7 +1,42 @@
 # Issue 126 — Sigmoid-NCE rule embeddings from fix-trajectory hindsight + Lemma-4.2 tier guard
 
-**Status:** CLOSED — **Lane (a) LANDED + GATED PASS 2026-09-20** ([Bench 099](.benchmarks/099_rule_embed_sigmoid_nce.md): full-rig top-1 94 → 98, G1 zero regressions, withheld no-harm, clean FP unchanged; `rule_embed_poc` + the BLAKE3-sealed artifact + standing gate `tests/rule_embed_gate.rs`; dequant-convention defect caught by the self-pair probe, recorded). **Lane (b) LANDED + GATED PASS 2026-09-20** (`src/tier_guard.rs` + the store-level arms `tests/tier_guard_store_gates.rs`; mapping + gates recorded below; Issue-033 history read and carried — exclusion filter only, pinned knobs, cold-start bit-identical; drive-by: `RuleIndex.rule_ids`'s poc-only reader got the honest `cfg_attr` dead-code annotation). Training data was the fixtures+self-pairs proxy — NO organic fixseq rings exist (measured); the reopen-to-promote data trigger stands.
+**Status:** CLOSED — **Lane (a) LANDED + GATED PASS 2026-09-20** ([Bench 099](.benchmarks/099_rule_embed_sigmoid_nce.md): full-rig top-1 94 → 98, G1 zero regressions, withheld no-harm, clean FP unchanged; `rule_embed_poc` + the BLAKE3-sealed artifact + standing gate `tests/rule_embed_gate.rs`; dequant-convention defect caught by the self-pair probe, recorded). **Lane (b) LANDED + GATED PASS 2026-09-20** (`src/tier_guard.rs` + the store-level arms `tests/tier_guard_store_gates.rs`; mapping + gates recorded below; Issue-033 history read and carried — exclusion filter only, pinned knobs, cold-start bit-identical; drive-by: `RuleIndex.rule_ids`'s poc-only reader got the honest `cfg_attr` dead-code annotation). Training data was the fixtures+self-pairs proxy — NO organic fixseq rings existed at train time (measured). **Post-close same-day addition (the 4090 box): the organic-ring corpus substrate for the reopen-to-promote trigger landed** — `.benchmarks/data/126_t0/` (172 runs / 242 hindsight labels: 218 kept-positives / 24 reverted hard-negatives, span_embed stamped 242/242, BLAKE3-pinned manifest) + the `--dump-fixseq <root>` regeneration flag on `examples/rustc_errors_floor.rs`; the §T0 record below carries the vocabulary constraint (strategy-space, not clippy-rule-space) any retrain-on-rings pass must reconcile.
 **Filed:** 2026-09-20 · Research: [riir-ai Research 386](../../riir-ai/.research/386_Contrastive_RL_Goal_Conditioned_Value.md) · arXiv:2206.07568 (CRL) — consumer-surface distillation (fusion priority #2)
+
+## T0 record (2026-09-20, the 4090 box) — the label audit + first corpus
+
+The filing's "the labels already exist" was **stale**: `.heal/fixseq/` rings
+existed on NO repo on this box (Issue 107's 2026-09-15 "zero organic rings"
+verdict still held; `trajectories.kv` exists in ~10 repos but carries per-rule
+counters, not per-span labels). Generated the first corpus instead:
+
+- **`--dump-fixseq <root>`** added to `examples/rustc_errors_floor.rs` (the
+  driver section's label-gen posture; early-returns before the G1/G2
+  measurement passes — the flag-less path unchanged).
+- **Corpus committed** at `.benchmarks/data/126_t0/` (172 run files, 242
+  attempt rows, BLAKE3-pinned manifest) — flattened to `rings/*.jsonl`
+  because the live-store `.heal/fixseq` nesting collides with the repo-wide
+  `.heal/` gitignore rule.
+- **Measured inventory** (rustc 1.98.1): **218 positives / 24 hard
+  negatives**, span_embed stamped 242/242, 5 error codes, **7 strategies**.
+  Hard negatives live ONLY on the two E0502 strategies that compete with
+  2 fixed alternatives (deref-removal 12, clone-out 12) — the E0502
+  contested stratum is where the discriminative signal concentrates.
+- **Vocabulary finding (the reopen trigger's design constraint):** the ring
+  labels are `strategy_id`-space (the rustc_errors playbook), NOT clippy/perf/kernel
+  rule-space — the fix-compile lane is the only lane that writes per-span
+  labels. The shipped lane (a) trained on the fixtures+self-pairs proxy
+  (clippy-rule-space) instead, which is why the two vocabularies never had to
+  meet; any RETRAIN-ON-RINGS pass for the reopen-to-promote trigger must
+  either bridge the vocabularies (strategy→code→rule mapping) or extend the
+  ring schema to record the clippy-lane fixer per span — the composite rig
+  stays the G3 no-regression control either way.
+- **Class balance:** 90/10 pos/neg; smallest strategy n=12, largest n=72.
+  At d=64 with 7 classes this is a small-data regime — the trainer should
+  regularize (weight decay / early stop on a held-out code) rather than
+  expect volume. The 4 codes with zero attempts (E0373, E0382, E0507,
+  E0596) are playbook-coverage gaps, not label noise — they contribute
+  nothing to this lane.
 
 ## Lane (a) — trained span↔rule embeddings, hindsight-labeled
 

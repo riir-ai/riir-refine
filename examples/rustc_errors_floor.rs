@@ -30,6 +30,18 @@
 //!    vs flat `(code,strategy)` BetaPosterior vs shape-conditional
 //!    ordering are compared on candidates-tried + reverts over the
 //!    template-covered stratum.
+//!
+//! # Issue 126 T0 — `--dump-fixseq <dir>` (label-gen posture)
+//!
+//! `--only driver --dump-fixseq <dir>` runs the production driver arm over
+//! the full corpus and dumps each case's attempt ring to
+//! `<dir>/.heal/fixseq/run-<ts>.jsonl` — the hindsight-label corpus
+//! (`span_embed` × `strategy_id` × `outcome`) for the sigmoid-NCE
+//! rule-embedding trainer (kept = positive, reverted = hard negative).
+//! Early-returns before the G1/G2 measurement passes. Pass a DEDICATED root
+//! (e.g. `.benchmarks/data/126_t0/rings`), never the repo root — dumping
+//! into `<repo>/.heal/fixseq` would pollute the organic-ring readings the
+//! `--horizon-report` consumer owns.
 
 use riir_clippy::domains::rustc_errors::corpus_gen::{generate_corpus, Territory};
 use riir_clippy::domains::rustc_errors::floor::{
@@ -61,7 +73,9 @@ fn main() {
         floor_section();
     }
     if want("driver") {
-        driver_section();
+        let dump_fixseq_root: Option<String> = std::env::args().position(|a| a == "--dump-fixseq")
+            .and_then(|p| std::env::args().nth(p + 1));
+        driver_section(dump_fixseq_root);
     }
     if want("null") {
         null_section();
@@ -185,7 +199,7 @@ fn floor_section() {
     harness.cleanup();
 }
 
-fn driver_section() {
+fn driver_section(dump_fixseq_root: Option<String>) {
     let harness = FloorHarness::new();
     let fixer = DriverFixer::new();
     let cases = floor_case_list();
@@ -207,6 +221,61 @@ fn driver_section() {
     print_report(&report);
     print_integrity(&report);
     dump_diverged(&cases, &report);
+
+    // Issue 126 T0 — optional fixseq ring dump: the hindsight-label corpus
+    // (`span_embed` × `strategy_id` × `outcome`) the sigmoid-NCE rule-embedding
+    // trainer trains on. Early-returns BEFORE the G1 semantics / G2 latency
+    // passes: the label-gen posture wants the rings, not the measurement
+    // tables (the flag-less path is unchanged — the committed corpus run
+    // keeps its full measurement session).
+    if let Some(root) = dump_fixseq_root {
+        use riir_clippy::domains::rustc_errors::driver::AttemptOutcome;
+        use riir_clippy::domains::rustc_errors::evolve::dump_fixseq;
+        use std::path::PathBuf;
+        let root = PathBuf::from(root);
+        let mut runs = 0usize;
+        let mut attempts_total = 0usize;
+        let mut kept = 0usize;
+        let mut reverted = 0usize;
+        let mut with_embed = 0usize;
+        let mut codes = std::collections::BTreeSet::new();
+        let mut strategies = std::collections::BTreeSet::new();
+        for (name, rep) in &driver_reports {
+            if rep.attempts.is_empty() {
+                continue;
+            }
+            let (written, warnings) = dump_fixseq(&root, &rep.attempts);
+            for w in &warnings {
+                eprintln!("fixseq dump {name}: {w}");
+            }
+            if written.is_none() {
+                continue;
+            }
+            runs += 1;
+            attempts_total += rep.attempts.len();
+            for a in &rep.attempts {
+                match a.outcome {
+                    AttemptOutcome::Kept => kept += 1,
+                    AttemptOutcome::RevertedNoProgress | AttemptOutcome::RevertedIo => reverted += 1,
+                }
+                if a.span_embed.is_some() {
+                    with_embed += 1;
+                }
+                codes.insert(a.code.clone());
+                strategies.insert(a.strategy_id.clone());
+            }
+        }
+        println!(
+            "\n  fixseq dump: {runs} run file(s) -> {}/.heal/fixseq/ ; attempts {attempts_total} \
+             (kept {kept} POSITIVES, reverted {reverted} HARD-NEGATIVES); span_embed stamped \
+             {with_embed}/{attempts_total}; {c} error code(s), {s} strategy(ies)",
+            root.display(),
+            c = codes.len(),
+            s = strategies.len()
+        );
+        harness.cleanup();
+        return;
+    }
 
     // G1 semantics pass: every repaired case's scaffold holds the final
     // source; run its ground-truth behavior test.

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-09-20T22:16:00Z",
+  "generator": "riir-clippy examples/rustc_errors_floor --only driver --dump-fixseq",
+  "rustc_version": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "issue": "126_sigmoid_nce_rule_embeddings_hindsight.md lane (a) T0",
+  "label_policy": "hindsight over machine-checked repair outcomes: outcome=Kept => (span_embed, strategy_id) POSITIVE; outcome in {RevertedNoProgress, RevertedIo} => HARD-NEGATIVE (fired + compile-gate reject). span_embed is the Issue-107-T2 write-time hashed unigram+bigram bag over the ORIGINAL trigger text, 32-dim i8 x/127.",
+  "regeneration": "cargo run --release --example rustc_errors_floor --features rustc_errors -- --only driver --dump-fixseq <tmp_root> — then flatten <tmp_root>/.heal/fixseq/run-*.jsonl. Corpus is toolchain-sensitive (known-inverse mutants vs live rustc); the manifest pins the toolchain this snapshot was measured under.",
+  "corpus": "258 mutants (12 committed anchors + generated), 9 error codes; 4 codes (E0373, E0382, E0507, E0596) produced ZERO attempts (no playbook coverage) and contribute no rows",
+  "run_files": 172,
+  "attempt_rows": 242,
+  "positives_kept": 218,
+  "hard_negatives_reverted": 24,
+  "span_embed_coverage": "242/242",
+  "error_codes_with_attempts": 5,
+  "strategies": 7,
+  "strategy_distribution": {
+    "e0499-swap-second-decl": 72,
+    "e0502-deref-removal": 45,
+    "e0597-scope-hoist": 42,
+    "e0502-clone-out": 38,
+    "e0505-clone-at-move": 21,
+    "e0502-read-relocate": 12,
+    "e0614-deref-at-use": 12
+  },
+  "hard_negative_distribution": {
+    "e0502-deref-removal": 12,
+    "e0502-clone-out": 12
+  },
+  "dataset_blake3": "e05fc63480ab6e587bfb31f16f52460fe9da9b0cda8316011a68bae28186781b",
+  "dataset_blake3_scope": "concatenation of rings/run-*.jsonl in sorted filename order, raw bytes"
+}
