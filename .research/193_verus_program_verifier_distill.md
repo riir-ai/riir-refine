@@ -2,7 +2,7 @@
 
 > **Source:** [Developing provably correct Rust code with Verus](https://www.amazon.science/blog/developing-provably-correct-rust-code-with-verus) — Bryan Parno (Amazon Scholar, CMU), Amazon Science blog, 2026-08-31 · tool: [verus-lang/verus](https://github.com/verus-lang/verus) · paper: Lattuada et al., *Verus: Verifying Rust Programs using Linear Ghost Types*, OOPSLA 2023 (PACMPL 7(OOPSLA1):286–315) · follow-up artifact: *Verus: A Practical Foundation for Systems Verification* (verus-lang, GitHub).
 > **Date:** 2026-09-20
-> **Status:** DISTILLED — pending owner decision (two-track verdict; executed follow-up = issue 127)
+> **Status:** DISTILLED — pending owner decision (two-track verdict; executed follow-up = issue 127). **Delta 2026-09-20 (later idle session): the issue-127 Kani POC EXECUTED POSITIVE** — G1+G2 machine-checked with exhibited witnesses (the `-inf/NaN/+inf` transitivity triple; the `u32::MAX + u32::MAX` overflow input), checked-form impossibility verified, cost floor 0.03–0.07 s solver per harness in the WSL2 lane (Windows-native unsupported). Kani's B+ oracle rung is now MEASURED, not read-off-078. Harnesses + run protocol: [`.proofs/kani_sec_poc/`](../.proofs/kani_sec_poc/README.md). Sole remainder: the owner call on the sec corpus doc's "property evidence" column.
 
 ## TL;DR
 

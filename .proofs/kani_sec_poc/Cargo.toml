@@ -1,0 +1,9 @@
+[package]
+name = "kani_sec_poc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Detached from any parent workspace: this crate is ONLY built by `cargo kani`
+# (Kani's own pinned toolchain), never by the workspace's stable rustc.
+[workspace]

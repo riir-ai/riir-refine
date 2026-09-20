@@ -1,5 +1,17 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-20 — Issue 127 POC EXECUTED, verdict POSITIVE: Kani machine-checks the sec rules' property claims — witnesses exhibited both directions, cost floor sub-second per harness (WSL2 lane)
+
+The Research-193 follow-up landed the same day it was filed. Kani (0.68.0 / CBMC 6.11.0, pinned `nightly-2026-08-21` — its own toolchain snapshot, fully detached from the workspace's stable pins) ran five standalone harnesses over the two rule targets, and decided all five:
+
+- **G1 (`nan-unsafe-sort-comparator`, the SHIPPED PanicSafety rule)**: the buggy `partial_cmp(..).unwrap_or(Equal)` form FAILED as desired — Kani exhibited the violating triple **x=`-inf`, y=`+NaN`, z=`+inf`** (cmp(x,y)=Equal, cmp(y,z)=Equal, cmp(x,z)=Less — the "NaN in the middle, ordered ends" shape, captured via `-Z concrete-playback --concrete-playback print`); `total_cmp` VERIFIED transitive-on-Equal, total, antisymmetric, NaN-self-Equal across ALL f64 bit patterns (3 SUCCESS harnesses).
+- **G2 (the Research-193 staged lead `unchecked-wire-arithmetic`, pre-batch validation)**: the buggy bare `+` on `from_le_bytes` results FAILED as desired — witness **a=b=`u32::MAX`` (all-0xFF bytes) trips Kani's arithmetic-overflow check inside the callee; the `checked_add` form VERIFIED two-sided (Some ⟺ exact u64 sum, None ⟺ true sum > u32::MAX — no silent wrap, no false alarm). The lead's property claims are machine-checkable; a wire-arithmetic batch, if the owner pulls it, inherits this evidence pattern.
+- **Cost (the issue's falsifier axis)**: install 8.6 s (warm cargo cache) + setup 51.2 s (the pinned nightly download); per-harness 0.15–0.45 s wall / 0.03–0.07 s solver; **no unwinding config needed** (loop-free fixtures); lane = **WSL2 Ubuntu 22.04** on the 4090 box — **Windows-native Kani is unsupported**, so the WSL requirement is itself part of the feasibility verdict. Honest scope: this is the FLOOR, not the ceiling — the minutes-per-fixture regime (loops/unwind bounds, heap, workspace-real code) was never approached and stays unmeasured.
+
+Harnesses + run protocol + the measured table live at [`.proofs/kani_sec_poc/`](.proofs/kani_sec_poc/README.md) (standalone detached crate, `[workspace]`-marked, zero deps, `/target` gitignored — never built by the workspace's stable rustc, never in CI, never a per-push gate). No corpus edits (the issue's non-goal): the ORACLE mechanism is validated, not adopted.
+
+**Sole remainder (owner call, held open in issue 127):** does the sec corpus doc table gain a "property evidence" column (harness id + verdict) beside "killed neighbours (evidence)"? G1+G2 landed, so the decision is unblocked — every other issue task is checked and cited.
+
 ## 2026-09-20 — Issue 123 RESOLVED: the TUNA client surfaces are complete + live on devnet — ack v4, the soft gate's second plane, the fuel-gauge tank, the plane-split tail, the depleted-run survey; only the owner's apex/mainnet light-up remains
 
 The TUNA trial-credit client arc (riir-dapps Proposal 006's client half) is done and verified live. Every task in the issue is landed with tests; the sole remainder is an OWNER OPS act (the apex + mainnet.ai.gist.rs deploys + one `/tuna/genesis` curl each — the same fail-closed posture dapps Issue 097's close recorded), which needs zero client work: the client parses defensively and lights up automatically when a B2 server sends TUNA truth.
