@@ -7,6 +7,11 @@ the TSD lane, katgpt-rs AGENTS.md contended by the bf16/meld/audit sibling agent
 + **2 league-intel rows**. Sources trending thin over a 9-day window — consistent
 with the 09-13 scout's SOURCES DRY verdict.
 
+**Update 2026-09-20:** citation queue drained — the riir-clippy corpus half landed
+2026-09-16 (same-day); the katgpt-rs AGENTS.md lossy-surface half landed
+2026-09-20 (katgpt-rs `87854232`, the sibling contention cleared). 2609.11687
+rides this note as rotation-tax echo #4 (no separate surface).
+
 ## Method + window mechanics (honest notes)
 
 - Same five standing lanes as walk #7 (spec-dec unrestricted / plain-KV /
