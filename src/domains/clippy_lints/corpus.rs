@@ -863,6 +863,31 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.141592653589793238462643f32 }".to_string(),
             fixed_code: "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.1415927f32 }".to_string(),
         },
+        // ── Batch 167 (2026-09-21, the coverage-report re-arm pack XI —
+        // Plan 158, the 2026-09-21 derivation leads, probe
+        // scripts/plan158_frontier_probe.py). Each fixture is the
+        // ORACLE-VERIFIED family pair from the probe: seed clean, broken
+        // fires EXACTLY its target. Both complexity/default-on — the
+        // group pinned by the probe's no-flags arms. The uc fixture is
+        // the PARAM shape — the probe's annotated-let seed co-fired our
+        // own let_and_return (tail-expression shape), so the pack ships
+        // the shape the v1 proposer owns.) ──
+        ClippyFixEntry {
+            // u64 (not u32): the scalar dodge — a u32 fixture triple-crowds
+            // the u32-heavy eval spans (the deref_addrof span lost its
+            // top-3 to the raw u32 token count, measured in the plan158
+            // A/B rank dump); the lint fires identically on any scalar.
+            lint_name: "unnecessary_cast".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn f(hits: &mut Vec<u8>, p: u64) -> u64 { hits.push(0); p as u64 }".to_string(),
+            fixed_code: "fn f(hits: &mut Vec<u8>, p: u64) -> u64 { hits.push(0); p }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "clone_on_copy".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn f(hits: &mut Vec<u8>, x: u64) -> u64 { hits.push(0); x.clone() }".to_string(),
+            fixed_code: "fn f(hits: &mut Vec<u8>, x: u64) -> u64 { hits.push(0); x }".to_string(),
+        },
     ])
 }
 
@@ -966,16 +991,19 @@ mod tests {
     /// `bool_comparison` — the frontier-lead mining pack VIII, Plan 153) +
     /// the 2 Batch 163 rows (`manual_string_new`, `needless_late_init`,
     /// the frontier-lead mining pack IX, Plan 154) + the 2 Batch 164 rows
+    /// + the 2 Batch 164 rows
     /// (`match_like_matches_macro`, `excessive_precision` — the
     /// frontier-lead mining pack X, the coverage-report re-arm, Plan 155)
-    /// = 86.
+    /// + the 2 Batch 167 rows (`unnecessary_cast`, `clone_on_copy` — the
+    /// coverage-report re-arm pack XI, the 2026-09-21 derivation leads,
+    /// Plan 158) = 88.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 86);
+        assert_eq!(corpus.entries.len(), 88);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

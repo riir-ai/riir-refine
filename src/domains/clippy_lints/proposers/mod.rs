@@ -100,6 +100,8 @@
 //! `manual_string_new` | `String::from("")` → `String::new()` — empty-String construction identity (zero capacity, no allocation); 2-segment path + explicit turbofish only, empty-literal arg only (Batch 163) |
 //! `needless_late_init` | `let x[: T]; x = v;` → `let x[: T] = v;` — the adjacent non-mut pair merged (E0384 makes the adjacent assignment THE initialization); annotation + initializer verbatim (Batch 163) |
 //! `match_like_matches_macro` | `match x { P => true, _ => false }` → `matches!(x, P)` (+ the `!` twin + the arm-1 guard) — the macro IS that match; scrutinee/pattern/guard verbatim (Batch 164) |
+//! `unnecessary_cast` | `x as T` → `x` on a proven-same-type ident; `5 as u64` → `5_u64` on an int/float literal — identity cast / literal-suffix construction identity; param provenance only in v1, cross-type + pointer targets refuse (Batch 167) |
+//! `clone_on_copy` | `x.clone()` → `x` on a proven-Copy receiver (primitives + `&str`/`&String`) — the std Copy/Clone contract makes the call a no-op; `String` refuses (`redundant_clone`'s territory) (Batch 167) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
@@ -167,8 +169,9 @@
 //! `bool_comparison`, Plan 153 — and the 2 Batch 163 frontier-lead rules —
 //! `manual_string_new` / `needless_late_init`, Plan 154 — and the 2 Batch
 //! 164 frontier-lead rules — `match_like_matches_macro` /
-//! `excessive_precision`, Plan 155); future lints drop in by extending the
-//! match.
+//! `excessive_precision`, Plan 155 — and the 2 Batch 167 coverage-report
+//! re-arm rules — `unnecessary_cast` / `clone_on_copy`, Plan 158); future
+//! lints drop in by extending the match.
 
 pub mod assign_op_pattern;
 pub mod bool_comparison;
@@ -176,6 +179,7 @@ pub mod byte_char_slices;
 pub mod bytes_count_to_len;
 pub mod cast_lossless;
 pub mod chunks_exact_to_as_chunks;
+pub mod clone_on_copy;
 pub mod collapsible_else_if;
 pub mod collapsible_if;
 pub mod comparison_to_empty;
@@ -242,6 +246,7 @@ pub mod suboptimal_flops;
 pub mod to_string_in_format_args;
 pub mod uninlined_format_args;
 pub mod unreadable_literal;
+pub mod unnecessary_cast;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_map_or;
 pub mod unnecessary_mut_passed;
@@ -658,6 +663,36 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // soundness leg. Style-group (default-on; pinned by the plan155 probe's
     // no-flags arm).
     "excessive_precision",
+    // ── Batch 167 (the coverage-report re-arm pack XI — Plan 158 — the
+    // 2026-09-21 derivation leads, probe scripts/plan158_frontier_probe.py) ──
+    // `x as T` → `x` on a proven-same-type ident; `5 as u64` → `5_u64` on
+    // an int/float literal — FIXABLE by CONSTRUCTION IDENTITY: a same-type
+    // cast changes neither value, type, nor place-expression status (the
+    // identity cast), and an unsized literal can carry its type as a suffix
+    // (`5 as u64` IS `5_u64` bit-and-type-identical). Guards: the operand
+    // must be a BARE IDENT proven by the enclosing fn's signature with the
+    // proven type text EXACTLY the cast target (cross-type casts fire
+    // cast_lossless/needless_type_cast/cast_possible_wrap — different
+    // lints, probe-pinned), OR a direct int/float literal (existing suffix
+    // stripped to the canonical form; char/bool targets refuse — no suffix
+    // spelling exists; unary/paren literals refuse). Param provenance only
+    // in v1 — annotated-let widening is the later rider (the documented
+    // narrower-than-clippy divergence). Complexity-group (default-on;
+    // pinned by the plan158 probe's no-flags arm).
+    "unnecessary_cast",
+    // `x.clone()` → `x` on a proven-Copy receiver — FIXABLE by the std
+    // Copy/Clone CONTRACT: Clone for a Copy type is required to be `*x`
+    // ("should not be overridden"), so on Copy the call is a semantic
+    // no-op with the same type/value/move semantics. Guards: receiver a
+    // BARE IDENT proven by the enclosing fn's signature over the Copy
+    // scalar set (all numeric primitives + bool + char + the shared-ref
+    // spellings `&str`/`&String` — `&T` is Copy); `String` is NOT Copy and
+    // refuses (the probe showed non-Copy clones fire redundant_clone — a
+    // different value-flow lint); arrays/tuples/&mut are not in the
+    // derivation and refuse; exactly `clone`, zero args, no turbofish;
+    // chains/fields/index/call receivers refuse. Complexity-group
+    // (default-on; pinned by the plan158 probe's no-flags arm).
+    "clone_on_copy",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -990,6 +1025,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 164 (the frontier-lead mining pack X — Plan 155) ──
         "match_like_matches_macro" => match_like_matches_macro::collect_edits(source, file),
         "excessive_precision" => excessive_precision::collect_edits(source, file),
+        // ── Batch 167 (the coverage-report re-arm pack XI — Plan 158) ──
+        "unnecessary_cast" => unnecessary_cast::collect_edits(source, file),
+        "clone_on_copy" => clone_on_copy::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1110,12 +1148,16 @@ mod tests {
         // the frontier-lead pack X, Plan 155; the macro-IS-the-match
         // verbatim rebuild + the suffix-pinned shortest-round-trip literal
         // rewrite with the in-proposer bit-identity proof).
-        assert_eq!(FIXABLE_LINTS.len(), 67);
+        // + 2 Batch 167 (unnecessary_cast + clone_on_copy — the
+        // coverage-report re-arm pack XI, Plan 158; the identity-cast
+        // drop + literal-suffix substitution + the Copy/Clone-contract
+        // receiver no-op).
+        assert_eq!(FIXABLE_LINTS.len(), 69);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 84-row fixture table — length is the point.
+    /// 86-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1568,6 +1610,16 @@ impl S {
                 "excessive_precision",
                 "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.141592653589793238462643f32 }",
                 "2.1415927f32",
+            ),
+            (
+                "unnecessary_cast",
+                "fn f(hits: &mut Vec<u8>, p: u32) -> u32 { hits.push(0); p as u32 }",
+                "hits.push(0); p }",
+            ),
+            (
+                "clone_on_copy",
+                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.clone() }",
+                "hits.push(0); x }",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
