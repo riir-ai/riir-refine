@@ -50,6 +50,12 @@
 //! | Rule | Detector | Why suggest-only |
 //! |---|---|---|
 //! | `unbounded-read-into-vec` | `unbounded_read::detect` | the fix must CHOOSE the limit (bytes? messages? wall time?) — a protocol decision, never mechanical |
+//!
+//! ## Batch 165 (2026-09-20, Plan 156) — the overflow sink on the shared walker
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `unchecked-wire-arithmetic` | `unchecked_wire_arithmetic::detect` | the fix is a checked op + an INVENTED error path the fn's signature may not carry — a protocol decision; sink-level novelty over `length_prefix_alloc` on the shared `wire_taint` walker (Plan 156 T2: sink-distinct, no composition gate — the derived-validated shape's overflow already happened at the op and a post-hoc range check validates the wrapped value) |
 
 use syn::File;
 
@@ -61,7 +67,13 @@ pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
 pub mod slice_len_guard;
+pub mod unchecked_wire_arithmetic;
 pub mod unbounded_read;
+
+/// The shared wire-taint walker (Batch 165) — one walker, the
+/// InputValidation wire sinks. Crate-internal: the public surface is the
+/// two detectors.
+pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{

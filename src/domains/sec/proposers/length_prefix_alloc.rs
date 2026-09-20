@@ -8,6 +8,10 @@
 //! demand a multi-GB buffer (OOM/abort). The cost axis is security, not
 //! cycles.
 //!
+//! The taint walk is the SHARED `wire_taint` substrate (Batch 165, Plan
+//! 156 T2 — one walker, two sinks); this module contributes the ALLOC
+//! sink (`vec![..; tracked_len]`) and nothing else.
+//!
 //! ## Why suggest-only (never a fix)
 //!
 //! The bounded repair must INVENT a limit constant and an error-return
@@ -53,11 +57,10 @@
 
 use std::ops::Range;
 
-use proc_macro2::{Delimiter, Group};
-use quote::ToTokens;
-use syn::spanned::Spanned;
-use syn::visit::Visit;
-use syn::{BinOp, Expr, ExprMethodCall, File, Item, Stmt};
+use syn::Expr;
+use syn::File;
+
+use super::wire_taint::{self, FnState, WireSink};
 
 /// One detected unbounded length-prefix allocation.
 #[derive(Debug, Clone)]
@@ -78,422 +81,42 @@ pub const ADVICE: &str = "validate the length BEFORE the allocation: \
 prefix flowing into vec![0u8; len] is an allocation-size DoS (Batch 131, \
 suggest-only)";
 
+/// The alloc sink: a `vec![init; count]` whose count is a bare tracked,
+/// unvalidated ident (the Batch-131 shape, unchanged by the Batch-165
+/// walker extraction — the 14-test suite below pins that).
+struct AllocSink<'a> {
+    findings: &'a mut Vec<FrameAllocFinding>,
+}
+
+impl WireSink for AllocSink<'_> {
+    fn check(&mut self, source: &str, expr: &Expr, state: &FnState) {
+        let Some(rep_len) = wire_taint::vec_repeat_len(expr) else {
+            return;
+        };
+        // Macro tokens are never descended into by the shared walk, so
+        // this check is the ONLY look inside a vec! (same as pre-extraction).
+        if let Some(id) = wire_taint::path_ident(&rep_len) {
+            if state.is_tracked(&id) && !state.validated.contains(&id) {
+                if let Some(span) = wire_taint::bounded_span(expr, source) {
+                    self.findings.push(FrameAllocFinding {
+                        alloc_text: source[span.clone()].to_string(),
+                        alloc_span: span,
+                        length_ident: id,
+                        advice: ADVICE,
+                    });
+                }
+            }
+        }
+    }
+}
+
 /// Detect unbounded `vec![..; parsed_len]` allocations (suggest-only; no
 /// edits are produced by this module, ever).
 #[must_use]
 pub fn detect(source: &str, file: &File) -> Vec<FrameAllocFinding> {
     let mut findings = Vec::new();
-    for item in &file.items {
-        collect_in_item(source, item, &mut findings);
-    }
+    wire_taint::walk_file(source, file, &mut AllocSink { findings: &mut findings });
     findings
-}
-
-fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<FrameAllocFinding>) {
-    match item {
-        Item::Fn(f) => scan_fn(source, &f.block, findings),
-        Item::Impl(imp) => {
-            for ii in &imp.items {
-                if let syn::ImplItem::Fn(m) = ii {
-                    scan_fn(source, &m.block, findings);
-                }
-            }
-        }
-        Item::Mod(m) => {
-            // Comment guard (house discipline): #[cfg(test)] mods are
-            // fixture habitat, not production wire paths.
-            if is_test_mod(m) {
-                return;
-            }
-            if let Some((_, items)) = &m.content {
-                for nested in items {
-                    collect_in_item(source, nested, findings);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn is_test_mod(m: &syn::ItemMod) -> bool {
-    m.attrs
-        .iter()
-        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
-}
-
-/// The per-fn tracking state.
-#[derive(Default)]
-struct FnState {
-    /// ident -> its tracking parents (sources it was derived from).
-    tracked: std::collections::HashMap<String, Vec<String>>,
-    /// idents that saw a bound comparison/match/assert before an alloc.
-    validated: std::collections::HashSet<String>,
-}
-
-impl FnState {
-    fn track(&mut self, ident: &str, parents: Vec<String>) {
-        self.tracked.insert(ident.to_string(), parents);
-    }
-
-    fn is_tracked(&self, ident: &str) -> bool {
-        self.tracked.contains_key(ident)
-    }
-
-    /// Validating `ident` also validates every tracked ancestor
-    /// (`n = len * 4` checked bounds `len`).
-    fn validate(&mut self, ident: &str) {
-        let mut queue = vec![ident.to_string()];
-        while let Some(id) = queue.pop() {
-            if self.validated.insert(id.clone()) {
-                if let Some(parents) = self.tracked.get(&id) {
-                    queue.extend(parents.iter().cloned());
-                }
-            }
-        }
-    }
-}
-
-fn scan_fn(source: &str, block: &syn::Block, findings: &mut Vec<FrameAllocFinding>) {
-    let mut state = FnState::default();
-    scan_stmts(source, &block.stmts, &mut state, findings);
-}
-
-/// Walk statements IN ORDER: bindings track, validations suppress, allocs
-/// fire — the same-name-later ordering is what makes the gates honest.
-fn scan_stmts(
-    source: &str,
-    stmts: &[Stmt],
-    state: &mut FnState,
-    findings: &mut Vec<FrameAllocFinding>,
-) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Local(l) => {
-                if let Some(init) = &l.init {
-                    // `let len = <parse-chain>` → track the bound idents.
-                    for pat_ident in local_idents(&l.pat) {
-                        if let Some(parents) = harvest_chain(&init.expr, state) {
-                            state.track(&pat_ident, parents);
-                        }
-                    }
-                    check_validation(&init.expr, state);
-                    scan_expr(source, &init.expr, state, findings);
-                }
-            }
-            Stmt::Item(item) => collect_in_item(source, item, findings),
-            Stmt::Expr(e, _) => {
-                // `content_length = Some(parse(..))` — the header-variable
-                // assignment shape tracks the assigned ident too.
-                if let Expr::Assign(a) = e {
-                    if let Some(parents) = harvest_chain(&a.right, state) {
-                        if let Some(name) = path_ident(&a.left) {
-                            state.track(&name, parents);
-                        }
-                    }
-                    check_validation(&a.right, state);
-                    scan_expr(source, &a.right, state, findings);
-                } else {
-                    check_validation(e, state);
-                    scan_expr(source, e, state, findings);
-                }
-            }
-            Stmt::Macro(_) => {}
-        }
-    }
-}
-
-/// The `let`-pattern's plain idents (bare + tuple patterns; wildcards and
-/// struct patterns are skipped — conservative).
-fn local_idents(pat: &syn::Pat) -> Vec<String> {
-    let mut out = Vec::new();
-    walk_pat(pat, &mut out);
-    out
-}
-
-fn walk_pat(pat: &syn::Pat, out: &mut Vec<String>) {
-    match pat {
-        syn::Pat::Ident(p) => out.push(p.ident.to_string()),
-        syn::Pat::Tuple(t) => {
-            for p in &t.elems {
-                walk_pat(p, out);
-            }
-        }
-        syn::Pat::Type(p) => walk_pat(&p.pat, out),
-        syn::Pat::Paren(p) => walk_pat(&p.pat, out),
-        syn::Pat::Reference(r) => walk_pat(&r.pat, out),
-        _ => {}
-    }
-}
-
-fn path_ident(e: &Expr) -> Option<String> {
-    if let Expr::Path(p) = e {
-        if p.qself.is_none() && p.path.segments.len() == 1 {
-            return Some(p.path.segments[0].ident.to_string());
-        }
-    }
-    None
-}
-
-/// Is this expr a length-parse site (`from_be_bytes(..)` assoc call or any
-/// `.parse(..)` method call)?
-fn is_parse_site(e: &Expr) -> bool {
-    match e {
-        Expr::Call(c) => match c.func.as_ref() {
-            Expr::Path(p) => p.path.segments.last().is_some_and(|s| {
-                matches!(
-                    s.ident.to_string().as_str(),
-                    "from_be_bytes" | "from_le_bytes" | "from_ne_bytes"
-                )
-            }),
-            _ => false,
-        },
-        Expr::MethodCall(m) => m.method == "parse",
-        _ => false,
-    }
-}
-
-/// If `expr` transparently derives from a tracked ident (or IS a parse
-/// site), return the parent idents for the newly tracked binding.
-/// Transparent wrappers: casts, `?`, `ok_or`/`ok_or_else`/`unwrap`/
-/// `unwrap_or`/`unwrap_or_else`/`expect`/`map_err`, `Some(..)`, and
-/// arithmetic on a tracked magnitude (a peer-controlled magnitude squared
-/// is still one).
-fn harvest_chain(expr: &Expr, state: &FnState) -> Option<Vec<String>> {
-    // A fresh parse site binds with no parents.
-    if is_parse_site(expr) {
-        return Some(Vec::new());
-    }
-    let from = |e: &Expr| -> Option<Vec<String>> {
-        let id = path_ident(e)?;
-        state.is_tracked(&id).then(|| vec![id])
-    };
-    match expr {
-        Expr::Cast(c) => harvest_chain(&c.expr, state),
-        Expr::Try(t) => harvest_chain(&t.expr, state),
-        Expr::Paren(p) => harvest_chain(&p.expr, state),
-        Expr::Call(c) => {
-            // `Some(<tracked>)`
-            if matches!(c.func.as_ref(), Expr::Path(p) if p.path.segments.len() == 1 && p.path.segments[0].ident == "Some")
-            {
-                if let Some(first) = c.args.first() {
-                    return harvest_chain(first, state);
-                }
-            }
-            None
-        }
-        Expr::MethodCall(m) => {
-            if matches!(
-                m.method.to_string().as_str(),
-                "ok_or"
-                    | "ok_or_else"
-                    | "unwrap"
-                    | "unwrap_or"
-                    | "unwrap_or_else"
-                    | "expect"
-                    | "map_err"
-            ) {
-                return harvest_chain(&m.receiver, state);
-            }
-            None
-        }
-        Expr::Binary(b) => {
-            if matches!(
-                b.op,
-                BinOp::Add(_)
-                    | BinOp::Mul(_)
-                    | BinOp::Shl(_)
-                    | BinOp::Sub(_)
-                    | BinOp::Div(_)
-                    | BinOp::Shr(_)
-            ) {
-                let mut parents = harvest_chain(&b.left, state).unwrap_or_default();
-                parents.extend(harvest_chain(&b.right, state).unwrap_or_default());
-                if parents.is_empty() {
-                    None
-                } else {
-                    Some(parents)
-                }
-            } else {
-                None
-            }
-        }
-        _ => from(expr),
-    }
-}
-
-/// Mark every tracked ident mentioned in a comparison / match scrutinee /
-/// assert as validated (the bounded twin's gate).
-fn check_validation(expr: &Expr, state: &mut FnState) {
-    struct V<'a>(&'a mut FnState);
-    impl Visit<'_> for V<'_> {
-        fn visit_expr(&mut self, e: &Expr) {
-            if let Expr::Binary(b) = e {
-                if matches!(
-                    b.op,
-                    BinOp::Lt(_)
-                        | BinOp::Gt(_)
-                        | BinOp::Le(_)
-                        | BinOp::Ge(_)
-                        | BinOp::Eq(_)
-                        | BinOp::Ne(_)
-                ) {
-                    let mut found = Vec::new();
-                    collect_tracked(&b.left, &self.0.tracked, &mut found);
-                    collect_tracked(&b.right, &self.0.tracked, &mut found);
-                    for id in found {
-                        self.0.validate(&id);
-                    }
-                }
-            }
-            if let Expr::Match(m) = e {
-                let mut found = Vec::new();
-                collect_tracked(&m.expr, &self.0.tracked, &mut found);
-                for id in found {
-                    self.0.validate(&id);
-                }
-            }
-            syn::visit::visit_expr(self, e);
-        }
-    }
-    // `assert!`/`debug_assert!` carry their comparison inside macro tokens.
-    if let Expr::Macro(mac) = expr {
-        if mac
-            .mac
-            .path
-            .segments
-            .last()
-            .is_some_and(|s| s.ident.to_string().starts_with("assert"))
-        {
-            if let Ok(inner) = syn::parse2::<Expr>(mac.mac.tokens.clone()) {
-                check_validation(&inner, state);
-            }
-        }
-    }
-    let mut v = V(state);
-    v.visit_expr(expr);
-}
-
-fn collect_tracked(
-    e: &Expr,
-    tracked: &std::collections::HashMap<String, Vec<String>>,
-    out: &mut Vec<String>,
-) {
-    struct W<'a> {
-        tracked: &'a std::collections::HashMap<String, Vec<String>>,
-        out: &'a mut Vec<String>,
-    }
-    impl Visit<'_> for W<'_> {
-        fn visit_expr(&mut self, e: &Expr) {
-            if let Some(id) = path_ident(e) {
-                if self.tracked.contains_key(&id) && !self.out.contains(&id) {
-                    self.out.push(id);
-                }
-            }
-            syn::visit::visit_expr(self, e);
-        }
-    }
-
-    if let Some(id) = path_ident(e) {
-        if tracked.contains_key(&id) {
-            out.push(id);
-        }
-        return;
-    }
-    let mut w = W { tracked, out };
-    w.visit_expr(e);
-}
-
-/// In-order expr walk: validations first (a comparison anywhere in this
-/// expr suppresses everything below it), then the alloc check, then
-/// recursion.
-fn scan_expr(
-    source: &str,
-    expr: &Expr,
-    state: &mut FnState,
-    findings: &mut Vec<FrameAllocFinding>,
-) {
-    check_validation(expr, state);
-    if let Expr::Macro(mac) = expr {
-        if mac
-            .mac
-            .path
-            .segments
-            .last()
-            .is_some_and(|s| s.ident == "vec")
-        {
-            // `vec![init; count]`: the macro tokens carry `[init; count]`
-            // WITHOUT the delimiters — re-wrap in brackets so the token
-            // stream parses as the array-repeat expression it expands to.
-            let wrapped = Group::new(Delimiter::Bracket, mac.mac.tokens.clone()).to_token_stream();
-            if let Ok(Expr::Repeat(rep)) = syn::parse2::<Expr>(wrapped) {
-                if let Some(id) = path_ident(&rep.len) {
-                    if state.is_tracked(&id) && !state.validated.contains(&id) {
-                        let span = expr.span().byte_range();
-                        if span.end <= source.len() {
-                            findings.push(FrameAllocFinding {
-                                alloc_text: source[span.clone()].to_string(),
-                                alloc_span: span,
-                                length_ident: id,
-                                advice: ADVICE,
-                            });
-                        }
-                    }
-                }
-            }
-            return; // do not descend into the macro tokens
-        }
-    }
-    // Recurse in syntactic order.
-    match expr {
-        Expr::If(i) => {
-            scan_expr(source, &i.cond, state, findings);
-            scan_stmts(source, &i.then_branch.stmts, state, findings);
-            if let Some((_, else_e)) = &i.else_branch {
-                scan_expr(source, else_e, state, findings);
-            }
-        }
-        Expr::Match(m) => {
-            scan_expr(source, &m.expr, state, findings);
-            for arm in &m.arms {
-                if let Some((_, guard)) = &arm.guard {
-                    scan_expr(source, guard, state, findings);
-                }
-                scan_expr(source, &arm.body, state, findings);
-            }
-        }
-        Expr::Block(b) => scan_stmts(source, &b.block.stmts, state, findings),
-        Expr::Unsafe(u) => scan_stmts(source, &u.block.stmts, state, findings),
-        Expr::Loop(l) => scan_stmts(source, &l.body.stmts, state, findings),
-        Expr::While(w) => {
-            scan_expr(source, &w.cond, state, findings);
-            scan_stmts(source, &w.body.stmts, state, findings);
-        }
-        Expr::ForLoop(f) => {
-            scan_expr(source, &f.expr, state, findings);
-            scan_stmts(source, &f.body.stmts, state, findings);
-        }
-        Expr::MethodCall(ExprMethodCall { receiver, args, .. }) => {
-            scan_expr(source, receiver, state, findings);
-            for a in args {
-                scan_expr(source, a, state, findings);
-            }
-        }
-        Expr::Call(c) => {
-            scan_expr(source, &c.func, state, findings);
-            for a in &c.args {
-                scan_expr(source, a, state, findings);
-            }
-        }
-        Expr::Assign(a) => {
-            scan_expr(source, &a.right, state, findings);
-        }
-        Expr::Binary(b) => {
-            scan_expr(source, &b.left, state, findings);
-            scan_expr(source, &b.right, state, findings);
-        }
-        Expr::Closure(c) => scan_expr(source, &c.body, state, findings),
-        _ => {}
-    }
 }
 
 #[cfg(test)]

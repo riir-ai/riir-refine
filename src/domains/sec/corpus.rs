@@ -25,6 +25,7 @@
 //! | `length-prefix-validate-before-alloc` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the fix must INVENT a limit + an error path) |
 //! | `secret-file-create-without-0600` | `InputValidation` | no (suggest-only) | — (no lint fires; the fix is cfg(unix)-shaped — a portable rewrite is judgment-bearing) |
 //! | `unbounded-read-into-vec` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the fix must CHOOSE the limit — a protocol decision) |
+//! | `unchecked-wire-arithmetic` | `InputValidation` | no (suggest-only) | `arithmetic_side_effects` SILENT on literal/const operands (`len + 8`, `len + CONST` — measured 1.98 probe, Plan 156 T7 refinement); on variable-operand sites it fires blanket, w/o suggestion or wire-origin scoping — restriction/allow-by-default; `manual_checked_ops` is Div-only at this pin |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -46,6 +47,17 @@
 //! unbounded stream-read class (RUSTSEC-2024-0003 / CVE-2019-9514 anchor),
 //! detector in `proposers::unbounded_read`. The DB is cited as CLASS
 //! provenance only; the fixtures are ORIGINAL syntheses.
+//!
+//! Batch 165 (2026-09-20, Plan 156 / Research 193): the family's fourth
+//! suggest-only rule — unchecked arithmetic on wire-byte origins (the
+//! overflow sink). The taint walk is SHARED with
+//! `length-prefix-validate-before-alloc` (`proposers::wire_taint`, one
+//! walker two sinks — Plan 156 T2's sink-distinct adjudication: distinct
+//! defect classes, distinct repairs, and the derived-validated shape's
+//! overflow already happened at the op, so a composition gate would
+//! suppress a true finding). Detector in
+//! `proposers::unchecked_wire_arithmetic`; probe evidence (real clippy
+//! 0.1.98, the pinned 1.98.1) recorded in Plan 156 T1.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -271,6 +283,39 @@ as class provenance; fixtures are original syntheses)."
             buggy_code: "pub fn read_request(mut stream: std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    let mut buf = Vec::new();\n    std::io::Read::read_to_end(&mut stream, &mut buf)?;\n    Ok(buf)\n}\n"
                 .to_string(),
             fixed_code: "pub fn read_request(stream: std::net::TcpStream, max_bytes: u64) -> std::io::Result<Vec<u8>> {\n    let mut limited = std::io::Read::take(stream, max_bytes);\n    let mut buf = Vec::with_capacity(max_bytes.min(1 << 20) as usize);\n    std::io::Read::read_to_end(&mut limited, &mut buf)?;\n    Ok(buf)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── Batch 165 (wire-arithmetic overflow sink) — the InputValidation ══
+        // ── family's fourth suggest-only rule (shared wire_taint walker).  ══
+        // ── unchecked-wire-arithmetic (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "unchecked-wire-arithmetic".to_string(),
+            sec_concept: "a wire-byte-origin integer (u32::from_be_bytes on a header, or a \
+.parse() of a length field) flowing through a BARE arithmetic operator (+ - * << >> \
+and their compound-assign spellings) with NO intervening bound check is an unchecked \
+overflow — panic in debug, silent WRAP in release, and a wrapped length silently \
+corrupts the frame parse downstream (the classic \"check the multiplication, not just \
+the result\" class: a post-hoc range check validates the wrapped value). Use the \
+checked op + an error path: len.checked_add(FRAME_OVERHEAD).ok_or(..)?. Suggest-only: \
+the invented error path's type the fn's signature may not carry — a protocol decision. \
+Sink-level novelty over length-prefix-validate-before-alloc on the SHARED wire_taint \
+walker (one walker, two sinks; Plan 156 T2 sink-distinct adjudication — the alloc \\
+sink owns allocation-size DoS, this sink owns the overflow itself, and in the \\
+derived-validated shape the alloc rule is correctly silent while this one correctly \\
+still fires). Boundary (measured, Plan 156 T1 + T7 refinement): clippy's \\
+arithmetic_side_effects is SILENT on literal/const operands (`len + 8`, \\
+`len + FRAME_OVERHEAD`) and where it does fire (variable operands) it is blanket — \
+every `x * y` site, no suggestion, no wire-origin scoping, restriction/allow-by-default; \
+manual_checked_ops is Div-only at this pin — Div/Rem are NOT this sink. Honest recall limits: same-fn \
+bare-ident origins only (cross-fn/field origins out); vec![0u8; len + 8] (arithmetic \
+INLINE in the repeat) is unreached — the shared walk never descends into macro \
+tokens. Batch 165 / Research 193 / Plan 156 (probe: real clippy 0.1.98 at the \
+pinned 1.98.1, zero safety lints on the shape)."
+                .to_string(),
+            buggy_code: "pub const FRAME_OVERHEAD: usize = 8;\n\npub fn framed_payload_len(header: [u8; 4]) -> usize {\n    let len = u32::from_be_bytes(header) as usize;\n    len + FRAME_OVERHEAD\n}\n"
+                .to_string(),
+            fixed_code: "pub const FRAME_OVERHEAD: usize = 8;\n\npub fn framed_payload_len(header: [u8; 4]) -> Option<usize> {\n    let len = u32::from_be_bytes(header) as usize;\n    len.checked_add(FRAME_OVERHEAD)\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },

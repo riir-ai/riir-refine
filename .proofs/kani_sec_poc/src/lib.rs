@@ -14,6 +14,12 @@
 //!   overflow on some wire input (existence witness); the `checked_add` form
 //!   proves silent wrapping impossible (Some ⟺ exact mathematical sum,
 //!   None ⟺ genuine overflow).
+//! - **G2c/G2d — the LANDED rule's corpus-fixture shape** (Batch 165, Plan
+//!   156 T6): one `from_be_bytes` parse + a CONSTANT header-size add — the
+//!   shipped `framed_payload_len` fixture — in its u32-domain twin. (The
+//!   fixture's `as usize` widening absorbs the overflow on 64-bit hosts;
+//!   the property lives in the wire-width domain the rule's advice
+//!   targets — checked_add BEFORE any widening.)
 
 use std::cmp::Ordering;
 
@@ -32,6 +38,20 @@ fn buggy_wire_sum(a: [u8; 4], b: [u8; 4]) -> u32 {
 /// op + an error path the caller must handle (returned here as `Option`).
 fn checked_wire_sum(a: [u8; 4], b: [u8; 4]) -> Option<u32> {
     u32::from_le_bytes(a).checked_add(u32::from_le_bytes(b))
+}
+
+/// The landed rule's corpus-fixture constant (`FRAME_OVERHEAD`).
+const FRAME_OVERHEAD: u32 = 8;
+
+/// G2c buggy form — the SHIPPED fixture's shape in its wire-width domain:
+/// one `from_be_bytes` parse + a bare constant add.
+fn buggy_framed_len(header: [u8; 4]) -> u32 {
+    u32::from_be_bytes(header) + FRAME_OVERHEAD
+}
+
+/// G2d checked form — the rule's bounded repair for that exact shape.
+fn checked_framed_len(header: [u8; 4]) -> Option<u32> {
+    u32::from_be_bytes(header).checked_add(FRAME_OVERHEAD)
 }
 
 #[cfg(kani)]
@@ -117,6 +137,35 @@ mod proofs {
         let expected =
             u64::from(u32::from_le_bytes(a)) + u64::from(u32::from_le_bytes(b));
         match checked_wire_sum(a, b) {
+            Some(v) => assert!(u64::from(v) == expected),
+            None => assert!(expected > u64::from(u32::MAX)),
+        }
+    }
+
+    // ---------- G2c/G2d: the LANDED rule's fixture shape (Plan 156 T6) ----------
+
+    /// G2c — EXPECTED VERIFICATION FAILURE (existence witness): some header
+    /// makes the shipped fixture's bare `parse + FRAME_OVERHEAD` overflow
+    /// (witness class: any header above `u32::MAX - 8`, e.g. all-0xFF).
+    /// Kani's default arithmetic-overflow check fires inside
+    /// `buggy_framed_len`; that failure IS the property violation evidence.
+    #[kani::proof]
+    fn g2c_buggy_framed_len_reaches_overflow() {
+        let header: [u8; 4] = kani::any();
+        let expected = u64::from(u32::from_be_bytes(header)) + u64::from(FRAME_OVERHEAD); // u64 cannot overflow
+        let got = u64::from(buggy_framed_len(header));
+        assert!(got == expected, "framed length wrapped silently");
+    }
+
+    /// G2d — EXPECTED VERIFICATION SUCCESS (impossibility): the checked
+    /// repair for the shipped fixture shape is two-sided — `Some(v)` iff v
+    /// is the exact mathematical length, `None` iff the true length exceeds
+    /// `u32::MAX` (no false alarm, no silent wrap).
+    #[kani::proof]
+    fn g2d_checked_framed_len_never_silently_wraps() {
+        let header: [u8; 4] = kani::any();
+        let expected = u64::from(u32::from_be_bytes(header)) + u64::from(FRAME_OVERHEAD);
+        match checked_framed_len(header) {
             Some(v) => assert!(u64::from(v) == expected),
             None => assert!(expected > u64::from(u32::MAX)),
         }
