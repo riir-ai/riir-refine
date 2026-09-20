@@ -101,8 +101,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     assert_eq!(
         corpus.entries.len(),
-        619,
-        "kernel batches through Batch 149 should have 619 rules"
+        620,
+        "kernel batches through Batch 166 should have 620 rules"
     );
 }
 
@@ -5339,7 +5339,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 619-rule corpus must appear in exactly one category.
+    // Every rule_id in the 620-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5382,10 +5382,10 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 148).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 166).
     let expected = [
         (KernelCategory::MemoryAccess, 134),
-        (KernelCategory::Compute, 65),
+        (KernelCategory::Compute, 66),
         (KernelCategory::Fusion, 46),
         (KernelCategory::Dispatch, 135),
         (KernelCategory::Parallelism, 57),
@@ -5412,9 +5412,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 619.
+    // Sum must equal 620.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 619, "Plan 003: category totals must sum to 619");
+    assert_eq!(total, 620, "Plan 003: category totals must sum to 620");
 }
 
 #[test]
@@ -5425,8 +5425,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 619,
-        "Plan 003: grouped corpus has {total} rules, expected 619"
+        total, 620,
+        "Plan 003: grouped corpus has {total} rules, expected 620"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9533,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        619,
-        "Batch 149: corpus should have 619 rules"
+        620,
+        "Batch 166: corpus should have 620 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12239,6 +12239,91 @@ fn batch149_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-149 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch166_rules_present() {
+    // Batch 166 (the FWHT butterfly staging ladder -- Plan 157 / Research
+    // 194): 1 kernel_opt rule, admitted only after the benchable instance
+    // landed in-tree (riir-ai Plan 600 / Issue 980's folded-prefill
+    // rotation lane, bonsai2_hadamard default-on 2026-09-19) -- the second
+    // butterfly-transform instance the 09-17 "STAGE, don't admit" grading
+    // waited for.
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["fwht-butterfly-staging-ladder-warp-smem-register"];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-166 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch166_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-166 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    // The staging ladder: the three bands, the incumbent defect shape,
+    // the fork evidence (expectation-priced), the sign-fold note, the
+    // bit-identity gate, the fused-family contract, the in-repo
+    // consumers, the W>2048 rider, the Batch-96 distinctness.
+    let c = concept("fwht-butterfly-staging-ladder-warp-smem-register");
+    for phrase in [
+        "WARP SHUFFLES",
+        "SHARED MEMORY with one barrier per stage",
+        "REGISTER-RESIDENT",
+        "256 threads, W = 1024, __shared__ float smem[1024]",
+        "~20 __syncthreads",
+        "+17% / +11% decode",
+        "25.8% of GPU time at block 4096",
+        "+2.2-4.8% pp",
+        "sign-first smem load",
+        "riir-ai d07542ee3",
+        "butterfly: fwht_rotate_forward_f32 verbatim",
+        "fwht_rotate_forward_f32 / fwht_rotate_inverse_f32",
+        "bonsai2_hadamard is DEFAULT-ON",
+        "6f1c6908d",
+        "Distinct from fwht-shuffle-xor-butterfly-register-resident (Batch 96",
+        "1bc46a8a7",
+    ] {
+        assert!(c.contains(phrase), "staging-ladder concept missing '{phrase}'");
+    }
+}
+
+#[test]
+fn batch166_pseudocode_parses() {
+    // G1 for Batch 166: syn-parse gate (fn-wrapped Rust-shaped code only --
+    // the B122/B123 lesson).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["fwht-butterfly-staging-ladder-warp-smem-register"];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-166 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-166 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-166 opt_pattern for '{id}' must parse"
         );
     }
 }

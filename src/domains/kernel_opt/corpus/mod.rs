@@ -1930,6 +1930,7 @@ mod entries_gpu_41;
 mod entries_gpu_42;
 mod entries_gpu_43;
 mod entries_gpu_44;
+mod entries_gpu_45;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1950,6 +1951,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_42::entries());
     entries.extend(entries_gpu_43::entries());
     entries.extend(entries_gpu_44::entries());
+    entries.extend(entries_gpu_45::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -1999,7 +2001,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 619-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 620-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2148,7 +2150,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "extent-clamped-operand-views-partial-k-tile",
         ],
     ),
-    // B: Compute patterns (64 rules)
+    // B: Compute patterns (66 rules) -- was 64 in the comment while the
+    // pinned truth was 65 (stale en passant, fixed at Batch 166)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2212,6 +2215,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hw-barrier-beats-mbarrier-polling",
             "mma-fragment-layout-m16n8k16",
             "fwht-shuffle-xor-butterfly-register-resident",
+            "fwht-butterfly-staging-ladder-warp-smem-register",
             "fused-vector-site-transcendental-form-nonportable",
             "per-row-scale-folded-into-rhs-staging-tile",
             "rope-pair-partner-via-cross-lane-shuffle",
