@@ -1,6 +1,6 @@
 # Plan 158 — Batch 167: the coverage-report re-arm pack XI (`unnecessary_cast` + `clone_on_copy`)
 
-**Status:** IN PROGRESS — probe complete, corpus authoring next.
+**Status:** COMPLETE 2026-09-21 — landed at `29915f11` (all T0–T13 `[x]`); follow-up hash-recording commit lands same day.
 
 Frontier-lead mining pack XI for `clippy_lints`, following the Batch 164
 coverage-report re-arm pipeline (the recorded-spare queue ran empty at
@@ -42,8 +42,8 @@ shape — the fixture uses the param shape instead); the call-expr seed co-fired
 - [x] T9 — freeze-table regeneration (corpus delta → the gen2/gen3 stride windows move; `src/score_bench/generations.rs` procedure, both `#[ignore]`d freeze e2es re-pinned and PASS 0 drift).
 - [x] T10 — retrieval-precision re-measure (floors: kernel self-variants 100%, blended ≥ pins; a decay FAILS the batch).
 - [x] T11 — score-bench run (+ the auto-appended frontier snapshot; double-run only if the verdict needs record capture).
-- [ ] T12 — docs: AGENTS.md count rows (86→88) + the Batch 167 domain-list row; `.docs/` domain page; `.research/195` batch note (next free number at write time); `.distill/001` LANDED row + next-pool pointer.
-- [ ] T13 — commit `feat: Batch 167: unnecessary_cast + clone_on_copy (clippy_lints 86→88)` + push.
+- [x] T12 — docs: AGENTS.md count rows (86→88) + the Batch 167 domain-list row; `.docs/` domain page; `.research/195` batch note (next free number at write time); `.distill/001` LANDED row + next-pool pointer.
+- [x] T13 — commit `feat: Batch 167: unnecessary_cast + clone_on_copy (clippy_lints 86→88)` + push.
 
 ## Standing gates (unchanged)
 
