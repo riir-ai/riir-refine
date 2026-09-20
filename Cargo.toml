@@ -648,6 +648,18 @@ required-features = ["nonergodic_poc"]
 name = "journey_credit_gate"
 required-features = ["rustc_errors", "latent_retrieval"]
 
+# Issue 126 lane (b) — the Lemma-4.2 likelihood-ratio tier guard's
+# store-level G1/G3 arms (poisoned wrong-goal credit excluded / clean
+# consistent credit certifies / refusal never demotes / replay
+# determinism) over a real TrajStore. The whole-file `#![cfg(feature =
+# "latent_retrieval")]` protects the count; this row protects the READER
+# (a bare `cargo test --test tier_guard_store_gates` errors instead of a
+# green zero); the guard's Layer 5d refuses an empty binary under
+# --all-features.
+[[test]]
+name = "tier_guard_store_gates"
+required-features = ["latent_retrieval"]
+
 [[test]]
 name = "nonergodic_driver_ab"
 required-features = ["nonergodic_driver"]

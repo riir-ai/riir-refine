@@ -83,6 +83,12 @@ pub mod fmt;
 pub mod frontier_pairs;
 pub mod modelability;
 pub mod pruner;
+// Issue 126 lane (b): the Lemma-4.2 likelihood-ratio tier guard (arXiv:2206.07568).
+// UNGATED — pure math over `elo`'s expected score; its only consumer is the
+// latent_retrieval-gated traj_store's certify transition, but the vocabulary
+// (π(τ|s_g)/π(τ|s_j) exclusion + the priced 2γε/(1−γ) slack) is crate-level
+// evidence law, and the pure tests run at default features.
+pub mod tier_guard;
 
 // ── Domain modules (feature-gated) ─────────────────────────────────────────
 pub mod domains;

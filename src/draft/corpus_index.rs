@@ -199,6 +199,10 @@ pub struct RuleIndex {
     /// Distinct rule ids (build order, deduped) — the full-vocab scoring side
     /// of the trained two-tower posture (Issue 126): the trained term scores
     /// EVERY indexed rule, so retrieval misses can still be rescued.
+    /// Read ONLY under `rule_embed_poc` (`rank_into`'s trained arm) — carried
+    /// ungated so the struct shape is feature-stable; dead-code-silent
+    /// elsewhere by this annotation (the platform-dead-code class).
+    #[cfg_attr(not(feature = "rule_embed_poc"), allow(dead_code))]
     rule_ids: Vec<String>,
     /// The frozen two-tower tables + the trained-term weight, when the
     /// Issue-126 posture is attached (opt-in feature; absent by default).

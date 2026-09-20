@@ -43,9 +43,12 @@
 //!
 //! Family scans are `scan_prefix(b"traj:")`; a trajectory's counters
 //! update by read-modify-write under the full-row key (idempotent upsert).
-//! The tier transitions are Issue 021's, durable: `success && verified`
-//! certifies; 3 consecutive failures withdraw (absorbing — only a
-//! verified success exits). The `learn:` rows are the per-rule EMA twin
+//! The tier transitions are Issue 021's, durable, now gated by Issue 126
+//! lane (b)'s Lemma-4.2 likelihood-ratio guard ([`crate::tier_guard`]):
+//! `success && verified` certifies WHEN the goal-side Elo model and the
+//! row's own Laplace outcome history agree within ε (counters always
+//! record — only the promotion is gated); 3 consecutive failures withdraw
+//! (absorbing — a verified success exits, through the same guard). The `learn:` rows are the per-rule EMA twin
 //! (Issue 037 E3): every verdict also steps the rule's evolved direction
 //! ([`ema_step`](crate::evolve::ema_step) — same rule as the in-process
 //! layer), durable + observable via `--memory-stats`.
@@ -524,8 +527,12 @@ impl TrajStore {
 
     /// Upsert one outcome. Creates the row on first sight; increments the
     /// counters + transitions the tier on repeat (Issue 021 semantics,
-    /// durable: `success && verified` certifies; 3 consecutive failures
-    /// withdraw — absorbing, only a verified success exits). Stamps the
+    /// durable, gated by Issue 126 lane (b)'s Lemma-4.2 guard:
+    /// `success && verified` certifies when
+    /// [`certify_allowed`](crate::tier_guard::certify_allowed) holds — the
+    /// fresh-row cold start is behavior-identical; 3 consecutive failures
+    /// withdraw — absorbing, a verified success exits through the same
+    /// guard). Stamps the
     /// verdict's run attribution: `run_id` + the current unix time
     /// (037-T2). Unattributed (Issue 047 component = `None`) — use
     /// [`record_classified`](Self::record_classified) for failures whose
@@ -578,7 +585,20 @@ impl TrajStore {
         if success {
             row.success_count = row.success_count.saturating_add(1);
             row.consecutive_fails = 0;
-            if verified {
+            // Issue 126 lane (b) — the Lemma-4.2 likelihood-ratio guard: the
+            // keep (reached goal) relabels to goal attainment (commanded
+            // goal) only when the goal-side Elo model and the row's own
+            // Laplace outcome history agree within ε. Counters always
+            // record; only the tier promotion is gated. Withdrawn recovery
+            // passes the same evidence bar (one uniform FSM).
+            if verified
+                && crate::tier_guard::certify_allowed(
+                    row.elo,
+                    row.span_elo,
+                    row.success_count,
+                    row.fail_count,
+                )
+            {
                 row.tier = EvidenceTier::Certified.as_u8();
             }
         } else {
