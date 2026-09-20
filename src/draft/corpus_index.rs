@@ -196,6 +196,14 @@ pub struct RuleIndex {
     by_zone_hash: HashMap<[u8; 32], String>,
     /// Distinct rules (NOT chunk count — multi-scale inflates chunks).
     n_rules: usize,
+    /// Distinct rule ids (build order, deduped) — the full-vocab scoring side
+    /// of the trained two-tower posture (Issue 126): the trained term scores
+    /// EVERY indexed rule, so retrieval misses can still be rescued.
+    rule_ids: Vec<String>,
+    /// The frozen two-tower tables + the trained-term weight, when the
+    /// Issue-126 posture is attached (opt-in feature; absent by default).
+    #[cfg(feature = "rule_embed_poc")]
+    trained: Option<(std::sync::Arc<super::rule_embed::TrainedTables>, f32)>,
 }
 
 impl RuleIndex {
@@ -231,8 +239,14 @@ impl RuleIndex {
         let embedder = ModellessEmbedder;
         let n_rules = patterns.len();
         let mut by_zone_hash = HashMap::with_capacity(n_rules);
+        let mut rule_ids: Vec<String> = Vec::with_capacity(n_rules);
+        let mut seen_ids: std::collections::HashSet<String> =
+            std::collections::HashSet::with_capacity(n_rules);
         let mut chunks: Vec<RawChunk> = Vec::with_capacity(n_rules);
         for (rule_id, text) in patterns {
+            if seen_ids.insert(rule_id.clone()) {
+                rule_ids.push(rule_id.clone());
+            }
             let push = |content: &str, chunks: &mut Vec<RawChunk>| {
                 chunks.push(RawChunk {
                     source: riir_rag::ChunkSource::new(format!("rule:{rule_id}"), 0, 0),
@@ -309,6 +323,9 @@ impl RuleIndex {
                     dense: Some(bonsai),
                     by_zone_hash,
                     n_rules,
+                    rule_ids,
+                    #[cfg(feature = "rule_embed_poc")]
+                    trained: None,
                 });
             }
         }
@@ -322,6 +339,9 @@ impl RuleIndex {
             dense: None,
             by_zone_hash,
             n_rules,
+            rule_ids,
+            #[cfg(feature = "rule_embed_poc")]
+            trained: None,
         })
     }
 
@@ -335,6 +355,26 @@ impl RuleIndex {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.by_zone_hash.is_empty()
+    }
+
+    /// Attach the frozen two-tower tables + the trained-term weight — the
+    /// Issue-126 A/B posture knob. Absent tables/rows degrade gracefully
+    /// (only rules with a ψ row get the trained term).
+    #[cfg(feature = "rule_embed_poc")]
+    pub fn set_rule_embed(
+        &mut self,
+        tables: &std::sync::Arc<super::rule_embed::TrainedTables>,
+        weight: f32,
+    ) {
+        self.trained = Some((std::sync::Arc::clone(tables), weight));
+    }
+
+    /// Project the query span through the frozen span tower, when the
+    /// trained posture is attached.
+    #[cfg(feature = "rule_embed_poc")]
+    fn phi_for(&self, code: &str) -> Option<[f32; super::rule_embed::EMBED_DIM]> {
+        let (tables, _) = self.trained.as_ref()?;
+        Some(tables.project_span(code))
     }
 
     /// Embed `code`, retrieve, and rank rules. `top_k` caps the result.
@@ -355,6 +395,21 @@ impl RuleIndex {
         scratch: &'s mut SuggestScratch,
     ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
+        // The trained posture's query projection (owned under the feature —
+        // a stack array — and borrowed into the rank call; `None` when the
+        // feature is off, typed uniformly as Option<&[f32]>).
+        #[cfg(feature = "rule_embed_poc")]
+        let phi_owned = self.phi_for(code);
+        let phi: Option<&[f32]> = {
+            #[cfg(feature = "rule_embed_poc")]
+            {
+                phi_owned.as_ref().map(<[f32; 64]>::as_slice)
+            }
+            #[cfg(not(feature = "rule_embed_poc"))]
+            {
+                None
+            }
+        };
         let query = self.query_for(code);
         // Score-only retrieval (Issue 063): `rank_into` reads `zone_hash` +
         // scores only, so the packed `retrieve()` path's content Strings +
@@ -363,6 +418,7 @@ impl RuleIndex {
         let mut retrieved = self.retriever.retrieve_for_scoring(&query);
         scratch.retrieved.append(&mut retrieved);
         self.rank_into(
+            phi,
             &scratch.retrieved,
             top_k,
             &mut scratch.best,
@@ -397,6 +453,18 @@ impl RuleIndex {
         scratch: &'s mut SuggestScratch,
     ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
+        #[cfg(feature = "rule_embed_poc")]
+        let phi_owned = self.phi_for(code);
+        let phi: Option<&[f32]> = {
+            #[cfg(feature = "rule_embed_poc")]
+            {
+                phi_owned.as_ref().map(<[f32; 64]>::as_slice)
+            }
+            #[cfg(not(feature = "rule_embed_poc"))]
+            {
+                None
+            }
+        };
         {
             let query = self.query_for(code);
             let mut retrieved_vec = self.retriever.retrieve_for_scoring(&query);
@@ -417,6 +485,7 @@ impl RuleIndex {
             scratch.retrieved.append(&mut line_vec);
         }
         self.rank_into(
+            phi,
             &scratch.retrieved,
             top_k,
             &mut scratch.best,
@@ -442,8 +511,18 @@ impl RuleIndex {
         q
     }
 
+    /// Merge retrieved chunks → per-rule best score → descending rank,
+    /// writing into the caller's `best`/`ranked` buffers (reused capacity).
+    /// Split-field params (not `&mut SuggestScratch`) so call sites can
+    /// field-split the borrow alongside `&scratch.retrieved`.
+    ///
+    /// `phi` is the trained posture's query projection (Issue 126) — `None`
+    /// when the feature is off or no tables are attached, in which case the
+    /// ranking is byte-identical to the pre-126 baseline.
+    #[cfg_attr(not(feature = "rule_embed_poc"), allow(unused_variables))]
     fn rank_into<'s>(
         &self,
+        phi: Option<&[f32]>,
         retrieved: &[riir_rag::RetrievedChunk],
         top_k: usize,
         best: &'s mut HashMap<String, f32>,
@@ -468,6 +547,25 @@ impl RuleIndex {
             let entry = best.entry(rule_id.clone()).or_insert(f32::NEG_INFINITY);
             if score > *entry {
                 *entry = score;
+            }
+        }
+        // The trained posture (Issue 126): score EVERY indexed rule through
+        // the frozen towers and blend — additive on retrieved candidates,
+        // stand-alone for rules retrieval missed entirely (the rescue path
+        // the fusion cannot provide). Rules without a ψ row are skipped
+        // (`score_rule` → None), an honest per-rule fallback to the baseline.
+        #[cfg(feature = "rule_embed_poc")]
+        if let (Some(phi), Some((tables, weight))) = (phi, &self.trained) {
+            for id in &self.rule_ids {
+                if let Some(t) = tables.score_rule(phi, id) {
+                    let s = weight * t;
+                    match best.get_mut(id) {
+                        Some(e) => *e += s,
+                        None => {
+                            best.insert(id.clone(), s);
+                        }
+                    }
+                }
             }
         }
         ranked.clear();

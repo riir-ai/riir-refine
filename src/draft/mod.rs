@@ -52,6 +52,11 @@ pub mod latent_matcher;
 // Issue 077 T2+T3: the margin law's shared substrate — pure math + the
 // matcher access pattern, no oracle. Gated latent_retrieval (the matcher).
 pub mod margin_weight;
+// Issue 126 lane (a): the sigmoid-NCE two-tower span↔rule embeddings + the
+// frozen i8 artifact. PoC posture (implies choice_scorer_poc — shared Rng +
+// schedule); the shipped suggest lane stays modelless until the gates pass.
+#[cfg(feature = "rule_embed_poc")]
+pub mod rule_embed;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
 #[cfg(feature = "set_rerank")]

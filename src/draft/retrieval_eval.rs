@@ -724,11 +724,11 @@ const PROBE_TOP_K: usize = 8;
 /// The labeled eval span set as OWNED strings (shared by `run_eval` + the
 /// Issue 020 router eval — both must measure the SAME spans).
 ///
-/// Plan 049 T0.0a widened this from `pub(crate)` to `pub`: the
-/// parameterized probe entry points ([`run_headroom_probe_with_spans`])
+/// `pub`: the parameterized probe entry points ([`run_headroom_probe_with_spans`])
 /// take `&[OwnedEvalSpan]`, so a caller must be able to name the set it
 /// feeds in — T0.2's oracle-labeled real-repo span sets are constructed
-/// outside this module.
+/// outside this module — and Issue 126's trainer consumes the SAME set for
+/// its TRAIN split (one fixture source, never a copy that can drift).
 pub struct OwnedEvalSpan {
     pub label: String,
     pub domain: DomainId,
@@ -743,7 +743,8 @@ pub struct OwnedEvalSpan {
     pub acceptable: Vec<String>,
 }
 
-pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
+#[must_use]
+pub fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
     let mut spans = Vec::new();
     #[cfg(feature = "clippy_lints")]
     for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
@@ -1004,6 +1005,142 @@ pub fn run_eval_inner(
     }
 
     report
+}
+
+/// Issue 126: the trained two-tower posture's split-aware measurement —
+/// BOTH postures (hashed baseline + baseline ⊕ trained term) over the SAME
+/// labeled spans, bucketed by the rule-level split
+/// ([`super::rule_embed::fixture_is_withheld`]), plus the gates:
+///
+/// - **G2 (the win gate):** full-rig `hits_at_1` (train + withheld) must
+///   BEAT the baseline's — movement on the committed axis (the +55.6pp
+///   Issue-121 precedent). The withheld split alone is NOT the win
+///   denominator: measured 2026-09-20, the baseline is already perfect
+///   there (31/31) — zero headroom, a win gate on it can never pass. The
+///   withheld split is the ANTI-MEMORIZATION read instead:
+/// - **G2-OOD (no harm):** withheld `hits_at_1` trained ≥ baseline. A train
+///   split win with a withheld regression would be memorization, not value.
+/// - **G1 (no regressions):** spans the baseline ranks top-1 that the
+///   trained posture does not — counted, gate is zero. The trained term may
+///   not cost the pipeline a span it already had.
+/// - **G3 (clean profile):** clean spans whose top-1 is a probeable
+///   (fixable-lint) rule — the false-positive class — must not increase.
+///
+/// Both matchers run `RerankMode::default()` (Structural — the shipped
+/// posture); the trained arm differs ONLY by the attached tables.
+#[cfg(feature = "rule_embed_poc")]
+#[derive(Debug, Default, Clone)]
+pub struct SplitReport {
+    pub baseline_train: DomainMetrics,
+    pub baseline_withheld: DomainMetrics,
+    pub trained_train: DomainMetrics,
+    pub trained_withheld: DomainMetrics,
+    /// G1: baseline top-1 spans the trained posture lost.
+    pub regressions_vs_baseline: usize,
+    /// G3: clean spans whose top-1 is probeable (the FP class).
+    pub clean_top1_fixable_baseline: usize,
+    pub clean_top1_fixable_trained: usize,
+    /// G3 evidence: clean spans whose top-1 identity CHANGED per domain
+    /// (tag, domain, baseline rule, trained rule).
+    pub clean_top1_changes: Vec<(&'static str, DomainId, String, String)>,
+    /// Failure anatomy: every labeled span that EITHER posture missed at
+    /// top-1 — (label, withheld, baseline rank, trained rank). This is the
+    /// population the win gate reads; `None` = not retrieved in the probe
+    /// window at all.
+    pub miss_detail: Vec<(String, bool, Option<usize>, Option<usize>)>,
+}
+
+#[cfg(feature = "rule_embed_poc")]
+fn bump_metrics(m: &mut DomainMetrics, rank: Option<usize>) {
+    m.labeled += 1;
+    if rank.is_some_and(|r| r < 1) {
+        m.hits_at_1 += 1;
+    }
+    if rank.is_some_and(|r| r < 3) {
+        m.hits_at_3 += 1;
+    }
+    if rank.is_some_and(|r| r < 5) {
+        m.hits_at_5 += 1;
+    }
+}
+
+/// Run the split-aware baseline-vs-trained measurement.
+///
+/// # Panics
+///
+/// Panics if the matcher cannot be built (no domain feature enabled).
+#[cfg(feature = "rule_embed_poc")]
+#[must_use]
+pub fn run_split_eval(
+    tables: &std::sync::Arc<super::rule_embed::TrainedTables>,
+    weight: f32,
+) -> SplitReport {
+    use super::rule_embed::fixture_is_withheld;
+    let build = || {
+        LatentMatcher::from_enabled_domains_with(crate::draft::RetrievalConfig::default())
+            .expect("build matcher")
+            .with_rerank_mode(crate::draft::RerankMode::default())
+    };
+    let mut baseline = build();
+    let mut trained = build().with_rule_embed(tables, weight);
+    let mut rep = SplitReport::default();
+
+    for span in labeled_eval_spans() {
+        let withheld = fixture_is_withheld(&span.label);
+        let mut ranks = [None; 2];
+        for (slot, matcher) in [&mut baseline, &mut trained].iter_mut().enumerate() {
+            let (_, by_domain) = matcher.suggest_span(&span.code, PROBE_TOP_K);
+            let ranked = by_domain
+                .iter()
+                .find(|(d, _)| *d == span.domain)
+                .map_or(Vec::new(), |(_, rules)| canonical_rank(rules));
+            ranks[slot] = ranked.iter().position(|r| r.rule_id == span.label);
+        }
+        let [b_rank, t_rank] = ranks;
+        let (bm, tm) = if withheld {
+            (&mut rep.baseline_withheld, &mut rep.trained_withheld)
+        } else {
+            (&mut rep.baseline_train, &mut rep.trained_train)
+        };
+        bump_metrics(bm, b_rank);
+        bump_metrics(tm, t_rank);
+        // G1: a span the baseline got right that the trained posture lost.
+        if b_rank == Some(0) && t_rank != Some(0) {
+            rep.regressions_vs_baseline += 1;
+        }
+        if b_rank != Some(0) || t_rank != Some(0) {
+            rep.miss_detail.push((span.label.clone(), withheld, b_rank, t_rank));
+        }
+    }
+
+    for (tag, code) in CLEAN_SPANS {
+        let (_, b_by) = baseline.suggest_span(code, PROBE_TOP_K);
+        let (_, t_by) = trained.suggest_span(code, PROBE_TOP_K);
+        for (d, brules) in &b_by {
+            let b_ranked = canonical_rank(brules);
+            let Some(btop) = b_ranked.first() else {
+                continue;
+            };
+            let Some((_, trules)) = t_by.iter().find(|(td, _)| td == d) else {
+                continue;
+            };
+            let t_ranked = canonical_rank(trules);
+            let Some(ttop) = t_ranked.first() else {
+                continue;
+            };
+            if super::instantiation_rerank::probeable(*d, &btop.rule_id) {
+                rep.clean_top1_fixable_baseline += 1;
+            }
+            if super::instantiation_rerank::probeable(*d, &ttop.rule_id) {
+                rep.clean_top1_fixable_trained += 1;
+            }
+            if btop.rule_id != ttop.rule_id {
+                rep.clean_top1_changes
+                    .push((tag, *d, btop.rule_id.clone(), ttop.rule_id.clone()));
+            }
+        }
+    }
+    rep
 }
 
 /// Human-readable metrics table (the `--nocapture` output of the report

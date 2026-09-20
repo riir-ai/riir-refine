@@ -70,26 +70,31 @@ fn tokens(text: &str) -> impl Iterator<Item = &[u8]> {
     })
 }
 
-/// Bucket + sign of one feature: blake3 → (bucket % DIMS, ±1). The sign
+/// Bucket + sign of one feature: blake3 → (bucket % dims, ±1). The sign
 /// comes from a byte the bucket does not read, so bucket and sign are
 /// independent.
-fn bucket_sign(feature: &[u8]) -> (usize, i8) {
+///
+/// `pub(crate)` — the trained two-tower posture (Issue 126) reuses the exact
+/// tokenization + bucket law at its own bucket count; a second copy would be
+/// a second thing to get wrong.
+pub(crate) fn bucket_sign(feature: &[u8], dims: usize) -> (usize, i8) {
     let h = blake3::hash(feature);
     let b = h.as_bytes();
-    let bucket = (u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize) % SPAN_EMBED_DIMS;
+    let bucket = (u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize) % dims;
     let sign = if b[4] & 1 == 0 { 1 } else { -1 };
     (bucket, sign)
 }
 
-/// Embed the span text: hashed unigram + adjacent-bigram bag, signed,
-/// L2-normalized, ×127 i8-quantized. Empty/whitespace-only text → the zero
-/// vector (an honest "no bytes captured", never a panic).
-#[must_use]
-pub fn span_embed(text: &str) -> [i8; SPAN_EMBED_DIMS] {
-    let mut acc = [0.0_f32; SPAN_EMBED_DIMS];
+/// Walk `text`'s tokens into a DENSE signed unigram+bigram bag over `dims`
+/// buckets, L2-normalized in place (zero vector for empty/whitespace-only
+/// text). `pub(crate)` — shared with the Issue-126 feature hashing.
+pub(crate) fn fill_hashbag(text: &str, dims: usize, acc: &mut [f32]) {
+    for v in acc.iter_mut() {
+        *v = 0.0;
+    }
     let mut prev: Option<&[u8]> = None;
     for tok in tokens(text) {
-        let (b, s) = bucket_sign(tok);
+        let (b, s) = bucket_sign(tok, dims);
         acc[b] += f32::from(s);
         if let Some(p) = prev {
             // Bigram input = p ++ ' ' ++ tok — no token contains a space
@@ -98,24 +103,34 @@ pub fn span_embed(text: &str) -> [i8; SPAN_EMBED_DIMS] {
             joined.extend_from_slice(p);
             joined.push(b' ');
             joined.extend_from_slice(tok);
-            let (b2, s2) = bucket_sign(&joined);
+            let (b2, s2) = bucket_sign(&joined, dims);
             acc[b2] += f32::from(s2);
         }
         prev = Some(tok);
     }
     let norm = acc.iter().map(|v| v * v).sum::<f32>().sqrt();
-    if norm <= 0.0 {
-        return [0; SPAN_EMBED_DIMS];
+    if norm > 0.0 {
+        for v in acc.iter_mut() {
+            *v /= norm;
+        }
     }
+}
+
+/// Embed the span text: hashed unigram + adjacent-bigram bag, signed,
+/// L2-normalized, ×127 i8-quantized. Empty/whitespace-only text → the zero
+/// vector (an honest "no bytes captured", never a panic).
+#[must_use]
+pub fn span_embed(text: &str) -> [i8; SPAN_EMBED_DIMS] {
+    let mut acc = [0.0_f32; SPAN_EMBED_DIMS];
+    fill_hashbag(text, SPAN_EMBED_DIMS, &mut acc);
     let mut out = [0_i8; SPAN_EMBED_DIMS];
     for (o, v) in out.iter_mut().zip(acc.iter()) {
-        // |v/norm| ≤ 1 by construction; round-then-clamp keeps the cast
-        // exact (|rounded| ≤ 127 < i8::MAX + 1).
+        // fill_hashbag L2-normalized, so |v| ≤ 1; round-then-clamp keeps the
+        // cast exact (|rounded| ≤ 127 < i8::MAX + 1).
         #[allow(clippy::cast_possible_truncation)] // post-clamp: exact
         #[allow(clippy::cast_sign_loss)] // i8 carries the sign, not u32
         {
-            *o = (v / norm * SPAN_EMBED_SCALE).round().clamp(-SPAN_EMBED_SCALE, SPAN_EMBED_SCALE)
-                as i8;
+            *o = (v * SPAN_EMBED_SCALE).round().clamp(-SPAN_EMBED_SCALE, SPAN_EMBED_SCALE) as i8;
         }
     }
     out

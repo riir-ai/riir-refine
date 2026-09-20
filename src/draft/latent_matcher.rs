@@ -447,6 +447,41 @@ impl LatentMatcher {
         self.rule_book.get(rule_id)
     }
 
+    /// The full rule book (id → buggy/fixed/domain) — Issue 126's trainer
+    /// reads THIS as its one corpus source (the same enumeration the matcher
+    /// indexes; never a second copy that can drift from it).
+    #[must_use]
+    pub fn rule_book_map(&self) -> &std::collections::HashMap<String, RuleInfo> {
+        &self.rule_book
+    }
+
+    /// Attach the frozen two-tower tables + the trained-term weight to every
+    /// built domain's index — the Issue-126 A/B posture knob (opt-in
+    /// feature). Absent ψ rows degrade per-rule to the untrained baseline.
+    #[cfg(feature = "rule_embed_poc")]
+    #[must_use]
+    pub fn with_rule_embed(
+        mut self,
+        tables: &std::sync::Arc<super::rule_embed::TrainedTables>,
+        weight: f32,
+    ) -> Self {
+        for index in [
+            &mut self.clippy,
+            &mut self.perf,
+            &mut self.kernel,
+            &mut self.sec,
+            &mut self.docker,
+            &mut self.dist,
+            &mut self.shader_perf,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            index.set_rule_embed(tables, weight);
+        }
+        self
+    }
+
     /// Issue 121: the embedded rule corpus (pool-latent lookups + recovery
     /// snap targets). Feature-gated with the set-rerank arm.
     #[cfg(feature = "set_rerank")]

@@ -252,6 +252,18 @@ gw_corpus = ["katgpt-core/gw_alignment", "clippy_lints", "rust_perf"]
 # a Bench-065 memorization signature = REFUTED, no widen-and-retry.
 choice_scorer_poc = ["latent_retrieval", "clippy_lints", "rust_perf"]
 
+# Issue 126 lane (a): the sigmoid-NCE two-tower span↔rule embeddings
+# (φ(span)ᵀψ(rule) ≈ P(rule fixes span)) trained on the machine-checked
+# fixture+corpus supervision with a rule-level withheld split, shipped as a
+# versioned BLAKE3-verified frozen i8 artifact. The runtime stays modelless
+# (one hashed bag + matvec, one dot + σ per rule). Implies choice_scorer_poc
+# (shared Rng + warmup/cosine schedule). Gates `examples/rule_embed_poc.rs`
+# (train/eval) + `run_split_eval` (retrieval_eval). Opt-in, measurement-only:
+# G2 = withheld hits-at-1 must BEAT the hashed baseline, G1 = zero top-1
+# regressions on baseline-correct spans, G3 = clean-span false-positive
+# profile no worse.
+rule_embed_poc = ["choice_scorer_poc"]
+
 # Issue 097: linking↔retrieval-confusion PoC — does topological linking
 # (PCA-3D, katgpt-core's Issue-757-tuned detector) between two rules'
 # span-embedding clouds predict retrieval top-1 confusion between those
@@ -618,6 +630,12 @@ required-features = ["linking_confusion_poc"]
 [[example]]
 name = "choice_scorer_poc"
 required-features = ["choice_scorer_poc"]
+
+# Issue 126 — the sigmoid-NCE two-tower rule-embedding PoC (--train/--eval;
+# measurement-only, never in default runs).
+[[example]]
+name = "rule_embed_poc"
+required-features = ["rule_embed_poc"]
 
 [[example]]
 name = "nonergodic_driver_poc"
