@@ -656,6 +656,16 @@ required-features = ["rustc_errors", "latent_retrieval"]
 # (a bare `cargo test --test tier_guard_store_gates` errors instead of a
 # green zero); the guard's Layer 5d refuses an empty binary under
 # --all-features.
+# Issue 126 lane (a) — the standing count-pinned gate for the trained
+# two-tower posture. `required-features` mirrors the file's `#![cfg(feature =
+# "rule_embed_poc")]` (line-25): without the row, `cargo test --test
+# rule_embed_gate` at default features compiles an EMPTY binary and prints
+# `ok. 0 passed` — the two-spelling green-zero class (the cfg protects the
+# count, the row protects the reader).
+[[test]]
+name = "rule_embed_gate"
+required-features = ["rule_embed_poc"]
+
 [[test]]
 name = "tier_guard_store_gates"
 required-features = ["latent_retrieval"]
