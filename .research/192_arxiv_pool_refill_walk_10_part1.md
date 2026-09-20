@@ -1,8 +1,11 @@
 # Research 192 — arxiv pool refill walk #10, part 1 (2026-09-20, window 09-16 → Sat-announce)
 
-**Status:** RECORD (part 1 of 2) — zero corpus delta, no batch. Part 2 = the
-09-18 → 09-20 submission announce delta (lands Mon 09-21 ~07:00 +07 with the
-Sunday 20:00 ET announce cycle); this note is APPENDED to, not superseded.
+**Status:** RECORD (parts 1+2 — walk CLOSED 2026-09-21) — zero corpus delta, no
+batch. Part 2 executed Mon 09-21 (the addendum below): the 09-18 announce
+delta was **not visible** through 14 polls spanning Sun 18:46 → 22:13 ET —
+arxiv-side announce/index delay, not a walk defect; the Fri batch rides the
+Mon announce and is the armed close-out trigger's opening balance. This note
+is APPENDED to, not superseded.
 
 **Why split:** the walk's read half is zero-contention and ran inside the
 Plan-337 box-saturation window (p335 x025 arm in final eval, load 12-21,
@@ -78,3 +81,60 @@ V4.1-Flash, Zarya/diffusion-LM, JustFit/MLX local-capacity).
 
 Part 2 (Mon 09-21): re-run the five lanes with the window extended through
 09-20, grade the delta, fold into this table, close the walk.
+
+---
+
+## Part 2 addendum — walk closed with an EMPTY visible delta (2026-09-21)
+
+**Execution:** Mon 09-21 01:46 +07 (Sun 18:46 ET) → 05:13 +07 (22:13 ET),
+M3-local, zero-contention (web lane only). `/tmp/arxiv_walk10/` scratch
+survived from part 1 — the same `parse.awk` state machine + the five standing
+lane queries, window widened to `submittedDate:"202609180000 TO 202609210000"`.
+
+**Instrument lessons (recorded for walk #11):**
+
+1. **The arxiv API range filter wants the QUOTED form** —
+   `submittedDate:"YYYYMMDDHHMM TO YYYYMMDDHHMM"` (literal `%22` quotes, no
+   brackets). The `%5B..%5D` bracket form silently rewrites to a quoted
+   literal server-side and returns `totalResults=0` — a well-formed empty
+   feed, indistinguishable from a genuinely empty window. First p2 fetch
+   round (5 lanes, bracket form) measured nothing; re-derived the working
+   form from part 1's own query echo (`lane2_kv.xml` header) before any
+   grading.
+2. **A single-lane sentinel is unsound for announce detection** — the poll
+   loop keyed on lane 1 (spec-dec); had Friday's batch merely contained no
+   spec-dec paper, the sentinel would read 0 forever after a successful
+   announce. The decisive probe is the UNRESTRICTED window query
+   (`search_query=submittedDate:".."` alone): its 0 is announce-state, not
+   lane composition.
+
+**Poll table (14 polls, one row per state change):**
+
+| Time (ET, Sun 09-20) | Probe | Result |
+|---|---|---|
+| 18:50 → 20:05 (6 polls, 15-min cadence) | lane-1 sentinel + unrestricted window | 0 / 0 |
+| 20:34, 20:47 (post-nominal-announce) | same | 0 / 0 |
+| 21:02, 21:16, 21:30, 21:44, 21:59, 22:13 | unrestricted window only | 0 each |
+| 22:20 (close) | sanity probes | **predicate correct, index empty after Thu** |
+
+**The sanity probes (the close-out evidence):**
+- `submittedDate:"202609170000 TO 202609180000"` (Thu alone) → **1155
+  results** — the window predicate works.
+- `submittedDate:"202609171200 TO 202609212359"` (from Thu noon to now) →
+  **568 results, newest = 2609.20823 @ 2026-09-17T17:59:59Z** — the Thu
+  announce batch is the last thing in the index. Nothing from Fri 09-18
+  onward existed at close, 2h13m past the nominal Sun 20:00 ET announce.
+
+**Verdict:** the announce/index delay is arxiv-side (Sunday big-batch lag is
+the known pattern); the walk's observable contract is fully executed — all
+five lanes re-run repeatedly across the nominal announce boundary, visible
+delta = **0 rows**, part 1's graded table stands unchanged as the walk's
+yield. **No speculative grading of an invisible batch** — the Fri 09-18
+submissions (+ weekend subs) ride the Mon 09-21 20:00 ET announce (Tue ~07:00
++07) together, and the **close-out delta check** (the same 5-lane re-run,
+~5 min) is ARMED as a trigger for the next idle pass after that announce —
+before the weekly walk #11 (opens Mon 09-28). It folds into this note's
+table the same way part 2 would have.
+
+**Part-2 yield: 0 rows graded, 2 instrument lessons, 1 armed trigger. Walk
+#10 CLOSED.**
