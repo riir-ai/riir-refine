@@ -99,10 +99,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 117 (5): antirez/ds4 Metal tensor-prefill delta distill (Plan 090 / Research 141) -- routed-activation-pack-once-shared-operand (L +1: pack the scattered routed activations ONCE per stage into a dense converted device tensor -- all consumers read it plain; f32->half exactly once at the pack; bounded grow-only scratch + derived 256 MiB refusal; bit-exact by conversion-site-only movement; +1.7-3.2% source-reported, MXFP4 arm non-uniform and said so), device-affine-scratch-admission-with-pool-fallback (A +1: three-check admission tuple ptr^device^capacity with the ladder RETAINED -- device affinity captured at SET time is the multi-GPU illegal-access guard; pool-alloc-inside-capture is the motivation (the remove-the-alloc complement of captured-graph-bakes-buffer-addresses); best-effort 96 MiB provisioning; +7.5/6.5/6.4% steady decode source-reported), batch-verify-rows-single-dispatch (C +1: the 2-6-row verify block in ONE launch, partials straight into the TP exchange slab, combine epilogue hoisted and byte-identical for both schedules -- lockstep by construction; +11-23% whole-commit conflated with the seed schedule, said so), row-aware-indexing-reuses-static-single-token-kernel (M +1: widen the existing static kernel's grid mapping (z -> token,slot) + per-token bases and call the static impl VERBATIM rebased -- reuse-instead-of-twin, the static pole of the B92 axis), dense-fast-path-bounded-by-selector-coverage (F +1: dense substitution is legal exactly through top_k + anchor_pool - 1 -- the selector's own reach, never the work-window; converts a tolerance into a proof while enabling the bounded GEMM; ~21 -> ~68 tok/s companion enablement source-reported) + 8 riders (B97 duplicate-pad-at-materialization complement, B35 TP non-owner identity + selector-padding sentinel, B23 byte-size static pin + topology-axis widening, B57 single-pass two-phase twins + four-backend audit, B58 remove-the-alloc-from-capture complement, B103 clamp-to-stay-on-bounded-gemm); source antirez/ds4 main @ 9ab7053 (MIT; Batch 97/98 pin 110afdd + ~14 commits; two read lanes + coordinator spot-verification, line drifts corrected).
     // Batch 118 (6): antirez/ds4 PR #991 Qwen3.8-Flash-Next distill (Research 142 / Plan 097) -- role-scoped-store-must-match-compute-guard (A, the correctness lead: unguarded store on a role-colliding row_half -> EXACTLY-UNIFORM softmax, invisible four ways, SIX sessions; gate batch118_unguarded_store_yields_uniform_softmax), tile-amplification-precedes-staging-pass (H, converged by both lanes), operand-precision-gated-by-consumer-invariance (N, GOAT-grade pass/fail arms + Q-split null ablation; closure MODEL-SCOPED), compute-role-split-by-accumulator-pressure (A, 2 score + 4 PV simdgroups), speculation-scheduler-break-even-flip (D, +3.8% plain decode -> 202 bypass vs 62; 110% margin doc-only), running-threshold-prune-compaction-aliasing-guard (I, memcmp == 0 survives; in-place compaction aliasing guard) + parallel-disjoint-pread-hides-cold-page-latency (rust_perf io) + 7 riders (B24/B95/B77/B57/stripe-semaphore/block-reduction gate batch118_indexed_shuffle_ladders_must_read_unmutated_partials/smem-envelope); source ivanfioravanti/ds4-metal branch qwen3.8-flash-next @ 236cb2a5 (MIT; force-pushed once, HEAD re-verified == pin).
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
+    // Batch 170 (7): mlxfast-gemma4 successor-arena pack (Research 198 / Plan 162) -- softmax-stats-precompute-exp-in-gemm-loader (C +1, at1: P never materialized, per-row stats 8 B/row, exp regenerated in the P*V GEMM's A-loader bit-identically, 4->2 passes over the score rectangle), fixed-ref-softmax-decode-walk (F +1, SLIDE-SOFTREF: prologue-pinned self-score reference replaces online max/rescale/branch, bounded divergence + span-0 bit-exact control), scale-identity-elide-in-framework-graph-transcription (B +1, QSCALE-ELIDE: delete the scale==1.0 multiply when transcribing the framework fallback graph -- 232 dispatches / 1.11e9 elements / ~4.4 GB of identity per prefill step), sentinel-operand-encoding-routes-fused-kernel (D +1, CAUSAL-CLOAD: dispatch decision encoded in an operand's shape signature -- stride kL+1 synthesis + the ldc==4/beta=-0.0 carry -- with graceful degradation on unpatched arms), tier-mismatched-grid-pruning-relaunch (E +1, LMH-001: 196608 of 262144 launched threadgroups exist only to early-return; relaunch the SAME kernel at the tier's claimed extent, bit-identical), compile-out-rare-paths-register-worst-case (E +1, RUN-CAP: register allocation is worst-case across inlined paths; cap the ladder at the measured run-length distribution, +9.12% s/token tokens bit-identical), batch-width-aware-partition-shrink (K +1, PARTITION: stock 1-row partition heuristic over-partitions the 8-wide batch ~8x; min(batch, stock) + the 1 MB-in-flight DRAM argument + merge-side simdgroup packing); source Layr-Labs/mlxfast-gemma4-26b-a4b-engine @ 27c821c4 (MIT; all 20 quote sites re-verified at the pin at authoring time) + 9 riders (B63-adjacent MMA bias-as-K-slot-64; B98 quad u32 load arm; B25-family LGH plane elision; B115-family teacher-forced-replay instrument; gate-up strided-view hazard; B100 write-fence graph spelling; B111-register-pipeline prefetch phase-multiplex negative; row-packing kL-keyed rows-per-TG table; B63 pointer-chain scatter-hoist store-side twin).
     assert_eq!(
         corpus.entries.len(),
-        620,
-        "kernel batches through Batch 166 should have 620 rules"
+        627,
+        "kernel batches through Batch 170 should have 627 rules"
     );
 }
 
@@ -883,8 +884,16 @@ fn batch15_block_contiguous_fused_geglu_rotation_codebook_concepts_covered() {
         .collect();
     // Category A: block-contiguous weight layout (riir-gpu gemm_ternary_block_contiguous)
     assert!(concepts.contains(&"pack multiple logical weight buffers (scale + bit-planes) into one block-contiguous buffer so one global-memory access fetches all components"));
-    // Category C: fuse gate+up GEMV + GeGLU (riir-gpu gemv_geglu_f16)
-    assert!(concepts.contains(&"fuse two sibling GEMVs (gate + up projections) + their multiplicative activation into one kernel dispatch"));
+    // Category C: fuse gate+up GEMV + GeGLU (riir-gpu gemv_geglu_f16).
+    // Batch 170 appended a rider to this concept (mlxfast-gemma4 strided-view
+    // hazard), so the FULL-STRING pin became prefix + rider asserts (the
+    // B125/B129 prefix lesson -- original text pinned verbatim, rider pinned
+    // by its opening marker).
+    let geglu = concepts.iter().find(|c| c.starts_with("fuse two sibling GEMVs (gate + up projections) + their multiplicative activation into one kernel dispatch")).expect("fuse-gate-up-gemv-activation concept prefix missing");
+    assert!(
+        geglu.contains("RIDER (Batch 170, mlxfast-gemma4"),
+        "batch-170 geglu strided-view rider missing"
+    );
     // Category B: pre-rotate query once (riir-gpu spectralquant/attention.rs)
     assert!(concepts.contains(&"for dot(q, R·y) with many y and orthogonal R, pre-rotate the query once (q' = R^T·q) instead of rotating each y"));
     // Category N: water-fill tail-dim shared codebook (riir-gpu spectralquant/dequant.rs)
@@ -1369,7 +1378,13 @@ fn batch25_gemma_cluster_concepts_covered() {
         "batch-129 argmax rider missing"
     );
     // B: monotone-transform-elision-under-argmax (riir-gpu gemma2_cubecl/gpu_forward.rs L208-217)
-    assert!(concepts.contains(&"a strictly monotone post-transform (softcap cap·tanh(x/cap), clamps, positive rescalings) does not change the argmax — skip it entirely when the only consumer is greedy decoding / top-k / any order-only query. The GPU decode path returns the raw logits WITHOUT final logit softcapping because tanh is monotonically increasing: argmax(softcap(x)) == argmax(x); the value-consuming CPU path still applies it. Elides a full-array transcendental pass (256K tanh evals per decode token). Distinct from softcap-tanh-attention-score (applying softcap in-kernel) — this elides it under order-only consumers; distinct from optional-bias-branch (absence) — the transform exists but order is invariant under it"));
+    // Batch 170 appended a rider (the LGH logits-plane elision), so the
+    // FULL-STRING pin became prefix + rider asserts (the B125/B129 lesson).
+    let monotone = concepts.iter().find(|c| c.starts_with("a strictly monotone post-transform (softcap cap·tanh(x/cap), clamps, positive rescalings) does not change the argmax — skip it entirely when the only consumer is greedy decoding / top-k / any order-only query. The GPU decode path returns the raw logits WITHOUT final logit softcapping because tanh is monotonically increasing: argmax(softcap(x)) == argmax(x); the value-consuming CPU path still applies it. Elides a full-array transcendental pass (256K tanh evals per decode token). Distinct from softcap-tanh-attention-score (applying softcap in-kernel) — this elides it under order-only consumers; distinct from optional-bias-branch (absence) — the transform exists but order is invariant under it")).expect("monotone-transform-elision concept prefix missing");
+    assert!(
+        monotone.contains("RIDER (Batch 170, mlxfast-gemma4"),
+        "batch-170 LGH plane-elision rider missing"
+    );
     // C: fan-out-shared-input-single-sync (riir-gpu gemma2_cubecl/dispatch.rs L69-122)
     assert!(concepts.contains(&"when N INDEPENDENT sibling kernels consume the same input (Q/K/V GEMVs on the same hidden state, per-head projections), create the input handle ONCE, clone it into each launch (cheap ref-count), queue all N dispatches, then read the outputs back-to-back — the first read executes the whole batched submission, so 1 upload + 1 effective sync instead of N uploads + N syncs. NOT the Bench 437 known-bad fan-out (one dispatch's output feeding multiple later dispatches — intermediates accumulate): here outputs are independent and read once at the end, no intermediates outlive the batch. Distinct from chain-dispatches-single-sync-point (dependent dispatches, sync amortization only — no shared upload) and from fuse-gate-up-gemv-activation (fuses siblings into ONE kernel — tighter but more invasive; this keeps existing kernels unchanged)"));
     // D: hot-swap-weights-preserve-autotune-caches (riir-gpu gemma4_cubecl/mod.rs L215-235)
@@ -5339,7 +5354,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 620-rule corpus must appear in exactly one category.
+    // Every rule_id in the 627-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5382,19 +5397,19 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 166).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 170).
     let expected = [
         (KernelCategory::MemoryAccess, 134),
-        (KernelCategory::Compute, 66),
-        (KernelCategory::Fusion, 46),
-        (KernelCategory::Dispatch, 135),
-        (KernelCategory::Parallelism, 57),
-        (KernelCategory::FlashAttnTiling, 15),
+        (KernelCategory::Compute, 67),
+        (KernelCategory::Fusion, 47),
+        (KernelCategory::Dispatch, 136),
+        (KernelCategory::Parallelism, 59),
+        (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
         (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 12),
+        (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
         (KernelCategory::DtypeAlignment, 44),
@@ -5412,9 +5427,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 620.
+    // Sum must equal 627.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 620, "Plan 003: category totals must sum to 620");
+    assert_eq!(total, 627, "Plan 003: category totals must sum to 627");
 }
 
 #[test]
@@ -5425,8 +5440,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 620,
-        "Plan 003: grouped corpus has {total} rules, expected 620"
+        total, 627,
+        "Plan 003: grouped corpus has {total} rules, expected 627"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9533,8 +9548,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        620,
-        "Batch 166: corpus should have 620 rules"
+        627,
+        "Batch 170: corpus should have 627 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12324,6 +12339,162 @@ fn batch166_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-166 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch170_rules_present() {
+    // Batch 170 (the mlxfast-gemma4 successor-arena pack -- Plan 162 /
+    // Research 198): 7 kernel_opt rules from the promoted diff-history of
+    // Layr-Labs/mlxfast-gemma4-26b-a4b-engine @ 27c821c4 (MIT; the qwen38
+    // harness family's successor arena, 180 promoted submissions; scoring
+    // prefill^0.25 x decode^0.75 with a 10% token-tolerance budget -- the
+    // deliberate opposite of qwen38's fidelity gate). All quotes
+    // re-verified verbatim at the pin at authoring time; every entry
+    // NotBenchable decision content (Metal source -- the R122/B100
+    // precedent; M5 Max numbers are expectation pricing, never ours).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "softmax-stats-precompute-exp-in-gemm-loader",
+        "fixed-ref-softmax-decode-walk",
+        "scale-identity-elide-in-framework-graph-transcription",
+        "sentinel-operand-encoding-routes-fused-kernel",
+        "tier-mismatched-grid-pruning-relaunch",
+        "compile-out-rare-paths-register-worst-case",
+        "batch-width-aware-partition-shrink",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-170 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch170_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-170 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    // at1: stats precompute + exp-in-loader, the 4->2 pass census, the
+    // bit-transport contract, the streaming distinction.
+    let c = concept("softmax-stats-precompute-exp-in-gemm-loader");
+    for phrase in [
+        "8 bytes/row against 2*kL bytes/row",
+        "four passes over the score rectangle, ~17.5 GB per ranked prefill",
+        "transported bit for bit",
+        "Distinct from online-softmax-streaming",
+    ] {
+        assert!(c.contains(phrase), "at1 concept missing '{phrase}'");
+    }
+    // fixed-ref: the prologue reference, the ceiling, the underflow
+    // argument, the span-0 control.
+    let c = concept("fixed-ref-softmax-decode-walk");
+    for phrase in [
+        "the query's self-score",
+        "min(..., 60.0f)",
+        "~87 nats under the reference underflow to zero",
+        "BIT-EXACT CONTROL",
+    ] {
+        assert!(c.contains(phrase), "fixed-ref concept missing '{phrase}'");
+    }
+    // qscale-elide: the census, the bit-exactness argument, the
+    // order-invariance neighbor distinction.
+    let c = concept("scale-identity-elide-in-framework-graph-transcription");
+    for phrase in [
+        "232 dispatches and 1.11 x 10^9 bf16 elements",
+        "~4.4 GB of traffic",
+        "sNaN quieting",
+        "Distinct from monotone-transform-elision-under-argmax",
+    ] {
+        assert!(c.contains(phrase), "qscale-elide concept missing '{phrase}'");
+    }
+    // sentinel: the stride signature, the addmm combination, the
+    // degradation property.
+    let c = concept("sentinel-operand-encoding-routes-fused-kernel");
+    for phrase in [
+        "(kL -> kL + 1)",
+        "SYNTHESIZE this operand in its epilogue",
+        "not a combination any other addmm of the declared shape produces",
+        "GRACEFUL DEGRADATION",
+    ] {
+        assert!(c.contains(phrase), "sentinel concept missing '{phrase}'");
+    }
+    // tight-grid: the 262144/196608 census, the same-pointers claim, the
+    // box receipt, the twin census.
+    let c = concept("tier-mismatched-grid-pruning-relaunch");
+    for phrase in [
+        "196608 of them exist only to hit that early return",
+        "the same threadgroup does the same rows with the same pointers",
+        "+0.216% composite / +0.383% decode",
+        "211,200 threadgroups; 158,400 of them are guaranteed early returns",
+    ] {
+        assert!(c.contains(phrase), "tight-grid concept missing '{phrase}'");
+    }
+    // run-cap: the RUN-OCT proof, the 14%/86% distribution, the measured
+    // cap, the bit-identity clause.
+    let c = concept("compile-out-rare-paths-register-worst-case");
+    for phrase in [
+        "merely compiling an eight-stream path cost 9.1% even when unused",
+        "runs of three or more are only 14% of runs",
+        "cap4 (incumbent) 0.002927 s/token, cap2 0.002660 = +9.12%",
+        "only an already-unreachable branch is removed",
+    ] {
+        assert!(c.contains(phrase), "run-cap concept missing '{phrase}'");
+    }
+    // partition: the 8x over-partition, the DRAM in-flight argument, the
+    // dead-lanes census, the attribution.
+    let c = concept("batch-width-aware-partition-shrink");
+    for phrase in [
+        "over-partitions by 8x",
+        "roughly 1 MB is in flight against the ~225 KB a 450 GB/s part",
+        "eight live lanes and twenty-four dead ones",
+        "samfenwick",
+    ] {
+        assert!(c.contains(phrase), "partition concept missing '{phrase}'");
+    }
+}
+
+#[test]
+fn batch170_pseudocode_parses() {
+    // G1 for Batch 170: syn-parse gate (fn-wrapped Rust-shaped code only --
+    // the B122/B123 lesson).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "softmax-stats-precompute-exp-in-gemm-loader",
+        "fixed-ref-softmax-decode-walk",
+        "scale-identity-elide-in-framework-graph-transcription",
+        "sentinel-operand-encoding-routes-fused-kernel",
+        "tier-mismatched-grid-pruning-relaunch",
+        "compile-out-rare-paths-register-worst-case",
+        "batch-width-aware-partition-shrink",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-170 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-170 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-170 opt_pattern for '{id}' must parse"
         );
     }
 }

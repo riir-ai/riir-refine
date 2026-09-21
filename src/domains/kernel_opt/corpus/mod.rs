@@ -1931,6 +1931,7 @@ mod entries_gpu_42;
 mod entries_gpu_43;
 mod entries_gpu_44;
 mod entries_gpu_45;
+mod entries_gpu_46;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1952,6 +1953,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_43::entries());
     entries.extend(entries_gpu_44::entries());
     entries.extend(entries_gpu_45::entries());
+    entries.extend(entries_gpu_46::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2001,7 +2003,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 620-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 627-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2150,8 +2152,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "extent-clamped-operand-views-partial-k-tile",
         ],
     ),
-    // B: Compute patterns (66 rules) -- was 64 in the comment while the
-    // pinned truth was 65 (stale en passant, fixed at Batch 166)
+    // B: Compute patterns (67 rules) -- was 64 in the comment while the
+    // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
+    // Batch 166, 67 at Batch 170 (scale-identity-elide)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2222,9 +2225,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "degenerate-selection-falls-back-to-identity-uniform",
             "lut-free-bit-spread-vadd4-unpack",
             "direct-low-bit-generation-replaces-exp-quantize-roundtrip",
+            "scale-identity-elide-in-framework-graph-transcription",
         ],
     ),
-    // C: Fusion patterns (46 rules)
+    // C: Fusion patterns (47 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2275,9 +2279,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-cancels-through-scale-invariant-norm",
             "batch-verify-rows-single-dispatch",
             "fused-residual-update-writes-separate-next-buffer",
+            "softmax-stats-precompute-exp-in-gemm-loader",
         ],
     ),
-    // D: Dispatch patterns (135 rules)
+    // D: Dispatch patterns (136 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2417,9 +2422,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "new-syntax-family-enumerates-every-keyed-surface",
             "one-time-dense-repack-keyed-sync-publish",
             "sustained-load-drift-interleave-protocol",
+            "sentinel-operand-encoding-routes-fused-kernel",
         ],
     ),
-    // E: Parallelism patterns (57 rules)
+    // E: Parallelism patterns (59 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2481,9 +2487,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ll-flag-in-data-packed-poll",
             "interleave-independent-accumulators-only",
             "narrow-matvec-one-row-per-simdgroup",
+            "tier-mismatched-grid-pruning-relaunch",
+            "compile-out-rare-paths-register-worst-case",
         ],
     ),
-    // F: Flash-attention tiling (15 rules)
+    // F: Flash-attention tiling (16 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -2503,6 +2511,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "split-k-two-pass-attention-decode-long-context",
             "dense-fast-path-bounded-by-selector-coverage",
             "kv-split-decode-underfill-per-slot-validity",
+            "fixed-ref-softmax-decode-walk",
         ],
     ),
     // G: Linear-attention recurrence (29 rules)
@@ -2603,7 +2612,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (12 rules)
+    // K: Autotune dispatch (13 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -2620,6 +2629,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "launch-heuristic-pinned-to-calibration-arch",
             "offline-device-tuned-table-dispatch",
             "tuned-config-resource-limit-fallback",
+            "batch-width-aware-partition-shrink",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (17 rules)

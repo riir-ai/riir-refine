@@ -1,6 +1,6 @@
 # Research 198 — mlxfast gemma4-26b-a4b-engine: the successor-arena diff-history walk (verdict)
 
-**Status:** DISTILLED — verdict **YES B+** (kernel_opt decision-content pack; 5–7 rules + 6–9 riders expected after ~50% falsification). Batch staged as the NEXT POOL (nominal Batch 170, executes via Plan 161 T5–T8 at the next quiet batch window). Walk executed 2026-09-21 (4090 idle session; zero cargo — the sibling doc-sync lane + the riir-train download lane ran untouched).
+**Status:** RECORD (Batch 170 LANDED 2026-09-21 via Plan 162 — all 7 rule candidates admitted, 0 demoted, + 9 riders; kernel_opt 620 → 627; every quote re-verified verbatim at the pin at authoring time — 20/20 sites incl. the steel_gemm_fused.h exp-in-loader quotes, which live in the vendored `Source/Cmlx/mlx/mlx/backend/...` twin, NOT the `mlx-generated` copy; `.raw/mlxfast-gemma4` removed at landing). Original verdict: YES B+.
 
 ## Source
 
@@ -67,4 +67,4 @@ Dropped/covered at dedup (recorded, not staged): fused-kv-write-attention (DIREC
 
 ## Queue slot
 
-**Batch 170 via Plan 161 T5–T8** — staged as the NEXT POOL (the coverage-report re-arm pipeline stays the clippy_lints lane's standing input; this is the kernel_opt lane's next input, the qwen38-successor the 09-20 queue entry designated). At landing: this note → RECORD; snapshot + AGENTS.md counts; `.raw/mlxfast-gemma4` removed.
+**CONSUMED** — Batch 170 landed via Plan 162 (this note → RECORD; snapshot + AGENTS.md counts updated; `.raw/mlxfast-gemma4` removed). The coverage-report re-arm pipeline stays the clippy_lints lane's standing input; the kernel_opt lane's next input opens with the next arena/walk verdict.
