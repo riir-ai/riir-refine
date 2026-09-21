@@ -113,6 +113,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       `new_without_default`, Plan 159; the suspicious group's FIRST
 ///       corpus row + the purely additive `impl Default`, both
 ///       default-on, the TENTH consecutive all-FIXABLE pack).
+///     + the 2 Batch 169 rows (2026-09-21, the coverage-report pack
+///       XIII — `match_ref_pats` + `into_iter_on_ref`, Plan 160; the
+///       Batch-168 staged alternates, both style/default-on, pinned by
+///       the plan160 probe — the deref-scrutinee `&`-strip + the
+///       container-proven method rename; the ELEVENTH consecutive
+///       all-FIXABLE pack).
 // Data table, not logic — length is the point. The entry count is
 // derived (module doc), never typed here.
 #[allow(clippy::too_many_lines)]
