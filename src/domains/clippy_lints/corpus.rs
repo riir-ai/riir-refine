@@ -953,6 +953,30 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).into_iter().next().copied() }".to_string(),
             fixed_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); v.iter().next().copied() }".to_string(),
         },
+        // ── Batch 171 (the coverage-report pack XIV, Plan 163): the
+        // comment-byte tab spacing (probe: `///`/`//!`/`/** */`/code
+        // samples all fire; regular `//` silent — mirrored) + the
+        // shape-proven adapter rename (`x.clone()` on `&T` proves T:
+        // Clone = cloned(); `*x` proves T: Copy = copied(); into_iter
+        // chains refused — clippy's empty suggestion there is Copy-only). ──
+        ClippyFixEntry {
+            lint_name: "tabs_in_doc_comments".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "///\ttabbed doc\nfn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 1 }".to_string(),
+            fixed_code: "///    tabbed doc\nfn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 1 }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "map_clone".to_string(),
+            lint_group: "perf".to_string(),
+            // The DEREF shape is the corpus atom (the regen's catch: the
+            // clone shape co-fires clone_on_copy on Copy elements AND
+            // redundant_closure_for_method_calls BY NATURE — `|x| x.clone()`
+            // IS a method-forwarding closure; the deref body fires exactly
+            // map_clone, probe mc_deref_copy). The clone arm lives in the
+            // module tests.
+            buggy_code: "fn f(hits: &mut Vec<u8>, v: &Vec<u8>) -> Vec<u8> { hits.push(0); v.iter().map(|x| *x).collect() }".to_string(),
+            fixed_code: "fn f(hits: &mut Vec<u8>, v: &Vec<u8>) -> Vec<u8> { hits.push(0); v.iter().copied().collect() }".to_string(),
+        },
     ])
 }
 
@@ -1074,7 +1098,7 @@ mod tests {
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 92);
+        assert_eq!(corpus.entries.len(), 94);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

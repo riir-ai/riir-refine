@@ -1,7 +1,7 @@
 # Plan 163 — Batch 171: the coverage-report pack XIV (tabs_in_doc_comments + map_clone)
 
-**Status:** IN PROGRESS (2026-09-21 — T0/T1 done; the probe-first law rejected
-TWO staged leads en route and this file records why)
+**Status:** COMPLETE (2026-09-21 — T13/T14 landing at commit time; all
+GOAT gates green)
 
 The standing pipeline (Batch 164+): fresh `--coverage-report` derivation →
 adjudicate the evidenced head with reasons → probe-verify the leads → land.
@@ -38,25 +38,32 @@ The two leads that survived:
 - [x] T0 fresh `--coverage-report` derivation + adjudication (the table above)
 - [x] T1 probe `scripts/plan163_pack14_probe.py` — PASS for both leads (with
       the two en-route REJECTS recorded in its header)
-- [ ] T2 `tabs_in_doc_comments` proposer (comment-text `\t`→4-space edit in
+- [x] T2 `tabs_in_doc_comments` proposer (comment-text `\t`→4-space edit in
       doc comments: `///`, `//!`, `/** */` — including code blocks; regular
       `//` untouched) + module tests
-- [ ] T3 `map_clone` proposer (by-ref-adapter-chained `.map(|x| x.clone())`
+- [x] T3 `map_clone` proposer (by-ref-adapter-chained `.map(|x| x.clone())`
       → `.cloned()` / `.map(|x| *x)` → `.copied()`; single-param identity
       closures only; into_iter/owned chains refused; nested-expr bodies
       refused — the mc_nested silence) + module tests
-- [ ] T4 registration: doc-table rows + pub mods + FIXABLE_LINTS 73→75
+- [x] T4 registration: doc-table rows + pub mods + FIXABLE_LINTS 73→75
       (count pin bumped) + dispatch arms + `all_lints_fire_and_parse` rows
-- [ ] T5 corpus.rs entries ×2 + count test 92→94
-- [ ] T6 G1: clippy_lints module + corpus tests green
-- [ ] T7 freeze regen gen2/gen3 (the plan-137 T7.5 law — the corpus delta
-      moves the stride windows; 3-run convergence)
-- [ ] T8 G2: lib default + kernel_heal counts (floors move up, no re-pins
-      down)
-- [ ] T9 retrieval gate: latent_retrieval suite floors held
-- [ ] T10 G3: clippy -D clean BOTH states
-- [ ] T11 score-bench + frontier snapshot + the Issue-102 cadence row (the
-      deliberate full-corpus sweep — row #3 takes the fade section live)
-- [ ] T12 Research 199 + AGENTS.md counts (92→94) + `.distill/001` update
+- [x] T5 corpus.rs entries ×2 + count test 92→94
+- [x] T6 G1: clippy_lints module + corpus tests green — 1183/0
+- [x] T7 freeze regen gen2/gen3 — 2-run convergence (the regen's run 1
+      caught the map_clone clone-shape co-fire: clone_on_copy + rcmfc fire
+      BY NATURE on `|x| x.clone()`; the corpus atom switched to the DEREF
+      shape; run 2 clean). Tables: 93/18 v2 + 93/22 v3; e2es v2 93/0/18
+      M4 PASS (20.3s) + v3 93/0/22 stratification PASS (19.2s).
+- [x] T8 G2: lib default 2137/0 + kernel_heal 2493/0
+- [x] T9 retrieval gate: 18/18 floors held
+- [x] T10 G3: clippy -D clean BOTH states (healer took 2 doc_markdown;
+      4 structural one-liners manual — if_same_then_else/manual_strip ×2/
+      while_let_loop, all outside the compiled fix set today)
+- [x] T11 score-bench #153 96.4% FLAT vocab 75 + frontier snapshot + the
+      Issue-102 cadence row — gen-3 sweep #154 at 66 rules, the THIRD
+      full-corpus sweep; the fade section is LIVE (0 candidates over
+      36→47→66)
+- [x] T12 Research 199 + AGENTS.md counts (92→94, 75→75 fixable) +
+      `.distill/001` update
 - [ ] T13 commit `feat: batch 171: ...` + push
 - [ ] T14 global binary rebuild + `--corpus-stats` verify (clippy_lints 94)

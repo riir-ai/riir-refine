@@ -105,6 +105,8 @@
 //! `empty_line_after_doc_comments` | `/// docs` + blank run + item → delete the blank run (pure whitespace; the doc re-attaches); attr-intervened silence mirrored (Batch 168) |
 //! `match_ref_pats` | `match f { &A => .., &B => .. }` → `match *f { A => .., B => .. }` — deref the ident scrutinee + strip each arm's leading `&`; binding-free sub-patterns only (binding modes are the staged hazard); mixed/wildcard/or arms are upstream-silent and refused (Batch 169) |
 //! `into_iter_on_ref` | `(&v).into_iter()` → `(&v).iter()` (+ the `(&mut v)` → `iter_mut` twin) — method rename only, clippy's own suggestion shape; the receiver ident proven container-typed by the fn signature (std's `IntoIterator for &T` IS `iter()`); for-heads refuse (the rename births explicit_iter_loop) (Batch 169) |
+//! `tabs_in_doc_comments` | every TAB in a doc comment → four spaces — comment bytes carry zero semantics; `///`, `//!`, `/** */` AND fenced code samples fire (probe); regular `//`/`////` stay silent; item/file-level doc attrs only (Batch 171) |
+//! `map_clone` | `v.iter().map(|x| x.clone())` → `.cloned()` / `.map(|x| *x)` → `.copied()` — the shape compiling PROVES the adapter's bound (T: Clone / T: Copy); by-ref adapter chains only (into_iter's empty-suggestion deletion is Copy-only — refused, the documented divergence) (Batch 171) |
 //! `new_without_default` | `impl W { pub fn new() -> Self }` with no Default → insert `impl Default for W` delegating to `new()` — purely additive, clippy's own suggestion shape (Batch 168) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
@@ -197,6 +199,8 @@ pub mod excessive_precision;
 pub mod manual_string_new;
 pub mod match_like_matches_macro;
 pub mod match_ref_pats;
+pub mod tabs_in_doc_comments;
+pub mod map_clone;
 pub mod needless_late_init;
 pub mod new_without_default;
 pub mod double_parens;
@@ -759,6 +763,35 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // class. Style-group (default-on; pinned by the plan160 probe's
     // no-flags run).
     "into_iter_on_ref",
+    // Every TAB in a doc comment → four spaces. FIXABLE by construction:
+    // comment bytes carry zero semantics and the replacement is clippy's
+    // own per-occurrence suggestion shape (probe: one `\t` → '    ', two →
+    // eight spaces; code samples inside fenced blocks fire too — mirrored
+    // verbatim). Guards: doc-comment ATTRS only (item/impl/trait level +
+    // the file-level `//!` — probe tid_inner fires, unlike
+    // empty_line_after_doc_comments' outer-only scope), the `////` and
+    // `/***` regular-comment prefixes refuse, the `#[doc = "..."]`
+    // attribute form refuses (escape-encoded literals make byte-level tab
+    // edits wrong — the documented divergence). Style-group (default-on;
+    // pinned by the plan163 probe's no-flags run).
+    "tabs_in_doc_comments",
+    // `v.iter().map(|x| x.clone())` → `.cloned()` (+ the `|x| *x` →
+    // `.copied()` twin). FIXABLE by the input's own compilation: the
+    // clone shape PROVES T: Clone (`x.clone()` on `&T` is what cloned()
+    // does per element), the deref shape PROVES T: Copy (a move out of a
+    // shared ref only compiles for Copy — copied()'s exact bound) — the
+    // adapter choice is TYPE-INDEPENDENT given the shape. clippy prefers
+    // `copied()` for Copy clone-shapes; we emit `cloned()` always —
+    // always-compilable, semantics-identical (the
+    // diverge-from-the-literal-suggestion precedent). Guards: by-ref
+    // adapter chain (iter/values/keys — probe-verified shapes only;
+    // iter_mut unprobed, refused) with NO into_iter anywhere (probe:
+    // clippy's empty suggestion there deletes the map — valid only for
+    // Copy elements, an owned-String chain would erase a real clone);
+    // single-param attr-free closures, body EXACTLY `p.clone()`/`*p`
+    // (probe mc_nested: nested clones are SILENT — mirrored).
+    // Perf-group (default-on; pinned by the plan163 probe's no-flags run).
+    "map_clone",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1100,6 +1133,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 169 (the coverage-report pack XIII — Plan 160) ──
         "match_ref_pats" => match_ref_pats::collect_edits(source, file),
         "into_iter_on_ref" => into_iter_on_ref::collect_edits(source, file),
+        // ── Batch 171 (the coverage-report pack XIV — Plan 163) ──
+        "tabs_in_doc_comments" => tabs_in_doc_comments::collect_edits(source, file),
+        "map_clone" => map_clone::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1231,7 +1267,10 @@ mod tests {
         // + 2 Batch 169 (match_ref_pats + into_iter_on_ref — the
         // coverage-report pack XIII, Plan 160; the deref-scrutinee `&`-strip
         // + the container-proven method rename).
-        assert_eq!(FIXABLE_LINTS.len(), 73);
+        // + 2 Batch 171 (tabs_in_doc_comments + map_clone — the
+        // coverage-report pack XIV, Plan 163; the comment-byte tab spacing
+        // + the shape-proven adapter rename).
+        assert_eq!(FIXABLE_LINTS.len(), 75);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
@@ -1719,6 +1758,16 @@ impl S {
                 "into_iter_on_ref",
                 "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).into_iter().next().copied() }",
                 "v.iter().next()",
+            ),
+            (
+                "tabs_in_doc_comments",
+                "///\ttabbed doc\nfn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 1 }",
+                "///    tabbed doc",
+            ),
+            (
+                "map_clone",
+                "fn f(hits: &mut Vec<u8>, v: &Vec<u8>) -> Vec<u8> { hits.push(0); v.iter().map(|x| *x).collect() }",
+                "v.iter().copied()",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
