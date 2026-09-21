@@ -901,6 +901,13 @@ pub fn render_journey_section(rows: &[JourneyRow], total_keys: usize) -> String 
 // `map_unwrap_or` (persist=1, resolved 1/2, constant) FADED on day one
 // with nothing having faded. A sweep row is a row whose attribution
 // covers the corpus.
+//
+// ⛔ FADED ≠ NEVER-CONTRIBUTED (the verdict's round-3 finding): fade
+// means CONTRIBUTED, THEN STOPPED — a rule with zero resolutions across
+// the whole series never contributed, which is 089 T4's `p̂ = 0`
+// expressiveness-gap fork (L3 ruliology or `decline`) — the OPPOSITE of
+// demotion. Two buckets, printed separately; T2 may only ever read the
+// FADED list.
 
 /// Minimum rules a score-history row must attribute to count as a
 /// full-corpus sweep row. The routine v1 lane attributes 4–5; the gen-3
@@ -951,8 +958,14 @@ pub struct FadeCandidate {
     /// Distinct generations across the series (display only — lanes can
     /// repeat a generation at a new corpus state).
     pub generations: Vec<u8>,
-    /// Σ resolved across the series (a candidate's is 0 by construction).
+    /// Σ resolved across the series (≥1 — FADED means contributed, then
+    /// stopped; a zero here is [`FadeScan::never_contributed`], not a
+    /// candidate).
     pub resolved_total: u32,
+    /// Sweeps with ≥1 resolution (the prior-contribution term).
+    pub resolved_sweeps: usize,
+    /// Consecutive zero-resolution sweeps at the series tail (the stop).
+    pub trailing_zero_sweeps: usize,
     /// Σ persist across the series (exposed-but-unresolved signal).
     pub persist_total: u32,
     /// Σ edits across the series.
@@ -969,9 +982,15 @@ pub struct FadeScan {
     /// One line per sweep row: "gen 3 @ ts (36 rules)" — the population
     /// the verdict rests on, printed in both the live and refused states.
     pub sweep_notes: Vec<String>,
-    /// Fade candidates, most-persisting first. EMPTY whenever [`FadeScan::refused`]
-    /// is set — an under-populated corpus never prints candidates.
+    /// FADED candidates (contributed, then stopped) — most-persisting
+    /// first. EMPTY whenever [`FadeScan::refused`] is set. The ONLY bucket
+    /// T2 may ever consume.
     pub candidates: Vec<FadeCandidate>,
+    /// Rules attributed in ≥ [`MIN_FADE_SWEEPS`] sweeps with ZERO
+    /// resolutions across the whole series — NEVER-CONTRIBUTED, 089 T4's
+    /// `p̂ = 0` expressiveness-gap fork territory, NEVER a demotion
+    /// candidate. Reported so the two buckets can never be conflated.
+    pub never_contributed: Vec<String>,
     /// Loud refusal when the population is below [`MIN_FADE_SWEEPS`]. The
     /// section's live state is a REFUSAL until ≥3 sweeps exist; correctness
     /// rides the planted-fade self-test until then.
@@ -980,21 +999,27 @@ pub struct FadeScan {
 
 /// One rule's running contribution series inside [`fade_scan`] (a named
 /// accumulator — the tuple form was a type-complexity finding).
+#[derive(Default)]
 struct FadeSeries {
     sweeps: usize,
     resolved: u32,
     persist: u32,
     edits: u32,
+    resolved_sweeps: usize,
+    trailing_zero_sweeps: usize,
     generations: Vec<u8>,
     last_ts: String,
 }
 
 /// Scan the score history for contribution fade. Pure — no store, no I/O.
-/// A rule is a candidate iff it is attributed in ≥ [`MIN_FADE_SWEEPS`]
-/// full-corpus sweep rows with `resolved_total == 0` across all of them
-/// (retrieval-exposed ∧ zero resolution — attribution in a sweep IS the
-/// exposure; per Issue 102 Caution 4 the per-generation evidence comes
-/// from these bench-time rows, never cumulative store deltas).
+/// Per rule attributed in ≥ [`MIN_FADE_SWEEPS`] full-corpus sweeps:
+/// **NEVER-CONTRIBUTED** (zero resolutions in every sweep →
+/// [`FadeScan::never_contributed`], the 089 triage fork, never a
+/// demotion candidate) vs **FADED** (≥1 sweep with a resolution, then a
+/// zero-resolution tail → [`FadeScan::candidates`]; attribution in a
+/// sweep IS the exposure — per Issue 102 Caution 4 the per-generation
+/// evidence comes from these bench-time rows, never cumulative store
+/// deltas).
 #[must_use]
 pub fn fade_scan(rows: &[FadeRow]) -> FadeScan {
     let sweeps: Vec<&FadeRow> = rows
@@ -1016,6 +1041,7 @@ pub fn fade_scan(rows: &[FadeRow]) -> FadeScan {
         sweep_rows: sweeps.len(),
         sweep_notes,
         candidates: Vec::new(),
+        never_contributed: Vec::new(),
         refused: None,
     };
     if scan.sweep_rows < MIN_FADE_SWEEPS {
@@ -1027,67 +1053,73 @@ pub fn fade_scan(rows: &[FadeRow]) -> FadeScan {
         ));
         return scan;
     }
-    let mut order: Vec<String> = Vec::new();
     let mut series: std::collections::BTreeMap<String, FadeSeries> =
         std::collections::BTreeMap::new();
     for row in &sweeps {
         for o in &row.outcomes {
             let e = series
                 .entry(o.rule.clone())
-                .or_insert_with(|| {
-                    order.push(o.rule.clone());
-                    FadeSeries {
-                        sweeps: 0,
-                        resolved: 0,
-                        persist: 0,
-                        edits: 0,
-                        generations: Vec::new(),
-                        last_ts: String::new(),
-                    }
-                });
+                .or_default();
             e.sweeps += 1;
             e.resolved += o.resolved;
             e.persist += o.persist;
             e.edits += o.edits;
+            if o.resolved > 0 {
+                e.resolved_sweeps += 1;
+                e.trailing_zero_sweeps = 0;
+            } else {
+                e.trailing_zero_sweeps += 1;
+            }
             if !e.generations.contains(&row.generation) {
                 e.generations.push(row.generation);
             }
             e.last_ts.clone_from(&row.ts);
         }
     }
-    for rule in order {
-        let Some(FadeSeries {
-            sweeps,
-            resolved,
-            persist,
-            edits,
-            mut generations,
-            last_ts,
-        }) = series.remove(&rule)
-        else {
-            continue;
-        };
-        if sweeps >= MIN_FADE_SWEEPS && resolved == 0 {
-            generations.sort_unstable();
-            scan.candidates.push(FadeCandidate {
-                rule,
-                sweeps,
-                generations,
-                resolved_total: resolved,
-                persist_total: persist,
-                edits_total: edits,
-                last_sweep_ts: last_ts,
-            });
-        }
+    for (rule, s) in series {
+        classify_series(&mut scan, rule, s);
     }
+    scan.never_contributed.sort();
     scan.candidates
         .sort_by(|a, b| b.persist_total.cmp(&a.persist_total).then(b.edits_total.cmp(&a.edits_total)).then(a.rule.cmp(&b.rule)));
     scan
 }
 
+/// Bucket one rule's completed series: thin (< [`MIN_FADE_SWEEPS`]) is
+/// skipped, zero-resolution is NEVER-CONTRIBUTED (089's triage fork), a
+/// resolution followed by a zero tail is FADED, everything else is still
+/// healthy. Deterministic order comes from the final sorts, not the walk.
+fn classify_series(scan: &mut FadeScan, rule: String, s: FadeSeries) {
+    if s.sweeps < MIN_FADE_SWEEPS {
+        return;
+    }
+    if s.resolved_sweeps == 0 {
+        scan.never_contributed.push(rule);
+        return;
+    }
+    if s.trailing_zero_sweeps == 0 {
+        return;
+    }
+    let mut generations = s.generations;
+    generations.sort_unstable();
+    scan.candidates.push(FadeCandidate {
+        rule,
+        sweeps: s.sweeps,
+        generations,
+        resolved_total: s.resolved,
+        resolved_sweeps: s.resolved_sweeps,
+        trailing_zero_sweeps: s.trailing_zero_sweeps,
+        persist_total: s.persist,
+        edits_total: s.edits,
+        last_sweep_ts: s.last_ts,
+    });
+}
+
 /// Render the fade section. The refused state is LOUD (population
 /// disclosure + no candidates) — never a silent zero table (the
-/// frontier-report law).
+/// frontier-report law). NEVER-CONTRIBUTED prints separately, never
+/// folded into the FADED table (the round-3 finding: the two buckets
+/// carry opposite remedies).
 #[must_use]
 pub fn render_fade_section(scan: &FadeScan) -> String {
     use std::fmt::Write as _;
@@ -1108,23 +1140,39 @@ pub fn render_fade_section(scan: &FadeScan) -> String {
         let _ = writeln!(out, "fade: {reason}");
         return out;
     }
+    if !scan.never_contributed.is_empty() {
+        let _ = writeln!(
+            out,
+            "never-contributed: {} rule(s) with ZERO resolutions across every sweep — 089's \
+             p̂=0 triage fork (expressiveness gap), NEVER demotion candidates:",
+            scan.never_contributed.len()
+        );
+        for rule in scan.never_contributed.iter().take(12) {
+            let _ = writeln!(out, "  · {rule}");
+        }
+        let hidden = scan.never_contributed.len().saturating_sub(12);
+        if hidden > 0 {
+            let _ = writeln!(out, "  · … and {hidden} more");
+        }
+    }
     if scan.candidates.is_empty() {
         let _ = writeln!(
             out,
-            "no fade candidates over {} sweep rows — every ≥{}-sweep rule resolved at least once",
+            "no FADED candidates over {} sweep rows — every ≥{}-sweep rule either still \
+             resolves or never contributed (see above)",
             scan.sweep_rows, MIN_FADE_SWEEPS
         );
         return out;
     }
     let _ = writeln!(
         out,
-        "{} fade candidate(s) — retrieval-exposed, zero resolution across ≥{MIN_FADE_SWEEPS} sweeps \
-         (most-persisting first; report-only, T2/T3 stay gated):",
+        "{} FADED candidate(s) — contributed, then stopped (zero-resolution tail; the ONLY \
+         bucket T2 may ever read; report-only, T2/T3 stay gated):",
         scan.candidates.len()
     );
     let _ = writeln!(
         out,
-        "| rule | sweeps | gens | persist | edits | last sweep |\n|---|---:|---|---:|---:|---|"
+        "| rule | sweeps | gens | resolved sweeps | trailing zeros | persist | edits | last sweep |\n|---|---:|---|---:|---:|---:|---:|---|"
     );
     for c in &scan.candidates {
         let gens = c
@@ -1135,8 +1183,15 @@ pub fn render_fade_section(scan: &FadeScan) -> String {
             .join(",");
         let _ = writeln!(
             out,
-            "| {} | {} | {} | {} | {} | {} |",
-            c.rule, c.sweeps, gens, c.persist_total, c.edits_total, c.last_sweep_ts
+            "| {} | {} | {} | {} | {} | {} | {} | {} |",
+            c.rule,
+            c.sweeps,
+            gens,
+            c.resolved_sweeps,
+            c.trailing_zero_sweeps,
+            c.persist_total,
+            c.edits_total,
+            c.last_sweep_ts
         );
     }
     out
@@ -1951,16 +2006,26 @@ mod tests {
     ];
 
     #[test]
-    fn planted_faded_rule_is_detected_after_three_sweeps() {
-        // `faded_rule` is one of the 30 attributed rules, persist-only
-        // (resolved=0) across THREE sweeps → candidate. Every other rule
-        // resolves at least once per sweep → never candidates.
+    fn planted_fade_needs_prior_contribution_and_never_contributed_is_its_own_bucket() {
+        // The round-3 arm: a rule at (1, 0, 0) is FADED (contributed, then
+        // stopped); a rule at (0, 0, 0) is NEVER-CONTRIBUTED — 089's
+        // p̂=0 triage fork, never a demotion candidate. The old planted
+        // arm (persist-only across all sweeps) was the NEVER-CONTRIBUTED
+        // shape wearing FADED's name.
         let mut rows = Vec::new();
+        let mut rules: Vec<&str> = SWEEP_RULES.to_vec();
+        rules.push("true_fade");
+        rules.push("never_rule");
+        let rules: Vec<&str> = rules;
         for (i, ts) in ["s1", "s2", "s3"].iter().enumerate() {
-            let mut row = sweep_row(3, ts, &SWEEP_RULES, 0);
+            let mut row = sweep_row(3, ts, &rules, 0);
             for o in &mut row.outcomes {
-                if o.rule != "faded_rule" {
-                    o.resolved = if i == 0 { 1 } else { 2 };
+                match o.rule.as_str() {
+                    // FADED: resolves exactly once, then zero tail.
+                    "true_fade" => o.resolved = if i == 0 { 1 } else { 0 },
+                    // Every other rule resolves every sweep (healthy).
+                    "never_rule" => o.resolved = 0,
+                    _ => o.resolved = 2,
                 }
             }
             rows.push(row);
@@ -1970,17 +2035,20 @@ mod tests {
         assert_eq!(scan.sweep_rows, 3);
         assert_eq!(scan.candidates.len(), 1, "exactly the planted fade");
         let c = &scan.candidates[0];
-        assert_eq!(c.rule, "faded_rule");
+        assert_eq!(c.rule, "true_fade");
         assert_eq!(c.sweeps, 3);
-        assert_eq!(c.resolved_total, 0);
-        assert_eq!(c.persist_total, 3);
+        assert_eq!(c.resolved_total, 1);
+        assert_eq!(c.resolved_sweeps, 1);
+        assert_eq!(c.trailing_zero_sweeps, 2);
+        assert_eq!(scan.never_contributed, vec!["never_rule".to_string()]);
     }
 
     #[test]
     fn healthy_thin_and_recovered_rules_are_never_flagged() {
         // healthy: resolves from sweep 1 on. thin: only in 2 sweeps.
         // recovered: persist-only for 2 sweeps, then resolves on the 3rd —
-        // fade is a SERIES property, one resolution clears it.
+        // the tail is a resolution, so neither FADED nor never-contributed
+        // (fade ≠ saturation is the classifier's core assertion, G2).
         let rules: Vec<&str> = SWEEP_RULES
             .iter()
             .copied()
@@ -2010,31 +2078,22 @@ mod tests {
         }
         let scan = fade_scan(&rows);
         assert!(scan.refused.is_none());
-        // recovered persists 2 then resolves — NOT a candidate (fade ≠
-        // saturation is the classifier's core assertion, G2).
         assert!(scan.candidates.is_empty(), "all rules healthy/thin/recovered");
-        // And a genuinely persist-only rule IS caught in the same world:
-        rows[0].outcomes.push(FadeOutcome {
-            rule: "late_fade".to_string(),
-            resolved: 0,
-            persist: 1,
-            edits: 1,
-        });
-        rows[1].outcomes.push(FadeOutcome {
-            rule: "late_fade".to_string(),
-            resolved: 0,
-            persist: 1,
-            edits: 1,
-        });
-        rows[2].outcomes.push(FadeOutcome {
-            rule: "late_fade".to_string(),
-            resolved: 0,
-            persist: 1,
-            edits: 1,
-        });
+        assert!(scan.never_contributed.is_empty());
+        // A genuinely all-zero rule lands in NEVER-CONTRIBUTED — printed,
+        // triage-fork territory, never in the FADED table.
+        for (i, row) in rows.iter_mut().enumerate() {
+            row.outcomes.push(FadeOutcome {
+                rule: "late_fade".to_string(),
+                resolved: 0,
+                persist: 1,
+                edits: 1,
+            });
+            let _ = i;
+        }
         let scan = fade_scan(&rows);
-        assert_eq!(scan.candidates.len(), 1);
-        assert_eq!(scan.candidates[0].rule, "late_fade");
+        assert!(scan.candidates.is_empty(), "all-zero is NEVER-CONTRIBUTED, not FADED");
+        assert_eq!(scan.never_contributed, vec!["late_fade".to_string()]);
     }
 
     #[test]
@@ -2077,12 +2136,13 @@ mod tests {
     }
 
     #[test]
-    fn fade_section_renders_refusal_and_live_states_loudly() {
+    fn fade_section_renders_refusal_live_and_never_contributed_states_loudly() {
         // Refused: the reason prints, no table.
         let refused = FadeScan {
             sweep_rows: 2,
             sweep_notes: vec!["gen 3 @ a (36 rules)".into(), "gen 3 @ b (47 rules)".into()],
             candidates: Vec::new(),
+            never_contributed: Vec::new(),
             refused: Some("REFUSED — needs ≥3".into()),
         };
         let text = render_fade_section(&refused);
@@ -2095,10 +2155,24 @@ mod tests {
             sweep_rows: 3,
             sweep_notes: vec![],
             candidates: Vec::new(),
+            never_contributed: Vec::new(),
             refused: None,
         };
         let text = render_fade_section(&live);
-        assert!(text.contains("no fade candidates over 3 sweep rows"));
+        assert!(text.contains("no FADED candidates over 3 sweep rows"));
+        // Never-contributed prints its OWN bucket with the triage wording,
+        // never inside the FADED table.
+        let split = FadeScan {
+            sweep_rows: 3,
+            sweep_notes: vec![],
+            candidates: Vec::new(),
+            never_contributed: vec!["p_zero_rule".to_string()],
+            refused: None,
+        };
+        let text = render_fade_section(&split);
+        assert!(text.contains("never-contributed: 1 rule(s)"));
+        assert!(text.contains("p_zero_rule"));
+        assert!(text.contains("triage fork"));
     }
 
     #[test]
