@@ -951,7 +951,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             lint_name: "into_iter_on_ref".to_string(),
             lint_group: "style".to_string(),
             buggy_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).into_iter().next().copied() }".to_string(),
-            fixed_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).iter().next().copied() }".to_string(),
+            fixed_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); v.iter().next().copied() }".to_string(),
         },
     ])
 }

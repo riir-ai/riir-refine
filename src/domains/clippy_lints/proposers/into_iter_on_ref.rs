@@ -1,21 +1,38 @@
-//! `clippy::into_iter_on_ref` — `(&v).into_iter()` → `(&v).iter()` (+ the
+//! `clippy::into_iter_on_ref` — `(&v).into_iter()` → `v.iter()` (+ the
 //! `(&mut v).into_iter()` → `iter_mut()` twin) (Batch 169 / Plan 160 — the
 //! coverage-report pack XIII, the Batch-168 staged alternate; envelope
 //! verified under the plain oracle 2026-09-21,
-//! `scripts/plan160_pack13_probe.py`).
+//! `scripts/plan160_pack13_probe.py`; the edit form is the SPLICE — the
+//! follow-through below).
 //!
 //! ## Why the rewrite is construction-identity (the FIXABLE bar)
 //!
-//! For every std container in the proven set, `impl IntoIterator for &T`
+//! For every container in the proven set, `impl IntoIterator for &T`
 //! IS `self.iter()` (and `&mut T` IS `self.iter_mut()`) — std defines the
-//! trait by delegating to the inherent method, so the method rename calls
-//! the SAME function on the SAME receiver. clippy's own suggestion is the
-//! rename alone ("call directly: `iter`" — probe-measured, receiver parens
-//! kept). The receiver-ident's type is proven by the enclosing fn's
+//! trait by delegating to the inherent method, so the rewrite calls
+//! the SAME function on the SAME receiver. The receiver-ident's type is
+//! proven by the enclosing fn's
 //! signature (the `receiver_kind` / `param_heads_over` precedent): only a
 //! param annotated with the delegation-law containers (or an array, each
 //! behind at most one reference) qualifies, and the never-rebound guard
 //! makes the annotation a construction fact.
+//!
+//! ## The edit form: the SPLICE, not the literal upstream suggestion
+//!
+//! Clippy's own help is the method rename alone ("call directly: `iter`"
+//! — receiver parens KEPT: `(&v).iter()`), and that form MEASURED
+//! co-firing `needless_borrow` (the redundant receiver borrow —
+//! warn-by-default style, so every plain `--fix` left a NEW warning
+//! behind). The born-lint slipped the landing gates by construction: the
+//! score-bench created axis and the freeze e2e are FIXABLE-vocabulary-
+//! filtered (`needless_borrow` is VERIFY-tier), and the probe measures
+//! clippy on BUGGY fixtures, never the fixer's output. The follow-through
+//! SPLICES instead — `[receiver.start, method.end)` → `v.iter` — dropping
+//! the now-redundant borrow with the parens (the
+//! `redundant_closure_for_method_calls` / `string_lit_as_bytes`
+//! diverge-from-the-literal-suggestion precedent). The provenance guard
+//! makes the splice trivially postfix-safe: the receiver inner is always
+//! a proven plain ident.
 //!
 //! ## Guards (the bounded fix-space — narrower than clippy, by design)
 //!
@@ -171,19 +188,29 @@ impl<'ast> Visit<'ast> for Scan {
         if !self.proven.contains(&name) {
             return;
         }
-        let span = byte_range(&m.method);
+        let method_span = byte_range(&m.method);
         if self
             .for_iter_ranges
             .iter()
-            .any(|rg| rg.contains(&span.start))
+            .any(|rg| rg.contains(&method_span.start))
         {
-            return; // for-head: the rename births explicit_iter_loop
+            return; // for-head: the rewrite births explicit_iter_loop
         }
-        let rename = if r.mutability.is_some() { "iter_mut" } else { "iter" };
+        // The SPLICE (Batch 169 follow-through): replace the whole
+        // `(&v).into_iter` head with `v.iter` — the parens-kept upstream
+        // suggestion MEASURED co-firing `needless_borrow` on the fixed
+        // form (the redundant receiver borrow; warn-by-default style, so
+        // every plain `--fix` left a NEW warning behind and the
+        // vocabulary-filtered created axis could not see it). The splice
+        // drops the now-redundant borrow with the parens; the ident is a
+        // proven plain ident, so the splice is postfix-safe by the guard
+        // set itself.
+        let recv_start = byte_range(m.receiver.as_ref()).start;
+        let method = if r.mutability.is_some() { "iter_mut" } else { "iter" };
         self.edits.push(SourceEdit {
-            start: span.start,
-            end: span.end,
-            replacement: rename.to_string(),
+            start: recv_start,
+            end: method_span.end,
+            replacement: format!("{name}.{method}"),
         });
     }
 }
@@ -193,19 +220,21 @@ mod tests {
     use super::super::propose_fix;
 
     #[test]
-    fn seed_fires_and_renames() {
+    fn seed_fires_and_splices() {
         let src = "pub fn f(v: Vec<u64>) -> Option<u64> {\n    (&v).into_iter().next().copied()\n}";
         let out = propose_fix("into_iter_on_ref", src).expect("matched");
-        assert!(out.contains("(&v).iter()"), "rename missing: {out}");
+        assert!(out.contains("v.iter()"), "splice missing: {out}");
+        assert!(!out.contains("(&v)"), "parens survived (the born needless_borrow form): {out}");
         assert!(!out.contains("into_iter"), "old name survived: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
-    fn mut_twin_renames_iter_mut() {
+    fn mut_twin_splices_iter_mut() {
         let src = "pub fn f(mut v: Vec<u64>) -> usize {\n    (&mut v).into_iter().count()\n}";
         let out = propose_fix("into_iter_on_ref", src).expect("matched");
-        assert!(out.contains("(&mut v).iter_mut()"), "mut rename missing: {out}");
+        assert!(out.contains("v.iter_mut()"), "mut splice missing: {out}");
+        assert!(!out.contains("(&mut v)"), "parens survived: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -215,21 +244,21 @@ mod tests {
         // aside, the parenthesized (&v) receiver is the spelling we catch
         let src = "pub fn f(v: &Vec<u64>) -> Option<&u64> {\n    (&v).into_iter().next()\n}";
         let out = propose_fix("into_iter_on_ref", src).expect("matched");
-        assert!(out.contains("(&v).iter()"));
+        assert!(out.contains("v.iter()"));
     }
 
     #[test]
     fn array_param_fires() {
         let src = "pub fn f(a: [u64; 4]) -> Option<&u64> {\n    (&a).into_iter().next()\n}";
         let out = propose_fix("into_iter_on_ref", src).expect("matched");
-        assert!(out.contains("(&a).iter()"));
+        assert!(out.contains("a.iter()"));
     }
 
     #[test]
     fn hashmap_param_fires() {
         let src = "use std::collections::HashMap;\npub fn f(m: HashMap<u64, u64>) -> Option<(&u64, &u64)> {\n    (&m).into_iter().next()\n}";
         let out = propose_fix("into_iter_on_ref", src).expect("matched");
-        assert!(out.contains("(&m).iter()"));
+        assert!(out.contains("m.iter()"));
     }
 
     #[test]

@@ -104,3 +104,46 @@ AFTER the Mon 09-21 20:00 ET announce (≈ Tue 07:00 +07) folds into Research
 idle pass; the next clippy pack rides the NEXT coverage-report derivation
 (the head's remainder is the Research 191 skip list) or a default-eco
 wave-5 if pack XIV ever needs it.
+
+
+## Follow-through (2026-09-21, later the same morning): the born-lint close
+
+The landing's `into_iter_on_ref` edit was the METHOD RENAME ONLY — the
+literal upstream suggestion, parens kept (`(&v).iter()`). A second,
+independent probe of the same pack (the duplicate batch's, see below)
+MEASURED that form co-firing `needless_borrow` on every fixed site: the
+parenthesized receiver borrow is redundant (autoref supplies it), and
+`needless_borrow` is warn-by-default style — every plain `--fix` left a
+NEW warning behind.
+
+**Why every landing gate missed it, by construction:** the score-bench
+created axis and the freeze e2e are FIXABLE-vocabulary-filtered
+(`needless_borrow` is VERIFY-tier — invisible to both), and the probe
+measures clippy on BUGGY fixtures, never the fixer's output. The probe's
+tracked-suggestion list named `needless_borrowed_reference` — a DIFFERENT
+lint (allow-by-default restriction) one character away — the near-miss-
+name class.
+
+**The fix** (landed as the follow-through commit): the edit SPLICES —
+`[receiver.start, method.end)` → `v.iter` — dropping the now-redundant
+borrow with the parens (the `string_lit_as_bytes` /
+`redundant_closure_for_method_calls` diverge-from-the-literal-suggestion
+precedent). The provenance guard makes the splice trivially postfix-safe:
+the receiver inner is always a proven plain ident. Corpus `fixed_code` and
+the dispatch fixture marker moved to the spliced form; module tests assert
+the parens are GONE.
+
+## The TWIN record
+
+Two sessions landed the SAME Batch 169 (same lint pair, same plan/research
+numbers) the same morning: this one (pushed `6d32c3b1`, 10:39 +07) and a
+duplicate (local commit, discarded — origin is canonical, never
+force-pushed). The duplicate's independent probe is what measured the
+born lint above; its G2-latency A/B datum is recorded here as the
+surviving content: under the sibling shader agent's sustained bevy
+`--workspace --doc` compile (loadavg 22-35),
+`latent_suggest_goat::g2_latency_under_1ms_per_chunk` (release-only)
+measures 1217-3512 µs/chunk at this batch AND **11526 µs/chunk at the
+Batch-168 parent `e49e621d`** (where it passed at 07:27 on a quiet box) —
+a box-state artifact, not a batch regression; re-adjudicate on a quiet
+box.

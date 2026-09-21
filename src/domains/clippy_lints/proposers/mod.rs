@@ -1718,7 +1718,7 @@ impl S {
             (
                 "into_iter_on_ref",
                 "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).into_iter().next().copied() }",
-                "(&v).iter()",
+                "v.iter().next()",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

@@ -31,7 +31,7 @@ lint, silent everywhere — recorded in plan158's probe).
       co-fires `needless_borrowed_reference` (probe) — the corpus atom is
       the clean no-binding spelling; clippy suggestion = deref scrutinee +
       strip `&`s, MachineApplicable. iir fires all 5 shapes; suggestion =
-      METHOD RENAME ONLY (`iter`/`iter_mut`, parens kept); `.count()`
+      METHOD RENAME ONLY (`iter`/`iter_mut`, parens kept — SUPERSEDED by the same-day FOLLOW-THROUGH: the rename form measured co-firing `needless_borrow` on every fixed site and the fix SPLICES to `v.iter` — see Research 197; `.count()`
       tails co-fire `iter_count` (the gen-8 shaped class); for-head fires
       but the rename births explicit_iter_loop → refused by us.
       Probe-harness lessons: `write_text(encoding="utf-8")` REQUIRED (the
@@ -80,17 +80,5 @@ lint, silent everywhere — recorded in plan158's probe).
 - [x] T12 Research 197 + AGENTS.md counts (90→92, FIXABLE 71→73) + the
       batch entry (this file's T-list is the .distill/001 pointer's
       companion — the snapshot edit follows)
-- [x] T13 commit `feat: batch 169: ...` + push — **COMPLETE `6d32c3b1`**
-      (18 files; the shared-worktree sibling's three docs/intake commits
-      391817eb/9ac91480/19c93f2f landed beneath it mid-batch — disjoint
-      regions, no conflicts, published together)
-- [x] T14 global binary rebuild — DONE: built from `6d32c3b1` in an
-      isolated worktree beside the repo (release feature set,
-      `latent_retrieval,kat_service,kat_transport,fix_verify`), installed
-      over the COPY at `~/.cargo/bin/cargo-heal.exe` (NOT a symlink on
-      this box — the 09-20 23:22 install was stale at clippy_lints 86;
-      the repo `target/release` copy vanished between cp and verify —
-      irrelevant, the installed copy is the load-bearing one); verified:
-      release set complete + `--corpus-stats` clippy_lints **92** /
-      rust_perf 145 / dist 6 / kernel_opt 620. Worktree + temp targets
-      removed.
+- [ ] T13 commit `feat: batch 169: ...` + push
+- [ ] T14 global binary rebuild + `--corpus-stats` verify
