@@ -80,5 +80,17 @@ lint, silent everywhere — recorded in plan158's probe).
 - [x] T12 Research 197 + AGENTS.md counts (90→92, FIXABLE 71→73) + the
       batch entry (this file's T-list is the .distill/001 pointer's
       companion — the snapshot edit follows)
-- [ ] T13 commit `feat: batch 169: ...` + push
-- [ ] T14 global binary rebuild + `--corpus-stats` verify
+- [x] T13 commit `feat: batch 169: ...` + push — **COMPLETE `6d32c3b1`**
+      (18 files; the shared-worktree sibling's three docs/intake commits
+      391817eb/9ac91480/19c93f2f landed beneath it mid-batch — disjoint
+      regions, no conflicts, published together)
+- [x] T14 global binary rebuild — DONE: built from `6d32c3b1` in an
+      isolated worktree beside the repo (release feature set,
+      `latent_retrieval,kat_service,kat_transport,fix_verify`), installed
+      over the COPY at `~/.cargo/bin/cargo-heal.exe` (NOT a symlink on
+      this box — the 09-20 23:22 install was stale at clippy_lints 86;
+      the repo `target/release` copy vanished between cp and verify —
+      irrelevant, the installed copy is the load-bearing one); verified:
+      release set complete + `--corpus-stats` clippy_lints **92** /
+      rust_perf 145 / dist 6 / kernel_opt 620. Worktree + temp targets
+      removed.
