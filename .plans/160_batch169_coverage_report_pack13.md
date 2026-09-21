@@ -80,5 +80,12 @@ lint, silent everywhere — recorded in plan158's probe).
 - [x] T12 Research 197 + AGENTS.md counts (90→92, FIXABLE 71→73) + the
       batch entry (this file's T-list is the .distill/001 pointer's
       companion — the snapshot edit follows)
-- [ ] T13 commit `feat: batch 169: ...` + push
-- [ ] T14 global binary rebuild + `--corpus-stats` verify
+- [x] T13 commit `feat: batch 169: ...` + push — **COMPLETE `6d32c3b1`**
+      (18 files). *Re-ticked 2026-09-21: the bdec43f6 follow-through
+      rewrote this file from a stale pre-`440fa6df` copy and reverted
+      these two boxes; the work stands as recorded there.*
+- [x] T14 global binary rebuild — DONE (`440fa6df`, built from `6d32c3b1`,
+      release set complete, `--corpus-stats` clippy_lints **92** /
+      rust_perf 145 / dist 6 / kernel_opt 620); superseded by the Batch-170
+      rebuild (`de73cf69`, kernel_opt 627 verified through the installed
+      copy). *Box re-ticked after the bdec43f6 stale-copy revert.*
