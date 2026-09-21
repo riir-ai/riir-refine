@@ -145,5 +145,17 @@ surviving content: under the sibling shader agent's sustained bevy
 `latent_suggest_goat::g2_latency_under_1ms_per_chunk` (release-only)
 measures 1217-3512 µs/chunk at this batch AND **11526 µs/chunk at the
 Batch-168 parent `e49e621d`** (where it passed at 07:27 on a quiet box) —
-a box-state artifact, not a batch regression; re-adjudicate on a quiet
-box.
+a box-state artifact, not a batch regression.
+
+**G2 ADJUDICATED (2026-09-21 ~11:20 +07) — the box-state verdict CLOSED,
+and it is not load-average:** after the sibling compile drained (loadavg
+4.6, zero cargo), BOTH commits fail identically — this batch 1236 µs and
+the Batch-168 parent `e49e621d` **1245 µs** in a clean detached worktree —
+against the parent's own 07:27 PASS on the morning box. Same commit, same
+near-quiet load, opposite verdicts hours apart: the gate's 1000 µs bar
+was calibrated on a COLD box, and the post-sustained-build state (thermal
+or clock — unmeasured, the mechanism is not claimed) holds every commit
+~24% over it. The gate is honest, the bar's box-state premise is what
+broke; re-calibration is the owner-scale call (it is a GOAT gate bar),
+and the measurement recipe is now on record: run g2 on a COLD box or
+discount the reading.
