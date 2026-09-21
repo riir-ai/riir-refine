@@ -103,6 +103,8 @@
 //! `unnecessary_cast` | `x as T` → `x` on a proven-same-type ident; `5 as u64` → `5_u64` on an int/float literal — identity cast / literal-suffix construction identity; param provenance only in v1, cross-type + pointer targets refuse (Batch 167) |
 //! `clone_on_copy` | `x.clone()` → `x` on a proven-Copy receiver (primitives + `&str`/`&String`) — the std Copy/Clone contract makes the call a no-op; `String` refuses (`redundant_clone`'s territory) (Batch 167) |
 //! `empty_line_after_doc_comments` | `/// docs` + blank run + item → delete the blank run (pure whitespace; the doc re-attaches); attr-intervened silence mirrored (Batch 168) |
+//! `match_ref_pats` | `match f { &A => .., &B => .. }` → `match *f { A => .., B => .. }` — deref the ident scrutinee + strip each arm's leading `&`; binding-free sub-patterns only (binding modes are the staged hazard); mixed/wildcard/or arms are upstream-silent and refused (Batch 169) |
+//! `into_iter_on_ref` | `(&v).into_iter()` → `(&v).iter()` (+ the `(&mut v)` → `iter_mut` twin) — method rename only, clippy's own suggestion shape; the receiver ident proven container-typed by the fn signature (std's `IntoIterator for &T` IS `iter()`); for-heads refuse (the rename births explicit_iter_loop) (Batch 169) |
 //! `new_without_default` | `impl W { pub fn new() -> Self }` with no Default → insert `impl Default for W` delegating to `new()` — purely additive, clippy's own suggestion shape (Batch 168) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
@@ -194,6 +196,7 @@ pub mod empty_line_after_doc_comments;
 pub mod excessive_precision;
 pub mod manual_string_new;
 pub mod match_like_matches_macro;
+pub mod match_ref_pats;
 pub mod needless_late_init;
 pub mod new_without_default;
 pub mod double_parens;
@@ -204,6 +207,7 @@ pub mod from_str_radix_10;
 pub mod helpers;
 pub mod identity_op;
 pub mod io_other_error;
+pub mod into_iter_on_ref;
 pub mod iter_skip_next;
 pub mod items_after_statements;
 pub mod iter_next_loop;
@@ -720,6 +724,41 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // cross-file Default is the verify-caught E0119 revert, never
     // silent. Style-group (default-on).
     "new_without_default",
+    // ── Batch 169 (the coverage-report pack XIII — Plan 160 — the
+    // Batch-168 staged alternates, probe scripts/plan160_pack13_probe.py) ──
+    // `match f { &A => .., &B => .. }` → `match *f { A => .., B => .. }` —
+    // FIXABLE by CONSTRUCTION IDENTITY: on any compiling input the
+    // all-`&`-armed scrutinee is a reference, and with BINDING-FREE
+    // sub-patterns the deref-place match selects the same arms with zero
+    // moves (no binding can move); byte-for-byte clippy's own
+    // MachineApplicable suggestion (probe: `*f` + stripped patterns).
+    // Guards: EVERY arm top-level `&`-pattern (the measured upstream
+    // silences mirrored — bare `_` arm, mixed arm, or-pattern arm);
+    // binding-free only (clippy fires on `&Some(ref x)` too — probe —
+    // but the rewrite changes binding modes: the documented
+    // narrower-than-clippy divergence, the staged scope); no nested `&`
+    // (a `&&A` output would re-fire our own fixpoint); plain-ident
+    // scrutinee only. Style-group (default-on; pinned by the plan160
+    // probe's no-flags run).
+    "match_ref_pats",
+    // `(&v).into_iter()` → `(&v).iter()` (+ `(&mut v)` → `iter_mut`) —
+    // FIXABLE by the std DELEGATION LAW: `impl IntoIterator for &T` IS
+    // `self.iter()` for every container in the proven set (std defines
+    // the trait by delegating to the inherent method), so the method
+    // rename calls the SAME function on the SAME receiver — clippy's own
+    // suggestion ("call directly: `iter`", receiver parens kept).
+    // Guards: the PARENTHESIZED `(&e)` receiver only (the typeck
+    // `r.into_iter()` shape clippy also catches is out of parse reach);
+    // the receiver ident proven by the enclosing fn's PARAM typed
+    // Vec/[T; N]/HashMap/HashSet/BTreeMap/BTreeSet/VecDeque/BinaryHeap
+    // (behind at most one reference; the `param_heads_over` precedent,
+    // never-rebound guard, closures refuse — shadowing); for-heads refuse
+    // (the rename births explicit_iter_loop — a style-for-style trade,
+    // the documented divergence); zero args, no turbofish. The `.count()`
+    // co-fire (probe: `iter_count`) rides as the gen-8 shaped-verdict
+    // class. Style-group (default-on; pinned by the plan160 probe's
+    // no-flags run).
+    "into_iter_on_ref",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1058,6 +1097,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 168 (the coverage-report re-arm pack XII — Plan 159) ──
         "empty_line_after_doc_comments" => empty_line_after_doc_comments::collect_edits(source, file),
         "new_without_default" => new_without_default::collect_edits(source, file),
+        // ── Batch 169 (the coverage-report pack XIII — Plan 160) ──
+        "match_ref_pats" => match_ref_pats::collect_edits(source, file),
+        "into_iter_on_ref" => into_iter_on_ref::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1186,12 +1228,15 @@ mod tests {
         // new_without_default — the coverage-report re-arm pack XII,
         // Plan 159; the blank-run deletion (suspicious-group's first
         // corpus row) + the additive Default-impl insertion).
-        assert_eq!(FIXABLE_LINTS.len(), 71);
+        // + 2 Batch 169 (match_ref_pats + into_iter_on_ref — the
+        // coverage-report pack XIII, Plan 160; the deref-scrutinee `&`-strip
+        // + the container-proven method rename).
+        assert_eq!(FIXABLE_LINTS.len(), 73);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 88-row fixture table — length is the point.
+    /// 90-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1664,6 +1709,16 @@ impl S {
                 "new_without_default",
                 "pub struct W { pub x: u8 }\nimpl W { pub fn new() -> Self { W { x: 1 } } }",
                 "impl Default for W",
+            ),
+            (
+                "match_ref_pats",
+                "pub enum Fruit { Apple, Pear }\nfn f(hits: &mut Vec<u8>, x: &Fruit) -> u64 { hits.push(0); match x { &Fruit::Apple => 1, &Fruit::Pear => 2 } }",
+                "match *x { Fruit::Apple => 1, Fruit::Pear => 2 }",
+            ),
+            (
+                "into_iter_on_ref",
+                "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).into_iter().next().copied() }",
+                "(&v).iter()",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

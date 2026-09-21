@@ -364,7 +364,9 @@ fn elem_head_of(ty: &syn::Type) -> Option<String> {
 /// Does the fn body rebind or assign `ident` anywhere (nested items
 /// included — the over-conservative direction: an inner fn's same-name
 /// param kills the outer derivation too, which only narrows fires)?
-fn body_rebinds(block: &syn::Block, ident: &str) -> bool {
+/// `pub(crate)` since Batch 169 — shared by the `param_heads_over` family
+/// and `into_iter_on_ref`'s container provenance.
+pub(crate) fn body_rebinds(block: &syn::Block, ident: &str) -> bool {
     struct R {
         ident: String,
         hit: bool,

@@ -417,6 +417,27 @@ pub fn specs() -> Vec<GenSpec> {
 // redirects (the Batch-160 measured lesson); it also COLLECTS + prints
 // fresh/stale exclusions instead of panicking, because a stride shuffle
 // needs 2 runs to converge (exclude, then re-derive).
+// Batch 169 regen (2026-09-21, Plan 160 — the coverage-report pack XIII,
+// the Batch-168 staged alternates): +2 atoms (`match_ref_pats` — CLEAN,
+// fires exactly its own lint in every window it lands in; `into_iter_on_ref`
+// — CLEAN after a FIXTURE repair caught by the regen itself: the first
+// corpus spelling returned `Option<&u64>` borrowing a fn param — E0515,
+// a non-compiling atom by construction; the `.next().copied()` spelling
+// verifies exactly its own lint). Bad-atom set UNCHANGED at 9 v2 / 10 v3
+// (the 8 pre-B168 atoms + new_without_default; v3 adds persist_array_default
+// as ever). The stride shuffle re-landed the iter_skip_next+
+// legacy_numeric_constants family at 3 new v2 windows + 2 new v3 windows,
+// retired 1 stale v3 id, and the v3 CASCADE (composites of unverified
+// atoms — the e2e's silent exclusion) moved one window row-side to
+// exclusion-side. Tables: 91 v2 labels / 18 v2 exclusions (109 specs at
+// 73 atoms), 91 v3 labels / 22 v3 exclusions. Regen-path notes honored
+// from Plan 159: the temp example WRITES ITS OWN output files; it also
+// mirrors the v3 cascade branch (run 2's tables missed it — the e2e
+// reported 1 newly-excluded with no printed reason; the cascade is the
+// silent branch); 3 runs to converge (fixture repair between runs 1-2,
+// cascade mirror between 2-3). e2es: v2 91 verified / 0 newly / 18
+// pre-excluded, M4 PASS (31.3s); v3 91 / 0 / 22, stratification PASS
+// (23.3s).
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]),
     ("gen2-k1-bool_comparison", &["bool_comparison"]),
@@ -433,6 +454,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-filter_next", &["filter_next"]),
     ("gen2-k1-from_str_radix_10", &["from_str_radix_10"]),
     ("gen2-k1-identity_op", &["identity_op"]),
+    ("gen2-k1-into_iter_on_ref", &["into_iter_on_ref"]),
     ("gen2-k1-io_other_error", &["io_other_error"]),
     ("gen2-k1-items_after_statements", &["items_after_statements"]),
     ("gen2-k1-iter_next_loop", &["iter_next_loop"]),
@@ -451,6 +473,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-map_unwrap_or", &["map_unwrap_or"]),
     ("gen2-k1-match_bool", &["match_bool"]),
     ("gen2-k1-match_like_matches_macro", &["match_like_matches_macro"]),
+    ("gen2-k1-match_ref_pats", &["match_ref_pats"]),
     ("gen2-k1-needless_bool", &["needless_bool"]),
     ("gen2-k1-needless_bool_assign", &["needless_bool_assign"]),
     ("gen2-k1-needless_late_init", &["needless_late_init"]),
@@ -486,31 +509,27 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),
     ("gen2-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),
     ("gen2-k2-filter_next+from_str_radix_10", &["filter_next", "from_str_radix_10"]),
-    ("gen2-k2-identity_op+io_other_error", &["identity_op", "io_other_error"]),
-    ("gen2-k2-items_after_statements+iter_next_loop", &["items_after_statements", "iter_next_loop"]),
-    ("gen2-k2-iter_nth_zero+iter_skip_next", &["iter_nth_zero", "iter_skip_next"]),
-    ("gen2-k2-legacy_numeric_constants+let_and_return", &["legacy_numeric_constants", "let_and_return"]),
-    ("gen2-k2-manual_clamp+manual_let_else", &["manual_clamp", "manual_let_else"]),
-    ("gen2-k2-manual_map+manual_range_contains", &["manual_map", "manual_range_contains"]),
-    ("gen2-k2-manual_range_patterns+manual_slice_fill", &["manual_range_patterns", "manual_slice_fill"]),
-    ("gen2-k2-manual_string_new+manual_unwrap_or", &["manual_string_new", "manual_unwrap_or"]),
+    ("gen2-k2-identity_op+into_iter_on_ref", &["identity_op", "into_iter_on_ref"]),
+    ("gen2-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),
+    ("gen2-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),
+    ("gen2-k2-let_and_return+manual_clamp", &["let_and_return", "manual_clamp"]),
+    ("gen2-k2-manual_let_else+manual_map", &["manual_let_else", "manual_map"]),
+    ("gen2-k2-manual_range_contains+manual_range_patterns", &["manual_range_contains", "manual_range_patterns"]),
+    ("gen2-k2-manual_slice_fill+manual_string_new", &["manual_slice_fill", "manual_string_new"]),
     ("gen2-k3-assign_op_pattern+bool_comparison+byte_char_slices", &["assign_op_pattern", "bool_comparison", "byte_char_slices"]),
     ("gen2-k3-bytes_count_to_len+clone_on_copy+collapsible_else_if", &["bytes_count_to_len", "clone_on_copy", "collapsible_else_if"]),
     ("gen2-k3-doc_markdown+doc_overindented_list_items+double_parens", &["doc_markdown", "doc_overindented_list_items", "double_parens"]),
-    ("gen2-k3-from_str_radix_10+identity_op+io_other_error", &["from_str_radix_10", "identity_op", "io_other_error"]),
-    ("gen2-k3-items_after_statements+iter_next_loop+iter_nth_zero", &["items_after_statements", "iter_next_loop", "iter_nth_zero"]),
-    ("gen2-k3-iter_skip_next+legacy_numeric_constants+let_and_return", &["iter_skip_next", "legacy_numeric_constants", "let_and_return"]),
-    ("gen2-k3-manual_clamp+manual_let_else+manual_map", &["manual_clamp", "manual_let_else", "manual_map"]),
-    ("gen2-k3-manual_range_contains+manual_range_patterns+manual_slice_fill", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill"]),
-    ("gen2-k3-manual_string_new+manual_unwrap_or+map_flatten", &["manual_string_new", "manual_unwrap_or", "map_flatten"]),
-    ("gen2-k3-map_unwrap_or+match_bool+match_like_matches_macro", &["map_unwrap_or", "match_bool", "match_like_matches_macro"]),
+    ("gen2-k3-from_str_radix_10+identity_op+into_iter_on_ref", &["from_str_radix_10", "identity_op", "into_iter_on_ref"]),
+    ("gen2-k3-io_other_error+items_after_statements+iter_next_loop", &["io_other_error", "items_after_statements", "iter_next_loop"]),
+    ("gen2-k3-let_and_return+manual_clamp+manual_let_else", &["let_and_return", "manual_clamp", "manual_let_else"]),
+    ("gen2-k3-manual_map+manual_range_contains+manual_range_patterns", &["manual_map", "manual_range_contains", "manual_range_patterns"]),
+    ("gen2-k3-manual_slice_fill+manual_string_new+manual_unwrap_or", &["manual_slice_fill", "manual_string_new", "manual_unwrap_or"]),
+    ("gen2-k3-map_flatten+map_unwrap_or+match_bool", &["map_flatten", "map_unwrap_or", "match_bool"]),
     ("gen2-k4-assign_op_pattern+bool_comparison+byte_char_slices+bytes_count_to_len", &["assign_op_pattern", "bool_comparison", "byte_char_slices", "bytes_count_to_len"]),
     ("gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),
-    ("gen2-k4-identity_op+io_other_error+items_after_statements+iter_next_loop", &["identity_op", "io_other_error", "items_after_statements", "iter_next_loop"]),
-    ("gen2-k4-iter_nth_zero+iter_skip_next+legacy_numeric_constants+let_and_return", &["iter_nth_zero", "iter_skip_next", "legacy_numeric_constants", "let_and_return"]),
-    ("gen2-k4-manual_clamp+manual_let_else+manual_map+manual_range_contains", &["manual_clamp", "manual_let_else", "manual_map", "manual_range_contains"]),
-    ("gen2-k4-manual_range_patterns+manual_slice_fill+manual_string_new+manual_unwrap_or", &["manual_range_patterns", "manual_slice_fill", "manual_string_new", "manual_unwrap_or"]),
-
+    ("gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements", &["identity_op", "into_iter_on_ref", "io_other_error", "items_after_statements"]),
+    ("gen2-k4-let_and_return+manual_clamp+manual_let_else+manual_map", &["let_and_return", "manual_clamp", "manual_let_else", "manual_map"]),
+    ("gen2-k4-manual_range_contains+manual_range_patterns+manual_slice_fill+manual_string_new", &["manual_range_contains", "manual_range_patterns", "manual_slice_fill", "manual_string_new"]),
 ];
 
 /// Spec ids the freeze run EXCLUDED (real-clippy labels ≠ union gold): the
@@ -521,23 +540,20 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k1-excessive_precision",
     "gen2-k1-legacy_numeric_constants",
     "gen2-k1-needless_match",
+    "gen2-k1-new_without_default",
     "gen2-k1-redundant_pattern_matching",
     "gen2-k1-uninlined_format_args",
     "gen2-k1-unnecessary_sort_by",
     "gen2-k1-unreadable_literal",
-    // Batch 168 (Plan 159): `new_without_default` is a BAD ATOM by premise —
-    // the lint requires effective exportation, and the harness's private
-    // `mod gen_N` wrap structurally prevents it (oracle: use_self only).
-    "gen2-k1-new_without_default",
     "gen2-k2-collapsible_if+deref_addrof",
-    // Batch 168 stride shuffle: the windows re-picked around the two new
-    // atoms; the eld+ep family carries ep's known `unreadable_literal`
-    // co-fire (the reason ep's own k1 is excluded).
     "gen2-k2-empty_line_after_doc_comments+excessive_precision",
+    "gen2-k2-iter_skip_next+legacy_numeric_constants",
     "gen2-k3-collapsible_if+deref_addrof+doc_lazy_continuation",
     "gen2-k3-empty_line_after_doc_comments+excessive_precision+filter_next",
+    "gen2-k3-iter_nth_zero+iter_skip_next+legacy_numeric_constants",
     "gen2-k4-clone_on_copy+collapsible_else_if+collapsible_if+deref_addrof",
     "gen2-k4-empty_line_after_doc_comments+excessive_precision+filter_next+from_str_radix_10",
+    "gen2-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
 ];
 
 /// Freeze readiness for one generation: Ok(admitted count) when every spec
@@ -803,26 +819,28 @@ pub fn specs_v3() -> Vec<GenSpec> {
 // 155 let_and_return broad-rule additions ride in the same tables); the
 // windows reshuffled past `io_other_error`'s sorted position — 14 rows.
 pub static EXCLUDED_IDS_V3: &[&str] = &[
+    "gen3-k1-persist_array_default",
     "gen3-k1-deref_addrof",
     "gen3-k1-excessive_precision",
     "gen3-k1-legacy_numeric_constants",
     "gen3-k1-needless_match",
     "gen3-k1-new_without_default",
-    "gen3-k1-persist_array_default",
     "gen3-k1-redundant_pattern_matching",
     "gen3-k1-uninlined_format_args",
     "gen3-k1-unnecessary_sort_by",
     "gen3-k1-unreadable_literal",
+    "gen3-k2-persist_array_default+persist_comment_arm",
     "gen3-k2-collapsible_if+deref_addrof",
     "gen3-k2-empty_line_after_doc_comments+excessive_precision",
-    "gen3-k2-persist_array_default+persist_comment_arm",
+    "gen3-k2-iter_skip_next+legacy_numeric_constants",
+    "gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist",
     "gen3-k3-collapsible_else_if+collapsible_if+deref_addrof",
     "gen3-k3-double_parens+empty_line_after_doc_comments+excessive_precision",
-    "gen3-k3-iter_nth_zero+iter_skip_next+legacy_numeric_constants",
-    "gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist",
+    "gen3-k3-legacy_numeric_constants+let_and_return+manual_clamp",
+    "gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format",
     "gen3-k4-clone_on_copy+collapsible_else_if+collapsible_if+deref_addrof",
     "gen3-k4-empty_line_after_doc_comments+excessive_precision+filter_next+from_str_radix_10",
-    "gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format",
+    "gen3-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
 ];
 
 /// The generation-3 frozen labels (spec id → vocabulary lints real clippy
@@ -849,6 +867,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-filter_next", &["filter_next"]),
     ("gen3-k1-from_str_radix_10", &["from_str_radix_10"]),
     ("gen3-k1-identity_op", &["identity_op"]),
+    ("gen3-k1-into_iter_on_ref", &["into_iter_on_ref"]),
     ("gen3-k1-io_other_error", &["io_other_error"]),
     ("gen3-k1-items_after_statements", &["items_after_statements"]),
     ("gen3-k1-iter_next_loop", &["iter_next_loop"]),
@@ -867,6 +886,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),
     ("gen3-k1-match_bool", &["match_bool"]),
     ("gen3-k1-match_like_matches_macro", &["match_like_matches_macro"]),
+    ("gen3-k1-match_ref_pats", &["match_ref_pats"]),
     ("gen3-k1-needless_bool", &["needless_bool"]),
     ("gen3-k1-needless_bool_assign", &["needless_bool_assign"]),
     ("gen3-k1-needless_late_init", &["needless_late_init"]),
@@ -903,26 +923,23 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),
     ("gen3-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),
     ("gen3-k2-filter_next+from_str_radix_10", &["filter_next", "from_str_radix_10"]),
-    ("gen3-k2-identity_op+io_other_error", &["identity_op", "io_other_error"]),
-    ("gen3-k2-items_after_statements+iter_next_loop", &["items_after_statements", "iter_next_loop"]),
-    ("gen3-k2-iter_nth_zero+iter_skip_next", &["iter_nth_zero", "iter_skip_next"]),
-    ("gen3-k2-legacy_numeric_constants+let_and_return", &["legacy_numeric_constants", "let_and_return"]),
-    ("gen3-k2-manual_clamp+manual_let_else", &["manual_clamp", "manual_let_else"]),
-    ("gen3-k2-manual_map+manual_range_contains", &["manual_map", "manual_range_contains"]),
+    ("gen3-k2-identity_op+into_iter_on_ref", &["identity_op", "into_iter_on_ref"]),
+    ("gen3-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),
+    ("gen3-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),
+    ("gen3-k2-let_and_return+manual_clamp", &["let_and_return", "manual_clamp"]),
+    ("gen3-k2-manual_let_else+manual_map", &["manual_let_else", "manual_map"]),
     ("gen3-k3-persist_useless_format+assign_op_pattern+bool_comparison", &["assign_op_pattern", "bool_comparison", "useless_format"]),
     ("gen3-k3-byte_char_slices+bytes_count_to_len+clone_on_copy", &["byte_char_slices", "bytes_count_to_len", "clone_on_copy"]),
     ("gen3-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items"]),
     ("gen3-k3-filter_next+from_str_radix_10+identity_op", &["filter_next", "from_str_radix_10", "identity_op"]),
-    ("gen3-k3-io_other_error+items_after_statements+iter_next_loop", &["io_other_error", "items_after_statements", "iter_next_loop"]),
-    ("gen3-k3-let_and_return+manual_clamp+manual_let_else", &["let_and_return", "manual_clamp", "manual_let_else"]),
-    ("gen3-k3-manual_map+manual_range_contains+manual_range_patterns", &["manual_map", "manual_range_contains", "manual_range_patterns"]),
-    ("gen3-k3-manual_slice_fill+manual_string_new+manual_unwrap_or", &["manual_slice_fill", "manual_string_new", "manual_unwrap_or"]),
+    ("gen3-k3-into_iter_on_ref+io_other_error+items_after_statements", &["into_iter_on_ref", "io_other_error", "items_after_statements"]),
+    ("gen3-k3-iter_next_loop+iter_nth_zero+iter_skip_next", &["iter_next_loop", "iter_nth_zero", "iter_skip_next"]),
+    ("gen3-k3-manual_let_else+manual_map+manual_range_contains", &["manual_let_else", "manual_map", "manual_range_contains"]),
+    ("gen3-k3-manual_range_patterns+manual_slice_fill+manual_string_new", &["manual_range_patterns", "manual_slice_fill", "manual_string_new"]),
     ("gen3-k4-assign_op_pattern+bool_comparison+byte_char_slices+bytes_count_to_len", &["assign_op_pattern", "bool_comparison", "byte_char_slices", "bytes_count_to_len"]),
     ("gen3-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),
-    ("gen3-k4-identity_op+io_other_error+items_after_statements+iter_next_loop", &["identity_op", "io_other_error", "items_after_statements", "iter_next_loop"]),
-    ("gen3-k4-iter_nth_zero+iter_skip_next+legacy_numeric_constants+let_and_return", &["iter_nth_zero", "iter_skip_next", "legacy_numeric_constants", "let_and_return"]),
-    ("gen3-k4-manual_clamp+manual_let_else+manual_map+manual_range_contains", &["manual_clamp", "manual_let_else", "manual_map", "manual_range_contains"]),
-
+    ("gen3-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements", &["identity_op", "into_iter_on_ref", "io_other_error", "items_after_statements"]),
+    ("gen3-k4-let_and_return+manual_clamp+manual_let_else+manual_map", &["let_and_return", "manual_clamp", "manual_let_else", "manual_map"]),
 ];
 
 /// Freeze readiness for generation 3 — Err until the freeze e2e lands the

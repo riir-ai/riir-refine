@@ -2022,7 +2022,7 @@ mod tests {
             for o in &mut row.outcomes {
                 match o.rule.as_str() {
                     // FADED: resolves exactly once, then zero tail.
-                    "true_fade" => o.resolved = if i == 0 { 1 } else { 0 },
+                    "true_fade" => o.resolved = u32::from(i == 0),
                     // Every other rule resolves every sweep (healthy).
                     "never_rule" => o.resolved = 0,
                     _ => o.resolved = 2,
@@ -2059,7 +2059,8 @@ mod tests {
             let mut row = sweep_row(3, ts, &rules, 0);
             for o in &mut row.outcomes {
                 match o.rule.as_str() {
-                    "healthy_rule" => o.resolved = 2,
+                    // healthy_rule rides the `_` arm (2, like every other
+                    // healthy rule)
                     "recovered_rule" if i == 2 => o.resolved = 1,
                     "thin_rule" => o.resolved = 0,
                     _ => o.resolved = 2,

@@ -924,6 +924,29 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "pub struct W { pub x: u8 }\nimpl W { pub fn new() -> Self { W { x: 1 } } }".to_string(),
             fixed_code: "pub struct W { pub x: u8 }\nimpl W { pub fn new() -> Self { W { x: 1 } } }\n\nimpl Default for W {\n    fn default() -> Self {\n        Self::new()\n    }\n}".to_string(),
         },
+        // ── Batch 169 (2026-09-21, the coverage-report pack XIII — the
+        // Batch-168 staged alternates, Plan 160, probe
+        // scripts/plan160_pack13_probe.py). mrf fires ONLY its own lint
+        // on the no-binding fixture (the binding shape co-fires
+        // needless_borrowed_reference — probe — so the atom must be the
+        // clean no-binding spelling, and the proposer REFUSES bindings
+        // anyway: the binding-mode hazard is the staged scope). iir's
+        // clean fixture is the bare `.next()` shape (the `.count()` tails
+        // co-fire iter_count — probe — the gen-8 shaped-verdict class);
+        // the receiver ident is signature-proven container-typed (the
+        // param_heads_over precedent). ──
+        ClippyFixEntry {
+            lint_name: "match_ref_pats".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "pub enum Fruit { Apple, Pear }\nfn f(hits: &mut Vec<u8>, x: &Fruit) -> u64 { hits.push(0); match x { &Fruit::Apple => 1, &Fruit::Pear => 2 } }".to_string(),
+            fixed_code: "pub enum Fruit { Apple, Pear }\nfn f(hits: &mut Vec<u8>, x: &Fruit) -> u64 { hits.push(0); match *x { Fruit::Apple => 1, Fruit::Pear => 2 } }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "into_iter_on_ref".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).into_iter().next().copied() }".to_string(),
+            fixed_code: "fn f(hits: &mut Vec<u8>, v: Vec<u64>) -> Option<u64> { hits.push(0); (&v).iter().next().copied() }".to_string(),
+        },
     ])
 }
 
@@ -1036,13 +1059,16 @@ mod tests {
     /// coverage-report re-arm pack XII, the post-Batch-167 derivation
     /// leads, Plan 159) = 90.
     ///
+    /// (`match_ref_pats`, `into_iter_on_ref` — the coverage-report pack
+    /// XIII, the Batch-168 staged alternates, Plan 160) = 92.
+    ///
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 90);
+        assert_eq!(corpus.entries.len(), 92);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires
