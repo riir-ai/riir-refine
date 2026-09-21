@@ -768,10 +768,13 @@ pub const SNAPSHOTS_JSONL: &str = ".benchmarks/frontier_snapshots.jsonl";
 pub struct FrontierSnapshot {
     /// UTC ISO-8601 timestamp of the report run.
     pub ts: String,
-    /// Best-effort git sha of the report's cwd — the STORE DISCRIMINATOR:
-    /// snapshots of different repos' stores share the one file, and the
-    /// sha (+ `population`) tells them apart without committing machine
-    /// paths.
+    /// Best-effort git sha of the report's cwd. NOT the store discriminator
+    /// (that reading was measured wrong 2026-09-21, Issue 102 verdict): the
+    /// sha keys the cwd's HEAD, which moves with every commit, and two
+    /// checkouts at one commit collide — the file's x-axis was non-monotone
+    /// on two unnamed stores because the store itself was never persisted.
+    /// `sha` stays for provenance (which tree produced the row); [`Self::store`]
+    /// discriminates.
     pub sha: String,
     /// The generation FRONTIER — the max score-history generation ever run
     /// in this cwd (0 = no history yet). Deliberately NOT the latest lane:
@@ -792,6 +795,15 @@ pub struct FrontierSnapshot {
     /// in the synthetic feed is a curriculum artifact; T4's gate needs the
     /// split, not just the pooled mass).
     pub feeds: Vec<FeedSnapshot>,
+    /// Short id of the store this snapshot measured ([`store_id`] —
+    /// blake3 of the canonicalized store root, first 8 hex; machine paths
+    /// never enter the file). Empty on rows written before the field
+    /// existed (2026-09-21): legacy rows are unattributed by construction,
+    /// never retro-guessed from population clusters. Joins
+    /// [`FrontierSnapshot::same_state`] — two stores with identical stats
+    /// are two states, not one.
+    #[serde(default)]
+    pub store: String,
 }
 
 // ── Issue 105 T4: the journey integral axis (INSTRUMENTATION, not scored) ──
@@ -873,6 +885,263 @@ pub fn render_journey_section(rows: &[JourneyRow], total_keys: usize) -> String 
     out
 }
 
+// ── Issue 102 T1: the contribution-fade section (report-first) ──────────
+// Library Drift (arXiv:2605.19576) over the healer corpus: a rule that
+// keeps getting retrieval-exposed on full-corpus sweeps and resolves
+// nothing is a FADE CANDIDATE — report-only, never a demotion (T2/T3 stay
+// gated on this report proving predictive over ≥3 FUTURE generations; the
+// clock started 2026-09-21 at this landing).
+//
+// ⛔ The unit is a DISTINCT FULL-CORPUS SWEEP, never a distinct row and
+// never a distinct sha (the verdict that revised the first cut,
+// 2026-09-21): the 44-row gen-1 series has ZERO variance — one distinct
+// outcome tuple per rule across 37 shas, because the routine v1 lane
+// samples 4–5 rules of a ~90-rule corpus — so keying fade on rows would
+// land an assertion that runs and cannot fail, and would flag
+// `map_unwrap_or` (persist=1, resolved 1/2, constant) FADED on day one
+// with nothing having faded. A sweep row is a row whose attribution
+// covers the corpus.
+
+/// Minimum rules a score-history row must attribute to count as a
+/// full-corpus sweep row. The routine v1 lane attributes 4–5; the gen-3
+/// persist-stratified sweeps attributed 36 (2026-09-13) → 47 (2026-09-18).
+/// 25 = 5× the routine lane and above half the smallest observed sweep —
+/// pinned, not tuned.
+pub const SWEEP_MIN_RULES: usize = 25;
+
+/// Fade candidacy needs this many sweep rows in a rule's series (Issue 102
+/// T1: "≥N generation rows, N a floor not a vibe").
+pub const MIN_FADE_SWEEPS: usize = 3;
+
+/// One score-history row the fade scan consumes — the light ungated shape.
+/// The CLI maps `serde_json::Value` → this (the T7 `half_counts` precedent:
+/// the `score_bench` types stay feature-gated).
+#[derive(Clone, Debug)]
+pub struct FadeRow {
+    /// The bench generation the row ran.
+    pub generation: u8,
+    /// UTC ISO ts of the run.
+    pub ts: String,
+    /// Per-rule outcomes attributed by this row (single-target only —
+    /// multi-target composites are skipped loud at bench time and absent
+    /// here by construction).
+    pub outcomes: Vec<FadeOutcome>,
+}
+
+/// One rule's outcome inside a [`FadeRow`].
+#[derive(Clone, Debug)]
+pub struct FadeOutcome {
+    /// The rule id.
+    pub rule: String,
+    /// Fixtures the rule resolved cleanly.
+    pub resolved: u32,
+    /// Fixtures the rule persisted (unresolved, output ok).
+    pub persist: u32,
+    /// Edits the rule applied (the R(n) log-length axis, 089 T8).
+    pub edits: u32,
+}
+
+/// One rule's contribution series across full-corpus sweeps.
+#[derive(Clone, Debug)]
+pub struct FadeCandidate {
+    /// The rule id.
+    pub rule: String,
+    /// Sweep rows the rule was attributed in (its series length).
+    pub sweeps: usize,
+    /// Distinct generations across the series (display only — lanes can
+    /// repeat a generation at a new corpus state).
+    pub generations: Vec<u8>,
+    /// Σ resolved across the series (a candidate's is 0 by construction).
+    pub resolved_total: u32,
+    /// Σ persist across the series (exposed-but-unresolved signal).
+    pub persist_total: u32,
+    /// Σ edits across the series.
+    pub edits_total: u32,
+    /// ts of the most recent sweep in the series.
+    pub last_sweep_ts: String,
+}
+
+/// The fade scan over a score history.
+#[derive(Clone, Debug)]
+pub struct FadeScan {
+    /// Sweep rows found (rows attributing ≥ [`SWEEP_MIN_RULES`] rules).
+    pub sweep_rows: usize,
+    /// One line per sweep row: "gen 3 @ ts (36 rules)" — the population
+    /// the verdict rests on, printed in both the live and refused states.
+    pub sweep_notes: Vec<String>,
+    /// Fade candidates, most-persisting first. EMPTY whenever [`FadeScan::refused`]
+    /// is set — an under-populated corpus never prints candidates.
+    pub candidates: Vec<FadeCandidate>,
+    /// Loud refusal when the population is below [`MIN_FADE_SWEEPS`]. The
+    /// section's live state is a REFUSAL until ≥3 sweeps exist; correctness
+    /// rides the planted-fade self-test until then.
+    pub refused: Option<String>,
+}
+
+/// One rule's running contribution series inside [`fade_scan`] (a named
+/// accumulator — the tuple form was a type-complexity finding).
+struct FadeSeries {
+    sweeps: usize,
+    resolved: u32,
+    persist: u32,
+    edits: u32,
+    generations: Vec<u8>,
+    last_ts: String,
+}
+
+/// Scan the score history for contribution fade. Pure — no store, no I/O.
+/// A rule is a candidate iff it is attributed in ≥ [`MIN_FADE_SWEEPS`]
+/// full-corpus sweep rows with `resolved_total == 0` across all of them
+/// (retrieval-exposed ∧ zero resolution — attribution in a sweep IS the
+/// exposure; per Issue 102 Caution 4 the per-generation evidence comes
+/// from these bench-time rows, never cumulative store deltas).
+#[must_use]
+pub fn fade_scan(rows: &[FadeRow]) -> FadeScan {
+    let sweeps: Vec<&FadeRow> = rows
+        .iter()
+        .filter(|r| r.outcomes.len() >= SWEEP_MIN_RULES)
+        .collect();
+    let sweep_notes: Vec<String> = sweeps
+        .iter()
+        .map(|r| {
+            format!(
+                "gen {} @ {} ({} rules)",
+                r.generation,
+                r.ts,
+                r.outcomes.len()
+            )
+        })
+        .collect();
+    let mut scan = FadeScan {
+        sweep_rows: sweeps.len(),
+        sweep_notes,
+        candidates: Vec::new(),
+        refused: None,
+    };
+    if scan.sweep_rows < MIN_FADE_SWEEPS {
+        scan.refused = Some(format!(
+            "REFUSED — needs ≥{MIN_FADE_SWEEPS} full-corpus sweep rows (≥{SWEEP_MIN_RULES} rules \
+             attributed), have {} — no candidates reported from an under-populated corpus; \
+             correctness rides the planted-fade self-test until the population exists",
+            scan.sweep_rows
+        ));
+        return scan;
+    }
+    let mut order: Vec<String> = Vec::new();
+    let mut series: std::collections::BTreeMap<String, FadeSeries> =
+        std::collections::BTreeMap::new();
+    for row in &sweeps {
+        for o in &row.outcomes {
+            let e = series
+                .entry(o.rule.clone())
+                .or_insert_with(|| {
+                    order.push(o.rule.clone());
+                    FadeSeries {
+                        sweeps: 0,
+                        resolved: 0,
+                        persist: 0,
+                        edits: 0,
+                        generations: Vec::new(),
+                        last_ts: String::new(),
+                    }
+                });
+            e.sweeps += 1;
+            e.resolved += o.resolved;
+            e.persist += o.persist;
+            e.edits += o.edits;
+            if !e.generations.contains(&row.generation) {
+                e.generations.push(row.generation);
+            }
+            e.last_ts.clone_from(&row.ts);
+        }
+    }
+    for rule in order {
+        let Some(FadeSeries {
+            sweeps,
+            resolved,
+            persist,
+            edits,
+            mut generations,
+            last_ts,
+        }) = series.remove(&rule)
+        else {
+            continue;
+        };
+        if sweeps >= MIN_FADE_SWEEPS && resolved == 0 {
+            generations.sort_unstable();
+            scan.candidates.push(FadeCandidate {
+                rule,
+                sweeps,
+                generations,
+                resolved_total: resolved,
+                persist_total: persist,
+                edits_total: edits,
+                last_sweep_ts: last_ts,
+            });
+        }
+    }
+    scan.candidates
+        .sort_by(|a, b| b.persist_total.cmp(&a.persist_total).then(b.edits_total.cmp(&a.edits_total)).then(a.rule.cmp(&b.rule)));
+    scan
+}
+
+/// Render the fade section. The refused state is LOUD (population
+/// disclosure + no candidates) — never a silent zero table (the
+/// frontier-report law).
+#[must_use]
+pub fn render_fade_section(scan: &FadeScan) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "## Contribution fade (Issue 102 T1, report-first — gates nothing)"
+    );
+    let _ = writeln!(
+        out,
+        "full-corpus sweep rows: {} (≥{SWEEP_MIN_RULES} rules attributed)",
+        scan.sweep_rows
+    );
+    for note in &scan.sweep_notes {
+        let _ = writeln!(out, "  · {note}");
+    }
+    if let Some(reason) = &scan.refused {
+        let _ = writeln!(out, "fade: {reason}");
+        return out;
+    }
+    if scan.candidates.is_empty() {
+        let _ = writeln!(
+            out,
+            "no fade candidates over {} sweep rows — every ≥{}-sweep rule resolved at least once",
+            scan.sweep_rows, MIN_FADE_SWEEPS
+        );
+        return out;
+    }
+    let _ = writeln!(
+        out,
+        "{} fade candidate(s) — retrieval-exposed, zero resolution across ≥{MIN_FADE_SWEEPS} sweeps \
+         (most-persisting first; report-only, T2/T3 stay gated):",
+        scan.candidates.len()
+    );
+    let _ = writeln!(
+        out,
+        "| rule | sweeps | gens | persist | edits | last sweep |\n|---|---:|---|---:|---:|---|"
+    );
+    for c in &scan.candidates {
+        let gens = c
+            .generations
+            .iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {} | {} |",
+            c.rule, c.sweeps, gens, c.persist_total, c.edits_total, c.last_sweep_ts
+        );
+    }
+    out
+}
+
 /// One feed's band-mass inside a [`FrontierSnapshot`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FeedSnapshot {
@@ -891,6 +1160,8 @@ pub struct FeedSnapshot {
 impl FrontierSnapshot {
     /// Same measured state (everything but `ts` — two runs over an
     /// unchanged store differ only by timestamp, which is not a new row).
+    /// `store` is part of the state: two stores with identical stats are
+    /// two measurements, not one (the 2026-09-21 non-monotone-axis lesson).
     fn same_state(&self, other: &Self) -> bool {
         self.sha == other.sha
             && self.generation == other.generation
@@ -899,6 +1170,7 @@ impl FrontierSnapshot {
             && self.band_count == other.band_count
             && self.saturated == other.saturated
             && self.feeds == other.feeds
+            && self.store == other.store
     }
 }
 
@@ -912,11 +1184,13 @@ pub fn snapshot_from(
     generation: u8,
     sha: String,
     ts: String,
+    store: String,
 ) -> FrontierSnapshot {
     FrontierSnapshot {
         ts,
         sha,
         generation,
+        store,
         population: summary.population,
         seen: summary.seen,
         band_count: summary.band_count,
@@ -1069,7 +1343,14 @@ pub fn append_snapshot_at_frontier(
         .map(|r| r.generation)
         .max()
         .unwrap_or(0);
-    let snap = snapshot_from(&summary, &feeds, generation, git_sha(), local_iso_timestamp());
+    let snap = snapshot_from(
+        &summary,
+        &feeds,
+        generation,
+        git_sha(),
+        local_iso_timestamp(),
+        store_id(root),
+    );
     if append_snapshot(snapshots_path, &snap)? {
         Ok(SnapshotOutcome::Appended { generation })
     } else {
@@ -1091,6 +1372,24 @@ pub fn git_sha() -> String {
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default()
+}
+
+/// Stable short id of the store at `root` — blake3 of the canonicalized
+/// root path, first 8 hex (the Issue 102 verdict, 2026-09-21: the
+/// snapshots file's x-axis was non-monotone on two unnamed stores because
+/// `generation` is per-store while `root` was never written to the row;
+/// `sha` keys the cwd's HEAD, which moves with every commit, and two
+/// checkouts at one commit collide). Machine paths never enter the file —
+/// only the digest. Deterministic for a store's life at one path; a moved
+/// store reads as a NEW store, which is honest — its history did not move
+/// with it.
+#[must_use]
+pub fn store_id(root: &std::path::Path) -> String {
+    let canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let hex = blake3::hash(canon.to_string_lossy().as_bytes())
+        .to_hex()
+        .to_string();
+    hex[..8].to_string()
 }
 
 /// UTC ISO-8601 timestamp, std-only (Howard Hinnant's civil-from-days —
@@ -1552,10 +1851,12 @@ mod tests {
             8,
             "deadbee".to_string(),
             "2026-09-12T05:00:00".to_string(),
+            "store01".to_string(),
         );
         assert_eq!(snap.ts, "2026-09-12T05:00:00");
         assert_eq!(snap.sha, "deadbee");
         assert_eq!(snap.generation, 8);
+        assert_eq!(snap.store, "store01");
         assert_eq!(snap.population, summary.population);
         assert_eq!(snap.seen, summary.seen);
         assert_eq!(snap.band_count, summary.band_count);
@@ -1572,10 +1873,232 @@ mod tests {
     #[test]
     fn snapshot_jsonl_round_trips() {
         let (summary, feeds) = snap_fixtures();
-        let snap = snapshot_from(&summary, &feeds, 0, "abc123".to_string(), "t".to_string());
+        let snap = snapshot_from(
+            &summary,
+            &feeds,
+            0,
+            "abc123".to_string(),
+            "t".to_string(),
+            "store02".to_string(),
+        );
         let line = serde_json::to_string(&snap).unwrap();
         let back: FrontierSnapshot = serde_json::from_str(&line).unwrap();
         assert_eq!(back, snap);
+    }
+
+    #[test]
+    fn legacy_row_without_store_decodes_empty_and_never_dedups_against_a_named_store() {
+        let (summary, feeds) = snap_fixtures();
+        let named = snapshot_from(
+            &summary,
+            &feeds,
+            8,
+            "aaaa".to_string(),
+            "t1".to_string(),
+            "store09".to_string(),
+        );
+        // A pre-2026-09-21 row carries no `store` key — serde default gives
+        // the empty string, and the row is honestly unattributed.
+        let mut legacy = serde_json::to_value(&named).unwrap();
+        legacy.as_object_mut().unwrap().remove("store");
+        let legacy: FrontierSnapshot = serde_json::from_value(legacy).unwrap();
+        assert_eq!(legacy.store, "");
+        // ...and the first discriminated snapshot lands even over identical
+        // stats: legacy "" vs "store09" are two states, not one.
+        assert!(!legacy.same_state(&named));
+    }
+
+    #[test]
+    fn store_id_is_stable_short_and_path_sensitive() {
+        let dir = std::env::temp_dir().join(format!("frontier_storeid_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = store_id(&dir);
+        let b = store_id(&dir);
+        assert_eq!(a, b, "stable across calls");
+        assert_eq!(a.len(), 8, "first 8 hex");
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        // A different path is a different store — the whole point.
+        let other = store_id(&dir.join("sub"));
+        assert_ne!(a, other);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── Issue 102 T1: the planted-fade self-test suite (GOAT G2) ────────
+
+    /// A sweep row: `rules` distinct rules, all attributed; per-rule
+    /// outcomes overridable via the map.
+    fn sweep_row(generation: u8, ts: &str, rules: &[&str], resolved: u32) -> FadeRow {
+        FadeRow {
+            generation,
+            ts: ts.to_string(),
+            outcomes: rules
+                .iter()
+                .map(|r| FadeOutcome {
+                    rule: (*r).to_string(),
+                    resolved,
+                    persist: 1,
+                    edits: 2,
+                })
+                .collect(),
+        }
+    }
+
+    const SWEEP_RULES: [&str; 30] = [
+        "r00", "r01", "r02", "r03", "r04", "r05", "r06", "r07", "r08", "r09", "r10", "r11",
+        "r12", "r13", "r14", "r15", "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
+        "r24", "r25", "r26", "r27", "r28", "faded_rule",
+    ];
+
+    #[test]
+    fn planted_faded_rule_is_detected_after_three_sweeps() {
+        // `faded_rule` is one of the 30 attributed rules, persist-only
+        // (resolved=0) across THREE sweeps → candidate. Every other rule
+        // resolves at least once per sweep → never candidates.
+        let mut rows = Vec::new();
+        for (i, ts) in ["s1", "s2", "s3"].iter().enumerate() {
+            let mut row = sweep_row(3, ts, &SWEEP_RULES, 0);
+            for o in &mut row.outcomes {
+                if o.rule != "faded_rule" {
+                    o.resolved = if i == 0 { 1 } else { 2 };
+                }
+            }
+            rows.push(row);
+        }
+        let scan = fade_scan(&rows);
+        assert!(scan.refused.is_none());
+        assert_eq!(scan.sweep_rows, 3);
+        assert_eq!(scan.candidates.len(), 1, "exactly the planted fade");
+        let c = &scan.candidates[0];
+        assert_eq!(c.rule, "faded_rule");
+        assert_eq!(c.sweeps, 3);
+        assert_eq!(c.resolved_total, 0);
+        assert_eq!(c.persist_total, 3);
+    }
+
+    #[test]
+    fn healthy_thin_and_recovered_rules_are_never_flagged() {
+        // healthy: resolves from sweep 1 on. thin: only in 2 sweeps.
+        // recovered: persist-only for 2 sweeps, then resolves on the 3rd —
+        // fade is a SERIES property, one resolution clears it.
+        let rules: Vec<&str> = SWEEP_RULES
+            .iter()
+            .copied()
+            .chain(["healthy_rule", "recovered_rule"])
+            .collect();
+        let mut rows = Vec::new();
+        for (i, ts) in ["s1", "s2", "s3"].iter().enumerate() {
+            let mut row = sweep_row(3, ts, &rules, 0);
+            for o in &mut row.outcomes {
+                match o.rule.as_str() {
+                    "healthy_rule" => o.resolved = 2,
+                    "recovered_rule" if i == 2 => o.resolved = 1,
+                    "thin_rule" => o.resolved = 0,
+                    _ => o.resolved = 2,
+                }
+            }
+            // thin_rule joins only the first two sweeps.
+            if i < 2 {
+                row.outcomes.push(FadeOutcome {
+                    rule: "thin_rule".to_string(),
+                    resolved: 0,
+                    persist: 1,
+                    edits: 1,
+                });
+            }
+            rows.push(row);
+        }
+        let scan = fade_scan(&rows);
+        assert!(scan.refused.is_none());
+        // recovered persists 2 then resolves — NOT a candidate (fade ≠
+        // saturation is the classifier's core assertion, G2).
+        assert!(scan.candidates.is_empty(), "all rules healthy/thin/recovered");
+        // And a genuinely persist-only rule IS caught in the same world:
+        rows[0].outcomes.push(FadeOutcome {
+            rule: "late_fade".to_string(),
+            resolved: 0,
+            persist: 1,
+            edits: 1,
+        });
+        rows[1].outcomes.push(FadeOutcome {
+            rule: "late_fade".to_string(),
+            resolved: 0,
+            persist: 1,
+            edits: 1,
+        });
+        rows[2].outcomes.push(FadeOutcome {
+            rule: "late_fade".to_string(),
+            resolved: 0,
+            persist: 1,
+            edits: 1,
+        });
+        let scan = fade_scan(&rows);
+        assert_eq!(scan.candidates.len(), 1);
+        assert_eq!(scan.candidates[0].rule, "late_fade");
+    }
+
+    #[test]
+    fn zero_variance_routine_lanes_never_reach_the_fade_population() {
+        // The measured gen-1 shape: 44 rows attributing 5 rules, zero
+        // variance — plus the 2 real sweeps. The routine lanes contribute
+        // NOTHING to the sweep population and the section stays REFUSED.
+        let mut rows = Vec::with_capacity(44);
+        for i in 0..44 {
+            rows.push(FadeRow {
+                generation: 1,
+                ts: format!("routine{i}"),
+                outcomes: [
+                    ("deref_addrof", 1u32, 0u32),
+                    ("filter_next", 1, 0),
+                    // The measured tuple: (2,1,1,0,0) — persist=1,
+                    // resolved 1/2, constant across all 44 rows (the
+                    // day-one false positive a row-keyed fade would flag).
+                    ("map_unwrap_or", 1, 1),
+                    ("needless_return", 1, 0),
+                    ("doc_markdown", 2, 0),
+                ]
+                .iter()
+                .map(|(r, resolved, persist)| FadeOutcome {
+                    rule: (*r).to_string(),
+                    resolved: *resolved,
+                    persist: *persist,
+                    edits: 1,
+                })
+                .collect(),
+            });
+        }
+        rows.push(sweep_row(3, "sweep1", &SWEEP_RULES, 1));
+        rows.push(sweep_row(3, "sweep2", &SWEEP_RULES, 2));
+        let scan = fade_scan(&rows);
+        assert_eq!(scan.sweep_rows, 2);
+        assert!(scan.refused.is_some(), "2 sweeps < 3 → loud refusal");
+        assert!(scan.candidates.is_empty(), "no candidates from a refused scan");
+        assert!(scan.refused.as_ref().unwrap().contains("REFUSED"));
+    }
+
+    #[test]
+    fn fade_section_renders_refusal_and_live_states_loudly() {
+        // Refused: the reason prints, no table.
+        let refused = FadeScan {
+            sweep_rows: 2,
+            sweep_notes: vec!["gen 3 @ a (36 rules)".into(), "gen 3 @ b (47 rules)".into()],
+            candidates: Vec::new(),
+            refused: Some("REFUSED — needs ≥3".into()),
+        };
+        let text = render_fade_section(&refused);
+        assert!(text.contains("REFUSED"));
+        assert!(text.contains("gen 3 @ a (36 rules)"));
+        assert!(!text.contains("| rule |"), "no candidate table when refused");
+        // Live + empty: the honest all-healthy line, never a zero table
+        // masquerading as a measurement.
+        let live = FadeScan {
+            sweep_rows: 3,
+            sweep_notes: vec![],
+            candidates: Vec::new(),
+            refused: None,
+        };
+        let text = render_fade_section(&live);
+        assert!(text.contains("no fade candidates over 3 sweep rows"));
     }
 
     #[test]
@@ -1586,23 +2109,58 @@ mod tests {
         let (summary, feeds) = snap_fixtures();
 
         // First append: state never seen → row #1.
-        let a = snapshot_from(&summary, &feeds, 8, "aaaa".to_string(), "t1".to_string());
+        let a = snapshot_from(
+            &summary,
+            &feeds,
+            8,
+            "aaaa".to_string(),
+            "t1".to_string(),
+            "storeaa".to_string(),
+        );
         assert!(append_snapshot(&path, &a).unwrap());
         // Same state, different ts only → deduped, file unchanged.
-        let a2 = snapshot_from(&summary, &feeds, 8, "aaaa".to_string(), "t2".to_string());
+        let a2 = snapshot_from(
+            &summary,
+            &feeds,
+            8,
+            "aaaa".to_string(),
+            "t2".to_string(),
+            "storeaa".to_string(),
+        );
         assert!(!append_snapshot(&path, &a2).unwrap());
         let text = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
         assert_eq!(lines.len(), 1);
 
-        // Changed state (generation bump) → row #2.
-        let b = snapshot_from(&summary, &feeds, 9, "aaaa".to_string(), "t3".to_string());
+        // Two stores with identical stats are TWO states, not one — the
+        // 2026-09-21 lesson (the pooled file's x-axis was non-monotone on
+        // unnamed stores): a different store id appends even at the same
+        // generation/population/band.
+        let other_store = snapshot_from(
+            &summary,
+            &feeds,
+            8,
+            "aaaa".to_string(),
+            "t2b".to_string(),
+            "storebb".to_string(),
+        );
+        assert!(append_snapshot(&path, &other_store).unwrap());
+
+        // Changed state (generation bump) → row #3.
+        let b = snapshot_from(
+            &summary,
+            &feeds,
+            9,
+            "aaaa".to_string(),
+            "t3".to_string(),
+            "storeaa".to_string(),
+        );
         assert!(append_snapshot(&path, &b).unwrap());
-        // Unchanged again → deduped against row #2 (the LAST row, not #1).
+        // Unchanged again → deduped against row #3 (the LAST row, not #1).
         assert!(!append_snapshot(&path, &b).unwrap());
         let text = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        assert_eq!(lines.len(), 2);
+        assert_eq!(lines.len(), 3);
 
         // A malformed trailing line never blocks the append (loud skip).
         std::fs::write(&path, "not json\n").unwrap();

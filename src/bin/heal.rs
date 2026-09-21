@@ -7,7 +7,7 @@
 //! fixed/optimized pattern snippet for manual review.
 //!
 //! `--fix` mode (Phase 6 T6.1 + T6.4): run the compiled-in proposers on
-//! each file + apply their span-preserving edits — rust_perf rules plus the
+//! each file + apply their span-preserving edits — `rust_perf` rules plus the
 //! structural clippy lints (the three type-blind clippy proposers stay
 //! suggest-only; see the clippy proposers' module docs). Without `--write`,
 //! fixed files print a per-edit review (rule + the changed span) plus the
@@ -17,7 +17,7 @@
 //! so no formatting churn enters a mechanical diff — see src/fmt.rs).
 //! Everything outside a matched span stays byte-identical — so written
 //! output keeps pre-existing indentation verbatim where rustfmt would
-//! reindent (e.g. match_bool mixed block/expr arms); the automatic fmt pass
+//! reindent (e.g. `match_bool` mixed block/expr arms); the automatic fmt pass
 //! closes the old Issue 027 T3 manual-rustfmt deferral. `--fix` ALSO runs
 //! the suggest pass unless `--quiet` is given, so rules without proposers
 //! still surface.
@@ -31,7 +31,7 @@
 //! ```
 //!
 //! Installed as `cargo-heal` (via `cargo install --path . --features
-//! latent_retrieval`), cargo's subcommand convention makes it `cargo heal
+//! `latent_retrieval``), cargo's subcommand convention makes it `cargo heal
 //! --suggest src/`.
 
 use std::collections::VecDeque;
@@ -94,10 +94,10 @@ enum KatCommand {
     /// `--dry-run` is steps 1+6 only and runs on every network.
     Wetrun,
     /// Proposal 015 Phase 2 (Plan 127): `replay` — the Max tier's earn
-    /// lane. Login-gated lease → local fix_verify + clippy-oracle replay
+    /// lane. Login-gated lease → local `fix_verify` + clippy-oracle replay
     /// (scratch project) → signed verdict submit. Toolchain-fingerprint
-    /// gated; kill switch `RIIR_HEAL_REPLAY=0`. Needs kat_service +
-    /// kat_transport + clippy_verify (the oracle instrument).
+    /// gated; kill switch `RIIR_HEAL_REPLAY=0`. Needs `kat_service` +
+    /// `kat_transport` + `clippy_verify` (the oracle instrument).
     Replay,
     /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
     /// the persisted service-url surface (env > config > default). Ungated:
@@ -507,13 +507,11 @@ fn survey_fixable_count(paths: &[PathBuf]) -> Option<usize> {
 fn mining_queued_batches() -> u32 {
     let outbox = resolve_heal_root(&[]).join(".heal").join("outbox");
     u32::try_from(
-        std::fs::read_dir(&outbox)
-            .map(|rd| {
+        std::fs::read_dir(&outbox).map_or(0, |rd| {
                 rd.filter_map(std::result::Result::ok)
                     .filter(|e| e.path().is_file())
                     .count()
-            })
-            .unwrap_or(0),
+            }),
     )
     .unwrap_or(u32::MAX)
 }
@@ -1484,7 +1482,7 @@ enum MinePush {
 }
 
 /// The one tail line (the burn-report discipline): Accepted and
-/// QueuedOffline print, Skipped stays silent.
+/// `QueuedOffline` print, Skipped stays silent.
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn print_mine_push(outcome: &MinePush) {
     match outcome {
@@ -3087,7 +3085,7 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
 }
 
 /// Issue 067 T1 — the same-rule reopen-trigger instrument. The reopen
-/// condition (from the issue): "the TrajStore holds ≥ K (K=3) Certified
+/// condition (from the issue): "the `TrajStore` holds ≥ K (K=3) Certified
 /// same-rule trajectories for a queried lint". This scans the store ONCE
 /// per run (lazily, on the first queried lint), then logs the FIRST time
 /// each queried lint's density reaches K. Zero store traffic on the hot
@@ -3459,8 +3457,13 @@ USAGE:
                     Also appends the T4 evidence-clock snapshot — one
                     band-mass row per state change to the committed
                     .benchmarks/frontier_snapshots.jsonl (an unchanged
-                    store at the same generation appends nothing; ≥3
-                    generations of rows are T4's GO evidence).
+                    store at the same generation appends nothing; T4's GO
+                    evidence is one store crossing ≥3 generation
+                    boundaries — rows carry a `store` id since 2026-09-21;
+                    legacy rows are unattributed). Also prints the Issue
+                    102 T1 contribution-fade section (live state REFUSES
+                    until ≥3 full-corpus sweep rows exist in the score
+                    history).
                     Read-only report; the snapshot append is best-effort and
                     never fails the run. Refuses (exit 1) on an empty
                     population — never a green zero. Needs --features
@@ -3833,10 +3836,10 @@ struct Args {
     /// outbox, charge ledger, soft gate). READ-ONLY; standalone
     /// early-return. `stake --info` keeps its own flag (the position).
     info: bool,
-    /// Set by parse_args when the bare no-mode default fired (the dry-run
+    /// Set by `parse_args` when the bare no-mode default fired (the dry-run
     /// banner then prints once, from main). Not a user flag.
     bare_default: bool,
-    /// Plan 019 T1.3: `--fix-compile` — the rustc_errors oracle driver.
+    /// Plan 019 T1.3: `--fix-compile` — the `rustc_errors` oracle driver.
     /// A separate mode (not a --fix modifier): it operates on packages,
     /// needs no retrieval, and its loop has verification built in.
     fix_compile: bool,
@@ -3883,7 +3886,7 @@ struct Args {
     /// k-ladder (issue 072 T5); 3 = the persist-stratified generation-v3
     /// ladder (Bench 069 reopen #1); 4 = the rustc-errors-side k-ladder
     /// (Plan 093 — measures the `--fix-compile` driver against rustc
-    /// coded-error ground truth); 5 = the rust_perf vocabulary ladder (Plan
+    /// coded-error ground truth); 5 = the `rust_perf` vocabulary ladder (Plan
     /// 094 — the mechanical shape oracle over the FIXABLE perf vocabulary).
     /// A NEW generation's first append is gated on non-vacuity — a
     /// generation that is not harder than v1 is refused, never appended.
@@ -3913,7 +3916,7 @@ struct Args {
     /// Plan 091 T1.2: `--misses` — print the `.heal/misses/` authoring
     /// queue in FRONTIER order (dispersion-informative codes first, the
     /// real-G8 enabler). Read-only standalone mode (the memory-stats
-    /// pattern: early return before validate_mode_flags).
+    /// pattern: early return before `validate_mode_flags`).
     misses: bool,
     /// `--limit <N>` with `--misses`: cap the printed queue (default: all).
     misses_limit: Option<usize>,
@@ -4045,7 +4048,7 @@ struct Args {
     config_audit: bool,
     /// Intake class P22: `--platform-audit` — the platform-dead_code
     /// decl-vs-use cfg lattice: declarations whose every use sits inside
-    /// a platform gate the declaration lacks (the NEON_U8 class no
+    /// a platform gate the declaration lacks (the `NEON_U8` class no
     /// single-platform CI matrix can see). Pure syn scan, zero new deps,
     /// ungated; exit 0 on real scans, refuses exit 1 on an empty one.
     platform_audit: bool,
@@ -4084,7 +4087,7 @@ struct Args {
     /// Issue 119: `--coverage-report` — the corpus coverage-debt sweep.
     /// clippy's LIVE lint surface, derived from the INSTALLED driver
     /// (`clippy-driver -W help`, never a hand-typed list), diffed against
-    /// the clippy_lints corpus + the compiled fix set, with the real-code
+    /// the `clippy_lints` corpus + the compiled fix set, with the real-code
     /// fired histogram (Bench 061) and kornel's published top-10 joined as
     /// the two frequency sources. Report-first, gates nothing; refuses
     /// exit 1 on a blind derivation — never a confident green zero.
@@ -4959,7 +4962,7 @@ fn print_suggestion(
 /// generalization): the frontier-ordered authoring queue — read-only,
 /// standalone. Two halves:
 ///
-/// - the ORIGINAL rustc_errors per-code queue (`.heal/misses/`, Plan 091
+/// - the ORIGINAL `rustc_errors` per-code queue (`.heal/misses/`, Plan 091
 ///   verbatim — kept, not replaced);
 /// - one frontier-ordered RULE queue per ENABLED retrieval domain
 ///   (clippy/perf/kernel/sec/docker — corpus membership attributes store
@@ -5370,7 +5373,7 @@ fn run_score_bench(generation: u8) {
 
 /// The M5 non-vacuity admission gate, shared by the clippy and compile
 /// runners: the FIRST row of a NEW generation (≥ 2) must measure strictly
-/// harder than v1's latest heal_rate — a new generation that isn't harder
+/// harder than v1's latest `heal_rate` — a new generation that isn't harder
 /// isn't a generation, it's the same measurement with a bigger denominator.
 /// Returns `Err(refusal message)` — the caller prints + exits 1; nothing is
 /// appended on a refusal (the generation is deterministic; the failed
@@ -5580,7 +5583,7 @@ fn finish_score_bench(
 /// production `--fix-compile` driver (write mode), and scores per-member
 /// coded-error reduction against rustc's own diagnostics — exact by
 /// construction, no oracle. Metrics map onto the shared row schema:
-/// heal_rate = Σ reduced / Σ members (per-member, NOT per-lint — the
+/// `heal_rate` = Σ reduced / Σ members (per-member, NOT per-lint — the
 /// admission gate's v1 anchor is a cross-domain non-vacuity floor, recorded
 /// as such in the plan).
 #[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
@@ -5734,13 +5737,13 @@ fn run_score_bench_compile() {
     finish_score_bench(4, &score, None);
 }
 
-/// The generation-5 bench runner (Plan 094): the rust_perf vocabulary
+/// The generation-5 bench runner (Plan 094): the `rust_perf` vocabulary
 /// ladder. CARGO-LESS end to end — the oracle is the bench-owned set of
 /// per-rule mechanical shape detectors (Plan 094 §2, pre-registered), each
 /// already validated by the always-on discrimination fence; the freeze
 /// gates run in `tests/generation_v5_freeze.rs`. Each spec heals through
 /// the production `heal_fixpoint` loop (both proposer domains, the
-/// fxhashmap stub-context skip, MAX_FIX_PASSES = 4), the healed file
+/// fxhashmap stub-context skip, `MAX_FIX_PASSES` = 4), the healed file
 /// re-parses, and member i's verdict reads module `gen_{i}`'s region.
 /// Per-member resolution (not per-lint): the admission gate's v1 anchor is
 /// a cross-domain non-vacuity floor, recorded as such in the plan.
@@ -5774,7 +5777,7 @@ fn run_score_bench_perf() {
         .into_iter()
         // fn(&str) over String items — the closure adapts (a bare fn path
         // here failed E0631 on this score_bench-only lane, pre-existing).
-        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
@@ -6132,7 +6135,7 @@ fn print_v8_shaped_table(
 
 // ── Issue 050 T2: --corpus-stats / --import-series / --json ────────────
 
-/// The corpus domain table — the Rust mirror of gen_dashboard.py's
+/// The corpus domain table — the Rust mirror of `gen_dashboard.py`'s
 /// `CORPUS_DOMAINS` (Issue 050 T2). Paths are repo-relative; a directory
 /// counts its DIRECT `*.rs` children except `mod.rs`, a single file counts
 /// itself.
@@ -6230,7 +6233,7 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
 }
 
 /// Count `needle` over the domain's corpus source(s) — the exact
-/// `_count_working_tree` semantics from gen_dashboard.py: a `.rs` file
+/// `_count_working_tree` semantics from `gen_dashboard.py`: a `.rs` file
 /// counts itself; a directory counts its DIRECT `*.rs` children except
 /// `mod.rs` (non-recursive, matching the Python glob). A missing path
 /// counts 0 (the domain table is static; the walk is best-effort).
@@ -7495,6 +7498,60 @@ fn main() {
                         "{}",
                         riir_clippy::frontier_report::render_journey_section(&jrows, jrows_all.len())
                     );
+                    // Issue 102 T1 — the contribution-fade section
+                    // (report-first; the live state REFUSES until ≥3
+                    // full-corpus sweep rows exist in the score history —
+                    // the verdict's population floor). Plain serde_json
+                    // read of the committed jsonl, the T7 half_counts
+                    // precedent: no feature-gated types cross here.
+                    let fade_rows: Vec<riir_clippy::frontier_report::FadeRow> =
+                        std::fs::read_to_string(".benchmarks/score_history.jsonl")
+                            .map(|text| {
+                                text.lines()
+                                    .filter(|l| !l.trim().is_empty())
+                                    .filter_map(|l| {
+                                        serde_json::from_str::<serde_json::Value>(l).ok()
+                                    })
+                                    .filter_map(|v| {
+                                        let generation = u8::try_from(
+                                            v.get("generation")?.as_u64()?,
+                                        )
+                                        .ok()?;
+                                        let ts = v.get("ts")?.as_str()?.to_string();
+                                        let outcomes = v
+                                            .get("rule_outcomes")?
+                                            .as_array()?
+                                            .iter()
+                                            .filter_map(|o| {
+                                                Some(riir_clippy::frontier_report::FadeOutcome {
+                                                    rule: o.get("rule")?.as_str()?.to_string(),
+                                                    resolved:
+                                                        u32::try_from(o.get("resolved")?.as_u64()?)
+                                                            .ok()?,
+                                                    persist:
+                                                        u32::try_from(o.get("persist")?.as_u64()?)
+                                                            .ok()?,
+                                                    edits: u32::try_from(
+                                                        o.get("edits")?.as_u64()?,
+                                                    )
+                                                    .ok()?,
+                                                })
+                                            })
+                                            .collect();
+                                        Some(riir_clippy::frontier_report::FadeRow {
+                                            generation,
+                                            ts,
+                                            outcomes,
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                    let scan = riir_clippy::frontier_report::fade_scan(&fade_rows);
+                    print!(
+                        "{}",
+                        riir_clippy::frontier_report::render_fade_section(&scan)
+                    );
                     // Issue 089 T4's evidence clock — append the band-mass
                     // snapshot (state-change dedup: an unchanged store at the
                     // same generation frontier appends nothing). Best-effort:
@@ -7514,14 +7571,16 @@ fn main() {
                         generation_frontier,
                         riir_clippy::frontier_report::git_sha(),
                         riir_clippy::frontier_report::local_iso_timestamp(),
+                        riir_clippy::frontier_report::store_id(&root),
                     );
                     match riir_clippy::frontier_report::append_snapshot(
                         std::path::Path::new(riir_clippy::frontier_report::SNAPSHOTS_JSONL),
                         &snap,
                     ) {
                         Ok(true) => println!(
-                            "frontier snapshot: appended (generation {}, band-mass {:.1}%) → {}",
+                            "frontier snapshot: appended (generation {}, store {}, band-mass {:.1}%) → {}",
                             snap.generation,
+                            if snap.store.is_empty() { "?" } else { &snap.store },
                             snap.band_mass * 100.0,
                             riir_clippy::frontier_report::SNAPSHOTS_JSONL
                         ),
@@ -10518,7 +10577,7 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
 }
 
 /// Plan 134 T0.2: the render-stage `.wgsl` lane. Suggest = stage-aware
-/// scanner citations (rule tags `fix`/`suggest` by FIXABLE_SHADER);
+/// scanner citations (rule tags `fix`/`suggest` by `FIXABLE_SHADER`);
 /// fix+write = the bounded loop-guard proposer ONLY, with the Tier-0
 /// invariants asserted on the healed output (entry-point multiset +
 /// binding multiset) and the naga tier when `shader_verify` is compiled
@@ -11041,8 +11100,8 @@ fn run_reheat_pass(
 mod fix_review_note_tests {
     use super::*;
 
-    /// One edit's review through the REAL formatter (format_fix_review —
-    /// print_fix_review is `print!` over this exact string, so the pin
+    /// One edit's review through the REAL formatter (`format_fix_review` —
+    /// `print_fix_review` is `print!` over this exact string, so the pin
     /// here is the byte the CLI emits).
     fn render(rule_id: &str, note: Option<&'static str>) -> String {
         format_fix_review(
