@@ -200,3 +200,51 @@ local-capacity watches, 1 lane-intel route with promotion trigger.**
 The Monday 20:00 ET announce (Tue ~07:00 +07) may add the Fri-weekend tail
 on top of this graded set — walk #11's opening balance, not a re-open of
 #10.
+
+---
+
+## Close-out delta check — EXECUTED at the first idle pass after the Mon announce (2026-09-22 07:01–07:08 +07, 4090 box)
+
+The `.distill/001` NEXT-POOL item (1). The five standing lanes + the
+unrestricted-window announce sentinel re-run via the terminal-egress path
+(browser UA — plain-python UAs 406 on this box; harness:
+`.raw/arxiv_walk10/closeout_delta.py`, window `202609190000..202609220700`,
+dedup against every graded + skip ID in this note).
+
+**Verdict: 0 visible delta — the Mon-announce batch was not in the index at
+execution time.**
+
+- Sentinel (unrestricted window, the lesson-2 probe): `total=0` across 8
+  polls spanning 07:01→07:08 +07, feed `updated` stuck at `23:23:48Z` — the
+  frontend's index snapshot predates the 00:00 UTC announce.
+- Predicate sanity (the lesson-1 probe): Thu-alone window returns **1424**
+  results — the query form works; the 0 is announce-state, not a broken
+  predicate.
+- This is the documented propagation-lag pattern (the Sun-announce batch
+  surfaced ~1h late on the polled endpoint and earlier on a different
+  frontend; "a poll verdict is a property of the egress path until two paths
+  agree").
+
+**Disposition:** per this note's own standing framing, the Mon-announce
+Fri-weekend tail is **walk #11's opening balance, not a re-open of #10** —
+walk #10's graded set (parts 1+2+trigger, rows 1–25 + skips) stands as the
+walk's yield. The close-out trigger is DISCHARGED; no further armed
+obligation on #10. (A later idle pass catching the batch early would just be
+walk #11's first rows.)
+
+**Same-session idle-pass trigger checks (the armed list):**
+- **riir-ai Issue 971 (chunked-GDN fork-adoption): trigger NOT fired.**
+  Upstream PR #26001 remains OPEN (requested-changes; ggerganov awaiting).
+  The lane ESCALATED in shape though: maintainer am17an (Sep 17) prefers
+  skipping straight to a FUSED kernel — lukdmine's fused variant is
+  2.7–3.1× the three-stage at FLA parity but under-fills ≥85-SM boards
+  (default gate `nsm ≤ 84` — OFF on the 4090's 128 SMs), and am17an says he
+  will write his own ("context-parallel later"). A tether-fork variant
+  (BF16 MMA + SM-aware value splitting, qvac-fabric-llm.cpp#257) opened
+  09-21. If a fused GDN prefill lands upstream, Issue 971's arithmetic
+  (+10%) underestimates the threat — re-run the table when it moves.
+- **Prism fork interim (watch_repo path)**: active through 09-21 (NOT quiet
+  — 09-18→09-21 commits on ternary-quant kernel lanes: PTQ1_0/PQ2_0 across
+  Vulkan-Xe2 integer-dot / AVX2-VNNI CPU / hip MMQ / Metal exact-float +
+  dspark/dflash draft-model work). **No GDN/chunked-prefill adoption** — the
+  971 trigger does not fire from the fork side either.
