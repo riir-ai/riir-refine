@@ -355,12 +355,11 @@ fn emit_sheet(
 
     println!("\n## Section D — corpus-authored known negatives (prefalse)");
     for &(i, j) in known_neg.iter() {
-        if !sheeted.contains(&(i, j)) {
+        if sheeted.insert((i, j)) {
             println!(
                 "- KNOWNNEG `{}` × `{}` — perf context_notes asserts Distinct-from",
                 clippy[i].lint_name, perf[j].rule_id
             );
-            sheeted.insert((i, j));
         }
     }
 }

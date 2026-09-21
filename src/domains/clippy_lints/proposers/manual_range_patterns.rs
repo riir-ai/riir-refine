@@ -128,7 +128,7 @@ fn rewrite(source: &str, o: &PatOr) -> Option<String> {
     let mut max: Option<(i128, String)> = None;
     let mut kind_included = true;
     let mut numbers_found = HashSet::new();
-    let mut ranges_found = Vec::new();
+    let mut ranges_found = Vec::with_capacity(cases.len());
 
     for case in &cases {
         if let Pat::Lit(lit) = case {

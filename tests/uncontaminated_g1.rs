@@ -78,6 +78,7 @@ fn gather_truth_over(spans: &'static [(&'static str, &'static str)]) -> Vec<Trut
             error: v.error.clone(),
         });
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -398,8 +399,9 @@ fn t355_composite_multi_lint_g1() {
 fn t355_rerank_latency_g2() {
     use std::time::Instant;
     let spans = riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS;
-    let mut timings = Vec::new();
-    for mode in [RerankMode::Off, RerankMode::Structural] {
+    let cap_iter = [RerankMode::Off, RerankMode::Structural];
+    let mut timings = Vec::with_capacity(cap_iter.len());
+    for mode in cap_iter {
         let mut matcher = LatentMatcher::from_enabled_domains()
             .expect("build matcher")
             .with_rerank_mode(mode);

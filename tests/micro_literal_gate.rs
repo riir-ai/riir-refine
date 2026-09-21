@@ -281,6 +281,7 @@ fn scan_text(stripped: &str) -> Vec<Finding> {
             }
         }
     }
+    findings.shrink_to_fit();
     findings
 }
 
@@ -344,7 +345,7 @@ fn scan_src_findings() -> (usize, Vec<(String, Finding)>) {
     collect_rs(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
     files.sort();
 
-    let mut all = Vec::new();
+    let mut all = Vec::with_capacity(files.len());
     for path in &files {
         let Ok(src) = std::fs::read_to_string(path) else {
             continue;

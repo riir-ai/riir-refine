@@ -208,6 +208,7 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
             replacement,
         });
     }
+    edits.shrink_to_fit();
     edits
 }
 

@@ -605,6 +605,7 @@ pub fn agreement(runs: &[RunRing]) -> Vec<AgreementRow> {
             rows.push(row);
         }
     }
+    rows.shrink_to_fit();
     rows
 }
 
@@ -913,22 +914,24 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // exact-by-construction: k=0/40 short-circuit to the literal (0.0, 0.0) — the spec IS exact equality
     fn wilson_bounds_point_and_shrink() {
-        let (l, u) = wilson(5, 10);
-        assert!((l - 0.2367).abs() < 1e-3 && (u - 0.7633).abs() < 1e-3, "({l},{u})");
+        let (lo, hi) = wilson(5, 10);
+        assert!((lo - 0.2367).abs() < 1e-3 && (hi - 0.7633).abs() < 1e-3, "({lo},{hi})");
         assert_eq!(wilson(3, 0), (0.0, 0.0));
-        let l0 = wilson(0, 40).0;
-        assert_eq!(l0, 0.0);
+        let zero = wilson(0, 40).0;
+        assert_eq!(zero, 0.0);
         // Width shrinks with n at the same rate.
-        let w = |n: usize| {
+        let width = |n: usize| {
             let (a, b) = wilson(n / 2, n);
             b - a
         };
-        assert!(w(400) < w(40), "{} {}", w(400), w(40));
+        assert!(width(400) < width(40), "{} {}", width(400), width(40));
         // lcb <= k/n <= ucb on a grid.
         for n in [1usize, 3, 7, 12, 50] {
             for k in 0..=n {
                 let (a, b) = wilson(k, n);
+                #[allow(clippy::cast_precision_loss)] // test: the exact rate the bounds must cover
                 let p = k as f64 / n as f64;
                 assert!(a <= p + 1e-9 && p <= b + 1e-9, "k={k} n={n} ({a},{b})");
             }
@@ -1145,7 +1148,7 @@ mod tests {
             TransferVerdict::Disagrees
         );
         assert_eq!(
-            transfer_verdict(&[sep.clone()], Badness::OutcomeReverted),
+            transfer_verdict(std::slice::from_ref(&sep), Badness::OutcomeReverted),
             TransferVerdict::Unmeasured
         );
         assert_eq!(
@@ -1223,7 +1226,7 @@ mod tests {
         ];
         let r = summarize(&corpora);
         let text = render(&r);
-        assert!(text.chars().all(|c| c.is_ascii()), "{text}");
+        assert!(text.is_ascii(), "{text}");
         assert!(text.contains("cascade law"));
         assert!(text.contains("derailment index"));
         assert!(text.contains("root-vs-cascade attribution"));

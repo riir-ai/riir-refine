@@ -211,7 +211,7 @@ impl EvolutionFixture {
         // The correct fix is placed at a VARYING index (not always first) so
         // the fallback drafter (which picks candidates[0]) doesn't always get
         // it right. This makes the baseline non-trivial.
-        let mut lints = Vec::new();
+        let mut lints = Vec::with_capacity(10);
         for i in 0..10 {
             let lint_name = format!("test_lint_{i}");
             let correct = format!("correct_fix_for_{i}");

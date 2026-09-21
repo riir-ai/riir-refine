@@ -1094,6 +1094,7 @@ mod tests {
     /// Issue 128 T6 — the transition feature is three-state and sits one
     /// lead OLDER than every native feature (None at a run head).
     #[test]
+    #[allow(clippy::float_cmp)] // exact-by-construction: the prev indicator is SET to the constants ±1.0/0.0 — the assertion pins the constants
     fn prev_feature_is_three_state() {
         let a = line(2, "E0499", "s", "Kept", (4, 3));
         let kept_prev = line(1, "E0499", "s", "Kept", (5, 4));
@@ -1109,7 +1110,7 @@ mod tests {
     /// Issue 128 T6 — the transition arm decodes a planted LAG-2
     /// anti-persistence signal the native 9 features cannot see: outcomes
     /// follow the period-4 pattern [K K R R] with per-run phase rotation,
-    /// so o_i = NOT o_{i-2} (prev-visible at lead 1) while o_{i-1}
+    /// so `o_i` = NOT o_{i-2} (prev-visible at lead 1) while o_{i-1}
     /// (native-visible) and position (phase-rotated across runs) are both
     /// uninformative pooled.
     #[test]

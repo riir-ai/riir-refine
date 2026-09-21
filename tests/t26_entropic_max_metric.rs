@@ -224,14 +224,15 @@ fn t26_max_metric_ab() {
     println!("\n=== Issue 026 T3 — max metric (discovery within {BUDGET} attempts) ===");
     for &evo_noise in &[0.6f32, 0.2] {
         println!("  evo_noise = {evo_noise}:");
-        let mut cells = Vec::new();
-        for mode in [
+        let cap_iter = [
             Arm::LinearBlend,
             Arm::BetaPosterior,
             Arm::EntSigmoid,
             Arm::EntSigmoidRate,
             Arm::EntMaxNorm,
-        ] {
+        ];
+        let mut cells = Vec::with_capacity(cap_iter.len());
+        for mode in cap_iter {
             let cell = run_cell(mode, 0x5EED_0001, evo_noise);
             cells.push((mode, cell));
             println!(

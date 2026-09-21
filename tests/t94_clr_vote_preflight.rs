@@ -52,7 +52,7 @@ fn perturbed_drafts<E: HealEntry>(
     corpus: &[E],
     k: usize,
 ) -> (Vec<String>, usize) {
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(k);
     let mut declined = 0usize;
     for i in 0..k {
         let seeded = format!("{buggy}\n// qmc:{i}");

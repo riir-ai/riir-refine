@@ -85,6 +85,7 @@ fn installer_urls(line: &str) -> Vec<String> {
             out.push(url.to_string());
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -141,7 +142,7 @@ fn every_install_url_is_the_canonical_one() {
     let mut files = Vec::new();
     markdown_files(&repo_root(), &mut files);
     let allowed = canonical();
-    let mut offenders = Vec::new();
+    let mut offenders = Vec::with_capacity(files.len());
     let mut seen = 0usize;
     for f in &files {
         let Ok(text) = std::fs::read_to_string(f) else {
@@ -188,7 +189,7 @@ fn every_install_url_is_the_canonical_one() {
 fn the_copy_never_points_at_the_private_repos_releases() {
     let mut files = Vec::new();
     markdown_files(&repo_root(), &mut files);
-    let mut offenders = Vec::new();
+    let mut offenders = Vec::with_capacity(files.len());
     for f in &files {
         let Ok(text) = std::fs::read_to_string(f) else {
             continue;

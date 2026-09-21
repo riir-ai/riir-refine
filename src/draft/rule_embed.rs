@@ -376,6 +376,7 @@ fn encode_artifact(
     }
     let h = blake3::hash(&p);
     p.extend_from_slice(h.as_bytes());
+    p.shrink_to_fit();
     p
 }
 

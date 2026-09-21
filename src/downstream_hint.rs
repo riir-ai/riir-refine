@@ -173,6 +173,7 @@ fn member_manifests(root_manifest: &Path) -> Vec<PathBuf> {
     }
     out.sort();
     out.dedup();
+    out.shrink_to_fit();
     out
 }
 
@@ -254,6 +255,7 @@ fn path_dep_values(text: &str) -> Vec<&str> {
             i = pos + 4;
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -288,6 +290,7 @@ fn quoted_values(s: &str) -> Vec<&str> {
         }
         i += 1;
     }
+    out.shrink_to_fit();
     out
 }
 
