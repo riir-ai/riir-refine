@@ -1,7 +1,6 @@
 # Plan 159 — Batch 168: the coverage-report re-arm pack XII
 
-**Status:** IN PROGRESS (2026-09-21, the 06:11 +07 session; the standing
-post-Batch-167 derivation pool — `.distill/001` next-pool pointer)
+**Status:** COMPLETE (2026-09-21 — all tasks `[x]`; landed + pushed at `e49e621d`)
 
 The fresh `cargo heal --coverage-report` derivation at develop `1b5a87f3`
 (clippy 0.1.98, post-Batch-167 corpus 88): 88 covered · 0 fix-set-only ·
@@ -55,5 +54,5 @@ default-firing candidates probed this pack (probe crate
       + .distill/001 next-pool pointer (my-blob staging — sibling WIP in that file)
       (`.docs/02_corpus/seed_corpus.md` is wholesale stale at 53 entries — batches
       150+ never updated it; recorded as a doc-sync unit, not fixed mid-batch)
-- [ ] T15 commit `feat: batch 168: ...` + push
+- [x] T15 commit `feat: batch 168: ...` + push — **COMPLETE `e49e621d`** (pushed to origin/develop; 16 files, the sibling WIP untouched via my-blob staging on .distill/001)
 
