@@ -1,7 +1,16 @@
 //! `clippy::format_collect` — `it.map(|x| format!(..)).collect::<String>()`
 //! → `it.fold(String::new(), |mut out, x| { let _ = write!(out, ..); out })`
-//! plus a file-level `use std::fmt::Write as _;` insertion when the trait
-//! is not already in scope (P11 post-mining intake, 2026-09-13).
+//! plus a `use std::fmt::Write as _;` insertion when the trait is not
+//! already in scope (P11 post-mining intake, 2026-09-13).
+//!
+//! INSERTION SCOPE (P35 post-mining intake, 2026-09-21 — the cfg(test)
+//! incident class): fold sites confined to nested `mod`s get their import
+//! at the INNERMOST enclosing mod's top, one per mod — a FILE-level import
+//! whose only usage lives under `#[cfg(test)]` is an `unused_imports`
+//! warning in every non-test compilation, and the `--verify` gate (which
+//! runs `--all-targets`) is green on it by construction. Mixed shapes
+//! (any top-level site present) keep the single file-level import: the
+//! top-level site uses it in every configuration.
 //!
 //! The FIRST `clippy_lints` rule whose fix is TWO spans (the fold rewrite +
 //! the import insertion) — mechanically the pipeline already supports it:
@@ -30,7 +39,9 @@
 //! `io::Write` nowhere in std (probed 2026-09-13: `write_all` on `String`
 //! is E0599) — only `fmt::Write` can resolve, whatever else is imported.
 //! The insertion is SKIPPED when `std::fmt::Write` (any form, any alias,
-//! incl. the `std::fmt::*` glob) is already imported at file level.
+//! incl. the `std::fmt::*` glob) is already imported at file level (covers
+//! every nested scope) or — for a mod-scoped insertion — at that mod's own
+//! top.
 //!
 //! Semantics: `fold` calls the closure once per item with a running
 //! `String` accumulator; `write!` appends the same formatted text
@@ -45,18 +56,42 @@
 
 use super::helpers::is_postfix_safe;
 use super::{edit, src, SourceEdit};
+use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprMacro, ExprMethodCall, File, Item, UseTree};
+use syn::{Expr, ExprMacro, ExprMethodCall, File, Item, ItemMod, UseTree};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut v = Collector {
         source,
         edits: Vec::new(),
+        mods: Vec::new(),
+        stack: Vec::new(),
+        scopes: Vec::new(),
     };
     v.visit_file(file);
     if v.edits.is_empty() || fmt_write_in_scope(file) {
+        return v.edits;
+    }
+    // P35 innermost-scope rule: when EVERY fold site sits inside a nested
+    // mod, the import goes to each innermost mod's top (deduped, skipped
+    // where the mod already imports the trait) — never the file root. Any
+    // top-level site keeps the previous single file-level import (it uses
+    // the import in every compilation, so the unused-import hazard cannot
+    // arise).
+    if v.scopes.iter().all(Option::is_some) {
+        for idx in v.scopes.iter().filter_map(|s| *s).collect::<BTreeSet<_>>() {
+            let ctx = &v.mods[idx];
+            if ctx.has_fmt_write_use {
+                continue;
+            }
+            v.edits.push(SourceEdit {
+                start: ctx.offset,
+                end: ctx.offset,
+                replacement: ctx.text.clone(),
+            });
+        }
         return v.edits;
     }
     let offset = import_insert_offset(source, file);
@@ -78,6 +113,21 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 struct Collector<'a> {
     source: &'a str,
     edits: Vec<SourceEdit>,
+    /// Arena of mod insertion contexts (P35), indexed by the stack.
+    mods: Vec<ModImportCtx>,
+    /// Innermost-mod stack as arena indices; `None` = a content-less
+    /// `mod foo;` declaration (cannot host edit sites).
+    stack: Vec<Option<usize>>,
+    /// Innermost enclosing mod per edit, parallel to `edits`; `None` = a
+    /// file-top-level site.
+    scopes: Vec<Option<usize>>,
+}
+
+/// Where and how a fresh `use` line lands at one mod's top (P35).
+struct ModImportCtx {
+    offset: usize,
+    text: String,
+    has_fmt_write_use: bool,
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
@@ -85,7 +135,25 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         syn::visit::visit_expr_method_call(self, m);
         if let Some(replacement) = self.try_fold(m) {
             self.edits.push(edit(m, replacement));
+            self.scopes.push(self.stack.last().copied().flatten());
         }
+    }
+
+    fn visit_item_mod(&mut self, i: &'ast ItemMod) {
+        let idx = i.content.as_ref().map(|(brace, items)| {
+            let ctx = ModImportCtx {
+                offset: mod_import_offset(self.source, items, brace),
+                text: mod_import_text(self.source, items, brace),
+                has_fmt_write_use: items
+                    .iter()
+                    .any(|item| matches!(item, Item::Use(u) if use_tree_imports_fmt_write(&u.tree, &mut Vec::new()))),
+            };
+            self.mods.push(ctx);
+            self.mods.len() - 1
+        });
+        self.stack.push(idx);
+        syn::visit::visit_item_mod(self, i);
+        self.stack.pop();
     }
 }
 
@@ -245,6 +313,59 @@ fn import_insert_offset(source: &str, file: &File) -> usize {
         return last_attr_end;
     }
     first_code_line_offset(source)
+}
+
+/// Byte offset where a fresh `use` line belongs at ONE mod's top: after the
+/// mod's last use item; else at the first item's line start (P35). The
+/// empty-mod fallback sits right after the opening brace — unreachable for
+/// fold sites (an edit site implies ≥1 item) but kept total.
+fn mod_import_offset(source: &str, items: &[Item], brace: &syn::token::Brace) -> usize {
+    if let Some(end) = items.iter().rev().find_map(|it| match it {
+        Item::Use(u) => Some(u.span().byte_range().end),
+        _ => None,
+    }) {
+        return end;
+    }
+    if let Some(first) = items.first() {
+        let start = first.span().byte_range().start;
+        return start_of_line(source, start);
+    }
+    brace.span.close().byte_range().end
+}
+
+/// Insertion text for the mod-top `use` line, indentation-aware: the
+/// append form after the mod's last use (same indent, newline first); the
+/// prepend form above the mod's first item (indent + trailing newline).
+fn mod_import_text(source: &str, items: &[Item], brace: &syn::token::Brace) -> String {
+    if let Some(end) = items.iter().rev().find_map(|it| match it {
+        Item::Use(u) => Some(u.span().byte_range().end),
+        _ => None,
+    }) {
+        let indent = line_indent(source, end);
+        return format!("\n{indent}use std::fmt::Write as _;");
+    }
+    if let Some(first) = items.first() {
+        let start = first.span().byte_range().start;
+        let line_start = start_of_line(source, start);
+        let indent = source[line_start..start].to_string();
+        return format!("{indent}use std::fmt::Write as _;\n");
+    }
+    let _ = brace;
+    "\nuse std::fmt::Write as _;".to_string()
+}
+
+/// Byte offset of the start of the line containing `offset`.
+fn start_of_line(source: &str, offset: usize) -> usize {
+    source[..offset].rfind('\n').map_or(0, |i| i + 1)
+}
+
+/// Leading whitespace of the line containing `offset`.
+fn line_indent(source: &str, offset: usize) -> String {
+    let line_start = start_of_line(source, offset);
+    source[line_start..]
+        .chars()
+        .take_while(|c| *c == ' ' || *c == '\t')
+        .collect()
 }
 
 /// First byte offset after leading blank lines, `//` line comments, and
@@ -459,6 +580,102 @@ mod tests {
             out.matches(".fold(String::new()").count(),
             2,
             "both folds applied: {out}"
+        );
+    }
+
+    // P35 post-mining intake (2026-09-21) — the cfg(test) incident class:
+    // a file-scope import whose only usage lives under #[cfg(test)] is an
+    // unused_imports warning in every non-test compilation, green through
+    // the --all-targets verify gate by construction.
+    const TESTMOD_BUGGY: &str = "#[cfg(test)]\nmod deploy_tests {\n    fn render(xs: &[u32]) -> String {\n        xs.iter().map(|x| format!(\"{}\", x)).collect::<String>()\n    }\n\n    #[test]\n    fn t() {\n        assert_eq!(render(&[1]), \"1\");\n    }\n}";
+
+    #[test]
+    fn import_lands_inside_enclosing_test_mod_not_file_scope() {
+        let input = format!("fn helper(a: u32) -> u32 {{ a + 1 }}\n\n{TESTMOD_BUGGY}");
+        let out = propose_fix("format_collect", &input).expect("matched");
+        assert!(
+            !out.starts_with("use std::fmt::Write as _;"),
+            "import must NOT land at file scope when every site is mod-confined: {out}"
+        );
+        assert!(
+            out.contains("mod deploy_tests {\n    use std::fmt::Write as _;"),
+            "import must land at the mod top, above its first item: {out}"
+        );
+        assert!(
+            out.matches("use std::fmt::Write as _;").count() == 1,
+            "exactly one import: {out}"
+        );
+        assert!(
+            syn::parse_file(&out).is_ok(),
+            "output must re-parse: {out}"
+        );
+    }
+
+    #[test]
+    fn mod_import_skipped_when_mod_already_imports_fmt_write() {
+        let input = "#[cfg(test)]\nmod deploy_tests {\n    use std::fmt::Write as _;\n    fn render(xs: &[u32]) -> String {\n        xs.iter().map(|x| format!(\"{}\", x)).collect::<String>()\n    }\n}";
+        let out = propose_fix("format_collect", input).expect("matched");
+        assert_eq!(
+            out.matches("use std::fmt::Write as _;").count(),
+            1,
+            "no second import inside the mod, none at file scope: {out}"
+        );
+    }
+
+    #[test]
+    fn mixed_top_level_and_mod_sites_keep_file_level_import() {
+        // The top-level site uses the import in every compilation, so the
+        // file-level form has no unused-import hazard — and one import
+        // covers both sites.
+        let input = format!("{BUGGY}\n\n{TESTMOD_BUGGY}");
+        let out = propose_fix("format_collect", &input).expect("matched");
+        assert_eq!(
+            out.matches("use std::fmt::Write as _;").count(),
+            1,
+            "one file-level import for the mixed shape: {out}"
+        );
+        assert!(
+            out.starts_with("use std::fmt::Write as _;\n"),
+            "the single import is at file head (the top-level site uses it in every config): {out}"
+        );
+        assert!(
+            !out.contains("    use std::fmt::Write as _;"),
+            "no indented (mod-scoped) import in the mixed shape: {out}"
+        );
+        assert_eq!(
+            out.matches(".fold(String::new()").count(),
+            2,
+            "both folds applied: {out}"
+        );
+    }
+
+    #[test]
+    fn two_mods_each_get_their_own_scoped_import() {
+        let input = format!("{TESTMOD_BUGGY}\n\n{}", TESTMOD_BUGGY.replace("deploy_tests", "other_tests").replace("fn render", "fn render2"));
+        let out = propose_fix("format_collect", &input).expect("matched");
+        assert_eq!(
+            out.matches("use std::fmt::Write as _;").count(),
+            2,
+            "one scoped import per mod: {out}"
+        );
+        assert!(
+            !out.starts_with("use std::fmt::Write as _;"),
+            "no file-head import: {out}"
+        );
+        assert_eq!(
+            out.matches("\nuse std::fmt::Write as _;").count(),
+            0,
+            "no column-0 (file-level) import: {out}"
+        );
+    }
+
+    #[test]
+    fn mod_import_lands_after_the_mods_last_use() {
+        let input = "#[cfg(test)]\nmod deploy_tests {\n    use std::io::Read;\n    fn render(xs: &[u32]) -> String {\n        xs.iter().map(|x| format!(\"{}\", x)).collect::<String>()\n    }\n}";
+        let out = propose_fix("format_collect", input).expect("matched");
+        assert!(
+            out.contains("use std::io::Read;\n    use std::fmt::Write as _;"),
+            "mod import must follow the mod's last use at mod indent: {out}"
         );
     }
 }
