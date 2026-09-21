@@ -369,6 +369,15 @@ pub mod frontier_miner;
 // green zero on empty/blind/single-class populations.
 pub mod horizon_report;
 
+// Issue 128 (T1-T4): the fixseq cascade-law + derailment-index report — the
+// Traverse/Scout long-horizon failure statistics (arXiv:2609.17930, Research
+// 200) over the SAME ring jsonl horizon_report loads. Counting over labeled
+// steps, no judge, no training; Wilson CIs; the G4 KS-vs-point-mass guard.
+// Pure stats, ungated (the horizon_report law); report-first, gates nothing,
+// wires nothing (G3); refuses green zero on empty / no-transition
+// populations.
+pub mod fixseq_stats;
+
 // Issue 107 T2: the span-shape embedding — the producer behind the fixseq
 // ring's embedding column. Hashed unigram+bigram bag over the span's
 // ORIGINAL trigger text, signed, L2-normalized, i8-quantized. Write-time

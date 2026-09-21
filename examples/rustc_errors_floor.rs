@@ -42,6 +42,26 @@
 //! (e.g. `.benchmarks/data/126_t0/rings`), never the repo root — dumping
 //! into `<repo>/.heal/fixseq` would pollute the organic-ring readings the
 //! `--horizon-report` consumer owns.
+//!
+//! # Issue 128 T5 — `--dump-fixseq-cfg <chunked|strided>` (the mint configs)
+//!
+//! With `--dump-fixseq-cfg`, the corpus is REPLACED by a composed
+//! multi-error generation config (the T5 two-config law — two seeds of one
+//! composer do NOT satisfy T7's disjointness rule):
+//!
+//! - `chunked` — `corpus_gen::compose_multi(generate_corpus(), 5)`: k
+//!   ADJACENT cases per world (same-family error runs share a scaffold).
+//! - `strided` — `corpus_gen::compose_multi_strided(generate_corpus(), 5)`:
+//!   stride-k across the corpus (families MIX per world; the Bench-088
+//!   menu-width-3-4 shape).
+//!
+//! Both configs append the 4 `interacting_pairs` (the E0614 masking chains
+//! — the only E0614 source, without which indicator (c) and the
+//! root/cascade attribution would have zero signal). MUTANT_CASES (solo
+//! single-error anchors) are EXCLUDED: single-attempt runs carry no
+//! transitions and would only dilute the cascade corpus. The run also
+//! writes `<dir>/manifest.json` — per-file BLAKE3 + counts, the house data
+//! discipline (the 049_t01 stamped-manifest law).
 
 use riir_clippy::domains::rustc_errors::corpus_gen::{generate_corpus, Territory};
 use riir_clippy::domains::rustc_errors::floor::{
@@ -75,7 +95,24 @@ fn main() {
     if want("driver") {
         let dump_fixseq_root: Option<String> = std::env::args().position(|a| a == "--dump-fixseq")
             .and_then(|p| std::env::args().nth(p + 1));
-        driver_section(dump_fixseq_root);
+        let dump_fixseq_cfg: Option<String> =
+            std::env::args().position(|a| a == "--dump-fixseq-cfg")
+                .and_then(|p| std::env::args().nth(p + 1));
+        // Issue 128 T5 — cfg validation at the door: a cfg without a dump
+        // root, or an unknown cfg name, refuses loudly (exit 2) rather than
+        // minting an unlabeled corpus.
+        match (&dump_fixseq_cfg, &dump_fixseq_root) {
+            (Some(cfg), Some(_)) if cfg != "chunked" && cfg != "strided" => {
+                eprintln!("--dump-fixseq-cfg must be chunked|strided, got '{cfg}'");
+                std::process::exit(2);
+            }
+            (Some(_), None) => {
+                eprintln!("--dump-fixseq-cfg requires --dump-fixseq <dir>");
+                std::process::exit(2);
+            }
+            _ => {}
+        }
+        driver_section(dump_fixseq_root, dump_fixseq_cfg);
     }
     if want("null") {
         null_section();
@@ -199,12 +236,26 @@ fn floor_section() {
     harness.cleanup();
 }
 
-fn driver_section(dump_fixseq_root: Option<String>) {
+fn driver_section(dump_fixseq_root: Option<String>, dump_fixseq_cfg: Option<String>) {
     let harness = FloorHarness::new();
     let fixer = DriverFixer::new();
-    let cases = floor_case_list();
+    // Issue 128 T5 — a mint config REPLACES the stock floor list with the
+    // composed multi-error worlds (+ the interacting pairs); the flag-less
+    // path is byte-identical to before (G3: the stock measurement session
+    // is untouched).
+    let cases = match &dump_fixseq_cfg {
+        Some(cfg) => composed_case_list(cfg).unwrap_or_else(|| {
+            eprintln!("unknown --dump-fixseq-cfg '{cfg}'");
+            std::process::exit(2);
+        }),
+        None => floor_case_list(),
+    };
+    let cfg_note = dump_fixseq_cfg
+        .as_deref()
+        .map(|c| format!(" [mint cfg: {c}, Issue 128 T5]"))
+        .unwrap_or_default();
     println!(
-        "\n── 3. The `--fix-compile` arm (verbose): over {n} known-inverse mutants ──\n",
+        "\n── 3. The `--fix-compile` arm (verbose): over {n} known-inverse mutants{cfg_note} ──\n",
         n = cases.len()
     );
     if !harness.is_available() {
@@ -273,6 +324,14 @@ fn driver_section(dump_fixseq_root: Option<String>) {
             c = codes.len(),
             s = strategies.len()
         );
+        // Issue 128 T5 — the house-data manifest: per-file BLAKE3 + counts,
+        // stamped with the mint config (the 049_t01 law).
+        if let Some(cfg) = &dump_fixseq_cfg {
+            match write_ring_manifest(&root, cfg) {
+                Ok(p) => println!("  manifest: {}", p.display()),
+                Err(e) => eprintln!("  manifest: {e}"),
+            }
+        }
         harness.cleanup();
         return;
     }
@@ -857,6 +916,80 @@ fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCa
         cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
     }
     cases
+}
+
+/// Issue 128 T5 — the composed multi-error mint corpus for one generation
+/// config. Two STRUCTURALLY different composers (chunked = adjacent
+/// same-family runs per world; strided = cross-family mix per world) — the
+/// T7 disjointness rule is satisfied by the CONFIG difference, never by
+/// two seeds of one composer. Both configs append the interacting pairs
+/// (the E0614 masking chains) and EXCLUDE the solo MUTANT_CASES anchors
+/// (single-attempt runs carry no transitions).
+fn composed_case_list(cfg: &str) -> Option<Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>>> {
+    use riir_clippy::domains::rustc_errors::corpus_gen::{compose_multi, compose_multi_strided};
+    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
+    const K: usize = 5;
+    let generated = generate_corpus();
+    let composed = match cfg {
+        "chunked" => compose_multi(&generated, K),
+        "strided" => compose_multi_strided(&generated, K),
+        _ => return None,
+    };
+    let mut cases: Vec<HarnessCase<'static>> =
+        Vec::with_capacity(composed.len() + 4);
+    for g in composed {
+        cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
+    }
+    for ix in riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs() {
+        cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
+    }
+    Some(cases)
+}
+
+/// Issue 128 T5 — the mint manifest: per-file BLAKE3 + attempt counts + the
+/// config stamp, written beside the rings at `<root>/manifest.json` (the
+/// house data discipline — `.benchmarks/data/049_t01/manifest.json`).
+fn write_ring_manifest(root: &std::path::Path, cfg: &str) -> std::io::Result<std::path::PathBuf> {
+    let dir = root.join(".heal").join("fixseq");
+    let mut files = Vec::new();
+    let mut total_attempts = 0usize;
+    for entry in std::fs::read_dir(&dir)?.flatten() {
+        let p = entry.path();
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !name.starts_with("run-") || !name.ends_with(".jsonl") {
+            continue;
+        }
+        let bytes = std::fs::read(&p)?;
+        let attempts = bytes.split(|&b| b == b'\n').filter(|l| !l.is_empty()).count();
+        let hash = blake3::hash(&bytes).to_hex().to_string();
+        total_attempts += attempts;
+        files.push(serde_json::json!({
+            "name": name,
+            "bytes": bytes.len(),
+            "blake3": hash,
+            "attempts": attempts,
+        }));
+    }
+    files.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    let manifest = serde_json::json!({
+        "issue": "128",
+        "task": "T5",
+        "cfg": cfg,
+        "rustc": rustc_version(),
+        "created_unix": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        "runs": files.len(),
+        "attempts": total_attempts,
+        "files": files,
+    });
+    let out = root.join("manifest.json");
+    std::fs::write(&out, serde_json::to_string_pretty(&manifest).unwrap_or_default())?;
+    Ok(out)
 }
 
 fn print_report(report: &FloorReport) {

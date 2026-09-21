@@ -1,0 +1,2 @@
+{"seq":0,"code":"E0614","span_hash":"45c54c765ab0c581","strategy_id":"e0614-deref-at-use","outcome":"Kept","errors":[1,1],"masking":[1,0],"journey_residual_sum":1,"terminal_residual":0,"span_embed":[0,0,0,0,0,0,-127,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+{"seq":1,"code":"E0499","span_hash":"680d947fb071c2a6","strategy_id":"e0499-swap-second-decl","outcome":"Kept","errors":[1,0],"masking":[0,0],"journey_residual_sum":1,"terminal_residual":0,"span_embed":[20,0,20,0,40,-40,-20,0,-20,0,0,-20,-60,0,0,0,20,-20,20,0,0,-20,-20,-20,0,40,0,-40,0,0,40,-20]}

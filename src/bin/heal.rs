@@ -3395,6 +3395,7 @@ USAGE:
     cargo heal --frontier-report                       (learnability band report, 089 T1+2)
     cargo heal --coverage-report                       (corpus coverage debt, 119)
     cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
+    cargo heal --fixseq-stats [PATHS]                  (cascade law + derailment index, 128)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke]  (Issue 108, score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
@@ -4063,6 +4064,16 @@ struct Args {
     /// single-class labels (never a green zero). Ungated — reads jsonl
     /// directly, no store, no domain features. Paths default to `.`.
     horizon_report: bool,
+    /// Issue 128 (T1-T4): `--fixseq-stats` — the fixseq cascade-law +
+    /// derailment-index report (Traverse/Scout, arXiv:2609.17930, Research
+    /// 200): P(bad-next | bad-prev) vs P(bad-next | good-prev) with Wilson
+    /// 95% CIs under three badness indicators, first-wrong-attempt
+    /// distributions + the G4 KS-vs-point-mass guard, cross-indicator ±k
+    /// agreement, root-vs-cascade attribution (masking as the root signal),
+    /// silent-failure rate, and the T7 transfer verdict when MULTIPLE paths
+    /// are given (each path = one corpus). Report-first, gates nothing;
+    /// refuses exit 1 on empty / no-transition populations. Ungated.
+    fixseq_stats: bool,
     /// Plan 124: `--config-audit` — the config-hygiene report (classes A+B
     /// from the post-mining intake): Default-impl fields that default to a
     /// const nobody's field-read while the const IS read elsewhere (the
@@ -4196,6 +4207,7 @@ fn parse_args() -> Args {
         import_series: false,
         frontier_report: false,
         horizon_report: false,
+        fixseq_stats: false,
         config_audit: false,
         platform_audit: false,
         orphan_report: false,
@@ -4304,6 +4316,7 @@ fn parse_args() -> Args {
             "--memory-stats" => args.memory_stats = true,
             "--frontier-report" => args.frontier_report = true,
             "--horizon-report" => args.horizon_report = true,
+            "--fixseq-stats" => args.fixseq_stats = true,
             "--config-audit" => args.config_audit = true,
             "--platform-audit" => args.platform_audit = true,
             "--orphan-report" => args.orphan_report = true,
@@ -4767,6 +4780,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.import_series
         || args.frontier_report
         || args.horizon_report
+        || args.fixseq_stats
         || args.config_audit
         || args.platform_audit
         || args.orphan_report
@@ -7682,6 +7696,51 @@ fn main() {
             runs.len()
         );
         if summary.refusal.is_some() {
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // ── Issue 128 (T1-T4): --fixseq-stats — the cascade + derailment report ──
+    // Report-first, gates nothing (the frontier-report law): reads the
+    // `.heal/fixseq/` rings through the SAME loader as --horizon-report.
+    // Each PATH is one CORPUS (per-corpus cascade tables + the T7 transfer
+    // verdict across corpora; the T5 mint manifest names its configs).
+    // Refuses exit 1 on empty / no-transition populations — never a green
+    // zero over no data.
+    if args.fixseq_stats {
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        let mut labeled: Vec<(String, Vec<riir_clippy::horizon_report::RunRing>)> = Vec::new();
+        let mut bad_total = 0usize;
+        let mut files_total = 0usize;
+        for t in &targets {
+            let (runs, bad, files) = riir_clippy::horizon_report::load_runs(t);
+            bad_total += bad;
+            files_total += files;
+            println!(
+                "corpus {}: {} run(s), {} ring file(s), {} bad line(s)",
+                t.display(),
+                runs.len(),
+                files,
+                bad
+            );
+            if !runs.is_empty() {
+                labeled.push((t.display().to_string(), runs));
+            }
+        }
+        let report = riir_clippy::fixseq_stats::summarize(&labeled);
+        print!("{}", riir_clippy::fixseq_stats::render(&report));
+        println!(
+            "scanned {} path(s), {} ring file(s), {} bad line(s)",
+            targets.len(),
+            files_total,
+            bad_total
+        );
+        if report.refusal.is_some() {
             std::process::exit(1);
         }
         return;
@@ -11513,6 +11572,7 @@ mod mode_flag_tests {
             ("--import-series", Box::new(|m| m.import_series = true)),
             ("--frontier-report", Box::new(|m| m.frontier_report = true)),
             ("--horizon-report", Box::new(|m| m.horizon_report = true)),
+            ("--fixseq-stats", Box::new(|m| m.fixseq_stats = true)),
             ("--coverage-report", Box::new(|m| m.coverage_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
             ("--platform-audit", Box::new(|m| m.platform_audit = true)),

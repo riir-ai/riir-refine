@@ -200,6 +200,10 @@ pub const N_FEAT: usize = 9;
 /// where every line carries the column (see [`summarize`]).
 pub const N_FEAT_EMBED: usize = N_FEAT + SPAN_EMBED_DIMS;
 
+/// Issue 128 T6 — the transition arm's feature count: the 9 ring-native
+/// features plus the PREV-attempt-outcome indicator (feature #10).
+pub const N_FEAT_PREV: usize = N_FEAT + 1;
+
 /// The strict-lead feature vector from record `a` (position `j` in a run of
 /// `run_len` attempts). Ring-native scalars ONLY — T2's embedding column is
 /// the designed upgrade, not a prerequisite:
@@ -226,7 +230,7 @@ pub fn features_at(a: &RingLine, run_len: usize) -> [f64; N_FEAT] {
 /// T2 column appended, decoded to `[-1, 1]`. `None` when the line predates
 /// T2 (no column): the caller's arm-skip discipline, never a zero-fill
 /// (a silently-zeroed block would read as "shapeless span", a lie).
-#[allow(clippy::cast_precision_loss)] // i8 → f64 is exact
+#[allow(clippy::cast_precision_loss)] // i8 -> f64 is exact
 #[must_use]
 pub fn features_at_embed(a: &RingLine, run_len: usize) -> Option<[f64; N_FEAT_EMBED]> {
     let e = a.span_embed.as_ref()?;
@@ -236,6 +240,30 @@ pub fn features_at_embed(a: &RingLine, run_len: usize) -> Option<[f64; N_FEAT_EM
         x[N_FEAT + i] = f64::from(*v) / 127.0;
     }
     Some(x)
+}
+
+/// Issue 128 T6 — the transition arm's strict-lead feature vector:
+/// [`features_at`] with the PREV-attempt-outcome indicator appended
+/// (three-state: +1 the attempt before the feature record was kept, -1
+/// reverted, 0 no previous attempt — the first record of a run). This is
+/// the cascade law's transition feature as a readout dimension: the
+/// question T6 asks is whether it RAISES the horizon. Strict-lead safe —
+/// the prev outcome sits at i-k-1, one lead OLDER than every native
+/// feature; nothing from (i-k, i] enters.
+#[must_use]
+pub fn features_at_prev(
+    a: &RingLine,
+    prev: Option<&RingLine>,
+    run_len: usize,
+) -> [f64; N_FEAT_PREV] {
+    let mut x = [0.0_f64; N_FEAT_PREV];
+    x[..N_FEAT].copy_from_slice(&features_at(a, run_len));
+    x[N_FEAT] = match prev.map(RingLine::kept) {
+        Some(Some(true)) => 1.0,
+        Some(Some(false)) => -1.0,
+        Some(None) | None => 0.0,
+    };
+    x
 }
 
 /// Closed-form ridge fit `(G + λI)w = h` via Gaussian elimination with
@@ -421,6 +449,12 @@ pub struct HorizonRow {
     /// was skipped (no column coverage) — disambiguate via
     /// [`HorizonSummary::embed_arm`], never this field alone.
     pub auc_embed: Option<f64>,
+    /// Issue 128 T6 — the TRANSITION arm's AUC: the same LORO ridge over
+    /// the native features plus the prev-attempt-outcome indicator
+    /// (feature #10). Runs on every corpus (the prev column always
+    /// exists — `0.0` on a run's first record); `None` only on a
+    /// single-class row.
+    pub auc_prev: Option<f64>,
 }
 
 impl HorizonRow {
@@ -440,6 +474,16 @@ impl HorizonRow {
     /// [`Self::auc_embed`] (the revival-path verdict, Issue 107 T2).
     fn beats_embed(&self) -> bool {
         match (self.measurable(), self.auc_embed, self.auc_history) {
+            (true, Some(a), Some(h)) => a >= (h.max(0.5) + MARGIN),
+            (true, Some(a), None) => a >= 0.5 + MARGIN,
+            _ => false,
+        }
+    }
+
+    /// Issue 128 T6 — the transition arm's beats-floor test, same margin
+    /// discipline over [`Self::auc_prev`].
+    fn beats_prev(&self) -> bool {
+        match (self.measurable(), self.auc_prev, self.auc_history) {
             (true, Some(a), Some(h)) => a >= (h.max(0.5) + MARGIN),
             (true, Some(a), None) => a >= 0.5 + MARGIN,
             _ => false,
@@ -553,6 +597,19 @@ impl HorizonSummary {
             .max()
             .unwrap_or(0)
     }
+
+    /// Issue 128 T6 — the transition arm's horizon: max measurable k whose
+    /// native+prev-outcome readout beats both floors (the T6 question: is
+    /// this >= [`Self::horizon`]?).
+    #[must_use]
+    pub fn horizon_prev(&self) -> usize {
+        self.rows
+            .iter()
+            .filter(|r| r.beats_prev())
+            .map(|r| r.k)
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 /// Compute the whole report over loaded runs. Deterministic: LORO over
@@ -628,17 +685,31 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
     let mut per_k: Vec<Vec<Vec<LeadSample<N_FEAT>>>> = (0..=K_MAX).map(|_| Vec::new()).collect();
     let mut per_k_e: Vec<Vec<Vec<LeadSample<N_FEAT_EMBED>>>> =
         (0..=K_MAX).map(|_| Vec::new()).collect();
+    // Issue 128 T6 — the transition arm's sample pool (always collected:
+    // the prev column exists on every ring — 0.0 on a run's first record).
+    let mut per_k_p: Vec<Vec<Vec<LeadSample<N_FEAT_PREV>>>> =
+        (0..=K_MAX).map(|_| Vec::new()).collect();
     for ring in runs {
         let len = ring.lines.len();
         let kmax = K_MAX.min(len.saturating_sub(1));
         for (k, slot) in per_k.iter_mut().enumerate().take(kmax + 1).skip(1) {
             let mut group = Vec::with_capacity(len - k);
             let mut group_e = Vec::with_capacity(len - k);
+            let mut group_p = Vec::with_capacity(len - k);
             for i in k..len {
                 let (x, y) = (&ring.lines[i - k], &ring.lines[i]);
+                // T6: the feature record's PREV attempt — one lead OLDER
+                // than every native feature (i-k-1); None at a run head.
+                let j = i - k;
+                let prev = if j >= 1 { Some(&ring.lines[j - 1]) } else { None };
                 if let Some(yb) = y.kept() {
                     group.push(LeadSample {
                         x: features_at(x, len),
+                        y: yb,
+                        strategy: y.strategy_id.clone(),
+                    });
+                    group_p.push(LeadSample {
+                        x: features_at_prev(x, prev, len),
                         y: yb,
                         strategy: y.strategy_id.clone(),
                     });
@@ -655,6 +726,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
             }
             if !group.is_empty() {
                 slot.push(group);
+                per_k_p[k].push(group_p);
                 if embed_arm {
                     per_k_e[k].push(group_e);
                 }
@@ -683,6 +755,9 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
         } else {
             None
         };
+        // Issue 128 T6 — the transition arm over the same samples.
+        let (prev_scores, _) = loro_scores(&per_k_p[k]);
+        let auc_prev = auc(&prev_scores);
 
         if pos >= MIN_CLASS && neg >= MIN_CLASS {
             any_auc_defined = any_auc_defined || auc_readout.is_some();
@@ -695,6 +770,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
             auc_readout,
             auc_history,
             auc_embed,
+            auc_prev,
         });
     }
 
@@ -844,13 +920,16 @@ pub fn render(s: &HorizonSummary) -> String {
     writeln!(out).unwrap();
     writeln!(
         out,
-        "  k |    n | pos | neg | auc(readout) | auc(embed) | floor(0.5) | floor(history) | verdict"
+        "  k |    n | pos | neg | auc(readout) | auc(prev) | auc(embed) | floor(0.5) | floor(history) | verdict"
     )
     .unwrap();
-    writeln!(out, "----+------+-----+-----+--------------+------------+------------+----------------+--------").unwrap();
+    writeln!(out, "----+------+-----+-----+--------------+-----------+------------+------------+----------------+--------").unwrap();
     for r in &s.rows {
         let ro = r
             .auc_readout
+            .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
+        let pv = r
+            .auc_prev
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
         let em = if s.embed_arm {
             r.auc_embed
@@ -863,12 +942,13 @@ pub fn render(s: &HorizonSummary) -> String {
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
         writeln!(
             out,
-            " {:>2} | {:>4} | {:>3} | {:>3} | {:>12} | {:>10} | {:>10} | {:>14} | {}",
+            " {:>2} | {:>4} | {:>3} | {:>3} | {:>12} | {:>9} | {:>10} | {:>10} | {:>14} | {}",
             r.k,
             r.n,
             r.pos,
             r.neg,
             ro,
+            pv,
             em,
             "0.500",
             hi,
@@ -906,6 +986,29 @@ pub fn render(s: &HorizonSummary) -> String {
             .unwrap();
         }
     }
+    // Issue 128 T6 — the transition arm's verdict line, always rendered
+    // (the arm always runs; the comparison against HORIZON is the point).
+    let hzp = s.horizon_prev();
+    let hz = s.horizon();
+    if hzp > hz {
+        writeln!(
+            out,
+            "HORIZON(prev) = {hzp} > {hz} — the transition feature RAISES the horizon (Issue 128 T6)"
+        )
+        .unwrap();
+    } else if hzp > 0 {
+        writeln!(
+            out,
+            "HORIZON(prev) = {hzp} (<= native {hz}) — the transition feature does NOT raise the horizon here"
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "HORIZON(prev) = none — the transition feature decodes nothing beyond the floors on this corpus"
+        )
+        .unwrap();
+    }
 
     if !s.families.is_empty() {
         write!(out, "{}", render_family_table(&s.families, s.thin_families)).unwrap();
@@ -915,7 +1018,8 @@ pub fn render(s: &HorizonSummary) -> String {
         "\nreadout: closed-form ridge over ring-native features at i-k (PROVISIONAL — the T3 \
          OnlineLinearReadout consumption follows katgpt-rs Issue 780); LORO hold-out, \
          either-polarity; floors: base 0.5 + per-strategy Laplace prior LORO. embed arm \
-         (T2): the same ridge over native + span-embedding features (41 dims)."
+         (T2): the same ridge over native + span-embedding features (41 dims). prev arm \
+         (Issue 128 T6): the same ridge over native + prev-attempt-outcome (10 dims)."
     )
     .unwrap();
     out
@@ -984,6 +1088,95 @@ mod tests {
             journey_residual_sum: 0,
             terminal_residual: 0,
             span_embed: None,
+        }
+    }
+
+    /// Issue 128 T6 — the transition feature is three-state and sits one
+    /// lead OLDER than every native feature (None at a run head).
+    #[test]
+    fn prev_feature_is_three_state() {
+        let a = line(2, "E0499", "s", "Kept", (4, 3));
+        let kept_prev = line(1, "E0499", "s", "Kept", (5, 4));
+        let rev_prev = line(1, "E0499", "s", "RevertedNoProgress", (5, 5));
+        let base = features_at(&a, 8);
+        let p = features_at_prev(&a, Some(&kept_prev), 8);
+        assert_eq!(p[..N_FEAT], base);
+        assert_eq!(p[N_FEAT], 1.0);
+        assert_eq!(features_at_prev(&a, Some(&rev_prev), 8)[N_FEAT], -1.0);
+        assert_eq!(features_at_prev(&a, None, 8)[N_FEAT], 0.0);
+    }
+
+    /// Issue 128 T6 — the transition arm decodes a planted LAG-2
+    /// anti-persistence signal the native 9 features cannot see: outcomes
+    /// follow the period-4 pattern [K K R R] with per-run phase rotation,
+    /// so o_i = NOT o_{i-2} (prev-visible at lead 1) while o_{i-1}
+    /// (native-visible) and position (phase-rotated across runs) are both
+    /// uninformative pooled.
+    #[test]
+    fn prev_arm_decodes_planted_lag2_signal_native_cannot() {
+        let mk = |phase: usize| {
+            let mut v = Vec::new();
+            for i in 0..8usize {
+                let outcome = if (i + phase) % 4 < 2 {
+                    "Kept"
+                } else {
+                    "RevertedNoProgress"
+                };
+                v.push(line(i, "E0499", "s", outcome, (6, 6)));
+            }
+            run(v)
+        };
+        let runs: Vec<RunRing> = (0..8).map(mk).collect();
+        let s = summarize(&runs);
+        assert!(s.refusal.is_none(), "{:?}", s.refusal);
+        let row1 = s.rows.iter().find(|r| r.k == 1).expect("k=1 row");
+        let prev = row1.auc_prev.expect("prev AUC defined");
+        let nat = row1.auc_readout.expect("native AUC defined");
+        assert!(
+            prev >= 0.95,
+            "transition arm must decode the lag-2 signal: {prev}"
+        );
+        assert!(
+            nat <= 0.65,
+            "native 9 features must NOT see it at lead 1: {nat}"
+        );
+        assert!(s.horizon_prev() >= 1);
+    }
+
+    /// Issue 128 T6 — the transition arm must NOT beat the floors on a
+    /// no-transition-signal corpus (the honest-null companion).
+    #[test]
+    fn prev_arm_does_not_beat_on_no_signal() {
+        // Runs where the outcome alternates deterministically by position
+        // (i % 2) — prev at lead k is redundant with position, and LORO
+        // across phase-rotated runs kills positional leakage; simpler: all
+        // runs identical [K R K R ...], so every feature is a deterministic
+        // function of position and LORO trains on the same pattern it
+        // scores — AUC may be high for BOTH arms, so assert only that prev
+        // does not EXCEED the native readout's horizon (the T6 question is
+        // marginal, never absolute). The real null-check is the ridge over
+        // identical samples: fit == holdout, both arms read the same.
+        let mk = || {
+            let mut v = Vec::new();
+            for i in 0..8usize {
+                let outcome = if i % 2 == 0 { "Kept" } else { "RevertedNoProgress" };
+                v.push(line(i, "E0499", "s", outcome, (6, 6)));
+            }
+            run(v)
+        };
+        let runs: Vec<RunRing> = (0..4).map(|_| mk()).collect();
+        let s = summarize(&runs);
+        // Both arms see the same deterministic pattern; the transition
+        // feature adds NO information beyond kept_j (which already encodes
+        // the parity) — the arms must agree within epsilon at every k.
+        for r in &s.rows {
+            if let (Some(p), Some(n)) = (r.auc_prev, r.auc_readout) {
+                assert!(
+                    (p - n).abs() <= 0.02,
+                    "k={}: prev {p} must not drift from native {n} on a parity corpus",
+                    r.k
+                );
+            }
         }
     }
 
