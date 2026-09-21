@@ -119,6 +119,46 @@ pub fn map_through_splices(p: usize, splices: &[SourceEdit]) -> usize {
     (p.cast_signed() + delta).cast_unsigned()
 }
 
+/// Remap a byte SPAN recorded against a pass's INPUT through that pass's
+/// applied splices into the pass's OUTPUT coordinates — the span-shaped
+/// companion of [`map_through_splices`], consumed by the repo-posture
+/// gate (`--repo-posture`) to keep feed diagnostic spans comparable with
+/// later fixpoint passes' edit coordinates.
+///
+/// Semantics (authority-follows-replacement): a position strictly inside
+/// a replaced region has no unique image — the old content is gone — so a
+/// span that INTERSECTS a splice extends to cover that splice's full
+/// replacement text. The flagged region's authority follows its rewritten
+/// bytes: a fixpoint-exposed nested edit inside the replacement inherits
+/// the enclosing diagnostic's confirmation. Pure shifts (span entirely
+/// before/after a splice) map both endpoints by the accumulated length
+/// delta, exactly like [`map_through_splices`].
+#[must_use]
+pub fn map_span_through_splices(span: (usize, usize), splices: &[SourceEdit]) -> (usize, usize) {
+    let mut out_start = map_through_splices(span.0, splices);
+    let mut out_end = map_through_splices(span.1, splices);
+    // Walk the splices again tracking the running delta, expanding over
+    // every replacement the ORIGINAL span intersected. Splices are sorted
+    // ascending + non-overlapping (apply_edits_traced's selection), so the
+    // delta of the strictly-earlier splices is exact at each step.
+    let mut delta: isize = 0;
+    for s in splices {
+        if s.end <= span.0 {
+            // entirely before the span — contributes only its shift
+            delta += s.replacement.len().cast_signed() - (s.end - s.start).cast_signed();
+        } else if s.start >= span.1 {
+            break; // entirely after — cannot affect the span's image
+        } else {
+            // intersects: authority extends over the replacement text
+            let repl_start = (s.start.cast_signed() + delta).cast_unsigned();
+            let repl_end = repl_start + s.replacement.len();
+            out_start = out_start.min(repl_start);
+            out_end = out_end.max(repl_end);
+        }
+    }
+    (out_start, out_end.max(out_start))
+}
+
 // ── Shared helpers ───────────────────────────────────────────────────────
 
 /// The original source text of a node (its exact formatting, comments
@@ -603,5 +643,56 @@ mod tests {
         assert_eq!(pos_a, ret_a); // same length replacement → no shift
         let line = final_src[..pos_a].matches('\n').count() + 1;
         assert_eq!(line, 2);
+    }
+
+    // ── Plan 165: span mapping for the repo-posture gate ─────────────
+
+    fn se(start: usize, end: usize, replacement: &str) -> SourceEdit {
+        SourceEdit {
+            start,
+            end,
+            replacement: replacement.to_string(),
+        }
+    }
+
+    #[test]
+    fn map_span_shifts_when_disjoint_from_every_splice() {
+        // Span entirely after one insertion (+3) and one deletion (−4).
+        let splices = [se(3, 3, "abc"), se(10, 14, "")];
+        assert_eq!(map_span_through_splices((50, 60), &splices), (49, 59));
+        // Span entirely before both: unmoved.
+        assert_eq!(map_span_through_splices((0, 2), &splices), (0, 2));
+    }
+
+    #[test]
+    fn map_span_expands_over_a_replacement_it_intersects() {
+        // Authority-follows-replacement: the span's flagged bytes were
+        // (partly) rewritten — the replacement text is the region's new
+        // content, so the span extends to cover it. Here a 4-byte deletion
+        // at 10..14 becomes nothing, and a span 12..20 straddling it maps
+        // to start at the splice's output start (10 + 0 shift) …
+        let splices = [se(10, 14, "")];
+        assert_eq!(map_span_through_splices((12, 20), &splices), (10, 16));
+        // …and a REPLACING splice (10..14 → 8 bytes) extends the end over
+        // the whole replacement even though the old span was shorter.
+        let splices = [se(10, 14, "01234567")];
+        assert_eq!(map_span_through_splices((12, 13), &splices), (10, 18));
+        // A span strictly inside the replaced region maps to exactly the
+        // replacement — the nested-fix inheritance rule.
+        assert_eq!(map_span_through_splices((11, 12), &splices), (10, 18));
+    }
+
+    #[test]
+    fn map_span_end_to_end_with_the_position_mapper() {
+        // For a span that intersects NOTHING, the span mapper must agree
+        // with mapping both endpoints through map_through_splices.
+        let splices = [se(5, 5, "XY"), se(20, 24, "")];
+        for span in [(0usize, 5usize), (6, 19), (24, 40)] {
+            let by_pos = (
+                map_through_splices(span.0, &splices),
+                map_through_splices(span.1, &splices),
+            );
+            assert_eq!(map_span_through_splices(span, &splices), by_pos);
+        }
     }
 }

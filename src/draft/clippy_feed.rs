@@ -65,6 +65,11 @@ pub struct ClippyDiagnostic {
     pub line: usize,
     /// The lint name without the `clippy::` prefix (`collapsible_if`).
     pub lint: String,
+    /// The primary span's byte range `(byte_start, byte_end)` in the file
+    /// clippy ran on — the coordinates the repo-posture gate matches edits
+    /// against (same lint + overlapping span). `None` when the feed's span
+    /// row lacked byte offsets (never in real cargo JSON; defensive).
+    pub span: Option<(usize, usize)>,
     /// The first help child's `MachineApplicable` suggestion, when the
     /// diagnostic carries one (P21). `None` when there is no suggestion,
     /// the applicability is not `MachineApplicable`, the suggestion spans
@@ -124,14 +129,15 @@ pub fn parse_clippy_feed(json_output: &str) -> Vec<ClippyDiagnostic> {
         let Some(lint) = code.strip_prefix("clippy::") else {
             continue;
         };
-        let Some((file_name, file_line)) = primary_span_location(message) else {
+        let Some(loc) = primary_span_location(message) else {
             continue;
         };
-        let suggestion = suggestion_from_message(message, file_name);
+        let suggestion = suggestion_from_message(message, loc.file);
         let diag = ClippyDiagnostic {
-            file: file_name.replace('\\', "/"),
-            line: file_line,
+            file: loc.file.replace('\\', "/"),
+            line: loc.line,
             lint: lint.to_string(),
+            span: loc.bytes,
             suggestion,
         };
         // Dedup on (file, line, lint) — clippy can repeat a diagnostic
@@ -218,11 +224,21 @@ fn suggestion_from_message(
     Some(FeedSuggestion { parts })
 }
 
-/// The primary span's (`file_name`, `line_start`): the first
-/// `is_primary: true` span, else the first span (the [`clippy_oracle`]
-/// `primary_span_file` rule — diagnostics without an explicit primary
-/// still anchor at their only span).
-fn primary_span_location(message: &serde_json::Value) -> Option<(&str, usize)> {
+/// What [`primary_span_location`] extracts: the primary span's file, its
+/// 1-based start line, and its byte range when the row carries one
+/// (`None` when `byte_start`/`byte_end` are absent — never in real cargo
+/// JSON; defensive, and a span-less diagnostic cannot posture-match).
+struct PrimarySpan<'a> {
+    file: &'a str,
+    line: usize,
+    bytes: Option<(usize, usize)>,
+}
+
+/// The primary span's location — the first `is_primary: true` span, else
+/// the first span (the [`clippy_oracle`] `primary_span_file` rule —
+/// diagnostics without an explicit primary still anchor at their only
+/// span).
+fn primary_span_location(message: &serde_json::Value) -> Option<PrimarySpan<'_>> {
     let spans = message.get("spans")?.as_array()?;
     let primary = spans
         .iter()
@@ -233,7 +249,19 @@ fn primary_span_location(message: &serde_json::Value) -> Option<(&str, usize)> {
         .get("line_start")
         .and_then(serde_json::Value::as_u64)
         .and_then(|n| usize::try_from(n).ok())?;
-    Some((file, line))
+    let start = span
+        .get("byte_start")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok());
+    let end = span
+        .get("byte_end")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok());
+    let bytes = match (start, end) {
+        (Some(s), Some(e)) if s <= e => Some((s, e)),
+        _ => None,
+    };
+    Some(PrimarySpan { file, line, bytes })
 }
 
 /// Do a feed file name and a scanned display path refer to the same file?
@@ -261,6 +289,57 @@ pub fn paths_ref_match(feed_file: &str, display_path: &str) -> bool {
 #[must_use]
 pub fn spans_overlap(a: &crate::edit_emitter::SourceEdit, b: &crate::edit_emitter::SourceEdit) -> bool {
     a.start < b.end && b.start < a.end
+}
+
+// ── The repo-posture gate (Plan 165, the 2026-09-21 riir-ai intake) ──────
+//
+// `--fix` on a foreign repo restyled docs the target's own gate never
+// complained about (the 26:1 doc_markdown churn: our corpus is BROADER
+// than clippy's `[a-z][A-Z]` regex on that lint). The posture gate
+// intersects the clippy-lane fix edits with the target repo's OWN clippy
+// diagnostics — the same feed the anchor lane consumes — so an edit
+// applies only where the target's clippy actually flagged.
+
+/// Build the per-lint posture index for ONE scanned file: the primary-span
+/// byte ranges (original on-disk coordinates) of every feed diagnostic
+/// that names this file ([`paths_ref_match`]) and carries byte offsets.
+/// Later fixpoint passes remap these through the applied splices
+/// ([`crate::edit_emitter::map_span_through_splices`]).
+#[must_use]
+pub fn posture_spans(
+    feed: &[ClippyDiagnostic],
+    display_path: &str,
+) -> std::collections::BTreeMap<String, Vec<(usize, usize)>> {
+    let mut map: std::collections::BTreeMap<String, Vec<(usize, usize)>> =
+        std::collections::BTreeMap::new();
+    for d in feed {
+        if !paths_ref_match(&d.file, display_path) {
+            continue;
+        }
+        let Some(span) = d.span else { continue };
+        map.entry(d.lint.clone()).or_default().push(span);
+    }
+    map
+}
+
+/// Does the posture index confirm ONE edit? True iff a same-lint span
+/// overlaps the edit's byte range in the SAME coordinate frame — the
+/// [`spans_overlap`] predicate over raw ranges (zero-width edits pass only
+/// strictly inside a flagged region, an insertion at a boundary is
+/// compatible). A lint absent from the index confirms nothing.
+#[must_use]
+pub fn posture_allows(
+    index: &std::collections::BTreeMap<String, Vec<(usize, usize)>>,
+    lint: &str,
+    start: usize,
+    end: usize,
+) -> bool {
+    let Some(spans) = index.get(lint) else {
+        return false;
+    };
+    spans
+        .iter()
+        .any(|&(s, e)| s < end && start < e)
 }
 
 /// The `--fix`-lane result of feeding one file's anchors through the
@@ -628,6 +707,7 @@ mod tests {
         assert_eq!(
             got,
             vec![ClippyDiagnostic {
+                span: None,
                 file: "tests/art_chaos.rs".to_string(),
                 line: 320,
                 lint: "collapsible_if".to_string(),
@@ -660,6 +740,7 @@ mod tests {
         assert_eq!(
             got,
             vec![ClippyDiagnostic {
+                span: None,
                 file: "src/b.rs".to_string(),
                 line: 5,
                 lint: "needless_return".to_string(),
@@ -801,6 +882,7 @@ mod tests {
     fn mapor_feed(src: &str) -> Vec<ClippyDiagnostic> {
         let off = src.find("map_or").expect("fixture has the site");
         vec![ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 2,
             lint: "unnecessary_map_or".to_string(),
@@ -824,6 +906,7 @@ mod tests {
         let src = "/// Runs the shader_perf stage over a HashMap.\nfn stage() {}\n";
         let off = src.find("shader_perf").unwrap();
         let feed = vec![ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 1,
             lint: "doc_markdown".to_string(),
@@ -894,6 +977,7 @@ mod tests {
         let h = src.find(header_old).expect("header marker");
         let s = src.find(slot_old).expect("slot marker");
         vec![ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 1,
             lint: "needless_range_loop".to_string(),
@@ -1020,6 +1104,7 @@ mod tests {
         let mut feed = mapor_feed(&src);
         // A second diagnostic whose suggestion overlaps the first's span.
         feed.push(ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 2,
             lint: "unnecessary_map_or".to_string(),
@@ -1046,6 +1131,7 @@ mod tests {
         let covered = "format!(\"{{x}}\")"; // 17 bytes, brace-carrying
         // clippy's own (wrong) suggestion: the escaped literal verbatim.
         let feed = vec![ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 2,
             lint: "useless_format".to_string(),
@@ -1070,6 +1156,7 @@ mod tests {
         let off = src.find("format!").expect("fixture has the site");
         let covered = "format!(\"plain\")"; // 16 bytes, brace-free
         let feed = vec![ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 2,
             lint: "useless_format".to_string(),
@@ -1099,6 +1186,7 @@ mod tests {
         // part at a syntactically valid point (the parse gate accepts).
         let off = src.find("fn f").unwrap();
         let feed = vec![ClippyDiagnostic {
+            span: None,
             file: "src/lib.rs".to_string(),
             line: 1,
             lint: "needless_return".to_string(),
@@ -1128,5 +1216,115 @@ mod tests {
         assert!(spans_overlap(&range, &inside));
         assert!(!spans_overlap(&range, &at_start));
         assert!(!spans_overlap(&range, &at_end));
+    }
+
+    // ── Plan 165: the repo-posture gate primitives ────────────────────
+
+    /// A `row` variant whose primary span carries byte offsets — the real
+    /// cargo JSON shape (`byte_start`/`byte_end` are always present on
+    /// file-bearing spans; the base `row` omits them to pin the defensive
+    /// `span: None` decode).
+    fn row_bytes(
+        level: &str,
+        code: &str,
+        file: &str,
+        line: u64,
+        byte_start: u64,
+        byte_end: u64,
+    ) -> String {
+        format!(
+            r#"{{"reason": "compiler-message", "message": {{"level": "{level}", "code": {{"code": "{code}"}}, "spans": [{{"file_name": "{file}", "line_start": {line}, "byte_start": {byte_start}, "byte_end": {byte_end}, "is_primary": true}}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn parse_retains_primary_span_bytes() {
+        let stream = format!(
+            "{}\n{}\n",
+            row_bytes(
+                "warning",
+                "clippy::manual_range_contains",
+                "src/a.rs",
+                7,
+                120,
+                145
+            ),
+            row("warning", Some("clippy::doc_markdown"), "src/a.rs", 9, true)
+        );
+        let got = parse_clippy_feed(&stream);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].span, Some((120, 145)));
+        // A span row without byte offsets (defensive — never real cargo
+        // JSON) decodes None: not posture-matchable, never a guessed span.
+        assert_eq!(got[1].span, None);
+    }
+
+    #[test]
+    fn posture_spans_partitions_by_lint_and_file() {
+        let feed = vec![
+            ClippyDiagnostic {
+                span: Some((10, 30)),
+                file: "src/lib.rs".to_string(),
+                line: 2,
+                lint: "manual_range_contains".to_string(),
+                suggestion: None,
+            },
+            ClippyDiagnostic {
+                span: Some((40, 60)),
+                file: "src/lib.rs".to_string(),
+                line: 4,
+                lint: "manual_range_contains".to_string(),
+                suggestion: None,
+            },
+            ClippyDiagnostic {
+                span: Some((70, 90)),
+                file: "src/other.rs".to_string(),
+                line: 6,
+                lint: "manual_range_contains".to_string(),
+                suggestion: None,
+            },
+            ClippyDiagnostic {
+                span: None,
+                file: "src/lib.rs".to_string(),
+                line: 8,
+                lint: "doc_markdown".to_string(),
+                suggestion: None,
+            },
+        ];
+        // Path matching is the paths_ref_match tail rule, not equality.
+        let idx = posture_spans(&feed, "crate/src/lib.rs");
+        assert_eq!(
+            idx.get("manual_range_contains").map(Vec::as_slice),
+            Some(&[(10usize, 30usize), (40, 60)][..])
+        );
+        // Span-less diagnostics and other files contribute nothing.
+        assert!(!idx.contains_key("doc_markdown"));
+        let other = posture_spans(&feed, "src/other.rs");
+        assert_eq!(
+            other.get("manual_range_contains").map(Vec::as_slice),
+            Some(&[(70usize, 90usize)][..])
+        );
+    }
+
+    #[test]
+    fn posture_allows_requires_same_lint_overlap() {
+        let mut idx = std::collections::BTreeMap::new();
+        idx.insert(
+            "manual_range_contains".to_string(),
+            vec![(10usize, 30usize)],
+        );
+        // Same lint, overlapping (contained / containing / partial).
+        assert!(posture_allows(&idx, "manual_range_contains", 12, 18));
+        assert!(posture_allows(&idx, "manual_range_contains", 8, 40));
+        assert!(posture_allows(&idx, "manual_range_contains", 25, 35));
+        // Zero-width insertion strictly inside passes; at a boundary not.
+        assert!(posture_allows(&idx, "manual_range_contains", 15, 15));
+        assert!(!posture_allows(&idx, "manual_range_contains", 30, 30));
+        // Same lint, disjoint span — the target's gate never flagged here.
+        assert!(!posture_allows(&idx, "manual_range_contains", 31, 50));
+        // Different lint over the same bytes — posture is per-lint.
+        assert!(!posture_allows(&idx, "doc_markdown", 12, 18));
+        // Lint absent from the index entirely.
+        assert!(!posture_allows(&idx, "needless_return", 12, 18));
     }
 }

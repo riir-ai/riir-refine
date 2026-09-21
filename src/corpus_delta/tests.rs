@@ -250,6 +250,7 @@ fn a_lagging_lease_produces_a_real_freshness_delta() {
         "sample.rs",
         3,
         &[ClippyDiagnostic {
+            span: None,
             file: "sample.rs".to_string(),
             line: 2,
             lint: "needless_return".to_string(),

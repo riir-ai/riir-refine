@@ -3746,6 +3746,16 @@ USAGE:
                     the auto run at a feature set, for diagnostics that
                     only fire behind a non-default feature; a manual
                     --clippy-json wins outright).
+    --repo-posture  With --fix ONLY: apply clippy-lane edits the TARGET
+                    repo's own clippy actually flagged — an edit lands only
+                    where the feed carries a same-lint diagnostic whose
+                    primary span overlaps it (the 2026-09-21 riir-ai intake:
+                    our doc_markdown corpus is broader than clippy's regex,
+                    a 26:1 churn a posture sweep refuses). Requires a feed
+                    (the auto-oracle or --clippy-json) — with neither, the
+                    run REFUSES exit 2 rather than apply unverified edits.
+                    The rust_perf/sec lanes and the oracle-consumed edits
+                    are unaffected (not target-gate mirrors).
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
@@ -3870,6 +3880,19 @@ struct Args {
     /// feature set — Issue 115) — this flag remains the explicit/curated
     /// override and wins outright.
     clippy_json: Option<String>,
+    /// `--repo-posture` (Plan 165, the 2026-09-21 riir-ai intake): gate the
+    /// CLIPPY-lane fix edits on the target repo's OWN clippy diagnostics —
+    /// an edit applies only where the feed (manual `--clippy-json` or the
+    /// auto-oracle) carries a same-lint diagnostic whose primary span
+    /// overlaps the edit. `--fix` on a foreign repo then cannot restyle
+    /// code the target's own gate never flagged (the 26:1 `doc_markdown`
+    /// churn that motivated the mode). The rust_perf/sec lanes (this
+    /// tool's own rules — the target's clippy says nothing about them) and
+    /// the P21 oracle-edits lane (consumed FROM the diagnostics — confirmed
+    /// by construction) are unaffected. REQUIRES a feed: with neither an
+    /// auto-oracle run nor a manual feed the mode REFUSES (exit 2) rather
+    /// than apply unverified edits wearing the posture name.
+    repo_posture: bool,
     top_k: usize,
     verify: bool,
     /// `--no-verify`: opt out of the compile gate that --fix now defaults
@@ -4128,6 +4151,7 @@ fn parse_args() -> Args {
         no_fmt: false,
         domain: None,
         clippy_json: None,
+        repo_posture: false,
         top_k: 3,
         verify: false,
         no_verify: false,
@@ -4335,6 +4359,9 @@ fn parse_args() -> Args {
                     usage();
                 };
                 args.clippy_json = Some(value);
+            }
+            "--repo-posture" => {
+                args.repo_posture = true;
             }
             "--generation" => {
                 let Some(value) = it.next() else {
@@ -4703,7 +4730,11 @@ fn parse_args() -> Args {
 /// the two hand-mirrored lists drifted exactly as the --misses regression
 /// predicted (see [`standalone_mode`] for the --version casualty).
 fn is_bare_posture(args: &Args) -> bool {
-    !args.suggest && !args.fix && !args.fix_compile && !standalone_mode(args)
+    !args.suggest
+        && !args.fix
+        && !args.fix_compile
+        && !args.repo_posture
+        && !standalone_mode(args)
 }
 
 /// Every standalone early-return mode — the flags that need NO scan paths
@@ -4763,6 +4794,13 @@ fn standalone_mode(args: &Args) -> bool {
 ///
 /// Returns the exact message `main` prints before `usage()`.
 fn validate_mode_flags(args: &Args) -> Result<(), &'static str> {
+    // Checked BEFORE the no-mode error: `--repo-posture` alone is a
+    // fix-lane modifier, and the message must name the real problem —
+    // "no mode given" would send the reader hunting for a mode flag the
+    // posture flag already implies.
+    if args.repo_posture && !args.fix {
+        return Err("--repo-posture requires --fix (it gates the fix lane's edits)");
+    }
     let (suggest, fix, fix_compile, dump_trajectories) = (
         args.suggest,
         args.fix,
@@ -8796,6 +8834,24 @@ fn main() {
     };
     let mut n_oracle_spans = 0usize;
     let mut n_anchored_missing = 0usize;
+    // Plan 165 (`--repo-posture`): a posture run with NO feed cannot
+    // verify anything — applying everything would be the unverified bulk
+    // apply wearing the mode's name. REFUSE (exit 2), naming both
+    // remedies. A feed with ZERO diagnostics (a clean tree) is a VALID
+    // posture input and proceeds — declining every clippy-lane edit IS
+    // the posture answer for a clean tree.
+    if args.repo_posture && clippy_feed.is_none() {
+        eprintln!(
+            "repo-posture: no clippy feed available (the auto-oracle could not run or is disabled, and no --clippy-json was given) — refusing rather than apply edits the target repo's own clippy never verified; unset --repo-posture, provide --clippy-json, or check the oracle status lines above"
+        );
+        std::process::exit(2);
+    }
+    // Run-total posture declines: per-lint counts for the summary + the
+    // file count. Counted at PASS 0 only (the bench-guard precedent:
+    // later fixpoint passes re-propose the identical declined set).
+    let mut n_posture_declined_total = 0usize;
+    let mut posture_declined_by_lint: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
     // Issue 116: the per-span `[no corpus rule]` lists, kept so the run can
     // report WHICH of the two messages that marker is delivering. Collected
     // rather than counted because the delta is per-LINT: the existing
@@ -8944,6 +9000,21 @@ fn main() {
             #[cfg(not(feature = "fix_verify"))]
             let fxhashmap_allowed = true;
 
+            // Plan 165 (`--repo-posture`): this file's per-lint diagnostic
+            // span index in ORIGINAL on-disk coordinates — the target
+            // repo's own clippy verdict for this file. Built once per
+            // file; each fixpoint pass remaps it through the applied
+            // splices (authority-follows-replacement) before gating.
+            let posture_index: Option<std::collections::BTreeMap<String, Vec<(usize, usize)>>> =
+                if args.repo_posture {
+                    clippy_feed.as_ref().map(|feed| {
+                        riir_clippy::draft::clippy_feed::posture_spans(feed, &display)
+                    })
+                } else {
+                    None
+                };
+            let mut n_posture_declined_file = 0usize;
+
             for pass in 0..MAX_FIX_PASSES {
                 let Ok(parsed) = syn::parse_file(&current) else {
                     eprintln!("skip (unparseable): {display}");
@@ -8997,15 +9068,64 @@ fn main() {
                     lint_set.extend(VERIFY_LINTS.iter().copied());
                 }
                 if run_clippy {
+                    // The pass's remapped posture index: feed spans are
+                    // original-coords; map them through every EARLIER
+                    // pass's applied splices so pass-N edits compare in
+                    // pass-N coordinates (a diagnostic whose flagged text
+                    // a confirmed edit rewrote extends over the replacement
+                    // — nested re-exposed fixes inherit the confirmation).
+                    let posture_pass: Option<
+                        std::collections::BTreeMap<String, Vec<(usize, usize)>>,
+                    > = posture_index.as_ref().map(|idx| {
+                        idx.iter()
+                            .map(|(lint, spans)| {
+                                let mapped: Vec<(usize, usize)> = spans
+                                    .iter()
+                                    .map(|&sp| {
+                                        let mut s = sp;
+                                        for applied in pass_splices.iter().take(pass) {
+                                            s = riir_clippy::edit_emitter::map_span_through_splices(
+                                                s, applied,
+                                            );
+                                        }
+                                        s
+                                    })
+                                    .collect();
+                                (lint.clone(), mapped)
+                            })
+                            .collect()
+                    });
                     // `&lint_set` (pattern-deref): the set is borrowed, not
                     // moved — the P21 oracle merge below needs it after this
                     // loop (the lane's corpus-set precondition).
                     for &lint in &lint_set {
-                        edits.extend(
+                        let collected =
                             riir_clippy::domains::clippy_lints::proposers::collect_edits(
                                 lint, &current, &parsed,
-                            ),
-                        );
+                            );
+                        match &posture_pass {
+                            None => edits.extend(collected),
+                            Some(idx) => {
+                                for re in collected {
+                                    if riir_clippy::draft::clippy_feed::posture_allows(
+                                        idx,
+                                        lint,
+                                        re.edit.start,
+                                        re.edit.end,
+                                    ) {
+                                        edits.push(re);
+                                    } else if pass == 0 {
+                                        // Count at pass 0 only (the bench-guard
+                                        // re-proposal law); the FILTER itself
+                                        // runs every pass.
+                                        n_posture_declined_file += 1;
+                                        *posture_declined_by_lint
+                                            .entry(lint.to_string())
+                                            .or_default() += 1;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 // ── P21: oracle-anchored edits — the --clippy-json fix lane.
@@ -9197,6 +9317,16 @@ fn main() {
                     "bench-guard: declined {n_bench_declined} rust_perf edit(s) on {display} — \
                      measurement-altering on a bench target (the file's numbers ARE its \
                      artifact; apply manually only if judged safe)"
+                );
+            }
+            // Plan 165: the posture decline line — what the target repo's
+            // own clippy never flagged stays UNTOUCHED, loudly.
+            if n_posture_declined_file > 0 {
+                n_posture_declined_total += n_posture_declined_file;
+                eprintln!(
+                    "repo-posture: declined {n_posture_declined_file} clippy-lane edit(s) on {display} — \
+                     no matching diagnostic in the target repo's own clippy run (same lint + \
+                     overlapping span); run without --repo-posture to apply the full corpus"
                 );
             }
         }
@@ -10069,6 +10199,19 @@ fn main() {
         if n_oracle_edits > 0 {
             let ed_pl = if n_oracle_edits == 1 { "edit" } else { "edits" };
             s.push_str(&format!(" · {n_oracle_edits} oracle {ed_pl} applied"));
+        }
+        // Plan 165: the posture declines, with the per-lint breakdown so
+        // the operator sees WHAT the target's gate filtered (the doc_markdown
+        // churn shape — one lint dominating the decline list).
+        if n_posture_declined_total > 0 {
+            let breakdown = posture_declined_by_lint
+                .iter()
+                .map(|(lint, n)| format!("{lint}×{n}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            s.push_str(&format!(
+                " · {n_posture_declined_total} declined by --repo-posture ({breakdown})"
+            ));
         }
         s
     } else {
@@ -11399,6 +11542,31 @@ mod mode_flag_tests {
         assert!(!bare(&a(false, true, false, false)), "--fix");
         assert!(!bare(&a(false, false, true, false)), "--fix-compile");
         assert!(!bare(&a(false, false, false, true)), "--dump-trajectories");
+    }
+
+    /// Plan 165: `--repo-posture` is a fix-lane MODIFIER, not a mode — it
+    /// must (a) break the bare posture (a silent suggest run under a
+    /// fix-lane gate is the no-op trap the --misses row names), (b) refuse
+    /// without --fix with the flag's own message naming the requirement,
+    /// (c) validate WITH --fix.
+    #[test]
+    fn repo_posture_requires_fix_and_breaks_the_bare_default() {
+        use super::is_bare_posture as bare;
+        let m = Args {
+            repo_posture: true,
+            ..Args::default()
+        };
+        assert!(!bare(&m), "--repo-posture alone must not take the bare suggest default");
+        assert_eq!(
+            v(&m),
+            Err("--repo-posture requires --fix (it gates the fix lane's edits)")
+        );
+        let ok = Args {
+            repo_posture: true,
+            fix: true,
+            ..Args::default()
+        };
+        assert!(v(&ok).is_ok(), "--fix --repo-posture must validate");
     }
 
     /// Named-field construction keeps each matrix row self-describing —

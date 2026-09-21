@@ -1042,6 +1042,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
 
     fn anchor(file: &str, line: usize, lint_id: &str) -> super::super::clippy_feed::ClippyDiagnostic {
         super::super::clippy_feed::ClippyDiagnostic {
+            span: None,
             file: file.to_string(),
             line,
             lint: lint_id.to_string(),
