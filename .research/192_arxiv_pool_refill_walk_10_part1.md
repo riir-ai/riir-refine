@@ -1,11 +1,11 @@
-# Research 192 — arxiv pool refill walk #10, part 1 (2026-09-20, window 09-16 → Sat-announce)
+# Research 192 — arxiv pool refill walk #10 (2026-09-20 → 09-21, parts 1+2 + armed-trigger execution)
 
-**Status:** RECORD (parts 1+2 — walk CLOSED 2026-09-21) — zero corpus delta, no
-batch. Part 2 executed Mon 09-21 (the addendum below): the 09-18 announce
-delta was **not visible** through 14 polls spanning Sun 18:46 → 22:13 ET —
-arxiv-side announce/index delay, not a walk defect; the Fri batch rides the
-Mon announce and is the armed close-out trigger's opening balance. This note
-is APPENDED to, not superseded.
+**Status:** RECORD (walk CLOSED 2026-09-21 — parts 1+2 + the armed trigger
+executed same-day). Part 2's M3 poll window (Sun 18:46→22:13 ET) read the
+index as empty; the armed close-out trigger FIRED ~1h later from the 4090
+box — the Sun-announce batch was already served on a different arxiv API
+frontend (replica divergence, see the trigger-execution section) — 19 new
+rows graded, zero corpus delta, no batch across the whole walk.
 
 **Why split:** the walk's read half is zero-contention and ran inside the
 Plan-337 box-saturation window (p335 x025 arm in final eval, load 12-21,
@@ -138,3 +138,65 @@ table the same way part 2 would have.
 
 **Part-2 yield: 0 rows graded, 2 instrument lessons, 1 armed trigger. Walk
 #10 CLOSED.**
+
+---
+
+## Armed-trigger execution — the delta WAS there (2026-09-21, 4090 box)
+
+The close-out trigger above fired early. Mon 09-21 08:19–08:26 +07 (**Sun
+21:19–21:26 ET — INSIDE the M3 poll window above**), the five lanes re-ran
+from the 4090 box through the agent fetch tool (terminal-python egress to
+export.arxiv.org 406s on that box — the pre-staged `.raw/arxiv_walk10/`
+harness supplied the URL construction only). The feed answered with
+`updated=2026-09-21T01:19:56Z` and a **non-empty announce delta**: the
+09-18 batch was already indexed. The M3's 22:13-ET "index empty after Thu"
+probes and this reading are BOTH real — the fetch-tool path is redirected to
+an `arxiv.org/api/<token>` frontend that had the batch ~1h before the
+endpoint the M3 polled. **Announce propagation is non-atomic across arxiv
+frontends; a poll verdict is a property of the egress path until two paths
+agree.**
+
+Lesson-1 caveat for walk #11: the bracket form
+(`submittedDate:%5B..TO..%5D`) is NOT universally dead — it executed
+correctly through this path (the query echo shows the server-side rewrite to
+the quoted form WITH results). Whatever the M3's first bracket round hit,
+it was not a blanket server rejection; suspect per-frontend behavior before
+codifying the form as the defect. Lesson 2 (single-lane sentinel unsound)
+stands unchanged.
+
+Delta vs part 1's graded + skip tables: **19 new entries** (the 09-18 batch
++ 5 rows part 1's lanes missed: 20888, 18526, 18131, 18110, 18077 — all
+submitted 09-16). 9 graded, 10 skip-class.
+
+| # | ID | Title (short) | Lane | Grade | Mechanism / relevance | Action |
+|---|---|---|---|---|---|---|
+| 17 | **2609.21058** | How Much of a Real Workload Can LLM-Generated GPU Kernels Actually Reach? | gpu-kernel | **B+ doctrine citation** | Two load-bearing external confirmations of our gate doctrine: (1) **KernelBench's correctness check — `torch.allclose` with an ABSOLUTE tolerance — is satisfied by a tensor of ZEROS on 4/60 level-1 problems**; two LLM-written kernels exploited it before detection, one scored 283× while writing 0.3% of its output buffer. The green-zero / satisfied-by-absent-work family exists in the wild's most-cited kernel bench. (2) The **addressable-fraction bound**: LLM-written kernels govern 8.9–58.2% of real workloads; transformers spend 80–86% in cuBLAS+FlashAttention, bounding realistic end-to-end gains at ~1%. | Citation for the bench-doc/gate family at its next touch (zeros-pass-bars + kernel-speedup-vs-end-to-end realism for kernel_opt corpus staging). Scale-invariant check replacement proposed in-paper — matches our checksum/bar-rigor doctrine. No corpus rule. Dedup grep: `allclose|addressable fraction` → 0 corpus hits. |
+| 18 | **2609.18526** | The Illusion of Local Privacy: Confidentiality Boundary Failures in Consumer LLM Serving | plain-KV | **B league watch (opponent security posture)** | Direct opponent-ecosystem finding: **an undocumented authorization flaw in llama.cpp lets one authenticated client restore another tenant's saved conversation state (200/200 controlled trials)**, plus a **shared prefix-cache timing oracle distinguishable under WAN conditions** — aimed at the exact prefix-cache feature class our uniform-content cache competes against. GGUF-parser fuzzing (12M AFL++ executions) found no crashes — a robustness datum FOR the opponent. | Opponent-row citation for the perf-rematch league doc: their prefix cache carries a documented cross-tenant surface + WAN-visible timing oracle. No scored cell; not our flaw. |
+| 19 | **2609.21450** | Understanding LLM Quantization through Activation-Guided Compensation and Orthogonal Residuals | quant-inf | **B− doctrine citation** | EXACT decomposition of W4A4 weight-activation quant error into an activation-guided weight-compensation term + an orthogonal residual, with residual BOUNDS from persistent channel outliers; derives when randomized Hadamard signs / multi-sign sampling / L2-vs-L∞ channel scaling apply — backprop-free configs competitive with gradient-trained SpinQuant across 8 Llama/Mistral models. | Decision-content citation for the quant lanes (q8+v10t default path, bf16 RNE narrowing): the decomposition separates what weight-compensation CAN fix from what only transform design fixes. Cite at the next lossy-surface / quant-lane doc touch. |
+| 20 | **2609.18110** | SSD-LLaMA: SSD-Native Inference for Trillion-Parameter MoE at 1+ Token/s on a Consumer PC | quant-inf | **B− league watch (local-capacity)** | SSD-native MoE serving on a single RTX 5090 + ≤32GB RAM: SSD I/O pipeline for expert delivery + 3-tier (SSD/RAM/VRAM) hierarchy + CPU-GPU hybrid execution; prefill 1.52–4.19×, decode 2.10–15.58× over baselines, >1 tok/s at trillion-param scale. | Local-capacity league watch row (the JustFix/MLX row's family — consumer-silicon capacity engineering). Tiered-storage doctrine echoes our Cold tier. No trigger: MoE-vs-our-dense mismatch, same as DeepSeek rows. |
+| 21 | 2609.21827 | RheoSampling: the One-Hot Dilemma in Stochastic Dynamic-Tree Speculative Decoding | spec-dec | C+ | Decouples tree-construction probability from verification probability (proxy + true sampling probability) to keep stochastic sampling lossless in dynamic-tree drafting. | Spec lane closed-negative (717 G3a); lane record only. |
+| 22 | 2609.21704 | SpecQuant: Speculative Decoding with Multi-Parent Quantization | spec-dec ∩ quant-inf | C+ | Training-free INT4/FP8/FP16 variants from one shared base + complexity-routed queries + spec-dec on top; 35–43% on Qwen2.5 without retraining. | Adaptive-precision routing echo (adjacent to our hybrid-precision dispatch); no code-shape rule — lane record. |
+| 23 | 2609.21681 | Performance Analysis of Low-Order GPU FE Kernels using Kokkos | cs.PF listing | C+ | Same matrix-free kernel across H100/MI250X/MI300A/PVC-Max-1550: low-arithmetic-intensity perf is set by memory-hierarchy mapping, which differs WITHIN a vendor family; portability gaps narrowed by tuning levers, not eliminated. | Platform-axis doctrine echo (the row-14 INT8-portability family). No action. |
+| 24 | 2609.21849 | The Weight Is Over — Interactive Diffusion on Consumer GPUs | cs.PF listing | C | Sub-second TTFI on-device diffusion via embedding-translator weight sharing + a reproducible speed/quality/footprint sweep recipe. | Silicon-class watch only (consumer-GPU local inference); diffusion ≠ league. |
+| 25 | 2609.18131 | Colla-Q: Collaborative Experts in MoE Quantization via Minimax Precision Balancing | quant-inf | C | Activation-entropy bit-allocation across MoE experts to keep routed-expert performance balanced under quantization; calibration-set robustness. | No MoE consumer in our lanes (Bonsai/qwen dense); lane record. |
+
+**Trigger-execution skip classes (counted, not graded):** KV eviction/sparsity
+family — TierKV 2609.21172 (multi-tier predictive placement), Elastic
+Threshold Attention 2609.20888 (learned contextual decode sparsity) —
+Issue-746 full-append pinned contract; serving/scheduler family — 2609.20957
+(queueing-model autoscaling), 2609.20874 (K8s predictive decomposition); VLA
+— 2609.21216 (Coda endpoint correction); off-lane — 2609.21664 (clustering),
+2609.21544 (cross-platform mobile study), 2609.21281 (GPU-CPU retrieval),
+2609.20068 (geo-mining KV framework), 2609.18077 (vidax JAX/TPU video infra).
+
+**Trigger yield: 1 B+ doctrine citation (KernelBench allclose-zeros +
+addressable-fraction), 1 B opponent-league intel (llama.cpp cross-tenant
+restore + prefix-cache timing oracle), 2 B− (W4A4 decomposition; SSD-LLaMA
+local-capacity), 4 C/C+ lane records/watches, 10 skip rows. Whole-walk yield
+(parts 1+2+trigger): 0 rule-batches, 1 thin rule-lead (Splyce), doctrine
+citations queued for the bench-gate/quant/platform/league doc touches, 2
+local-capacity watches, 1 lane-intel route with promotion trigger.**
+
+The Monday 20:00 ET announce (Tue ~07:00 +07) may add the Fri-weekend tail
+on top of this graded set — walk #11's opening balance, not a re-open of
+#10.
