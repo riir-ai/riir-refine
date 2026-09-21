@@ -2,7 +2,7 @@
 
 **Status:** COMPLETE 2026-09-20 — verdict **GATED PASS at the PoC gates** (G2 full-rig +4 top-1 with G1 zero regressions, G2-OOD no harm, G3 clean FP unchanged). Shipped as the opt-in `rule_embed_poc` feature + the BLAKE3-sealed frozen artifact (`assets/rule_embed_frozen_v1.bin`); the shipped suggest lane is UNCHANGED — the posture attaches only when a caller builds a matcher with `with_rule_embed` (the standing gate test drives it). Promotion to a production path is a separate owner decision (the choice_scorer/Bench-098 posture: measurement lands first, wiring follows gates + need).
 
-**Source:** [Issue 126](../.issues/126_sigmoid_nce_rule_embeddings_hindsight.md) · [riir-ai Research 386](../../riir-ai/.research/386_Contrastive_RL_Goal_Conditioned_Value.md) (CRL critic reframe; arXiv:2206.07568) · Bench 048 (sigmoid-vs-InfoNCE dimension law)
+**Source:** [Issue 126](../HISTORY.md) (COMPLETE — the record row) · [riir-ai Research 386](../../riir-ai/.research/386_Contrastive_RL_Goal_Conditioned_Value.md) (CRL critic reframe; arXiv:2206.07568) · Bench 048 (sigmoid-vs-InfoNCE dimension law)
 
 ## What ran
 

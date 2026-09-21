@@ -1,15 +1,24 @@
 # Seed corpus — built-in lint examples
 
-`build_seed_corpus()` returns a `ClippyCorpus` with 53 entries: the 10
-seed lints (style, complexity, perf, nursery groups) + the 30 Issue 016
-structural-expansion lints (frequency-ranked selection — see
-[`.benchmarks/021`](../../.benchmarks/021_clippy_structural_expansion_goat.md))
-+ the P7 post-mining verify row (`manual_is_multiple_of`, 2026-08-29) +
-2 Batch 89 + 2 Batch 90 + 4 Batch 91 + the 2 P10 post-mining intake rows
-+ the P11 post-mining intake row
-(2026-09-13) + the 1 P12 post-mining intake row (2026-09-14,
-`needless_pass_by_ref_mut` — nursery/default-`allow`, VERIFY-tier, the
-first receiver+cascade rule).
+`build_seed_corpus()` returns a `ClippyCorpus` (back-compat alias for
+`Corpus<ClippyLintDomain>`, Plan 001) — the compiled, BLAKE3-committed
+clippy_lints seed corpus living in
+[`src/domains/clippy_lints/corpus.rs`](../../src/domains/clippy_lints/corpus.rs).
+
+**The entry set and its count are properties of the compiled code — take
+them from a run (`cargo heal --corpus-stats`), never from this page.**
+This page is the proof: its header said "53 entries" while the corpus
+reached 90, because the per-batch narrative below stopped at the P12 /
+Issue-120 wave (2026-09-14) while the frontier-mining batches (the
+Batch 150+ coverage-report re-arm packs, I–XII, plus the P15/P31 and
+Batch-151 intake rows — the full per-batch enumeration lives in the
+`corpus.rs` module doc) kept landing. Those later batches are recorded
+in `HISTORY.md` + their plan files; duplicating their per-lint tables
+here would be a second copy that drifts (measured — this is the drift).
+
+The sections below are the **historical narrative through the P12 /
+Issue-120 wave (2026-09-14)**, kept because their killed/refuted leads
+and documented divergences are written nowhere else.
 
 ## The 10 seed entries
 

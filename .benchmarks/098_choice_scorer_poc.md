@@ -2,7 +2,7 @@
 
 **Status:** COMPLETE 2026-09-20 — verdict **REFUTED for promotion** (both gates + latency fail; modelless `RerankMode::Structural` default stands). Harness + model land as the reusable measurement lane (`choice_scorer_poc` feature) — re-run as-is when the corpus grows an order of magnitude (the issue's reopen trigger).
 
-**Source:** [Research 573](../katgpt-rs/.research/573_CUA_S1_Open_Jev_Recipe_Specialist_Option_Scorer.md) (CUA-S1 @ `83f142c4`, MIT) · [Issue 125](../.issues/125_specialist_option_scorer_rule_selection_poc.md)
+**Source:** [Research 573](../katgpt-rs/.research/573_CUA_S1_Open_Jev_Recipe_Specialist_Option_Scorer.md) (CUA-S1 @ `83f142c4`, MIT) · [Issue 125](../HISTORY.md) (RESOLVED — REFUTED, the record row)
 
 ## What ran
 

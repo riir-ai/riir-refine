@@ -18,8 +18,13 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 72 entries:
-/// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] — the seed
+/// corpus. The entry count is DERIVED (it moves with every mining
+/// batch): run `cargo heal --corpus-stats`, never read a typed figure
+/// here — the hand-typed one rotted ("72 entries" against an
+/// enumeration that had already reached Batch 164). The enumeration
+/// below is the per-batch landing index: the 10 seed lints (style,
+/// complexity, perf, nursery groups) + the 31
 /// Issue 016 structural-expansion and post-mining lints (frequency-ranked
 /// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
 /// crates.io study ∩ clippy's `MachineApplicable` axis ∩ parse-only
@@ -99,7 +104,17 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       — `match_like_matches_macro` + `excessive_precision`, Plan 155;
 ///       the coverage-report re-arm leads, both style/default-on, pinned
 ///       by the plan155 probe's no-flags arms).
-// 86-entry data table, not logic — length is the point.
+///     + the 2 Batch 167 rows (2026-09-21, the coverage-report re-arm
+///       pack XI — `unnecessary_cast` + `clone_on_copy`, Plan 158; the
+///       fresh coverage-report derivation's leads, both
+///       complexity/default-on, pinned by the plan158 probe arms).
+///     + the 2 Batch 168 rows (2026-09-21, the coverage-report re-arm
+///       pack XII — `empty_line_after_doc_comments` +
+///       `new_without_default`, Plan 159; the suspicious group's FIRST
+///       corpus row + the purely additive `impl Default`, both
+///       default-on, the TENTH consecutive all-FIXABLE pack).
+// Data table, not logic — length is the point. The entry count is
+// derived (module doc), never typed here.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {

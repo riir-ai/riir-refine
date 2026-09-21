@@ -14,8 +14,10 @@
 
 ## Source
 
-- [`src/corpus.rs`](../../src/corpus.rs) — `ClippyCorpus`, `ClippyFixEntry`
-- [`src/seed_corpus.rs`](../../src/seed_corpus.rs) — `build_seed_corpus()`
+- [`src/corpus.rs`](../../src/corpus.rs) — `Corpus<D>` (generic, Plan 001),
+  `ClippyFixEntry`, BLAKE3 commitment; `ClippyCorpus` is the back-compat alias
+- [`src/domains/clippy_lints/corpus.rs`](../../src/domains/clippy_lints/corpus.rs)
+  — `build_seed_corpus()` + the per-batch landing enumeration
 
 ## See also
 

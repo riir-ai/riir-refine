@@ -460,8 +460,8 @@ in-file paragraph was missed) — landed with this batch's; and
 `.research/.highwater` was STALE at 184 (Batch 158 used 185 without
 bumping) — now 186.
 
-Research note: [186](../.research/186_batch159_frontier_lead_pack5.md);
-plan: [150](../.plans/150_batch159_frontier_lead_pack5.md). NEXT POOL:
+Research note: [186](.research/186_batch159_frontier_lead_pack5.md);
+plan: [150](.plans/150_batch159_frontier_lead_pack5.md). NEXT POOL:
 the re-arm's leads (`from_str_radix_10` + `assign_op_pattern`; spare
 `unit_arg`) + arxiv walk #10 (Mon 09-21).
 
