@@ -1585,8 +1585,9 @@ pub(crate) fn attrs_test_fn(attrs: &[syn::Attribute]) -> bool {
 }
 
 /// Cargo-layout heuristic: a file under `tests/` or `benches/` is test
-/// context regardless of its items.
-fn file_is_test_path(name: &str) -> bool {
+/// context regardless of its items. (Shared with `orphan_report`'s
+/// wire-const test masking.)
+pub(crate) fn file_is_test_path(name: &str) -> bool {
     name.contains("/tests/")
         || name.contains("/benches/")
         || name.starts_with("tests/")

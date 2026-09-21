@@ -8709,15 +8709,27 @@ fn main() {
                 // feature are invisible at the default posture (the exact
                 // class consumer_residue_sweep.sh's screen exists for).
                 let features = riir_clippy::clippy_oracle::auto_oracle_features();
+                // 2026-09-21: --all-targets is the DEFAULT posture (mod
+                // tests spans anchored like any other — the riir-chain/riir-ai
+                // intake pair); the kill-switch restores the fast lib-only
+                // spawn.
+                let all_targets = riir_clippy::clippy_oracle::auto_oracle_all_targets();
+                let targets_note = if all_targets {
+                    "all targets (tests/benches/examples included)"
+                } else {
+                    "lib targets only (RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS is set)"
+                };
                 match features.as_deref() {
                     Some(set) => eprintln!(
-                        "clippy oracle (auto): linting {} with features [{}] — a feature-superset clippy run is materially slower than default features; first run can take a while (RIIR_HEAL_AUTO_ORACLE_FEATURES; unset for default features; RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                        "clippy oracle (auto): linting {} with features [{}], {} — a feature-superset clippy run is materially slower than default features; first run can take a while (RIIR_HEAL_AUTO_ORACLE_FEATURES; unset for default features; RIIR_HEAL_AUTO_ORACLE=0 disables)",
                         root.display(),
-                        set.join(",")
+                        set.join(","),
+                        targets_note
                     ),
                     None => eprintln!(
-                        "clippy oracle (auto): linting {} at default features — this compiles the project, first run can take a while (RIIR_HEAL_AUTO_ORACLE=0 disables)",
-                        root.display()
+                        "clippy oracle (auto): linting {} at default features, {} — this compiles the project, first run can take a while (RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                        root.display(),
+                        targets_note
                     ),
                 }
                 // A knob-directed spawn that fails must name the knob: the
@@ -8736,6 +8748,7 @@ fn main() {
                     &root,
                     &cargo_bin,
                     features.as_deref(),
+                    all_targets,
                 ) {
                     Ok(run) => {
                         let diags = parse_clippy_feed(&run.text);

@@ -44,6 +44,18 @@
 //!   faith).
 //! - Sign never enters the edit: `-2.1000000f32` is `Unary(Neg, lit)` —
 //!   the minus stays in the source, the lit span re-spells alone.
+//!
+//! ## The unsuffixed refusal is correct, not a gap (2026-09-21 ground truth)
+//!
+//! The five live misses behind the 09-21 intake row were UNSUFFIXED
+//! literals inside an `[f32; N]` array — upstream fires there (it knows
+//! the type); this rule refuses because the f32-shortest and f64-shortest
+//! of the same text DIFFER (`1.0009765625` → `1.0009766` at f32 but is
+//! already shortest at f64), so a parse-only rewrite at either width can
+//! CHANGE THE VALUE at the other. The masking half of that incident —
+//! `unreadable_literal` restyling the same literal — is repaired on the
+//! OTHER rule (its guard consumes this module's decision), not by widening
+//! this one.
 
 use syn::visit::Visit;
 use syn::{ExprLit, File, Lit};
@@ -105,8 +117,13 @@ fn split_suffix(text: &str) -> Option<LiteralBody<'_>> {
 }
 
 /// The shortest-round-trip search. `None` = refuse (not the family, or the
-/// literal is already shortest).
-fn shortest_round_trip(digits: &str, suffix: &str) -> Option<String> {
+/// literal is already shortest). `pub(crate)` because `unreadable_literal`
+/// consumes the SAME decision as its cross-fire guard (2026-09-21: the
+/// separator regroup on a literal this lint owns is a masking no-op —
+/// `1.0009765625` → `1.000_976_562_5` left the `excessive_precision` warning
+/// standing in riir-ai). One decision function, two consumers — the two
+/// rules can never disagree about who owns a literal.
+pub(crate) fn shortest_round_trip(digits: &str, suffix: &str) -> Option<String> {
     let parts = split_mantissa_exponent(digits)?;
     let orig_digits = digits_of(parts.mantissa_int, parts.frac);
     let (shortest, integral) = if suffix == "f32" {

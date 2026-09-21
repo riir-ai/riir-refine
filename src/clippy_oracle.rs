@@ -33,7 +33,17 @@
 //! materially slower; unknown feature names fail the clippy spawn, which
 //! degrades LOUD to heuristic-only naming the knob). `--all-features`
 //! stays a deliberate non-default (cost + sibling feature-combo explosion);
-//! the auto-run never widens its own scope.
+//! the auto-run never widens its own scope that way.
+//!
+//! `--all-targets` IS the default (2026-09-21, the riir-chain/riir-ai intake
+//! pair): without it the spawn lints only lib targets, so every `mod tests`
+//! span — where fixture code lives, and where BOTH intake incidents sat — is
+//! invisible to the anchor lane (a `manual_range_contains` in `mod tests`
+//! was hand-applied while the oracle ran blind beside it). A knob nobody
+//! passes is not a repair, so the WIDE posture is the default and
+//! `RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS=1` restores the fast lib-only one
+//! (only explicit truthy spellings disable; a typo must not silently
+//! restore the blind posture).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -77,6 +87,26 @@ pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
 #[must_use]
 pub fn auto_oracle_features() -> Option<Vec<String>> {
     features_from(std::env::var("RIIR_HEAL_AUTO_ORACLE_FEATURES").ok().as_deref())
+}
+
+/// Kill-switch predicate over the raw
+/// `RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS` value (2026-09-21): the
+/// `--all-targets` posture is the DEFAULT (test modules are half the
+/// healing surface); only explicit truthy spellings disable it. Unknown
+/// values keep it ON — a typo must not silently restore the blind posture.
+#[must_use]
+pub fn all_targets_from(v: Option<&str>) -> bool {
+    !matches!(v.map(str::trim), Some("1" | "true" | "yes" | "on"))
+}
+
+/// The live env read.
+#[must_use]
+pub fn auto_oracle_all_targets() -> bool {
+    all_targets_from(
+        std::env::var("RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS")
+            .ok()
+            .as_deref(),
+    )
 }
 
 /// Nearest cargo project root for the scan targets (v1: the FIRST target —
@@ -133,9 +163,12 @@ pub struct OracleRun {
     pub exit: Option<i32>,
 }
 
-/// Spawn `cargo clippy --workspace --no-deps --message-format=json --quiet`
-/// in `root`, optionally re-aimed at a feature set (`--features <csv>`, the
-/// `RIIR_HEAL_AUTO_ORACLE_FEATURES` posture — `None` = default features).
+/// Spawn `cargo clippy --workspace --no-deps --message-format=json --quiet
+/// [--all-targets] [--features <csv>]` in `root`.
+///
+/// `--all-targets` (the default posture — see [`all_targets_from`]) lints
+/// test/bench/example targets too, so `mod tests` spans anchor like any
+/// other. `features` is the Issue-115 re-aim (`None` = default features).
 ///
 /// # Errors
 ///
@@ -146,6 +179,7 @@ pub fn run_clippy(
     root: &Path,
     cargo_bin: &str,
     features: Option<&[String]>,
+    all_targets: bool,
 ) -> Result<OracleRun, String> {
     let mut cmd = Command::new(cargo_bin);
     cmd.args([
@@ -155,6 +189,9 @@ pub fn run_clippy(
         "--message-format=json",
         "--quiet",
     ]);
+    if all_targets {
+        cmd.arg("--all-targets");
+    }
     if let Some(set) = features {
         cmd.arg("--features").arg(set.join(","));
     }
@@ -224,6 +261,18 @@ mod tests {
         assert!(!enabled_from(Some("false")));
         assert!(!enabled_from(Some("off")));
         assert!(enabled_from(Some("2")), "unknown values default ON, not silent-off");
+    }
+
+    #[test]
+    fn all_targets_default_on_only_explicit_truthy_disables() {
+        assert!(all_targets_from(None));
+        assert!(all_targets_from(Some("")));
+        assert!(all_targets_from(Some("0")));
+        assert!(all_targets_from(Some("false")), "falsy keeps the wide posture");
+        assert!(all_targets_from(Some("2")), "unknown values keep it ON");
+        assert!(!all_targets_from(Some("1")));
+        assert!(!all_targets_from(Some("true")));
+        assert!(!all_targets_from(Some(" on ")), "trimmed truthy disables");
     }
 
     #[test]

@@ -26,15 +26,36 @@
 //! plain decimal), and non-digit/non-dot characters anywhere. The
 //! fraction part is regrouped left-to-right only when it has >3 digits
 //! (the `unreadable_literal_lint_fractions` default).
+//!
+//! ## The `excessive_precision` cross-fire guard (2026-09-21 intake)
+//!
+//! The separator regroup never changes digits — so on a float literal
+//! whose digits EXCEED its width's shortest round-trip the edit is a
+//! masking no-op: clippy's `excessive_precision` still fires after it
+//! (the live case: `1.0009765625` in an `[f32; N]` test fixture became
+//! `1.000_976_562_5`, warning standing). The guard consumes
+//! `excessive_precision`'s OWN decision fn — this lint skips any literal
+//! that rule would shorten. Width resolution: a suffix decides; a direct
+//! `let _: f32/f64` (or `[f32; N]`) annotation decides; a `let x = [lit, …]`
+//! array whose first SUFFIXED float element decides (unification); an
+//! unconstrained unsuffixed float defaults to f64 (Rust's own inference
+//! default — the probed firing fixtures `123456.789` / `3.14159265358979`
+//! are f64-shortest and stay firing). Residual: floats constrained to f32
+//! through shapes the visitor cannot see (fn-arg position, arithmetic with
+//! suffixed operands) fall back to the f64 posture and may still regroup —
+//! narrower than the live class, and the anchored oracle lane owns the
+//! span when a feed is present.
 
+use super::excessive_precision::shortest_round_trip;
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{ExprLit, File, Lit};
+use syn::{Expr, ExprLit, File, Lit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut v = Collector {
         source,
+        let_width: None,
         edits: Vec::new(),
     };
     v.visit_file(file);
@@ -43,10 +64,87 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 
 struct Collector<'a> {
     source: &'a str,
+    /// Float width resolved for the current let-init: `Some(true)` = f32,
+    /// `Some(false)` = f64, `None` = unresolved (defaults to the f64
+    /// posture at the guard).
+    let_width: Option<bool>,
     edits: Vec<SourceEdit>,
 }
 
+/// Resolve a type annotation to a float width: `f32`/`f64` directly, or
+/// an array/slice OF one (the `let edges: [f32; 12] = …` shape).
+fn float_width_of(ty: &syn::Type) -> Option<bool> {
+    match ty {
+        syn::Type::Path(tp) => match tp.path.segments.last() {
+            Some(s) if s.ident == "f32" => Some(true),
+            Some(s) if s.ident == "f64" => Some(false),
+            _ => None,
+        },
+        syn::Type::Array(a) => float_width_of(&a.elem),
+        syn::Type::Slice(s) => float_width_of(&s.elem),
+        syn::Type::Group(g) => float_width_of(&g.elem),
+        syn::Type::Paren(p) => float_width_of(&p.elem),
+        _ => None,
+    }
+}
+
+/// Array unification: the first SUFFIXED float element of an array
+/// literal fixes the width of every unsuffixed float in it (Rust infers
+/// the element type from the suffixed element; mixed suffixes would not
+/// compile).
+fn array_suffix_width(expr: &Expr) -> Option<bool> {
+    let Expr::Array(arr) = expr else {
+        return None;
+    };
+    for e in &arr.elems {
+        if let Expr::Lit(ExprLit {
+            lit: Lit::Float(fl), ..
+        }) = e
+        {
+            let s = fl.suffix();
+            return match s {
+                "f32" => Some(true),
+                "f64" => Some(false),
+                _ => continue,
+            };
+        }
+    }
+    None
+}
+
+/// Does the `excessive_precision` decision fire for this literal at the
+/// resolved width? (The separator fix is a masking no-op when it does.)
+fn excessive_precision_owns(digits: &str, suffix: &str, let_width: Option<bool>) -> bool {
+    let suffix = suffix.trim_start_matches('_');
+    let width = match suffix {
+        "f32" => Some(true),
+        "f64" => Some(false),
+        // Unsuffixed: annotation/array-unification if resolved, else the
+        // f64 inference default.
+        _ => Some(let_width.unwrap_or(false)),
+    };
+    let width = width.unwrap_or(false);
+    let ep_suffix = if width { "f32" } else { "f64" };
+    shortest_round_trip(digits, ep_suffix).is_some()
+}
+
 impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_local(&mut self, l: &'ast syn::Local) {
+        let saved = self.let_width;
+        // A `let` annotation lives on the PATTERN (`let a: f32 = …` parses
+        // as `Pat::Type`), not on the Local itself.
+        if let syn::Pat::Type(pt) = &l.pat {
+            self.let_width = float_width_of(&pt.ty).or(self.let_width);
+        }
+        if let Some(init) = &l.init {
+            if let Some(w) = array_suffix_width(&init.expr) {
+                self.let_width = Some(w);
+            }
+        }
+        syn::visit::visit_local(self, l);
+        self.let_width = saved;
+    }
+
     fn visit_expr_lit(&mut self, e: &'ast ExprLit) {
         syn::visit::visit_expr_lit(self, e);
         if !matches!(e.lit, Lit::Int(_) | Lit::Float(_)) {
@@ -55,6 +153,14 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         let Some(text) = src(self.source, e) else {
             return;
         };
+        if matches!(e.lit, Lit::Float(_)) {
+            let (digits, suffix) = split_suffix(&text);
+            if !digits.is_empty() && excessive_precision_owns(digits, suffix, self.let_width) {
+                // The digit-reducing lint owns this literal; the separator
+                // regroup would mask its warning instead of fixing it.
+                return;
+            }
+        }
         let Some(regrouped) = regroup(&text) else {
             return;
         };
@@ -244,5 +350,60 @@ mod tests {
         assert_eq!(split_suffix("123456.789f64"), ("123456.789", "f64"));
         assert_eq!(split_suffix("999999"), ("999999", ""));
         assert_eq!(split_suffix("123456.789"), ("123456.789", ""));
+    }
+
+    // ── the excessive_precision cross-fire guard (2026-09-21 intake) ──
+
+    #[test]
+    fn suffixed_excessive_float_skipped() {
+        // `2.141592653589793238462643f32` is excessive_precision's literal
+        // (shortest `2.1415927f32`); the separator regroup would mask it.
+        assert!(fix("fn f() { let a = 2.141592653589793238462643f32; }").is_none());
+        assert!(fix("fn f() { let a = 2.141592653589793238462643f64; }").is_none());
+    }
+
+    #[test]
+    fn suffixed_non_excessive_float_still_fires() {
+        // 12 fraction digits but f64-shortest — regrouping is the real fix.
+        let out = fix("fn f() { let a = 123456.789012f64; }").expect("fires");
+        assert_eq!(out, "fn f() { let a = 123_456.789_012f64; }");
+    }
+
+    #[test]
+    fn live_f32_array_fixture_skipped() {
+        // The 09-21 riir-ai shape: unsuffixed literals unified to f32 by the
+        // array's first SUFFIXED element — excessive_precision (upstream,
+        // which knows the type) owns them; the regroup masked the warning.
+        let code = "fn f() { let edges = [0.0f32, -0.0, 1.0009765625, 5.960464477539063e-08]; }";
+        assert!(fix(code).is_none(), "f32-unified array literal must skip");
+    }
+
+    #[test]
+    fn annotated_f32_let_skipped() {
+        let code = "fn f() { let a: f32 = 1.0009765625; }";
+        assert!(fix(code).is_none(), "annotated f32 literal must skip");
+    }
+
+    #[test]
+    fn annotated_f64_let_still_fires() {
+        // The probed firing shape: f64-shortest at 15 digits, not excessive —
+        // the annotation path must keep it firing.
+        let out = fix("fn f() -> f64 { let a: f64 = 3.14159265358979; a }").expect("fires");
+        assert!(out.contains("3.141_592_653_589_79"), "{out}");
+    }
+
+    #[test]
+    fn unconstrained_unsuffixed_defaults_f64_and_fires() {
+        // Rust's inference default for an unconstrained float is f64 — the
+        // probed fixture stays firing (f64-shortest, not excessive).
+        let out = fix("fn f() { let a = 123456.789; }").expect("fires");
+        assert!(out.contains("123_456.789"), "{out}");
+    }
+
+    #[test]
+    fn integers_never_guarded() {
+        // The guard is float-only; integer regrouping is untouched.
+        let out = fix("fn f() { let a = 1234567; }").expect("fires");
+        assert!(out.contains("1_234_567"), "{out}");
     }
 }

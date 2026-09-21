@@ -17,15 +17,23 @@
 //! the direct receiver of a method call — a BOUND iterator consumed later
 //! can still reach `remainder()`, so `it.map(..)` never fires either).
 //!
-//! Tier: **VERIFY**. Two type-blind classes the compile gate reverts:
+//! Tier: **VERIFY**. The type-blind classes the compile gate reverts:
 //! - a loop body / closure body that consumes the chunk in a position
 //!   where `&[u8; N]` does not coerce (e.g. a `Vec<u8>` parameter) —
 //!   parse-only cannot see callee signatures; on chains the closure
 //!   param type also shifts `&[u8]` → `&[u8; N]` (const-index bodies are
-//!   identical; `p.len()`/typed-position bodies revert);
-//! - a NON-const `Path` size argument (a plain variable `n` compiles as
-//!   `chunks_exact(n)` but not as `as_chunks::<n>()`; a named `const` is
-//!   indistinguishable from a variable in syn).
+//!   identical; `p.len()`/typed-position bodies revert).
+//! - an UNKNOWN single-segment Path size (an imported const vs an imported
+//!   `static` — the latter is not a valid const argument) and qualified
+//!   paths (`Foo::N`). A path that names a runtime binding of THIS file
+//!   (a `let`, a param, a loop/match binding) or a file-local `static` is
+//!   PROVABLY not a const argument and refuses at the shape gate (the
+//!   riir-chain `bytes_per_dim` E0435 class, 2026-09-21 — a runtime `let`
+//!   reached `as_chunks::<bytes_per_dim>()` and the verify was blind at
+//!   default features on a 124-feature crate). Const-generic params and
+//!   `const` items are indistinguishable from variables in syn ALONE —
+//!   which is why the guard runs on a file-wide binding/static pre-pass,
+//!   not on the path's shape.
 //!
 //! SAFER-than-clippy divergence (measured, 2026-09-14 probe): for the MUT
 //! chain root clippy literally suggests `as_chunks_mut::<N>().0.iter()` —
@@ -40,10 +48,45 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprForLoop, ExprLit, ExprMethodCall, ExprParen, File, Lit};
 
+/// Names that make a single-segment path size argument provably NOT a
+/// const argument: every runtime binding of the file (let / fn / closure
+/// params / for / match — one `PatIdent` walk covers all binding forms)
+/// and every file-local `static` (statics cannot be referenced in const
+/// position). A `const` item and a const-generic param appear in NEITHER
+/// set — a const generic IS a valid const argument, so only runtime
+/// bindings and statics refuse.
+#[derive(Default)]
+struct NonConstNames {
+    bindings: std::collections::HashSet<String>,
+    statics: std::collections::HashSet<String>,
+}
+
+fn non_const_names(file: &File) -> NonConstNames {
+    struct V {
+        out: NonConstNames,
+    }
+    impl<'ast> Visit<'ast> for V {
+        fn visit_pat_ident(&mut self, p: &'ast syn::PatIdent) {
+            self.out.bindings.insert(p.ident.to_string());
+            syn::visit::visit_pat_ident(self, p);
+        }
+        fn visit_item_static(&mut self, i: &'ast syn::ItemStatic) {
+            self.out.statics.insert(i.ident.to_string());
+            syn::visit::visit_item_static(self, i);
+        }
+    }
+    let mut v = V {
+        out: NonConstNames::default(),
+    };
+    v.visit_file(file);
+    v.out
+}
+
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut v = Collector {
         source,
+        non_const: non_const_names(file),
         edits: Vec::new(),
     };
     v.visit_file(file);
@@ -52,6 +95,7 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 
 struct Collector<'a> {
     source: &'a str,
+    non_const: NonConstNames,
     edits: Vec<SourceEdit>,
 }
 
@@ -115,8 +159,26 @@ impl Collector<'_> {
         match arg {
             Expr::Lit(ExprLit {
                 lit: Lit::Int(_), ..
-            })
-            | Expr::Path(_) => {}
+            }) => {}
+            Expr::Path(p) => {
+                // A const-generic argument must be a const expression. A
+                // SINGLE-segment path naming a runtime binding of this file
+                // or a file-local `static` is provably not one — emitting
+                // `as_chunks::<n>()` there is E0435 on every compile (the
+                // riir-chain `bytes_per_dim` class). A QUALIFIED path
+                // (`Foo::N`) can never be a local, and an unknown
+                // single-segment path can only be an item (a local is
+                // always in this file's binding set) — those keep the
+                // VERIFY-tier emit.
+                if p.qself.is_none() && p.path.segments.len() == 1 {
+                    let ident = p.path.segments[0].ident.to_string();
+                    if self.non_const.bindings.contains(&ident)
+                        || self.non_const.statics.contains(&ident)
+                    {
+                        return None;
+                    }
+                }
+            }
             _ => return None,
         }
         // Span-replacement — an interior comment (`chunks_exact(/* N */ 4)`)
@@ -183,13 +245,51 @@ mod tests {
     }
 
     #[test]
-    fn variable_size_still_emits_but_is_verify_tier() {
-        // A non-const Path arg compiles as chunks_exact(n) but NOT as
-        // as_chunks::<n>() — the VERIFY compile gate reverts it. The shape
-        // gate accepts it (indistinguishable from a named const).
+    fn runtime_param_size_refuses() {
+        // A runtime size (a fn param `n`) does not compile as
+        // `as_chunks::<n>()` (E0435) — the shape gate refuses it outright
+        // now (the riir-chain `bytes_per_dim` class, 2026-09-21): the emit
+        // must not depend on the verify gate catching it, because a
+        // default-features verify is blind on heavily-gated crates.
         let input = "fn f(bytes: &[u8], n: usize) -> usize { let mut acc = 0; for c in bytes.chunks_exact(n) { acc += c.len(); } acc }";
+        let out = propose_fix("chunks_exact_to_as_chunks", input);
+        assert!(out.is_none(), "runtime param size must refuse: {out:?}");
+    }
+
+    #[test]
+    fn runtime_let_size_refuses() {
+        // The live riir-chain shape: `let bytes_per_dim = 32 / dim;` — a
+        // runtime let binding reached the const-generic slot.
+        let input = "fn f(commitment: &[u8], dim: usize) -> usize { let bytes_per_dim = 32 / dim; let mut acc = 0; for c in commitment.chunks_exact(bytes_per_dim) { acc += c[0] as usize; } acc }";
+        let out = propose_fix("chunks_exact_to_as_chunks", input);
+        assert!(out.is_none(), "runtime let size must refuse: {out:?}");
+    }
+
+    #[test]
+    fn file_local_static_refuses() {
+        // A `static` is not a valid const-generic argument either
+        // ("statics cannot be referenced in constants").
+        let input = "static N: usize = 4;\nfn f(bytes: &[u8]) -> usize { let mut acc = 0; for c in bytes.chunks_exact(N) { acc += c.len(); } acc }";
+        let out = propose_fix("chunks_exact_to_as_chunks", input);
+        assert!(out.is_none(), "file-local static size must refuse: {out:?}");
+    }
+
+    #[test]
+    fn const_generic_param_fires() {
+        // `fn f<const N: usize>` — a const-generic param IS a valid const
+        // argument; it is not a PatIdent binding, so the pre-pass leaves it
+        // alone.
+        let input = "fn f<const N: usize>(bytes: &[u8]) -> usize { let mut acc = 0; for c in bytes.chunks_exact(N) { acc += c.len(); } acc }";
         let out = propose_fix("chunks_exact_to_as_chunks", input).expect("matched");
-        assert!(out.contains("bytes.as_chunks::<n>().0"), "{out}");
+        assert!(out.contains("bytes.as_chunks::<N>().0"), "{out}");
+    }
+
+    #[test]
+    fn qualified_const_path_fires() {
+        // `P::N` — a qualified path can never be a local binding.
+        let input = "struct P;\nimpl P { const N: usize = 4; }\nfn f(bytes: &[u8]) -> usize { let mut acc = 0; for c in bytes.chunks_exact(P::N) { acc += c.len(); } acc }";
+        let out = propose_fix("chunks_exact_to_as_chunks", input).expect("matched");
+        assert!(out.contains("bytes.as_chunks::<P::N>().0"), "{out}");
     }
 
     #[test]

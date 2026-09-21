@@ -463,9 +463,17 @@ fn macro_is_serde_json_value(mac: &syn::Macro) -> bool {
 }
 
 /// One construction-site entry: the field was set at an `ExprStruct` of the
-/// (file-global) type name, with a literal-constant value or not.
+/// (file-global) type name, with a literal-constant value or not, and
+/// whether the site sits in TEST context (`#[cfg(test)]` mods, `#[test]`
+/// fns, a `tests/`/`benches/` file — the `config_audit` context rules). A
+/// test-context site is fixture evidence: a protocol-mirror crate's tests
+/// construct every wire type with literal constants BY DESIGN while the
+/// production constructors live outside the scanned set, so test-only
+/// sites must not arm the `[wire-const]` class (the riir-kat FP class,
+/// 2026-09-21).
 struct SiteEntry {
     is_const: bool,
+    in_test: bool,
 }
 
 /// The wire-pass visitor. Walks every file once, tracking (a) whether we are
@@ -476,6 +484,12 @@ struct SiteEntry {
 struct WireVisitor {
     in_serde_fn: bool,
     impl_ty: Option<String>,
+    /// File-level test context (a `tests/`/`benches/` path or the file's
+    /// own `#![cfg(test)]`) — seeds [`WireVisitor::test_depth`].
+    file_is_test: bool,
+    /// `#[cfg(test)]` mod / `#[test]`-fn nesting depth (the `config_audit`
+    /// context rules — `attrs_cfg_test` / `attr_is_test_fn`).
+    test_depth: usize,
     /// Per-file name-resolution scope (Issue 109 specimen A) — provably
     /// foreign literals are not evidence in either direction.
     scope: FileScope,
@@ -511,8 +525,24 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
         self.impl_ty = saved;
     }
 
+    fn visit_item_mod(&mut self, i: &'ast syn::ItemMod) {
+        let enter_test = crate::config_audit::attrs_cfg_test(&i.attrs);
+        if enter_test {
+            self.test_depth += 1;
+        }
+        syn::visit::visit_item_mod(self, i);
+        if enter_test {
+            self.test_depth -= 1;
+        }
+    }
+
     fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
         let saved = self.in_serde_fn;
+        let enter_test = i.attrs.iter().any(crate::config_audit::attr_is_test_fn)
+            || crate::config_audit::attrs_cfg_test(&i.attrs);
+        if enter_test {
+            self.test_depth += 1;
+        }
         if block_has_serde_call(&i.block) {
             self.in_serde_fn = true;
             // The fn-B half of the fn-A/fn-B gap (the riir-kat queue-writer
@@ -527,7 +557,24 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
             }
         }
         syn::visit::visit_item_fn(self, i);
+        if enter_test {
+            self.test_depth -= 1;
+        }
         self.in_serde_fn = saved;
+    }
+
+    fn visit_impl_item_fn(&mut self, i: &'ast syn::ImplItemFn) {
+        // Methods are `syn::ImplItem::Fn` in syn 2 — `visit_item_fn` never
+        // fires inside impl blocks (the config_audit C2 lesson, mirrored).
+        let enter_test = i.attrs.iter().any(crate::config_audit::attr_is_test_fn)
+            || crate::config_audit::attrs_cfg_test(&i.attrs);
+        if enter_test {
+            self.test_depth += 1;
+        }
+        syn::visit::visit_impl_item_fn(self, i);
+        if enter_test {
+            self.test_depth -= 1;
+        }
     }
 
     fn visit_item_struct(&mut self, i: &'ast syn::ItemStruct) {
@@ -600,6 +647,7 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
                 .or_default()
                 .push(SiteEntry {
                     is_const: expr_is_literal_const(&fv.expr),
+                    in_test: self.file_is_test || self.test_depth > 0,
                 });
         }
         syn::visit::visit_expr_struct(self, e);
@@ -914,6 +962,7 @@ fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
             }
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -1013,8 +1062,10 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
         ..WireVisitor::default()
     };
     let local_crates = crate::config_audit::scan_local_crate_roots(sources);
-    for (_name, file) in &parsed {
+    for (name, file) in &parsed {
         v.scope = FileScope::of(file, &local_crates);
+        v.file_is_test = crate::config_audit::file_is_test_path(name)
+            || crate::config_audit::attrs_cfg_test(&file.attrs);
         syn::visit::visit_file(&mut v, file);
     }
 
@@ -1043,7 +1094,20 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
         if !wire_types.contains(ty) {
             continue;
         }
-        if entries.iter().all(|e| e.is_const) {
+        // Test-context sites are fixture evidence, not schema evidence —
+        // a protocol-mirror crate's tests construct every wire type with
+        // literal constants BY DESIGN while the production constructors
+        // live outside the scanned set (the cross-repo hint already
+        // discloses downstream constructors are invisible). With ZERO
+        // non-test sites the (type, field) renders NOTHING: the class's
+        // premise ("serialized-but-constant = schema-dead weight the
+        // receiver cannot be using") is unsupported by test-only
+        // evidence (the riir-kat FP class, 2026-09-21).
+        let non_test: Vec<&SiteEntry> = entries.iter().filter(|e| !e.in_test).collect();
+        if non_test.is_empty() {
+            continue;
+        }
+        if non_test.iter().all(|e| e.is_const) {
             out.wire_const.push((ty.clone(), field.clone()));
         } else {
             out.cleared.insert((ty.clone(), field.clone()));
@@ -2098,6 +2162,111 @@ pub fn main() {
                 .contains(&("EpochSummary".to_string(), "advisory".to_string())),
             "the variable-valued sibling field still clears"
         );
+    }
+
+    /// The riir-kat FP class (2026-09-21 intake): ALL in-repo construction
+    /// sites sit inside `#[cfg(test)]` fixtures with literal constants while
+    /// the production constructors live OUTSIDE the scanned set (another
+    /// repo's client builds `ClaimRequest { queued_unix: now() }`). Test-only
+    /// sites are no evidence for `[wire-const]` — the (type, field) renders
+    /// NOTHING (not cleared either: nothing was measured).
+    #[test]
+    fn wire_const_test_only_sites_render_nothing() {
+        let src = r"
+#[derive(serde::Serialize)]
+pub struct ClaimRequest {
+    pub queued_unix: u64,
+}
+pub fn enqueue(req: &ClaimRequest) -> Vec<u8> {
+    serde_json::to_vec(req).unwrap()
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn claim_queues_locally() {
+        let req = ClaimRequest { queued_unix: 1726900000 };
+        let bytes = enqueue(&req);
+        assert!(!bytes.is_empty());
+    }
+}
+";
+        let wire = wire_of(src);
+        assert!(
+            !wire.wire_const.contains(&("ClaimRequest".to_string(), "queued_unix".to_string())),
+            "test-only const sites must not arm wire-const"
+        );
+        assert!(
+            !wire.cleared.contains(&("ClaimRequest".to_string(), "queued_unix".to_string())),
+            "test-only sites are no evidence in EITHER direction"
+        );
+    }
+
+    /// Production const + test VAR: the test site is no evidence, so the
+    /// production const rules — `[wire-const]` fires (previously the test
+    /// var site would have wrongly CLEARED it).
+    #[test]
+    fn wire_test_var_prod_const_is_wire_const() {
+        let src = r"
+#[derive(serde::Serialize)]
+pub struct Pulse {
+    pub era: u32,
+}
+pub fn send(p: &Pulse) -> Vec<u8> {
+    serde_json::to_vec(p).unwrap()
+}
+pub fn prod_pulse() -> Pulse {
+    Pulse { era: 7 }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn t() {
+        let p = Pulse { era: current_era_for_test() };
+        let _ = send(&p);
+    }
+    fn current_era_for_test() -> u32 { 0 }
+}
+";
+        let wire = wire_of(src);
+        assert!(
+            wire.wire_const.contains(&("Pulse".to_string(), "era".to_string())),
+            "the production const site rules; the test var site is no evidence"
+        );
+    }
+
+    /// Test const + production VAR: the production var clears — test sites
+    /// still cannot arm the class against real production evidence.
+    #[test]
+    fn wire_test_const_prod_var_clears() {
+        let src = r"
+#[derive(serde::Serialize)]
+pub struct Telemetry {
+    pub session: u64,
+}
+pub fn send(t: &Telemetry) -> Vec<u8> {
+    serde_json::to_vec(t).unwrap()
+}
+pub fn prod(now: u64) -> Telemetry {
+    Telemetry { session: now }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn t() {
+        let x = Telemetry { session: 1 };
+        let _ = send(&x);
+    }
+}
+";
+        let wire = wire_of(src);
+        assert!(
+            wire.cleared.contains(&("Telemetry".to_string(), "session".to_string())),
+            "production variable site clears; the test const site cannot arm wire-const"
+        );
+        assert!(!wire.wire_const.contains(&("Telemetry".to_string(), "session".to_string())));
     }
 
     /// A struct literal in a NON-serde fn is NOT wire evidence — the field
