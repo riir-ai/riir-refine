@@ -888,6 +888,27 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f(hits: &mut Vec<u8>, x: u64) -> u64 { hits.push(0); x.clone() }".to_string(),
             fixed_code: "fn f(hits: &mut Vec<u8>, x: u64) -> u64 { hits.push(0); x }".to_string(),
         },
+        // ── Batch 168 (2026-09-21, the coverage-report re-arm pack XII —
+        // Plan 159, the post-Batch-167 derivation leads, probe
+        // scripts/plan159_pack12_probe.py). eld is suspicious/default-on —
+        // the group's FIRST corpus row (the derivation's suspicious column
+        // read 0 covered); the probed silent shape (doc + blank +
+        // `#[derive]`) is the guard, mirrored. nwd is style/default-on —
+        // the fix is purely additive (clippy's own "try adding this"
+        // shape). The nwd fixture carries no `hits` param BY PREMISE:
+        // `new` must be zero-arg for the lint to fire at all.) ──
+        ClippyFixEntry {
+            lint_name: "empty_line_after_doc_comments".to_string(),
+            lint_group: "suspicious".to_string(),
+            buggy_code: "/// Adds one.\n\nfn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 1 }".to_string(),
+            fixed_code: "/// Adds one.\nfn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 1 }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "new_without_default".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "pub struct W { pub x: u8 }\nimpl W { pub fn new() -> Self { W { x: 1 } } }".to_string(),
+            fixed_code: "pub struct W { pub x: u8 }\nimpl W { pub fn new() -> Self { W { x: 1 } } }\n\nimpl Default for W {\n    fn default() -> Self {\n        Self::new()\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -966,7 +987,7 @@ mod tests {
     /// 2026-09-14), the 1 P15 post-mining intake row
     /// (`unnecessary_map_or`, 2026-09-14 — the born-lint closure), the
     /// 1 Issue 120 intake row (`doc_markdown`, 2026-09-16), the 1
-    /// P31 post-mining intake row (`manual_range_patterns`, 2026-09-17
+    /// 1 P31 post-mining intake row (`manual_range_patterns`, 2026-09-17
     /// — the riir-chain `51b456f` MISS artifact), and the 6 Batch 150
     /// rows (`print_with_newline`, `write_with_newline`,
     /// `unreadable_literal`, `legacy_numeric_constants`,
@@ -975,35 +996,38 @@ mod tests {
     /// rows (`doc_lazy_continuation`, `doc_overindented_list_items` —
     /// the doc-line state-machine port, Research 177 #7), and the 4
     /// Batch 155 rows (`let_and_return`, `ptr_arg`, `redundant_slicing`,
-    /// `map_flatten` — the frontier-lead mining pack, Plan 146), and the 2
-    /// Batch 156 rows (`io_other_error`, `wrong_self_convention` — the
+    /// `map_flatten` — the frontier-lead mining pack, Plan 146), and the
+    /// 2 Batch 156 rows (`io_other_error`, `wrong_self_convention` — the
     /// frontier-lead mining pack II, Plan 147), and the 2
     /// Batch 157 rows (`redundant_closure_for_method_calls`,
     /// `iter_skip_next` — the frontier-lead mining pack III, Plan 148),
     /// and the 2 Batch 158 rows (`to_string_in_format_args`,
     /// `manual_range_contains` — the frontier-lead mining pack IV,
-    /// Plan 149) + the 2 Batch 159 rows (`single_char_add_str`,
-    /// `manual_clamp` — the frontier-lead mining pack V, Plan 150) + the
+    /// Plan 149), the 2 Batch 159 rows (`single_char_add_str`,
+    /// `manual_clamp` — the frontier-lead mining pack V, Plan 150), the
     /// 2 Batch 160 rows (`from_str_radix_10`, `assign_op_pattern` — the
-    /// frontier-lead mining pack VI, Plan 151) + the 2 Batch 161 rows
+    /// frontier-lead mining pack VI, Plan 151), the 2 Batch 161 rows
     /// (`unit_arg`, `string_lit_as_bytes` — the frontier-lead mining pack
-    /// VII, Plan 152) + the 2 Batch 162 rows (`bytes_count_to_len`,
-    /// `bool_comparison` — the frontier-lead mining pack VIII, Plan 153) +
+    /// VII, Plan 152), the 2 Batch 162 rows (`bytes_count_to_len`,
+    /// `bool_comparison` — the frontier-lead mining pack VIII, Plan 153),
     /// the 2 Batch 163 rows (`manual_string_new`, `needless_late_init`,
-    /// the frontier-lead mining pack IX, Plan 154) + the 2 Batch 164 rows
-    /// + the 2 Batch 164 rows
+    /// the frontier-lead mining pack IX, Plan 154), the 2 Batch 164 rows
     /// (`match_like_matches_macro`, `excessive_precision` — the
-    /// frontier-lead mining pack X, the coverage-report re-arm, Plan 155)
-    /// + the 2 Batch 167 rows (`unnecessary_cast`, `clone_on_copy` — the
-    /// coverage-report re-arm pack XI, the 2026-09-21 derivation leads,
-    /// Plan 158) = 88.
+    /// frontier-lead mining pack X, the coverage-report re-arm, Plan
+    /// 155), the 2 Batch 167 rows (`unnecessary_cast`, `clone_on_copy` —
+    /// the coverage-report re-arm pack XI, the 2026-09-21 derivation
+    /// leads, Plan 158), and the 2 Batch 168 rows
+    /// (`empty_line_after_doc_comments`, `new_without_default` — the
+    /// coverage-report re-arm pack XII, the post-Batch-167 derivation
+    /// leads, Plan 159) = 90.
+    ///
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 88);
+        assert_eq!(corpus.entries.len(), 90);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

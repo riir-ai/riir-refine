@@ -102,6 +102,8 @@
 //! `match_like_matches_macro` | `match x { P => true, _ => false }` → `matches!(x, P)` (+ the `!` twin + the arm-1 guard) — the macro IS that match; scrutinee/pattern/guard verbatim (Batch 164) |
 //! `unnecessary_cast` | `x as T` → `x` on a proven-same-type ident; `5 as u64` → `5_u64` on an int/float literal — identity cast / literal-suffix construction identity; param provenance only in v1, cross-type + pointer targets refuse (Batch 167) |
 //! `clone_on_copy` | `x.clone()` → `x` on a proven-Copy receiver (primitives + `&str`/`&String`) — the std Copy/Clone contract makes the call a no-op; `String` refuses (`redundant_clone`'s territory) (Batch 167) |
+//! `empty_line_after_doc_comments` | `/// docs` + blank run + item → delete the blank run (pure whitespace; the doc re-attaches); attr-intervened silence mirrored (Batch 168) |
+//! `new_without_default` | `impl W { pub fn new() -> Self }` with no Default → insert `impl Default for W` delegating to `new()` — purely additive, clippy's own suggestion shape (Batch 168) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
@@ -170,8 +172,10 @@
 //! `manual_string_new` / `needless_late_init`, Plan 154 — and the 2 Batch
 //! 164 frontier-lead rules — `match_like_matches_macro` /
 //! `excessive_precision`, Plan 155 — and the 2 Batch 167 coverage-report
-//! re-arm rules — `unnecessary_cast` / `clone_on_copy`, Plan 158); future
-//! lints drop in by extending the match.
+//! re-arm rules — `unnecessary_cast` / `clone_on_copy`, Plan 158 — and
+//! the 2 Batch 168 coverage-report re-arm rules —
+//! `empty_line_after_doc_comments` / `new_without_default`, Plan 159);
+//! future lints drop in by extending the match.
 
 pub mod assign_op_pattern;
 pub mod bool_comparison;
@@ -186,10 +190,12 @@ pub mod comparison_to_empty;
 pub mod deref_addrof;
 pub mod doc_lazy_continuation;
 pub mod doc_markdown;
+pub mod empty_line_after_doc_comments;
 pub mod excessive_precision;
 pub mod manual_string_new;
 pub mod match_like_matches_macro;
 pub mod needless_late_init;
+pub mod new_without_default;
 pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
@@ -693,6 +699,27 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // chains/fields/index/call receivers refuse. Complexity-group
     // (default-on; pinned by the plan158 probe's no-flags arm).
     "clone_on_copy",
+    // `/// docs` + blank line(s) + item → delete the blank run — the doc
+    // re-attaches; pure whitespace deletion, zero semantic surface.
+    // Guards: comment-style OUTER `///` only (`//!` refuses; `#[doc]`
+    // attribute-form and `/** */` block docs are invisible via
+    // `doc_lines`); the blank run must resolve to a non-doc, non-attr,
+    // non-`}` line — the attr case is MEASURED upstream silence (the
+    // plan159 probe: `/// docs` + blank + `#[derive]` never fires);
+    // EOF-resolving runs refuse. Suspicious-group (default-on) — the
+    // group's FIRST corpus row.
+    "empty_line_after_doc_comments",
+    // `impl W { pub fn new() -> Self { .. } }` with no Default → INSERT
+    // `impl Default for W { fn default() -> Self { Self::new() } }` —
+    // purely additive, byte-for-byte clippy's own suggestion shape; no
+    // existing byte moves and every prior Default use was a compile
+    // error. Guards: inherent impl, plain-ident self type, zero-arg
+    // non-generic non-unsafe `pub fn new() -> Self` (const fn admitted);
+    // no in-file `impl Default` / `derive(Default)` / inherent `default`
+    // fn (inherent shadowing refused up front); generic impls refuse —
+    // cross-file Default is the verify-caught E0119 revert, never
+    // silent. Style-group (default-on).
+    "new_without_default",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1028,6 +1055,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 167 (the coverage-report re-arm pack XI — Plan 158) ──
         "unnecessary_cast" => unnecessary_cast::collect_edits(source, file),
         "clone_on_copy" => clone_on_copy::collect_edits(source, file),
+        // ── Batch 168 (the coverage-report re-arm pack XII — Plan 159) ──
+        "empty_line_after_doc_comments" => empty_line_after_doc_comments::collect_edits(source, file),
+        "new_without_default" => new_without_default::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1152,12 +1182,16 @@ mod tests {
         // coverage-report re-arm pack XI, Plan 158; the identity-cast
         // drop + literal-suffix substitution + the Copy/Clone-contract
         // receiver no-op).
-        assert_eq!(FIXABLE_LINTS.len(), 69);
+        // + 2 Batch 168 (empty_line_after_doc_comments +
+        // new_without_default — the coverage-report re-arm pack XII,
+        // Plan 159; the blank-run deletion (suspicious-group's first
+        // corpus row) + the additive Default-impl insertion).
+        assert_eq!(FIXABLE_LINTS.len(), 71);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 86-row fixture table — length is the point.
+    /// 88-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1620,6 +1654,16 @@ impl S {
                 "clone_on_copy",
                 "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.clone() }",
                 "hits.push(0); x }",
+            ),
+            (
+                "empty_line_after_doc_comments",
+                "/// Adds one.\n\nfn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 1 }",
+                "/// Adds one.\nfn f(hits",
+            ),
+            (
+                "new_without_default",
+                "pub struct W { pub x: u8 }\nimpl W { pub fn new() -> Self { W { x: 1 } } }",
+                "impl Default for W",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

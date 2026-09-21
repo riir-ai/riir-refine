@@ -88,7 +88,7 @@ pub fn vocabulary() -> BTreeSet<String> {
 /// Construct the bench's oracle (distinct temp root so a concurrent
 /// `self_evolve` run never shares a crate dir with a bench run).
 /// The root itself is DELIBERATE — `[documented-fixed-root]`: keyed crate
-/// dirs under it; see clippy_lints::verify::ClippyVerifier (katgpt-rs
+/// dirs under it; see `clippy_lints::verify::ClippyVerifier` (katgpt-rs
 /// Issue 832 T5).
 #[must_use]
 pub fn draft_oracle() -> ClippyOracle {
