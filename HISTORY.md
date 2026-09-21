@@ -3685,8 +3685,9 @@ crank's corpus-view leg; the committed-snapshot refresh step died with
 the consumer). The LOCAL dashboard's own corpus card still uses
 `load_corpus_history` + `_count_working_tree` — only the consumer-facing
 export lane is gone. The Phase-2 follow-up (sync payload v3 carrying
-`domain`, goldens dual-pinned both sides, v2/v3 mixed-fleet window) is
-filed as [Issue 103](.issues/103_sync_payload_v3_domain_field.md).
+`domain`, goldens dual-pinned both sides, v2/v3 mixed-fleet window) landed
+as Issue 103 (RESOLVED at `4f39e637` — the record is this commit and the
+row above; file removed at close).
 
 ## P11 post-mining intake — `format_collect` (the first two-span clippy rule) + the `needless_borrow` receiver-shape extension (2026-09-13)
 
