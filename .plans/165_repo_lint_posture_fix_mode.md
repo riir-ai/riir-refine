@@ -1,6 +1,6 @@
 # Plan 165 — repo-lint-posture fix mode (`--repo-posture`)
 
-**Status:** IN PROGRESS — T1–T5 LANDED (code+tests+GOAT); T6 docs / T7 global-binary rebuild / T8 push in flight. The 09-21 intake's one OPEN product suggestion, executed as its own unit.
+**Status:** COMPLETE — all tasks `[x]`; landed as `79b1c1fd` (feat) + the docs close-out commit; the 09-21 intake's one OPEN product suggestion, closed.
 
 ## Why
 
@@ -83,11 +83,16 @@ set. The missing piece is gating the fix lane's PROPOSER edits on it.
   2× field_reassign_with_default in the new test, 1× type_complexity on
   the parser helper → the `PrimarySpan` struct); score-bench 96.4% FLAT
   byte-identical (rows #156+#157, heal_rate 0.96363634 == Plan 164's).**
-- [ ] T6 — Docs: AGENTS.md CLI bullet; HISTORY entry; `.distill/001`
+- [x] T6 — Docs: AGENTS.md CLI bullet; HISTORY entry; `.distill/001`
   intake row DONE marker; this plan's tasks checked off.
-- [ ] T7 — Global binary rebuild (beside-the-repo worktree, release
+- [x] T7 — Global binary rebuild (beside-the-repo worktree, release
   feature set, `CARGO_TARGET_DIR` isolated) + `--version` non-stale verify.
-- [ ] T8 — Commit + push (`feat:`), worktree cleaned up.
+  → built 6m23s at `79b1c1fd`; copied to BOTH `target/release/cargo-heal.exe`
+  AND `~/.cargo/bin/cargo-heal.exe` (a plain FILE on this Windows box, not
+  the documented symlink — the copy-half of the rebuild must touch both;
+  live-verified: `--version` release set complete + the misuse arm exits 2
+  with the flag's own message).
+- [x] T8 — Commit + push (`feat:`), worktree cleaned up.
 
 ## GOAT gates
 
