@@ -1,7 +1,7 @@
 # Research 200: Traverse/Scout — First-Mistake Localization, the Cascade Law, and the Plan 342 Restart Path
 
 > **Source:** "Locating Hidden Failures Makes Long-Horizon Agents More Reliable" — [arXiv:2609.17930](https://arxiv.org/abs/2609.17930) — Rahman, Kim, Parmar, Heydari, Liu, Lee, Zhang, Hosseini, Metwally, Yang, Mirzasoleiman, Liu, Izmailov, Gabriel, Malhotra, Patel, McDuff, Palangi (UCLA / NYU / Google Research / Google DeepMind), 2026-09-15. Traverse benchmark + Scout 4B verifier.
-> **Status:** DISTILLED — modelless measurement filed as [Issue 128](../.issues/128_fixseq_cascade_law_derailment_index.md); the model-based half is a restart path appended to riir-train [Plan 342](../../riir-train/.plans/342_genrm_l4_verifier_gate.md) (owner-gated on GPU windows — C13/riir-train Plan 318 owns the 4090).
+> **Status:** DISTILLED — modelless measurement filed as `Issue 128`; the model-based half is a restart path appended to riir-train [Plan 342](../../riir-train/.plans/342_genrm_l4_verifier_gate.md) (owner-gated on GPU windows — C13/riir-train Plan 318 owns the 4090).
 **Date:** 2026-09-21
 > **Classification:** Private
 > **Related Research:** riir-train [Research 423](../../riir-train/.research/423_GenRM_Generative_Verifier_L4_Gate.md) (GenRM — Scout's direct ancestor; this paper is its long-horizon agentic continuation) · [Research 049](049_Long_Horizon_AI_Research_Evidential_Status.md) (long-horizon harness failure modes) · [Research 135](135_elo_selection_gate.md) (selection laws — the balanced-recall product is a selection-law cousin) · [Research 182](182_powerplay_frontier_miner_poc.md) (frontier/coverage discipline the measurement reuses)
