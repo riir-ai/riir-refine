@@ -65,5 +65,11 @@ The two leads that survived:
       36→47→66)
 - [x] T12 Research 199 + AGENTS.md counts (92→94, 75→75 fixable) +
       `.distill/001` update
-- [ ] T13 commit `feat: batch 171: ...` + push
-- [ ] T14 global binary rebuild + `--corpus-stats` verify (clippy_lints 94)
+- [x] T13 commit `feat: batch 171: ...` + push — **COMPLETE `f9002260`**
+- [x] T14 global binary rebuild + `--corpus-stats` verify — DONE: built
+      from `f9002260` in an isolated worktree BESIDE the repo (a Temp-path
+      worktree breaks the relative path deps — the beside-the-repo
+      placement is load-bearing), release set complete, installed over
+      the copy at `~/.cargo/bin/cargo-heal.exe`; verified: clippy_lints
+      **94** / kernel_opt 627 / rust_perf 145. Worktree + temp target
+      removed.
