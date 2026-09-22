@@ -3,7 +3,7 @@
 > **Source:** J. Schmidhuber, "Recursive Self-Improvement (RSI) since 1987", Technical Note IDSIA-9-26, 17 Sept 2026 — https://people.idsia.ch/~juergen/recursive-self-improvement.html (essay/survey; CC BY-NC-SA)
 > **Date:** 2026-09-17
 > **Status:** DISTILLED — pending owner decision (issues 122 here + riir-train 559 filed; no plan opened)
-> **Related Research:** 167 (RSI-survey autonomy-ladder positioning — the prior RSI distill in this repo), 174/175 (batch context), katgpt-rs 320 (Red Queen Gödel Machine → Plan 336 `best_belief.rs`), katgpt-rs 512 (Meta^n RSI, PASS), katgpt-rs 526 (fast weights), katgpt-rs 165 (healer curriculum)
+> **Related Research:** 167 (RSI-survey autonomy-ladder positioning — the prior RSI distill in this repo), 174/175 (batch context), katgpt-rs 320 (Red Queen Gödel Machine → Plan 336 `best_belief.rs`), katgpt-rs 512 (Meta^n RSI, PASS), katgpt-rs 526 (fast weights), katgpt-rs 165 (healer curriculum), **203 (RRSI [arXiv:2609.24972] — the 2026 empirical keeper-discipline paper for this lineage; four of its seven regularizers confirmed as shipped cousins, the admission-gap half filed as Issue 130)**
 > **Cross-ref (riir-train):** .issues/559 (quest-grammar RFT→GRPO loop)
 > **Classification:** Private (healer-domain distill; home is riir-clippy per the MOAT table)
 
