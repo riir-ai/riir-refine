@@ -1,0 +1,55 @@
+# Mezura — fast line counter (rust_perf distill source verdict)
+
+**Status:** DISTILLED — pending owner decision (Batch 172 planned, `.plans/166_batch172_mezura_rust_perf_distill.md`; not yet mined)
+
+- **Source:** https://github.com/subamanis/mezura @ `2dbacb756d2169d2239bcdfbe9391fcd2ed9389b` (post-3.2.0 HEAD, cloned shallow into `.raw/`, deleted after this commit; the 3.2.0 release sha per crates.io trustpub = `6577a40fd2b29e4bb9d1cfb02a316a1932fa1708`)
+- **License:** MIT OR Apache-2.0 (fixtures must be ORIGINAL minimal reproductions — the cmpeq/movemask idioms are textbook; write our own AVX2/NEON arms)
+- **Inspected:** 2026-09-22 (full-tree clone; `mezura-core/src/engine/{masks,consumer,file_parser}.rs` read; greps over the rest; see caveats)
+- **What it is:** the fastest cloc-class line counter (measured 2.41× over scc, 4.80× over tokei on the Linux tree, Linux + Windows, linebench methodology — source-reported). Workspace: `mezura` CLI + `mezura-core` lib (5.8k LOC) + `mezura-mcp`. Edition 2024, thin LTO + CGU 1, deps: memchr, memmap2 (unix), crossbeam-deque, ignore, num_cpus.
+
+## Verdict
+
+**YES, B+ corpus / no lane mapping / no product-coverage fire.** Mine as **Batch 172** (rust_perf), lead with the dual-mask fused block scan.
+
+**Domain routing:** `rust_perf` (simd + io + concurrency categories). NOT `kernel_opt` — zero GPU code; the CPU-SIMD-is-not-kernel_opt trap (this is host byte-scanning, both SIMD arms are `std::arch`).
+
+**Lane-intel axis:** NO mapping — mezura is a file-walking line counter; the workspace's open perf lanes (prefill/decode vs llama.cpp, ANE, GPU kernel classes) are untouched by any mechanism here. Checked against the league scoreboard rows; nothing to file.
+
+**Product-coverage axis:** no famous-lib family seeded (memchr/memmap2/crossbeam-deque/ignore are common deps but no tokio-class gap). The simd byte-scan family grows to its second rule; the io mmap family gains its admission rule (the family had prefault/mincore/pread/coalesce — not map-vs-read).
+
+## Ranked candidates
+
+| # | pattern | source | grade | notes |
+|---|---|---|---|---|
+| 1 | **dual-mask fused block scan** — one 64B SIMD pass yields BOTH the newline bitmask AND the any-of-needle-set candidate bitmask (AVX2 2×32 cmpeq+movemask; NEON 4×16 with the AND-powers-of-2 + vpaddq bit-gather; scalar fallback shares the contract; feature detect cached at finder build). Line-splitting + candidate scan read off the masks — no search per line. | `mezura-core/src/engine/masks.rs` (257 L) | **A−** | **GOAT lead.** Benchable hermetic (in-memory buffer, both arches — the transposed-weight/unaligned-word cross-arch precedents); bit-identical positions (integer mask math); magnitude: per-line shape touches bytes twice (split + search) + per-line call overhead vs one cmpeq-per-needle-byte + one newline cmpeq per block; suggest-only fix class (hand-SIMD, not a bounded autofix). |
+| 2 | **anchor-byte greedy set-cover for multi-needle scans** — choose the FEWEST finding bytes that reach every delimiter symbol (greedy max-cover; letters disfavored — "visited on every word"), anchor multi-byte symbols at an offset BEHIND the found byte (`r#"` found by its quote), pack into memchr2/memchr3 single passes. | `file_parser.rs` L304–444 (`ScanPlan`, `anchors_of`) | B | Dedup-adjacent to `byte-find-position-to-memchr` (B67 — its notes already name the "2/3-needle variants for `\|\|` chains" ladder). Distinct buggy shape: code already scanning per-needle (or scanning first-bytes naively); the cover-SELECTION is the novel half. Risk: coordinator may fold as a B67 rider — argue the selection algorithm, not the primitive. |
+| 3 | **mmap-settled-size-gated whole-file read** — unix: map when size ≥ 256 KiB AND mtime age ≥ 5 s (the settle guard avoids the concurrent-truncation SIGBUS; "ripgrep's memory maps carry the same exposure"), else read into the reusable buffer; read protocol uses the expected+1 sentinel (asking one byte past the listed size distinguishes exact-size from grown; sized-on-fill only when the first 64 KiB window fills; stat-elision priced honestly — a partial short read on a failing disk is counted, unreported). | `file_parser.rs` L178–254 (`HeldFile`, `read_file_into`, `is_settled`) | B− | io family grows. Honestly NotBenchable (page-cache state dominates any microbench — the corpus's own io family says so three times: prefault/mincore/pread). The settle guard + the expected+1 protocol are the novel load-bearing halves; the map-vs-read threshold itself is folklore both ways. |
+| 4 | **steal-batch-not-per-item** — crossbeam `Injector` per-item steals contend (`Steal::Retry` → `yield_now` = a scheduling round per file) → `steal_batch_and_pop` (half of what's left, so the tail still spreads). | `consumer.rs` L64–73 | C+ | Zero corpus hits for steal_batch/Injector (channel rules exist — different mechanism: deque contention vs park/unpark). Niche dep; NotBenchable (contention timing). |
+| 5 | **io-bound consumer oversubscription** — consumers deliberately ≫ cores ("a consumer spends most of its life waiting for a file to open; speed comes from how many reads are in flight"); idle backoff ladder yield×10 → 2 ms sleep. | README §Threads + `consumer.rs` | C+ | Decision-content only; NotBenchable (same platform-nondeterministic class as `batch-blocking-pool-segment`, which it is adjacent to — sizing vs batching). |
+| 6 | **scratch-capacity clamp** — reuse the file buffer across files but drop it when retained capacity exceeds 4 MiB (one huge file must not pin 4 MiB+ per thread forever); initial 150 B. | `consumer.rs` L160–162 | C | Third policy beside `reuse-allocation-clear` (Batch base) and kernel_opt's grow-only staging (opposite policy). Metric mismatch (retained memory is not a bench axis) — likely an annotation/rider, not standalone. |
+| D | runtime-detect-once · tz-mask consumption · unaligned word loads · per-thread local stats + single merge · ascii→`from_utf8_unchecked` · bounded-head skip heuristics (512 B markers / 8 KiB identification) · phase telemetry · themes/render | various | DROP | Positive instances of B74 (`runtime-feature-detect-per-chunk`), B66 (`sparse-set-bit-iteration-tz-blsr`), B69 (`unaligned-word-load-from-bytes`), B135-family (`partitioned-mut-slices-zero-sync`); unsafe-laden with thin win; ambient structure. |
+
+## Dedup-grep evidence (both vocabularies, `riir-clippy/src/`)
+
+- `movemask|bit.?gather|cmpeq_epi8` → 0 rule hits (matches only inside B67's memchr explanation text) — candidate 1 PASS.
+- mmap family (`prefault-admission-keyed-to-ram-headroom` B139, `mincore-probe-routes-gather-arm` B145, `parallel-disjoint-pread-hides-cold-page-latency` B118, `batch-pool-read-makes-serial-readahead-redundant` B123) — none is map-vs-read ADMISSION; candidate 3 PASS (distinct axis, distinct-from notes owed to all four).
+- `steal_batch|crossbeam|Injector|work.?steal` → 0 hits (channel rules only) — candidate 4 PASS.
+- `oversubscri|num_cpus|io.?bound` → 0 rule hits (1 kernel_opt spin-barrier TEST, different subject) — candidate 5 PASS.
+- `capacity.?clamp|retained|scratch` → `reuse-allocation-clear` exists (ADJACENT — read: clear-reuse is alloc-per-call→reuse; the clamp bounds RETENTION on that reuse — same family, distinct refinement; fold as rider unless the coordinator wants it standalone).
+- memchr → `byte-find-position-to-memchr` B67 exists; its notes name the 2/3-needle arity ladder — candidate 2 ADJACENT/DUP-RISK (the anchor-cover selection is the argued-distinct half).
+
+## GOAT check (candidate 1)
+
+1. Benchable: YES — Pareto validator, hermetic in-memory bench, sizes 4 KiB–1 MiB source-like synthetic buffer, dual-arch (M3 aarch64 NEON arm + 4090 x86_64 AVX2 arm).
+2. Exact semantics: YES — same line count + same candidate positions, bit-identical (integer/mask math only).
+3. Magnitude: mechanism-level — bytes touched once vs twice + per-line call overhead eliminated; multi-x expected on the scan phase. (Mezura's 2.41×-over-scc is e2e and corroborates the TECHNIQUE FAMILY, not this rule alone — honest.)
+4. Deterministic: YES.
+
+All four pass. Suggest-only fix class (hand-SIMD is not a bounded autofix); the buggy shape (`for line in text.split('\n') { line.find(..) }`) is extremely common in user code — every line-oriented parser.
+
+## Caveats
+
+- Young crate: first release 2026-09-02, 4 versions in 3 weeks, 109 downloads, 51★. Maintenance is irrelevant to pattern grade but recorded for provenance.
+- **Unread files — re-verify at mine time:** `producer.rs` (653 L — the walk side, only README + grep level), `identity.rs` (833 L), `language_file.rs` (1345 L), `domain.rs` (934 L), ~85% of `file_parser.rs` (4465 L — read front matter + ScanPlan + greps), render/explain/tests. The ranked grades above cover only what was read.
+- The candidate-2 dedup risk is the most likely coordinator kill; candidate 1 has no known duplicate.
+- Freeze-table law: if the batch's corpus delta touches `build_seed_corpus()` stride windows, the gen2/gen3 regeneration rides the SAME batch (the Batch-151 lesson) — rust_perf additions may or may not move it; the plan gates on measurement.
