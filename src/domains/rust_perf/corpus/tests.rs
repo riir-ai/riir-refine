@@ -1865,7 +1865,7 @@ fn fourteen_rules_are_not_benchable() {
 /// (mir-destprop-branch-site-merge — the measured `ParetoDominant` verdict
 /// with the runtime-opaque-targets negative-control boundary and the
 /// rustc `DestProp` toolchain regime). Batch 172 added 4 annotations (the
-/// dual-mask GOAT lead + three NotBenchable mezura decision-content rules)
+/// dual-mask GOAT lead + three `NotBenchable` mezura decision-content rules)
 /// and flipped byte-find-position-to-memchr via the anchor-cover rider.
 /// The other 55 have `context_notes: None` (unconditional wins or
 /// honestly `NotBenchable`).
@@ -4655,14 +4655,14 @@ fn batch143_pareto_benches() {
 }
 
 /// G1 for `dual-mask-fused-block-scan` (Batch 172, Research 202 — the mezura
-/// GOAT lead): the dispatched SIMD arm (AVX2 on x86_64, NEON on aarch64)
+/// GOAT lead): the dispatched SIMD arm (AVX2 on `x86_64`, NEON on aarch64)
 /// must produce BIT-IDENTICAL masks to the scalar contract on every shape:
 /// (a) every byte value 0..=255 at every position of a 64-byte block (the
 /// position × byte-value sweep, 16,384 comparisons — a needle equal to the
 /// newline is included, both bits at once);
 /// (b) 2,000 LCG blocks dense in newlines + searched bytes;
 /// (c) short blocks: every length 0..=63, dense;
-/// (d) end-to-end scan() vs the naive split reference on LCG buffers of
+/// (d) end-to-end `scan()` vs the naive split reference on LCG buffers of
 /// every length 0..=300 (block boundaries + tails) + 1 KiB/4 KiB/64 KiB:
 /// newline count, hit count, and the position checksum all identical.
 #[test]
@@ -4735,8 +4735,8 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
                 hits: &mut u64,
                 checksum: &mut u64,
             ) {
-                *newlines += m.newlines.count_ones() as u64;
-                *hits += m.candidates.count_ones() as u64;
+                *newlines += u64::from(m.newlines.count_ones());
+                *hits += u64::from(m.candidates.count_ones());
                 let mut bits = m.candidates;
                 while bits != 0 {
                     let at = bits.trailing_zeros() as usize;
@@ -4908,7 +4908,7 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
         let mut block = [0u8; BLOCK];
         for slot in &mut block[..len] {
             let r = next(&mut state);
-            *slot = if r % 2 == 0 { b'\n' } else { needles[(r >> 40) as usize % needles.len()] };
+            *slot = if r.is_multiple_of(2) { b'\n' } else { needles[(r >> 40) as usize % needles.len()] };
         }
         let sim = finder.scan_block(&block[..len]);
         let sca = finder.scan_block_scalar(&block[..len]);
