@@ -75,13 +75,14 @@
 //! literal constant is schema-dead weight the receiver cannot be using —
 //! reported at the weak `[wire-const]` severity instead. Clearance applies
 //! to stillborn rows only (the measured FP class); ORPHANED rows keep their
-//! independent history evidence. Limits: fn-scoped approximation (a
-//! literal built in fn A and serialized in fn B is not cleared — the
-//! conservative direction); path-call form only (aliased imports invisible);
-//! type names are file-global (no module resolution, same as the read
-//! greps); the value classification sees literal sites only (a field never
-//! set at any visible literal is treated as cleared — its value comes from
-//! deserialization or defaults, and the wire IS the consumption).
+//! independent history evidence. Limits: fn-scoped approximation (a literal
+//! built in fn A and serialized in fn B is not cleared unless fn B serializes
+//! its own CONCRETE param, or binds the value from a same-file fn's RETURN —
+//! the two fn-A/fn-B links below); path-call form only (aliased imports
+//! invisible); type names are file-global (no module resolution, same as the
+//! read greps); the value classification sees literal sites only (a field
+//! never set at any visible literal is treated as cleared — its value comes
+//! from deserialization or defaults, and the wire IS the consumption).
 //!
 //! # Foreign-literal attribution + generic serde bridges (Issue 109, 2026-09-15)
 //!
@@ -408,7 +409,11 @@ pub struct WireConsumption {
     /// the type is a CONCRETE param serde-serialized by some fn (the
     /// sibling-fn link: literal in the flow, `to_string(&intent)` in the
     /// queue writer — the fn-A/fn-B repair, extended to json! interpolation),
-    /// AND the field carries a
+    /// OR the type is a same-file fn's RETURN VALUE that a serializing fn
+    /// binds into a local and serializes (`let fused = recommend(..);
+    /// serde_json::to_string(&fused)` — the riir-reflex test-serializes-the-
+    /// producer shape; same-file free-fn resolution, unique binding), AND
+    /// the field carries a
     /// non-literal-constant value at some construction site. Stillborn
     /// rows matching here are cleared.
     pub cleared: HashSet<(String, String)>,
@@ -507,6 +512,11 @@ struct WireVisitor {
     bridge_fns: HashSet<String>,
     /// Pass-2 accumulation: concrete types named at bridge call sites.
     bridge_types: HashSet<String>,
+    /// Same-file free-fn return types (pass-1 product, swapped in per file):
+    /// the resolution map for the serialized-return-value wire link. Same-
+    /// file only by construction — a cross-file producer's return type is
+    /// unknown here and the link misses (the conservative direction).
+    fn_rets: BTreeMap<String, String>,
     /// Scan-global top-level struct field sets (Issue 109 re-sight): a
     /// literal naming a field that no local same-named decl has is provably
     /// foreign — neither a construction site nor wire-type membership. This
@@ -555,6 +565,15 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
             // generic `T: Serialize` twin is `is_generic_serde_bridge`'s
             // lane; this is the concrete twin.
             for ty in serialized_concrete_param_types(i) {
+                self.direct_wire_types.insert(ty);
+            }
+            // The producer's-return-value half (the riir-reflex
+            // `FusedGateRecommendation` specimen, 2026-09-23): a local bound
+            // from a same-file free fn's return and fed to a serde to_* call
+            // consumes that return type — neither fn-scoped co-occurrence
+            // (the literal lives in the producer) nor the param link (the
+            // serializing fn receives NO param) can join them.
+            for ty in serialized_return_value_types(&i.block, &self.fn_rets) {
                 self.direct_wire_types.insert(ty);
             }
         }
@@ -968,6 +987,152 @@ fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
     out
 }
 
+/// The bare ident a fn's return type names, unwrapping `Option<T>` /
+/// `Vec<T>` / `Result<T, _>` / `Box<T>` one wrapper level (the wrap-edge
+/// convention): `-> FusedGateRecommendation` names the struct,
+/// `-> Option<Report>` names `Report`. Multi-segment paths take the last
+/// segment (the same granularity every name here works at); tuples, fn
+/// pointers and trait objects → None (no bare name to resolve).
+fn return_type_ident(ret: &syn::ReturnType) -> Option<String> {
+    let syn::ReturnType::Type(_, ty) = ret else {
+        return None;
+    };
+    let mut ty: &syn::Type = ty;
+    loop {
+        match ty {
+            syn::Type::Reference(r) => ty = &r.elem,
+            syn::Type::Group(g) => ty = &g.elem,
+            syn::Type::Paren(p) => ty = &p.elem,
+            _ => break,
+        }
+    }
+    let syn::Type::Path(tp) = ty else {
+        return None;
+    };
+    let last = tp.path.segments.last()?;
+    let name = last.ident.to_string();
+    if matches!(name.as_str(), "Option" | "Vec" | "Result" | "Box") {
+        if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
+            if let Some(syn::GenericArgument::Type(syn::Type::Path(inner))) = args.args.first() {
+                return inner.path.segments.last().map(|s| s.ident.to_string());
+            }
+        }
+        return None;
+    }
+    Some(name)
+}
+
+/// Pass-1 visitor: collects each free fn's return-type ident — the same-file
+/// resolution map for [`serialized_return_value_types`]. Methods are not
+/// collected (receiver-type resolution is a second map; add on a measured
+/// specimen).
+struct FnRetFinder {
+    out: BTreeMap<String, String>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for FnRetFinder {
+    fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
+        if let Some(ty) = return_type_ident(&i.sig.output) {
+            self.out.insert(i.sig.ident.to_string(), ty);
+        }
+        syn::visit::visit_item_fn(self, i);
+    }
+}
+
+/// The producer's-return-value half of the fn-A/fn-B gap (the riir-reflex
+/// `FusedGateRecommendation` specimen, 2026-09-23): a TEST fn binds a local
+/// from a producer call (`let fused = recommend_fused_gate(..);`) and
+/// serializes THAT local (`serde_json::to_string(&fused)`) — the struct
+/// literal lives in the producer, the serializing fn receives no param, so
+/// neither fn-scoped co-occurrence nor the concrete-param link can join
+/// them. Resolution: same-file free-fn return types ([`FnRetFinder`]),
+/// conservative at every seam — bare single-segment callees only (`Foo::new`
+/// and method calls are unknown here and refuse), uniquely-bound locals only
+/// (a shadowed name refuses entirely), and bare single-ident serialized args
+/// only (`&fused`, `(&fused)`, `fused` — an expression like `&fused.field`
+/// proves nothing about the whole value's type path).
+fn serialized_return_value_types(
+    block: &syn::Block,
+    fn_rets: &BTreeMap<String, String>,
+) -> Vec<String> {
+    struct F {
+        bound_from: BTreeMap<String, String>,
+        bind_count: BTreeMap<String, usize>,
+        serialized: BTreeSet<String>,
+    }
+    impl F {
+        /// Peel `&x` / `(x)` / group wrappers off a to_* argument; a bare
+        /// single-segment path yields the local name.
+        fn bare_ident_arg(expr: &syn::Expr) -> Option<String> {
+            let mut e = expr;
+            loop {
+                match e {
+                    syn::Expr::Reference(r) => e = &r.expr,
+                    syn::Expr::Paren(p) => e = &p.expr,
+                    syn::Expr::Group(g) => e = &g.expr,
+                    _ => break,
+                }
+            }
+            if let syn::Expr::Path(p) = e {
+                if p.path.segments.len() == 1 {
+                    return Some(p.path.segments[0].ident.to_string());
+                }
+            }
+            None
+        }
+    }
+    impl<'ast> syn::visit::Visit<'ast> for F {
+        fn visit_local(&mut self, l: &'ast syn::Local) {
+            if let syn::Pat::Ident(pi) = &l.pat {
+                let name = pi.ident.to_string();
+                *self.bind_count.entry(name.clone()).or_insert(0) += 1;
+                if let Some(init) = &l.init {
+                    if let syn::Expr::Call(c) = &*init.expr {
+                        if let syn::Expr::Path(p) = &*c.func {
+                            if p.path.segments.len() == 1 {
+                                self.bound_from
+                                    .insert(name, p.path.segments[0].ident.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            syn::visit::visit_local(self, l);
+        }
+
+        fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+            if let syn::Expr::Path(p) = &*c.func {
+                if is_serde_to_path(&p.path) {
+                    for arg in &c.args {
+                        if let Some(name) = Self::bare_ident_arg(arg) {
+                            self.serialized.insert(name);
+                        }
+                    }
+                }
+            }
+            syn::visit::visit_expr_call(self, c);
+        }
+    }
+    let mut f = F {
+        bound_from: BTreeMap::new(),
+        bind_count: BTreeMap::new(),
+        serialized: BTreeSet::new(),
+    };
+    syn::visit::visit_block(&mut f, block);
+    let mut out = Vec::new();
+    for (name, callee) in &f.bound_from {
+        if f.bind_count.get(name).copied().unwrap_or(0) != 1 || !f.serialized.contains(name) {
+            continue;
+        }
+        if let Some(ty) = fn_rets.get(callee) {
+            out.push(ty.clone());
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Does the expression mention any of the given names as a bare path
 /// (`row`, `row.clone()`'s receiver — not `other::row`)?
 fn expr_mentions_ident(expr: &syn::Expr, names: &[String]) -> bool {
@@ -1058,6 +1223,17 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
     }
 
     let local_fields = collect_struct_field_sets(&parsed);
+    // Pass 1b: per-file free-fn return types — the same-file resolution map
+    // for the serialized-return-value link (a bridge-style pre-pass, so a
+    // test defined BEFORE its producer in the file still resolves).
+    let mut file_fn_rets: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    for (name, file) in &parsed {
+        let mut f = FnRetFinder {
+            out: BTreeMap::new(),
+        };
+        syn::visit::visit_file(&mut f, file);
+        file_fn_rets.insert(name.clone(), f.out);
+    }
     let mut v = WireVisitor {
         bridge_fns,
         local_fields,
@@ -1068,6 +1244,7 @@ pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
         v.scope = FileScope::of(file, &local_crates);
         v.file_is_test = crate::config_audit::file_is_test_path(name)
             || crate::config_audit::attrs_cfg_test(&file.attrs);
+        v.fn_rets = file_fn_rets.remove(name).unwrap_or_default();
         syn::visit::visit_file(&mut v, file);
     }
 
@@ -1363,7 +1540,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape — OR a crate-rooted serde_json::json! macro whose tokens mention the param: the macro IS a serializer, each interpolated arg goes through to_value at runtime, the riir-kat shop_seed_body shape) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a zero-external-read row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation in every bucket (stillborn, orphaned, AND the silent arm whose reads at HEAD are the field's own test pins — the riir-chain GuardVerdict class); downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape — OR a crate-rooted serde_json::json! macro whose tokens mention the param: the macro IS a serializer, each interpolated arg goes through to_value at runtime, the riir-kat shop_seed_body shape — OR a same-file fn's RETURN VALUE bound into a local the serializing fn serializes (the riir-reflex test-serializes-the-producer shape: `let fused = recommend(..)` + `to_string(&fused)` in the test, literal in the producer; same-file free-fn resolution, unique-binding required)) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a zero-external-read row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation in every bucket (stillborn, orphaned, AND the silent arm whose reads at HEAD are the field's own test pins — the riir-chain GuardVerdict class); downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
         );
         out
     }
@@ -2029,6 +2206,125 @@ pub const VOTE_VERSION: u32 = 1;
         assert!(
             wire.cleared.contains(&("VoteIntent".to_string(), "queued_unix".to_string())),
             "variable-valued field clears through the sibling-fn param link"
+        );
+    }
+
+    /// The riir-reflex `FusedGateRecommendation` shape (2026-09-23 intake):
+    /// the struct literal is built in the producer fn, and the SERIALIZING
+    /// fn is a test that binds the value from the producer's RETURN (`let
+    /// fused = recommend_fused_gate(..); serde_json::to_string(&fused)`).
+    /// Neither fn-scoped co-occurrence (the literal lives in the producer,
+    /// which has no serde call) nor the concrete-param link (the test takes
+    /// no param) can join them — the return-value link does.
+    #[test]
+    fn wire_return_value_serialized_in_test_fn_clears() {
+        let src = r#"
+#[derive(serde::Serialize)]
+pub enum Posture {
+    Percentile { rho: f32 },
+}
+#[derive(serde::Serialize)]
+pub struct Rec {
+    pub threshold: f64,
+}
+#[derive(serde::Serialize)]
+pub struct FusedGateRecommendation {
+    pub posture: Posture,
+    pub score: Option<Rec>,
+    pub distance: Option<Rec>,
+}
+pub fn recommend_fused_gate(rho: f32) -> FusedGateRecommendation {
+    let posture = Posture::Percentile { rho };
+    FusedGateRecommendation { posture, score: None, distance: None }
+}
+#[test]
+fn serde_metadata_shape() {
+    let fused = recommend_fused_gate(0.3);
+    let json = serde_json::to_string(&fused).unwrap();
+    assert!(json.contains("posture"));
+}
+"#;
+        let wire = wire_of(src);
+        assert!(
+            wire.cleared.contains(&("FusedGateRecommendation".to_string(), "posture".to_string())),
+            "a variable-valued field clears through the return-value link"
+        );
+        assert!(
+            wire.cleared.contains(&("FusedGateRecommendation".to_string(), "score".to_string())),
+            "Option-valued fields clear with the struct"
+        );
+        assert!(
+            wire.cleared.contains(&("FusedGateRecommendation".to_string(), "distance".to_string())),
+            "the second Option field clears with the struct"
+        );
+    }
+
+    /// The return-value link's guards, each a refusal (the conservative
+    /// direction): (1) the serialized local is NOT the call-bound one — a
+    /// call-bound local merely EXISTING in the fn clears nothing; (2) the
+    /// callee is not a bare same-file free fn (`Rec::make` is associated,
+    /// unknown to the resolution map) → no clearance; (3) a shadowed binding
+    /// refuses the name entirely, even though one of the two inits is a
+    /// known producer call.
+    #[test]
+    fn wire_return_value_link_stays_type_exact() {
+        let src = r"
+#[derive(serde::Serialize)]
+pub struct Dead1 {
+    pub a: u8,
+}
+#[derive(serde::Serialize)]
+pub struct Dead2 {
+    pub b: u8,
+}
+#[derive(serde::Serialize)]
+pub struct Dead3 {
+    pub c: u8,
+}
+pub fn make1() -> Dead1 {
+    Dead1 { a: 1 }
+}
+impl Rec2 {
+    pub fn make() -> Dead2 {
+        Dead2 { b: 2 }
+    }
+}
+pub struct Rec2;
+pub fn make3() -> Dead3 {
+    Dead3 { c: 3 }
+}
+pub struct Other;
+#[test]
+fn wrong_local_serialized() {
+    let made = make1();
+    let other = 5u8;
+    let _ = serde_json::to_string(&other);
+    let _ = made;
+}
+#[test]
+fn associated_callee_unknown() {
+    let made = Rec2::make();
+    let _ = serde_json::to_string(&made);
+}
+#[test]
+fn shadowed_binding_refuses() {
+    let made = make3();
+    let made = Other;
+    let _ = serde_json::to_string(&made);
+}
+";
+        let wire = wire_of(src);
+        assert!(
+            !wire.cleared.contains(&("Dead1".to_string(), "a".to_string())),
+            "a call-bound local that is not the serialized one clears nothing"
+        );
+        assert!(
+            !wire.cleared.contains(&("Dead2".to_string(), "b".to_string())),
+            "an associated-fn callee is unknown to the same-file free-fn map"
+        );
+        assert!(
+            !wire.cleared.contains(&("Dead3".to_string(), "c".to_string())),
+            "a shadowed binding refuses the name entirely"
         );
     }
 
