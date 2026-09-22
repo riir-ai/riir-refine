@@ -18,7 +18,7 @@ Source: subamanis/mezura @ `2dbacb756d2169d2239bcdfbe9391fcd2ed9389b` (MIT OR Ap
 - [x] T10 GOAT — **DONE: G1 exhaustive gate PASS; G2 ParetoDominant 4/0/0 ×2; G3 lib 2175/0 (was 2174, +1 gate); G4 alloc-free fixed arm (0 allocs, axis 0/0)**
 - [x] T11 Retrieval floors — **DONE: score-bench #160 heal_rate 96.36% FLAT; rule_outcomes rows recorded**
 - [x] T12 Docs — **DONE: HISTORY.md Batch 172 entry + AGENTS.md count bump + Research 202 → RECORD + close-out + queue line + this plan COMPLETE**
-- [x] T13 Commit+push + `rm -rf .raw/mezura` — **DONE (see the landing commit)**
+- [x] T13 Commit+push + `rm -rf .raw/mezura` — **DONE: landed at `6e168aa3` (2026-09-23 00:01:19 +0700, pushed 7be9801c..6e168aa3); `.raw/mezura` + the neon_check scratch removed**
 
 ## Defers
 
