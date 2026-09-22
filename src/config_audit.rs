@@ -246,6 +246,16 @@ pub struct SelfReferentialConfig {
     /// Outranks `gpu_uniform` when both apply (a tests-tree struct is not
     /// production schema either way).
     pub test_rig: bool,
+    /// Every Default-impl field's doc carries the deliberate-write-only
+    /// marker — the C2 verdict renders at the weak
+    /// `[C2·documented-write-only]` annotation (2026-09-23, the
+    /// seal-remake `FeatureFlags`/`SessionMeta`/`WasmLimits` intake): the
+    /// struct-level verdict is correct in shape (zero external reads) but
+    /// every field's authorial intent is already documented. Downgrade-not-
+    /// suppress (the `[wire-const]` precedent): the doc's claim is NOT
+    /// verified. Rendered after `test_rig` and `gpu_uniform` — the more
+    /// specific mechanisms win when both apply.
+    pub documented_write_only: bool,
     pub fields: Vec<SelfRefField>,
 }
 
@@ -1279,7 +1289,7 @@ fn classify(
             }
         }
     }
-    classify_self_referential(candidates, ix, &mut report, gpu_uniform, test_rig);
+    classify_self_referential(candidates, ix, &mut report, gpu_uniform, test_rig, field_docs);
     report
 }
 
@@ -1292,6 +1302,7 @@ fn classify_self_referential(
     report: &mut ConfigAuditReport,
     gpu_uniform: &BTreeSet<String>,
     test_rig: &TestRigDecls,
+    field_docs: &FieldDocs,
 ) {
     let mut seen: Vec<String> = Vec::new();
     for cand in candidates {
@@ -1335,11 +1346,21 @@ fn classify_self_referential(
             });
         }
         if all_confined {
+            // The documented-write-only downgrade needs EVERY Default-impl
+            // field marked — one unmarked field keeps the strong verdict
+            // (the marker speaks per field, the C2 verdict per struct).
+            let all_marked = !fields.is_empty()
+                && fields.iter().all(|f| {
+                    field_docs
+                        .get(&(cand.struct_name.clone(), f.field_name.clone()))
+                        .is_some_and(|d| is_deliberate_write_only_marker(d))
+                });
             report.self_referential.push(SelfReferentialConfig {
                 struct_name: cand.struct_name.clone(),
                 origin: cand.origin.clone(),
                 gpu_uniform: gpu_uniform.contains(&cand.struct_name),
                 test_rig: all_reads_in_tests_tree && test_rig.is_eligible(&cand.struct_name),
+                documented_write_only: all_marked,
                 fields,
             });
         }
@@ -2136,8 +2157,9 @@ fn render_gpu_uniform_row(out: &mut String, k: &InertKnob) {
     );
 }
 
-/// One [C2] row (or its `[C2·test-rig]` / `[C2·gpu-uniform]` weak
-/// downgrades) with its per-field tally and fix line.
+/// One [C2] row (or its `[C2·test-rig]` / `[C2·gpu-uniform]` /
+/// `[C2·documented-write-only]` weak downgrades) with its per-field tally
+/// and fix line.
 fn render_self_referential(out: &mut String, s: &SelfReferentialConfig) {
     if s.test_rig {
         let _ = writeln!(
@@ -2179,6 +2201,23 @@ fn render_self_referential(out: &mut String, s: &SelfReferentialConfig) {
             out,
             "      fix: confirm the WGSL reads the fields; do not delete on this row alone"
         );
+        return;
+    }
+    if s.documented_write_only {
+        let _ = writeln!(
+            out,
+            "  [C2·documented-write-only] {} — {} ({} Default-impl field(s)) has ZERO external reads but every field doc carries a deliberate-write-only marker (weak severity — the doc's claim is NOT verified; if it is not deliberate, drop the marker wording or delete the fields)",
+            s.origin,
+            s.struct_name,
+            s.fields.len()
+        );
+        for f in &s.fields {
+            let _ = writeln!(
+                out,
+                "      .{} — {} read(s): {} test, {} own-validate-impl",
+                f.field_name, f.total_reads, f.test_reads, f.self_impl_reads
+            );
+        }
         return;
     }
     let _ = writeln!(
@@ -2861,6 +2900,48 @@ pub fn make() -> Dead { Dead::default() }
         );
         assert_eq!(r.self_referential.len(), 1);
         assert!(r.inert_knobs.is_empty() && r.assert_only.is_empty());
+    }
+
+    #[test]
+    fn c2_documented_write_only_marker_downgrades() {
+        // The seal-remake FeatureFlags shape: every field doc carries the
+        // exact marker vocabulary, zero reads anywhere — the strong C2
+        // verdict renders at the weak annotation instead.
+        let r = one(
+            r"
+pub struct Flags {
+    /// Forward surface: read from KV/env at load time once the runtime grows a loader (Issue 030).
+    pub big: bool,
+    /// Forward surface: read from KV/env at load time once the runtime grows a loader (Issue 030).
+    pub live: bool,
+}
+impl Default for Flags { fn default() -> Self { Self { big: true, live: false } } }
+",
+        );
+        assert_eq!(r.self_referential.len(), 1);
+        let s = &r.self_referential[0];
+        assert!(s.documented_write_only, "all fields marked → downgrade");
+        assert!(r.render().contains("[C2·documented-write-only]"));
+        assert!(!r.render().contains("  [C2] "));    }
+
+    #[test]
+    fn c2_marker_needs_every_field_marked() {
+        // One unmarked field keeps the strong verdict — the marker speaks
+        // per field, the C2 verdict per struct.
+        let r = one(
+            r"
+pub struct Mixed {
+    /// Forward surface: read from KV/env once the loader lands.
+    pub marked: bool,
+    pub unmarked: bool,
+}
+impl Default for Mixed { fn default() -> Self { Self { marked: true, unmarked: false } } }
+",
+        );
+        assert_eq!(r.self_referential.len(), 1);
+        let s = &r.self_referential[0];
+        assert!(!s.documented_write_only, "one unmarked field → strong C2");
+        assert!(r.render().contains("[C2]"));
     }
 
     #[test]
