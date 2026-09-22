@@ -118,7 +118,9 @@
 //!   receiver consumes the serialized field; the in-repo read loss is not
 //!   the death verdict it would be for a local-only struct).
 //! * **The documented-write-only downgrade (P26, the config-audit parity):**
-//!   a stillborn OR ORPHANED row whose FIELD doc carries a deliberate-
+//!   a zero-external-read row (stillborn, ORPHANED, or silent — the silent
+//!   arm is the test-pinned forward surface: reads exist but are all the
+//!   field's own test scaffolding) whose FIELD doc carries a deliberate-
 //!   write-only marker (`documented-write-only` | `deliberate` |
 //!   `forward surface` | `GOAT-gate territory` — the Issue-142/147 owner
 //!   vocabulary, one home in [`crate::config_audit`]) renders at the weak
@@ -1243,6 +1245,19 @@ pub fn classify_with_probe(
             } else {
                 stillborn.push(field.clone());
             }
+        } else if marked {
+            // The zero-read row carries reads at HEAD (grep counts them —
+            // the reads are usually the field's own TEST pins), but the
+            // field doc carries the owner's deliberate-write-only marker:
+            // render the weak annotation instead of the count-only silent
+            // bucket. The chain GuardVerdict.redirect/backoff_ticks class —
+            // marker'd forward surfaces whose only readers are the
+            // behavioral tests that pin them — was invisible here before
+            // (the P26 check reached only the stillborn/orphaned branches).
+            // The annotation is downgrade-not-suppress, so surfacing a
+            // marked row is never a false positive by construction: the
+            // owner's own doc wording is the trigger.
+            documented_write_only.push(field.clone());
         }
         // else: read-shaped occurrences exist now with no vanished evidence
         // — silent (A/B/C2 territory), counted in the header only.
@@ -1348,7 +1363,7 @@ impl OrphanReport {
         }
         let _ = writeln!(
             out,
-            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape — OR a crate-rooted serde_json::json! macro whose tokens mention the param: the macro IS a serializer, each interpolated arg goes through to_value at runtime, the riir-kat shop_seed_body shape) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a stillborn/orphaned row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation (downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
+            "scope: history greps are name-global (untyped) — a same-named field on another type can masquerade; comment mentions count (syn excludes them, grep cannot); readers outside the scanned set are invisible; a reader MOVED (not removed) can drop the count — adjudicate every row against the listed commits; #[serde(skip_serializing_if)] fields are excluded (output-schema surface, derive-read — the Issue 934 boundary); wire-clearance is fn-scoped co-occurrence (serde_json::to_*/serde_yaml::to_* path calls + literal same-fn, or a Vec/Option wrapper field of a wire literal, OR a sibling-fn link: a fn that serde-serializes its own CONCRETE-typed param consumes that param's type — the literal sits in the caller, the riir-kat queue-writer shape — OR a crate-rooted serde_json::json! macro whose tokens mention the param: the macro IS a serializer, each interpolated arg goes through to_value at runtime, the riir-kat shop_seed_body shape) and applies to stillborn rows only; struct-literal attribution is per-file scope-resolved (a literal naming a type the file imports from a foreign path, or reachable only via a foreign glob with no local decl/import, is foreign evidence — skipped); a literal naming a field that NO local same-named top-level struct declares is skipped as provably foreign too — the foreign-glob + local-glob import shape is undecidable, the field sets are not (Issue 109 re-sight); generic serde bridges (Serialize-bounded generic param + serde to_* on it) mark their call sites' turbofish-named types bridge-consumed — stillborn rows there count as bridge-cleared, orphaned rows render wire-dto weak; a zero-external-read row whose FIELD doc carries a deliberate-write-only marker (documented-write-only | deliberate | forward surface | GOAT-gate territory — the config-audit vocabulary) renders at the weak [documented-write-only] annotation in every bucket (stillborn, orphaned, AND the silent arm whose reads at HEAD are the field's own test pins — the riir-chain GuardVerdict class); downgrade-not-suppress — the doc's claim is not verified; consumed rows outrank it, wire-const is a different class and stays)"
         );
         out
     }
@@ -1607,6 +1622,52 @@ impl Default for W { fn default() -> Self { Self { g: 1 } } }
         let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
         assert_eq!(report.orphaned.len(), 1, "an unmarked row stays [C1]");
         assert!(report.documented_write_only.is_empty());
+    }
+
+    /// The riir-chain `GuardVerdict` class: a marked field whose ONLY reads
+    /// are its own test pins — grep counts them at HEAD, so the row lands
+    /// in the silent arm (never stillborn, never orphaned). The marker
+    /// check must reach the silent arm too, or owner-marked forward
+    /// surfaces are invisible to the report entirely.
+    #[test]
+    fn documented_write_only_marker_reaches_the_silent_arm() {
+        let src = r"
+pub struct V {
+    /// documented-write-only: adjudicated (Issues 142 + 147) forward surface.
+    pub f: bool,
+}
+impl Default for V { fn default() -> Self { Self { f: true } } }
+";
+        let scan = scan_of(src);
+        assert_eq!(scan.marked_write_only.len(), 1, "the field doc is marked");
+        // reads EXIST at HEAD and every depth (the test pins) — no delta.
+        let fake = FakeHistory::new(&DEPTHS)
+            .count("f", "HEAD", 2)
+            .count("f", "HEAD~10", 2)
+            .count("f", "HEAD~50", 2);
+        let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
+        assert!(report.stillborn.is_empty(), "reads at HEAD → not stillborn");
+        assert!(report.orphaned.is_empty(), "no delta → not orphaned");
+        assert_eq!(report.documented_write_only.len(), 1, "the marked silent row downgrades");
+        let rendered = report.render();
+        assert!(rendered.contains("[documented-write-only]"), "{rendered}");
+    }
+
+    /// The silent arm stays silent for an UNMARKED field — the extension
+    /// converts only owner-marked rows, never manufactures findings.
+    #[test]
+    fn unmarked_silent_row_stays_counted_only() {
+        let scan = scan_of(ORPHANED_SRC);
+        let fake = FakeHistory::new(&DEPTHS)
+            .count("alarm_radius", "HEAD", 1)
+            .count("alarm_radius", "HEAD~10", 1)
+            .count("alarm_radius", "HEAD~50", 1);
+        let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
+        assert!(report.documented_write_only.is_empty());
+        assert!(report.stillborn.is_empty());
+        assert!(report.orphaned.is_empty());
+        let rendered = report.render();
+        assert!(rendered.contains(" 1 silent (no vanished-reader evidence)"), "{rendered}");
     }
 
     /// P26 scope: wire-const is a different class and STAYS — a marked field
