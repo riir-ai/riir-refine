@@ -1,6 +1,6 @@
 # Mezura — fast line counter (rust_perf distill source verdict)
 
-**Status:** DISTILLED — pending owner decision (Batch 172 planned, `.plans/166_batch172_mezura_rust_perf_distill.md`; not yet mined)
+**Status:** DISTILLED — pending owner decision (Batch 172 planned, `.plans/166_batch172_mezura_rust_perf_distill.md`; not yet mined — **T1+T2 pre-verified 2026-09-22, addendum below**)
 
 - **Source:** https://github.com/subamanis/mezura @ `2dbacb756d2169d2239bcdfbe9391fcd2ed9389b` (post-3.2.0 HEAD, cloned shallow into `.raw/`, deleted after this commit; the 3.2.0 release sha per crates.io trustpub = `6577a40fd2b29e4bb9d1cfb02a316a1932fa1708`)
 - **License:** MIT OR Apache-2.0 (fixtures must be ORIGINAL minimal reproductions — the cmpeq/movemask idioms are textbook; write our own AVX2/NEON arms)
@@ -53,3 +53,30 @@ All four pass. Suggest-only fix class (hand-SIMD is not a bounded autofix); the 
 - **Unread files — re-verify at mine time:** `producer.rs` (653 L — the walk side, only README + grep level), `identity.rs` (833 L), `language_file.rs` (1345 L), `domain.rs` (934 L), ~85% of `file_parser.rs` (4465 L — read front matter + ScanPlan + greps), render/explain/tests. The ranked grades above cover only what was read.
 - The candidate-2 dedup risk is the most likely coordinator kill; candidate 1 has no known duplicate.
 - Freeze-table law: if the batch's corpus delta touches `build_seed_corpus()` stride windows, the gen2/gen3 regeneration rides the SAME batch (the Batch-151 lesson) — rust_perf additions may or may not move it; the plan gates on measurement.
+
+## T2 pre-verification addendum (2026-09-22 ~22:4x +07, Plan 166 T1+T2 executed early — read-only; the batch itself stays cadence-gated, `.raw/mezura` re-pinned LIVE at `2dbacb7` until T13)
+
+**T1 — citation re-verification: ALL PASS, zero drift.** Re-cloned at the pinned `2dbacb7`; every recorded citation re-checked against the tree: file line counts (masks 257 / producer 653 / identity 833 / file_parser 4465), constants (`SMALLEST_MAPPED_FILE_BYTES = 262_144`, `MAX_RETAINED_FILE_BUFFER_BYTES = 4_194_304`, `INITIAL_FILE_BUFFER_BYTES = 150`, `SHEBANG_READ_LIMIT = 256`, `MAX_IDENTITY_LEN = 32`), mechanisms (AVX2 2×32 cmpeq+movemask masks.rs L105–127; NEON vpaddq bit-gather L169–170; expected+1 sentinel + 64 KiB sizing window file_parser.rs L221–258; steal_batch consumer.rs L64–73; clamp L160–162; ScanPlan L309 + anchors_of L429), manifest facts (edition 2024, thin LTO, CGU 1, memmap2 under `[target.'cfg(unix)'.dependencies]`), and the README §Threads quote (L676–677, verbatim).
+
+**T2 — the unread-file sweep (producer.rs L1–249 production, identity.rs L1–480 production, file_parser.rs L445–1000): ONE new candidate-grade find, two strengthening cites, five annotations.**
+
+| # | pattern | source | grade | notes |
+|---|---|---|---|---|
+| 7 | **O_NONBLOCK probe open** — head-probe reads of arbitrary paths open with `OpenOptions::read(true).custom_flags(libc::O_NONBLOCK)` on unix: a kernel notification file (`/sys/kernel/security/apparmor/revision`) "gives its value on the first read and makes the next one wait for that value to change, which never comes" — a plain `File::open`+read head-probe HANGS forever. The read loop treats `WouldBlock` as end-of-head. | `identity.rs` L406–440 (`read_first_bytes`, `open_for_probe`) | **B−** | Dedup PASS (`O_NONBLOCK\|nonblock\|NonBlock` → 0 corpus hits; single mezura site). Distinct from candidate 3 (open-mode hang vs map-admission SIGBUS). NotBenchable-by-construction (the failure is a hang) — suggest-only, same admission class as candidates 3/5. Buggy shape: any tool that head-probes arbitrary files (counters, detectors, previewers) without O_NONBLOCK. |
+
+**Strengthening cites (grades unchanged):**
+
+- Candidate 4 (steal-batch): `producer.rs` L113–133 uses `steal_batch_and_pop` on BOTH the global injector AND peer stealers (skipping self) — the mechanism is engine-wide, not consumer-only.
+- Candidate 5 (backoff ladder): third site — producer idle poll `thread::sleep(50µs)` (`producer.rs` L106) beside the consumer's yield→2ms ladder.
+
+**Annotations (family notes; NOT standalone — positive instances / adjacent classes):**
+
+- Stack-buffer case-fold with rare-alloc fallback (`identity.rs` L354–378: `[u8; 32]` + in-place `make_ascii_lowercase`; allocating `to_ascii_lowercase` only past `MAX_IDENTITY_LEN`) — alloc-reuse family.
+- Prebuilt `memmem::Finder<'static>` per needle set + per-language lazy matcher caches (`file_parser.rs` L753–835, L913–971) — B67-adjacent (the ScanPlan is the generalized form).
+- `code_spans` batching — keywords searched once over gathered code spans "instead of once per alias per line" (`file_parser.rs` L560–567) — batching family.
+- `is_minified` average-line early-exit — `memchr_iter('\n').take(len/AVG).count() < len/AVG` settles the average from a bounded prefix (`file_parser.rs` L989–999) — the dropped bounded-head-skip family, second instance.
+- `cfg!(windows)` DirEntry-metadata size freebie (`producer.rs` L215–217) — stat-elision, folds into candidate 3's notes.
+
+**ScanPlan consumer machinery (file_parser.rs L445–751) confirms candidates 1–2 end-to-end**: the `Candidates::At(offsets, lead)` path consumes the dual-mask positions directly (no per-line search; offsets rebased per line via `checked_sub(lead)`), the `Unsearched` fallback walks packed memchr/memchr2/memchr3 chunks, and sorts fire only for kinds split across passes — one pass yields line order for free.
+
+**Still unread by design (out of T2's plan-scoped subset):** `language_file.rs` (1345 L), `domain.rs` (934 L), file_parser.rs beyond L1000, render/explain/tests — the remainder is language-definition data and output formatting; no simd/io/concurrency surface expected, and the plan's T2 subset covered the engine files where such candidates live.
