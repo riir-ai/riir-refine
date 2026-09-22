@@ -9850,3 +9850,31 @@ with the function) and reverted here; the file belongs to that session's
 commit. `groq_first`-only also never compiled its live router smoke
 (missing `cf_workers_ai` cfg — latent since the test landed, surfaced by
 making the posture real); gated now.
+
+## 2026-09-22 — Issue 129: the cargo-heal scoop-bucket 0.1.4 manifest 404 (URL pointed at the v0.1.3 tag)
+
+`bucket/cargo-heal.json` in `gist-rs/scoop-bucket` declared
+`"version": "0.1.4"` but its download URL fetched from the **v0.1.3** tag —
+no `cargo-heal-v0.1.4-*` asset exists there, so every scoop install/upgrade
+of cargo-heal 0.1.4 on Windows 404'd since the 0.1.4 bump. The `hash` field
+was already correct; only the URL's tag was stale — exactly the shape a
+hand-edit produces (version string bumped, URL string missed).
+
+**Fix + verification** (same day, scoop-bucket `9f70496`): one-line URL tag
+`v0.1.3` → `v0.1.4`, verified END-TO-END — `curl -sL` the fixed URL →
+sha256 byte-identical to the manifest's hash AND to the v0.1.4 release's
+own `SHA256SUMS` row for the windows zip.
+
+**Prevention (the lane note)**: `release.yml` (Plan 105) owns tap/bucket
+PRs on `v*` tags, but the 0.1.4 bucket row landed as a manual commit — a
+hand path with no mechanical coupling between the version string and the
+URL tag. Prefer the release.yml bucket-PR lane for every bump; when
+hand-editing is unavoidable, copy BOTH `url` and `hash` from the freshly
+cut release's assets (never retype the tag), and curl the URL once before
+pushing — a 404 in a bucket manifest is a broken install for every Windows
+user, not a docs nit.
+
+Found during the riir-reflex Plan 606 T2.3 session (previously carried as
+"noted, not mine" in the Phase-2 handoff); the reflex-side record is
+riir-reflex `e5dcfc9`. Issue file removed per the noise-reduction rule —
+this row is the durable record.
