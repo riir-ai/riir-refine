@@ -57,7 +57,21 @@ pub(super) fn entries() -> Vec<PerfRule> {
             category: "iterators".to_string(),
             buggy_code: "fn find_delim(buf: &[u8]) -> Option<usize> {\n    buf.iter().position(|&b| b == b';')\n}".to_string(),
             fixed_code: "fn find_delim(buf: &[u8]) -> Option<usize> {\n    memchr::memchr(b';', buf) // SIMD block scan + movemask early exit\n}".to_string(),
-            context_notes: None,
+            // BATCH 172 RIDER (mezura, Research 202 candidate 2 — the
+            // anchor-byte greedy set-cover for multi-NEEDLE scans): when
+            // the scan targets a set of multi-byte SYMBOLS (comment
+            // openers, raw-string fences, string terminators), do not run
+            // one search per symbol — derive the FEWEST finding bytes that
+            // reach every symbol (greedy min-cover over the symbols'
+            // bytes), disfavouring LETTERS (visited on every word),
+            // anchoring multi-byte symbols at an offset BEHIND the found
+            // byte (a `r#"` is found by its quote; verify the full symbol
+            // at the hit), and pack the chosen 2-3 anchor bytes into one
+            // memchr2/memchr3 pass. The selection algorithm is the rider's
+            // content — the memchr-packing primitive is this rule's own
+            // ladder, and a cover computed once per needle set amortizes
+            // like the finder's bool table.
+            context_notes: Some("DEP-GATED suggestion (fire only when the target manifest declares memchr, else suggestion-only); the single-needle rule's own ParetoDominant bench verdict is unchanged by this rider. Wash below ~16-32B haystacks (call overhead eats the win). EXCLUDES xs.contains(&b): std already specializes u8 contains via SWAR — the position/rposition shape is where the win lives. BATCH 172 RIDER — the multi-NEEDLE selection half (mezura ScanPlan/anchors_of, Research 202 cand 2, adjudicated rider-not-standalone: the arity ladder above already names the 2/3-needle packing; the DISTINCT content is WHICH bytes feed it): for a set of multi-byte SYMBOLS, derive the minimal ANCHOR COVER — greedy fewest finding bytes reaching every symbol, letters disfavoured (hit on every word), multi-byte symbols anchored at an offset BEHIND the found byte (find the quote of r#\", verify the fence at the hit) — then ONE memchr2/memchr3 pass over the anchors, verifying full symbols only at hits. Compute the cover ONCE per needle set (it amortizes the way a finder's tables do); re-deriving per line re-pays the selection and is the per-line shape this rule family exists to kill. Source: subamanis/mezura file_parser.rs (ScanPlan, anchors_of) @ 2dbacb7, MIT OR Apache-2.0. Batch 172 / Plan 166.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(byte_find_position_to_memchr_bench_spec()),
         },

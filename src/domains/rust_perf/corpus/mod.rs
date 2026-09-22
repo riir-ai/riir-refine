@@ -7,7 +7,7 @@
 //! `context_notes` field is `Option<String>` — `Some(...)` for rules the bench
 //! validator found ParetoDominated/Mixed/Tie in the default config (Bench 013 /
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
-//! unconditional wins + honestly `NotBenchable` rules.
+//!      unconditional wins + honestly `NotBenchable` rules.
 //!
 //! 145 entries across 12 categories (complexity 22, allocation 26, simd 8,
 //! layout 12, iterators 10, concurrency 20, io 24, arithmetic 8, dispatch 5,
@@ -17,30 +17,30 @@
 //! annotations were never counted) (8 external-runtime/size-class + 2
 //! metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
-//! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
+//!      axis (Batch 86) + the workload-level read-coalescing annotation (Batch
 //! 94) + the measurement-honesty axis itself (Batch 109 — a timing gate
-//! whose work folds away has no nonzero baseline to ratio) + the PLE-gather
-//! workload annotation (Batch 118) + the two build-integrity annotations
-//! and the A/B-design annotation (Batch 121 — resume provenance, write-
-//! verify-publish, one-variable A/B; correctness-of-provenance and
-//! experimental-design content, not speed) + the three vision-delta
-//! annotations (Batch 122 — template-governed emission, provisioning
-//! completeness, per-turn diagnostics; correctness-of-emission and
-//! test-honesty content, not speed) + the two upstream-surge annotations
-//! (Batch 123 — full-vector comparison integrity, tri-state fit
-//! classification; measurement-integrity and robustness content, not speed)
-//! plus the evaluation-design annotation (Batch 124 — matched controls,
-//! proxy-vs-endpoint, null-arm identity; experimental-design content, not
-//! speed) plus the oracle-contract annotation (Batch 125 — baseline-
-//! reproduction triage, compute-shape-matched oracles, consumed-outputs
-//! comparison; oracle-contract content, not speed) plus the three agent-
-//! context annotations (Batch 141 — measured reserve for a destructive
-//! rewrite, semantic truncation boundaries, pattern-bounded stream holdback;
-//! budget/boundary/stream discipline, not speed) plus the two Batch-143
-//! annotations (the log-only hot-path computation behind a level gate — its
-//! note carries the #143684 wall-time-vs-icount measurement-honesty rider;
-//! and the macro-emission build-time rule — upstream-measured compile-time
-//! content, no runtime A/B axis).
+//!     whose work folds away has no nonzero baseline to ratio) + the PLE-gather
+//!     workload annotation (Batch 118) + the two build-integrity annotations
+//!     and the A/B-design annotation (Batch 121 — resume provenance, write-
+//!     verify-publish, one-variable A/B; correctness-of-provenance and
+//!     experimental-design content, not speed) + the three vision-delta
+//!     annotations (Batch 122 — template-governed emission, provisioning
+//!     completeness, per-turn diagnostics; correctness-of-emission and
+//!     test-honesty content, not speed) + the two upstream-surge annotations
+//!     (Batch 123 — full-vector comparison integrity, tri-state fit
+//!     classification; measurement-integrity and robustness content, not speed)
+//!     plus the evaluation-design annotation (Batch 124 — matched controls,
+//!     proxy-vs-endpoint, null-arm identity; experimental-design content, not
+//!     speed) plus the oracle-contract annotation (Batch 125 — baseline-
+//!     reproduction triage, compute-shape-matched oracles, consumed-outputs
+//!     comparison; oracle-contract content, not speed) plus the three agent-
+//!     context annotations (Batch 141 — measured reserve for a destructive
+//!     rewrite, semantic truncation boundaries, pattern-bounded stream holdback;
+//!     budget/boundary/stream discipline, not speed) plus the two Batch-143
+//!     annotations (the log-only hot-path computation behind a level gate — its
+//!     note carries the #143684 wall-time-vs-icount measurement-honesty rider;
+//!     and the macro-emission build-time rule — upstream-measured compile-time
+//!     content, no runtime A/B axis).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -104,14 +104,14 @@
 //! Batch 91 (2026-08-31, Research 106 — the Rustdoc filter-first distill,
 //! noahlev.org "Making Rustdoc 33% faster" + rust-lang PRs 159623/159779/
 //! 159854) added filter-before-expensive-transform (Rustdoc built the
-//! display representation for EVERY trait impl in the dependency graph,
-//! THEN filtered; the fix re-expresses the relevance predicate on the raw
-//! input and filters first — win ∝ discard-fraction × transform cost,
-//! IMPOSSIBLE when the predicate is not re-expressible on the input) and
-//! decision-projection-before-construction (the decision consumes only a
-//! cheap projection that is INVARIANT under an expensive canonicalization
-//! — the head of a type — so compute the projection on the raw input and
-//! pay the canonicalization only behind the decision).
+//!         display representation for EVERY trait impl in the dependency graph,
+//!         THEN filtered; the fix re-expresses the relevance predicate on the raw
+//!         input and filters first — win ∝ discard-fraction × transform cost,
+//!         IMPOSSIBLE when the predicate is not re-expressible on the input) and
+//!         decision-projection-before-construction (the decision consumes only a
+//!         cheap projection that is INVARIANT under an expensive canonicalization
+//!         — the head of a type — so compute the projection on the raw input and
+//!         pay the canonicalization only behind the decision).
 //!
 //! Batch 94 (2026-09-01, Research 110 — the oMLX PR #3260 SSD expert
 //! streaming distill) added coalesce-nearby-reads-bounded-gap-cacheability-
@@ -323,6 +323,19 @@
 //! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
 //!   a timing gate whose work folds away under LTO has no nonzero baseline to
 //!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
+//! - `mmap-settled-size-gated-read` (page-cache state dominates any map-vs-read
+//!   microbench — the io family's B118/B123/B139/B145 standing, cited three
+//!   times; decision content = the TWO-GATE admission (size ≥ 256 KiB AND mtime
+//!   age ≥ 5 s vs the concurrent-truncation SIGBUS) + the expected+1 sentinel
+//!   read protocol; Batch 172, mezura)
+//! - `steal-batch-not-per-item` (deque-header contention under real scheduling
+//!   — not hostable without a thread farm whose noise floor swallows the
+//!   signal; decision content = `steal_batch_and_pop`'s half-not-all policy;
+//!   Batch 172, mezura)
+//! - `nonblocking-open-for-head-probes` (the failure is a HANG against a live
+//!   kernel-notification endpoint — `NotBenchable` by construction; decision
+//!   content = `O_NONBLOCK` probe opens + WouldBlock-as-end-of-head; Batch 172,
+//!   mezura)
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
@@ -348,7 +361,11 @@
 //! invariance-precondition note on `decision-projection-before-construction`)
 //! extend it; Batch 94's cacheability note and Batch 99's measured-verdict +
 //! regime-boundary note on `mir-destprop-branch-site-merge` complete the
-//! current set. The patterns
+//! current set; Batch 172 added four annotations (the dual-mask GOAT lead +
+//! the three `NotBenchable` mezura decision-content rules) and flipped
+//! `byte-find-position-to-memchr` from unannotated to annotated (the anchor-
+//! cover selection rider) while extending `reuse-allocation-clear`'s note
+//! with the retention-clamp rider. The patterns
 //! are genuine wins in their respective regimes and are kept in the corpus as
 //! documented patterns, but consumers should treat annotated rules as
 //! context-dependent — not unconditional suggestions.
@@ -368,10 +385,10 @@ mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 145 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 149 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (26 rules); concurrency has 20
+/// wasm). Allocation is the deepest (26 rules); concurrency has 21
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 135 added the zero-cost atomic conversion + the
 /// zero-sync partition; Batch 136 added the dynamic-work ladder + the
@@ -380,15 +397,19 @@ mod tests;
 /// consecutive-ready yield, the semaphore fan-out bound; Batch 153 added the
 /// blocking-sleep async twin + the rayon oneshot bridge — the corpus's first
 /// tokio×rayon boundary rule; Batch 154 added the oneshot response-send
-/// hygiene + the bounded-channel-cycle deadlock);
+/// hygiene + the bounded-channel-cycle deadlock; Batch 172 added the
+/// crossbeam steal-batch rule);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist); caching has 7; io has 24 (the
+/// the runtime-table handler-pair hoist); caching has 7; io has 26 (the
 /// measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
 /// prefault-admission rule; Batch 141 added the tail-boundary and
 /// stream-holdback rules; Batch 153 added the `TCP_NODELAY` request-response
-/// rule; Batch 154 added the vectored-write capability flag); bevy has 2;
-/// wasm has 1.
+/// rule; Batch 154 added the vectored-write capability flag; Batch 172 added
+/// the mmap-settled-size-gated read + the nonblocking head-probe open); bevy
+/// has 2; wasm has 1. simd has 9 (Batch 172 added the dual-mask fused block
+/// scan — the corpus's first hand-SIMD `std::arch` entry with both AVX2 and
+/// NEON arms).
 #[must_use]
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     let mut entries = entries_01::entries();

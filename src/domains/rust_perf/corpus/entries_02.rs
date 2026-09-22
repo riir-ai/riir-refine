@@ -101,7 +101,18 @@ pub(super) fn entries() -> Vec<PerfRule> {
             context_notes: Some(
                 "Bench 013: Mixed 3/4 Faster (5.97× at N=100, 1.60× at N=1000, 1.20× at N=10000) \
                  but 0.87× at N=100000 (reused buffer exceeds L2 cache). Suggest for hot \
-                 functions called in tight loops with small-to-medium buffers (≤10K elements).".to_string()
+                 functions called in tight loops with small-to-medium buffers (≤10K elements). \
+                 BATCH 172 RIDER — the retention CLAMP (mezura, Research 202 cand 6, adjudicated \
+                 rider-not-standalone: retention is not a bench axis, and the policy refines \
+                 this rule's own reuse): reuse the buffer across calls, but DROP it when \
+                 retained capacity exceeds 4 MiB (4_194_304) — one huge input must not pin \
+                 4+ MiB per thread FOREVER (a walker hitting a single giant file would \
+                 ratchet every worker's steady-state footprint to that file's size); seed \
+                 small (~150 B) and let growth ride the reuse, clamping only the extremes. \
+                 Third retention policy beside this rule (reuse, unbounded) and kernel_opt's \
+                 grow-only staging (the opposite): bounded reuse. Source: subamanis/mezura \
+                 consumer.rs MAX_RETAINED_FILE_BUFFER_BYTES @ 2dbacb7. Batch 172 / Plan 166."
+                    .to_string(),
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(reuse_allocation_clear_bench_spec()),

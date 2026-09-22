@@ -1,6 +1,6 @@
 # Mezura — fast line counter (rust_perf distill source verdict)
 
-**Status:** DISTILLED — pending owner decision (Batch 172 planned, `.plans/166_batch172_mezura_rust_perf_distill.md`; not yet mined — **T1+T2 pre-verified 2026-09-22, addendum below**)
+**Status:** RECORD — Batch 172 LANDED 2026-09-23 (4 rules + 2 riders + 1 drop; the landing record: HISTORY.md 2026-09-23 §Batch 172; T1+T2 pre-verified 2026-09-22, addendum below; `.raw/mezura` removed at landing)
 
 - **Source:** https://github.com/subamanis/mezura @ `2dbacb756d2169d2239bcdfbe9391fcd2ed9389b` (post-3.2.0 HEAD, cloned shallow into `.raw/`, deleted after this commit; the 3.2.0 release sha per crates.io trustpub = `6577a40fd2b29e4bb9d1cfb02a316a1932fa1708`)
 - **License:** MIT OR Apache-2.0 (fixtures must be ORIGINAL minimal reproductions — the cmpeq/movemask idioms are textbook; write our own AVX2/NEON arms)
@@ -80,3 +80,17 @@ All four pass. Suggest-only fix class (hand-SIMD is not a bounded autofix); the 
 **ScanPlan consumer machinery (file_parser.rs L445–751) confirms candidates 1–2 end-to-end**: the `Candidates::At(offsets, lead)` path consumes the dual-mask positions directly (no per-line search; offsets rebased per line via `checked_sub(lead)`), the `Unsearched` fallback walks packed memchr/memchr2/memchr3 chunks, and sorts fire only for kinds split across passes — one pass yields line order for free.
 
 **Still unread by design (out of T2's plan-scoped subset):** `language_file.rs` (1345 L), `domain.rs` (934 L), file_parser.rs beyond L1000, render/explain/tests — the remainder is language-definition data and output formatting; no simd/io/concurrency surface expected, and the plan's T2 subset covered the engine files where such candidates live.
+
+## Batch 172 landing close-out (2026-09-23, past-midnight cadence slot)
+
+**Adjudications executed (the coordinator falsification):**
+
+- Candidate 1 `dual-mask-fused-block-scan` — **LANDED** (simd, benchable). MEASURED ParetoDominant 4/0/0 verdict-stable ×2 (4090 AVX2): 43.11×/43.95×/23.10×/18.29× at 4 KiB/64 KiB/256 KiB/1 MiB; alloc 0/0; G-det stable. G1 exhaustive in-module gate (16,384-combo byte×position sweep + dense + short + end-to-end; it caught the `\n`-in-needle-set contract subtlety pre-landing). NEON arm aarch64 cross-compile-verified; runtime re-gate rides the M3.
+- Candidate 2 anchor-cover — **RIDER on `byte-find-position-to-memchr`** (B67's notes name the 2/3-needle ladder; the selection algorithm — greedy min-cover, letters disfavoured, anchor-behind-found-byte — is the rider's distinct content; B67 flipped None→Some).
+- Candidate 3 `mmap-settled-size-gated-read` — **LANDED** (io, NotBenchable, the B139/B145/B118 standing; distinct-from paid to all four mmap-adjacent rules).
+- Candidate 4 `steal-batch-not-per-item` — **LANDED** (concurrency, NotBenchable; the T2 strengthening cite carried).
+- Candidate 5 oversubscription — **DROPPED**: decision-content-only, adjacent to `batch-blocking-pool-segment`'s sizing axis; no distinct mechanism survives the adjacency read.
+- Candidate 6 scratch-capacity clamp — **RIDER on `reuse-allocation-clear`** (retention is not a bench axis; bounded reuse as the third retention policy).
+- Candidate 7 `nonblocking-open-for-head-probes` — **LANDED** (io, NotBenchable-by-construction; the hang class, distinct from cand 3's SIGBUS axis).
+
+**Net: 4 rules + 2 riders + 1 drop.** rust_perf 145 → 149 (simd 9, io 26, concurrency 21). Lib 2175/0; score-bench #160 heal_rate 96.36% FLAT; freeze tables unmoved by derivation (proposer-less rules never enter the atom vocab). T3 mine-time dedup re-grep PASS on all candidates. `.raw/mezura` removed at landing.

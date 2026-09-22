@@ -169,6 +169,35 @@ entry it belongs to — in the SAME commit. Generator lessons
 the `.distill/001` standing rules; this file holds the craft, not the
 mechanics.
 
+## 13. Cross-arch hand-SIMD fixtures + the embedded-code escape ladder (Batch 172)
+
+The first hand-SIMD std::arch entry (dual-mask-fused-block-scan) taught three
+lessons the string-fixture entries could not:
+
+1. **The three-layer escape ladder.** A corpus entry's `fixed_code` passes
+   through THREE representations before it compiles as embedded code: the
+   tool-call JSON → the FILE's Rust string literal → the Rust-unescaped
+   string CONTENT. `\n` in the file means a newline in the code; `\\n` in
+   the file means `\n` (the char-literal escape) in the code. A `b'\\n'`
+   written into the file is CORRECT (it unescapes to `b'\n'`) — pre-existing
+   entries carry the same bytes. The failure mode is not knowing which layer
+   you are editing; VERIFY with a byte-level grep before diagnosing an
+   escaping "bug" that is not one (this session chased a phantom for ten
+   minutes because a grep pattern itself escaped wrongly).
+2. **fn-local `mod wide` cannot `use super::DualMasks`.** A module declared
+   inside a test fn resolves `super::` to the ENCLOSING MODULE, not the fn's
+   items — the wide arms return plain tuples `(u64, u64)` and the outer
+   scope wraps them. (Module-level harness code — the bench harness — is
+   unaffected: its `mod wide` and the type are true siblings.)
+3. **The G1 reference contract must agree on SEPARATORS.** An end-to-end
+   equivalence sweep against a naive `split()`-walked reference vacuously
+   differs when the needle SET CONTAINS the separator (the reference can
+   never see a separator inside a line). Block-level mask sweeps keep the
+   both-bits-at-once edge; end-to-end sweeps use a separator-free needle
+   set. The exhaustive gate caught this pre-landing — which is its job.
+
+Worked-example row added below (the phantom-escape lesson).
+
 ## Worked examples (killed and refuted leads are knowledge)
 
 | Lead | Verdict | Lesson |
@@ -179,6 +208,7 @@ mechanics.
 | `useless_format` oracle consumption | GUARDED (P23) | clippy's own suggestion can be wrong; escape-free gate (§3) |
 | pufferlib bf16 AVX2 store | corpus-NO | no two-regime structure → not a rule (§4) |
 | `chunks_exact` chain shape (P13) | EXTENSION, measured safer | SAFER-than-clippy divergence, pinned + documented (§6) |
+| `b'\\n'` "escaping bug" (Batch 172) | PHANTOM — file bytes were CORRECT | the three-layer escape ladder (§13.1); verify with byte-level grep first |
 
 ## See also
 

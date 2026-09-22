@@ -1,5 +1,79 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — Batch 172 / Plan 166: the mezura rust_perf distill, rust_perf 145 → 149 — the dual-mask GOAT lead at 43×/18×
+
+The 873-handoff cadence slot opened (first idle pass past midnight +07, 09-23);
+T1/T2 were pre-executed read-only on 09-22 ([Research 202](.research/202_mezura_line_counter_distill.md)
+— every citation re-verified at the pin + one new candidate graded). Four new
+rules + two riders, fixtures ORIGINAL (MIT OR Apache-2.0 source read under
+`.raw/mezura` @ `2dbacb7`, removed at landing).
+
+**4 new rules** (yield 2–3 was the estimate; the T2 addendum's candidate 7 +
+the coordinator's steal-batch call bring it to 4 — all four carry annotations):
+
+- `dual-mask-fused-block-scan` (simd, A− lead, BENCHABLE) — one fused 64-byte
+  SIMD pass yields BOTH the newline bitmask AND the any-of-needle-set bitmask
+  (AVX2 2×32 cmpeq+movemask / NEON 4×16 vceq + power-of-two-weighted vpaddq
+  fold); line splitting + candidate extraction become trailing_zeros mask
+  walks. **MEASURED ParetoDominant 4/0/0, verdict-stable ×2 (4090 x86_64 AVX2,
+  quiet): 43.11×/43.95×/23.10×/18.29× at 4 KiB/64 KiB/256 KiB/1 MiB; alloc
+  axis 0/0 (G4 holds — the fixed arm's only state is two u64 masks per
+  block); G-det stable ×3.** G1 exhaustive gate in-module: every byte value
+  × every position (16,384 combos) + 2,000 dense LCG blocks + every short
+  length 0..=63 + end-to-end counts/position-checksum vs the naive split
+  reference at every length 0..=300 + 1K/4K/64K — the gate caught a real
+  contract subtlety pre-landing (a `\n`-in-needle-set is vacuously different
+  under the per-line reference; the end-to-end sweep uses a newline-free set,
+  the block sweeps keep the both-bits edge). NEON arm compile-verified via
+  aarch64-apple-darwin cross-check from the 4090 (full-crate cross is
+  cc-blocked on Windows); runtime NEON re-gate rides the next M3 idle pass
+  (the transposed-weight precedent). Suggestion-only (hand-SIMD is not a
+  bounded autofix). The corpus's first hand-SIMD std::arch entry with both
+  AVX2 and NEON arms.
+- `mmap-settled-size-gated-read` (io, NotBenchable — page-cache state, the
+  B139/B145/B118 standing) — TWO-GATE mmap admission (size ≥ 256 KiB AND
+  mtime age ≥ 5 s, the settle guard vs the concurrent-truncation SIGBUS) +
+  the expected+1 sentinel read protocol (short-at-listed = exact, full =
+  grew, re-stat) + the Windows DirEntry size freebie. Distinct-from notes
+  owed + paid to all four mmap-adjacent io rules.
+- `steal-batch-not-per-item` (concurrency, NotBenchable — contention timing)
+  — per-item `steal()` answered with `yield_now` per `Steal::Retry` →
+  `steal_batch_and_pop` (half of what's left, so the tail still spreads);
+  the T2 addendum's engine-wide strengthening cite (producer L113-133 +
+  consumer L64-73 both) is in the annotation.
+- `nonblocking-open-for-head-probes` (io, NotBenchable by construction — the
+  failure is a HANG on a live kernel endpoint) — O_NONBLOCK probe opens for
+  head-probe reads of arbitrary paths (kernel notification files park the
+  SECOND read forever); WouldBlock reads as end-of-head; regular files
+  unaffected (POSIX).
+
+**2 riders** (the coordinator-falsification half): candidate 2 (anchor-byte
+ greedy set-cover for multi-needle scans) → RIDER on
+ `byte-find-position-to-memchr` (the arity ladder already names the
+ memchr2/3 packing; the DISTINCT content — greedy min-cover, letters
+ disfavoured, anchor-behind-found-byte — joins B67's notes; B67 flipped
+ None→Some, the first annotation flip since async-yield-point); candidate 6
+ (scratch-capacity clamp) → RIDER on `reuse-allocation-clear` (retention is
+ not a bench axis; bounded reuse joins as the third retention policy).
+Candidate 5 (io-bound oversubscription) DROPPED — decision-content-only,
+ adjacent to batch-blocking-pool-segment's sizing axis (recorded in Research
+ 202's close-out).
+
+**Gates:** lib 2175/0 (was 2174; +1 the G1 equivalence gate); count pins
+ 149 total / 93 benchable / 94 annotated / 55 unannotated; clippy `-D
+ warnings` clean (healer took the 5 doc_markdown mechanicals on mod.rs);
+score-bench **#160 heal_rate 96.36% FLAT** vs #159; gen2/gen3 freeze tables
+UNMOVED by derivation (the atom tables filter to the clippy corpus and to
+FIXABLE_RULES — my 4 rules are proposer-less suggest-only, excluded; measured
+by reading v5_atoms/vocabulary, no regeneration owed); NEON aarch64
+compile-check green; T3 dedup re-grep at mine time PASS on all 7 candidates
+(only known-family hits). Global release binary rebuilt (23:42, release
+feature set stamped complete) + the score-bench run rode a `--features
+score_bench,latent_retrieval,kat_service` build.
+
+Standing cadence note: the batch COMMITTED past midnight +07 09-23 (the
+one-batch-per-day discipline held — Batch 171 landed 09-22).
+
 ## 2026-09-21 — Issue 128 EXECUTED (T1-T7): the fixseq cascade-law + derailment-index report shipped, two mint corpora measured — the law is GENERATOR-CONDITIONAL, G4 fired live, HORIZON(prev) does not raise
 
 Research 200's executable half (arXiv:2609.17930 Traverse/Scout, the repair-driver adaptation), executed the same day it was filed. Everything report-only (the scope guard held): nothing wired into driver/fixpoint paths.

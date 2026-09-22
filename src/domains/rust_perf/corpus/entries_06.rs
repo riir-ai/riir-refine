@@ -933,6 +933,112 @@ fn upload_uniforms(device: &Device, params: &WaterParams, dst: &mut UploadBuffer
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
+
+        // ── Batch 172 (2026-09-23, Plan 166 / Research 202 — the mezura
+        // line-counter distill; fixtures ORIGINAL, MIT OR Apache-2.0 source
+        // read under .raw at the pinned sha, no verbatim reproduction).
+        //
+        // ── simd: one fused block pass yields BOTH the newline mask AND the
+        // any-of-needle-set mask (the dual-mask fused block scan) ─────────
+        // The default shape of every line-oriented scan touches the same
+        // bytes once per question: split() walks the buffer for newlines,
+        // then every searched byte is walked again inside every line (or
+        // searched per line via find/contains), plus per-line iterator +
+        // closure overhead. One 64-byte SIMD pass answers BOTH questions
+        // for every byte at once: AVX2 compares two 32-byte halves with
+        // cmpeq_epi8 against the newline and each searched byte, OR-ing the
+        // hit vectors, and movemask_epi8 gathers the sign bits — bit i of
+        // two u64s answers for byte i. NEON compares four 16-byte quarters
+        // with vceqq_u8, weights each lane with its power of two and folds
+        // the four vectors down with three vpaddq pairwise-add rounds (byte
+        // j of the folded vector = block bits 8j..8j+7). Line splitting
+        // (trailing_zeros over the newline mask) and the candidate question
+        // (the candidates mask) are then pure mask arithmetic. Feature
+        // detect is cached at finder construction, never per block; a short
+        // tail block falls to the shared scalar contract.
+        PerfRule {
+            rule_id: "dual-mask-fused-block-scan".to_string(),
+            name: "line-oriented scan (split('\n') + per-line per-needle search) touches every byte once per question → ONE fused 64-byte block pass computes both the newline bitmask and the any-of-needle-set bitmask (AVX2 2×32 cmpeq+movemask / NEON 4×16 vceq+weighted vpaddq fold); line splitting and candidate search read off the masks".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "// The default shape of every line-oriented parser/counter/detector:\n// split() walks the buffer once looking for newlines, then EVERY\n// searched byte is walked again inside EVERY line — the same bytes are\n// touched once per question, and each line pays iterator + closure call\n// overhead on top.\nfn count_lines_with_markers(buf: &[u8], markers: &[u8]) -> u64 {\n    let mut marked = 0;\n    for line in buf.split(|&b| b == b'\\n') {\n        for &m in markers {\n            if line.iter().any(|&b| b == m) {\n                marked += 1;\n                break;\n            }\n        }\n    }\n    marked\n}".to_string(),
+            fixed_code: "// One pass over each 64-byte block answers BOTH questions for every\n// byte at once: is it a newline, is it one of the searched bytes. The\n// answers arrive as two u64 bitmaps (bit i = byte i), so line splitting\n// and the candidate question are both mask arithmetic.\npub const BLOCK: usize = 64;\n\npub struct DualMasks {\n    pub newlines: u64,\n    pub candidates: u64,\n}\n\npub struct DualMaskFinder {\n    is_searched: [bool; 256],\n    searched: Vec<u8>,\n    wide: bool, // AVX2/NEON, probed ONCE here — never per block\n}\n\nimpl DualMaskFinder {\n    pub fn new(searched: &[u8]) -> Self {\n        let mut is_searched = [false; 256];\n        for &b in searched {\n            is_searched[b as usize] = true;\n        }\n        #[cfg(target_arch = \"x86_64\")]\n        let wide = std::is_x86_feature_detected!(\"avx2\");\n        #[cfg(target_arch = \"aarch64\")]\n        let wide = std::arch::is_aarch64_feature_detected!(\"neon\");\n        #[cfg(not(any(target_arch = \"x86_64\", target_arch = \"aarch64\")))]\n        let wide = false;\n        Self { is_searched, searched: searched.to_vec(), wide }\n    }\n\n    /// A block shorter than BLOCK answers for the bytes it has; the\n    /// missing tail reads as zeros.\n    pub fn scan_block(&self, block: &[u8]) -> DualMasks {\n        debug_assert!(block.len() <= BLOCK);\n        #[cfg(target_arch = \"x86_64\")]\n        if self.wide && block.len() == BLOCK {\n            // SAFETY: avx2 probed at construction; len checked == 64.\n            return unsafe { wide::scan_block(block, &self.searched) };\n        }\n        #[cfg(target_arch = \"aarch64\")]\n        if self.wide && block.len() == BLOCK {\n            // SAFETY: neon probed at construction; len checked == 64.\n            return unsafe { wide::scan_block(block, &self.searched) };\n        }\n        self.scan_block_scalar(block)\n    }\n\n    fn scan_block_scalar(&self, block: &[u8]) -> DualMasks {\n        let (mut newlines, mut candidates) = (0u64, 0u64);\n        for (at, &byte) in block.iter().enumerate() {\n            if byte == b'\\n' {\n                newlines |= 1 << at;\n            }\n            if self.is_searched[byte as usize] {\n                candidates |= 1 << at;\n            }\n        }\n        DualMasks { newlines, candidates }\n    }\n\n    /// Newline count + every searched-byte position checksum, one pass.\n    pub fn scan(&self, buf: &[u8]) -> (u64, u64) {\n        let (mut lines, mut checksum) = (0u64, 0u64);\n        let (mut base, mut hits) = (0usize, 0u64);\n        let (blocks, tail) = buf.as_chunks::<BLOCK>();\n        for block in blocks {\n            let m = self.scan_block(block);\n            lines += m.newlines.count_ones() as u64;\n            hits += m.candidates.count_ones() as u64;\n            let mut bits = m.candidates;\n            while bits != 0 {\n                let at = bits.trailing_zeros() as usize;\n                checksum = checksum.wrapping_add((base + at) as u64);\n                bits &= bits - 1; // clear the lowest set bit\n            }\n            base += BLOCK;\n        }\n        let m = self.scan_block(tail);\n        lines += m.newlines.count_ones() as u64;\n        hits += m.candidates.count_ones() as u64;\n        let mut bits = m.candidates;\n        while bits != 0 {\n            let at = bits.trailing_zeros() as usize;\n            checksum = checksum.wrapping_add((base + at) as u64);\n            bits &= bits - 1;\n        }\n        (lines, checksum)\n    }\n}\n\n#[cfg(target_arch = \"x86_64\")]\nmod wide {\n    use super::DualMasks;\n    use std::arch::x86_64::{__m256i, _mm256_cmpeq_epi8, _mm256_loadu_si256,\n        _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8};\n\n    /// SAFETY: caller probed avx2 and checked len == 64.\n    #[target_feature(enable = \"avx2\")]\n    pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> DualMasks {\n        let lo = _mm256_loadu_si256(block.as_ptr().cast::<__m256i>());\n        let hi = _mm256_loadu_si256(block.as_ptr().add(32).cast::<__m256i>());\n        let nl = _mm256_set1_epi8(b'\\n' as i8);\n        let newlines = gather(\n            _mm256_cmpeq_epi8(lo, nl),\n            _mm256_cmpeq_epi8(hi, nl),\n        );\n        let (mut hits_lo, mut hits_hi) = (_mm256_set1_epi8(0), _mm256_set1_epi8(0));\n        for &byte in searched {\n            let want = _mm256_set1_epi8(byte as i8);\n            hits_lo = _mm256_or_si256(hits_lo, _mm256_cmpeq_epi8(lo, want));\n            hits_hi = _mm256_or_si256(hits_hi, _mm256_cmpeq_epi8(hi, want));\n        }\n        DualMasks { newlines, candidates: gather(hits_lo, hits_hi) }\n    }\n\n    /// The sign bit of every lane, bit i for byte i of the block.\n    /// SAFETY: avx2.\n    #[target_feature(enable = \"avx2\")]\n    unsafe fn gather(lo: __m256i, hi: __m256i) -> u64 {\n        let lo_bits = _mm256_movemask_epi8(lo) as u32 as u64;\n        let hi_bits = _mm256_movemask_epi8(hi) as u32 as u64;\n        lo_bits | (hi_bits << 32)\n    }\n}\n\n#[cfg(target_arch = \"aarch64\")]\nmod wide {\n    use super::DualMasks;\n    use std::arch::aarch64::{uint8x16_t, vandq_u8, vceqq_u8, vdupq_n_u8,\n        vgetq_lane_u64, vld1q_u8, vorrq_u8, vpaddq_u8, vreinterpretq_u64_u8};\n\n    const POWERS: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];\n\n    /// SAFETY: caller probed neon and checked len == 64.\n    #[target_feature(enable = \"neon\")]\n    pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> DualMasks {\n        let p = block.as_ptr();\n        let quarters = [\n            vld1q_u8(p),\n            vld1q_u8(p.add(16)),\n            vld1q_u8(p.add(32)),\n            vld1q_u8(p.add(48)),\n        ];\n        let nl = vdupq_n_u8(b'\\n');\n        let newlines = gather([\n            vceqq_u8(quarters[0], nl),\n            vceqq_u8(quarters[1], nl),\n            vceqq_u8(quarters[2], nl),\n            vceqq_u8(quarters[3], nl),\n        ]);\n        let mut hits = [vdupq_n_u8(0); 4];\n        for &byte in searched {\n            let want = vdupq_n_u8(byte);\n            for (hit, &quarter) in hits.iter_mut().zip(quarters.iter()) {\n                *hit = vorrq_u8(*hit, vceqq_u8(quarter, want));\n            }\n        }\n        DualMasks { newlines, candidates: gather(hits) }\n    }\n\n    /// Bit i of the result = the predicate held at byte i of the block:\n    /// weight every lane with its power of two, then pairwise-add the\n    /// four quarters down — three vpaddq rounds fold the weights into\n    /// 8 bytes, byte j holding block bits 8j..8j+7 (each set predicate\n    /// contributes exactly its own power of two; groups occupy disjoint\n    /// value bits, so the sums reassemble the bitmask without carries).\n    /// SAFETY: neon.\n    #[target_feature(enable = \"neon\")]\n    unsafe fn gather(preds: [uint8x16_t; 4]) -> u64 {\n        let powers = vld1q_u8(POWERS.as_ptr());\n        let [a, b, c, d] = preds.map(|pred| vandq_u8(pred, powers));\n        let halves = vpaddq_u8(vpaddq_u8(a, b), vpaddq_u8(c, d));\n        let folded = vpaddq_u8(halves, halves);\n        vgetq_lane_u64::<0>(vreinterpretq_u64_u8(folded))\n    }\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 4/0/0, verdict-stable x2 (4090 box x86_64 AVX2, quiet, 2026-09-23 — Batch 172 benches): 43.11x/43.95x/23.10x/18.29x at 4 KiB/64 KiB/256 KiB/1 MiB, alloc axis 0/0 at every size (both arms allocation-free — the timing axis is the win; G4's alloc-free fixed arm holds: the scan's only state is two u64 masks per block). aarch64 NEON arm compile-verified (aarch64-apple-darwin cross-check from the 4090) — runtime re-gate rides the next M3 idle pass (the transposed-weight precedent). Suggestion-only (hand-SIMD is not a bounded autofix — the soa-hot-field class). THE MECHANISM: the per-line shape touches the same bytes once per question — split() walks the buffer for newlines, then every searched byte is walked again inside every line, plus per-line iterator + closure overhead — while the fused scan answers BOTH questions for every byte in ONE block pass (AVX2: one cmpeq against the newline + one cmpeq per DISTINCT searched byte, OR-ed, then movemask gathers the sign bits into two u64s; NEON: vceqq_u8 quarters + a power-of-two-weighted vpaddq fold). Line splitting and candidate extraction are then trailing_zeros mask walks (the sparse-set-bit-iteration-tz-blsr family). REGIME: line-oriented scans over buffers well past a few blocks — counters, detectors, comment/markup scanners, any split+search pipeline; the searched set is a handful of DISTINCT bytes (each adds one cmpeq per block — cost is linear in DISTINCT needles, not occurrences). ANTI-REGIMES: buffers under a few blocks (call overhead dominates — the byte-find-position-to-memchr small-haystack concession); needles arriving dynamically per line with no stable set (the finder amortizes its bool table + feature probe across the scan); UTF-8-aware scanning that cannot treat bytes independently. The newline contract is byte-level (newline popcount = segments-1 in split terms), NOT the str::lines() CRLF-normalizing contract. Composes with a ScanPlan-style consumer: one pass yields line order for free (a sort fires only for kinds split across passes). Distinct from byte-find-position-to-memchr (single-needle FIRST-position search delegated to the memchr crate — this fuses TWO predicates over the whole buffer and yields ALL positions) and from bitplane-transpose-repeated-predicate-scan (repeated PREDICATE on packed data — this is two DIFFERENT byte-equality predicates fused); the dropped bounded-head family (early-exit heuristics) is the opposite regime (full-pass vs prefix). Fixtures ORIGINAL (the cmpeq/movemask and vceq/weighted-vpaddq idioms are textbook SIMD); source read under .raw at the pin: subamanis/mezura @ 2dbacb7 (MIT OR Apache-2.0, Research 202, masks.rs + the file_parser.rs consumer). Batch 172 / Plan 166.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(dual_mask_fused_block_scan_bench_spec()),
+        },
+
+        // ── io: mmap admission gated on size AND a settle window, with the
+        // expected+1 sentinel read protocol ─────────────────────────────
+        // Source: mezura file_parser.rs HeldFile/read_file_into/is_settled
+        // (Batch 172, Research 202 candidate 3). Unix whole-file reads of
+        // large settled files pay a copy the kernel could serve from the
+        // page cache directly; mapping removes the copy but opens the
+        // concurrent-truncation SIGBUS window (the source's own note:
+        // ripgrep's memory maps carry the same exposure). The admission is
+        // TWO-gated: size >= 256 KiB AND mtime age >= 5 s (a file still
+        // being written is NOT settled). The read protocol uses the
+        // expected+1 sentinel: ask one byte past the listed size — short
+        // at the listed size means exact, a full read means the file GREW
+        // (re-stat, re-read); sized-on-fill only when the first 64 KiB
+        // window fills. Honesty clause (kept): a partial short read on a
+        // failing disk is counted, unreported — stat-elision trades a rare
+        // false-size for zero stat calls on the hot path. Windows walks
+        // DirEntry metadata for the size freebie (no stat at all).
+        PerfRule {
+            rule_id: "mmap-settled-size-gated-read".to_string(),
+            name: "whole-file read always copies (fs::read) whatever the size or settle state → unix: mmap when size ≥ 256 KiB AND mtime age ≥ 5 s (the settle guard vs the concurrent-truncation SIGBUS), else read into the reusable buffer; the expected+1 sentinel read distinguishes exact-size from grown without a second stat".to_string(),
+            category: "io".to_string(),
+            buggy_code: "use std::fs;\n\n// Always-copy: every file, whatever its size or how settled it is,\n// pays the full kernel-copy into a fresh heap buffer. For large\n// inputs that sit in the page cache the copy is the dominant cost;\n// for a file being written RIGHT NOW, though, the copy is also the\n// only thing making the read SAFE — an mmap of a concurrently\n// truncated file SIGBUSes.\nfn read_whole(path: &str) -> std::io::Result<Vec<u8>> {\n    fs::read(path)\n}".to_string(),
+            fixed_code: "#[cfg(unix)]\nuse std::fs::File;\n#[cfg(unix)]\nuse std::io::Read;\n\nconst SMALLEST_MAPPED_FILE_BYTES: u64 = 262_144; // 256 KiB\nconst SETTLE_WINDOW_SECS: u64 = 5;\n\n/// A file is SETTLED when its mtime is old enough that no writer is\n/// mid-flight: mapping it cannot race a truncate. The guard is what\n/// makes mmap admission safe — without it the map is a SIGBUS window.\n#[cfg(unix)]\nfn is_settled(meta: &std::fs::Metadata) -> bool {\n    match meta.modified().ok().and_then(|m| m.elapsed().ok()) {\n        Some(age) => age.as_secs() >= SETTLE_WINDOW_SECS,\n        None => false, // unreadable clock: treat as NOT settled (read, don't map)\n    }\n}\n\n#[cfg(unix)]\nfn read_whole(path: &str) -> std::io::Result<Vec<u8>> {\n    let meta = std::fs::metadata(path)?;\n    let len = meta.len();\n    if len >= SMALLEST_MAPPED_FILE_BYTES && is_settled(&meta) {\n        // The settle window + size gate are the admission; a truncate\n        // AFTER admission still SIGBUSes — the guard narrows the window\n        // to files no writer has touched for SETTLE_WINDOW_SECS.\n        let map = memmap2::Mmap::map(&File::open(path)?)?;\n        return Ok(map.to_vec()); // or keep the map zero-copy at the call site\n    }\n    // The expected+1 sentinel: ask one byte PAST the listed size —\n    // a short read at `len` means exact-size; a full read means the\n    // file GREW (re-stat, re-read); sized-on-fill only when the first\n    // window fills. A partial short read on a failing disk is counted\n    // (the stat-elision trade, documented).\n    let mut file = File::open(path)?;\n    let mut buf = Vec::with_capacity(len as usize + 1);\n    let _ = file.take(len + 1).read_to_end(&mut buf)?;\n    Ok(buf)\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, suggestion-only, honestly NotBenchable (page-cache state dominates any microbench of map-vs-read — the corpus's own io family says so three times: prefault-admission B139, mincore-probe B145, parallel-disjoint-pread B118; deterministic only in the syscall/copy-count sense). THE DECISION CONTENT: (1) the TWO-GATE admission — size ≥ 256 KiB AND mtime age ≥ 5 s — is what makes mmap safe against the concurrent-truncation SIGBUS (a file being written is NOT settled; ripgrep's memory maps carry the same exposure, which is why rg gates its own maps); (2) the expected+1 sentinel read protocol — ask one byte past the listed size; short-at-listed = exact, full = grown (re-stat, re-read), sized-on-fill only when the first 64 KiB window fills — eliminates a second stat on the hot path at the cost of counting (never reporting) a partial short read on a failing disk; (3) the Windows DirEntry-metadata size freebie (the size arrives with the walk, no stat at all). REGIME: file-walking tools that read many whole files (counters, indexers, linters) on unix — the map serves settled large inputs straight from the page cache without the kernel copy. ANTI-REGIMES: files mutated concurrently without a settle guarantee (SIGBUS — the guard exists to exclude these); small files (the map/munmap syscall pair costs more than the copy — the 256 KiB floor); non-unix targets (memmap2 maps fine but the settle/SIGBUS analysis is POSIX-shaped); callers that need an owned Vec anyway (map.to_vec keeps the copy — the zero-copy win needs the call site to accept a borrowed slice). Distinct-from the io family's four mmap-adjacent rules, all on DIFFERENT axes: prefault-admission-keyed-to-ram-headroom (B139 — WHETHER to fault pages in eagerly, keyed to headroom; this is WHETHER to map at all, keyed to size+settle); mincore-probe-routes-gather-arm (B145 — probing residency to route; this admits on metadata, no probe); parallel-disjoint-pread-hides-cold-page-latency (B118 — positional reads on a shared fd; this is whole-file map-vs-read); batch-pool-readahead (B123 — readahead shaping; this is admission). Fixtures original; the settle-window/sentinel numbers are the source's own published constants (re-verified at the pin). Source: subamanis/mezura file_parser.rs (HeldFile/read_file_into/is_settled) @ 2dbacb7, MIT OR Apache-2.0, Research 202 candidate 3. Batch 172 / Plan 166.".to_string()),
+            // Not benchable: page-cache state dominates (the B139/B145/B118 class).
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
+        // ── concurrency: per-item steals from a crossbeam Injector contend ──
+        // Source: mezura consumer.rs L64-73 + producer.rs L113-133 (Batch
+        // 172, Research 202 candidate 4 — the mechanism is engine-wide:
+        // BOTH the producer's injector drain AND the consumers' peer steals
+        // use steal_batch_and_pop, skipping self). Per-item steals from a
+        // crossbeam-deque Injector return Steal::Retry under contention —
+        // and the naive consumer answers Retry with yield_now(), a full
+        // scheduling round PER ITEM. steal_batch_and_pop takes HALF of
+        // what's left in one pop (so the tail still spreads across workers
+        // instead of draining into one) and moves the contention from
+        // per-item to per-batch.
+        PerfRule {
+            rule_id: "steal-batch-not-per-item".to_string(),
+            name: "per-item steal() from a work-stealing Injector/Worker (Steal::Retry answered with yield_now per item — a scheduling round each) → steal_batch_and_pop (half of what's left, so the tail still spreads; contention moves from per-item to per-batch)".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use crossbeam_deque::{Injector, Steal};\n\n// Per-item stealing: every single steal() contends on the same deque\n// header, and under contention it returns Steal::Retry — which this\n// loop answers with yield_now(), a full scheduling round PER ITEM.\n// A worker processing a thousand items pays a thousand potential\n// reschedules for the crime of having siblings.\nfn drain<T: Send>(injector: &Injector<T>, worker: &crossbeam_deque::Worker<T>) -> Option<T> {\n    loop {\n        match injector.steal(worker) {\n            Steal::Success(item) => return Some(item),\n            Steal::Retry => std::thread::yield_now(), // a scheduling round per item\n            Steal::Empty => return None,\n        }\n    }\n}".to_string(),
+            fixed_code: "use crossbeam_deque::{Injector, Steal};\n\n// steal_batch_and_pop moves HALF of what the source holds into the\n// worker's own deque in one synchronized operation and pops one item —\n// the remaining half is still there for the NEXT stealer, so the tail\n// of the work spreads across workers instead of draining into one.\n// Contention now happens per BATCH, not per item; Retry is rare and\n// cheap to answer. (The producer side drains its own injector the\n// same way; peer steals skip self.)\nfn drain<T: Send>(injector: &Injector<T>, worker: &crossbeam_deque::Worker<T>) -> Option<T> {\n    loop {\n        match injector.steal_batch_and_pop(worker) {\n            Steal::Success(item) => return Some(item),\n            Steal::Retry => std::hint::spin_loop(), // batches make Retry rare\n            Steal::Empty => return None,\n        }\n    }\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, suggestion-only, honestly NotBenchable (the win is DEQUE-HEADER CONTENTION under real multi-thread scheduling — the timing axis the Pareto validator cannot host without a thread farm whose noise floor swallows the signal; deterministic only in the synchronized-operation-count sense: per-item steals are N contended ops, a batch steal is one). THE MECHANISM: crossbeam-deque steal() takes ONE item per synchronized operation on the shared deque header; steal_batch_and_pop moves half the remaining items in ONE — the half-not-all policy is deliberate (all-of-it would drain the tail into one worker and starve the spread the deque exists to provide; the source's own producer AND consumer sides both use it, peer steals skipping self). REGIME: hand-rolled work-stealing farms over a crossbeam Injector feeding roughly-a-core-count workers (file walks, parse farms, sharded scans) where per-item contention plus Retry/yield rounds are measurable. ANTI-REGIMES: single-worker queues (no contention — any batching is ceremony); item sets that don't fit the worker's local deque in halves (batching degenerates); rayon users (rayon already batches internally — this is the hand-rolled-farm rule). Distinct from channel-send-batching-unpark (SENDER-side syscall/park amortization on channels — a park/unpark mechanism; this is STEALER-side deque-header contention on a work-stealing deque) and from the tokio pool rules (async task scheduling, not thread work-stealing). Fixtures original. Source: subamanis/mezura consumer.rs + producer.rs @ 2dbacb7, MIT OR Apache-2.0, Research 202 candidate 4 (strengthened by the T2 addendum: engine-wide, not consumer-only). Batch 172 / Plan 166.".to_string()),
+            // Not benchable: contention timing under real scheduling.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+
+        // ── io: head-probe reads of arbitrary paths without O_NONBLOCK ─────
+        // Source: mezura identity.rs read_first_bytes/open_for_probe (Batch
+        // 172, Research 202 candidate 7, the T2 addendum find). A head-probe
+        // (read the first N bytes to identify a file) against a KERNEL
+        // NOTIFICATION file hangs FOREVER with a plain blocking open: e.g.
+        // /sys/kernel/security/apparmor/revision gives its value on the
+        // first read and makes the next one wait for that value to change,
+        // which never comes. The probe open passes O_NONBLOCK on unix; the
+        // read loop treats WouldBlock as end-of-head.
+        PerfRule {
+            rule_id: "nonblocking-open-for-head-probes".to_string(),
+            name: "head-probe read (first-N-bytes identify) of arbitrary paths with a plain blocking open → open with O_NONBLOCK on unix and treat WouldBlock as end-of-head (kernel notification files block the SECOND read forever; the probe must never wait on a value change)".to_string(),
+            category: "io".to_string(),
+            buggy_code: "use std::fs::File;\nuse std::io::Read;\n\n// Identify a file by its first bytes — with a BLOCKING open. Against\n// a kernel notification file (/sys/kernel/security/apparmor/revision\n// and its kin) the first read succeeds and the SECOND waits for the\n// value to CHANGE, which never comes: the probe hangs forever.\nfn head_probe(path: &str, out: &mut [u8]) -> std::io::Result<usize> {\n    let mut f = File::open(path)?;\n    f.read(out)\n}".to_string(),
+            fixed_code: "#[cfg(unix)]\nuse std::os::unix::fs::OpenOptionsExt;\n\n// The probe open is NONBLOCKING on unix: a notification file that\n// would park the second read forever now answers WouldBlock — which\n// the read loop treats as end-of-head (nothing more to identify).\n// Regular files ignore O_NONBLOCK entirely (POSIX: no effect on\n// regular files), so the probe of ordinary paths is unchanged.\n#[cfg(unix)]\nfn head_probe(path: &str, out: &mut [u8]) -> std::io::Result<usize> {\n    let mut f = std::fs::OpenOptions::new()\n        .read(true)\n        .custom_flags(libc::O_NONBLOCK)\n        .open(path)?;\n    let mut filled = 0;\n    loop {\n        match f.read(&mut out[filled..]) {\n            Ok(0) => return Ok(filled), // EOF\n            Ok(n) => filled += n,\n            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(filled), // end-of-head\n            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,\n            Err(e) => return Err(e),\n        }\n    }\n}\n\n#[cfg(not(unix))]\nfn head_probe(path: &str, out: &mut [u8]) -> std::io::Result<usize> {\n    use std::io::Read;\n    let mut f = std::fs::File::open(path)?;\n    f.read(out)\n}".to_string(),
+            context_notes: Some("DECISION-CONTENT, suggestion-only, honestly NotBenchable-by-construction (the failure is a HANG against a kernel-notification file — reproducing it needs a live /sys or /proc notification endpoint the validator cannot host; deterministic only in the hang/no-hang sense). THE MECHANISM: kernel notification files (apparmor's revision counter is the canonical specimen; the class is any sysfs/procfs value-change endpoint) answer the FIRST read with their value and park the SECOND until the value CHANGES — a plain blocking head-probe of arbitrary paths (walk a tree, identify by magic bytes) wedges the whole walk on the first such file it meets. O_NONBLOCK converts the park into WouldBlock, which the read loop reads as end-of-head; regular files are unaffected (POSIX: O_NONBLOCK has no effect on them), so the probe of ordinary paths is byte-identical. REGIME: any tool that head-probes ARBITRARY paths it did not choose — file walkers, type detectors, previewers, indexers. ANTI-REGIMES: paths you control (known-regular files — a blocking read is simpler); pipes/sockets where WouldBlock means backpressure rather than end (the end-of-head reading is a PROBE policy, not a general read policy). Distinct from mmap-settled-size-gated-read (open-mode HANG vs map-admission SIGBUS — both arbitrary-path safety gates, on different syscalls; the dedup grep separated them) and from the io error-hygiene family (WouldBlock here is a VALUE, not an error to propagate). Fixtures original. Source: subamanis/mezura identity.rs (read_first_bytes/open_for_probe) @ 2dbacb7, MIT OR Apache-2.0, Research 202 candidate 7 (the T2 addendum find). Batch 172 / Plan 166.".to_string()),
+            // Not benchable: the failure is a hang on a live kernel endpoint.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
         ]
 }
 
@@ -1347,6 +1453,289 @@ pub fn run_fixed(input: &Input) {
     let total = fixed::run(&input.work);
     debug_assert_eq!(total, input.expected);
     std::hint::black_box(total);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `dual-mask-fused-block-scan` (Batch 172, Plan 166 /
+/// Research 202 — the mezura lead): per-line split + per-needle per-line
+/// walk vs ONE fused 64-byte block pass computing both masks.
+///
+/// sizes = BUFFER bytes (4 KiB .. 1 MiB, source-like synthetic text with
+/// ~5% searched-byte density, LCG-deterministic). Both arms return
+/// (newline count, hit count, position checksum) — G1 bit-identity is
+/// `debug_assert_eq!`d against a make_input-computed ground truth on
+/// every call. The scanner (bool table + feature probe) is built ONCE in
+/// `make_input` — the timed `run_*` paths are allocation-free (G4: the
+/// fixed arm's only state is two u64 masks per block). The AVX2 arm
+/// (2×32 cmpeq+movemask) runs on x86_64, the NEON arm (4×16 vceq +
+/// weighted vpaddq fold) on aarch64, scalar elsewhere + for tails.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+#[allow(unsafe_code)]
+fn dual_mask_fused_block_scan_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![4_096, 65_536, 262_144, 1_048_576],
+        harness: r#"
+pub const BLOCK: usize = 64;
+
+pub struct DualMasks {
+    pub newlines: u64,
+    pub candidates: u64,
+}
+
+pub struct DualMaskFinder {
+    is_searched: [bool; 256],
+    searched: Vec<u8>,
+    wide: bool, // AVX2/NEON, probed ONCE here — never per block
+}
+
+impl DualMaskFinder {
+    pub fn new(searched: &[u8]) -> Self {
+        let mut is_searched = [false; 256];
+        for &b in searched {
+            is_searched[b as usize] = true;
+        }
+        #[cfg(target_arch = "x86_64")]
+        let wide = std::is_x86_feature_detected!("avx2");
+        #[cfg(target_arch = "aarch64")]
+        let wide = std::arch::is_aarch64_feature_detected!("neon");
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        let wide = false;
+        Self { is_searched, searched: searched.to_vec(), wide }
+    }
+
+    /// A block shorter than BLOCK answers for the bytes it has; the
+    /// missing tail reads as zeros.
+    pub fn scan_block(&self, block: &[u8]) -> DualMasks {
+        debug_assert!(block.len() <= BLOCK);
+        #[cfg(target_arch = "x86_64")]
+        if self.wide && block.len() == BLOCK {
+            // SAFETY: avx2 probed at construction; len checked == 64.
+            return unsafe { wide::scan_block(block, &self.searched) };
+        }
+        #[cfg(target_arch = "aarch64")]
+        if self.wide && block.len() == BLOCK {
+            // SAFETY: neon probed at construction; len checked == 64.
+            return unsafe { wide::scan_block(block, &self.searched) };
+        }
+        self.scan_block_scalar(block)
+    }
+
+    fn scan_block_scalar(&self, block: &[u8]) -> DualMasks {
+        let (mut newlines, mut candidates) = (0u64, 0u64);
+        for (at, &byte) in block.iter().enumerate() {
+            if byte == b'\n' {
+                newlines |= 1 << at;
+            }
+            if self.is_searched[byte as usize] {
+                candidates |= 1 << at;
+            }
+        }
+        DualMasks { newlines, candidates }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+mod wide {
+    use super::DualMasks;
+    use std::arch::x86_64::{__m256i, _mm256_cmpeq_epi8, _mm256_loadu_si256,
+        _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8};
+
+    /// SAFETY: caller probed avx2 and checked len == 64.
+    #[target_feature(enable = "avx2")]
+    pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> DualMasks {
+        let lo = _mm256_loadu_si256(block.as_ptr().cast::<__m256i>());
+        let hi = _mm256_loadu_si256(block.as_ptr().add(32).cast::<__m256i>());
+        let nl = _mm256_set1_epi8(b'\n' as i8);
+        let newlines = gather(
+            _mm256_cmpeq_epi8(lo, nl),
+            _mm256_cmpeq_epi8(hi, nl),
+        );
+        let (mut hits_lo, mut hits_hi) = (_mm256_set1_epi8(0), _mm256_set1_epi8(0));
+        for &byte in searched {
+            let want = _mm256_set1_epi8(byte as i8);
+            hits_lo = _mm256_or_si256(hits_lo, _mm256_cmpeq_epi8(lo, want));
+            hits_hi = _mm256_or_si256(hits_hi, _mm256_cmpeq_epi8(hi, want));
+        }
+        DualMasks { newlines, candidates: gather(hits_lo, hits_hi) }
+    }
+
+    /// The sign bit of every lane, bit i for byte i of the block.
+    /// SAFETY: avx2.
+    #[target_feature(enable = "avx2")]
+    unsafe fn gather(lo: __m256i, hi: __m256i) -> u64 {
+        let lo_bits = _mm256_movemask_epi8(lo) as u32 as u64;
+        let hi_bits = _mm256_movemask_epi8(hi) as u32 as u64;
+        lo_bits | (hi_bits << 32)
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+mod wide {
+    use super::DualMasks;
+    use std::arch::aarch64::{uint8x16_t, vandq_u8, vceqq_u8, vdupq_n_u8,
+        vgetq_lane_u64, vld1q_u8, vorrq_u8, vpaddq_u8, vreinterpretq_u64_u8};
+
+    const POWERS: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];
+
+    /// SAFETY: caller probed neon and checked len == 64.
+    #[target_feature(enable = "neon")]
+    pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> DualMasks {
+        let p = block.as_ptr();
+        let quarters = [
+            vld1q_u8(p),
+            vld1q_u8(p.add(16)),
+            vld1q_u8(p.add(32)),
+            vld1q_u8(p.add(48)),
+        ];
+        let nl = vdupq_n_u8(b'\n');
+        let newlines = gather([
+            vceqq_u8(quarters[0], nl),
+            vceqq_u8(quarters[1], nl),
+            vceqq_u8(quarters[2], nl),
+            vceqq_u8(quarters[3], nl),
+        ]);
+        let mut hits = [vdupq_n_u8(0); 4];
+        for &byte in searched {
+            let want = vdupq_n_u8(byte);
+            for (hit, &quarter) in hits.iter_mut().zip(quarters.iter()) {
+                *hit = vorrq_u8(*hit, vceqq_u8(quarter, want));
+            }
+        }
+        DualMasks { newlines, candidates: gather(hits) }
+    }
+
+    /// Bit i of the result = the predicate held at byte i of the block:
+    /// weight every lane with its power of two, then pairwise-add the
+    /// four quarters down — three vpaddq rounds fold the weights into
+    /// 8 bytes, byte j holding block bits 8j..8j+7 (each set predicate
+    /// contributes exactly its own power of two; groups occupy disjoint
+    /// value bits, so the sums reassemble the bitmask without carries).
+    /// SAFETY: neon.
+    #[target_feature(enable = "neon")]
+    unsafe fn gather(preds: [uint8x16_t; 4]) -> u64 {
+        let powers = vld1q_u8(POWERS.as_ptr());
+        let [a, b, c, d] = preds.map(|pred| vandq_u8(pred, powers));
+        let halves = vpaddq_u8(vpaddq_u8(a, b), vpaddq_u8(c, d));
+        let folded = vpaddq_u8(halves, halves);
+        vgetq_lane_u64::<0>(vreinterpretq_u64_u8(folded))
+    }
+}
+
+mod buggy {
+    /// The per-line shape: split() walks the buffer once for newlines,
+    /// then EVERY searched byte is walked again inside EVERY line. The
+    /// absolute offset is tracked by hand because split() does not give
+    /// positions — the overhead is real, not staged.
+    pub fn run(buf: &[u8], needles: &[u8]) -> (u64, u64, u64) {
+        let (mut newlines, mut hits, mut checksum) = (0u64, 0u64, 0u64);
+        let mut segments = 0u64;
+        let mut at = 0usize;
+        for line in buf.split(|&b| b == b'\n') {
+            segments += 1;
+            for &ndl in needles {
+                for (i, &b) in line.iter().enumerate() {
+                    if b == ndl {
+                        hits += 1;
+                        checksum = checksum.wrapping_add((at + i) as u64);
+                    }
+                }
+            }
+            at += line.len() + 1;
+        }
+        newlines = segments - 1; // split yields newlines+1 segments
+        (newlines, hits, checksum)
+    }
+}
+
+mod fixed {
+    use super::{DualMaskFinder, BLOCK};
+
+    /// One fused pass: both masks per 64-byte block; the counts and the
+    /// position checksum are mask arithmetic (trailing_zeros + blsr).
+    pub fn run(buf: &[u8], finder: &DualMaskFinder) -> (u64, u64, u64) {
+        let (mut newlines, mut hits, mut checksum) = (0u64, 0u64, 0u64);
+        let mut base = 0usize;
+        let (blocks, tail) = buf.as_chunks::<BLOCK>();
+        for block in blocks {
+            let m = finder.scan_block(block);
+            newlines += m.newlines.count_ones() as u64;
+            hits += m.candidates.count_ones() as u64;
+            let mut bits = m.candidates;
+            while bits != 0 {
+                let at = bits.trailing_zeros() as usize;
+                checksum = checksum.wrapping_add((base + at) as u64);
+                bits &= bits - 1;
+            }
+            base += BLOCK;
+        }
+        let m = finder.scan_block(tail);
+        newlines += m.newlines.count_ones() as u64;
+        hits += m.candidates.count_ones() as u64;
+        let mut bits = m.candidates;
+        while bits != 0 {
+            let at = bits.trailing_zeros() as usize;
+            checksum = checksum.wrapping_add((base + at) as u64);
+            bits &= bits - 1;
+        }
+        (newlines, hits, checksum)
+    }
+}
+
+pub struct Input {
+    pub buf: Vec<u8>,
+    pub needles: Vec<u8>,
+    pub finder: DualMaskFinder,
+    pub expected: (u64, u64, u64),
+}
+
+fn next(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *state >> 33
+}
+
+pub fn make_input(n: usize) -> Input {
+    let needles: Vec<u8> = vec![b'#', b'/', b'"', b'\'', b';', b'('];
+    let mut state = 0x853C_49E6_748F_EA9Bu64;
+    let mut buf: Vec<u8> = Vec::with_capacity(n + 128);
+    while buf.len() < n {
+        let line_len = 8 + (next(&mut state) as usize % 96); // 8..=103
+        for _ in 0..line_len {
+            let r = next(&mut state);
+            let byte = if r % 21 == 0 {
+                needles[(r >> 40) as usize % needles.len()]
+            } else {
+                b'a' + (r % 26) as u8
+            };
+            if buf.len() < n {
+                buf.push(byte);
+            }
+        }
+        if buf.len() < n {
+            buf.push(b'\n');
+        }
+    }
+    buf.truncate(n);
+    let finder = DualMaskFinder::new(&needles);
+    let expected = buggy::run(&buf, &needles);
+    Input { buf, needles, finder, expected }
+}
+
+pub fn run_buggy(input: &Input) {
+    let out = buggy::run(&input.buf, &input.needles);
+    debug_assert_eq!(out, input.expected);
+    std::hint::black_box(out);
+}
+
+pub fn run_fixed(input: &Input) {
+    let out = fixed::run(&input.buf, &input.finder);
+    debug_assert_eq!(out, input.expected);
+    std::hint::black_box(out);
 }
 "#
         .to_string(),

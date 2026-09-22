@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 145); // Batch 154 (tokio upstream-surface refresh) 142 → 145
+    assert_eq!(corpus.entries.len(), 149); // Batch 172 (mezura) 145 → 149: +dual-mask-fused-block-scan, +mmap-settled-size-gated-read, +steal-batch-not-per-item, +nonblocking-open-for-head-probes
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1778,7 +1778,7 @@ fn eighty_six_rules_have_bench_specs() {
         .iter()
         .filter(|e| e.bench_spec.is_some())
         .count();
-    assert_eq!(with_spec, 92, "expected 92 benchable rules (Batch 147 added the bounded-pool spec; the stack-read spec was withheld after its measured ParetoDominated verdict), got {with_spec}");
+    assert_eq!(with_spec, 93, "expected 93 benchable rules (Batch 172 added the dual-mask fused block scan spec), got {with_spec}");
 }
 
 #[cfg(feature = "rust_perf_bench")]
@@ -1795,7 +1795,10 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 53); // 145 total − 92 benchable (Batch 154 added 3 NotBenchable suggestion-only rules: the vectored capability flag, the oneshot response-send, the bounded-cycle deadlock)
+    assert_eq!(without_spec.len(), 56); // 149 total − 93 benchable (Batch 172 added 3 NotBenchable suggestion-only rules: the mmap settle-gated read, the crossbeam steal-batch, the nonblocking head-probe open)
+    assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
+    assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
+    assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
     assert!(without_spec.contains(&"prefault-admission-keyed-to-ram-headroom")); // Batch 139 — admission-policy annotation, source-reported only
     assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
     assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
@@ -1858,10 +1861,13 @@ fn fourteen_rules_are_not_benchable() {
 /// invariance-precondition note). Batch 94 added 1
 /// (coalesce-nearby-reads-bounded-gap-cacheability-gated — the
 /// cacheability-coupling regime, source-reported). Batch 99 added 1
+/// Batch 99 added 1
 /// (mir-destprop-branch-site-merge — the measured `ParetoDominant` verdict
 /// with the runtime-opaque-targets negative-control boundary and the
-/// rustc `DestProp` toolchain regime).
-/// The other 57 have `context_notes: None` (unconditional wins or
+/// rustc `DestProp` toolchain regime). Batch 172 added 4 annotations (the
+/// dual-mask GOAT lead + three NotBenchable mezura decision-content rules)
+/// and flipped byte-find-position-to-memchr via the anchor-cover rider.
+/// The other 55 have `context_notes: None` (unconditional wins or
 /// honestly `NotBenchable`).
 #[test]
 fn forty_three_annotated_rules_carry_context_notes() {
@@ -1872,7 +1878,12 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 89, "expected 89 context-annotated rules (Batch 154 added the three tokio upstream-surface annotations; Batch 153 added the three async-blocking annotations and annotated async-yield-point, previously None; Batch 152 added the three dial9 tokio annotations)");
+    assert_eq!(annotated.len(), 94, "expected 94 context-annotated rules (Batch 172 added the four mezura annotations and flipped byte-find-position-to-memchr via the anchor-cover rider; Batch 154 added the three tokio upstream-surface annotations)");
+    assert!(annotated.contains(&"dual-mask-fused-block-scan")); // Batch 172 — the GOAT lead, measured verdict in notes
+    assert!(annotated.contains(&"mmap-settled-size-gated-read")); // Batch 172 — NotBenchable decision-content annotation
+    assert!(annotated.contains(&"steal-batch-not-per-item")); // Batch 172 — NotBenchable contention annotation
+    assert!(annotated.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — NotBenchable hang-class annotation
+    assert!(annotated.contains(&"byte-find-position-to-memchr")); // Batch 172 — the anchor-cover selection rider flipped it from None
     assert!(annotated.contains(&"debug-level-gated-computation")); // Batch 143 — the #147293 citation + the #143684 wall-time-vs-icount measurement-honesty rider
     assert!(annotated.contains(&"batch-blocking-pool-segment")); // Batch 152 — the two-regime + global-resource annotation
     assert!(annotated.contains(&"adaptive-yield-consecutive-ready")); // Batch 152 — the dynamic-trigger + light-load anti-regime annotation
@@ -1936,7 +1947,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 56, "expected 56 unannotated rules (145 total - 89 annotated; Batch 154's three rules all joined the ANNOTATED side)");
+    assert_eq!(unannotated, 55, "expected 55 unannotated rules (149 total - 94 annotated; Batch 172 flipped byte-find-position-to-memchr to the annotated side via the rider)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1948,7 +1959,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 89); // Batch 143: 67 → 69; Batch 145: 69 → 70; Batch 146: 70 → 74; Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86 (3 new + async-yield-point annotated); Batch 154: 86 → 89 (3 new tokio upstream-surface rules)
+    assert_eq!(annotated, 94); // Batch 154: 86 → 89; Batch 172: 89 → 94 (4 new annotated + byte-find-position-to-memchr flipped by the anchor-cover rider)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1989,7 +2000,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 89, "expected 89 annotated rules (Batch 147: 74 → 79; Batch 152: 79 → 82; Batch 153: 82 → 86; Batch 154: 86 → 89)");
+    assert_eq!(annotated.len(), 94, "expected 94 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94 — four new + byte-find flipped by the rider)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2028,7 +2039,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 56, "expected 56 unannotated rules (145 total − 89 annotated, Batch 154's three rules all joined the annotated side)");
+    assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules (149 total − 94 annotated, Batch 172 flipped byte-find to the annotated side)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -4630,6 +4641,7 @@ fn batch143_pareto_benches() {
         }
     };
     assert!(b.ran, "batch-143 R1 bench must run: {:?}", b.error);
+    assert!(b.ran, "batch-143 debug-level-gated-computation bench must run: {:?}", b.error);
     println!(
         "batch-143 debug-level-gated-computation: {:?} faster={} slower={} tie={}",
         b.overall, b.faster_count, b.slower_count, b.tie_count
@@ -4638,6 +4650,295 @@ fn batch143_pareto_benches() {
         println!(
             "  n={:>6} buggy={:>9}ns fixed={:>9}ns speedup={:.2}x allocs {}→{} outcome={:?}",
             r.size, r.buggy_ns, r.fixed_ns, r.speedup, r.buggy_allocs, r.fixed_allocs, r.outcome
+        );
+    }
+}
+
+/// G1 for `dual-mask-fused-block-scan` (Batch 172, Research 202 — the mezura
+/// GOAT lead): the dispatched SIMD arm (AVX2 on x86_64, NEON on aarch64)
+/// must produce BIT-IDENTICAL masks to the scalar contract on every shape:
+/// (a) every byte value 0..=255 at every position of a 64-byte block (the
+/// position × byte-value sweep, 16,384 comparisons — a needle equal to the
+/// newline is included, both bits at once);
+/// (b) 2,000 LCG blocks dense in newlines + searched bytes;
+/// (c) short blocks: every length 0..=63, dense;
+/// (d) end-to-end scan() vs the naive split reference on LCG buffers of
+/// every length 0..=300 (block boundaries + tails) + 1 KiB/4 KiB/64 KiB:
+/// newline count, hit count, and the position checksum all identical.
+#[test]
+#[allow(unsafe_code)]
+#[allow(clippy::too_many_lines)] // one four-section exhaustive sweep, one scanner
+fn dual_mask_fused_block_scan_equivalence_gate() {
+    const BLOCK: usize = 64;
+
+    struct DualMasks {
+        newlines: u64,
+        candidates: u64,
+    }
+
+    struct DualMaskFinder {
+        is_searched: [bool; 256],
+        searched: Vec<u8>,
+        wide: bool,
+    }
+
+    impl DualMaskFinder {
+        fn new(searched: &[u8]) -> Self {
+            let mut is_searched = [false; 256];
+            for &b in searched {
+                is_searched[b as usize] = true;
+            }
+            #[cfg(target_arch = "x86_64")]
+            let wide = std::is_x86_feature_detected!("avx2");
+            #[cfg(target_arch = "aarch64")]
+            let wide = std::arch::is_aarch64_feature_detected!("neon");
+            #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+            let wide = false;
+            Self { is_searched, searched: searched.to_vec(), wide }
+        }
+
+        fn scan_block(&self, block: &[u8]) -> DualMasks {
+            debug_assert!(block.len() <= BLOCK);
+            #[cfg(target_arch = "x86_64")]
+            if self.wide && block.len() == BLOCK {
+                // SAFETY: avx2 probed at construction; len checked == 64.
+                let (newlines, candidates) = unsafe { wide::scan_block(block, &self.searched) };
+                return DualMasks { newlines, candidates };
+            }
+            #[cfg(target_arch = "aarch64")]
+            if self.wide && block.len() == BLOCK {
+                // SAFETY: neon probed at construction; len checked == 64.
+                let (newlines, candidates) = unsafe { wide::scan_block(block, &self.searched) };
+                return DualMasks { newlines, candidates };
+            }
+            self.scan_block_scalar(block)
+        }
+
+        fn scan_block_scalar(&self, block: &[u8]) -> DualMasks {
+            let (mut newlines, mut candidates) = (0u64, 0u64);
+            for (at, &byte) in block.iter().enumerate() {
+                if byte == b'\n' {
+                    newlines |= 1 << at;
+                }
+                if self.is_searched[byte as usize] {
+                    candidates |= 1 << at;
+                }
+            }
+            DualMasks { newlines, candidates }
+        }
+
+        fn scan(&self, buf: &[u8]) -> (u64, u64, u64) {
+            fn consume(
+                m: &DualMasks,
+                base: usize,
+                newlines: &mut u64,
+                hits: &mut u64,
+                checksum: &mut u64,
+            ) {
+                *newlines += m.newlines.count_ones() as u64;
+                *hits += m.candidates.count_ones() as u64;
+                let mut bits = m.candidates;
+                while bits != 0 {
+                    let at = bits.trailing_zeros() as usize;
+                    *checksum = checksum.wrapping_add((base + at) as u64);
+                    bits &= bits - 1;
+                }
+            }
+            let (mut newlines, mut hits, mut checksum) = (0u64, 0u64, 0u64);
+            let mut base = 0usize;
+            let (blocks, tail) = buf.as_chunks::<BLOCK>();
+            for block in blocks {
+                let m = self.scan_block(block);
+                consume(&m, base, &mut newlines, &mut hits, &mut checksum);
+                base += BLOCK;
+            }
+            let m = self.scan_block(tail);
+            consume(&m, base, &mut newlines, &mut hits, &mut checksum);
+            (newlines, hits, checksum)
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    mod wide {
+        use std::arch::x86_64::{__m256i, _mm256_cmpeq_epi8, _mm256_loadu_si256,
+            _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8};
+
+        /// Returns (newlines, candidates). SAFETY: caller probed avx2 and
+        /// checked len == 64.
+        #[target_feature(enable = "avx2")]
+        pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> (u64, u64) {
+            let lo = _mm256_loadu_si256(block.as_ptr().cast::<__m256i>());
+            let hi = _mm256_loadu_si256(block.as_ptr().add(32).cast::<__m256i>());
+            let nl = _mm256_set1_epi8(b'\n' as i8);
+            let newlines = gather(
+                _mm256_cmpeq_epi8(lo, nl),
+                _mm256_cmpeq_epi8(hi, nl),
+            );
+            let (mut hits_lo, mut hits_hi) = (_mm256_set1_epi8(0), _mm256_set1_epi8(0));
+            for &byte in searched {
+                let want = _mm256_set1_epi8(byte as i8);
+                hits_lo = _mm256_or_si256(hits_lo, _mm256_cmpeq_epi8(lo, want));
+                hits_hi = _mm256_or_si256(hits_hi, _mm256_cmpeq_epi8(hi, want));
+            }
+            (newlines, gather(hits_lo, hits_hi))
+        }
+
+        /// SAFETY: avx2.
+        #[target_feature(enable = "avx2")]
+        unsafe fn gather(lo: __m256i, hi: __m256i) -> u64 {
+            let lo_bits = _mm256_movemask_epi8(lo) as u32 as u64;
+            let hi_bits = _mm256_movemask_epi8(hi) as u32 as u64;
+            lo_bits | (hi_bits << 32)
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    mod wide {
+        use std::arch::aarch64::{uint8x16_t, vandq_u8, vceqq_u8, vdupq_n_u8,
+            vgetq_lane_u64, vld1q_u8, vorrq_u8, vpaddq_u8, vreinterpretq_u64_u8};
+
+        const POWERS: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];
+
+        /// Returns (newlines, candidates). SAFETY: caller probed neon and
+        /// checked len == 64.
+        #[target_feature(enable = "neon")]
+        pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> (u64, u64) {
+            let p = block.as_ptr();
+            let quarters = [
+                vld1q_u8(p),
+                vld1q_u8(p.add(16)),
+                vld1q_u8(p.add(32)),
+                vld1q_u8(p.add(48)),
+            ];
+            let nl = vdupq_n_u8(b'\n');
+            let newlines = gather([
+                vceqq_u8(quarters[0], nl),
+                vceqq_u8(quarters[1], nl),
+                vceqq_u8(quarters[2], nl),
+                vceqq_u8(quarters[3], nl),
+            ]);
+            let mut hits = [vdupq_n_u8(0); 4];
+            for &byte in searched {
+                let want = vdupq_n_u8(byte);
+                for (hit, &quarter) in hits.iter_mut().zip(quarters.iter()) {
+                                       *hit = vorrq_u8(*hit, vceqq_u8(quarter, want));
+                }
+            }
+            (newlines, gather(hits))
+        }
+
+        /// SAFETY: neon.
+        #[target_feature(enable = "neon")]
+        unsafe fn gather(preds: [uint8x16_t; 4]) -> u64 {
+            let powers = vld1q_u8(POWERS.as_ptr());
+            let [a, b, c, d] = preds.map(|pred| vandq_u8(pred, powers));
+            let halves = vpaddq_u8(vpaddq_u8(a, b), vpaddq_u8(c, d));
+            let folded = vpaddq_u8(halves, halves);
+            vgetq_lane_u64::<0>(vreinterpretq_u64_u8(folded))
+        }
+    }
+
+    fn naive(buf: &[u8], needles: &[u8]) -> (u64, u64, u64) {
+        let (mut segments, mut hits, mut checksum) = (0u64, 0u64, 0u64);
+        let mut at = 0usize;
+        for line in buf.split(|&b| b == b'\n') {
+            segments += 1;
+            for &ndl in needles {
+                for (i, &b) in line.iter().enumerate() {
+                    if b == ndl {
+                        hits += 1;
+                        checksum = checksum.wrapping_add((at + i) as u64);
+                    }
+                }
+            }
+            at += line.len() + 1;
+        }
+        (segments - 1, hits, checksum)
+    }
+
+    fn next(state: &mut u64) -> u64 {
+        *state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        *state >> 33
+    }
+
+    // The needle set deliberately INCLUDES b'\n' (a byte that must set BOTH
+    // bits) plus a spread of ordinary delimiters.
+    let needles: Vec<u8> = vec![b'#', b'/', b'"', b'\'', b';', b'(', b'\n'];
+    let finder = DualMaskFinder::new(&needles);
+
+    // (a) every byte value × every position: a 64-byte filler block, one
+    // planted byte swept across all values and positions.
+    for pos in 0..BLOCK {
+        for byte in 0..=255u8 {
+            let mut block = [b'x'; BLOCK];
+            block[pos] = byte;
+            let sim = finder.scan_block(&block);
+            let sca = finder.scan_block_scalar(&block);
+            assert_eq!(sim.newlines, sca.newlines, "newline mask at pos={pos} byte={byte:#04x}");
+            assert_eq!(
+                sim.candidates,
+                sca.candidates,
+                "candidate mask at pos={pos} byte={byte:#04x}"
+            );
+        }
+    }
+
+    // (b) 2,000 LCG blocks dense in newlines + searched bytes.
+    let mut state = 0x853C_49E6_748F_EA9Bu64;
+    for _ in 0..2_000 {
+        let mut block = [0u8; BLOCK];
+        for slot in &mut block {
+            let r = next(&mut state);
+            *slot = match r % 3 {
+                0 => b'\n',
+                1 => needles[(r >> 40) as usize % needles.len()],
+                _ => b'a' + (r % 26) as u8,
+            };
+        }
+        let sim = finder.scan_block(&block);
+        let sca = finder.scan_block_scalar(&block);
+        assert_eq!((sim.newlines, sim.candidates), (sca.newlines, sca.candidates));
+    }
+
+    // (c) short blocks: every length 0..=63 (the tail contract — a shorter
+    // block answers for the bytes it has; the missing tail reads as zeros).
+    for len in 0..BLOCK {
+        let mut block = [0u8; BLOCK];
+        for slot in &mut block[..len] {
+            let r = next(&mut state);
+            *slot = if r % 2 == 0 { b'\n' } else { needles[(r >> 40) as usize % needles.len()] };
+        }
+        let sim = finder.scan_block(&block[..len]);
+        let sca = finder.scan_block_scalar(&block[..len]);
+        assert_eq!((sim.newlines, sim.candidates), (sca.newlines, sca.candidates), "len={len}");
+    }
+
+    // (d) end-to-end: every length 0..=300 + 1 KiB/4 KiB/64 KiB, fused scan
+    // vs the naive split reference — counts AND the position checksum.
+    // The needle set here EXCLUDES the newline: the naive per-line walk can
+    // never see a separator inside a line (split consumed it), so a
+    // newline-in-set contract is vacuously different — the block sweeps
+    // above cover the both-bits-at-once edge instead.
+    let scan_needles: Vec<u8> = vec![b'#', b'/', b'"', b'\'', b';', b'('];
+    let scan_finder = DualMaskFinder::new(&scan_needles);
+    let mut lengths: Vec<usize> = (0..=300).collect();
+    lengths.extend_from_slice(&[1_024, 4_096, 65_536]);
+    for len in lengths {
+        let mut buf = vec![0u8; len];
+        for slot in &mut buf {
+            let r = next(&mut state);
+            *slot = match r % 7 {
+                0 => b'\n',
+                1 | 2 => scan_needles[(r >> 40) as usize % scan_needles.len()],
+                _ => b'a' + (r % 26) as u8,
+            };
+        }
+        assert_eq!(
+            scan_finder.scan(&buf),
+            naive(&buf, &scan_needles),
+            "end-to-end divergence at len={len}"
         );
     }
 }
