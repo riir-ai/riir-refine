@@ -1,5 +1,47 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — P36: the `[C2·documented-write-only]` downgrade (config-audit; the seal-remake `FeatureFlags`/`SessionMeta`/`WasmLimits` idle-pass intake)
+
+Found and consumed in ONE session (the 09-23 quiet-repo code-smell hunt,
+`.distill/001` §"INTAKE 2026-09-23 c" → §"INTAKE CONSUMED"): the hunt
+adjudicated seal-remake's three C2 structs DELIBERATE (seal-edge-worker —
+`FeatureFlags` config.rs, `SessionMeta` reducer_bridge/mod.rs,
+`WasmLimits` wasm_compat.rs; every field doc carries the exact
+marker vocabulary, all anchored to seal-remake Issue 030), yet C2
+fired RAW — every other class consults field-doc markers ([A·doc],
+[B·doc], stillborn/orphaned weak) but the struct-level C2 verdict did
+not.
+
+Fix (`bc5ff183`, config_audit): `classify_self_referential` takes
+`field_docs` (the ONE marker-vocabulary home,
+`is_deliberate_write_only_marker` — no copy) and sets
+`SelfReferentialConfig.documented_write_only` when EVERY Default-impl
+field carries a marker. The EVERY-field rule is load-bearing: the
+marker speaks per field, the C2 verdict per struct — one unmarked
+field keeps the strong verdict (negative arm pinned,
+`c2_marker_needs_every_field_marked`). Render precedence holds
+test-rig > gpu-uniform > marker — the P28/P29/P32 pins unmoved; the
+weak row renders `[C2·documented-write-only]` with the
+not-verified caveat and a drop-the-marker-or-delete fix line.
+
+Gates: **2 new module fixtures** (the all-marked downgrade + the
+every-field control) — lib **2177/0**; clippy `-D --all-targets`
+clean after `10f88b50` (the healer fixed its own 6 mechanicals from
+Batch-172's corpus-test additions — landing gate never compiled
+test-cfg; `--fix --write --verify`, compile-gated, mining batch 283
+rows pushed). Global binary rebuilt at the new HEAD (release set
+stamped complete) and the seal-remake re-audit live-verifies all
+three C2s render `[C2·documented-write-only]` weak. Intake row:
+`.distill/001` §"INTAKE CONSUMED" (closed in the same session;
+labeled P36 retroactively in this entry — the series stays
+monotonic).
+
+Tool-gap (b) from the same hunt RESOLVED BY ANALYSIS, no code: chain's
+P26 canary rows were orphaned-THEN (a transient read-vanish in the
+pickaxe window → weak annotation); stable-NOW reads render silent
+(zero-external-read, no vanished-reader evidence — counted only); the
+buckets are honest, the source adjudication docs verified standing.
+
 ## 2026-09-23 — Batch 172 / Plan 166: the mezura rust_perf distill, rust_perf 145 → 149 — the dual-mask GOAT lead at 43×/18×
 
 The 873-handoff cadence slot opened (first idle pass past midnight +07, 09-23);
