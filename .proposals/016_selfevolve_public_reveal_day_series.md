@@ -1,6 +1,6 @@
 # Proposal 016 — Public self-evolve reveal: the healer quality day-series on the kat-service dashboard
 
-Status: **REVISE round 2 addressed — D1–D4 + E1–E3 incorporated, owner D1 call made (per-lane small-multiples headline, ladder → step markers). Verdict ping-pong capped at 3 rounds; ready for the dapps plan + owner GO.**
+Status: **REVISE round 2 addressed — D1–D4 + E1–E3 incorporated, owner D1 call made (per-lane small-multiples headline, ladder → step markers). Cadence verdict recorded 2026-09-23 (client-side push; nightly anchor T4.1 + opportunistic push-on-activity T4.3; idempotent door replaces a retry queue; CF cron earns nothing). Ready for the dapps plan + owner GO.**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: riir-dapps Proposal 004 (fix-stats lane) × riir-dapps Issues 102+104 (corpus-days signed sync) × riir-clippy Issues 037/039 (self-evolve stores + Elo) × riir-clippy Issues 089/102 (frontier snapshots + fade)
@@ -126,9 +126,33 @@ Field rules (each closes a verdict finding):
   score_history.jsonl + frontier_snapshots.jsonl only. `healqual_sync.sh` (sibling of
   `corpus_days_sync.sh`) signs and POSTs. **The nightly never cargo-builds** — the
   stale-binary class is structurally absent; `.corpus_sync.key` is the authentication.
-- **Cadence wiring**: `riir-clippy/scripts/ops_nightly.sh` gains the leg BESIDE the
-  existing corpus leg (C2 — the launcher lives in riir-clippy), same non-fatal
-  `WARN … continuing` posture.
+- **Cadence — the scheduling verdict (recorded 2026-09-23)**: the producer stays
+  CLIENT-SIDE push; data locality decides it — `crank_alarm_pass` owns server
+  ledger state and can read none of these feeds, the feeds are local jsonl, and
+  `.corpus_sync.key` lives on the publishing machine — so a CF-side cron has
+  nothing to run and earns nothing for this card. The door's idempotent merge
+  (newer-ts wins / equal-ts no-op) makes scheduling a LIVENESS concern, not a
+  correctness one — no retry queue, no delivery ledger; a missed night self-heals
+  on the next push, and every push re-derives the FULL series from the jsonl
+  feeds (never a partial delta). "Distributed crank" therefore resolves as
+  per-machine self-cranking, TWO triggers: (a) the **nightly anchor** — the
+  `ops_nightly.sh` leg BESIDE the existing corpus leg (C2 — the launcher lives
+  in riir-clippy), same non-fatal `WARN … continuing` posture (T4.1); (b)
+  **opportunistic push-on-activity** — a post-run SHELL step in whatever invokes
+  score_bench, tailing the same `healqual_sync.sh` (T4.3). Two bounds on (b):
+  the hook is a SHELL step, never a Rust seam in `src/score_bench/` — wiring the
+  push there would move the key + an outbound POST into the healer binary and
+  break C3's "pure Python, `.corpus_sync.key` is the authentication" posture;
+  and the per-run push NEVER hits the equal-ts no-op (`ts` is the run's own
+  clock, so every push is strictly newer and always writes — against the
+  append-only registry, growth would track bench-run frequency instead of
+  days), closed by a **digest guard**: cache the last-pushed series digest
+  beside the key and SKIP the POST when the freshly-mined series is
+  byte-identical. Backoff rules: transport / 5xx is transparent (the next
+  opportunity catches up, by the full-series re-derivation); **408/429 are
+  retryable** (next scheduled run); **401/403 is terminal AND LOUD** — key
+  rotation or an allowlist drop must surface at the launcher, never
+  warn-and-continue into a permanently silent card that still reads as success.
 
 ### Consent posture (Q2 — resolved round 1)
 
@@ -263,8 +287,16 @@ self-improvement, honestly framed.
 - [ ] T3.2 lib-count pins bump; devnet manual deploy; curl-verify all postures
 
 ### Phase 4 — riir-clippy cadence + fleet
-- [ ] T4.1 `ops_nightly.sh` leg beside the corpus leg (WARN-continuing posture)
+- [ ] T4.1 `ops_nightly.sh` leg beside the corpus leg (WARN-continuing posture;
+      the nightly anchor) — plus the LOUD 401/403 surface at the launcher
+      (cadence verdict: terminal auth failures surface, never silent-skip)
 - [ ] T4.2 (deferred, new consent decision) `lane: "healqual"` fleet join; Rust store fields
+- [ ] T4.3 (deferred, independent of T4.2) opportunistic push-on-activity — a
+      post-run SHELL step in whatever invokes score_bench, tailing the same
+      `healqual_sync.sh`; NEVER a Rust seam in the healer binary (C3); digest
+      guard skips the POST when the mined series is byte-identical to the last
+      pushed one (per-run ts is always newer — only the digest stops
+      append-only registry churn)
 
 ## Risks
 
@@ -292,6 +324,10 @@ mainnet enablement (devnet first, per every prior lane).
 3. katgpt-rs Research 440 — AIDE2 recursive self-improvement, measured PASS (cited).
 4. Lilian Weng, *Harness Engineering for Self-Improvement* (2026-07) (cited-only).
 5. riir-dapps Proposal 004 + Issues 102/104 — the lanes this instantiates (in-house precedent).
+6. Citation note for the future dapps plan: cite this document QUALIFIED as
+   **"riir-clippy Proposal 016"** everywhere — riir-dapps `.proposals/.highwater`
+   reads 6, so a bare "Proposal 016" in a dapps doc is live headroom that rebinds
+   to the wrong document the day dapps allocates the number.
 
 ## TL;DR
 
