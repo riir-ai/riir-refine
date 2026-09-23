@@ -1,6 +1,6 @@
 # Proposal 016 — Public self-evolve reveal: the healer quality day-series on the kat-service dashboard
 
-Status: **REVISE round 2 addressed — D1–D4 + E1–E3 incorporated, owner D1 call made (per-lane small-multiples headline, ladder → step markers). Cadence verdict recorded 2026-09-23 (client-side push; nightly anchor T4.1 + opportunistic push-on-activity T4.3; idempotent door replaces a retry queue; CF cron earns nothing). Ready for the dapps plan + owner GO.**
+Status: **REVISE round 2 addressed — D1–D4 + E1–E3 incorporated, owner D1 call made (per-lane small-multiples headline, ladder → step markers). Cadence verdict recorded 2026-09-23 (client-side push; nightly anchor T4.1 + opportunistic interval T4.3; idempotent door replaces a retry queue; CF cron earns nothing). OWNER GO 2026-09-23 — nightly rider KEPT; Claude verdict REVISE round 1 ADDRESSED, round 2 AGREE (residual prose fixed at landing; T4.2 (date,machine) note added). Next: the riir-dapps plan.**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: riir-dapps Proposal 004 (fix-stats lane) × riir-dapps Issues 102+104 (corpus-days signed sync) × riir-clippy Issues 037/039 (self-evolve stores + Elo) × riir-clippy Issues 089/102 (frontier snapshots + fade)
@@ -8,12 +8,14 @@ Related: [Research 203 — RRSI](../.research/203_rrsi_regularized_harness_evolu
 
 ## TL;DR
 
-The healer's self-evolve is measured every day and visible to no one: 160 score-bench
+The healer's self-evolve is measured every day and visible to no one: 162 score-bench
 runs since 2026-08-19 (heal 84.6% → 96.4%, created-warnings 5.8% → 1.8%, safety 100%),
 Elo stores across 10 repos, frontier band-mass snapshots, trajectory rows — all local
 jsonl/kv artifacts. The public dashboard shows only VOLUME (corpus contribution graph,
-fixstats totals). This proposal adds the QUALITY axis: a nightly, Ed25519-signed daily
-aggregate pushed through a new `POST /admin/healqual/days` merge door and rendered as
+fixstats totals). This proposal adds the QUALITY axis: an Ed25519-signed daily
+aggregate — cranked by the nightly anchor leg plus an opportunistic interval
+launcher (Q3 cadence) — pushed through a new `POST /admin/healqual/days` merge door
+and rendered as
 a "Self-evolve" card whose HEADLINE — per the owner's call on the round-2 verdict — is
 **per-lane small-multiples: each generation's own heal% climb since birth**, the only
 series with real daily resolution. The difficulty ladder (3 steps in 27 days, its
@@ -27,7 +29,7 @@ zero new deps.
 
 The owner's question — "is the healer getting smarter each day?" — is answerable from
 data we already measure, but the answer lives in `.benchmarks/score_history.jsonl`
-(riir-clippy, 160 runs), `.benchmarks/frontier_snapshots.jsonl` (089 T4 emission), and
+(riir-clippy, 162 runs), `.benchmarks/frontier_snapshots.jsonl` (089 T4 emission), and
 the per-repo trajectory stores (037 store-first). None of it is rendered anywhere.
 Meanwhile the public site's only growth surface is the corpus contribution graph
 (git-mined ADDS — volume) and the fixstats strip (epoch totals — volume). The owner
@@ -98,7 +100,8 @@ Field rules (each closes a verdict finding):
   arrived, an instrumentation jump — → 8 on 09-11), flat at 8 for the last 9 days.
   This is why it is a MARKER, not a headline.
 - **`frontier`** = latest frontier_snapshots.jsonl row (pure file read; the values
-  above are the real latest row).
+  above are ILLUSTRATIVE — feed state as derived 2026-09-22, not a live figure;
+  D4's own rule applied to this prose: the golden test derives, never transcribes).
 - `elo` and per-repo `stores` counts are RESERVED, absent in v1 (C3 — they need the
   Rust store reader; caveat 4 bars them from any headline either way).
 
@@ -120,39 +123,83 @@ Field rules (each closes a verdict finding):
   absent-quality accepted (E3).
 - **Bounds** (the Issues-102 discipline): day ∈ [2026-08-19, today+1] (first bench
   run), ≤ 400 rows/post, rates ∈ [0,1], counts ≤ 1e6, `ts ≤ now+skew` (reject), ≤ 8
-  lane keys, row ≤ 1 KB. Registry append-only, no purge door.
+  lane keys — each key must parse as an INTEGER 1..=64 (shape bounded, not just
+  count; admits no `"../../x"` and no 200-char key) — row ≤ 1 KB.
+  **`ts` ∈ [date 00:00 ICT, date+1 00:00 ICT) REQUIRED** (verdict round 1): nothing
+  else constrains `ts` against `date`, and with NO purge door a publisher misconfig
+  (wrong TZ constant, stale `date` + fresh `ts`) would write today's numbers onto an
+  arbitrary past day at a permanently-unbeatable ts — the same permanent-wedge B3
+  rejects, reached through the other field. Exactly derivable, no tolerance, holds by
+  construction for the collector. **Duplicate dates within ONE payload → 400** — the
+  merge law is per-date ACROSS posts; two rows for one date inside one post has no
+  rule, and 400 is cleaner than last-wins. No purge door; the day row is a
+  KEYED-SLOT UPSERT (per-date slot — the template's measured shape, see Cadence)
+  and the domain registry is content-compared: growth tracks days by construction,
+  never post frequency.
 - **Collector — pure Python over plain files (C3)**: `riir-dapps/scripts/mine_healqual_days.py`
   (sibling of `mine_corpus_git_days.py`), run INSIDE the riir-clippy checkout, reads
   score_history.jsonl + frontier_snapshots.jsonl only. `healqual_sync.sh` (sibling of
   `corpus_days_sync.sh`) signs and POSTs. **The nightly never cargo-builds** — the
   stale-binary class is structurally absent; `.corpus_sync.key` is the authentication.
-- **Cadence — the scheduling verdict (recorded 2026-09-23)**: the producer stays
-  CLIENT-SIDE push; data locality decides it — `crank_alarm_pass` owns server
-  ledger state and can read none of these feeds, the feeds are local jsonl, and
-  `.corpus_sync.key` lives on the publishing machine — so a CF-side cron has
-  nothing to run and earns nothing for this card. The door's idempotent merge
-  (newer-ts wins / equal-ts no-op) makes scheduling a LIVENESS concern, not a
-  correctness one — no retry queue, no delivery ledger; a missed night self-heals
-  on the next push, and every push re-derives the FULL series from the jsonl
-  feeds (never a partial delta). "Distributed crank" therefore resolves as
-  per-machine self-cranking, TWO triggers: (a) the **nightly anchor** — the
-  `ops_nightly.sh` leg BESIDE the existing corpus leg (C2 — the launcher lives
-  in riir-clippy), same non-fatal `WARN … continuing` posture (T4.1); (b)
-  **opportunistic push-on-activity** — a post-run SHELL step in whatever invokes
-  score_bench, tailing the same `healqual_sync.sh` (T4.3). Two bounds on (b):
-  the hook is a SHELL step, never a Rust seam in `src/score_bench/` — wiring the
-  push there would move the key + an outbound POST into the healer binary and
-  break C3's "pure Python, `.corpus_sync.key` is the authentication" posture;
-  and the per-run push NEVER hits the equal-ts no-op (`ts` is the run's own
-  clock, so every push is strictly newer and always writes — against the
-  append-only registry, growth would track bench-run frequency instead of
-  days), closed by a **digest guard**: cache the last-pushed series digest
-  beside the key and SKIP the POST when the freshly-mined series is
-  byte-identical. Backoff rules: transport / 5xx is transparent (the next
-  opportunity catches up, by the full-series re-derivation); **408/429 are
-  retryable** (next scheduled run); **401/403 is terminal AND LOUD** — key
-  rotation or an allowlist drop must surface at the launcher, never
-  warn-and-continue into a permanently silent card that still reads as success.
+- **Cadence — the scheduling verdict (recorded 2026-09-23; Claude REVISE round 1
+  addressed same day)**: the producer stays CLIENT-SIDE push; data locality decides
+  it — `crank_alarm_pass` owns server ledger state and can read none of these feeds,
+  the feeds are local jsonl, and `.corpus_sync.key` lives on the publishing machine —
+  so a CF-side cron has nothing to run and earns nothing for this card. The door's
+  idempotent merge (newer-ts wins / equal-ts no-op) makes scheduling a LIVENESS
+  concern, not a correctness one — no retry queue, no delivery ledger; a missed night
+  self-heals on the next push, and every push re-derives the FULL series from the
+  jsonl feeds (never a partial delta). "Distributed crank" therefore resolves as
+  per-machine self-cranking, TWO triggers:
+  - **(a) the nightly anchor (T4.1)** — the `ops_nightly.sh` leg BESIDE the existing
+    corpus leg (C2 — the launcher lives in riir-clippy), same non-fatal `WARN …
+    continuing` posture. The nightly ALWAYS POSTS — never `--if-changed` — because
+    it is the design's only liveness probe: a quiet day that skipped the POST would
+    let a rotated key hide behind a card that still reads as success (the LOUD-401
+    requirement below).
+  - **(b) the opportunistic leg (T4.3) — a SECOND launchd interval, NOT a hook.**
+    "Whatever invokes score_bench" has NO SUBJECT: every `--score-bench` site in
+    riir-clippy is documentation (README, .docs, AGENTS.md); the invoker is a human
+    or an agent typing the documented command, and a wrapper-and-hook repair
+    reproduces exactly the git-hook class this proposal rejects — the documented
+    direct invocation bypasses it, silently. The activity signal already exists as
+    a FILE (`score_history.jsonl`'s content). So: `healqual_sync.sh --if-changed`
+    (cheap, idempotent — mine the series, digest-compare against the cached one,
+    POST only when different) on its own launchd interval beside the
+    `com.riir.ops-nightly` plist. Latency ≤ interval, no unowned seam in any
+    caller, nothing to forget to install.
+  - **`--if-changed` is the digest guard's ONLY caller** — the guard is a FLAG on
+    the shared script, never unconditional: if it lived in the script's main path
+    the nightly would skip quiet days too and (a)'s liveness probe would die.
+  - **Digest guard DEMOTED to optimisation (measured, not reasoned)**: the round-0
+    motivation — "append-only registry churn would track bench-run frequency" — is
+    WRONG against the template: `corpus_view.rs` writes `CorpusViewRow::key(day)` —
+    a PER-DAY KEYED SLOT, upsert — so a same-day re-push overwrites one slot and
+    appends nothing; registry growth tracks days BY CONSTRUCTION, whatever `ts`
+    does. The churn invariant belongs at the DOOR (the only thing that survives a
+    deleted digest cache, a second publisher, or a forgotten flag): the door stores
+    the newer ts but may report a content no-op when every RENDERED field (rates,
+    lanes, ladder, frontier) is byte-identical. A last-pushed-TS watermark is
+    REJECTED — it cannot see a past day's row changing under a collector-rule
+    change or a late out-of-order feed row (the E1 class, measured to happen). The
+    client digest stays as the cheap first line: bandwidth saved, nothing more.
+  - **Digest write ordering (multi-env)**: `ENVS` is a list; a failed devnet POST
+    with a written digest would skip that series forever. Pin: the digest is
+    written ONLY after EVERY configured env returned ok — or keyed per host.
+  - **The Rust-seam rejection STANDS — three reasons, strongest last**: (1) the key
+    + an outbound POST inside the healer binary breaks C3's "pure Python,
+    `.corpus_sync.key` is the authentication" posture; (2) `cargo heal` runs in
+    10+ sibling repos (`scripts/swept_repos.txt`) — a lint healer that opens an
+    outbound connection from any checkout it is invoked in is a materially
+    different tool, not a wiring detail; (3) `score_bench` is FEATURE-GATED — a
+    push seam behind it compiles to NOTHING on every ordinary build (this repo's
+    own green-zero class): the trigger would be present in the source and absent
+    in the binary anybody actually runs.
+  - **Backoff rules**: transport / 5xx is transparent (the next opportunity catches
+    up, by the full-series re-derivation); **408/429 are retryable** (next
+    scheduled run); **401/403 is terminal AND LOUD** — key rotation or an allowlist
+    drop must surface at the launcher, never warn-and-continue into a permanently
+    silent card that still reads as success.
 
 ### Consent posture (Q2 — resolved round 1)
 
@@ -203,9 +250,11 @@ self-improvement, honestly framed.
 3. **heal% certifies bench-fit, not real-world fix quality.** The corpus is the model.
    The real-world axis on the same card is fixstats volume + mining adoption; the two
    stay visually and semantically distinct — never one merged "score".
-4. **Elo/band-mass are thin-n** (27 rated rules; latest snapshot band 1/19) —
-   reserved out of v1 entirely (C3), barred from any headline even when a Rust
-   collector lands. Issue 130's T0 owner call may change what admission evidence even is.
+4. **Elo/band-mass are thin-n** (27 rated rules; latest snapshot read band_count 0 /
+   population 27 on 2026-09-23 — the round-2 figure was band 1/19; both are thin-n,
+   the conclusion is unchanged) — reserved out of v1 entirely (C3), barred from any
+   headline even when a Rust collector lands. Issue 130's T0 owner call may change
+   what admission evidence even is.
 5. **New public door = new surface.** Inherited mitigations (signed, allowlisted
    pubkey, bounded, no purge, fail-closed) plus the ts-merge contract arms; full
    battery before the card lights; manual devnet deploy.
@@ -235,13 +284,17 @@ self-improvement, honestly framed.
 - **G1 (correctness):** golden day-row derived MECHANICALLY from the feed (D4 — a
   hand-typed example pinned a ts↔date contradiction once already; the golden test
   derives, never transcribes) + golden signed payload both repos; merge arms:
-  newer-wins, equal-ts no-op, stale-ts no-op, **future-ts 400 (B3)**, ceiling
-  violations 400, malformed 400, bad signature 401, bearer fallback,
+  newer-wins, equal-ts no-op, stale-ts no-op, **future-ts 400 (B3)**,
+  **ts/date mismatch 400 (verdict round 1 — ts outside [date 00:00 ICT,
+  date+1 00:00 ICT))**, **duplicate dates within one payload 400**,
+  **lane-key shape 400 (non-integer or out-of-range key)**, ceiling violations 400,
+  malformed 400, bad signature 401, bearer fallback,
   **absent-quality accepted (E3)**; collector fixtures: **out-of-order feed pair
   sorted by ts (E1)**, **near-midnight ICT conversion both sides of midnight (D3)**,
   untagged pre-field rows default to lane 1 + post-field loud skip (B1/E2),
   settled-day equal-ts idempotence (B2), empty-feed loud-empty (never fabricated),
-  thin-lane n<3 tag (caveat 1).
+  thin-lane n<3 tag (caveat 1), **`--if-changed` skips a byte-identical series and
+  POSTS a changed one (T4.3)**.
 - **G2 (perf):** nightly push ≤ 5 s (two small jsonl files, pure Python); card render
   O(days ≤ 90 × lanes ≤ 8); door ≤ corpus-days door cost.
 - **G3 (no-regression):** corpus-days lane and fixstats lane byte-untouched (their
@@ -262,7 +315,8 @@ self-improvement, honestly framed.
   corpus-days door is the template.
 
 ### Deferred — riir-clippy Phase 4
-- The `ops_nightly.sh` leg (launcher lives here, C2) and the `lane: "healqual"` fleet
+- The `ops_nightly.sh` anchor leg + the T4.3 opportunistic launchd interval
+  (launchers live here, C2) and the `lane: "healqual"` fleet
   join (Proposal 004 mechanism, new consent decision at that point).
 - Rust store reader for `elo`/`stores` fields (reserved; never headline).
 
@@ -280,7 +334,7 @@ self-improvement, honestly framed.
 - [ ] T1.2 golden fixtures (derived, not transcribed) + `healqual_sync.sh` + sign mode `--domain healqual`
 
 ### Phase 2 — riir-dapps door
-- [ ] T2.1 door + newer-ts merge + registry + full contract battery (future-ts 400, absent-quality accepted)
+- [ ] T2.1 door + newer-ts merge + registry + full contract battery (future-ts 400, ts/date-mismatch 400, duplicate-dates-per-payload 400, lane-key-shape 400, absent-quality accepted — G1 is the authoritative arm list)
 
 ### Phase 3 — reveal
 - [ ] T3.1 `/mining/healquality` JSON twin + front-page small-multiples SVG card + ladder markers + volume bars
@@ -290,13 +344,17 @@ self-improvement, honestly framed.
 - [ ] T4.1 `ops_nightly.sh` leg beside the corpus leg (WARN-continuing posture;
       the nightly anchor) — plus the LOUD 401/403 surface at the launcher
       (cadence verdict: terminal auth failures surface, never silent-skip)
-- [ ] T4.2 (deferred, new consent decision) `lane: "healqual"` fleet join; Rust store fields
-- [ ] T4.3 (deferred, independent of T4.2) opportunistic push-on-activity — a
-      post-run SHELL step in whatever invokes score_bench, tailing the same
-      `healqual_sync.sh`; NEVER a Rust seam in the healer binary (C3); digest
-      guard skips the POST when the mined series is byte-identical to the last
-      pushed one (per-run ts is always newer — only the digest stops
-      append-only registry churn)
+- [ ] T4.2 (deferred, new consent decision) `lane: "healqual"` fleet join; Rust store fields. NOTE (verdict round 2): the merge law is per-DATE while `machine` is the fleet seam — under two publishers a later push for an existing date silently DISCARDS the earlier machine's row, never joins it; the door key must widen to `(date, machine)` or the lane declares single-writer-per-date explicitly
+- [ ] T4.3 (deferred, independent of T4.2) opportunistic leg — a SECOND launchd
+      interval (beside the `com.riir.ops-nightly` plist) running
+      `healqual_sync.sh --if-changed` (mine → digest-compare against the cached
+      series → POST only when different; digest written ONLY after every
+      configured env returned ok). NOT a hook on score_bench's invoker — no such
+      caller exists (every `--score-bench` site is documentation), and a wrapper
+      hook re-creates the git-hook bypass class. NEVER a Rust seam in the healer
+      binary (C3 + the swept-repos blast radius + the feature-gated green-zero
+      class). The nightly leg (T4.1) never passes `--if-changed` — it always
+      POSTs, as the LOUD-401 liveness probe.
 
 ## Risks
 
