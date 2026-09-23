@@ -421,7 +421,17 @@ mod tests {
         // fires (a clippy proposer mangling a perf fixture through pattern
         // ambiguity); a true-positive fire by the lint's own shape is not a
         // leak, so the named (fixture, lint) pair is allowlisted.
-        const TRUE_POSITIVE_FIRES: &[(&str, &str)] = &[("powi-vs-powf", "suboptimal_flops")];
+        // True-positive cross-fires, adjudicated (a perf fixture whose
+        // shape a clippy lint legitimately fires on):
+        // - powi-vs-powf: suboptimal_flops reads `x.powi(2)` correctly.
+        // - iter-copied-deref-map: Batch 171's map_clone twin
+        //   (`.map(|x| *x)` → `.copied()`) proposes the same specialized
+        //   adapter this perf rule teaches — the same idiom from both
+        //   domains, so the clippy fire is correct, not cross-domain noise.
+        const TRUE_POSITIVE_FIRES: &[(&str, &str)] = &[
+            ("powi-vs-powf", "suboptimal_flops"),
+            ("iter-copied-deref-map", "map_clone"),
+        ];
         let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for &(rule, code) in PERF_SPANS {
             for &l in &structural {
