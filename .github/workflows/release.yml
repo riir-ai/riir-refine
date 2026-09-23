@@ -8,7 +8,15 @@
 #
 # Secrets (both must fail LOUD when absent — the expiry-alarm rule):
 #   SIBLING_REPOS_TOKEN — fine-grained PAT cloning gist-rs/riir-ai +
-#                         gist-rs/riir-neuron-db (the same secret rust.yml
+#                         gist-rs/riir-neuron-db + gist-rs/riir-kat (a
+#                         NON-optional root dep since the 09-10 issue-088
+#                         spin-out) + gist-rs/riir-auth (riir-kat's
+#                         transitive) + gist-rs/riir-llm (issue 124,
+#                         optional but resolved) + gist-rs/riir-infer (the
+#                         09-22 carve, riir-ai Issue 998 — riir-ai's
+#                         riir-engine/riir-gpu escape to it transitively;
+#                         cargo reads path-dep manifests even behind
+#                         `optional = true`) — the same secret rust.yml
 #                         already uses; the workspace cannot resolve without
 #                         those siblings — path deps + [patch] sections).
 #   RELEASE_PAT         — fine-grained PAT, repository access = the three
@@ -76,10 +84,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${SIBLING_TOKEN:-}" ]; then
-            echo "::error title=SIBLING_REPOS_TOKEN missing::The workspace cannot resolve without riir-ai + riir-neuron-db. Set/renew the secret (a fine-grained PAT expires ~90 days)."
+            echo "::error title=SIBLING_REPOS_TOKEN missing::The workspace cannot resolve without riir-ai + riir-neuron-db + riir-kat (+ its transitive riir-auth) + riir-llm + riir-infer (the carve, riir-ai Issue 998). Set/renew the secret (a fine-grained PAT expires ~90 days)."
             exit 1
           fi
-          for repo in riir-ai riir-neuron-db; do
+          for repo in riir-ai riir-neuron-db riir-kat riir-auth riir-llm riir-infer; do
             git clone --depth 1 \
               "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
               "sibling/${repo}"
@@ -170,10 +178,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${SIBLING_TOKEN:-}" ]; then
-            echo "::error title=SIBLING_REPOS_TOKEN missing::The workspace cannot resolve without riir-ai + riir-neuron-db. Set/renew the secret (a fine-grained PAT expires ~90 days)."
+            echo "::error title=SIBLING_REPOS_TOKEN missing::The workspace cannot resolve without riir-ai + riir-neuron-db + riir-kat (+ its transitive riir-auth) + riir-llm + riir-infer (the carve, riir-ai Issue 998). Set/renew the secret (a fine-grained PAT expires ~90 days)."
             exit 1
           fi
-          for repo in riir-ai riir-neuron-db; do
+          for repo in riir-ai riir-neuron-db riir-kat riir-auth riir-llm riir-infer; do
             git clone --depth 1 \
               "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
               "sibling/${repo}"

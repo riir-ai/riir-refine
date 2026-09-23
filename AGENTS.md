@@ -97,13 +97,22 @@ Plan 001 generalized the framework from a clippy-only healer into a pluggable mu
 /git/katgpt-rs            ← katgpt-core (NON-OPTIONAL: ConstraintPruner trait + ternary matvec)
 /git/riir-ai              ← OPTIONAL dep (feature-gated arms only: ternary_inference →
                           riir-engine + riir-gpu, Bench 010; latent_retrieval → riir-rag,
-                          Plan 005. Default build: NOT a dep)
+                          Plan 005. Default build: NOT a dep). Since the 09-22 carve
+                          (riir-ai Issue 998) its riir-engine/riir-gpu escape
+                          transitively to ../riir-infer — required on disk for ANY
+                          cargo command, optional or not
+/git/riir-infer           ← transitive only (riir-ai's carve; NOT a direct dep —
+                          reached through riir-engine/riir-gpu path deps)
 /git/riir-train           ← OPTIONAL dep (only for L4 LoRA fallback, deferred)
 /git/riir-chain           ← NOT a dep
 /git/riir-neuron-db       ← transitive only (via riir-rag under latent_retrieval)
-/git/riir-auth            ← OPTIONAL dep (account-key login substrate; kat_service →
-                          riir-auth/account_key only, NOT github_login — Issue 081,
-                          2026-09-09; src/kat_account.rs is the kat-facing facade)
+/git/riir-kat             ← NON-OPTIONAL root dep (the kat plane leaf, Issue 088
+                          2026-09-10: kat_mining_consent/kat_service_config/kat_soft_gate/
+                          kat_units + the protocol tier; `kat_service`/`kat_transport`
+                          gate its client/transport features)
+/git/riir-llm             ← OPTIONAL dep (the shared LLM-transport leaf, Issue 124)
+/git/riir-auth            ← transitive only (riir-kat carries the account-key surface;
+                          root's direct row was removed with the Issue-088 spin-out)
 ```
 
 Path deps in `Cargo.toml` assume the standard `/git/` sibling layout.
@@ -149,7 +158,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 
 ### CI enforcement (2026-09-02, katgpt-rs Issue 701 R2 self-apply)
 
-`.github/workflows/rust.yml` runs `scripts/ci_feature_guard.sh` — the same guard a developer runs, not a CI-only subset — plus a `standalone` job pinning the escaping-path-dep set (`scripts/standalone_dep_gate.sh`: 10 entries across 4 siblings since Issue 081 added riir-auth; private siblings via `SIBLING_REPOS_TOKEN`, hard-erroring when absent). Triggers are deliberately narrow (the workspace spending-limit convention): pushes to `main` and `workflow_dispatch` — the weekly `develop` rot-check cron was SUSPENDED 2026-09-09 (Actions spending limit; schedules evaluate against the default branch `develop`), commented in-file. Separately, `.github/workflows/release.yml` (Plan 105, Proposal 003) runs on `v*` tags (publish to the public dist repo + tap/bucket PRs) and `workflow_dispatch` (dry run); it needs `SIBLING_REPOS_TOKEN` (as rust.yml) plus `RELEASE_PAT` (the three public dist repos only — see Plan 105 T1.3). Toolchain installs from `rust-toolchain.toml` (never @stable); the Tier-2 `docker build --check` agreement degrades deterministically in CI via a dead `DOCKER_HOST`; the layer-5c wedge budget is 7200 s for the 4-core runner; first scheduled runs are the cost measurement (~300 min budget). (Full runner notes: `HISTORY.md`.)
+`.github/workflows/rust.yml` runs `scripts/ci_feature_guard.sh` — the same guard a developer runs, not a CI-only subset — plus a `standalone` job pinning the escaping-path-dep set (`scripts/standalone_dep_gate.sh`: 12 entries across 5 siblings — Issue 088 moved the kat plane to the riir-kat leaf, Issue 124 added riir-llm; private siblings via `SIBLING_REPOS_TOKEN`, hard-erroring when absent). CI provisions SEVEN checkouts (the five pinned siblings + riir-auth via riir-kat + riir-infer via riir-ai's carve, riir-ai Issue 998). Triggers are deliberately narrow (the workspace spending-limit convention): pushes to `main` and `workflow_dispatch` — the weekly `develop` rot-check cron was SUSPENDED 2026-09-09 (Actions spending limit; schedules evaluate against the default branch `develop`), commented in-file. Separately, `.github/workflows/release.yml` (Plan 105, Proposal 003) runs on `v*` tags (publish to the public dist repo + tap/bucket PRs) and `workflow_dispatch` (dry run); it needs `SIBLING_REPOS_TOKEN` (as rust.yml — the same seven-checkout set) plus `RELEASE_PAT` (the three public dist repos only — see Plan 105 T1.3). Toolchain installs from `rust-toolchain.toml` (never @stable); the Tier-2 `docker build --check` agreement degrades deterministically in CI via a dead `DOCKER_HOST`; the layer-5c wedge budget is 7200 s for the 4-core runner; first scheduled runs are the cost measurement (~300 min budget). (Full runner notes: `HISTORY.md`.)
 
 ## Feature Flag Discipline
 

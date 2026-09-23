@@ -1,5 +1,62 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — CI sibling provisioning: riir-infer joins every checkout (the carve's T2.3 riir-clippy half) + release.yml's pre-existing kat-plane gap fixed
+
+Found by the riir-ai Issue 998 handoff session while adjudicating what S6's
+"T2.3 consumer retarget" actually owes: the manifests show riir-train and
+riir-clippy carry ZERO direct `riir-infer*` deps — they consume through
+riir-ai's riir-engine/riir-gpu, which the T3 carve (2026-09-22) re-pointed to
+`../../../riir-infer`. But cargo resolves path deps **even behind
+`optional = true`** (the katgpt-rs cross_repo_path_dep_gate measured class:
+"cargo check, test and fmt all die at manifest load"), and riir-clippy's
+Cargo.lock carries `riir-infer-core` + `riir-infer-gpu` (lines ~3523/3544) —
+so ANY cargo command here requires `../riir-infer` on disk, and every CI
+lane that provisions siblings must clone it.
+
+**rust.yml was missing exactly that one sibling** (loop named `riir-ai
+riir-neuron-db riir-auth riir-kat riir-llm`) — the next feature-guard run
+(main-push/dispatch only, so latent since the carve) would have died at
+manifest load with a raw cargo error instead of the designed fail-loud
+message. Fixed: `riir-infer` joins the loop, the missing-sibling MSG names
+it (with the 998 cross-ref), and the layout comment explains the transitive
+escape.
+
+**release.yml was BROADER and PRE-EXISTING**: both private-sibling loops
+named only `riir-ai riir-neuron-db` — unresolvable since **2026-09-10**, when
+the Issue-088 spin-out made `riir-kat` a NON-optional root dep
+(`../riir-kat`, default-features = false) one day AFTER v0.1.4 shipped;
+`riir-auth` (riir-kat's transitive) and `riir-llm` (optional, issue 124, but
+resolved) were never provisioned either. The next `v*` tag would have died
+at workspace load in both the licenses job and the build matrix. Fixed in
+the same commit: both loops now clone `riir-ai riir-neuron-db riir-kat
+riir-auth riir-llm riir-infer`, both missing-token error messages enumerate
+the set, and the header's token description matches. (En-route observation,
+NOT touched: `ops_dashboard.yml` still checks out `gist-rs/riir-unity`,
+retired to `git/obsolete/` 2026-09-04 — its lane needs an owner call on
+whether that remote still exists and what the dashboard's mirror set should
+now be.)
+
+Docs truth brought along: the standalone gate's PASS prose ("CI provisions
+all five siblings" — was already imprecise, CI provisioned six while the
+pin names five) now states the seven-checkout shape; AGENTS.md's
+Sibling-Repo Layout gained `riir-kat` (NON-optional root, the kat plane
+leaf) + `riir-llm` rows and corrected `riir-auth` to transitive-only (the
+provided table still described the pre-088 surface, where riir-auth was a
+root dep) + `riir-infer` transitive; AGENTS.md CI section's "10 entries
+across 4 siblings" corrected to the gate's own "12 entries across 5" + the
+seven-checkout provisioning note. The standalone gate's PIN is UNCHANGED
+(riir-infer never appears in this repo's own manifests — it is riir-ai's
+escape; the gate pins THIS repo's escaping-dep set, and it still passes at
+12 entries). riir-train's provisioning half was already landed in that
+repo's own lane (its rust.yml carries both loops + messages).
+
+Validated: `python3 yaml.safe_load` on both workflows OK; `bash -n` on the
+gate OK; `./scripts/standalone_dep_gate.sh` PASSED (12 entries, pin held);
+no cargo invocation changed shape locally (the sibling exists on this box).
+Cannot simulate the sibling-absent case locally (moving siblings is
+forbidden — sibling agents work there); the resolve-needs-it proof is the
+lockfile rows + the katgpt-rs measured class cited above.
+
 ## 2026-09-23 — P36: the `[C2·documented-write-only]` downgrade (config-audit; the seal-remake `FeatureFlags`/`SessionMeta`/`WasmLimits` idle-pass intake)
 
 Found and consumed in ONE session (the 09-23 quiet-repo code-smell hunt,

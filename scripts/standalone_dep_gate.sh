@@ -146,7 +146,10 @@ if [ "$ACTUAL" = "$EXPECTED" ]; then
     n=$(printf '%s\n' "$ACTUAL" | grep -c . || true)
     echo "✓ standalone-dep gate PASSED — $n escaping path deps, matching the pin"
     echo "  (this repo is still NOT standalone-buildable; the gate pins the gap,"
-    echo "   it does not close it. CI provisions all five siblings —"
+    echo "   it does not close it. CI provisions every sibling the resolve needs —"
+    echo "   seven checkouts: the five pinned siblings + riir-auth (riir-kat's"
+    echo "   transitive) + riir-infer (riir-ai Issue 998's carve, transitive"
+    echo "   through riir-ai's riir-engine/riir-gpu) — see"
     echo "   .github/workflows/rust.yml, feature-guard job.)"
     exit 0
 fi

@@ -11,9 +11,10 @@
 #
 # Two jobs:
 #   standalone     — no siblings, no secret, no cargo: pins the escaping-dep
-#                    set (scripts/standalone_dep_gate.sh, 10 entries across 4
-#                    siblings since Issue 081 added riir-auth). The ONLY
-#                    check that runs in a bare clone.
+#                    set (scripts/standalone_dep_gate.sh, 12 entries across 5
+#                    siblings — Issue 088 moved the kat plane to the riir-kat
+#                    leaf, Issue 124 added riir-llm). The ONLY check that
+#                    runs in a bare clone.
 #   feature-guard  — the full scripts/ci_feature_guard.sh, siblings provided.
 #                    Runs exactly what a developer runs locally — no CI-only
 #                    configuration, so a red run is reproducible on a laptop.
@@ -28,9 +29,9 @@
 # audits. `main` pushes (promotions) and workflow_dispatch cover the rest.
 #
 # Sibling provisioning follows riir-chain's pattern (its rust.yml, Issue 028):
-# katgpt-rs is public (default GITHUB_TOKEN), riir-ai + riir-neuron-db +
-# riir-auth are private and need `SIBLING_REPOS_TOKEN` — a fine-grained PAT
-# that expires
+# katgpt-rs is public (default GITHUB_TOKEN); riir-ai + riir-neuron-db +
+# riir-auth + riir-kat + riir-llm + riir-infer are private and need
+# `SIBLING_REPOS_TOKEN` — a fine-grained PAT that expires
 # (~90 days), so an expired token must fail LOUDLY, not silently skip. On any
 # trusted event (push/schedule/dispatch — there is no PR trigger today) a
 # missing token is a hard error; the pull_request warning branch exists only
@@ -144,7 +145,7 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          for repo in riir-ai riir-neuron-db riir-auth riir-kat riir-llm; do
+          for repo in riir-ai riir-neuron-db riir-auth riir-kat riir-llm riir-infer; do
             git clone --depth 1 \
               "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
               "sibling/${repo}"
@@ -155,9 +156,12 @@ jobs:
 
       # $GITHUB_WORKSPACE is .../riir-clippy; the manifest's `../katgpt-rs`,
       # `../riir-ai`, `../riir-neuron-db`, `../riir-auth` (riir-kat's
-      # transitive), `../riir-kat` and `../riir-llm` (issue 124) path deps
-      # resolve into the parent — this puts the siblings exactly where cargo
-      # expects them.
+      # transitive), `../riir-kat`, `../riir-llm` (issue 124) and — since the
+      # riir-infer carve (riir-ai Issue 998, 2026-09-22) — riir-ai's own
+      # `../../../riir-infer` escape (riir-engine/riir-gpu resolve it
+      # transitively, and cargo reads path-dep manifests even behind
+      # `optional = true`) path deps resolve into the parent — this puts the
+      # siblings exactly where cargo expects them.
       - name: Arrange the sibling layout
         if: steps.siblings.outputs.available == 'true'
         run: mv sibling/* ..
@@ -191,7 +195,9 @@ jobs:
           (public, checked out above) and gist-rs/riir-ai + \
           gist-rs/riir-neuron-db, gist-rs/riir-auth (riir-kat's transitive), \
           gist-rs/riir-kat (issue 088), gist-rs/riir-llm (issue 124, the \
-          LLM-transport leaf). Set/renew SIBLING_REPOS_TOKEN \
+          LLM-transport leaf), gist-rs/riir-infer (the 09-22 carve — \
+          riir-ai Issue 998; riir-ai's riir-engine/riir-gpu escape to it \
+          transitively). Set/renew SIBLING_REPOS_TOKEN \
           (a fine-grained PAT expires ~90 days)."
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "::warning title=Feature guard SKIPPED::$MSG"
