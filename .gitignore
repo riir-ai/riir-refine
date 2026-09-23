@@ -32,4 +32,5 @@ scripts/__pycache__/
 # someone else's commit.
 .benchmarks/ops_nightly.log
 .benchmarks/ops_nightly.launchd.log
+.benchmarks/healqual_sync.launchd.log
 .benchmarks/.ops_nightly.lock/

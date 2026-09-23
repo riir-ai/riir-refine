@@ -1,5 +1,30 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — Issue 131: the e2e self-evolve flywheel as a doc diagram + the KAT-pages static SVG hero (file removed per the noise-reduction rule — this row is the durable record)
+
+The self-evolve story was documented piecewise (`.docs/10_self_evolve/*` for
+the local loop; the KAT network surface on riir-dapps' front page) with no
+single artifact showing the whole e2e flywheel — the product pitch. Landed
+the same day in both repos (`ed7bf3aa` here: `.docs/10_self_evolve/
+self_evolve_flow.md` + the canonical static SVG `.svg`, dark-palette,
+no-JS, aria-labeled, README index line; riir-dapps `82933de`: the pinned
+mirror `src/self_evolve_flow.svg` + `src/self_evolve_hero.rs`
+(`include_str!`, the heal_skill convention, shape/CSS/no-fabricated-numbers
+test pins) + the `{HERO}` front-page slot wiring). Gates: kat-service lib
+277/277, clippy clean native + wasm32, direction gate OK.
+
+**Deploy closure verified live 2026-09-23 ~21:1x (M3 idle pass): the hero
+is LIVE on devnet** — `https://devnet.ai.gist.rs/` serves the flywheel SVG
+in the front page (grep-verified: the `<svg>` hero + "flywheel"/"self-evolve"
+captions). The issue's deploy note ("ships on the worker's next deploy —
+Plan 037's in-flight WIP is in the same build tree") is satisfied: Plan 037
+completed first, the worker deployed after, and the page renders the hero.
+T4's "both repos committed on develop" claim — the 20:5x pass's
+premature-as-committed suspicion — was verified TRUE at origin by the 21:0x
+armed check (dapps `82933de` an ancestor of origin/develop) before this
+removal. Canonical SVG home stays THIS repo (`.docs/10_self_evolve/`); the
+dapps copy is a pinned mirror, never hand-edited there.
+
 ## 2026-09-23 — Batch 173 / Plan 167: the serde zero-copy family distill, rust_perf 149 → 151 — the corpus's first dedicated serde rules
 
 The queued serde-family batch (Research 204, graded YES B− / no lane mapping /
