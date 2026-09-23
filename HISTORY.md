@@ -1,5 +1,49 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-24 — Batch 174: the cubecl/bevy merged-fix distill (host-lock + flush-hoist + the B56 rider)
+
+Batch 174 landed at the 09-24 ~00:0x +07 cadence slot (`feat:` commit, Plan
+168 / Research 205): rust_perf 151 → 153 + a kernel_opt rider, all three
+sources MERGED upstream PRs whose mechanism quotes were re-verified verbatim
+against the merged diffs before authoring (cubecl #1678 @ `9d1314c0` = tag
+v0.11.0-pre.4; cubecl #1686 @ `8ccbde3f5`; bevy #25851 @ `1fb979e37`).
+
+- **`host-lock-across-reentrant-blocking-call`** (concurrency, NotBenchable —
+  deadlock/hang class, the O_NONBLOCK precedent): a shared-state lock held
+  across a call that blocks on a thread that RE-TAKES the same lock (device
+  runner / executor / thread pool) is mutual wait by construction — the fix
+  shape is decide-under-lock → drop guard → issue the side-effect, with the
+  `probed`-flag skip-no-op sub-decision and the distinct-from note vs
+  `tokio-guard-across-await` (same fix shape, await-contention vs re-entrant
+  self-deadlock, no lint oracle for the latter).
+- **`deferred-command-flush-hoist-out-of-batch-loop`** (concurrency,
+  BENCHABLE — MEASURED ParetoDominant 3/0/0, verdict-stable ×2:
+  21.3×/13.3×/16.5× at 1k/10k/100k, alloc axis EXACTLY FLAT): the bevy
+  despawn_all flush-hoist at pattern level. The bench-honesty arc is the
+  durable lesson — THREE iterations to an honest toy: a static-const hook
+  table FOLDED at -O (0.80×, the dead-result class), a pure-map-built runtime
+  Vec still constant-propagated (black_box the construction), and the model
+  choice adjudicated between two bounds (vectorizable linear sum ~1-2ns →
+  1.1-1.6×; data-dependent dispatch chain ~35ns → the shipped numbers) with
+  BOTH disclosed in the annotation + bevy's 2.4-10.6% end-to-end as the
+  app-layer citation.
+- **The kernel_opt B56 rider** (no new rule, 627 stands): cubecl #1686's
+  double-checked-lookup at the throughput-probe cache — "Asked again inside:
+  another thread may have answered while this one queued" — plus the
+  device-to-itself exclusivity rationale (upstream confirmation of our own
+  GPU-exclusivity discipline, Bench 649's class).
+
+Gates: 102 rust_perf corpus tests green (7 count-pin sites walked + the
+third annotated site the pins' own grep had missed); full lib 2220/0;
+clippy `-D` clean at default / rust_perf_bench / kernel_heal (the rider's
+quote-escaping break caught at gate time — inner `"` needed `\"` in the Rust
+literal); Pareto verdict-stable ×2; kernel retrieval floors re-measured
+18/18; score row #162 heal 96.36% / created 1.82% FLAT; freeze tables
+UNMOVED by derivation (zero clippy_lints files touched). Repaired in
+passing: the rust_perf corpus doc comment (149→153 + category counts — B173
+had left it at 149). Global binary rebuilt at landing (release set,
+`--corpus-stats` rust_perf 153 verified).
+
 ## 2026-09-23 — Issue 132: the role-perspective e2e flows — doc + four per-tab SVGs + the front-page embed (file removed per the noise-reduction rule — this row is the durable record)
 
 Follow-up to Issue 131: the front page's role-tabbed "Get started" card

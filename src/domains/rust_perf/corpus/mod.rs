@@ -382,16 +382,18 @@ mod entries_04;
 mod entries_05;
 mod entries_06;
 mod entries_07;
+mod entries_08;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 149 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 153 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (26 rules); concurrency has 21
+/// wasm). Allocation is the deepest (28 rules — Batch 173 added the two
+/// serde zero-copy rules); concurrency has 23
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 135 added the zero-cost atomic conversion + the
 /// zero-sync partition; Batch 136 added the dynamic-work ladder + the
@@ -401,7 +403,8 @@ mod tests;
 /// blocking-sleep async twin + the rayon oneshot bridge — the corpus's first
 /// tokio×rayon boundary rule; Batch 154 added the oneshot response-send
 /// hygiene + the bounded-channel-cycle deadlock; Batch 172 added the
-/// crossbeam steal-batch rule);
+/// crossbeam steal-batch rule; Batch 174 added the host-lock re-entrant
+/// release rule + the deferred-command flush-hoist);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
 /// the runtime-table handler-pair hoist); caching has 7; io has 26 (the
@@ -422,5 +425,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_05::entries());
     entries.extend(entries_06::entries());
     entries.extend(entries_07::entries());
+    entries.extend(entries_08::entries());
     Corpus::new(entries)
 }

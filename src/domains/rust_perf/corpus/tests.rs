@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 151); // Batch 173 (serde family) 149 → 151: +serde-borrow-deserialize, +rawvalue-passthrough-defer-parse
+    assert_eq!(corpus.entries.len(), 153); // Batch 174 (host-lock + flush-hoist) 151 → 153
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -1778,7 +1778,7 @@ fn eighty_six_rules_have_bench_specs() {
         .iter()
         .filter(|e| e.bench_spec.is_some())
         .count();
-    assert_eq!(with_spec, 95, "expected 95 benchable rules (Batch 173 added the two serde zero-copy specs), got {with_spec}");
+    assert_eq!(with_spec, 96, "expected 96 benchable rules (Batch 174 added the flush-hoist spec; the host-lock rule is NotBenchable — deadlock class), got {with_spec}");
 }
 
 #[cfg(feature = "rust_perf_bench")]
@@ -1795,7 +1795,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 56); // 151 total − 95 benchable — UNMOVED by Batch 173 (both serde rules are benchable; the Batch-172 NotBenchable trio stands: the mmap settle-gated read, the crossbeam steal-batch, the nonblocking head-probe open)
+    assert_eq!(without_spec.len(), 57); // 153 total − 96 benchable — Batch 174 added the host-lock rule (NotBenchable, deadlock class); the flush-hoist is benchable
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1878,9 +1878,11 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 96, "expected 96 context-annotated rules (Batch 173 added the two serde zero-copy annotations; Batch 172 added the four mezura annotations and flipped byte-find-position-to-memchr via the anchor-cover rider)");
+    assert_eq!(annotated.len(), 98, "expected 98 context-annotated rules (Batch 174 added the host-lock + flush-hoist annotations; Batch 173 added the two serde zero-copy annotations; Batch 172 added the four mezura annotations and flipped byte-find-position-to-memchr via the anchor-cover rider)");
     assert!(annotated.contains(&"serde-borrow-deserialize")); // Batch 173 — the escape-regime + from_reader anti-regime annotation
     assert!(annotated.contains(&"rawvalue-passthrough-defer-parse")); // Batch 173 — the behavioral-delta (formatting retention) + typed-consumer anti-regime annotation
+    assert!(annotated.contains(&"host-lock-across-reentrant-blocking-call")); // Batch 174 — NotBenchable deadlock-class annotation (decide-under-lock/drop/act)
+    assert!(annotated.contains(&"deferred-command-flush-hoist-out-of-batch-loop")); // Batch 174 — the mechanism-isolation + observer-contract annotation
     assert!(annotated.contains(&"dual-mask-fused-block-scan")); // Batch 172 — the GOAT lead, measured verdict in notes
     assert!(annotated.contains(&"mmap-settled-size-gated-read")); // Batch 172 — NotBenchable decision-content annotation
     assert!(annotated.contains(&"steal-batch-not-per-item")); // Batch 172 — NotBenchable contention annotation
@@ -1949,7 +1951,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 55, "expected 55 unannotated rules (151 total - 96 annotated; Batch 173 added 2 ANNOTATED serde rules — the unannotated side is unmoved)");
+    assert_eq!(unannotated, 55, "expected 55 unannotated rules (153 total - 98 annotated; Batch 173 + Batch 174 added only ANNOTATED rules — the unannotated side is unmoved)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1961,7 +1963,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 96); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96 (the two serde zero-copy annotations)
+    assert_eq!(annotated, 98); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98 (the host-lock + flush-hoist annotations)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2002,7 +2004,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 96, "expected 96 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96 — the two serde zero-copy annotations)");
+    assert_eq!(annotated.len(), 98, "expected 98 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98 — the host-lock + flush-hoist annotations)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2041,7 +2043,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules (151 total − 96 annotated, Batch 173 added 2 annotated serde rules)");
+    assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules (153 total − 98 annotated, Batch 174 added 2 annotated concurrency rules)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -3509,6 +3511,89 @@ fn batch173_pareto_benches() {
             b.results.last().map_or(0, |r| r.fixed_allocs),
         );
     }
+}
+
+/// Batch 174 (2026-09-24, Plan 168 — the host-lock/flush-hoist distill from
+/// cubecl #1678 + bevy #25851): both rules present, parse, carry the concept
+/// needles. The host-lock rule is `NotBenchable` by design (deadlock class —
+/// the O_NONBLOCK head-probe precedent), so `without_spec` carries its count
+/// half and this gate carries presence/parse/needles.
+#[test]
+fn batch174_rules_present_and_parse() {
+    let corpus = build_perf_seed_corpus();
+    for (rid, category, needles) in [
+        (
+            "host-lock-across-reentrant-blocking-call",
+            "concurrency",
+            vec!["RE-TAKES", "decide under the lock", "guard dropped", "deadlock"],
+        ),
+        (
+            "deferred-command-flush-hoist-out-of-batch-loop",
+            "concurrency",
+            vec!["flush per item", "ONE sync point", "observer", "despawn_all"],
+        ),
+    ] {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-174 rule '{rid}' missing"));
+        assert_eq!(e.category, category, "batch-174 '{rid}' category");
+        let blob = format!(
+            "{}{}{}{}",
+            e.name, e.buggy_code, e.fixed_code,
+            e.context_notes.as_deref().unwrap_or("")
+        );
+        for needle in needles {
+            assert!(
+                blob.contains(needle),
+                "batch-174 '{rid}' missing concept needle {needle:?}"
+            );
+        }
+        // both entries must syn-parse (the standing parse gate, per-rule)
+        syn::parse_file(&e.buggy_code).expect("batch-174 buggy_code parses");
+        syn::parse_file(&e.fixed_code).expect("batch-174 fixed_code parses");
+    }
+}
+
+/// Batch 174's benchable half: the flush-hoist spec runs and lands its
+/// verdict (ParetoDominant expected — the barrier's fixed-cost share; the
+/// measured numbers + the model caveat live in the entry's context_notes).
+#[cfg(feature = "rust_perf_bench")]
+#[test]
+#[ignore = "slow: spawns cargo build+run per rule (temp bench crates)"]
+fn batch174_pareto_benches() {
+    let corpus = build_perf_seed_corpus();
+    let validator = crate::domains::rust_perf::bench::PerfBenchValidator::new();
+    let rid = "deferred-command-flush-hoist-out-of-batch-loop";
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == rid)
+        .unwrap_or_else(|| panic!("batch-174 rule '{rid}' missing"));
+    let verdict = validator.validate(rid, e.bench_spec.as_ref());
+    assert!(!verdict.is_not_benchable(), "batch-174 '{rid}' has a spec");
+    let b = match &verdict {
+        crate::domains::rust_perf::bench::BenchVerdict::Pareto(p) => p,
+        crate::domains::rust_perf::bench::BenchVerdict::NotBenchable(n) => {
+            panic!("batch-174 '{rid}' unexpectedly NotBenchable: {n:?}")
+        }
+    };
+    assert!(b.ran, "batch-174 '{rid}' bench must run: {:?}", b.error);
+    assert_eq!(
+        b.overall,
+        crate::domains::rust_perf::bench::BenchOverall::ParetoDominant,
+        "batch-174 '{rid}' landed ParetoDominant; re-measure before re-pinning"
+    );
+    println!(
+        "batch-174 {rid}: {:?} faster={} slower={} tie={} allocs@max {}→{}",
+        b.overall,
+        b.faster_count,
+        b.slower_count,
+        b.tie_count,
+        b.results.last().map_or(0, |r| r.buggy_allocs),
+        b.results.last().map_or(0, |r| r.fixed_allocs),
+    );
 }
 
 /// Batch 136 (2026-09-09, Plan 115 — the Lattimore "Graph Algorithms in
