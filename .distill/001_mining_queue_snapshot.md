@@ -182,6 +182,20 @@
   authoring lessons there in the same commit.
 - Per batch, ONE commit: research note (with a `**Status:**` line) + AGENTS.md batch
   entry + corpus-count bump + this snapshot's one-line queue update.
+- **Gate-calibration at batch landing (Issue 130 T1+T3, landed 2026-09-23): run
+  `cargo heal --gate-calibration` after each corpus-generation landing and read it** —
+  a `⚠ STALLED` store window (zero frontier-generation advances over the last 6 snapshots)
+  routes to the coverage-report re-arm (`cargo heal --coverage-report`; new uncovered
+  families go to the mining queue); the repo-stratum line tracks whether an admission
+  floor δ has become calibratable (Issue 130 T2 stays deferred while it reads
+  `UNCALIBRATED — zero spread` — the deterministic-oracle axis).
+- **Active-set discipline (Issue 102 T2/T3, landed 2026-09-23): demotion is operator-only** —
+  `--active-set-demote <domain:rule>` writes `.heal/active_set.json`; nothing in the heal
+  path demotes, and it must stay that way until Issue 102's ≥3-future-generations
+  fade-predictive clock opens. A retirement decision prices through
+  `--necessity-bench --necessity-rule <RULE>` FIRST (the 102-T4 paired lane) — DECORATIVE
+  is evidence for demotion, LOAD-BEARING is evidence against; auto re-admit fires on the
+  first fresh unresolved clippy diagnostic, and oracle anchors pass through loud.
 - Generator lessons (edit_file escape-stripping, `ensure_ascii=False`, line-initial
   `+ ` doc-markdown, CRLF check before fmt, count-pin walks) are recorded per-batch in
   AGENTS.md entries — read the last 2–3 batch entries before writing corpus content.

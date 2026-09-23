@@ -1,5 +1,85 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — Issues 089+102+130 batch: active-set lifecycle (T2/T3/T4), the admission-gate REPORT half (T1+T3), the owed gen-3 sweep #161, and the switch_cost cross-fire adjudication
+
+Three open issues closed out to their honest states in one batch (two
+implementation subagents + a Claude verdict round whose conditions are
+landed as code and whose premise corrections are recorded in the issues):
+
+- **Issue 102 T2+T3 — the corpus active-set mechanism, landed gate-CLOSED**
+  (`src/active_set.rs` ungated + fan-out/fix-lane honor + the operator
+  CLI): `.heal/active_set.json` is the ONE marker; the similarity fan-out
+  (`LatentMatcher::with_active_set`, retained before rerank+truncate) and
+  the fix dispatch (main pass perf/clippy + reheat perf/clippy/sec loops)
+  skip demoted rules; oracle anchors pass through LOUD (`[active-set:
+  DEMOTED — anchor override]` in `print_suggestion`); auto re-admit at
+  fix-run end fires on the first fresh feed-named diagnostic (Research 165
+  rule 3; the pre-fix-feed approximation is documented — the post-fix
+  oracle re-run is T4's priced axis); `enforce_cap` lands as a pure
+  function with NO call site (condition C — the cap binds only when
+  measured fade-driven degradation exists, and the live fade section reads
+  zero candidates). Nothing demotes automatically: the ≥3-future-
+  generations fade-predictive clock (started 09-21) is the only key that
+  opens wiring; until then `--active-set-demote/readmit/clear/cap` is the
+  only writer. The `KNOWN_DOMAIN_KEYS` table (ungated) is drift-pinned
+  against `DomainId::label` by a latent_matcher test.
+- **Issue 102 T4 — the per-decision paired lane**:
+  `--necessity-bench --necessity-rule <RULE>` (forced single-target mode
+  over the Issue-108 machinery). Control = enabled baseline vs treatment =
+  the disabled arm; the matched-swap arm is skipped (the decision reads
+  the control pair only); an unknown rule is a loud REFUSAL (exit 2,
+  nothing appended); the load-bearing top-1 canary is skipped LOUD in
+  forced mode — a no-flip DECORATIVE verdict IS the finding being priced,
+  and gating the exit on it would invert the lane — while the planted-noop
+  determinism canary runs in both modes.
+- **Issue 130 T0 decided + T1+T3 landed** (`src/gate_calibration.rs` +
+  `--gate-calibration`, report-only): T0's dichotomy (close vs proceed)
+  was superseded by its own Caution 1 — the verdict round named that
+  explicitly and the issue records the supersession. T1 groups the score
+  history's strata per (class, generation) and reports δ with THREE
+  verdicts — Deferred (single run / thin), Supported, and **Degenerate**:
+  δ = 0 at depth prints `UNCALIBRATED — zero spread … a δ=0 floor admits
+  everything`, never a calibration (the verdict round's blocking
+  condition; the deterministic clippy oracle makes zero-spread the
+  expected deep-stratum state, and the live read confirms it — repo gen-6:
+  21 findings, 2 runs, δ = 0.000). The first live run also caught its own
+  cries-wolf shape: 45 pre-strata rows errored on missing `generation`
+  (demanded before the strata-absent short-circuit) — reordered same-day,
+  both behaviors pinned. T3's stall predicate flags per-store windows with
+  zero generation advances; live: BOTH stores STALLED (flat at gen 7/8) —
+  the honest re-arm signal. T2 stays deferred BY MEASUREMENT: the stratum
+  is deep enough (21 findings) but there is no nonzero δ to wire.
+- **The owed gen-3 sweep (#161)**: Batch 172's corpus growth (145→149
+  rust_perf) landed 09-23 without its cadence sweep — run in a DETACHED
+  WORKTREE at HEAD (compile isolation from concurrent sessions; the
+  manifest-path trick keeps the artifacts landing in the real
+  `.benchmarks/`). Row #161: 93 fixtures, heal_rate 95.5%, 66 rules
+  attributed single-target; bench tail appended a snapshot (store
+  `b93bd219`, population 26→27) — a STATE move, NOT a frontier boundary:
+  089 T4's per-store boundary clock is honestly unchanged, and the issue
+  says so (a sweep is T8/fade fuel, never T4 progress).
+- **switch_cost cross-fire adjudicated** (found by the active-set
+  subagent, pre-existing at HEAD): Batch 171's `map_clone` twin
+  (`.map(|x| *x)` → `.copied()`) fires on the perf fixture
+  `iter-copied-deref-map` — the same idiom from both domains — so the
+  clippy fire is a TRUE POSITIVE, not cross-domain noise;
+  `TRUE_POSITIVE_FIRES` gained the adjudicated row (with the reasoning
+  inline). The latent_retrieval lib lane is green again.
+- **Issue 089 bookkeeping**: the status line re-measures accumulation
+  post-sweep (4 sweep rows; T8's grid-fit corpus grows; T4 boundary clock
+  unchanged, with the reason). The frontier-boundary gate stays unwired
+  (report-first law) — accumulation remains the only blocker, by design.
+
+Validation: lib clippy `-D` at default AND latent_retrieval; bin clippy
+`-D` at the required feature set; 2218/2218 default lib tests (the G3
+count-pins check, mechanical); active_set 18/18, gate_calibration 19/19,
+latent_matcher 15/15, necessity 11/11, switch_cost 5/5, bin mode tests
+4/4 (6 new standalone rows); live CLI round-trips (active-set lifecycle
+incl. the bad-domain refusal; gate-calibration against the real
+artifacts; frontier-report's 4-sweep live fade read). AGENTS.md CLI notes
+updated; `.distill/001` standing rules gained the gate-calibration and
+active-set pointers.
+
 ## 2026-09-23 — CI sibling provisioning: riir-infer joins every checkout (the carve's T2.3 riir-clippy half) + release.yml's pre-existing kat-plane gap fixed
 
 Found by the riir-ai Issue 998 handoff session while adjudicating what S6's
