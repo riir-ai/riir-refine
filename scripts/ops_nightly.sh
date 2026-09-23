@@ -504,6 +504,10 @@ fi
 # hatch). The sync's unauthorized line lands in the log above — that is
 # the 401/403-LOUD surface (key rotation or an allowlist drop must
 # surface here, never warn-and-continue into a silently stale card).
+# Companion (T4.3, riir-clippy Proposal 016): the OPPORTUNISTIC push runs
+# on its own launchd interval — com.riir.healqual-sync.plist, 4h,
+# `healqual_sync.sh --if-changed` (digest-gated). THIS leg stays the
+# always-POST liveness probe; never point it at --if-changed.
 if [ "${OPS_NIGHTLY_NO_HEALQUAL_SYNC:-0}" != "1" ]; then
   if [ -x "${REPO}/../riir-dapps/scripts/healqual_sync.sh" ]; then
     log "healqual days sync starting"

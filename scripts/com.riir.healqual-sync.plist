@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- riir-dapps Plan 037 T4.3 / riir-clippy Proposal 016 — the opportunistic
+     healqual push. A SECOND launchd interval beside com.riir.ops-nightly
+     (NOT a hook: every --score-bench invocation site is documentation, and
+     a wrapper around the documented command is bypassed silently). The
+     activity signal is the FILE — score_history.jsonl's content — so this
+     leg runs healqual_sync.sh --if-changed: mine the series, sha256-compare
+     against the cached digest, POST only when the series changed. The
+     nightly (01:23) remains the always-POST liveness probe; this leg only
+     improves freshness to <= 4h after a batch lands. The digest cache is
+     written only after EVERY configured env returned ok.
+     Install:    cp scripts/com.riir.healqual-sync.plist ~/Library/LaunchAgents/
+                 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.riir.healqual-sync.plist
+     Uninstall:  launchctl bootout gui/$(id -u)/com.riir.healqual-sync
+     Run now:    launchctl kickstart -k gui/$(id -u)/com.riir.healqual-sync
+     Status:     launchctl print gui/$(id -u)/com.riir.healqual-sync | head -20
+     Log:        tail -f .benchmarks/healqual_sync.launchd.log -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.riir.healqual-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/katopz/git/riir-dapps/scripts/healqual_sync.sh</string>
+    <string>--if-changed</string>
+  </array>
+
+  <!-- Every 4h: latency to a fresh score-bench row is <= the interval,
+       and a no-op run costs one pure-Python mine + one sha256 (no POST,
+       no signer, no network). The laptop sleeps; launchd coalesces missed
+       intervals and fires once on wake. -->
+  <key>StartInterval</key>
+  <integer>14400</integer>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- The script self-locates its repo from BASH_SOURCE; the working dir
+       only decides where a crash core would land. -->
+  <key>WorkingDirectory</key>
+  <string>/Users/katopz/git/riir-dapps</string>
+
+  <!-- Same posture as the nightly: nothing here is urgent, and it shares
+       the box with interactive agent work + cargo builds. -->
+  <key>Nice</key>
+  <integer>10</integer>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <!-- The script echoes its own progress lines; these catch launchd-level
+       failures (interpreter errors, spartan-PATH misses). -->
+  <key>StandardOutPath</key>
+  <string>/Users/katopz/git/riir-clippy/.benchmarks/healqual_sync.launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/katopz/git/riir-clippy/.benchmarks/healqual_sync.launchd.log</string>
+</dict>
+</plist>
