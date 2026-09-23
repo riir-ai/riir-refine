@@ -1,5 +1,76 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — Batch 173 / Plan 167: the serde zero-copy family distill, rust_perf 149 → 151 — the corpus's first dedicated serde rules
+
+The queued serde-family batch (Research 204, graded YES B− / no lane mapping /
+seeds the serde family — the dial9 product-coverage shape one lib over: serde/
+serde_json is the ecosystem's most-depended-on family and the corpus carried
+ZERO dedicated entries beside 67 tokio ones). Docs-source distill
+(serde.rs/lifetimes.html + docs.rs RawValue @ 1.0.151 — the lock's version;
+nothing cloned, nothing to delete); fixtures ORIGINAL; the plan-first
+pre-verification (T1/T2/T3/T6 + the freeze-table half of T7) ran early per the
+Plan-166/167 precedent, and T3's dedup gate re-ran fresh at batch time (corpus
+still exactly 149, zero covering rules).
+
+**2 new rules** (allocation; both benchable + annotated — `entries_07.rs` is
+the new slice, opened per entries_06's own ~1800-line rule at 1743):
+
+- `serde-borrow-deserialize` (GOAT lead) — derived `Deserialize` with String
+  fields on a from_str/from_slice path → `&'a str` (implicit borrow) or
+  `#[serde(borrow)] Cow<'a, str>` (the regime-robust spelling). **MEASURED
+  ParetoDominant 4/0/0 (M3 Max, release): 1.33×/1.32×/1.29×/1.05× at
+  1k/10k/50k/100k records — the timing win is modest (the JSON scan dominates;
+  the allocator fast path amortizes the mallocs), so the LOAD-BEARING cell is
+  the alloc axis: EXACT 300016 → 16 at n=100k (3R String allocations → 0;
+  both arms keep the shared output-Vec growth); bytes 23.4 MB → 21.0 MB;
+  G-det stable ×3.** The ESCAPED-PAYLOAD REGIME WITNESS is the batch's
+  instrument innovation: the harness prints it from inside `make_input`
+  (untimed) using the bench crate's own counting allocator — owned 300019 vs
+  Cow 100019 allocs at n=100k — the escape-free fields still borrow, only the
+  escaped field degrades to Cow::Owned, so the delta collapses 3R→0 (clean)
+  to 3R→1R (fully-escaped payloads): Cow recovers 2/3 of the win even at the
+  anti-regime. G1 is LIVE IN RELEASE (plain asserts in make_input): field
+  equality both payloads + Cow::Borrowed on the clean parse + the
+  Borrowed/Borrowed/Owned per-field split on the escaped one (the kind/target
+  vs actor split caught a wrong-field assert pre-landing).
+- `rawvalue-passthrough-defer-parse` — opaque `serde_json::Value` field that
+  is only stored/forwarded/re-serialized → `#[serde(borrow)] &'a RawValue`
+  (Box<RawValue> on reader paths). **MEASURED ParetoDominant 3/0/0: 4.25×/
+  3.88×/2.10× at 1k/10k/50k envelopes; alloc axis EXACT 950000 → 100000 at
+  n=50k (19/env → 2/env — the ~17-node Value tree + the to_string buffer
+  vanish; both arms keep the IDENTICAL source: String so the delta isolates
+  the opaque-field typing); bytes 142.5 MB → 1.05 MB; G-det stable ×3.** G1
+  compares RE-PARSED VALUES live in release (RawValue keeps the original
+  formatting — "will not be minified or pretty-printed" — a behavioral delta
+  documented in the annotation, never byte-compare).
+
+Both rules are SUGGEST-ONLY (a parse-only proposer cannot see the deserializer
+input path or the verbatim-forward semantics) → `FIXABLE_RULES` untouched →
+no freeze table CAN move (T7's structural proof). **Verified, not assumed:**
+the gen2 freeze e2e (47.5s, real clippy) + gen3 (25.6s) + gen5 (1.0s) all
+green at the landing — the corpus-derived and FIXABLE_RULES-derived tables
+byte-stable.
+
+Riders on the landing (pre-existing findings surfaced by the batch's lint
+lanes, fixed in the same commit): entries_06's dual-mask bench-spec doc
+doc_markdown (x86_64/vceq/vpaddq backticks — the lane was never linted at
+`--features rust_perf,rust_perf_bench` before); gate_calibration's
+`unreadable_literal` (0.980_392_16) + `float_cmp` (the exact-zero delta
+assertion now an explicit `== 0.0` with the determinism rationale inline) —
+both surfaced under `--all-targets --features rust_perf_bench`, both
+mechanical-manual (healer dry-ran first: 0 applicable).
+
+Validation: perf_bench_demo GOAT run — G1 0 failed / G-det 2/2 stable ×3 /
+G5 ParetoDominant 2/2 (ALL GOAT GATES PASS); batch173_pareto re-run from the
+landed corpus (19.1s, both verdicts reproduce); 2249/2249 lib tests at
+`rust_perf,rust_perf_bench` + 2219/2219 at default; clippy `-D` at rust_perf,
+`rust_perf,rust_perf_bench`, all-targets+bench, no-default, and the
+all-features workspace sweep; gen2/gen3/gen5 freeze e2es; `--score-bench`
+row #162 (heal_rate 96.4%, decline_correctness 100%, shaped_rate 94.5%,
+rule_outcomes 5 rules single-target; the standing 2-fixture toolchain drift
+warning is console-only and pre-dates this batch — the rust_perf corpus is
+not in the clippy fixture path). rust_perf 151 confirmed by `--corpus-stats`.
+
 ## 2026-09-23 — Issues 089+102+130 batch: active-set lifecycle (T2/T3/T4), the admission-gate REPORT half (T1+T3), the owed gen-3 sweep #161, and the switch_cost cross-fire adjudication
 
 Three open issues closed out to their honest states in one batch (two

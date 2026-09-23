@@ -1470,8 +1470,8 @@ pub fn run_fixed(input: &Input) {
 /// every call. The scanner (bool table + feature probe) is built ONCE in
 /// `make_input` — the timed `run_*` paths are allocation-free (G4: the
 /// fixed arm's only state is two u64 masks per block). The AVX2 arm
-/// (2×32 cmpeq+movemask) runs on x86_64, the NEON arm (4×16 vceq +
-/// weighted vpaddq fold) on aarch64, scalar elsewhere + for tails.
+/// (2×32 `cmpeq` + `movemask`) runs on `x86_64`, the NEON arm (4×16 `vceq` +
+/// weighted `vpaddq` fold) on aarch64, scalar elsewhere + for tails.
 #[cfg(feature = "rust_perf_bench")]
 #[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
 #[allow(unsafe_code)]

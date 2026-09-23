@@ -40,7 +40,9 @@
 //!     annotations (the log-only hot-path computation behind a level gate — its
 //!     note carries the #143684 wall-time-vs-icount measurement-honesty rider;
 //!     and the macro-emission build-time rule — upstream-measured compile-time
-//!     content, no runtime A/B axis).
+//!     content, no runtime A/B axis). Batch 173 (Plan 167) added the two serde
+//!     zero-copy rules — allocation 26 → 28 (the corpus's first dedicated
+//!     serde family; both benchable + annotated).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -379,6 +381,7 @@ mod entries_03;
 mod entries_04;
 mod entries_05;
 mod entries_06;
+mod entries_07;
 
 #[cfg(test)]
 mod tests;
@@ -418,5 +421,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_04::entries());
     entries.extend(entries_05::entries());
     entries.extend(entries_06::entries());
+    entries.extend(entries_07::entries());
     Corpus::new(entries)
 }

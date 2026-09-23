@@ -692,7 +692,7 @@ mod tests {
         assert_eq!(views[1].class, "authored");
         assert_eq!(views[1].vocab_before, 51);
         assert_eq!(views[1].resolved, 50);
-        assert!(close(views[1].heal_rate, 0.98039216));
+        assert!(close(views[1].heal_rate, 0.980_392_16));
     }
 
     #[test]
@@ -884,7 +884,11 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].findings_max, 21);
         assert_eq!(rows[0].runs, 2);
-        assert_eq!(rows[0].delta, 0.0);
+        // Deterministic fixture inputs: the delta is EXACTLY 0.0 (same-value
+        // subtraction), so the float-cmp gate's exactness is the assertion.
+        #[allow(clippy::float_cmp)]
+        let degenerate = rows[0].delta == 0.0;
+        assert!(degenerate);
         assert_eq!(rows[0].verdict, CalibrationVerdict::Degenerate);
         let text = render_calibration(&rows);
         assert!(text.contains("UNCALIBRATED — zero spread"), "{text}");
