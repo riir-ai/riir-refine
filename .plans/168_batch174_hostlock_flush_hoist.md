@@ -1,6 +1,6 @@
 # 168 — Batch 174: host-lock release-before-blocking-call + deferred-command flush-hoist + the CubeCL double-checked-lookup rider
 
-**Status:** COMPLETE-PENDING-LANDING — all gates green at the 09-24 ~00:0x +07 cadence slot (T1–T7 done, records T8 written, T9 commit + T10 binary rebuild in flight).
+**Status:** COMPLETE — landed 2026-09-24 00:43:42 +07 at `064f48c54` (rebased over the sibling's Issue-132/fixstats commits; HISTORY.md was the one conflict, resolved both-sections-newest-first). Global binary rebuilt + `--corpus-stats` verified live (rust_perf 153 / kernel_opt 627 / clippy_lints 94) — NOTE: the global binary was found STALE at 09-22 23:42 (pre-B173's 151) despite the B173 follow-through's "verified live 151" claim; refreshed both cargo-heal + cargo-heal.exe this landing.
 
 Sources (all three PRs MERGED — quotes stable, re-verified against the merged diffs this session):
 
@@ -24,8 +24,8 @@ Dedup (done, read-only):
 - [x] T6 GOAT: lib tests green (2220/0), clippy `-D warnings` clean at default + `--features rust_perf,rust_perf_bench` + `--features kernel_heal`, Pareto bench run for the flush-hoist spec (ParetoDominant verdict-stable ×2), kernel retrieval-precision re-measure (18/18 green, floors hold — 80.5s), score-bench run (row #162: heal 96.36% / created 1.82% — FLAT vs floors).
 - [x] T7 Freeze tables: verified UNMOVED by derivation (zero clippy_lints files touched — the B172 law; git status confirms the write set).
 - [x] T8 Records: Research 205 (`.research/205_*.md`, highwater 204 → 205), AGENTS.md rust_perf 151 → 153 (Batch 174 row), `.docs/11_domains/rust_perf.md` (top block + Source ledger entries_01..08 + 153/96), `.docs/11_domains/kernel_opt.md` (Batch 174 rider row), HISTORY.md §Batch 174.
-- [ ] T9 Land at the cadence slot: `feat: batch 174: ...` + push (single commit; tree verified clean of sibling WIP before staging — named-files staging only).
-- [ ] T10 Global binary rebuild (release set, isolated worktree if the shared target is contended) + `--corpus-stats` verify rust_perf 153; `.raw`-class scratch (`/tmp/b174`) removed at close.
+- [x] T9 Land at the cadence slot: `feat: batch 174: ...` + push. **DONE — `064f48c54` (00:43:42 +07), rebased over sibling commits `e4dd85f8` + `5f00d2ac` (HISTORY.md the one conflict, both sections kept, newest first); tree verified clean of sibling WIP before staging — named-files staging only.**
+- [x] T10 Global binary rebuild (release set) + `--corpus-stats` verify rust_perf 153; `.raw`-class scratch (`/tmp/b174`) removed at close. **DONE — the global ~/.cargo/bin binary was found STALE (09-22 23:42, reading 149 — pre-B173); both spellings refreshed from the 00:50 release build; stats verified: rust_perf 153 / kernel_opt 627 / clippy_lints 94.**
 
 ## Standing notes
 
