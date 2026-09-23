@@ -1,6 +1,6 @@
 # Plan 169 — Batch 175: the coverage-report pack XV (len_without_is_empty + cast_abs_to_unsigned)
 
-**Status:** PRE-SLOTTED — T0/T1 probe-verified read-only 2026-09-24 ~01:2x +07 (fresh session, post-B174 close-out); corpus authoring + landing at the NEXT cadence slot (~19:5x 09-24 or ~00:0x 09-25 +07; B174 landed 09-24 00:43).
+**Status:** PRE-SLOTTED — T0/T1 probe-verified read-only 2026-09-24 ~01:2x +07 (fresh session, post-B174 close-out); T2/T3 substrate claims + T4/T5 pin locations pre-verified read-only 2026-09-24 ~05:4x +07 (the Plan-167 early-pre-verification precedent — findings in Standing notes); corpus authoring + landing at the NEXT cadence slot (~19:5x 09-24 or ~00:0x 09-25 +07; B174 landed 09-24 00:43).
 
 The standing pipeline (Batch 164+): fresh `--coverage-report` derivation →
 adjudicate the evidenced head with reasons → probe-verify the leads → land.
@@ -134,6 +134,23 @@ shape. SILENT: ref-bind on owned scrutinee; match-ergonomics form.
   every overturned row names NEW evidence (a landed precedent, a shipped
   substrate, fresh measurements), and the two rows without new evidence
   (derivable_impls DEFER, the standing REFUSE set) kept their verdicts.
+- **T2/T3 substrate pre-verification (2026-09-24 ~05:4x, read-only):** T3's
+  `scalar_param_heads_over` CONFIRMED directly consumable —
+  `helpers.rs:425`, `fn(inputs: impl Iterator<Item=&FnArg>, block:
+  &Block) -> BTreeMap<ident, type-text>` with the never-rebound guard; T3
+  filters the map for the signed primitives (i8/i16/i32/i64/i128/isize) —
+  exactly the Plan-149 law, zero adaptation needed. T2's NWD substrate is
+  ADJACENT-NOT-LITERAL: `proposers/new_without_default.rs` (302 LOC) ships
+  the Candidate/Scan scaffolding + effective-exportation gating to consume
+  as a PATTERN, but it inserts a SIBLING top-level `impl Default` — **no
+  shared insert-into-impl-body helper exists**; T2 authors the
+  brace-matched before-closing-brace insertion itself (the
+  needless_late_init syn-respan lesson governs the span arithmetic).
+- **T4/T5 pin locations confirmed at the named lines:**
+  `assert_eq!(FIXABLE_LINTS.len(), 75)` at proposers/mod.rs:1273 (→ 77);
+  `assert_eq!(corpus.entries.len(), 94)` at corpus.rs:1101 (→ 96 — the
+  enclosing test NAME `corpus_size_is_82` is stale-era; the count is what
+  the pin asserts, do not "fix" the name in this batch).
 - `.plans/.highwater` repair rides this unit (167→168→169): the B174
   session landed 168 without the bump — the 7fc14393 precedent, folder
   re-scanned, 168 is the max, no reuse risk.
