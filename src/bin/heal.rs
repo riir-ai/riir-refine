@@ -3396,8 +3396,14 @@ USAGE:
     cargo heal --coverage-report                       (corpus coverage debt, 119)
     cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
     cargo heal --fixseq-stats [PATHS]                  (cascade law + derailment index, 128)
+    cargo heal --gate-calibration                      (Issue 130 T1+T3 report — strata δ calibration + corpus-stall flag; ungated, report-only)
+    cargo heal --active-set                            (Issue 102 marker — print demotions + caps)
+    cargo heal --active-set-demote <domain:rule>       (demote a rule out of the fan-out + fix dispatch; e.g. clippy:manual_div_ceil)
+    cargo heal --active-set-readmit <domain:rule>      (remove a demotion — the manual re-admit)
+    cargo heal --active-set-cap <domain:N>             (per-domain active ceiling; 0 removes — OFF by default)
+    cargo heal --active-set-clear                      (drop every demotion + cap; the corpus is never touched)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
-    cargo heal --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke]  (Issue 108, score_bench)
+    cargo heal --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke --necessity-rule RULE]  (Issue 108 + the 102-T4 per-decision paired lane, score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
     cargo heal account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
@@ -3931,6 +3937,38 @@ struct Args {
     /// stride + both canaries (validates the instrument itself without the
     /// full oracle bill).
     necessity_smoke: bool,
+    /// Issue 102 T4: `--necessity-rule <RULE>` with `--necessity-bench` —
+    /// the per-DECISION paired lane: forced single-target control/disabled
+    /// pair over the frozen set (priced per invocation, not per bench
+    /// run). A no-flip verdict (DECORATIVE) is the finding being priced,
+    /// so the load-bearing canary is skipped loud in this mode; the
+    /// planted-noop determinism canary still runs.
+    necessity_rule: Option<String>,
+    /// Issue 130: `--gate-calibration` — the admission-gate evidence
+    /// report (standalone, ungated, report-only): the T1 δ calibration
+    /// over the score-history strata + the T3 corpus-stall predicate over
+    /// the frontier snapshots. Nothing here gates; the T2 admission
+    /// predicate stays deferred until the report says the repo stratum
+    /// can support a δ.
+    gate_calibration: bool,
+    /// Issue 102 T2: `--active-set` — print the corpus active-set marker
+    /// (standalone). The marker file is the ONLY demotion writer; the
+    /// fade-predictive clock stays the only thing that could ever automate
+    /// one.
+    active_set_list: bool,
+    /// `--active-set-demote <domain:rule>` — demote a rule out of the
+    /// similarity fan-out + the fix dispatch (entry KEPT in the corpus;
+    /// deletion is never a lifecycle op).
+    active_set_demote: Option<String>,
+    /// `--active-set-readmit <domain:rule>` — remove a demotion (the
+    /// manual counterpart of the auto re-admit).
+    active_set_readmit: Option<String>,
+    /// `--active-set-clear` — drop every demotion + cap.
+    active_set_clear: bool,
+    /// `--active-set-cap <domain:N>` — set the per-domain active ceiling
+    /// (T3); `0` removes it. OFF by default: the cap binds only when the
+    /// admission path enforces it, per the Library-Drift warning.
+    active_set_cap: Option<String>,
     /// `--memory-stats` (Issue 037 observability): print the one-command
     /// debug summary of the self-evolve store — tier/outcome counts, top
     /// rules, BLAKE3 commitment status, + the E1/E2/E3 loop-state verdict.
@@ -4175,6 +4213,13 @@ fn parse_args() -> Args {
         necessity_top: None,
         necessity_random: None,
         necessity_smoke: false,
+        necessity_rule: None,
+        gate_calibration: false,
+        active_set_list: false,
+        active_set_demote: None,
+        active_set_readmit: None,
+        active_set_clear: false,
+        active_set_cap: None,
         memory_stats: false,
         misses: false,
         misses_limit: None,
@@ -4293,6 +4338,37 @@ fn parse_args() -> Args {
             "--score-report" => args.score_report = true,
             "--necessity-bench" => args.necessity_bench = true,
             "--necessity-smoke" => args.necessity_smoke = true,
+            "--necessity-rule" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--necessity-rule requires a value (the corpus rule id, e.g. map_clone)");
+                    usage();
+                };
+                args.necessity_rule = Some(value);
+            }
+            "--gate-calibration" => args.gate_calibration = true,
+            "--active-set" => args.active_set_list = true,
+            "--active-set-demote" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--active-set-demote requires a value (domain:rule, e.g. clippy:manual_div_ceil)");
+                    usage();
+                };
+                args.active_set_demote = Some(value);
+            }
+            "--active-set-readmit" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--active-set-readmit requires a value (domain:rule)");
+                    usage();
+                };
+                args.active_set_readmit = Some(value);
+            }
+            "--active-set-clear" => args.active_set_clear = true,
+            "--active-set-cap" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--active-set-cap requires a value (domain:N; 0 removes the cap)");
+                    usage();
+                };
+                args.active_set_cap = Some(value);
+            }
             "--necessity-top" => {
                 let Some(value) = it.next() else {
                     eprintln!("--necessity-top requires a value (the top-N target count)");
@@ -4730,6 +4806,19 @@ fn parse_args() -> Args {
         eprintln!("--necessity-top/--necessity-random/--necessity-smoke require --necessity-bench");
         usage();
     }
+    if args.necessity_rule.is_some() && !args.necessity_bench {
+        eprintln!("--necessity-rule requires --necessity-bench (the per-decision paired lane runs inside it)");
+        usage();
+    }
+    let active_set_cmds = u8::from(args.active_set_list)
+        + u8::from(args.active_set_demote.is_some())
+        + u8::from(args.active_set_readmit.is_some())
+        + u8::from(args.active_set_clear)
+        + u8::from(args.active_set_cap.is_some());
+    if active_set_cmds > 1 {
+        eprintln!("--active-set* commands are separate invocations (one marker write each)");
+        usage();
+    }
     if args.necessity_bench && args.score_bench {
         eprintln!("--necessity-bench and --score-bench are separate runs (one oracle bill each)");
         usage();
@@ -4788,6 +4877,12 @@ fn standalone_mode(args: &Args) -> bool {
         || args.coverage_report
         || args.candidates_path.is_some()
         || args.command.is_some()
+        || args.gate_calibration
+        || args.active_set_list
+        || args.active_set_demote.is_some()
+        || args.active_set_readmit.is_some()
+        || args.active_set_clear
+        || args.active_set_cap.is_some()
 }
 
 /// Plan 019 T1.5: the mode-flag validation matrix, extracted so every
@@ -4976,8 +5071,16 @@ fn print_suggestion(
         }
         let info = matcher.rule_book(lint);
         let fixed = info.map_or("?", |i| snippet_head(&i.fixed_code));
+        // Issue 102 T2: the anchor pass-through must be LOUD — an operator
+        // who demoted this rule has to see that the oracle finding still
+        // stands, or the mechanism reads as broken and gets "fixed".
+        let demoted_note = if matcher.active_exclusions().excludes(domain.label(), lint) {
+            "  [active-set: DEMOTED — anchor override; the oracle finding stands]"
+        } else {
+            ""
+        };
         println!(
-            "  [{:<6}] {:<32} oracle finding  →  {fixed}",
+            "  [{:<6}] {:<32} oracle finding  →  {fixed}{demoted_note}",
             domain.label(),
             lint
         );
@@ -5242,8 +5345,235 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
 /// history — trial runs never touch it). Canaries gate the run: a failed
 /// canary invalidates every verdict this run produced (the
 /// audit-instrument law) → exit 1.
+/// Issue 102 T2/T3: the active-set marker commands — the ONLY writers of
+/// `.heal/active_set.json`. Nothing in the heal path ever demotes: the
+/// fade-predictive gate (Issue 102's ≥3-future-generations clock, started
+/// 2026-09-21) is the only thing that could automate a demotion, and until
+/// it opens, an operator writes the marker through these commands. The
+/// corpus itself is compile-time — demotion hides a rule from the
+/// fan-out/fix dispatch, it never deletes the entry.
+fn run_active_set_cmd(args: &Args) {
+    let root = resolve_heal_root(&args.paths);
+    let path = root.join(riir_clippy::active_set::ACTIVE_SET_FILE);
+    let mut set = match riir_clippy::active_set::ActiveSet::load(&path) {
+        Ok(set) => set,
+        Err(e) => {
+            eprintln!("active-set: {e}");
+            std::process::exit(1);
+        }
+    };
+    if args.active_set_list {
+        println!("active set: {}", path.display());
+        if set.is_empty() {
+            println!("  (empty — the default posture; nothing demoted, no cap binds)");
+            return;
+        }
+        for key in riir_clippy::active_set::KNOWN_DOMAIN_KEYS {
+            let rules = set.demoted_rules(key);
+            if rules.is_empty() {
+                continue;
+            }
+            println!("  {key}:");
+            for rule in &rules {
+                println!("    - {rule}");
+            }
+        }
+        for (domain, cap) in set.caps() {
+            println!(
+                "  cap {domain}: {cap} active rule(s) max — binds only when the admission path \
+                 enforces it (off by default, the Library-Drift posture)"
+            );
+        }
+        return;
+    }
+    if let Some(id) = args.active_set_demote.as_ref() {
+        let (domain, rule) = match parse_active_set_id(id) {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("active-set: {e}");
+                std::process::exit(2);
+            }
+        };
+        if set.excludes(&domain, &rule) {
+            println!("active-set: `{domain}:{rule}` is already demoted");
+            return;
+        }
+        set.demote(&domain, &rule);
+        if let Err(e) = set.save(&path) {
+            eprintln!("active-set: save failed: {e}");
+            std::process::exit(1);
+        }
+        println!(
+            "active-set: demoted `{domain}:{rule}` — it exits the similarity fan-out and the fix \
+             dispatch on the NEXT run; oracle-anchored force-inclusion still passes through (the \
+             finding stands, loud), and auto re-admit fires when a fresh unresolved clippy \
+             diagnostic names it (or re-admit by hand with --active-set-readmit)"
+        );
+        return;
+    }
+    if let Some(id) = args.active_set_readmit.as_ref() {
+        let (domain, rule) = match parse_active_set_id(id) {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("active-set: {e}");
+                std::process::exit(2);
+            }
+        };
+        if !set.readmit(&domain, &rule) {
+            eprintln!("active-set: `{domain}:{rule}` is not demoted — nothing to re-admit");
+            std::process::exit(1);
+        }
+        if let Err(e) = set.save(&path) {
+            eprintln!("active-set: save failed: {e}");
+            std::process::exit(1);
+        }
+        println!("active-set: re-admitted `{domain}:{rule}`");
+        return;
+    }
+    if args.active_set_clear {
+        set.clear();
+        if let Err(e) = set.save(&path) {
+            eprintln!("active-set: save failed: {e}");
+            std::process::exit(1);
+        }
+        println!(
+            "active-set: cleared — every demotion + cap removed (the corpus is never touched; \
+             entries are compile-time and deletion is not a lifecycle op)"
+        );
+        return;
+    }
+    if let Some(id) = args.active_set_cap.as_ref() {
+        let Some((domain, n)) = id.rsplit_once(':') else {
+            eprintln!("active-set: cap must be `domain:N` (e.g. clippy:40), got {id:?}");
+            std::process::exit(2);
+        };
+        if !riir_clippy::active_set::KNOWN_DOMAIN_KEYS.contains(&domain) {
+            eprintln!(
+                "active-set: unknown domain {domain:?} — known keys: {}",
+                riir_clippy::active_set::KNOWN_DOMAIN_KEYS.join(", ")
+            );
+            std::process::exit(2);
+        }
+        let Ok(cap) = n.parse::<u32>() else {
+            eprintln!("active-set: cap must be a number (0 removes), got {n:?}");
+            std::process::exit(2);
+        };
+        if cap == 0 {
+            if set.remove_cap(domain) {
+                println!("active-set: cap on `{domain}` removed (off by default again)");
+            } else {
+                println!("active-set: no cap was set on `{domain}`");
+                return;
+            }
+        } else {
+            set.set_cap(domain, cap);
+            println!(
+                "active-set: cap `{domain}` = {cap} — recorded. It BINDS only when the admission \
+                 path enforces it; the Library-Drift warning (over-aggressive retirement measured \
+                 WORSE than unguided libraries) keeps enforcement OFF by default"
+            );
+        }
+        if let Err(e) = set.save(&path) {
+            eprintln!("active-set: save failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Parse an operator `domain:rule` id for the active-set commands against
+/// [`riir_clippy::active_set::KNOWN_DOMAIN_KEYS`].
+fn parse_active_set_id(id: &str) -> Result<(String, String), String> {
+    let Some((domain, rule)) = id.split_once(':') else {
+        return Err(format!(
+            "id must be `domain:rule` (e.g. clippy:manual_div_ceil), got {id:?}"
+        ));
+    };
+    if !riir_clippy::active_set::KNOWN_DOMAIN_KEYS.contains(&domain) {
+        return Err(format!(
+            "unknown domain {domain:?} — known keys: {}",
+            riir_clippy::active_set::KNOWN_DOMAIN_KEYS.join(", ")
+        ));
+    }
+    if rule.is_empty() {
+        return Err("empty rule id".to_string());
+    }
+    Ok((domain.to_string(), rule.to_string()))
+}
+
+/// Issue 130 T1+T3: the admission-gate evidence report (standalone,
+/// ungated, report-only). Reads the committed artifacts — the score
+/// history's per-run provenance strata (T1) and the frontier snapshot
+/// series (T3) — and prints both verdicts. Nothing here gates: the T2
+/// admission predicate stays deferred until this report says the repo
+/// stratum can support a δ.
+fn run_gate_calibration() {
+    use riir_clippy::gate_calibration as gc;
+    let hist = std::path::Path::new(gc::SCORE_HISTORY_JSONL);
+    let Ok(text) = std::fs::read_to_string(hist) else {
+        eprintln!(
+            "gate-calibration: no score history at {} — run --score-bench (a strata-bearing \
+             lane) first",
+            hist.display()
+        );
+        std::process::exit(1);
+    };
+    let mut runs = Vec::new();
+    let mut bad_rows = 0usize;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            bad_rows += 1;
+            continue;
+        };
+        match gc::stratum_runs(&v) {
+            Ok(mut parsed) => runs.append(&mut parsed),
+            Err(e) => {
+                bad_rows += 1;
+                eprintln!("gate-calibration: skipped one history row: {e}");
+            }
+        }
+    }
+    let rows = gc::calibrate(&runs);
+    println!("{}", gc::render_calibration(&rows));
+    let snaps_path = std::path::Path::new(gc::FRONTIER_SNAPSHOTS_JSONL);
+    match std::fs::read_to_string(snaps_path) {
+        Err(_) => println!(
+            "## Corpus stall (Issue 130 T3)\nno frontier snapshot file at {} — the stall window \
+             is UNMEASURED (run --frontier-report in a repo with a store to seed it)",
+            snaps_path.display()
+        ),
+        Ok(snap_text) => {
+            let mut snapshots = Vec::new();
+            for line in snap_text.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<riir_clippy::frontier_report::FrontierSnapshot>(line)
+                {
+                    Ok(snap) => snapshots.push(snap),
+                    Err(_) => bad_rows += 1,
+                }
+            }
+            let stall = gc::stall_scan(&snapshots);
+            println!("{}", gc::render_stall(&stall));
+        }
+    }
+    if bad_rows > 0 {
+        eprintln!("gate-calibration: {bad_rows} unparsable row(s) skipped loud");
+    }
+}
+
 #[cfg(feature = "score_bench")]
-fn run_necessity_bench(top: Option<usize>, random: Option<usize>, smoke: bool) {
+fn run_necessity_bench(
+    top: Option<usize>,
+    random: Option<usize>,
+    smoke: bool,
+    forced_rule: Option<String>,
+) {
     use riir_clippy::score_bench as sb;
 
     let oracle = sb::draft_oracle();
@@ -5257,17 +5587,60 @@ fn run_necessity_bench(top: Option<usize>, random: Option<usize>, smoke: bool) {
             top: 3,
             random: 1,
             fixture_cap: Some(20),
+            forced_rule: None,
         }
     } else {
+        if let Some(rule) = &forced_rule {
+            println!(
+                "necessity_bench: FORCED single-rule decision mode — `{rule}` (the 102-T4 paired \
+                 lane: control=enabled vs treatment=disabled over the frozen set; the \
+                 load-bearing canary is skipped loud because a no-flip IS the finding)"
+            );
+        }
         sb::necessity::NecessityConfig {
             top: top.unwrap_or(20),
             random: random.unwrap_or(5),
             fixture_cap: None,
+            forced_rule,
         }
     };
+    let forced = cfg.forced_rule.clone();
     let fixtures = sb::fixtures::fixtures();
     let run = sb::necessity::run_necessity(&oracle, &fixtures, &cfg);
     sb::necessity::print_run(&run);
+    if let Some(rule) = &forced {
+        if run.refusal.is_none() {
+            match run
+                .rows
+                .iter()
+                .find(|r| &r.rule == rule && r.arm == "disabled")
+            {
+                Some(row) => {
+                    let verdict =
+                        sb::necessity::disabled_verdict(false, row.solo_resolved, row.delta_resolved);
+                    let reading = match verdict {
+                        "LOAD-BEARING" => "evidence AGAINST demotion — the composition uses it",
+                        "DECORATIVE" | "NO-EVIDENCE" => {
+                            "evidence FOR demotion — the composition does not use it"
+                        }
+                        _ => "control arm — not a decision reading",
+                    };
+                    println!(
+                        "paired decision for `{rule}`: baseline resolved {} → disabled arm {} \
+                         (Δ={}) → {verdict} — {reading}",
+                        row.baseline_resolved, row.arm_resolved, row.delta_resolved
+                    );
+                }
+                None => {
+                    eprintln!("paired decision for `{rule}`: no disabled-arm row (unexpected)");
+                }
+            }
+        }
+    }
+    if let Some(refusal) = &run.refusal {
+        eprintln!("necessity_bench: REFUSED — {refusal}");
+        std::process::exit(2);
+    }
     if let Err(e) = sb::necessity::append_rows(
         std::path::Path::new(sb::necessity::HISTORY_JSONL),
         &run.rows,
@@ -7181,6 +7554,7 @@ fn main() {
             args.necessity_top,
             args.necessity_random,
             args.necessity_smoke,
+            args.necessity_rule.clone(),
         );
         return;
     }
@@ -7342,6 +7716,23 @@ fn main() {
     // validate_mode_flags never sees it). Summarizes whichever backend the
     // build ships: the JSON envelope always; the repo-local neuron-db store
     // (`.heal/trajectories.kv`, `latent_retrieval` builds) when present.
+    // ── Issue 102: the active-set marker (standalone — no paths) ────
+    if args.active_set_list
+        || args.active_set_demote.is_some()
+        || args.active_set_readmit.is_some()
+        || args.active_set_clear
+        || args.active_set_cap.is_some()
+    {
+        run_active_set_cmd(&args);
+        return;
+    }
+
+    // ── Issue 130: the admission-gate evidence report (standalone) ──
+    if args.gate_calibration {
+        run_gate_calibration();
+        return;
+    }
+
     if args.memory_stats {
         let path = default_memory_path();
         match std::fs::read_to_string(&path) {
@@ -8533,6 +8924,33 @@ fn main() {
         // (the "corpus promotion" line above names what joined).
     }
 
+    // Issue 102 T2: the corpus active-set marker — loaded ONCE, before the
+    // matcher build, so the suggest fan-out and the fix dispatch read the
+    // same view. Nothing here demotes: the marker is written only by the
+    // operator CLI (--active-set-*), and the fade-predictive gate (Issue
+    // 102's ≥3-future-generations clock) is the only thing that could ever
+    // automate one. A corrupt marker is LOUD and the run continues with an
+    // empty set — an operator marker must never take a heal run down.
+    let mut active_set = if args.fix || args.suggest {
+        match riir_clippy::active_set::ActiveSet::load_default(&resolve_heal_root(&args.paths)) {
+            Ok(set) => set,
+            Err(e) => {
+                eprintln!("active-set: {e} — continuing with an EMPTY active set this run");
+                riir_clippy::active_set::ActiveSet::empty()
+            }
+        }
+    } else {
+        riir_clippy::active_set::ActiveSet::empty()
+    };
+    if !active_set.is_empty() {
+        println!(
+            "active-set: {} demoted rule(s) loaded from {} (the similarity fan-out and the fix \
+             dispatch skip them; oracle anchors pass through, loud)",
+            active_set.demoted_total(),
+            riir_clippy::active_set::ACTIVE_SET_FILE
+        );
+    }
+
     // IIFE because the kat_service arm returns early from inside a
     // cfg-gated block — a plain let-chain would need the same cfg pair
     // on a variable initializer (the immediately-invoked-closure idiom,
@@ -8551,6 +8969,7 @@ fn main() {
         eprintln!("index build failed: {e}");
         std::process::exit(1);
     });
+    matcher = matcher.with_active_set(active_set.clone());
 
     // T2.4 domain gating: an explicitly requested domain whose feature is
     // off is an error, not a silent skip.
@@ -8723,7 +9142,7 @@ fn main() {
                 );
                 if let Some((_, overlay)) = lease_overlay_for_run(&lease_store, None) {
                     match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
-                        Ok(m) => matcher = m,
+                        Ok(m) => matcher = m.with_active_set(active_set.clone()),
                         Err(e) => eprintln!(
                             "corpus lease: epoch {epoch} index rebuild failed ({e}) — continuing on the prior corpus"
                         ),
@@ -9086,6 +9505,15 @@ fn main() {
                         if *rule == "fxhashmap" && !fxhashmap_allowed {
                             continue;
                         }
+                        // Issue 102 T2: a demoted perf rule's dispatch slot
+                        // is empty (zero edits, no error). Oracle-anchored
+                        // suggestion consumption below is deliberately NOT
+                        // gated by this — a demotion is a CORPUS lifecycle
+                        // op, and clippy's own MachineApplicable suggestion
+                        // is not corpus.
+                        if active_set.excludes("perf", rule) {
+                            continue;
+                        }
                         #[cfg(feature = "fix_verify")]
                         {
                             perf_edits.extend(
@@ -9158,6 +9586,13 @@ fn main() {
                     // moved — the P21 oracle merge below needs it after this
                     // loop (the lane's corpus-set precondition).
                     for &lint in &lint_set {
+                        // Issue 102 T2: a demoted clippy rule's proposer
+                        // stands down (the auto re-admit at run end watches
+                        // exactly this — a fresh diagnostic naming the lint
+                        // while the rule was skipped re-admits it).
+                        if active_set.excludes("clippy", lint) {
+                            continue;
+                        }
                         let collected =
                             riir_clippy::domains::clippy_lints::proposers::collect_edits(
                                 lint, &current, &parsed,
@@ -10157,7 +10592,7 @@ fn main() {
     if let Some(ctx) = lease_ctx.as_mut() {
         let meter = kat_meter.as_mut();
         if let Some((report, charge_line)) =
-            run_reheat_pass(ctx, &args, &files, &mut matcher, meter)
+            run_reheat_pass(ctx, &args, &files, &mut matcher, meter, &active_set)
         {
             println!("\nreheat: epoch {} landed mid-run", report.pass2_epoch);
             println!("  {}", report.itemized_line());
@@ -10236,6 +10671,34 @@ fn main() {
                 "  ... and {} more",
                 suppressed_pairs.len() - MAX_SUPPRESSED_SHOWN
             );
+        }
+    }
+    // Issue 102 T2: auto re-admit — a demoted clippy rule whose lint shows
+    // up in THIS run's fresh diagnostics re-enters the marker (Research 165
+    // rule 3, "the first fresh unresolved span the rule could serve"). The
+    // feed is pre-fix, so "unresolved" is approximated by presence in the
+    // feed: the rule was skipped all run (it fixed nothing itself), and a
+    // shape it could serve was present. The post-fix oracle re-run that
+    // would prove resolution is deliberately not paid here — pricing that
+    // axis per decision is the Issue 102 T4 paired lane's job.
+    if args.fix && !active_set.is_empty() {
+        let fired: Vec<&str> = clippy_feed
+            .as_ref()
+            .map(|feed| feed.iter().map(|d| d.lint.as_str()).collect())
+            .unwrap_or_default();
+        let readmitted = active_set.auto_readmit_lints(&fired);
+        if !readmitted.is_empty() {
+            for rule in &readmitted {
+                println!(
+                    "active-set: auto re-admitted `{rule}` — a fresh diagnostic named it this \
+                     run (marker updated on disk)"
+                );
+            }
+            if let Err(e) = active_set.save(
+                &resolve_heal_root(&args.paths).join(riir_clippy::active_set::ACTIVE_SET_FILE),
+            ) {
+                eprintln!("active-set: re-admit save failed: {e}");
+            }
         }
     }
     // 2026-09-13 footer redesign: plural-aware `files`/`spans` beats the
@@ -11063,6 +11526,7 @@ fn reheat_fix_pass(
     write: bool,
     verify_mode: bool,
     fmt_active: bool,
+    active_set: &riir_clippy::active_set::ActiveSet,
 ) -> usize {
     const MAX_PASSES: usize = 4;
 
@@ -11089,6 +11553,10 @@ fn reheat_fix_pass(
         if run_perf {
             let mut perf_edits: Vec<RuleEdit> = Vec::new();
             for rule in FIXABLE_RULES {
+                // Issue 102 T2: demoted rules' dispatch slots are empty.
+                if active_set.excludes("perf", rule) {
+                    continue;
+                }
                 perf_edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
                     rule, &current, &parsed,
                 ));
@@ -11106,6 +11574,10 @@ fn reheat_fix_pass(
         }
         if run_clippy {
             for lint in FIXABLE_LINTS {
+                // Issue 102 T2: demoted rules' dispatch slots are empty.
+                if active_set.excludes("clippy", lint) {
+                    continue;
+                }
                 edits.extend(
                     riir_clippy::domains::clippy_lints::proposers::collect_edits(
                         lint, &current, &parsed,
@@ -11116,6 +11588,9 @@ fn reheat_fix_pass(
         #[cfg(feature = "sec")]
         if run_sec {
             for rule in riir_clippy::domains::sec::proposers::FIXABLE_SEC {
+                if active_set.excludes("sec", rule) {
+                    continue;
+                }
                 edits.extend(riir_clippy::domains::sec::proposers::collect_edits(
                     rule, &current, &parsed,
                 ));
@@ -11179,6 +11654,7 @@ fn run_reheat_pass(
     files: &[PathBuf],
     matcher: &mut LatentMatcher,
     mut meter: Option<&mut riir_clippy::kat_meter::KatMeter>,
+    active_set: &riir_clippy::active_set::ActiveSet,
 ) -> Option<(riir_clippy::kat_lease_client::ReheatReport, Option<String>)> {
     use riir_clippy::kat_lease_client::{
         run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseTransport, PassSpans,
@@ -11222,7 +11698,7 @@ fn run_reheat_pass(
             let rebuilt = lease_overlay_for_run(&store, None);
             if let Some((_, overlay)) = rebuilt {
                 match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
-                    Ok(m) => *matcher = m,
+                    Ok(m) => *matcher = m.with_active_set(active_set.clone()),
                     Err(_) => return None,
                 }
             } else {
@@ -11292,7 +11768,14 @@ fn run_reheat_pass(
             if args.fix {
                 for file in &file_changed {
                     new_fixes +=
-                        reheat_fix_pass(file, args.domain, args.write, args.verify, !args.no_fmt);
+                        reheat_fix_pass(
+                            file,
+                            args.domain,
+                            args.write,
+                            args.verify,
+                            !args.no_fmt,
+                            active_set,
+                        );
                 }
             }
             let report = riir_clippy::kat_lease_client::ReheatReport {
@@ -11580,6 +12063,21 @@ mod mode_flag_tests {
             ("--frame-time-report", Box::new(|m| m.frame_time_report = true)),
             ("--refill", Box::new(|m| m.refill = true)),
             ("--info", Box::new(|m| m.info = true)),
+            ("--gate-calibration", Box::new(|m| m.gate_calibration = true)),
+            ("--active-set", Box::new(|m| m.active_set_list = true)),
+            (
+                "--active-set-demote clippy:x",
+                Box::new(|m| m.active_set_demote = Some("clippy:x".to_string())),
+            ),
+            (
+                "--active-set-readmit clippy:x",
+                Box::new(|m| m.active_set_readmit = Some("clippy:x".to_string())),
+            ),
+            ("--active-set-clear", Box::new(|m| m.active_set_clear = true)),
+            (
+                "--active-set-cap clippy:40",
+                Box::new(|m| m.active_set_cap = Some("clippy:40".to_string())),
+            ),
             (
                 "--dump-trajectories",
                 Box::new(|m| m.dump_trajectories = true),

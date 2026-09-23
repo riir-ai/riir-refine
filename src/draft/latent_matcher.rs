@@ -133,6 +133,12 @@ pub struct LatentMatcher {
     /// Issue 121: the set-rerank weights (A/B knob).
     #[cfg(feature = "set_rerank")]
     set_cfg: super::set_rerank::SetRerankConfig,
+    /// Issue 102 T2/T3: the corpus active-set exclusions — demoted rule ids
+    /// per domain, dropped from every similarity fan-out before ranking.
+    /// Default-empty (byte-identical posture): nothing demotes
+    /// automatically — the fade-predictive gate stays closed, and only the
+    /// operator-written marker file (`.heal/active_set.json`) demotes.
+    active_exclusions: crate::active_set::ActiveSet,
 }
 
 impl LatentMatcher {
@@ -426,6 +432,7 @@ impl LatentMatcher {
             set_scratch: super::set_rerank::MatcherSetScratch::default(),
             #[cfg(feature = "set_rerank")]
             set_cfg: super::set_rerank::SetRerankConfig::default(),
+            active_exclusions: crate::active_set::ActiveSet::empty(),
         })
     }
 
@@ -441,6 +448,26 @@ impl LatentMatcher {
     pub fn with_rerank_mode(mut self, mode: super::instantiation_rerank::RerankMode) -> Self {
         self.rerank_mode = mode;
         self
+    }
+
+    /// Issue 102 T2/T3: attach a corpus active-set — the operator marker's
+    /// demotions, dropped from every similarity fan-out below. Default is
+    /// [`crate::active_set::ActiveSet::empty`] (byte-identical posture); a
+    /// set loaded from the marker file (`crate::active_set::ACTIVE_SET_FILE`
+    /// under the repo root) is the ONLY way anything demotes — the
+    /// fade-predictive gate stays closed.
+    #[must_use]
+    pub fn with_active_set(mut self, set: crate::active_set::ActiveSet) -> Self {
+        self.active_exclusions = set;
+        self
+    }
+
+    /// Read-only view of the attached active set (what is demoted, what
+    /// caps are armed) — for callers and tests that need to know without
+    /// re-reading the marker file.
+    #[must_use]
+    pub fn active_exclusions(&self) -> &crate::active_set::ActiveSet {
+        &self.active_exclusions
     }
 
     pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
@@ -600,6 +627,21 @@ impl LatentMatcher {
                 let mut rules = index
                     .suggest_deep_into(code, pool, &mut self.scratch)
                     .to_vec();
+                // Issue 102 T2/T3: the active-set honor — demoted rules
+                // leave the fan-out BEFORE instantiation marking + rerank +
+                // truncate, so the surviving pool fills top_k. Oracle
+                // ANCHORS pass through untouched (`push_anchor` reads the
+                // rule book, not this list): an anchor is real-clippy
+                // ground truth, and demotion is a similarity-fan-out
+                // lifecycle operation, never an oracle override — the fix
+                // lane's proposer honor + auto re-admit carry the demotion
+                // there (coordinator-wired). The is_empty guard keeps the
+                // default posture byte-identical (zero work, zero
+                // reallocation).
+                if !self.active_exclusions.is_empty() {
+                    let key = active_set_domain_key(domain);
+                    rules.retain(|r| !self.active_exclusions.excludes(key, &r.rule_id));
+                }
                 if let Some(file) = &parsed {
                     super::instantiation_rerank::mark_instantiation_with_file(
                         domain,
@@ -640,13 +682,20 @@ impl LatentMatcher {
             DomainId::Dist => self.dist.as_ref(),
             DomainId::ShaderPerf => self.shader_perf.as_ref(),
         }?;
-        let pool = index
+        let mut pool = index
             .suggest_deep_into(
                 code,
                 super::instantiation_rerank::RERANK_POOL,
                 &mut self.scratch,
             )
             .to_vec();
+        // Issue 102 T2/T3: same honor as `suggest_all_domains` — the
+        // retrieved pool drops demoted rules before the ranked copy, so
+        // pool + ranked agree on what the fan-out serves.
+        if !self.active_exclusions.is_empty() {
+            let key = active_set_domain_key(domain);
+            pool.retain(|r| !self.active_exclusions.excludes(key, &r.rule_id));
+        }
         let mut ranked = pool.clone();
         super::instantiation_rerank::mark_instantiation(
             domain,
@@ -814,6 +863,16 @@ impl LatentMatcher {
         }
         out
     }
+}
+
+/// The active-set domain key for a [`DomainId`] — the marker file's
+/// vocabulary (Issue 102 T2/T3). One translation point, delegating to
+/// [`DomainId::label`] so the marker keys cannot drift from the router's
+/// labels; the clippy spelling is pinned against
+/// [`crate::active_set::CLIPPY_DOMAIN_KEY`] by the test
+/// `active_set_domain_key_matches_the_marker_vocabulary`.
+fn active_set_domain_key(domain: DomainId) -> &'static str {
+    domain.label()
 }
 
 /// Attach one anchor's lint to a span: rule-book hit → `anchored_rules`
@@ -1161,5 +1220,136 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
                 assert!(s.start_line > 4);
             }
         }
+    }
+
+    // ── Issue 102 T2/T3: the active-set fan-out honor ──────────────────
+
+    #[test]
+    fn active_set_domain_key_matches_the_marker_vocabulary() {
+        // The marker file's domain keys ARE the router label spellings;
+        // the clippy key MUST agree with active_set::CLIPPY_DOMAIN_KEY or
+        // the auto re-admit (clippy-only) would silently key a domain no
+        // marker can name — the demotions would then be un-undoable.
+        assert_eq!(
+            active_set_domain_key(DomainId::Clippy),
+            crate::active_set::CLIPPY_DOMAIN_KEY
+        );
+        // Every domain translates to a non-empty stable label AND is a
+        // key the ungated marker module knows — the drift pin for the
+        // KNOWN_DOMAIN_KEYS table (which cannot see `DomainId` from behind
+        // its feature gate): a domain added to the router without a row
+        // there fails HERE, not silently at the operator CLI.
+        for domain in DomainId::ALL {
+            let key = active_set_domain_key(domain);
+            assert!(!key.is_empty());
+            assert!(
+                crate::active_set::KNOWN_DOMAIN_KEYS.contains(&key),
+                "router label {key:?} missing from active_set::KNOWN_DOMAIN_KEYS — add it there (same commit)"
+            );
+        }
+    }
+
+    #[test]
+    fn active_set_empty_is_byte_identical() {
+        let query = "fn f() -> u8 { return 7; }";
+        let mut plain = LatentMatcher::from_enabled_domains().expect("build");
+        let mut marked = LatentMatcher::from_enabled_domains()
+            .expect("build")
+            .with_active_set(crate::active_set::ActiveSet::empty());
+        let a = plain.suggest_span(query, 5);
+        let b = marked.suggest_span(query, 5);
+        assert_eq!(a, b, "an empty active set is the default posture");
+        // The pool_and_ranked path agrees too.
+        let pa = plain
+            .pool_and_ranked(DomainId::Clippy, query)
+            .expect("clippy index enabled");
+        let pb = marked
+            .pool_and_ranked(DomainId::Clippy, query)
+            .expect("clippy index enabled");
+        assert_eq!(pa, pb);
+    }
+
+    #[test]
+    fn demoted_rule_exits_the_fanout() {
+        let query = "fn f() -> u8 { return 7; }";
+        // Retrieve first; demote whatever tops the clippy list, and keep
+        // the runners-up as the survival witnesses.
+        let mut probe = LatentMatcher::from_enabled_domains().expect("build");
+        let (_, by_domain) = probe.suggest_span(query, 3);
+        let clippy = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Clippy)
+            .expect("clippy index enabled");
+        let top = clippy.1.first().expect("clippy serves the span").rule_id.clone();
+        let others: Vec<String> = clippy
+            .1
+            .iter()
+            .skip(1)
+            .map(|r| r.rule_id.clone())
+            .collect();
+        assert!(!others.is_empty(), "need a runner-up to prove survival");
+
+        let mut set = crate::active_set::ActiveSet::empty();
+        set.demote(crate::active_set::CLIPPY_DOMAIN_KEY, &top);
+        let mut m = LatentMatcher::from_enabled_domains()
+            .expect("build")
+            .with_active_set(set);
+        assert!(m.active_exclusions().excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top));
+        let (_, by_domain) = m.suggest_span(query, 3);
+        // The domain ENTRY is not dropped — only the rule is gone, and the
+        // freed top slot backfills from deeper ranks.
+        let clippy = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Clippy)
+            .expect("the clippy entry survives demotion of one rule");
+        assert!(
+            !clippy.1.iter().any(|r| r.rule_id == top),
+            "the demoted top rule left the fan-out"
+        );
+        for other in &others {
+            assert!(
+                clippy.1.iter().any(|r| &r.rule_id == other),
+                "runner-up {other} still served after the demotion"
+            );
+        }
+        // The pool_and_ranked path honors the same set.
+        let (pool, ranked) = m.pool_and_ranked(DomainId::Clippy, query).expect("clippy");
+        assert!(!pool.iter().any(|r| r.rule_id == top), "pool drops the demoted rule");
+        assert!(!ranked.iter().any(|r| r.rule_id == top), "ranked copy drops it too");
+    }
+
+    #[test]
+    fn demotion_never_overrides_oracle_anchors() {
+        // The anchor path (`push_anchor`) reads the RULE BOOK, not the
+        // active set: an oracle finding is real-clippy ground truth, and
+        // demotion is a similarity-fan-out lifecycle operation — never an
+        // oracle override. (The fix lane's proposer honor + auto re-admit
+        // carry the demotion there; coordinator-wired.)
+        let mut set = crate::active_set::ActiveSet::empty();
+        set.demote(crate::active_set::CLIPPY_DOMAIN_KEY, "needless_return");
+        let mut m = LatentMatcher::from_enabled_domains()
+            .expect("build")
+            .with_active_set(set);
+        let sugg = m.suggest_file_anchored(
+            SAMPLE,
+            "sample.rs",
+            3,
+            &[anchor("sample.rs", 2, "needless_return")],
+        );
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line <= 2 && s.end_line >= 2)
+            .expect("a chunk covers line 2");
+        assert!(
+            span.anchored_rules
+                .iter()
+                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"),
+            "the demoted rule still anchors — oracle truth is not demotable"
+        );
+        // ...while the same rule left the similarity list of that span.
+        assert!(!span
+            .by_domain
+            .iter()
+            .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return")));
     }
 }

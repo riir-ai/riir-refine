@@ -109,6 +109,12 @@ pub struct NecessityConfig {
     /// Smoke mode: cap the fixture list (the bounded e2e — the instrument
     /// validates itself without the full oracle bill).
     pub fixture_cap: Option<usize>,
+    /// Issue 102 T4: the per-decision paired lane — force exactly this one
+    /// target (control = enabled baseline vs treatment = its disabled arm),
+    /// skip the matched-swap arm, and skip the load-bearing canary (a
+    /// no-flip IS the finding being priced). `None` = the presence-ranked
+    /// schedule. An unknown rule is a loud REFUSAL, never a green zero.
+    pub forced_rule: Option<String>,
 }
 
 impl Default for NecessityConfig {
@@ -117,6 +123,7 @@ impl Default for NecessityConfig {
             top: 20,
             random: 5,
             fixture_cap: None,
+            forced_rule: None,
         }
     }
 }
@@ -181,8 +188,13 @@ pub struct NecessityRun {
     /// passes; excluded fixtures invoke less — a budget ledger, not a
     /// gate).
     pub oracle_budget: usize,
-    /// The fixture count actually used (post-cap).
+    /// Fixtures the run executed (after the smoke cap).
     pub fixtures: usize,
+    /// Issue 102 T4: `Some(reason)` when a forced-rule run REFUSED — the
+    /// rule has zero presence in the frozen set, so the paired instrument
+    /// cannot price the decision. A refusal is loud (the CLI exits 2 and
+    /// appends nothing), never a green zero. `None` on every ordinary run.
+    pub refusal: Option<String>,
 }
 
 /// Canonical unordered pair key (a < b — `BTreeMap` determinism).
@@ -456,10 +468,54 @@ pub fn run_necessity(
     let presence = presence_counts(&baseline);
 
     // 4. Target schedule (deterministic; presence-ranked — the multi-target
-    //    fixtures carry the composition question).
-    let targets = select_targets(&presence, cfg.top, cfg.random);
-    let (mut rows, arms_run, swap_arms_skipped) =
-        run_target_arms(oracle, &fixtures, &before_cache, &targets, &solo, &co, &baseline);
+    //    fixtures carry the composition question). Forced single-rule mode
+    //    (Issue 102 T4) replaces the schedule with exactly the named rule:
+    //    the per-DECISION paired lane. A rule with zero presence in the
+    //    frozen set is a loud REFUSAL — the instrument cannot price a
+    //    decision it has no fixtures for — never a green zero.
+    let (targets, include_swap) = match &cfg.forced_rule {
+        Some(rule) => {
+            if !presence.contains_key(rule) {
+                return NecessityRun {
+                    rows: Vec::new(),
+                    load_bearing_canary: CanaryState {
+                        ok: true,
+                        detail: "not run — the invocation refused before arms".to_string(),
+                    },
+                    noop_canary: CanaryState {
+                        ok: true,
+                        detail: "not run — the invocation refused before arms".to_string(),
+                    },
+                    arms_run: 0,
+                    swap_arms_skipped: 0,
+                    // before pass + baseline pass were spent discovering
+                    // the zero presence.
+                    oracle_budget: n.saturating_mul(2),
+                    fixtures: n,
+                    refusal: Some(format!(
+                        "forced rule `{rule}` has zero presence in the frozen set — no fixture \
+                         serves it, so the paired instrument cannot price this decision (grow \
+                         the fixture corpus or re-check the rule id)"
+                    )),
+                };
+            }
+            (vec![rule.clone()], false)
+        }
+        None => (
+            select_targets(&presence, cfg.top, cfg.random),
+            true,
+        ),
+    };
+    let (mut rows, arms_run, swap_arms_skipped) = run_target_arms(
+        oracle,
+        &fixtures,
+        &before_cache,
+        &targets,
+        &solo,
+        &co,
+        &baseline,
+        include_swap,
+    );
 
     // 5. The planted no-op arm — the determinism canary.
     let mut ovr = ComponentOverride::default();
@@ -493,27 +549,41 @@ pub fn run_necessity(
     };
     rows.push(noop_row);
 
-    // 6. The load-bearing canary — the top-1 target MUST flip.
-    let load_bearing_canary = match targets.first() {
-        Some(top_rule) => {
-            let top_delta = rows
-                .iter()
-                .find(|r| r.rule == *top_rule && r.arm == "disabled")
-                .map_or(0, |r| r.delta_resolved);
-            CanaryState {
-                ok: top_delta != 0,
-                detail: format!(
-                    "top-1 target `{top_rule}` (solo resolved {}) disabled Δresolved={top_delta}",
-                    solo_of(&solo, top_rule).1
-                ),
-            }
-        }
-        None => CanaryState {
-            ok: false,
-            detail: "no targets — the baseline resolved nothing single-target \
-                     (population 0 is a refusal, never a green zero)"
+    // 6. The load-bearing canary — the top-1 target MUST flip. SKIPPED in
+    //    forced single-rule mode: there the flip question IS the decision
+    //    being priced, and a no-flip (DECORATIVE) is a finding, not a
+    //    harness failure — gating the exit on it would invert the lane.
+    //    The planted-noop canary above still runs as the determinism
+    //    witness in both modes.
+    let load_bearing_canary = if cfg.forced_rule.is_some() {
+        CanaryState {
+            ok: true,
+            detail: "SKIPPED in forced single-rule mode — the paired decision IS the readout; \
+                     a no-flip (DECORATIVE) is the finding being priced, not a harness failure"
                 .to_string(),
-        },
+        }
+    } else {
+        match targets.first() {
+            Some(top_rule) => {
+                let top_delta = rows
+                    .iter()
+                    .find(|r| r.rule == *top_rule && r.arm == "disabled")
+                    .map_or(0, |r| r.delta_resolved);
+                CanaryState {
+                    ok: top_delta != 0,
+                    detail: format!(
+                        "top-1 target `{top_rule}` (solo resolved {}) disabled Δresolved={top_delta}",
+                        solo_of(&solo, top_rule).1
+                    ),
+                }
+            }
+            None => CanaryState {
+                ok: false,
+                detail: "no targets — the baseline resolved nothing single-target \
+                         (population 0 is a refusal, never a green zero)"
+                    .to_string(),
+            },
+        }
     };
 
     NecessityRun {
@@ -526,6 +596,7 @@ pub fn run_necessity(
         // bound (excluded fixtures invoke less).
         oracle_budget: n + arms_run * n + n,
         fixtures: n,
+        refusal: None,
     }
 }
 
@@ -540,6 +611,7 @@ fn run_target_arms(
     solo: &RuleOutcomeRead,
     co: &BTreeMap<(String, String), usize>,
     baseline: &BenchScore,
+    include_swap: bool,
 ) -> (Vec<NecessityRow>, usize, usize) {
     let baseline_totals = totals(baseline);
     let mut rows: Vec<NecessityRow> = Vec::new();
@@ -567,8 +639,16 @@ fn run_target_arms(
             co,
         ));
 
-        // The matched-swap arm (highest-co-occurrence donor).
-        if let Some(donor) = donor_for(rule, co) {
+        // The matched-swap arm (highest-co-occurrence donor). Skipped
+        // entirely in forced single-rule mode — the T4 decision reads the
+        // control pair only (priced per decision, not per bench run); the
+        // skip is not a "no donor" event and must not count as one.
+        let donor = if include_swap {
+            donor_for(rule, co)
+        } else {
+            None
+        };
+        if let Some(donor) = donor {
             let mut ovr = ComponentOverride::default();
             ovr.swap.insert(rule.clone(), donor.clone());
             let arm = run_bench_overridden(oracle, fixtures, &ovr, before_cache);

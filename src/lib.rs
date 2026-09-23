@@ -113,6 +113,14 @@ pub mod ruliology_search;
 pub mod collapse_monitor;
 pub mod component;
 pub mod evolve;
+// Issue 102 T2/T3: the corpus active-set marker (demotion/re-admit/cap).
+// Ungated, default-empty — nothing demotes until the fade-predictive gate
+// opens; the fan-out and fix lanes only ever READ this file.
+pub mod active_set;
+// Issue 130 T1+T3: the admission-time generalization gate's REPORT half —
+// per-stratum δ calibration + the corpus-stall predicate. Report-only by
+// design (T0): nothing here gates admission until the strata support a δ.
+pub mod gate_calibration;
 pub mod gp_acquisition;
 pub mod memory;
 pub mod recorder;
