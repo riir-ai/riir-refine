@@ -43,7 +43,11 @@ pub struct ShaderSeedCorpus {
 }
 
 /// Positional shorthand (the docker/dist convention — the dashboard's
-/// count needle is `    rule(`).
+/// count needle is the four-space-indented `rule(` call).
+/// ⛔ Never quote the needle VERBATIM in a comment: the corpus-stats
+/// source-walk counts raw substring matches, so a comment carrying the
+/// literal four-spaces-then-`rule(` counts itself (the 09-23 doc-sync
+/// finding — walked 9 vs runtime 8 until this reword).
 #[allow(clippy::too_many_arguments)]
 fn rule(
     rule_id: &str,
