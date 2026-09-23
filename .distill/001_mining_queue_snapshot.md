@@ -213,3 +213,5 @@
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
 negated comparisons, cfg-attributed trailing returns).
+
+- 2026-09-23 ~09:2x pass: skill-size hygiene sweep ALL CLEAN (21 SKILL.md across 4 skill roots; largest katgpt-rs research 68.8KB vs 80KB ceiling — no prune owed, katgpt-rs gate owns that repo); state re-verified (carve cargo still active, load ~7, items 3/5/6/7/8 stay deferred per adjudication); sibling d755136a fold noted (FWHT #29096 8th check NOT FIRED, snapshot WIP landed); plans/issues/smell-hunt/online-search all dry per 09:0x-09:1x passes — zero open-unclaimed tasks, nothing owed this cycle.
