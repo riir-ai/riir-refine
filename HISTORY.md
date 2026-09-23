@@ -1,5 +1,62 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-23 — Issue 132: the role-perspective e2e flows — doc + four per-tab SVGs + the front-page embed (file removed per the noise-reduction rule — this row is the durable record)
+
+Follow-up to Issue 131: the front page's role-tabbed "Get started" card
+(coder / miner / fixer / trainer) got the same treatment — each role's e2e
+flow as one diagram (DO / GET / COST; solid = flow, dotted = cost/consent/
+status; designed-but-not-settling lanes labelled per the P013 law). Facts
+pinned in the issue before drawing (burn 1 KAT-equiv/1M tokens TUNA-first,
+100 TUNA grant verified against `FREE_GRANT_MICRO_KAT`, 70% miner pool,
+fixer replay `cut = 0` until ratified, trainer ours-only/UNARMED).
+
+Landed in two phases, both on this branch:
+
+- **Phase 1 (`e884f0f5` here):** `.docs/01_orientation/role_flows.md` — four
+  role sections + the shared cost-plane section + the role × tier grid, and
+  the four canonical `role_*.svg` renders (mermaid.ink from the doc's own
+  mermaid blocks, KAT dark palette, Issue 131 post-processing). Validation
+  that earned its keep: an XML + headless-Chrome pass caught mermaid.ink
+  emitting `role="graphics-document document"` — the post-processor's
+  appended second `role` attribute made the SVGs un-renderable; fixed to
+  replace-in-place.
+- **Phase 2 (riir-dapps `eefd8cd`):** the front-page embed — the pinned
+  mirrors `cloudflare/kat-service/src/role_*.svg` + `role_flows.rs`
+  (`include_str!`, one slot per role pane in `front_page.rs`, the
+  self_evolve_hero shape). NEW substrate problem solved en route: FIVE
+  inline mermaid SVGs now share one document (the hero + these four), and
+  mermaid derives every internal id from the root id — so the worker
+  suffixes each copy's ids with the role key (`scope_ids`: CSS selectors,
+  marker defs + their `url()` refs, the gradient — defs and every
+  reference together, in a fixed replace order), leaving the hero the only
+  bare `id="mermaid-svg"` (contract-tested both sides). The shared SVG
+  contract scanner was extracted (`svg_contract.rs`) so the hero + role
+  tests cannot grow diverging copies of the invariants — the second-caller
+  extraction the workspace keeps paying for.
+
+⚠ **The deferral was right, and the collision it predicted fired anyway**:
+Phase 2's issue note deferred on "a sibling session owns `front_page.rs`
+right now" (the Issue 131 incident); the window opened (tree clean at
+`018dd9a`, Plan 037 landed), the embed was written green (293 lib tests),
+and the sibling's Plan 038 WIP landed in the SAME file mid-change —
+non-compiling E0425 in the shared worktree. The documented blob protocol
+carried it: the change was re-assembled in the `riir-dapps.w132` worktree
+at HEAD (the worker's `../../../` sibling path deps need the /git layout —
+a /tmp worktree does not resolve), verified green there (293/0, clippy
+-D native, wasm32 check), then committed via `git hash-object -w` +
+`git update-index --cacheinfo` (9 files, the sibling's hunks NOT in the
+commit; their worktree state untouched). `front_page.rs`'s committed delta
+is exactly the +54 embed lines.
+
+**Deploy closure verified live 2026-09-23 ~22:0x:** devnet (version
+`323d4ff6`) + apex (version `375f95f2`) both serving the embed —
+curl-verified on each: 4 `flow-*` wrappers, 4 role-suffixed diagram roots,
+the bare `mermaid-svg` root count exactly 1 (the hero), `/health` 200.
+Testnet stays parked (owner timing; a deploy there would restore it).
+Gates: kat-service lib 293/293 (the pre-collision count, in the isolated
+worktree), clippy clean native + wasm32, direction gate untouched
+(worker-only, no lib change).
+
 ## 2026-09-23 — Issue 131: the e2e self-evolve flywheel as a doc diagram + the KAT-pages static SVG hero (file removed per the noise-reduction rule — this row is the durable record)
 
 The self-evolve story was documented piecewise (`.docs/10_self_evolve/*` for

@@ -152,15 +152,27 @@ stripped, every CSS selector scoped to `#mermaid-svg`, `role="img"` +
 an aria-label. The doc block is the source of truth — re-render from
 it, never hand-edit the SVG.
 
-**Phase 2 (Issue 132):** each tab embeds its SVG the way the
-self-evolve hero does — a pinned mirror in the riir-dapps worker +
-`include_str!` + the pane slot. Deferred to the next riir-dapps worker
-window (a sibling session owns `front_page.rs` right now; see the
-issue).
+**Phase 2 LANDED (Issue 132 closed 2026-09-23):** each role pane embeds
+its SVG the way the self-evolve hero does — the pinned mirror lives in
+the riir-dapps worker (`cloudflare/kat-service/src/role_*.svg`, loaded
+by `role_flows.rs` via `include_str!`, one slot per pane in
+`front_page.rs`). The mirror law is the Issue 131 one: re-render from
+the doc block HERE, then copy the four files to the worker in the SAME
+commit (the worker's tests pin the mirror's self-containedness + CSS
+scoping, so a stale or hand-edited copy reds there). Because five
+inline mermaid SVGs now share the front page (the Issue 131 hero +
+these four), the worker suffixes every internal id of each copy with
+the role key (`scope_ids` in `role_flows.rs`) — defs and every
+`url()` reference together. Landed at riir-dapps `eefd8cd`; deployed
+to devnet + apex the same day, curl-verified (4 flow wrappers, the
+hero keeping the only bare root id). Testnet stays parked (owner
+timing). The miner diagram is the widest render — legible at tab
+scale; if it ever reads too dense, a stacked `flowchart TB` re-render
+of the same doc block swaps in at zero drift cost.
 
 ## Refs
 
-- [`.issues/132_role_flow_perspectives_doc_svg.md`](../../.issues/132_role_flow_perspectives_doc_svg.md) — the issue (both phases)
+- [`.issues/132_role_flow_perspectives_doc_svg.md`](../../.issues/132_role_flow_perspectives_doc_svg.md) — the issue (both phases; removed on close — `HISTORY.md` 2026-09-23 carries the record + the landing commit)
 - [`node_tiers.md`](node_tiers.md) — the tier spec (Proposal 013/015), the corrections ledger
 - [`kat_billing.md`](kat_billing.md) — the billing + TUNA plane
 - [`replay_lane.md`](replay_lane.md) — the fixer replay lane's gates + pinned rate rule
