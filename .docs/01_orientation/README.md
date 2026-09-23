@@ -17,6 +17,7 @@
 | [`node_tiers.md`](node_tiers.md) | The install tier spec (Ultra/Max/Pro/Lite — Proposal 013; the Max replay earn class — Proposal 015): one place to compare what a rig can run, per-tier cost/earn, and honest shipped/designed/blocked status |
 | [`replay_lane.md`](replay_lane.md) | The `cargo heal replay` lane (P015 Phase 2 / Plan 127): lease → local clippy-oracle replay → signed verdict — gates, the pinned rate rule, canaries, and the honest no-settlement-yet status |
 | [`kat_billing.md`](kat_billing.md) | The KAT billing + TUNA trial-credit surfaces: the two tanks and the fixed-rate draw order, the run footer spec, the offline arc (stacking, report-time plane decision), why no debt exists, and the depleted posture (the 075 gate, the two refuel doors, the count-only survey, the 7-day payout clock) |
+| [`role_flows.md`](role_flows.md) | The four Get-started roles (coder / miner / fixer / trainer) as DO → GET → COST flow diagrams + the shared cost plane + the role × tier grid; the per-tab SVG renders the front page embeds (Issue 132) |
 
 ## See also
 
