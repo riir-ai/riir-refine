@@ -495,6 +495,28 @@ if [ "${OPS_NIGHTLY_NO_CORPUS_SYNC:-0}" != "1" ]; then
   fi
 fi
 
+# ── 4d. healqual days sync (riir-dapps Plan 037) — the healer's daily
+# quality series → the kat-service "Self-evolve" card. Mines THIS repo's
+# score-bench + frontier feeds (the miner runs inside this checkout) and
+# POSTs the signed series to each env's merge door. WARN-only, by design:
+# a healqual-sync failure must never stop the dashboard refresh.
+# OPS_NIGHTLY_NO_HEALQUAL_SYNC=1 skips (the run-once-by-hand escape
+# hatch). The sync's unauthorized line lands in the log above — that is
+# the 401/403-LOUD surface (key rotation or an allowlist drop must
+# surface here, never warn-and-continue into a silently stale card).
+if [ "${OPS_NIGHTLY_NO_HEALQUAL_SYNC:-0}" != "1" ]; then
+  if [ -x "${REPO}/../riir-dapps/scripts/healqual_sync.sh" ]; then
+    log "healqual days sync starting"
+    if "${REPO}/../riir-dapps/scripts/healqual_sync.sh" >> "${LOG}" 2>&1; then
+      log "healqual days sync ok"
+    else
+      log "WARN healqual days sync FAILED (see above; riir-dapps Plan 037) — continuing"
+    fi
+  else
+    log "WARN healqual days sync skipped — no ../riir-dapps checkout beside this repo"
+  fi
+fi
+
 # ── 5. keep the log bounded (this runs unattended, forever) ──
 if [ "$(wc -l < "${LOG}")" -gt 5000 ]; then
   tail -n 2000 "${LOG}" > "${LOG}.tmp" && mv "${LOG}.tmp" "${LOG}"
