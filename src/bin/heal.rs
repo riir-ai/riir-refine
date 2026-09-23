@@ -10986,16 +10986,42 @@ fn main() {
                     .iter()
                     .map(|(k, v)| riir_clippy::kat_protocol_fixstat::FixStatCount::new(k, *v))
                     .collect();
-                // Domain totals: derivable only on a single-domain run (the
-                // common case); `--domain auto` leaves the map empty and the
-                // server's by_domain stays honest-empty rather than guessed.
+                // Domain totals: an explicit `--domain` pin wins (the
+                // operator's own attribution); otherwise the COMPILED
+                // rule→domain table (the mining v3 sync's same table —
+                // Plan 038 Phase 2) attributes each rule and folds
+                // unknowns into the reserved "other" bucket; when the
+                // table is compiled out the map stays honest-empty rather
+                // than guessed.
                 let total: u32 = rules.iter().map(|e| e.count).sum();
                 let domains = match args.domain {
                     Some(d) => vec![riir_clippy::kat_protocol_fixstat::FixStatCount::new(
                         d.label(),
                         total,
                     )],
-                    None => Vec::new(),
+                    None => {
+                        #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+                        {
+                            let pairs: Vec<(String, u32)> = rules
+                                .iter()
+                                .map(|e| (e.name.clone(), e.count))
+                                .collect();
+                            riir_clippy::kat_sync_payload::RuleDomains::compiled()
+                                .fold_rule_domains(&pairs)
+                                .into_iter()
+                                .map(|(name, count)| {
+                                    riir_clippy::kat_protocol_fixstat::FixStatCount::new(name, count)
+                                })
+                                .collect()
+                        }
+                        #[cfg(not(all(
+                            feature = "kat_service",
+                            feature = "latent_retrieval"
+                        )))]
+                        {
+                            Vec::new()
+                        }
+                    }
                 };
                 let row = riir_clippy::kat_fixstat_client::FixStatRow {
                     run_id: riir_clippy::kat_fixstat_client::fresh_run_id(&machine),

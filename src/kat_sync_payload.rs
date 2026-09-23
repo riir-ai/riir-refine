@@ -340,6 +340,26 @@ impl RuleDomains {
         }
         ""
     }
+
+    /// Aggregate `(rule_id, count)` pairs into per-domain totals for the
+    /// fix-stats push (Plan 038 Phase 2 — the fixstats lane's by_domain
+    /// had stayed honest-empty because the push tail could not attribute
+    /// a rule to a domain; this is the SAME compiled attribution the
+    /// mining v3 sync rows carry, so the two lanes cannot disagree).
+    /// Unattributed rules fold into the reserved `"other"` bucket — the
+    /// corpus view's own catch-all — never dropped, never guessed at a
+    /// domain. Pure over its input; the empty run folds to empty.
+    #[must_use]
+    pub fn fold_rule_domains(&self, rules: &[(String, u32)]) -> Vec<(String, u32)> {
+        let mut by_domain: std::collections::BTreeMap<String, u32> =
+            std::collections::BTreeMap::new();
+        for (rule, count) in rules {
+            let domain = self.domain_for(rule);
+            let key = if domain.is_empty() { "other" } else { domain };
+            *by_domain.entry(key.to_string()).or_insert(0) += *count;
+        }
+        by_domain.into_iter().collect()
+    }
 }
 
 /// Per-row gate metadata — the "gate fingerprints are recorded in payload
@@ -985,6 +1005,38 @@ mod tests {
         let d = RuleDomains::compiled();
         assert_eq!(d.domain_for("E0502:hoist-to-first-use"), RUSTC_ERRORS_DOMAIN);
         assert_eq!(d.domain_for("E0614:deref-at-use"), RUSTC_ERRORS_DOMAIN);
+    }
+
+    #[test]
+    fn fold_rule_domains_aggregates_and_folds_unknown_into_other() {
+        let d = RuleDomains {
+            rules: [
+                ("needless_return".to_string(), "clippy".to_string()),
+                ("shrink-to-fit-after-build".to_string(), "rust_perf".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+            rustc_codes: ["E0502".to_string()].into_iter().collect(),
+        };
+        let folded = d.fold_rule_domains(&[
+            ("needless_return".to_string(), 3),
+            ("E0502:hoist".to_string(), 2),
+            ("needless_return".to_string(), 4),
+            ("totally_unknown".to_string(), 5),
+            ("shrink-to-fit-after-build".to_string(), 1),
+        ]);
+        // BTreeMap order (alphabetical), repeated rules sum, unknown →
+        // the reserved bucket, never dropped.
+        assert_eq!(
+            folded,
+            vec![
+                ("clippy".to_string(), 7),
+                ("other".to_string(), 5),
+                ("rust_perf".to_string(), 1),
+                (RUSTC_ERRORS_DOMAIN.to_string(), 2),
+            ]
+        );
+        assert!(d.fold_rule_domains(&[]).is_empty(), "the empty run folds empty");
     }
 
     /// v3 (Issue 103): a row built WITHOUT an override carries the COMPILED
