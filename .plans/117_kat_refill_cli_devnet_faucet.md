@@ -1,6 +1,6 @@
 # Plan 117 — `cargo heal --refill`: the dev/test faucet refill (client half)
 
-**Status:** IMPLEMENTED (client half) — 2026-09-09; CREDIT still blocked on riir-dapps Issue 025 owner call + devnet treasury funding (T0); dapps rider filed: see T9
+**Status:** COMPLETE — client half implemented 2026-09-09; CREDIT blocker DISCHARGED 2026-09-10 (server half landed: riir-dapps genesis re-scale resolved Issue 025, settlement drain resolved Issue 035; live smoke `--refill --refill-wait 45` exit 0, burn-ack server truth written — AGENTS.md records the owed item DISCHARGED). Status-corrected 2026-09-23 by the idle-loop plan-status hygiene pass.
 
 ## The verdict (grep + prior art, 2026-09-09)
 

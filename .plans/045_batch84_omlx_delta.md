@@ -1,6 +1,6 @@
 # Plan 045 — Batch 84: the oMLX v0.5.4rc1 → v0.6.3 release delta (kernel_opt external batch)
 
-**Status:** IN PROGRESS — opened 2026-08-28 (idle loop, queue item 5 / Protocol A)
+**Status:** COMPLETE — LANDED 2026-08-28 at `20d551a` (+ repair `e40cb6e`, T8 checked "LANDED", pushed `f67c628..20d551a`); `latch-failed-accelerator-shed-to-fallback` stays DEFERRED (see Deferred). Status-corrected 2026-09-23 by the idle-loop plan-status hygiene pass (the IN-PROGRESS line predated the T8 landing).
 **Source:** jundot/omlx releases v0.5.4rc1 → v0.6.3 (PRs #2966 / #3133 / #3110), primary
 distilled record: `../riir-ai/.research/353_ane_metal_cpu_heterogeneous_prefill_decode.md`
 §2.5.1 (queued in `.distill/001_mining_queue_snapshot.md` 2026-08-28, commit `b2a3295`)

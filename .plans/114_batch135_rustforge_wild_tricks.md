@@ -1,6 +1,6 @@
 # Plan 114 — Batch 135: the Wild-linker "RustForge wild performance tricks" article distill
 
-**Status:** IN PROGRESS — executing the owner-directed e2e contribution test (verdict + 3 rules, e2e gates, one commit on develop)
+**Status:** COMPLETE — LANDED at `84d0d73f` (feat: Batch 135 — rust_perf 114→117, 3 measured rules; history stamp `7f1d1659`). Status-corrected 2026-09-23 by the idle-loop plan-status hygiene pass (the IN-PROGRESS line predated the landing).
 
 Source: David Lattimore (Wild linker author), "RustForge wild performance tricks",
 davidlattimore.github.io, 2025-09-02. Six techniques; verdict + dedup gate in
