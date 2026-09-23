@@ -14,54 +14,21 @@ fn seed_corpus_round_trips() {
 }
 
 #[test]
-fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
+fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
     assert_eq!(corpus.entries.len(), 153); // Batch 174 (host-lock + flush-hoist) 151 → 153
+    // Per-category standing counts (Batch 174 landing): allocation 28, io 26,
+    // concurrency 23, complexity 22, layout 12, iterators 10, simd 9,
+    // arithmetic 8, caching 7, dispatch 5, bevy 2, wasm 1 — asserted via the
+    // distinct-category pin below plus the benchable/NotBenchable pins in
+    // this file. Never read a typed figure from prose: run
+    // `cargo heal --corpus-stats` (or this test) for the live numbers, and
+    // read the per-batch history in `.docs/11_domains/rust_perf.md` — the
+    // narrative copy here had gone stale (98 → 145 → 153 across three
+    // landings that updated the assert but not the prose).
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
-    // 12 distinct categories. Allocation is the deepest (22 rules,
-    // — Batch 75 added encoded-layout-borrowed-view +
-    // group-keys-borrow-allocate-on-first-sight;
-    // including Issue 014's arc-str-payload + Batch 48's three + Batch
-    // 53's hashmap-with-capacity); complexity has 18 (Batch 76 added
-    // debug-stat-full-scan-out-of-hot-path; Batch 91 added
-    // decision-projection-before-construction; Batch 75 added
-    // sorted-input-previous-row-fast-path; Batch 48 added
-    // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
-    // added debug-assert-length-hoist); iterators
-    // has 10 (Batch 48 added three; Batch 66 added
-    // sortedness-check-branchless-accumulate; Batch 67 added
-    // byte-find-position-to-memchr; Batch 91 added
-    // filter-before-expensive-transform); simd has 8 (Batch 62 added
-    // transposed-weight-register-gemv; Batch 64 added
-    // loop-order-innermost-contiguous; Batch 83 added
-    // bitplane-transpose-repeated-predicate-scan); layout has 10 (Batch 53 added
-    // soa-hot-field; Batch 61 added usize-index-to-u32; Batch 78 added
-    // narrow-counter-overflow-promotion; Batch 85 added
-    // weight-tile-consumption-order; Batch 112 added
-    // hot-byval-move-over-memcpy-threshold) + concurrency
-    // has 8 (Issue 014 added the two metric-mismatch rules; Batch 65
-    // added align-64-false-sharing + channel-send-batching-unpark;
-    // Batch 73 added lock-guard-narrow-field-accessor; Batch 78 added
-    // cache-line-block-partitioned-lock
-    // added align-64-false-sharing + channel-send-batching-unpark;
-    // Batch 73 added lock-guard-narrow-field-accessor); arithmetic
-    // has 7 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
-    // added division-by-invariant-multiplication; Batch 62
-    // added newton-refinement-vs-hardware-transcendental; Batch 74
-    // added swar-digit-chunk-parse); dispatch has 4
-    // (Batch 61 added keyword-map-to-match; Batch 74 added
-    // runtime-feature-detect-per-chunk; Batch 99 added
-    // mir-destprop-branch-site-merge); caching has 4 (Issue 014
-    // added regex-hoist-lazylock; Batch 73 added
-    // sort-key-cache-precompute-out-of-lock; Batch 76 added
-    // eager-pointer-collect-lazy-fetch); io has 5 (Batch 68 added
-    // varint-compose-word-single-store; Batch 69 added
-    // unaligned-word-load-from-bytes; Batch 85 added
-    // software-prefetch-storage-bound; Batch 94 added
-    // coalesce-nearby-reads-bounded-gap-cacheability-gated); bevy, wasm
-    // have 1 each.
     assert_eq!(categories.len(), 12);
 }
 
@@ -3516,7 +3483,7 @@ fn batch173_pareto_benches() {
 /// Batch 174 (2026-09-24, Plan 168 — the host-lock/flush-hoist distill from
 /// cubecl #1678 + bevy #25851): both rules present, parse, carry the concept
 /// needles. The host-lock rule is `NotBenchable` by design (deadlock class —
-/// the O_NONBLOCK head-probe precedent), so `without_spec` carries its count
+/// the `O_NONBLOCK` head-probe precedent), so `without_spec` carries its count
 /// half and this gate carries presence/parse/needles.
 #[test]
 fn batch174_rules_present_and_parse() {

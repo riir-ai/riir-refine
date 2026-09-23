@@ -9,12 +9,15 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 145 entries across 12 categories (complexity 22, allocation 26, simd 8,
-//! layout 12, iterators 10, concurrency 20, io 24, arithmetic 8, dispatch 5,
-//! caching 7, bevy 2, wasm 1). 92 are benchable; 53 are honestly
+//! 153 entries across 12 categories (allocation 28, io 26, concurrency 23,
+//! complexity 22, layout 12, iterators 10, simd 9, arithmetic 8, caching 7,
+//! dispatch 5, bevy 2, wasm 1). 96 are benchable; 57 are honestly
 //! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
-//! annotations were never counted) (8 external-runtime/size-class + 2
+//! annotations were never counted) and again by the 09-24 housekeeping pass
+//! (the header prose had gone stale at 145/92/53 through B172–B174; the
+//! gated count tests + `cargo heal --corpus-stats` are the live ledgers)
+//! (8 external-runtime/size-class + 2
 //! metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //!      axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -42,7 +45,12 @@
 //!     and the macro-emission build-time rule — upstream-measured compile-time
 //!     content, no runtime A/B axis). Batch 173 (Plan 167) added the two serde
 //!     zero-copy rules — allocation 26 → 28 (the corpus's first dedicated
-//!     serde family; both benchable + annotated).
+//!     serde family; both benchable + annotated). Batch 172 (Plan 166) added
+//!     the mezura quartet — simd 8 → 9, io 24 → 26, concurrency 20 → 21 (one
+//!     measured GOAT lead + three `NotBenchable` decision-content rules). Batch
+//!     174 (Plan 168) added the host-lock + flush-hoist pair — concurrency
+//!     21 → 23 (one measured `ParetoDominant` + one `NotBenchable` deadlock
+//!     class).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
