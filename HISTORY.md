@@ -1,5 +1,36 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-24 — Issue 134 T4: the fanout controls — best-single-domain + homogeneous-at-budget
+
+T4 landed the paper's linearization/homogeneous controls (Research 585) in
+the retrieval-eval report: any "fanout wins" claim reading the blended row
+must now beat BOTH control rows, which print under their own header with
+the binding rule.
+
+- **`EvalReport.homogeneous`** (new field): populated by `run_eval_inner`'s
+  equalized-budget pass — every labeled span answered by its OWN domain's
+  engine at pool = `n_enabled × RERANK_POOL` (depth-without-diversity: if
+  blended top-1 were a budget effect, this row would match it).
+- **best-single-domain is the own-share ceiling, honestly framed**: ONE
+  fixed domain answering EVERY span scores `hits_at_1_d / blended.labeled`
+  (it cannot be right on other domains' spans). Live: rust_perf 50.5% vs
+  blended 93.1% — the fan-out's margin over any single engine is
+  CROSS-DOMAIN COVERAGE by construction; the row exists so a claim quotes
+  the ceiling, never the per-domain column (96.2%) as the member baseline.
+- **The first live reading is itself a finding**: homogeneous@budget =
+  93.1% = blended EXACTLY (+0.0pp). Blended top-1 is entirely per-domain
+  selection — ZERO contribution from fan-out budget or depth (consistent
+  with T3's flat curves, pinned now at the exact equalized budget).
+- **Scope note**: the score-bench summary carries no multi-domain fanout
+  claim today (clippy-dominated fixtures; gen-5 is its only cross-domain
+  rung) — the controls bind where the claim lives; a future multi-domain
+  bench generation gains its own rows at birth.
+- **Rider**: `print_report`'s `names` had SIX entries against `per_domain`'s
+  SEVEN — shader_perf's row never printed (the row-key-omits-a-domain
+  drift class). Fixed in the same edit.
+- Gates: retrieval regression gate green with the new rows (93.1% blended,
+  floors held); clippy clean at the eval feature set.
+
 ## 2026-09-24 — Issue 134 T3: the ρ-prediction depth sweep — instrument landed, verdict REFUSED at the power floor
 
 T3's measurement harness landed with its first reading, and the honest

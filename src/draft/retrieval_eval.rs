@@ -351,6 +351,14 @@ pub struct EvalReport {
     /// record either way). The `DomainId` is the span's own domain.
     pub taxonomy_by_rule:
         std::collections::BTreeMap<String, (DomainId, ChoiceTaxonomy)>,
+    /// Issue 134 T4: the HOMOGENEOUS-budget control — the own-domain
+    /// engine run at the fan-out's TOTAL pool budget
+    /// (`n_enabled · RERANK_POOL` depth on ONE domain instead of
+    /// `RERANK_POOL` on each). Depth-without-diversity: if the fan-out's
+    /// blended top-1 were merely a budget effect, this row would match it.
+    /// Only `labeled`/`hits_at_1` are populated (the control is a top-1
+    /// claim, not a recall ladder).
+    pub homogeneous: DomainMetrics,
     /// Issue 121: the Vendi axis — the geometric diversity of the DELIVERED
     /// slate (the per-domain top-[`PROBE_TOP_K`] latents, exact cosine-
     /// kernel certificate via katgpt-core `set_admission`). `None` when the
@@ -1000,6 +1008,33 @@ pub fn run_eval_inner(
             .absorb(choice);
     }
 
+    // Issue 134 T4: the HOMOGENEOUS-budget control — every labeled span
+    // answered by its OWN domain's engine at the fan-out's TOTAL pool
+    // budget (`n_enabled · RERANK_POOL` depth on one domain instead of
+    // `RERANK_POOL` on each). Depth-without-diversity: if blended top-1
+    // were merely a budget effect, this matches it. The T3 sweep measured
+    // the flat-curve shape this rides (zero gain at 4× depth); this row
+    // pins it in the standing report at the exact equalized budget.
+    let budget = matcher
+        .domains()
+        .len()
+        .max(1)
+        .saturating_mul(super::instantiation_rerank::RERANK_POOL);
+    for span in &spans {
+        if !matcher.has_domain(span.domain) {
+            continue;
+        }
+        let (_, by_domain) = matcher.suggest_span(&span.code, budget);
+        let ranked = by_domain
+            .iter()
+            .find(|(d, _)| *d == span.domain)
+            .map_or(Vec::new(), |(_, rules)| canonical_rank(rules));
+        report.homogeneous.labeled += 1;
+        if ranked.first().is_some_and(|r| r.rule_id == span.label) {
+            report.homogeneous.hits_at_1 += 1;
+        }
+    }
+
     for (tag, code) in CLEAN_SPANS {
         let (routed, by_domain) = matcher.suggest_span(code, PROBE_TOP_K);
         let _ = routed;
@@ -1170,7 +1205,13 @@ pub fn run_split_eval(
 #[allow(clippy::too_many_lines)] // one table per report — the measurement surface
 pub fn print_report(report: &EvalReport) {
     println!("== Issue 017 retrieval-precision eval ==");
-    let names = ["clippy", "perf  ", "kernel", "sec   ", "docker", "dist  "];
+    // Rider (Issue 134 T4's edit): the seventh domain's row — `names` had 6
+    // entries while `per_domain` is sized by `DomainId::ALL.len()` (7), so
+    // shader_perf's metrics never printed (the row-key-omits-a-domain
+    // drift class).
+    let names = [
+        "clippy", "perf  ", "kernel", "sec   ", "docker", "dist  ", "shader",
+    ];
     println!(
         "{:<8} {:>8} {:>9} {:>9} {:>9}",
         "domain", "labeled", "top-1", "top-3", "top-5"
@@ -1197,6 +1238,56 @@ pub fn print_report(report: &EvalReport) {
         report.blended.recall(5).map_or(0.0, |r| r * 100.0),
         report.skipped,
     );
+    // Issue 134 T4 — the fanout controls (the paper's linearization /
+    // homogeneous controls, Research 585): any "fanout wins" claim reading
+    // this report must beat BOTH rows.
+    if report.blended.labeled > 0 {
+        // best-single-domain: ONE fixed domain engine answering EVERY span.
+        // It can only ever be right on its own spans, so its whole-set top-1
+        // is `hits_at_1_d / blended.labeled` — the structural disclosure
+        // (the fan-out's cross-domain coverage IS the margin over any single
+        // engine; the row pins that ceiling so a claim quotes it, never the
+        // per-domain column, which speaks only for its own spans).
+        let mut best: Option<(usize, &str, usize)> = None; // (i, name, hits)
+        for (i, name) in names.iter().enumerate() {
+            let m = &report.per_domain[i];
+            if m.labeled == 0 {
+                continue;
+            }
+            if best.is_none_or(|(_, _, h)| m.hits_at_1 > h) {
+                best = Some((i, name, m.hits_at_1));
+            }
+        }
+        if let Some((bi, bname, bhits)) = best {
+            let share = bhits as f32 / report.blended.labeled as f32 * 100.0;
+            println!(
+                "  fanout controls (134 T4 — a fanout-wins claim must beat both):");
+            println!(
+                "  best-single-domain  top-1 {share:.1}% on the whole set ({:<6} answering every span — its own-share ceiling; per-domain {:>5.1}% on its spans)",
+                bname.trim_end(),
+                report.per_domain[bi].recall(1).map_or(0.0, |r| r * 100.0),
+            );
+        }
+        // homogeneous: the own-domain engine at the fan-out's TOTAL pool
+        // budget — depth-without-diversity. Populated by `run_eval_inner`'s
+        // equalized-budget pass; `labeled == 0` means the control did not
+        // run (a hand-built report), and the row says so rather than 0.0.
+        if report.homogeneous.labeled > 0 {
+            let h = report
+                .homogeneous
+                .recall(1)
+                .map_or(0.0, |r| r * 100.0);
+            let b = report.blended.recall(1).map_or(0.0, |r| r * 100.0);
+            println!(
+                "  homogeneous @budget top-1 {h:.1}% (one engine, pool = n_enabled x RERANK_POOL) — delta vs blended {:+.1}pp",
+                h - b
+            );
+        } else {
+            println!(
+                "  homogeneous @budget — not measured by this report's run (run_eval_inner populates it)"
+            );
+        }
+    }
     println!(
         "router annotation: {}/{} correct ({:.1}%) — feeds the Issue 020 re-gate",
         report.router_correct,
