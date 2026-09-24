@@ -1252,6 +1252,16 @@ required-features = ["set_rerank", "clippy_verify", "clippy_lints", "rust_perf"]
 name = "demonstrability_gate_wiring"
 required-features = ["demonstrability_gate"]
 
+# Issue 134 T3 — the ρ-prediction depth sweep (gain-from-depth vs the T1
+# demonstrability constant, Spearman + the ≥5-domain power floor). A
+# measurement harness: the verdict today is the standing REFUSAL (the
+# labeled-fixture population is 2 domains, 3 with kernel_heal — below the
+# floor); the per-domain sweep data accumulates as thin domains gain
+# fixture sets. kernel_heal rides optionally (it adds the third domain).
+[[example]]
+name = "demonstrability_t3_sweep"
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
+
 [[test]]
 name = "uncontaminated_g1"
 required-features = ["clippy_verify", "latent_retrieval"]

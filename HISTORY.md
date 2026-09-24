@@ -1,5 +1,48 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-24 — Issue 134 T3: the ρ-prediction depth sweep — instrument landed, verdict REFUSED at the power floor
+
+T3's measurement harness landed with its first reading, and the honest
+verdict at the current fixture population is the issue's own designed
+refusal: **n=3 qualifying domains < the ≥5 power floor** (clippy 0.935 /
+rust_perf 0.962 / kernel_opt 1.000 with `kernel_heal` on; n=2 at default).
+Neither passed nor failed — the promotion question stays open until the
+re-arm triggers fire ([Bench 100](.benchmarks/100_demonstrability_t3_depth_sweep.md)).
+
+- **`examples/demonstrability_t3_sweep.rs`**: pool-depth ladder 28→56→112
+  (depth = POOL, not truncation — a deeper pool changes the rerank's
+  candidate set; truncation cannot change top-1), top-1 accuracy per
+  domain at each rung, the T1 constant from the SAME run, hand-rolled
+  Spearman with tie-averaged ranks (no new deps), the power-floor refusal.
+- **Every depth curve is FLAT** (zero gain at 2× and 4× pools in all three
+  domains): the instantiation-first rerank head is stable — nothing deeper
+  in the pool ever promotes past an already-instantiating head. At face
+  value that is the paper's law holding at high constants (selection
+  already lands the correct candidate; depth adds candidates selection
+  never needs) — and it independently says the T2 gate's deepen-half has
+  nothing to buy in the CURRENT corpora (consistent with the standing
+  factors rounding inert). A description at n=3, not a verdict — exactly
+  what the floor is for.
+- **The constant column reproduces T1's standing readings exactly**
+  (0.935/0.962 parity). A harness-fidelity trap caught pre-landing:
+  classifying over the full 28-deep list instead of the eval's top-8 probe
+  window silently reclassifies `wrong_span`→`wrong_rule` and reads clippy
+  at 0.915 — the window is part of the constant's semantics. Pinned by
+  `take(8)` + recorded in the bench doc.
+- **kernel_opt reads 1.000 partly self-referentially**: its 30 fixtures
+  are corpus-derived (`kernel_fixture_spans(30)`), so the fixture IS the
+  corpus entry. Recorded in the bench doc as a de-bias note (authored
+  kernel fixtures would fix the row), not fixed here.
+- Re-arm triggers: authored labeled fixture sets for sec/docker/dist/
+  shader_perf (each adds a qualifying domain), or a bench-half standing
+  row (the next `--score-bench` run attributes through the same
+  `RuleDomains` table). Then the sweep re-runs and the verdict flips to
+  PASS (ρ≥0.5 → promote per the standard rule) or FAIL (record the
+  negative).
+- Gates: clippy clean at the example's feature set; constants parity-
+  pinned against T1; `.benchmarks/.highwater` 98→100 (099 existed past a
+  stale highwater — `ls`-AND-highwater discipline); no corpus delta.
+
 ## 2026-09-24 — Issue 134 T2: the pool-depth allocation gate (`demonstrability_gate`)
 
 The Research-585 allocation law landed its CONSUMER: the measured per-domain
