@@ -1,5 +1,68 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-25 — Batch 179 LANDED (Plan 172 / Research 210): the rsconstmap distill — the std-map-probe family's layout + MLP + map-selection cells
+
+Source: lemire/rsconstmap @ `bf7b3341` (MIT OR Apache-2.0, the Rust port of
+lemire/constmap + fastconstmap; the math is Graf & Lemire, Binary Fuse
+Filters, ACM JEA 2022). Three rules, all measured ParetoDominant on the M3
+(verdict-stable ×2 each, alloc axis flat, G1 live in every bench
+invocation's `make_input`), + one rider annotation. `.raw` clone removed at
+landing.
+
+- **`paired-probe-layout-present-vs-absent`** (layout, the GOAT lead):
+  two parallel arrays probed at the same three indices per lookup (the
+  fingerprint gate + the value) → zip into 16-byte `[u64; 2]` slots — a
+  present-key probe touches 3 cache lines instead of 6 and each slot XORs
+  as one 128-bit word on baseline SSE2/NEON (no feature detection).
+  Measured 3/0/0 at 1.68×/1.45×/1.80× (262_144 present-key probes, random
+  order, tables 4/64/256 MB). The absent-key REGRESSION is the regime
+  gate (the source's own doc: the split layout's fingerprint array is
+  half the map and early-exits before the values) — quoted in the note,
+  the timed arms carry only the present cell.
+- **`block-hash-before-gather-mlp`** (iterators): a per-key
+  hash→dependent-gather loop → resolve the whole block of 8's indices
+  first, then gather (the source's `map_many`, `BATCH_BLOCK = 8` — its own
+  two-machine adjudication, annotated never gated). Measured 2/0/1 at
+  1.68×/1.30×/1.02× — and the REGIME DIVERGES from the source's cold-first
+  telling: on this box the win sits at L2/SLC-resident tables, the 256 MB
+  cell ties (the loop's own OoO window already saturates load MLP past
+  DRAM). Recorded honestly in the note; the Rust-side expectation was
+  always the modest band (the Go port's hashing hoist is already free
+  here).
+- **`immutable-static-map-filter-selection`** (complexity, `[dep:
+  constmap]` — the papaya dep precedent, the library IS the fix):
+  built-once read-only `HashMap<String, u64>` → the construct-once
+  binary-fuse static map. Measured 2/0/0 at 2.09×/4.27× (100k/1M keys),
+  margin growing with key count exactly as the source's scaling table
+  claims (their absolute 7.8× at 1M is M4-Max-and-varied-keys; ours is the
+  honest same-regime cell). Contracts in the note: absent keys undefined,
+  no enumeration, construction slower (amortize); the 32-byte serialized
+  header's 8-alignment pad folded.
+- **The fixture lesson (on record for future distills)**: the first draft
+  derived probe indices with `% m` and measured ALL-TIES at every size —
+  three non-pipelined divides per key dominate and mask the entire
+  load-latency regime. The source's own multiply-high index form (high 64
+  bits of `h * m`) is the faithful fixture; with it the regime appeared
+  immediately in all three rules. A fixture's index arithmetic is part of
+  the measured mechanism — derive it from the source, not from habit.
+- **Rider**: `bufwriter-batched` gained the serialize finding as an
+  annotation (contiguous data → self-chunk the dump at 64 KiB,
+  source-measured 1020 ms → 11.1 ms at 1M keys; BufReader/BufWriter do
+  NOT help there — the chunking already batches the syscalls and the
+  wrapper's copy costs what it saves; fused FNV-1a checksum folds into the
+  transfer).
+- **Retrieval re-pins (measured − 1 span)**: the three new PERF_SPANS
+  retrieve their rules top-1; default-state population 138 → 141 (blended
+  127/141/133/141/135/141), clippy rows unmoved except CLIPPY_TOP3 44 → 43
+  /48 (convention, measured held); all five reachable router-annotation
+  arms re-measured at their new populations (default 113/141 floor 108,
+  +shader 116/149 floor 111, +kernel 107/171 floor 102, +sec 90/157 floor
+  85, ALL 89/195 floor 84 — the full-state ratio ROSE 44.8% → 45.6%).
+  Count pins: 153 → 156 rules / 96 → 99 benchable / 98 → 102 annotated.
+- En route: a latent `doc_lazy_continuation` red in `retrieval_eval.rs`
+  (a `+ `-led continuation line parsed as a new list item) — clippy 1.98
+  newly lints it; fixed as a rider.
+
 ## 2026-09-24 — Issue 134 CLOSED (T3 re-arm executed): seven-domain sweep, the ρ=0.536 artifact, and the degenerate-axis guard
 
 The re-arm triggers Bench 100 named were discharged: the thin-domain

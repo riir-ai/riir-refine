@@ -16,9 +16,10 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 155); // Batch 177 (A/A control + observer-sync bias) 153 → 155
-    // Per-category standing counts (Batch 174 landing): allocation 28, io 26,
-    // concurrency 23, complexity 22, layout 12, iterators 10, simd 9,
+    assert_eq!(corpus.entries.len(), 158); // Batch 177 (+2) then Batch 179 (+3) on the 153 base
+    // Per-category standing counts (Batch 179 landing): allocation 28, io 26,
+    // concurrency 23, complexity 25, layout 13, iterators 11, simd 9,
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
     // arithmetic 8, caching 7, dispatch 5, bevy 2, wasm 1 — asserted via the
     // distinct-category pin below plus the benchable/NotBenchable pins in
     // this file. Never read a typed figure from prose: run
@@ -1745,7 +1746,7 @@ fn eighty_six_rules_have_bench_specs() {
         .iter()
         .filter(|e| e.bench_spec.is_some())
         .count();
-    assert_eq!(with_spec, 96, "expected 96 benchable rules (Batch 174 added the flush-hoist spec; the host-lock rule is NotBenchable — deadlock class), got {with_spec}");
+    assert_eq!(with_spec, 99, "expected 99 benchable rules (Batch 179 added the three rsconstmap specs; the host-lock rule is NotBenchable — deadlock class), got {with_spec}");
 }
 
 #[cfg(feature = "rust_perf_bench")]
@@ -1762,7 +1763,8 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 59); // 155 total − 96 benchable — Batch 177 added BOTH new rules as NotBenchable (the measurement-honesty family, members #3 + #4)
+    assert_eq!(without_spec.len(), 59); // 158 total − 99 benchable — Batch 177 added BOTH its rules as NotBenchable (measurement-honesty #3 + #4); Batch 179 added three BENCHABLE rules
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1845,9 +1847,10 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 100, "expected 100 context-annotated rules (Batch 174: 96 → 98 the host-lock + flush-hoist; Batch 177: 98 → 100 the measurement-honesty pair — A/A control + observer-sync bias)");
+    assert_eq!(annotated.len(), 104, "expected 104 context-annotated rules (Batch 177: 98 → 100 the measurement-honesty pair; Batch 179: 100 → 104 — the three rsconstmap annotations + the bufwriter-batched serialize rider)");
     assert!(annotated.contains(&"aa-control-prices-the-fidelity-instrument")); // Batch 177 — NotBenchable measurement-honesty #3 (the comparator)
     assert!(annotated.contains(&"observer-sync-bias-differs-by-change-class")); // Batch 177 — NotBenchable measurement-honesty #4 (the observer-consumer bias)
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
     assert!(annotated.contains(&"serde-borrow-deserialize")); // Batch 173 — the escape-regime + from_reader anti-regime annotation
     assert!(annotated.contains(&"rawvalue-passthrough-defer-parse")); // Batch 173 — the behavioral-delta (formatting retention) + typed-consumer anti-regime annotation
     assert!(annotated.contains(&"host-lock-across-reentrant-blocking-call")); // Batch 174 — NotBenchable deadlock-class annotation (decide-under-lock/drop/act)
@@ -1920,7 +1923,8 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 55, "expected 55 unannotated rules (155 total - 100 annotated; Batch 173/174/177 added only ANNOTATED rules — the unannotated side is unmoved)");
+    assert_eq!(unannotated, 54, "expected 54 unannotated rules (158 total - 104 annotated; Batch 179 annotated its 3 new rules + flipped bufwriter-batched with the serialize rider)");
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1932,7 +1936,8 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 100); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 (the measurement-honesty pair)
+    assert_eq!(annotated, 104); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100; Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider)
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1973,7 +1978,8 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 100, "expected 100 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 — the measurement-honesty pair)");
+    assert_eq!(annotated.len(), 104, "expected 104 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider)");
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2012,7 +2018,8 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules (155 total − 100 annotated, Batch 177 added 2 annotated complexity rules)");
+    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (158 total − 104 annotated; Batch 177 added 2 annotated rules; Batch 179 added 3 annotated rules + flipped bufwriter-batched)");
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -5149,5 +5156,176 @@ fn batch177_rules_present_and_annotated() {
             obs.context_notes.clone().unwrap_or_default().contains(needle),
             "batch-177 observer-sync lost phrase: {needle}"
         );
+// ── Batch 179 G1 gates (Plan 172 / Research 210 — the rsconstmap distill) ──
+
+/// G1 for `paired-probe-layout-present-vs-absent`: the paired-slot probe
+/// must answer identically to the split-array probe — values exact on
+/// present keys (the fingerprint XOR is the same words both arms read)
+/// and the corrupted fingerprint early-exits in both layouts, over an
+/// LCG sweep of keys at three table sizes. The aarch64 arm exercises the
+/// NEON `xor3` path the fixed form ships (baseline ISA — no feature
+/// gate); other targets compile the scalar fallback the fixture carries.
+#[test]
+fn paired_probe_layout_equivalence_gate() {
+    fn mix(mut x: u64) -> u64 {
+        x ^= x >> 30;
+        x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        x ^= x >> 27;
+        x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+        x ^= x >> 31;
+        x
+    }
+    #[allow(clippy::cast_possible_truncation)] // the high 64 bits are < m <= usize::MAX on 64-bit targets
+    fn fastrange(h: u64, m: u64) -> usize {
+        ((u128::from(h) * u128::from(m)) >> 64) as usize
+    }
+    fn triple(key: u64, m: u64) -> [usize; 3] {
+        let h = mix(key);
+        [
+            fastrange(h, m),
+            fastrange(h.rotate_left(21), m),
+            fastrange(h ^ (h >> 32).wrapping_mul(0x9E37_79B9_7F4A_7C15), m),
+        ]
+    }
+    fn xor3_scalar(a: [u64; 2], b: [u64; 2], c: [u64; 2]) -> [u64; 2] {
+        [a[0] ^ b[0] ^ c[0], a[1] ^ b[1] ^ c[1]]
+    }
+    #[cfg(target_arch = "aarch64")]
+    fn xor3_neon(a: &[u64; 2], b: &[u64; 2], c: &[u64; 2]) -> [u64; 2] {
+        use std::arch::aarch64::{veorq_u64, vgetq_lane_u64, vld1q_u64};
+        // SAFETY: NEON is baseline on AArch64; each vld1q_u64 reads one
+        // live 16-byte slot.
+        unsafe {
+            let v = vld1q_u64(a.as_ptr());
+            let v = veorq_u64(v, vld1q_u64(b.as_ptr()));
+            let v = veorq_u64(v, vld1q_u64(c.as_ptr()));
+            [vgetq_lane_u64::<0>(v), vgetq_lane_u64::<1>(v)]
+        }
+    }
+
+    let mut state = 0xC0FF_EE00_1234_5678u64;
+    let mut next = move || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        state
+    };
+
+    for &n in &[97usize, 1_009, 65_537] {
+        let checks: Vec<u64> = (0..n).map(|_| next()).collect();
+        let data: Vec<u64> = (0..n).map(|_| next()).collect();
+        let m = n as u64;
+        for _ in 0..2_000u64 {
+            let key = next();
+            let [i0, i1, i2] = triple(key, m);
+            let expect_fp = checks[i0] ^ checks[i1] ^ checks[i2];
+            let want = data[i0] ^ data[i1] ^ data[i2];
+            // The paired slot must carry [value, fingerprint] and answer
+            // exactly what the split probe would answer.
+            let sv = xor3_scalar(
+                [data[i0], checks[i0]],
+                [data[i1], checks[i1]],
+                [data[i2], checks[i2]],
+            );
+            assert_eq!(sv, [want, expect_fp], "paired slot must be [value, fingerprint]");
+            #[cfg(target_arch = "aarch64")]
+            {
+                let nv = xor3_neon(
+                    &[data[i0], checks[i0]],
+                    &[data[i1], checks[i1]],
+                    &[data[i2], checks[i2]],
+                );
+                assert_eq!(nv, sv, "NEON xor3 must equal the scalar form bit-for-bit");
+            }
+            // The absent-key contract: a corrupted fingerprint matches
+            // neither the split XOR nor the paired fingerprint word —
+            // both layouts early-exit to None.
+            let corrupted = expect_fp ^ 1;
+            assert_ne!(expect_fp, corrupted);
+            assert_ne!(sv[1], corrupted);
+        }
+    }
+}
+
+/// G1 for `block-hash-before-gather-mlp`: the two-phase block restructure
+/// must be bit-identical to the per-key loop over random keys — including
+/// the tail path (< BLOCK keys) and the empty input — over several table
+/// sizes and batch lengths.
+#[test]
+fn block_hash_gather_equivalence_gate() {
+    const BLOCK: usize = 8;
+    fn mix(mut x: u64) -> u64 {
+        x ^= x >> 30;
+        x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        x ^= x >> 27;
+        x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+        x ^= x >> 31;
+        x
+    }
+    #[allow(clippy::cast_possible_truncation)] // the high 64 bits are < m <= usize::MAX on 64-bit targets
+    fn fastrange(h: u64, m: u64) -> usize {
+        ((u128::from(h) * u128::from(m)) >> 64) as usize
+    }
+    fn triple(key: u64, m: u64) -> [usize; 3] {
+        let h = mix(key);
+        [
+            fastrange(h, m),
+            fastrange(h.rotate_left(21), m),
+            fastrange(h ^ (h >> 32).wrapping_mul(0x9E37_79B9_7F4A_7C15), m),
+        ]
+    }
+    fn loop_gather(table: &[u64], keys: &[u64], out: &mut [u64]) {
+        for (o, &k) in out.iter_mut().zip(keys) {
+            let [i0, i1, i2] = triple(k, table.len() as u64);
+            *o = table[i0] ^ table[i1] ^ table[i2];
+        }
+    }
+    fn block_gather(table: &[u64], keys: &[u64], out: &mut [u64]) {
+        let m = table.len() as u64;
+        let mut i0s = [0usize; BLOCK];
+        let mut i1s = [0usize; BLOCK];
+        let mut i2s = [0usize; BLOCK];
+        let blocks = keys.len() / BLOCK * BLOCK;
+        let mut b = 0;
+        while b < blocks {
+            for j in 0..BLOCK {
+                let [i0, i1, i2] = triple(keys[b + j], m);
+                i0s[j] = i0;
+                i1s[j] = i1;
+                i2s[j] = i2;
+            }
+            for j in 0..BLOCK {
+                out[b + j] = table[i0s[j]] ^ table[i1s[j]] ^ table[i2s[j]];
+            }
+            b += BLOCK;
+        }
+        for (o, &k) in out[blocks..].iter_mut().zip(&keys[blocks..]) {
+            let [i0, i1, i2] = triple(k, m);
+            *o = table[i0] ^ table[i1] ^ table[i2];
+        }
+    }
+
+    let mut state = 0xB10C_41DE_0000_0001u64;
+    let mut next = move || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        state
+    };
+
+    for &tn in &[13usize, 1_000, 32_769] {
+        let table: Vec<u64> = (0..tn).map(|_| next()).collect();
+        for &kn in &[0usize, 1, 7, 8, 9, 15, 16, 63, 64, 65, 4_096] {
+            let keys: Vec<u64> = (0..kn).map(|_| next()).collect();
+            let mut a = vec![0u64; kn];
+            let mut b = vec![0u64; kn];
+            loop_gather(&table, &keys, &mut a);
+            block_gather(&table, &keys, &mut b);
+            assert_eq!(
+                a, b,
+                "blocked gathers must equal the loop bit-for-bit (table={tn}, keys={kn})"
+            );
+        }
+>>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
     }
 }

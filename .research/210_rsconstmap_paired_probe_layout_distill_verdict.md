@@ -1,6 +1,6 @@
 # rsconstmap / constmap — paired-probe-layout + static-map distill verdict
 
-**Status:** DISTILLED — pending owner decision (verdict YES B+; queued as nominal Batch 179 behind B177/B178; Plan 172; no corpus edit made)
+**Status:** RECORD — Batch 179 LANDED (see HISTORY.md for the landing commit; the three rules + rider measured ParetoDominant on M3; plan-first verdict was YES B+)
 
 - Source: https://github.com/lemire/rsconstmap @ `bf7b33419d37c5d141075b9c1642fb69642a7896` (shallow clone `.raw/rsconstmap`, removed at landing commit; re-clone at the pin at mine time).
 - Crate: `constmap` 0.3.0 on crates.io. License: MIT OR Apache-2.0. 10★, 4 commits, last 2026-09-16 — COMPLETE, not WIP; criterion benches; rust-version 1.80.

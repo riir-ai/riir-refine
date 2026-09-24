@@ -9,10 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 155 entries across 12 categories (allocation 28, io 26, concurrency 23,
-//! complexity 24, layout 12, iterators 10, simd 9, arithmetic 8, caching 7,
-//! dispatch 5, bevy 2, wasm 1). 96 are benchable; 59 are honestly
-//! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
+//! 158 entries across 12 categories (allocation 28, io 26, concurrency 23,
+//! complexity 25, layout 13, iterators 11, simd 9, arithmetic 8, caching 7,
+//! dispatch 5, bevy 2, wasm 1). 99 are benchable; 59 are honestly//! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) and again by the 09-24 housekeeping pass
 //! (the header prose had gone stale at 145/92/53 through B172–B174; the
@@ -40,6 +39,7 @@
 //!     context annotations (Batch 141 — measured reserve for a destructive
 //!     rewrite, semantic truncation boundaries, pattern-bounded stream holdback;
 //!     budget/boundary/stream discipline, not speed) plus the two Batch-143
+//!     1x) plus the two Batch-143
 //!     annotations (the log-only hot-path computation behind a level gate — its
 //!     note carries the #143684 wall-time-vs-icount measurement-honesty rider;
 //!     and the macro-emission build-time rule — upstream-measured compile-time
@@ -50,7 +50,10 @@
 //!     measured GOAT lead + three `NotBenchable` decision-content rules). Batch
 //!     174 (Plan 168) added the host-lock + flush-hoist pair — concurrency
 //!     21 → 23 (one measured `ParetoDominant` + one `NotBenchable` deadlock
-//!     class).
+//!     class). Batch 179 (Plan 172 / Research 210) added the rsconstmap trio —
+//!     layout 12 → 13, iterators 10 → 11, complexity 22 → 23 (three measured
+//!     `ParetoDominant` benchable rules; the first `[dep: constmap]` external
+//!     map-family entry).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -397,8 +400,7 @@ mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 155 entries
-/// covering the main perf pattern categories (complexity, allocation, simd,
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 158 entries/// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (28 rules — Batch 173 added the two
 /// serde zero-copy rules); complexity has 24 (the measurement-honesty family

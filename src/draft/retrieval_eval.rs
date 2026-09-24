@@ -27,7 +27,7 @@
 //!   `sec` (16, `sec` only) / `docker` (31) / `dist` (6) / `shader_perf`
 //!   (8, `shader_perf` only) — hand-authored variants of the corpus
 //!   anti-patterns, one span per rule, labels verified against the corpus
-//!   + their own proposers by the committed label tests. Honest
+//!   and their own proposers by the committed label tests. Honest
 //!   confusability documented in the fixture files: docker's
 //!   cache-mount/manifest-first corpus texts are byte-identical, and dist's
 //!   three ship-size rules share the bare-`[[bin]]` shape — their constants
@@ -1920,9 +1920,22 @@ mod tests {
         // New per-domain floors for the thin domains are NOT pinned here yet —
         // one fixture-set generation of stability first (the Batch-48
         // precedent: first measurements move as the set converges).
-        pub const BLENDED_TOP1: f32 = 123.0 / 138.0;
-        pub const BLENDED_TOP3: f32 = 129.0 / 138.0;
-        pub const BLENDED_TOP5: f32 = 131.0 / 138.0;
+        //
+        // Batch 179 re-pin (2026-09-25, the rsconstmap trio landing): the
+        // three new rust_perf spans (paired-probe-layout / block-hash-mlp /
+        // immutable-static-map) grew the default-state population 138 → 141
+        // (perf 53 → 56). All three new spans retrieve their rule top-1
+        // (their authors follow the corpus-shape convention). MEASURED at
+        // the landing (default state: clippy+perf+docker+dist): blended
+        // **127/141 (90.1%) / 133/141 (94.3%) / 135/141 (95.7%)**, clippy
+        // **43/48 / 44/48 / 44/48**, perf **54/56 / 55/56 / 56/56**. Floors
+        // = measured − ONE span. Clippy top-1 UNCHANGED (43/48 measured,
+        // 42/48 floor — the one-span margin intact); clippy top-3 re-pinned
+        // 44/48 → 43/48 (measured held at 44; the pin moves only to keep
+        // the one-span convention as the denominator convention requires).
+        pub const BLENDED_TOP1: f32 = 126.0 / 141.0;
+        pub const BLENDED_TOP3: f32 = 132.0 / 141.0;
+        pub const BLENDED_TOP5: f32 = 134.0 / 141.0;
         pub const CLIPPY_TOP1: f32 = 42.0 / 48.0;
         // Issue 063 sweep, 2026-09-02 — **convention alignment, NOT a
         // loosened bar.** This const was `45.0 / 48.0` while clippy top-3
@@ -1939,8 +1952,8 @@ mod tests {
         // The gate was NOT failing: 45 ≥ 45 passed. This restores the one-span
         // margin the convention prescribes (44/48) rather than nudging a
         // constant until something passes.
-        pub const CLIPPY_TOP3: f32 = 44.0 / 48.0;
-        pub const PERF_TOP3: f32 = 51.0 / 53.0;
+        pub const CLIPPY_TOP3: f32 = 43.0 / 48.0;
+        pub const PERF_TOP3: f32 = 54.0 / 56.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
         /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
@@ -2049,10 +2062,15 @@ mod tests {
                     // default feature, so a docker-on dist-off state is
                     // reachable only via --no-default-features feature
                     // surgery that nothing runs.)
+                    // Batch 179 re-pin (2026-09-25, the rsconstmap trio:
+                    // 3 rust_perf spans in every state's population):
+                    // shader-off 141 spans, MEASURED 113/141 (80.1%) — floor
+                    // = 108. Shader-on twin (149 spans): 116/149 (77.9%) —
+                    // floor = 111.
                     if cfg!(feature = "shader_perf") {
-                        109.0 / 146.0 // measured 114/146 (78.1%)
+                        111.0 / 149.0 // measured 116/149 (77.9%)
                     } else {
-                        105.0 / 138.0 // measured 110/138 (79.7%)
+                        108.0 / 141.0 // measured 113/141 (80.1%)
                     }
                 }
                 // Batch 130 (2026-09-08, Plan 111): the 5 kernel CloudRift
@@ -2076,7 +2094,9 @@ mod tests {
                     // Issue 134 T3 re-arm (MEASURED 2026-09-24): population
                     // 131 → 168 (the thin-domain fixtures at the kernel state).
                     // 105/168 (62.5%) — floor = 100 per the Plan-030 convention.
-                    100.0 / 168.0
+                    // Batch 179 re-pin (2026-09-25): population 171, MEASURED
+                    // 107/171 (62.6%) — floor = 102.
+                    102.0 / 171.0
                 }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file
@@ -2091,7 +2111,7 @@ mod tests {
                 // = 34.7% at B131) -- the read_to_end/TcpStream vocabulary
                 // keeps the B131 sec-centroid drift ticking (-1 span);
                 // floor = 34 - 5 = 29.
-                (false, true, true) => 82.0 / 154.0, // measured 87/154 (56.5%) — Issue 134 T3 re-arm, 2026-09-24 (population 101 → 154; was 34/101 at Batch 140, the no-docker era pin)
+                (false, true, true) => 85.0 / 157.0, // measured 90/157 (57.3%) — Batch 179 re-pin, 2026-09-25 (population 141 → 157; was 82/154, measured 87/154 at Issue 134)
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.
@@ -2110,7 +2130,12 @@ mod tests {
                     // compounds it). 86/192 (44.8%) — floor = 81 per the
                     // Plan-030 convention. Annotation only: gating stays
                     // killed (85% bar, Bench 025).
-                    81.0 / 192.0 // measured 86/192 (44.8%)
+                    // Batch 179 re-pin (2026-09-25): population 195, MEASURED
+                    // 89/195 (45.6%) — floor = 84 (the 3 new rust_perf spans
+                    // routed correctly AND the shader spans hold 100%, so the
+                    // ratio ROSE 44.8% → 45.6% despite the sec/kernel
+                    // attractor mass).
+                    84.0 / 195.0 // measured 89/195 (45.6%)
                 }
             }
         }

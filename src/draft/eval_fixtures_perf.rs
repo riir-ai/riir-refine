@@ -584,4 +584,54 @@ pub fn centroid_x(npcs: &[NpcEntry]) -> f32 {
 }
 "#,
     ),
+    (
+        "paired-probe-layout-present-vs-absent",
+        r#"pub struct FingerprintGate {
+    checks: Vec<u64>, // fingerprint word per position
+    data: Vec<u64>,   // value word per position
+}
+
+impl FingerprintGate {
+    pub fn probe(&self, key: u64) -> Option<u64> {
+        let m = self.checks.len() as u64;
+        let h = mix(key);
+        let i0 = fastrange(h, m);
+        let i1 = fastrange(h.rotate_left(21), m);
+        let i2 = fastrange(h ^ (h >> 32), m);
+        let fp = self.checks[i0] ^ self.checks[i1] ^ self.checks[i2];
+        if fp != expected {
+            return None;
+        }
+        Some(self.data[i0] ^ self.data[i1] ^ self.data[i2])
+    }
+}
+"#,
+    ),
+    (
+        "block-hash-before-gather-mlp",
+        r#"pub fn gather_all(table: &[u64], keys: &[u64], out: &mut [u64]) {
+    for (o, &k) in out.iter_mut().zip(keys) {
+        let h = mix(k);
+        let (i0, i1, i2) = positions(h, table.len());
+        // hash chain → gather, per key: the next key's gathers wait
+        // behind this key's index derivation
+        *o = table[i0] ^ table[i1] ^ table[i2];
+    }
+}
+"#,
+    ),
+    (
+        "immutable-static-map-filter-selection",
+        r#"pub struct EntityTable {
+    // built once at startup from the world snapshot, read-only afterward
+    values: HashMap<String, u64>,
+}
+
+impl EntityTable {
+    pub fn value(&self, key: &str) -> Option<u64> {
+        self.values.get(key).copied() // SipHash + stored keys per hot lookup
+    }
+}
+"#,
+    ),
 ];
