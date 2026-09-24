@@ -219,6 +219,15 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # precedent).
 set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 
+# katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
+# correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
+# mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
+# ModellessEmbedder is sigmoid-bounded (positive orthant), so raw cosine
+# carries a large common-mode floor; the anchor subtracts it. λ=0 (the
+# default) is byte-identical — the correction is skipped entirely. Opt-in
+# pending the A/B verdict (tests/differential_anchor_ab.rs).
+differential_anchor = ["katgpt-core/differential_anchor", "latent_retrieval"]
+
 # Issue 134 T2 — the pool-depth allocation gate: scale the suggest lane's
 # per-domain retrieval pool + truncation K by the measured demonstrability
 # constant (Research 585 / SAT arXiv:2609.22682 — depth pays where selection
@@ -1354,3 +1363,7 @@ required-features = ["dist"]
 [[test]]
 name = "shader_perf_gates"
 required-features = ["shader_perf"]
+
+[[test]]
+name = "differential_anchor_ab"
+required-features = ["differential_anchor", "clippy_lints", "rust_perf"]

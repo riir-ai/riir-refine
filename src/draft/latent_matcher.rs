@@ -445,6 +445,29 @@ impl LatentMatcher {
         })
     }
 
+    /// katgpt-rs Issue 882 P0 rider: set the differential-anchor strength λ
+    /// on EVERY enabled domain's index (each carries its own mean-corpus
+    /// anchor). `0.0` is the uncorrected path, byte-identical.
+    #[cfg(feature = "differential_anchor")]
+    #[must_use]
+    pub fn with_differential_anchor(mut self, lambda: f32) -> Self {
+        for index in [
+            &mut self.clippy,
+            &mut self.perf,
+            &mut self.kernel,
+            &mut self.sec,
+            &mut self.docker,
+            &mut self.dist,
+            &mut self.shader_perf,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            index.set_differential_anchor(lambda);
+        }
+        self
+    }
+
     /// Look up a suggested rule's display info (buggy + fixed patterns).
     ///
     /// `--suggest` prints the `fixed_code` snippet for manual review

@@ -917,15 +917,24 @@ pub fn run_eval_with(config: crate::draft::RetrievalConfig) -> EvalReport {
 ///
 /// Panics if [`LatentMatcher::from_enabled_domains_with`] fails.
 #[must_use]
-#[allow(clippy::too_many_lines)] // the measurement: every labeled span × every axis in one deterministic walk
-#[allow(clippy::cast_precision_loss)] // the vendi mean divides a count — display precision
 pub fn run_eval_inner(
     config: crate::draft::RetrievalConfig,
     rerank: crate::draft::RerankMode,
 ) -> EvalReport {
-    let mut matcher = LatentMatcher::from_enabled_domains_with(config)
-        .expect("build matcher")
-        .with_rerank_mode(rerank);
+    run_eval_on(
+        LatentMatcher::from_enabled_domains_with(config)
+            .expect("build matcher")
+            .with_rerank_mode(rerank),
+    )
+}
+
+/// The eval body over a caller-built matcher — the seam for A/B knobs that
+/// live on the matcher rather than on [`crate::draft::RetrievalConfig`]
+/// (katgpt-rs Issue 882 P0 rider: `with_differential_anchor`).
+#[must_use]
+#[allow(clippy::too_many_lines)] // the measurement: every labeled span × every axis in one deterministic walk
+#[allow(clippy::cast_precision_loss)] // the vendi mean divides a count — display precision
+pub fn run_eval_on(mut matcher: LatentMatcher) -> EvalReport {
     let mut report = EvalReport::default();
     // Issue 121: the Vendi-axis accumulator (feature-gated with the field).
     #[cfg(feature = "set_rerank")]

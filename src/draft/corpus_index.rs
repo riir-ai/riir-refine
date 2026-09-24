@@ -208,7 +208,61 @@ pub struct RuleIndex {
     /// Issue-126 posture is attached (opt-in feature; absent by default).
     #[cfg(feature = "rule_embed_poc")]
     trained: Option<(std::sync::Arc<super::rule_embed::TrainedTables>, f32)>,
+    /// katgpt-rs Issue 882 P0 rider: the per-domain mean-CORPUS anchor ā
+    /// (mean `ModellessEmbedder` direction over every indexed chunk) + the
+    /// correction strength λ. λ = 0 (the build default) skips the
+    /// correction entirely — byte-identical to the uncorrected path.
+    #[cfg(feature = "differential_anchor")]
+    diff_anchor: DiffAnchor,
 }
+
+/// The differential-anchor state carried by a [`RuleIndex`] (katgpt-rs
+/// Issue 882 P0 rider): `q̂ = q − λ·ā` on the 8-D latent query direction.
+#[cfg(feature = "differential_anchor")]
+#[derive(Debug, Clone, Copy)]
+struct DiffAnchor {
+    /// Mean-corpus embedding over the indexed chunks (fit at build).
+    mean: [f32; riir_rag::query::LATENT_DIM],
+    /// Correction strength; `0.0` ⇒ no correction (the kill switch).
+    lambda: f32,
+}
+
+#[cfg(feature = "differential_anchor")]
+impl DiffAnchor {
+    /// Fit the mean-corpus anchor over every chunk the index embeds — the
+    /// SAME texts `index_chunks` embeds, so ā lives in the index's space.
+    fn fit(chunks: &[RawChunk]) -> Self {
+        let mut b = katgpt_core::differential_anchor::AnchorBuilder::new(
+            riir_rag::query::LATENT_DIM,
+        );
+        for c in chunks {
+            b.observe(&ModellessEmbedder.embed(&c.content));
+        }
+        let mut mean = [0.0_f32; riir_rag::query::LATENT_DIM];
+        b.finish_into(&mut mean);
+        Self {
+            mean,
+            lambda: Self::env_lambda(),
+        }
+    }
+
+    /// The same-binary A/B knob (the `RIIR_CLIPPY_NO_TWO_STAGE` precedent):
+    /// `RIIR_CLIPPY_DIFF_ANCHOR_LAMBDA=<f32>` seeds λ at build so gates that
+    /// construct their own matcher (uncontaminated G1, the score bench) can
+    /// be A/B'd without edits. Unset / unparsable / non-finite ⇒ 0.0 (off).
+    fn env_lambda() -> f32 {
+        std::env::var(DIFF_ANCHOR_LAMBDA_ENV)
+            .ok()
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .filter(|l| l.is_finite())
+            .unwrap_or(0.0)
+    }
+}
+
+/// Env knob seeding the differential-anchor λ at index build (see
+/// `DiffAnchor::env_lambda`). Explicit `set_differential_anchor` overrides.
+#[cfg(feature = "differential_anchor")]
+pub const DIFF_ANCHOR_LAMBDA_ENV: &str = "RIIR_CLIPPY_DIFF_ANCHOR_LAMBDA";
 
 impl RuleIndex {
     /// Index `patterns` — one chunk per `(rule_id, pattern_text)`, plus one
@@ -272,6 +326,8 @@ impl RuleIndex {
                 }
             }
         }
+        #[cfg(feature = "differential_anchor")]
+        let diff_anchor = DiffAnchor::fit(&chunks);
         // `with_bm25_tokenizer` MUST precede `index_chunks` — the tokenizer is
         // used at both index and search time, and swapping it after indexing
         // silently desyncs the postings from the queries (substrate contract).
@@ -330,6 +386,8 @@ impl RuleIndex {
                     rule_ids,
                     #[cfg(feature = "rule_embed_poc")]
                     trained: None,
+                    #[cfg(feature = "differential_anchor")]
+                    diff_anchor,
                 });
             }
         }
@@ -346,6 +404,8 @@ impl RuleIndex {
             rule_ids,
             #[cfg(feature = "rule_embed_poc")]
             trained: None,
+            #[cfg(feature = "differential_anchor")]
+            diff_anchor,
         })
     }
 
@@ -371,6 +431,21 @@ impl RuleIndex {
         weight: f32,
     ) {
         self.trained = Some((std::sync::Arc::clone(tables), weight));
+    }
+
+    /// Set the differential-anchor strength λ (katgpt-rs Issue 882 P0
+    /// rider). `0.0` restores the uncorrected path exactly (the correction
+    /// is skipped, not multiplied by zero).
+    #[cfg(feature = "differential_anchor")]
+    pub fn set_differential_anchor(&mut self, lambda: f32) {
+        self.diff_anchor.lambda = lambda;
+    }
+
+    /// The fitted mean-corpus anchor ā (measurement observable).
+    #[cfg(feature = "differential_anchor")]
+    #[must_use]
+    pub fn differential_anchor_mean(&self) -> &[f32; riir_rag::query::LATENT_DIM] {
+        &self.diff_anchor.mean
     }
 
     /// Project the query span through the frozen span tower, when the
@@ -506,7 +581,19 @@ impl RuleIndex {
     /// the Bonsai rerank path is active.
     #[cfg_attr(not(feature = "bonsai_retrieval"), allow(clippy::unused_self))]
     fn query_for(&self, text: &str) -> LatentQuery {
-        let q = LatentQuery::from_direction(ModellessEmbedder.embed(text)).with_text(text);
+        #[allow(unused_mut)] // `mut` is only exercised under `differential_anchor`
+        let mut direction = ModellessEmbedder.embed(text);
+        // katgpt-rs Issue 882 P0 rider: fold the common-mode reference out of
+        // the query (one axpy on a stack array). λ = 0 skips — byte-identical.
+        #[cfg(feature = "differential_anchor")]
+        if self.diff_anchor.lambda != 0.0 {
+            katgpt_core::differential_anchor::correct_query(
+                &mut direction,
+                &self.diff_anchor.mean,
+                self.diff_anchor.lambda,
+            );
+        }
+        let q = LatentQuery::from_direction(direction).with_text(text);
         #[cfg(feature = "bonsai_retrieval")]
         if let Some(bonsai) = &self.dense {
             use riir_rag::DenseEmbedder;
