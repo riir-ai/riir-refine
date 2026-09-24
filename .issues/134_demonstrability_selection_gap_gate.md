@@ -1,6 +1,6 @@
 # Issue 134: Demonstrability selection-gap gate — pool depth pays where selection discriminates
 
-**Status:** Active — T1 LANDED 2026-09-24 (measurement column live; see the T1 note + commit); T2–T4 unstarted
+**Status:** Active — T1 LANDED 2026-09-24 at `c38562213` (measurement column live; T2–T4 unstarted; citation qualifier rider `1b6d4fa4e`)
 **Source:** [katgpt-rs Research 585](../../katgpt-rs/.research/585_SAT_Teamwork_Strategy_Banks_Demonstrability.md) — SAT [arXiv:2609.22682]: demonstrability (balanced discriminability of correct vs incorrect artifacts) tracks where multi-candidate collaboration beats the best member at ρ=0.90 across 8 benchmarks; generation-vs-selection separation (coverage 87.9% vs accuracy 72.8% on their knowledge suite) shows selection is the bottleneck exactly where discriminability is low.
 
 ## Mechanism
