@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 153 entries across 12 categories (allocation 28, io 26, concurrency 23,
-//! complexity 22, layout 12, iterators 10, simd 9, arithmetic 8, caching 7,
-//! dispatch 5, bevy 2, wasm 1). 96 are benchable; 57 are honestly
+//! 155 entries across 12 categories (allocation 28, io 26, concurrency 23,
+//! complexity 24, layout 12, iterators 10, simd 9, arithmetic 8, caching 7,
+//! dispatch 5, bevy 2, wasm 1). 96 are benchable; 59 are honestly
 //! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) and again by the 09-24 housekeeping pass
@@ -397,11 +397,14 @@ mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 153 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 155 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (28 rules — Batch 173 added the two
-/// serde zero-copy rules); concurrency has 23
+/// serde zero-copy rules); complexity has 24 (the measurement-honesty family
+/// lives here — B109 the work, the 2609.04040 rule the design, B115 the
+/// config, Batch 177 the comparator (A/A control) + the observer-consumer
+/// bias); concurrency has 23
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 135 added the zero-cost atomic conversion + the
 /// zero-sync partition; Batch 136 added the dynamic-work ladder + the

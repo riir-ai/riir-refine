@@ -1,6 +1,7 @@
 # Research 207 — vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe distill verdict
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD — mined as **Batch 177** (2026-09-25, Plan 170). Mine-time
+verification appendix at the end of this note.
 
 **Verdict:** **YES, B — corpus** (route `kernel_opt`, with one `rust_perf`
 measurement-honesty member) **/ LANE INTEL HIGH — riir-infer quantization zoo**
@@ -132,6 +133,83 @@ decode bound*. Both distinct.
   allocation failures in the kernel log, earlyoom's 3% trigger, a 0.93 attempt
   killed by the watchdog during load) — box-specific operational tuning.
   **KILL as a rule**, cite in the lane note.
+
+## Mine-time verification appendix (Batch 177, 2026-09-25)
+
+**Landed:** 6 rules + 1 rider (the plan's T4 fork resolved to ONE rule for
+candidate #2 — see the dedup catch below).
+
+- **#1 `aa-control-prices-the-fidelity-instrument`** — landed `rust_perf`
+  (complexity, NotBenchable annotation). Quotes re-verified at the pin:
+  the README measurement section + `probe_greedy.py` (still in-tree, still
+  marked as superseded).
+- **#2 `quantized-pack-residency-audit-unquantized-minority-first`** —
+  landed `kernel_opt` (N) as **ONE rule, not two**. The T2 re-verification
+  (grep under both vocabularies at current corpus HEAD, per the plan's
+  mandate) caught what the verdict's phrase-grep could not see:
+  `factor-affine-quant-scale-out-of-element-loop` (entries_gpu_01, Batch 18)
+  IS the loop-stage half of the exactness placement — the verdict probed
+  `scale.*factors out` (0 hits) while the rule's ID spells the mechanism.
+  Resolution per the plan's T4 fork: the AUDIT discipline is the rule; the
+  scale placement rides as its fix-regime clause with an explicit kinship
+  row (format-stage CREATES the constant vs loop-stage EXPLOITS it — they
+  compose). New quotes verified from the patch body this batch: the
+  in-code factors-out comment with its honest fp32-rounding caveat (parity
+  MEASURED at 1-2e-4/1e-7, greedy diverges from fp16 at token 157/34/14 —
+  never bit-identity), the 8-byte-int8-load = same-8-wide-step note (the
+  real lane-aligned reason int6 lost), the two scale granularities (per-row
+  `fn` / per-channel `up`, each constant along ITS contracted dim, the
+  `_quantize_int8` docstring verbatim), the mixq int8-sim acceptance floor
+  (58-63% vs 63%), and the i8 A/B logs re-read (`i8_int8-on_dds_code.log`
+  78.95 t/s @ 72.93% vs off 73.80 @ 73.12% — the commit body's rounded
+  74.0→79.1 / 73.1→72.9 exactly).
+- **#3 `bpw-reduction-buys-memory-not-decode-when-dequant-bound`** — landed
+  `kernel_opt` (N). Numbers re-verified against `docs/benchmark-data.json`
+  (schema v2: context_curve 52.22 @3060 / 50.53 @24354; 79 GiB resident;
+  MemAvailable 17-18).
+- **#4 `host-gather-splits-the-graph-and-the-split-is-the-separable-price`**
+  — landed `kernel_opt` (D).
+- **#5 `asymmetric-draft-verify-precision-escapes-the-coverage-guard`** —
+  landed as the **rider on `readout-trim-needs-committed-id-coverage`**
+  (entries_gpu_26), per the verdict's own rule-vs-rider fork: the landed
+  rule's guard is economic (forced rejects vs trim savings) and this names
+  the structural condition under which it does not bind. Patch 0002 read
+  in FULL this batch: the fail-closed `_pruned_head_cache = False` guards
+  (non-trellis / biased / scale-free heads take the full path) verified in
+  the diff body.
+- **#6 `observer-sync-bias-differs-by-change-class`** — landed `rust_perf`
+  (complexity, NotBenchable). The tuning/README.md header quote verified
+  verbatim at the pin, plus the rider clause the verdict also carried (the
+  sampler-pinning discipline: `temperature-0.8 moves MTP acceptance 58-75%
+  run to run`) folded into the annotation.
+- **#7 `unified-memory-page-cache-is-device-allocatable`** — landed `kernel_opt`
+  (D) as a RULE, not a rider: the 4 existing `page.cache`/`fadvise` hits were
+  READ at current HEAD (B123 read-ahead duplication, B94 cacheability-gated
+  coalescing, B118 parallel cold page-ins, + mmap/prefault mentions) — none
+  carries the device-allocatable framing; `drop-model-cache.sh`'s header
+  comment verified verbatim (the mem_get_info() refusal + the 9.5/2.5 min
+  cells + the >=8 s workspace race).
+
+**Dropped as adjudicated** (no changes): patch 0003's three sync removals
+(pinned staging = the 271-hit pinned family; batched verify + device-resident
+ids = B25/B26/B27), the levers-that-measured-empty table, the vLLM plumbing,
+`rename_unsharded_ngram.py`, the gpu-memory-utilization lore.
+
+**Quotes that failed re-verification:** none — every load-bearing quote
+re-verified at `e0ebee8d`. The repo moved +2 restructure commits past the
+pin (TabbyAPI-primary, vLLM to plugin dir; no measurement content in the
+subjects) — the pin proved load-bearing exactly as the verdict warned.
+
+**Gates:** batch177 presence/concepts/parses ×3 (kernel) + presence+annotation
+(rust_perf) green; lib default 2286/0; kernel_heal 2645/0; kernel_heal+latent
+2818/0; retrieval floors 21/21 (209 s); clippy `-D warnings` clean both
+postures (4 doc_markdown backticks healed mechanically via `cargo heal`, 4
+edits compile-gated); score-bench row #165 heal 0.96363634 / created 0.0182
+— byte-identical to B174's baseline (the clippy corpus untouched; no
+freeze-table regen owed). Pins walked: kernel 627→631 (router + per-category
+table D 136→138 / N 44→46 + two 627s inside legacy batch tests — the B129
+lesson again), rust_perf 153→155 (total + without_spec 57→59 + three
+annotated-count 98→100 sites + header + build doc).
 
 ## GOAT candidate test (#1, `aa-control-prices-the-fidelity-instrument`)
 

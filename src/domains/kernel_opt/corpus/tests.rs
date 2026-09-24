@@ -100,10 +100,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 118 (6): antirez/ds4 PR #991 Qwen3.8-Flash-Next distill (Research 142 / Plan 097) -- role-scoped-store-must-match-compute-guard (A, the correctness lead: unguarded store on a role-colliding row_half -> EXACTLY-UNIFORM softmax, invisible four ways, SIX sessions; gate batch118_unguarded_store_yields_uniform_softmax), tile-amplification-precedes-staging-pass (H, converged by both lanes), operand-precision-gated-by-consumer-invariance (N, GOAT-grade pass/fail arms + Q-split null ablation; closure MODEL-SCOPED), compute-role-split-by-accumulator-pressure (A, 2 score + 4 PV simdgroups), speculation-scheduler-break-even-flip (D, +3.8% plain decode -> 202 bypass vs 62; 110% margin doc-only), running-threshold-prune-compaction-aliasing-guard (I, memcmp == 0 survives; in-place compaction aliasing guard) + parallel-disjoint-pread-hides-cold-page-latency (rust_perf io) + 7 riders (B24/B95/B77/B57/stripe-semaphore/block-reduction gate batch118_indexed_shuffle_ladders_must_read_unmutated_partials/smem-envelope); source ivanfioravanti/ds4-metal branch qwen3.8-flash-next @ 236cb2a5 (MIT; force-pushed once, HEAD re-verified == pin).
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     // Batch 170 (7): mlxfast-gemma4 successor-arena pack (Research 198 / Plan 162) -- softmax-stats-precompute-exp-in-gemm-loader (C +1, at1: P never materialized, per-row stats 8 B/row, exp regenerated in the P*V GEMM's A-loader bit-identically, 4->2 passes over the score rectangle), fixed-ref-softmax-decode-walk (F +1, SLIDE-SOFTREF: prologue-pinned self-score reference replaces online max/rescale/branch, bounded divergence + span-0 bit-exact control), scale-identity-elide-in-framework-graph-transcription (B +1, QSCALE-ELIDE: delete the scale==1.0 multiply when transcribing the framework fallback graph -- 232 dispatches / 1.11e9 elements / ~4.4 GB of identity per prefill step), sentinel-operand-encoding-routes-fused-kernel (D +1, CAUSAL-CLOAD: dispatch decision encoded in an operand's shape signature -- stride kL+1 synthesis + the ldc==4/beta=-0.0 carry -- with graceful degradation on unpatched arms), tier-mismatched-grid-pruning-relaunch (E +1, LMH-001: 196608 of 262144 launched threadgroups exist only to early-return; relaunch the SAME kernel at the tier's claimed extent, bit-identical), compile-out-rare-paths-register-worst-case (E +1, RUN-CAP: register allocation is worst-case across inlined paths; cap the ladder at the measured run-length distribution, +9.12% s/token tokens bit-identical), batch-width-aware-partition-shrink (K +1, PARTITION: stock 1-row partition heuristic over-partitions the 8-wide batch ~8x; min(batch, stock) + the 1 MB-in-flight DRAM argument + merge-side simdgroup packing); source Layr-Labs/mlxfast-gemma4-26b-a4b-engine @ 27c821c4 (MIT; all 20 quote sites re-verified at the pin at authoring time) + 9 riders (B63-adjacent MMA bias-as-K-slot-64; B98 quad u32 load arm; B25-family LGH plane elision; B115-family teacher-forced-replay instrument; gate-up strided-view hazard; B100 write-fence graph spelling; B111-register-pipeline prefetch phase-multiplex negative; row-packing kL-keyed rows-per-TG table; B63 pointer-chain scatter-hoist store-side twin).
+    // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        627,
-        "kernel batches through Batch 170 should have 627 rules"
+        631,
+        "kernel batches through Batch 177 should have 631 rules"
     );
 }
 
@@ -5397,12 +5398,12 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 170).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 177).
     let expected = [
         (KernelCategory::MemoryAccess, 134),
         (KernelCategory::Compute, 67),
         (KernelCategory::Fusion, 47),
-        (KernelCategory::Dispatch, 136),
+        (KernelCategory::Dispatch, 138),
         (KernelCategory::Parallelism, 59),
         (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
@@ -5412,7 +5413,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 44),
+        (KernelCategory::DtypeAlignment, 46),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5427,9 +5428,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 627.
+    // Sum must equal 631.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 627, "Plan 003: category totals must sum to 627");
+    assert_eq!(total, 631, "Plan 003: category totals must sum to 631");
 }
 
 #[test]
@@ -5440,8 +5441,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 627,
-        "Plan 003: grouped corpus has {total} rules, expected 627"
+        total, 631,
+        "Plan 003: grouped corpus has {total} rules, expected 631"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9548,8 +9549,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        627,
-        "Batch 170: corpus should have 627 rules"
+        631,
+        "Batch 177: corpus should have 631 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12495,6 +12496,148 @@ fn batch170_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-170 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch177_rules_present() {
+    // Batch 177 (the EXL3/GB10 serving-recipe distill -- Plan 170 /
+    // Research 207): 4 kernel_opt rules (N +2: the residency audit + the
+    // bpw-axis rule; D +2: the graph-split separable price + the
+    // unified-memory page-cache rule) + the readout-trim scope rider on
+    // entries_gpu_26, distilled from
+    // vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT;
+    // provenance three-deep: vcruz305/exllamav3 PR #2 -> turboderp-org/
+    // exllamav3 -> QTIP arXiv:2406.11235). Executed AHEAD of the
+    // event-blocked B176 FWHT rider (#29096 frozen through the 35th
+    // check). The T2 re-verification caught the verdict's phrase-grep miss
+    // (factor-affine-quant-scale-out-of-element-loop is candidate #2's
+    // loop-stage half), so #2 lands as ONE rule with the placement as its
+    // fix-regime clause. All quotes re-verified verbatim at the pin THIS
+    // batch; GB10 numbers are source-reported, never ours.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "quantized-pack-residency-audit-unquantized-minority-first",
+        "bpw-reduction-buys-memory-not-decode-when-dequant-bound",
+        "host-gather-splits-the-graph-and-the-split-is-the-separable-price",
+        "unified-memory-page-cache-is-device-allocatable",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-177 rule '{id}' missing from corpus"
+        );
+    }
+    // The rider: the scope correction must be IN the landed rule text.
+    let trim = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "readout-trim-needs-committed-id-coverage")
+        .expect("readout-trim rule present");
+    assert!(
+        trim.gpu_concept.contains("SCOPE CORRECTION (Batch 177 rider"),
+        "batch-177 readout-trim scope rider missing"
+    );
+    assert!(trim.gpu_concept.contains("becomes a rejection, not an error"));
+}
+
+#[test]
+fn batch177_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept text
+    // (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "quantized-pack-residency-audit-unquantized-minority-first",
+            &[
+                "Run this first on any new pack",
+                "CONSTANT ALONG THAT TENSOR'S CONTRACTED DIM",
+                "sum_k s[k] * (q[k] * scale) == scale * sum_k s[k] * q[k]",
+                "ONLY THE WEIGHT LOAD CHANGES",
+                "int4 sim COLLAPSED acceptance to 20%",
+                "REJECTED for lane-aligned loads",
+                "the same 8-wide step as the half kernel's 16-byte loads",
+                "MEASURED, not bit-identity",
+                "pending a second box's numbers",
+                "factor-affine-quant-scale-out-of-element-loop",
+            ],
+        ),
+        (
+            "bpw-reduction-buys-memory-not-decode-when-dequant-bound",
+            &[
+                "per-weight dequant cost barely grows with K",
+                "INVERTS",
+                "52.22 -> 48.70",
+                "context ceiling HALVED 262,144 -> 131,072",
+                "acceptance 68% -> 74%",
+                "a SPECULATION win, not a bandwidth one",
+                "ANTI-REGIME: bandwidth-bound decode",
+            ],
+        ),
+        (
+            "host-gather-splits-the-graph-and-the-split-is-the-separable-price",
+            &[
+                "PRICED INDEPENDENTLY",
+                "PIECEWISE ALONE measured 5-7%",
+                "the RESIDUAL, never the whole",
+                "FIRST-TOUCH page in from NVMe",
+                "+15 GiB headroom",
+            ],
+        ),
+        (
+            "unified-memory-page-cache-is-device-allocatable",
+            &[
+                "cached file pages count against GPU-allocatable RAM",
+                "refuses to load if mem_get_info() looks tight",
+                "9.5 min from NVMe vs 2.5 min from page cache",
+                "DROP DELIBERATELY AT THE RIGHT MOMENT",
+                ">= 8 s apart",
+                "never to minimize or maximize blanketly",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-177 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                entry.gpu_concept.contains(needle),
+                "batch-177 {id} concept lost phrase: {needle}"
+            );
+        }
+    }
+}
+
+#[test]
+fn batch177_pseudocode_parses() {
+    // G1 for Batch 177: syn-parse gate (the four EXL3/GB10 rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "quantized-pack-residency-audit-unquantized-minority-first",
+        "bpw-reduction-buys-memory-not-decode-when-dequant-bound",
+        "host-gather-splits-the-graph-and-the-split-is-the-separable-price",
+        "unified-memory-page-cache-is-device-allocatable",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-177 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-177 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-177 opt_pattern for '{id}' must parse"
         );
     }
 }

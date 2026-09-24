@@ -23,9 +23,24 @@
 
 ## Corpus
 
-153 rules across 12 categories (rust-optimize skill checklist +
+155 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 153 rules — Batch 174 (2026-09-24,
+profiling guide, Research 032; **now 155 rules — Batch 177 (2026-09-25,
+Plan 170 / Research 207 — the EXL3/GB10 serving-recipe distill): the
+measurement-honesty family grows to four members with the pair
+`aa-control-prices-the-fidelity-instrument` (#3, the COMPARATOR — the A/A
+control priced the text-diff fidelity gate at ZERO power: the engine is
+non-deterministic at temp 0, and spec-on vs spec-on scored the SAME 2-of-6
+as spec-on vs spec-off; the fallback is acceptance counters, and the
+divergence is prompt-class-conditional so a constrained-only suite reports
+a clean instrument with no power; NotBenchable, the B109 precedent) +
+`observer-sync-bias-differs-by-change-class` (#4, the OBSERVER-CONSUMER
+interface — the in-process harness's per-token console write is a host sync
+whose bias SCALES WITH CHANGE CLASS ~4 tok/s kernel / ~10 host-side, so it
+does NOT cancel in ratios; quote the harness matching the deployed consumer
+and say which one you quoted; the TTFT-absorbs-k+1 clause licenses ratios
+never absolutes; NotBenchable); both complexity, suggestion-only, annotated;
+Batch 174 (2026-09-24,
 Plan 168 / Research 205 — the cubecl/bevy merged-fix distill): the lead
 `deferred-command-flush-hoist-out-of-batch-loop` (concurrency — MEASURED
 ParetoDominant 3/0/0 at 21.3×/13.3×/16.5× n=1k/10k/100k, verdict-stable ×2,
@@ -790,7 +805,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 8 verbatim entry slices (`entries_01..08`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 153 rules / 96 `BenchSpec`s — Batch 174 (the cubecl/bevy merged-fix distill): 1 MEASURED ParetoDominant benchable rule (`deferred-command-flush-hoist-out-of-batch-loop` concurrency, +1 BenchSpec) + 1 NotBenchable suggestion-only rule (`host-lock-across-reentrant-blocking-call` concurrency — deadlock class); Batch 173 (the serde zero-copy family distill): 2 MEASURED ParetoDominant suggest-only rules (`serde-borrow-deserialize` + `rawvalue-passthrough-defer-parse`, +2 BenchSpecs — the corpus's first dedicated serde family); Batch 172 (the mezura distill): 1 MEASURED ParetoDominant benchable rule (`dual-mask-fused-block-scan` simd — the corpus's first hand-SIMD `std::arch` entry with AVX2+NEON arms, +1 BenchSpec) + 3 NotBenchable suggestion-only rules (mmap-settled-size-gated-read io + steal-batch-not-per-item concurrency + nonblocking-open-for-head-probes io), no new BenchSpecs beyond the lead + 2 riders (byte-find-position-to-memchr anchor-cover, reuse-allocation-clear retention clamp) + 1 drop; Batch 154 (the tokio upstream-surface refresh): 3 NotBenchable suggestion-only rules (write-vectored-capability-flag io + oneshot-response-send-unwrap-panics + actor-bounded-channel-cycle-deadlock concurrency), no new BenchSpecs + 4 annotation folds (all three new rules annotated); Batch 153 (the async-blocking distill): 3 NotBenchable suggestion-only rules (blocking-sleep-in-async, rayon-bridge-oneshot concurrency + tcp-nodelay io), no new BenchSpecs + 5 annotation folds (async-yield-point annotated, previously None); Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
+- [`src/domains/rust_perf/corpus/`](../../src/domains/rust_perf/corpus/) — `build_perf_seed_corpus()` in `mod.rs` + 8 verbatim entry slices (`entries_01..08`, one `BenchSpec` helper set per slice) + `tests.rs` — the 2026-09-10 scripted split of the former `corpus.rs` monolith (`scripts/split_rust_perf_corpus.py`; entry order + BLAKE3 commitment unchanged at split time; now 155 rules / 96 `BenchSpec`s — Batch 177 (the EXL3/GB10 serving-recipe distill): 2 NotBenchable suggestion-only complexity rules (the measurement-honesty pair, no new BenchSpecs); Batch 174 (the cubecl/bevy merged-fix distill): 1 MEASURED ParetoDominant benchable rule (`deferred-command-flush-hoist-out-of-batch-loop` concurrency, +1 BenchSpec) + 1 NotBenchable suggestion-only rule (`host-lock-across-reentrant-blocking-call` concurrency — deadlock class); Batch 173 (the serde zero-copy family distill): 2 MEASURED ParetoDominant suggest-only rules (`serde-borrow-deserialize` + `rawvalue-passthrough-defer-parse`, +2 BenchSpecs — the corpus's first dedicated serde family); Batch 172 (the mezura distill): 1 MEASURED ParetoDominant benchable rule (`dual-mask-fused-block-scan` simd — the corpus's first hand-SIMD `std::arch` entry with AVX2+NEON arms, +1 BenchSpec) + 3 NotBenchable suggestion-only rules (mmap-settled-size-gated-read io + steal-batch-not-per-item concurrency + nonblocking-open-for-head-probes io), no new BenchSpecs beyond the lead + 2 riders (byte-find-position-to-memchr anchor-cover, reuse-allocation-clear retention clamp) + 1 drop; Batch 154 (the tokio upstream-surface refresh): 3 NotBenchable suggestion-only rules (write-vectored-capability-flag io + oneshot-response-send-unwrap-panics + actor-bounded-channel-cycle-deadlock concurrency), no new BenchSpecs + 4 annotation folds (all three new rules annotated); Batch 153 (the async-blocking distill): 3 NotBenchable suggestion-only rules (blocking-sleep-in-async, rayon-bridge-oneshot concurrency + tcp-nodelay io), no new BenchSpecs + 5 annotation folds (async-yield-point annotated, previously None); Batch 152 (the dial9 tokio distill): 3 NotBenchable suggestion-only concurrency rules, no new BenchSpecs; Batch 147 (the staged agave distill): 1 measured-ParetoDominant benchable allocation rule + 1 measured-ParetoDominated rule demoted to suggestion-only WITH its negative as the pinned anti-regime witness + 3 NotBenchable suggestion-only rules)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)

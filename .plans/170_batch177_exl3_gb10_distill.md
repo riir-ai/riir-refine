@@ -1,6 +1,12 @@
 # Plan 170 — Batch 177: the EXL3/GB10 serving-recipe distill (Research 207)
 
-**Status:** IN FLIGHT — claimed 2026-09-25 ~06:25 +07 (shikuwa/4090 session; executed AHEAD of the event-blocked B176 FWHT rider — #29096 frozen through the 35th check, cadence slot open post-B175, one-batch-per-day holds). T1–T12 executing; no corpus edit yet.
+**Status:** EXECUTED 2026-09-25 (shikuwa/4090 session) — fired AHEAD of the
+event-blocked B176 FWHT rider (#29096 frozen through the 35th check;
+cadence slot open post-B175, one-batch-per-day holds). **6 rules + 1 rider
+landed** (T4 fork resolved: #2 = ONE rule — the T2 re-verification caught
+`factor-affine-quant-scale-out-of-element-loop` as the loop-stage half of
+#2's placement, which the verdict's phrase-grep could not see). All gates
+green; close-out in `.distill/001` + Research 207 appendix.
 
 **Source pin:** `vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @
 e0ebee8ddc4391b5e66d86fdce993b0756e00986` (MIT). Verdict, dedup evidence,
@@ -20,51 +26,62 @@ domain — the B109/Batch-136 precedent, an annotation and not a demotion).
 
 ## Tasks
 
-- [ ] **T1 — Re-clone at the pin and verify.** `git clone --depth 1` into
-  `.raw/qwen38-flash-next-exl3-dgx-spark`; `rev-parse HEAD` must equal
-  `e0ebee8d…`; confirm LICENSE is MIT. **Any stale `.raw/` entry from the
-  verdict session is UNTRUSTED — delete and re-clone.** The verdict session's
-  clone was removed at landing by design.
-- [ ] **T2 — Dedup RE-VERIFICATION (not a re-read of Research 207's table).**
-  Re-grep every candidate under both vocabularies at current corpus HEAD; the
-  corpus moves between verdict and batch. Three rows need a READ, not a count:
-  (a) the 4 `page.cache`/`fadvise` hits vs candidate #7 — if the existing
-  `rust_perf` io entries already carry the device-allocatable framing, #7 is a
-  rider or a drop; (b) the 68 `pinned` hits vs the patch-0003 drop row —
-  confirm the drop; (c) `readout-trim-needs-committed-id-coverage`
-  (`entries_gpu_26.rs`) vs candidate #5 — read the landed text and decide
-  **rule vs rider** on its scope-correction claim.
-- [ ] **T3 — Read the files the verdict did NOT grade.** `hc_mix.cu` full body
-  (+256 ln; only the header and commit body were read), `docs/benchmark-data.json`,
-  the `logs/` matrices backing the 4.05-bpw and PIECEWISE tables. Nothing
-  ungraded enters the corpus.
-- [ ] **T4 — Adjudicate candidate #2's split.** It may be TWO rules — the
-  `(class, dtype)` residency audit discipline, and the scale-factors-out-of-the-
-  k-loop exactness placement — or one. Decide with the reason written down.
-- [ ] **T5 — Author entries with ORIGINAL fixtures.** No CUDA, no Python, no
-  README prose pasted into `buggy_code`/`fixed_code`. Minimal reproductions in
-  the corpus's own shape; measured numbers may be QUOTED in `gpu_concept` with
-  the pin, as the B115/B130 entries do.
-- [ ] **T6 — Annotate the NotBenchable members.** #1 and #6 take
-  `bench_spec: None` + a `context_notes` annotation naming the domain reason
-  (no latency quantity to ratio) and the machine-checkable surrogate (the A/A
-  disagreement rate; the harness-class disclosure). Cite B109 as the family
-  precedent, Batch 136 as the landing precedent.
-- [ ] **T7 — Standing gates.** `batch177` gates + lib default + kernel_heal +
-  kernel_heal+latent + retrieval floors + clippy 0 across default/kernel_heal
-  + score-bench. Per the B121/B130 close-out shape.
-- [ ] **T8 — Count pins walked.** Corpus totals, per-category counts, the
-  category comment pins, member lists, and the annotated-rule count — both
-  domains, since this batch lands in two. **The B129 lesson: the walk missed
-  its own comment pins.**
-- [ ] **T9 — Research 207 → `Status: RECORD`** with a mine-time verification
-  appendix: which candidates landed, which were falsified and why, and any quote
-  that failed re-verification at the pin.
-- [ ] **T10 — Queue snapshot close-out row** in `.distill/001_mining_queue_snapshot.md`.
-- [ ] **T11 — Cleanup.** `rm -rf .raw/qwen38-flash-next-exl3-dgx-spark`. *A
-  landed batch with a live `.raw/` entry is an unfinished batch.*
-- [ ] **T12 — Commit + push** on `develop`, `feat:` prefix, with the
-  `Session:` marker (shared-worktree attribution discipline).
+- [x] **T1 — Re-clone at the pin and verify.** DONE — HEAD == `e0ebee8d`, MIT
+  LICENSE verified; the repo moved +2 restructure commits past the pin
+  (TabbyAPI-primary; no measurement content) — fetched the pin sha directly,
+  lane intel recorded.
+- [x] **T2 — Dedup RE-VERIFICATION.** DONE + ONE CATCH: (a) the 4 `page.cache`/
+  `fadvise` hits READ — none carries the device-allocatable framing → #7
+  lands as a rule; (b) `pinned` now 271 hits — the patch-0003 drop CONFIRMED;
+  (c) `readout-trim…` READ → #5 = rider. **THE CATCH:** `factor-affine-quant-
+  scale-out-of-element-loop` (entries_gpu_01) is #2's loop-stage half — the
+  verdict's `scale.*factors out` grep (0 hits) could not see a rule whose ID
+  IS the mechanism; recorded as the T4 input.
+- [x] **T3 — Read the files the verdict did NOT grade.** DONE — patch 0001 in
+  full (the in-code factors-out comment + its fp32 caveat; the 8-byte-load
+  note; both scale granularities; the launcher `TORCH_CHECK` guards), patch
+  0002 in full (the fail-closed `_pruned_head_cache=False` guards), patch
+  0003 in full (the batched-verify eligibility predicate — no past-id
+  penalties/filters/forced tokens), `docs/benchmark-data.json` (schema v2
+  structure + context_curve), the `logs/` inventory + the i8 A/B pair
+  re-read (78.95/72.93% on vs 73.80/73.12% off — the commit body's rounding
+  exact), `tuning/README.md` header (the #6 quote + the sampler-pinning
+  rider), `drop-model-cache.sh` (the #7 framing verbatim).
+- [x] **T4 — Adjudicate candidate #2's split.** DECIDED: **ONE rule**. Reason:
+  the T2 re-verification found the placement's loop-stage mechanism ALREADY
+  SHIPPED (`factor-affine-quant-scale-out-of-element-loop`, Batch 18) — landing
+  it separately would be a near-duplicate; the two halves also have different
+  fix-spaces (run-an-audit-first vs apply-scale-outside-kloop) but the placement
+  is the audit rule's natural FIX REGIME, so it rides as a clause + a kinship
+  row (format-stage creates the constant, loop-stage exploits it — compose).
+- [x] **T5 — Author entries with ORIGINAL fixtures.** DONE — 4 kernel_opt
+  rules (`entries_gpu_47.rs`, Rust pseudocode fixtures, measured numbers
+  quoted in `gpu_concept` with the pin) + 2 rust_perf rules (`entries_08.rs`,
+  original harness-shape fixtures).
+- [x] **T6 — Annotate the NotBenchable members.** DONE — #1 + #6 carry
+  `bench_spec: None` + `context_notes` naming the domain reason (no latency
+  quantity to ratio) + the machine-checkable surrogate (the A/A disagreement
+  rate; the harness-class disclosure), citing B109/Batch-136.
+- [x] **T7 — Standing gates.** ALL GREEN — batch177 gates ×4; lib default
+  2286/0; kernel_heal 2645/0; kernel_heal+latent 2818/0; retrieval floors
+  21/21; clippy `-D warnings` clean both postures (4 doc_markdown healed
+  mechanically); score-bench #165 heal 0.96363634 FLAT (clippy corpus
+  untouched — no freeze regen owed).
+- [x] **T8 — Count pins walked.** DONE — kernel 627→631 (router + per-category
+  table D 136→138 / N 44→46 + TWO 627s hiding inside legacy batch tests at
+  5443/9550 — the B129 lesson again) + the batch-ledger comment row;
+  rust_perf 153→155 (total pin + without_spec 57→59 + THREE 98→100
+  annotated-count sites + corpus header + build doc + entries_08 header);
+  AGENTS.md ×3 + kernel_opt.md + README.md + rust_perf.md ×3.
+- [x] **T9 — Research 207 → `Status: RECORD`** with the mine-time verification
+  appendix (landed/falsified/quote-re-verification + the dedup catch).
+- [x] **T10 — Queue snapshot close-out row** in `.distill/001_mining_queue_snapshot.md`.
+- [x] **T11 — Cleanup.** `rm -rf .raw/qwen38-flash-next-exl3-dgx-spark` (done at
+  commit time). NOTE: `.raw/exllamav3` (cloned 2026-09-24 12:48 +07, turboderp
+  master @ 6b84a21) is NOT this batch's and its owner is unverifiable from
+  mtimes — left in place, flagged for its owner.
+- [x] **T12 — Commit + push** on `develop`, `feat:` prefix, with the
+  `Session:` marker.
 
 ## Deferred / not in this batch
 

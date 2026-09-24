@@ -1932,6 +1932,7 @@ mod entries_gpu_43;
 mod entries_gpu_44;
 mod entries_gpu_45;
 mod entries_gpu_46;
+mod entries_gpu_47;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1954,6 +1955,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_44::entries());
     entries.extend(entries_gpu_45::entries());
     entries.extend(entries_gpu_46::entries());
+    entries.extend(entries_gpu_47::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2282,7 +2284,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-stats-precompute-exp-in-gemm-loader",
         ],
     ),
-    // D: Dispatch patterns (136 rules)
+    // D: Dispatch patterns (138 rules; Batch 177 +2: the host-gather graph
+    // split + the unified-memory page-cache rule)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2423,6 +2426,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-time-dense-repack-keyed-sync-publish",
             "sustained-load-drift-interleave-protocol",
             "sentinel-operand-encoding-routes-fused-kernel",
+            "host-gather-splits-the-graph-and-the-split-is-the-separable-price",
+            "unified-memory-page-cache-is-device-allocatable",
         ],
     ),
     // E: Parallelism patterns (59 rules)
@@ -2683,7 +2688,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pipeline-cache-key-covers-every-function-constant",
         ],
     ),
-    // N: dtype + alignment specialization (44 rules)
+    // N: dtype + alignment specialization (46 rules; Batch 177 +2: the
+    // residency-audit + bpw-axis rules, both quantization-format decisions)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2732,6 +2738,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "quantize-scale-math-wide-precision-denorm-safe",
             "block-quant-weight-pad-never-extends-activations",
             "fast-accumulate-periodic-promote-bounded-error",
+            "quantized-pack-residency-audit-unquantized-minority-first",
+            "bpw-reduction-buys-memory-not-decode-when-dequant-bound",
         ],
     ),
     // O: IR strength reduction (4 rules)

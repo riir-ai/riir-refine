@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 153); // Batch 174 (host-lock + flush-hoist) 151 → 153
+    assert_eq!(corpus.entries.len(), 155); // Batch 177 (A/A control + observer-sync bias) 153 → 155
     // Per-category standing counts (Batch 174 landing): allocation 28, io 26,
     // concurrency 23, complexity 22, layout 12, iterators 10, simd 9,
     // arithmetic 8, caching 7, dispatch 5, bevy 2, wasm 1 — asserted via the
@@ -1762,7 +1762,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 57); // 153 total − 96 benchable — Batch 174 added the host-lock rule (NotBenchable, deadlock class); the flush-hoist is benchable
+    assert_eq!(without_spec.len(), 59); // 155 total − 96 benchable — Batch 177 added BOTH new rules as NotBenchable (the measurement-honesty family, members #3 + #4)
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1845,7 +1845,9 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 98, "expected 98 context-annotated rules (Batch 174 added the host-lock + flush-hoist annotations; Batch 173 added the two serde zero-copy annotations; Batch 172 added the four mezura annotations and flipped byte-find-position-to-memchr via the anchor-cover rider)");
+    assert_eq!(annotated.len(), 100, "expected 100 context-annotated rules (Batch 174: 96 → 98 the host-lock + flush-hoist; Batch 177: 98 → 100 the measurement-honesty pair — A/A control + observer-sync bias)");
+    assert!(annotated.contains(&"aa-control-prices-the-fidelity-instrument")); // Batch 177 — NotBenchable measurement-honesty #3 (the comparator)
+    assert!(annotated.contains(&"observer-sync-bias-differs-by-change-class")); // Batch 177 — NotBenchable measurement-honesty #4 (the observer-consumer bias)
     assert!(annotated.contains(&"serde-borrow-deserialize")); // Batch 173 — the escape-regime + from_reader anti-regime annotation
     assert!(annotated.contains(&"rawvalue-passthrough-defer-parse")); // Batch 173 — the behavioral-delta (formatting retention) + typed-consumer anti-regime annotation
     assert!(annotated.contains(&"host-lock-across-reentrant-blocking-call")); // Batch 174 — NotBenchable deadlock-class annotation (decide-under-lock/drop/act)
@@ -1918,7 +1920,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 55, "expected 55 unannotated rules (153 total - 98 annotated; Batch 173 + Batch 174 added only ANNOTATED rules — the unannotated side is unmoved)");
+    assert_eq!(unannotated, 55, "expected 55 unannotated rules (155 total - 100 annotated; Batch 173/174/177 added only ANNOTATED rules — the unannotated side is unmoved)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1930,7 +1932,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 98); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98 (the host-lock + flush-hoist annotations)
+    assert_eq!(annotated, 100); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 (the measurement-honesty pair)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -1971,7 +1973,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 98, "expected 98 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98 — the host-lock + flush-hoist annotations)");
+    assert_eq!(annotated.len(), 100, "expected 100 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 — the measurement-honesty pair)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2010,7 +2012,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules (153 total − 98 annotated, Batch 174 added 2 annotated concurrency rules)");
+    assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules (155 total − 100 annotated, Batch 177 added 2 annotated complexity rules)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -5085,6 +5087,67 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
             scan_finder.scan(&buf),
             naive(&buf, &scan_needles),
             "end-to-end divergence at len={len}"
+        );
+    }
+}
+
+#[test]
+fn batch177_rules_present_and_annotated() {
+    // The EXL3/GB10 serving-recipe distill (Plan 170 / Research 207),
+    // measurement-honesty family members #3 (the comparator) + #4 (the
+    // observer-consumer bias) -- both suggestion-only NotBenchable (no
+    // latency quantity to ratio; the B109 precedent), both carrying
+    // context_notes (the annotation IS the content).
+    let corpus = build_perf_seed_corpus();
+    let expected = [
+        ("aa-control-prices-the-fidelity-instrument", "complexity"),
+        ("observer-sync-bias-differs-by-change-class", "complexity"),
+    ];
+    for (id, category) in expected {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-177 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-177 {id} category");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-177 {id} must carry context_notes (the annotation IS the content)"
+        );
+        let notes = e.context_notes.clone().unwrap_or_default();
+        assert!(notes.contains("NotBenchable"), "batch-177 {id} NotBenchable posture");
+    }
+    // Mandated phrases (case-sensitive contains -- the B51 lesson).
+    let aa = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "aa-control-prices-the-fidelity-instrument")
+        .unwrap();
+    for needle in [
+        "4 distinct outputs from 5 identical",
+        "the control is indistinguishable from the test",
+        "prompt-class-conditional",
+    ] {
+        assert!(
+            aa.context_notes.clone().unwrap_or_default().contains(needle)
+            || aa.buggy_code.contains(needle)
+            || aa.fixed_code.contains(needle)
+            || aa.name.contains(needle),
+            "batch-177 aa-control lost phrase: {needle}"
+        );
+    }
+    let obs = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "observer-sync-bias-differs-by-change-class")
+        .unwrap();
+    for needle in [
+        "~4 tok/s high for kernel changes and ~10 for host-side",
+        "uniform across configurations, so comparisons hold",
+    ] {
+        assert!(
+            obs.context_notes.clone().unwrap_or_default().contains(needle),
+            "batch-177 observer-sync lost phrase: {needle}"
         );
     }
 }
