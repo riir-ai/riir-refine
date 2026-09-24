@@ -1,6 +1,6 @@
 # HISTORY.md — riir-clippy
 
-## 2026-09-24 — Issue 134 T1: the standing demonstrability column (SAT / Research 585)
+## 2026-09-24 — Issue 134 T1: the standing demonstrability column (SAT / katgpt-rs Research 585)
 
 The Research-585 follow-up landed its measurement half: a per-domain
 **demonstrability constant** (selection discriminability, coverage-conditioned)
