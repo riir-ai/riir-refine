@@ -342,7 +342,7 @@ impl RuleDomains {
     }
 
     /// Aggregate `(rule_id, count)` pairs into per-domain totals for the
-    /// fix-stats push (Plan 038 Phase 2 — the fixstats lane's by_domain
+    /// fix-stats push (Plan 038 Phase 2 — the fixstats lane's `by_domain`
     /// had stayed honest-empty because the push tail could not attribute
     /// a rule to a domain; this is the SAME compiled attribution the
     /// mining v3 sync rows carry, so the two lanes cannot disagree).

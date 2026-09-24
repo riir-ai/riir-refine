@@ -119,6 +119,13 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///       the plan160 probe — the deref-scrutinee `&`-strip + the
 ///       container-proven method rename; the ELEVENTH consecutive
 ///       all-FIXABLE pack).
+///     + the 2 Batch 175 rows (2026-09-24, the coverage-report pack XV —
+///       `len_without_is_empty` + `cast_abs_to_unsigned`, Plan 169; the
+///       pack-XV OVERTURNS of two Plan-163 refusals on new evidence —
+///       the landed `new_without_default` insertion precedent and the
+///       `scalar_param_heads_over` provenance substrate; both atoms fire
+///       ALONE (zero co-fires, the plan169 probe), style + suspicious
+///       groups, the TWELFTH consecutive all-FIXABLE pack).
 // Data table, not logic — length is the point. The entry count is
 // derived (module doc), never typed here.
 #[allow(clippy::too_many_lines)]
@@ -977,6 +984,28 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f(hits: &mut Vec<u8>, v: &Vec<u8>) -> Vec<u8> { hits.push(0); v.iter().map(|x| *x).collect() }".to_string(),
             fixed_code: "fn f(hits: &mut Vec<u8>, v: &Vec<u8>) -> Vec<u8> { hits.push(0); v.iter().copied().collect() }".to_string(),
         },
+        // ── Batch 175 (2026-09-24, the coverage-report pack XV, Plan 169,
+        // probe scripts/plan169_pack15_probe.py): both atoms fire ALONE
+        // (zero co-fires). lwie = the probe's plain inherent-impl shape —
+        // the additive is_empty insertion, the NWD precedent, the
+        // Plan-163 fn-body-invention refusal OVERTURNED on the landed
+        // gate-proven insertion substrate. cau = the probe's cau_i64
+        // same-width shape — the signature-proven unsigned_abs rewrite,
+        // the Plan-163 typeck refusal OVERTURNED on the Plan-149
+        // param-heads substrate; narrow/wide regimes keep the cast and
+        // live in the module tests. ──
+        ClippyFixEntry {
+            lint_name: "len_without_is_empty".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "pub struct LwA { items: Vec<u8> }\nimpl LwA {\n    pub fn len(&self) -> usize {\n        self.items.len()\n    }\n}".to_string(),
+            fixed_code: "pub struct LwA { items: Vec<u8> }\nimpl LwA {\n    pub fn len(&self) -> usize {\n        self.items.len()\n    }\n    pub fn is_empty(&self) -> bool {\n        self.len() == 0\n    }\n}".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "cast_abs_to_unsigned".to_string(),
+            lint_group: "suspicious".to_string(),
+            buggy_code: "pub fn cau_a(x: i64) -> u64 {\n    x.abs() as u64\n}".to_string(),
+            fixed_code: "pub fn cau_a(x: i64) -> u64 {\n    x.unsigned_abs()\n}".to_string(),
+        },
     ])
 }
 
@@ -1087,10 +1116,19 @@ mod tests {
     /// leads, Plan 158), and the 2 Batch 168 rows
     /// (`empty_line_after_doc_comments`, `new_without_default` — the
     /// coverage-report re-arm pack XII, the post-Batch-167 derivation
-    /// leads, Plan 159) = 90.
+    /// leads, Plan 159), and the 2 Batch 169 rows (`match_ref_pats`,
+    /// `into_iter_on_ref` — the coverage-report pack XIII, Plan 160), and
+    /// the 2 Batch 171 rows (`tabs_in_doc_comments`, `map_clone` — the
+    /// coverage-report pack XIV, Plan 163), and the 2 Batch 175 rows
+    /// (`len_without_is_empty`, `cast_abs_to_unsigned` — the
+    /// coverage-report pack XV, the Plan-163 overturns, Plan 169) = 96.
     ///
     /// (`match_ref_pats`, `into_iter_on_ref` — the coverage-report pack
     /// XIII, the Batch-168 staged alternates, Plan 160) = 92.
+    ///
+    /// (`len_without_is_empty`, `cast_abs_to_unsigned` — the
+    /// coverage-report pack XV, the Plan-163 overturns on new evidence,
+    /// Plan 169) = 96.
     ///
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
@@ -1098,7 +1136,7 @@ mod tests {
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 94);
+        assert_eq!(corpus.entries.len(), 96);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

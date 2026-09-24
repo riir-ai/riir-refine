@@ -1,6 +1,6 @@
 # Plan 169 — Batch 175: the coverage-report pack XV (len_without_is_empty + cast_abs_to_unsigned)
 
-**Status:** PRE-SLOTTED — T0/T1 probe-verified read-only 2026-09-24 ~01:2x +07 (fresh session, post-B174 close-out); T2/T3 substrate claims + T4/T5 pin locations pre-verified read-only 2026-09-24 ~05:4x +07 (the Plan-167 early-pre-verification precedent — findings in Standing notes); corpus authoring + landing at the NEXT cadence slot (~19:5x 09-24 or ~00:0x 09-25 +07; B174 landed 09-24 00:43).
+**Status:** EXECUTED 2026-09-24 ~09:4x +07 (M3, ahead of the ~19:5x slot — disclosed in the landed row; box cargo-quiet, sibling lane disjoint). T0/T1 probe-verified read-only 2026-09-24 ~01:2x +07 (fresh session, post-B174 close-out); T2/T3 substrate claims + T4/T5 pin locations pre-verified read-only 2026-09-24 ~05:4x +07 (the Plan-167 early-pre-verification precedent — findings in Standing notes). All tasks T2–T12 LANDED; T13/T14 (commit+push, global binary rebuild) are the only open rows — see the checkbox notes for the gate results.
 
 The standing pipeline (Batch 164+): fresh `--coverage-report` derivation →
 adjudicate the evidenced head with reasons → probe-verify the leads → land.
@@ -95,31 +95,53 @@ shape. SILENT: ref-bind on owned scrutinee; match-ergonomics form.
       FAILed honestly: `nbr_let` silent-guess wrong → moved to FIXTURES
       with its measured count; `cau_unsigned_in` retired — `u32` has no
       `.abs()`, E0599, the shape cannot exist; replaced by `cau_narrow`)
-- [ ] T2 `len_without_is_empty` proposer (inherent-impl insertion of
+- [x] T2 `len_without_is_empty` proposer (inherent-impl insertion of
       `pub fn is_empty(&self) -> bool { self.len() == 0 }` before the impl
       closing brace; guards: existing is_empty, non-pub len, traits
-      refused v1) + module tests
-- [ ] T3 `cast_abs_to_unsigned` proposer (three-regime swap keyed on
+      refused v1) + module tests **LANDED 2026-09-24** (+ exactly-`&self`/
+      int-return/zero-arg/no-generics/non-unsafe compile-safety guards;
+      single-line impls get the single-line spelling; the syn receiver
+      finding: `&self` desugars to FnArg::Receiver, NOT Pat::Ident — the
+      first test run caught it)
+- [x] T3 `cast_abs_to_unsigned` proposer (three-regime swap keyed on
       width equality via fn-head param provenance + the spelled cast
       target; guards: non-plain-ident receivers, non-primitive/unsigned
-      receiver types refuse) + module tests
-- [ ] T4 registration: doc-table rows + pub mods + FIXABLE_LINTS 75→77
+      receiver types refuse) + module tests **LANDED 2026-09-24**
+- [x] T4 registration: doc-table rows + pub mods + FIXABLE_LINTS 75→77
       (the mod.rs:1273 pin) + dispatch arms + `all_lints_fire_and_parse`
-      rows
-- [ ] T5 corpus.rs entries ×2 + count pin 94→96 (corpus.rs:1101); the
+      rows **LANDED** (Scope paragraph 86→88 + the Batch-175 mention)
+- [x] T5 corpus.rs entries ×2 + count pin 94→96 (corpus.rs:1101); the
       LWIE atom = the plain impl shape; the CAU atom = cau_i64 (both
-      fire ALONE — zero co-fires measured)
-- [ ] T6 G1: clippy_lints module + corpus tests green
-- [ ] T7 freeze regen gen2/gen3 — 2-run convergence (the corpus-touching
+      fire ALONE — zero co-fires measured) **LANDED** (+ header doc +
+      count-doc paragraphs)
+- [x] T6 G1: clippy_lints module + corpus tests green **1236/0**
+- [x] T7 freeze regen gen2/gen3 — 2-run convergence (the corpus-touching
       law: new entries move the stride windows; labels/exclusions
-      regenerate as data in the SAME batch)
-- [ ] T8 G2: lib default + kernel_heal floors green
-- [ ] T9 retrieval gate floors held
-- [ ] T10 G3: clippy -D clean at both feature postures (healer first for
-      mechanical findings)
-- [ ] T11 score-bench row + frontier snapshot + the Issue-102 cadence row
-- [ ] T12 `.docs/11_domains/clippy_lints.md` + AGENTS.md counts (94→96)
-      + `.distill/001` BATCH 175 LANDED row
+      regenerate as data in the SAME batch) **LANDED — the lwie BAD-ATOM
+      finding (the new_without_default exportation class: oracle {} under
+      the `mod gen_N` wrap, excluded k1+composites BOTH gens; cast_abs
+      CLEAN every window); tables 94/28 v2 + 94/32 v3, 2-run
+      byte-identical convergence [the freeze e2es ran in a DETACHED
+      WORKTREE at HEAD + the batch files copied in — the sibling retarget
+      lane's half-landed Cargo.toml broke workspace resolution in the
+      main checkout mid-batch; the sanctioned isolation, and the FIRST
+      worktree run's stale-copy lesson: verify the copied files BY
+      CONTENT (grep), not by exit code — 0-atom tables landed once from
+      an unverified copy]**
+- [x] T8 G2: lib default + kernel_heal floors green **2257/0 + 2613/0**
+- [x] T9 retrieval gate floors held **18/18, floors HELD**
+- [x] T10 G3: clippy -D clean at both feature postures (healer first for
+      mechanical findings) **CLEAN ×2 [healer took 1 doc_markdown in
+      kat_sync_payload; 2 necessity.rs allows manual — sibling HEAD code
+      all-features-dirty since 5f00d2ac, repaired in passing]**
+- [x] T11 score-bench row + frontier snapshot + the Issue-102 cadence row
+      **#164 appended + gen-8 snapshot + gate-calibration (repo δ=0
+      UNCALIBRATED, 2 stores STALLED — the standing flag this re-arm
+      answers) + frontier-report (4 sweeps, 0 FADED)**
+- [x] T12 `.docs/11_domains/clippy_lints.md` + AGENTS.md counts (94→96)
+      + `.distill/001` BATCH 175 LANDED row **LANDED [no clippy_lints.md
+      page exists — AGENTS.md + .distill are the live surfaces; the doc
+      page filename in this task was aspirational]**
 - [ ] T13 commit `feat: batch 175: ...` + push at the cadence slot
 - [ ] T14 global binary rebuild (release set) + `--corpus-stats` verify
       clippy_lints 96

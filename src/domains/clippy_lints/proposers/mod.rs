@@ -108,6 +108,8 @@
 //! `tabs_in_doc_comments` | every TAB in a doc comment → four spaces — comment bytes carry zero semantics; `///`, `//!`, `/** */` AND fenced code samples fire (probe); regular `//`/`////` stay silent; item/file-level doc attrs only (Batch 171) |
 //! `map_clone` | `v.iter().map(|x| x.clone())` → `.cloned()` / `.map(|x| *x)` → `.copied()` — the shape compiling PROVES the adapter's bound (T: Clone / T: Copy); by-ref adapter chains only (into_iter's empty-suggestion deletion is Copy-only — refused, the documented divergence) (Batch 171) |
 //! `new_without_default` | `impl W { pub fn new() -> Self }` with no Default → insert `impl Default for W` delegating to `new()` — purely additive, clippy's own suggestion shape (Batch 168) |
+//! `len_without_is_empty` | inherent impl with a public `len(&self) -> <int>` and no `is_empty` on the type → INSERT `pub fn is_empty(&self) -> bool { self.len() == 0 }` before the impl's closing brace — the additive-insertion precedent; traits refuse v1 (Batch 175) |
+//! `cast_abs_to_unsigned` | `x.abs() as uN` → `x.unsigned_abs()` on a signature-proven signed-int param — whole-expr replacement iff the unsigned twin width equals the cast target, else the cast survives (narrow/wide); release-identical + debug-strictly-better (the lint's own "can panic" motivation) (Batch 175) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
@@ -154,7 +156,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 86 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 88 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -178,14 +180,20 @@
 //! `excessive_precision`, Plan 155 — and the 2 Batch 167 coverage-report
 //! re-arm rules — `unnecessary_cast` / `clone_on_copy`, Plan 158 — and
 //! the 2 Batch 168 coverage-report re-arm rules —
-//! `empty_line_after_doc_comments` / `new_without_default`, Plan 159);
-//! future lints drop in by extending the match.
+//! `empty_line_after_doc_comments` / `new_without_default`, Plan 159 — and
+//! the 2 Batch 175 coverage-report re-arm rules — `len_without_is_empty` /
+//! `cast_abs_to_unsigned`, Plan 169, the pack-XV overturns of two Plan-163
+//! refusals on NEW evidence: the landed `new_without_default` insertion
+//! precedent and the `scalar_param_heads_over` signature-provenance
+//! substrate, both gate-proven since); future lints drop in by extending
+//! the match.
 
 pub mod assign_op_pattern;
 pub mod bool_comparison;
 pub mod byte_char_slices;
 pub mod bytes_count_to_len;
 pub mod cast_lossless;
+pub mod cast_abs_to_unsigned;
 pub mod chunks_exact_to_as_chunks;
 pub mod clone_on_copy;
 pub mod collapsible_else_if;
@@ -218,6 +226,7 @@ pub mod iter_next_loop;
 pub mod iter_nth_zero;
 pub mod legacy_numeric_constants;
 pub mod let_and_return;
+pub mod len_without_is_empty;
 pub mod map_flatten;
 pub mod manual_checked_ops;
 pub mod manual_clamp;
@@ -792,6 +801,8 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // (probe mc_nested: nested clones are SILENT — mirrored).
     // Perf-group (default-on; pinned by the plan163 probe's no-flags run).
     "map_clone",
+    "len_without_is_empty",
+    "cast_abs_to_unsigned",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1136,6 +1147,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 171 (the coverage-report pack XIV — Plan 163) ──
         "tabs_in_doc_comments" => tabs_in_doc_comments::collect_edits(source, file),
         "map_clone" => map_clone::collect_edits(source, file),
+        // ── Batch 175 (the coverage-report pack XV — Plan 169) ──
+        "len_without_is_empty" => len_without_is_empty::collect_edits(source, file),
+        "cast_abs_to_unsigned" => cast_abs_to_unsigned::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1270,12 +1284,18 @@ mod tests {
         // + 2 Batch 171 (tabs_in_doc_comments + map_clone — the
         // coverage-report pack XIV, Plan 163; the comment-byte tab spacing
         // + the shape-proven adapter rename).
-        assert_eq!(FIXABLE_LINTS.len(), 75);
+        // + 2 Batch 175 (len_without_is_empty + cast_abs_to_unsigned — the
+        // coverage-report pack XV, Plan 169; the additive is_empty insertion
+        // (the NWD insertion precedent, overturned Plan-163 refusal) + the
+        // signature-proven unsigned_abs rewrite in three measured regimes
+        // (the Plan-149 provenance law, overturned Plan-163 typeck
+        // refusal)).
+        assert_eq!(FIXABLE_LINTS.len(), 77);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 90-row fixture table — length is the point.
+    /// 92-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1768,6 +1788,17 @@ impl S {
                 "map_clone",
                 "fn f(hits: &mut Vec<u8>, v: &Vec<u8>) -> Vec<u8> { hits.push(0); v.iter().map(|x| *x).collect() }",
                 "v.iter().copied()",
+            ),
+            // ── Batch 175 (the coverage-report pack XV, Plan 169) ──
+            (
+                "len_without_is_empty",
+                "pub struct Bag { items: Vec<u8> }\nimpl Bag {\n    pub fn len(&self) -> usize {\n        self.items.len()\n    }\n}",
+                "pub fn is_empty(&self) -> bool",
+            ),
+            (
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); x.abs() as u64 }",
+                "hits.push(0); x.unsigned_abs() }",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

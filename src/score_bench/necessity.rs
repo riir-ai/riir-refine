@@ -432,6 +432,7 @@ fn build_row(ctx: &ArmCtx, co: &BTreeMap<(String, String), usize>) -> NecessityR
 /// oracle does the measuring, this does the scheduling and the verdicts.
 #[must_use]
 #[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::too_many_lines)]
 pub fn run_necessity(
     oracle: &ClippyOracle,
     all_fixtures: &[BenchFixture],
@@ -603,6 +604,7 @@ pub fn run_necessity(
 /// The per-target arm loop (extracted from [`run_necessity`] — the
 /// orchestration fn stays readable): disabled arm + matched-swap arm per
 /// target, `(rows, arms_run, swap_arms_skipped)` out.
+#[allow(clippy::too_many_arguments)]
 fn run_target_arms(
     oracle: &ClippyOracle,
     fixtures: &[BenchFixture],
