@@ -1,7 +1,6 @@
 # Plan 170 — Batch 177: the EXL3/GB10 serving-recipe distill (Research 207)
 
-**Status:** OPEN — plan-FIRST, created 2026-09-24 before any corpus edit.
-Queued behind the B176 FWHT rider. No corpus edit has been made.
+**Status:** IN FLIGHT — claimed 2026-09-25 ~06:25 +07 (shikuwa/4090 session; executed AHEAD of the event-blocked B176 FWHT rider — #29096 frozen through the 35th check, cadence slot open post-B175, one-batch-per-day holds). T1–T12 executing; no corpus edit yet.
 
 **Source pin:** `vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @
 e0ebee8ddc4391b5e66d86fdce993b0756e00986` (MIT). Verdict, dedup evidence,
