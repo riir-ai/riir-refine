@@ -1,6 +1,6 @@
 # Issue 133 — Matryoshka-k supervision for `rule_embed` (reopen-lane enhancement)
 
-**Status:** OPEN (DEFERRED-TRIGGER — do not start until `rule_embed_poc`'s reopen trigger fires: organic fixseq rings or oracle-anchored real-repo spans at scale, Bench 099). Filed 2026-09-24 from katgpt-rs [Research 584](../katgpt-rs/.research/584_Matryoshka_Attribution_Sigmoid_Topk_Budget_Primitives.md) (arXiv:2609.25518 "Matryoshka attribution" distill).
+**Status:** OPEN (DEFERRED-TRIGGER — do not start until `rule_embed_poc`'s reopen trigger fires: organic fixseq rings or oracle-anchored real-repo spans at scale, Bench 099). Filed 2026-09-24 from katgpt-rs [Research 584](../../katgpt-rs/.research/584_Matryoshka_Attribution_Sigmoid_Topk_Budget_Primitives.md) (arXiv:2609.25518 "Matryoshka attribution" distill).
 
 ## The idea
 

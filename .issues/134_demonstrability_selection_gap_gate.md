@@ -1,0 +1,30 @@
+# Issue 134: Demonstrability selection-gap gate — pool depth pays where selection discriminates
+
+**Status:** Active — T1 (measurement) unstarted
+**Source:** [katgpt-rs Research 585](../../katgpt-rs/.research/585_SAT_Teamwork_Strategy_Banks_Demonstrability.md) — SAT [arXiv:2609.22682]: demonstrability (balanced discriminability of correct vs incorrect artifacts) tracks where multi-candidate collaboration beats the best member at ρ=0.90 across 8 benchmarks; generation-vs-selection separation (coverage 87.9% vs accuracy 72.8% on their knowledge suite) shows selection is the bottleneck exactly where discriminability is low.
+
+## Mechanism
+
+The healer already **measures** the generation-vs-selection split everywhere:
+- retrieval eval (Issue 125 `ChoiceTaxonomy`): `wrong_rule` (gold surfaced, outranked — selection failure) vs `wrong_span` (never surfaced — generation failure), `selective_accuracy` = correct/covered;
+- score-bench: persist / broken / shaped per-rule outcome classes (shaped = correct core produced but selection leaves new diagnostics — a selection gap);
+- rustc_errors: resolved-rate vs attempt counts — demonstrability is **NOT asserted ≈ 1** here (an asserted top-rank point would be a free coordinate in T3's Spearman over 5–8 domains — the same contamination class T1 closes); the domain joins T3's qualifying set only if T1 measures it with one of the two formulas, else it is dropped with a printed reason.
+
+Nothing **consumes** these as a per-domain *demonstrability constant* that allocates compute. The paper's law gives the allocation principle: **candidate-pool depth pays in proportion to measured selection discriminability** — where selection reliably picks the correct candidate when present, spend on generation (deeper pools, more strategies, wider banks); where it does not, generation is wasted at any depth and the spend belongs in discrimination (rerank, scorer, admission gates) instead.
+
+## Tasks
+
+- [ ] **T1 — Standing demonstrability column (coverage-conditioned by construction).** Both halves condition on the correct candidate having been PRESENT in the pool — a success rate would contaminate T3 (easy domains carry both high success and high gain-from-depth; the ρ-test would pass for the wrong reason):
+  - eval fixtures: `correct_top1 / (correct_top1 + wrong_rule)` — conditioned on gold (or an acceptable alternative) having surfaced; `wrong_rule` is the "incorrect candidate available and rejected" class (gold outranked by another candidate); `wrong_span` is EXCLUDED (generation-side — never surfaced) and reported beside, never pooled.
+  - score-bench: `persist / (persist + shaped)` — conditioned on a correct core having been produced; `shaped` is the "available but selection left defects" class; `broken` is EXCLUDED as generation-side (fix broke compile) and reported beside, never pooled.
+  Print per-domain (and per-rule where n≥20) in `--corpus-stats`/retrieval-eval output + append to the score-bench jsonl row. Measurement only, no behavior change; refuses a confident zero on empty labeled sets (the frontier-report law).
+- [ ] **T2 — Pool-depth allocation gate (feature `demonstrability_gate`, default off).** Where the suggest lane picks pool depth / K (rerank truncation, fan-out width, L4 arming thresholds), scale depth by the measured constant: high-demonstrability domains get deeper pools, low get shallower pools + the freed budget routed to rerank. Byte-identical when off.
+- [ ] **T3 — GOAT: the ρ-prediction on our domains, with a power floor.** Depth sweep (K vs K+ΔK) per domain; assert the per-domain gain-from-depth rank-agrees with the T1 demonstrability rank (Spearman over the qualifying domain set, n reported beside ρ). **Power floor: refuse — neither pass nor fail — below FIVE qualifying domains** (domains clearing T1's labeled-set floor; the tail-support rule applied to a rank statistic — at n=3 Spearman cannot reject, at n=4 it cannot reach the paper's p). Available domain set is 8 (clippy_lints, rust_perf, rustc_errors, kernel_opt, docker, sec, dist, shader_perf); the thin ones may not qualify and the refusal is the honest answer then. Gate passes → promote `demonstrability_gate` per the standard rule; fails → keep measurement-only (T1 survives as instrumentation), record the negative.
+- [ ] **T4 — Homogeneous-control row (eval design adoption).** Multi-domain fanout claims in retrieval-eval/score-bench summaries gain two control rows: best-single-domain, and homogeneous (single-domain engine run at the same total budget) — the paper's linearization/homogeneous controls; any "fanout wins" claim must beat both.
+
+## Guards
+
+- Not a new selection mechanism — a consumer of shipped metrics (Issue 125 taxonomy, score-bench outcomes). No new substrate in katgpt-core.
+- T1 is coverage-conditioned by construction (correct-present denominators only); generation-side failures (`wrong_span`, `broken`) are reported beside, never pooled — a raw success rate would make T3 pass for the wrong reason.
+- Kill-switch: feature flag default-off through T3; `RIIR_HEAL_DEMONSTRABILITY=0` runtime override.
+- Anti-scope: does NOT touch the oracle lanes (defect-audit selection already ships there); does NOT touch game-surface deliberation (absorbed by the riir-ai `forage_share` lane's re-open triggers via Research 583 — Bench 952, Issue 997 closed 2026-09-23).
