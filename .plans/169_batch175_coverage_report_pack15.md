@@ -142,9 +142,9 @@ shape. SILENT: ref-bind on owned scrutinee; match-ergonomics form.
       + `.distill/001` BATCH 175 LANDED row **LANDED [no clippy_lints.md
       page exists — AGENTS.md + .distill are the live surfaces; the doc
       page filename in this task was aspirational]**
-- [ ] T13 commit `feat: batch 175: ...` + push at the cadence slot
-- [ ] T14 global binary rebuild (release set) + `--corpus-stats` verify
-      clippy_lints 96
+- [x] T13 commit `feat: batch 175: ...` + push at the cadence slot **`e947dec7` local, pushed as `0319d689` via the .b175 worktree [the main checkout's sibling WIP files blocked the rebase — the skill's temp-worktree push recipe; the twin check ran clean: origin had only the pre-slot commit]**
+- [x] T14 global binary rebuild (release set) + `--corpus-stats` verify
+      clippy_lints 96 **verified live: release set complete, clippy_lints 96 / rust_perf 153 / kernel_opt 627 — exactly the intended delta**
 
 ## Standing notes
 
