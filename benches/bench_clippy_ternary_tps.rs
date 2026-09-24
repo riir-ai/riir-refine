@@ -74,10 +74,10 @@
 use std::path::Path;
 use std::time::Instant;
 
-use riir_engine::deltanet::effective_rotary_dim;
-use riir_engine::gguf_loader::{load_qwen_deltanet_ternary_weights_gguf, GgufFile};
-use riir_engine::rope::RopeFreqTable;
-use riir_engine::tokenizer::BpeTokenizer;
+use riir_infer_core::deltanet::effective_rotary_dim;
+use riir_infer_core::gguf_loader::{load_qwen_deltanet_ternary_weights_gguf, GgufFile};
+use riir_infer_core::rope::RopeFreqTable;
+use riir_infer_core::tokenizer::BpeTokenizer;
 
 /// Speculative decode lookahead (K=2 is the sweet spot per Issue 665 T1).
 const DRAFT_K: usize = 2;
@@ -176,8 +176,8 @@ fn main() {
     // ── GPU-resident forward: the M3 Metal path (all activations stay on GPU) ──
     eprintln!("[bench010] initializing GPU-resident forward (CubeCL wgpu<msl>) ...");
     let t_gpu = Instant::now();
-    let ctx = riir_gpu::CubeCLContext::new().expect("CubeCL Metal context");
-    let mut fwd = riir_gpu::TernaryDeltanetGpuForward::new(&ctx, &config, &weights);
+    let ctx = riir_infer_gpu::CubeCLContext::new().expect("CubeCL Metal context");
+    let mut fwd = riir_infer_gpu::TernaryDeltanetGpuForward::new(&ctx, &config, &weights);
     let gpu_init_s = t_gpu.elapsed().as_secs_f64();
     eprintln!("[bench010] GPU-resident forward ready in {gpu_init_s:.1}s");
 
@@ -295,10 +295,10 @@ fn main() {
         //   TRUNCATE_P=<n>  truncate every prompt to n tokens (P-regime probe)
         //   LOGITS_PROBE=1  print post-prefill top-2 logits + gap per case
         //   ZC_WARMUP=<n>   throwaway prefill of n tokens before the case loop
-        riir_gpu::set_prefill_use_simdgroup(true);
+        riir_infer_gpu::set_prefill_use_simdgroup(true);
         #[cfg(target_os = "macos")]
         if std::env::var("ZEROCOPY").unwrap_or_else(|_| "0".to_string()) == "1" {
-            riir_gpu::set_prefill_use_metal_tensor_zerocopy(true);
+            riir_infer_gpu::set_prefill_use_metal_tensor_zerocopy(true);
         }
 
         let t_prefill = Instant::now();
@@ -485,13 +485,13 @@ fn main() {
 /// Returns `(generated_tokens, acceptance_rate, spec_rounds)`.
 #[cfg(feature = "ternary_inference")]
 fn decode_speculative(
-    fwd: &mut riir_gpu::TernaryDeltanetGpuForward,
-    weights: &riir_engine::deltanet::ternary_weights::QwenDeltaNetTernaryWeights,
+    fwd: &mut riir_infer_gpu::TernaryDeltanetGpuForward,
+    weights: &riir_infer_core::deltanet::ternary_weights::QwenDeltaNetTernaryWeights,
     prompt_tokens: &[usize],
     decode_tokens: usize,
     eos_id: usize,
 ) -> (Vec<usize>, f64, usize) {
-    use riir_gpu::speculative_decode::NgramDrafter;
+    use riir_infer_gpu::speculative_decode::NgramDrafter;
 
     if decode_tokens == 0 {
         return (Vec::new(), 0.0, 0);

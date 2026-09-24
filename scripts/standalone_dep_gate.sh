@@ -24,9 +24,12 @@
 #                            katgpt-micro-belief (Issue 093 T1 — opt-in
 #                            nonergodic_poc; already transitive via
 #                            katgpt-core defaults, this is the direct row)
-#   riir-ai        (private)  riir-engine, riir-gpu, riir-rag
-#                             + cubecl-runtime, cubecl-wgpu, wgpu-hal
-#                             (the [patch.crates-io] vendor paths)
+#   riir-infer     (public)   riir-infer-core, riir-infer-gpu (the ternary
+#                             lane's inference substrate; T2.3 retarget) +
+#                             cubecl-runtime, wgpu-hal (the [patch.crates-io]
+#                             vendor paths, now pointing at riir-infer/vendor)
+#   riir-ai        (private)  riir-rag (latent_retrieval) — the ONLY direct
+#                             riir-ai edge left
 #   riir-neuron-db (private)  riir-neuron-db
 #   riir-kat       (private)  riir-kat (issue 088 — the service-plane leaf;
 #                             riir-auth left the set the same day: the row
@@ -59,21 +62,24 @@ cd "$(dirname "$0")/.."
 
 # The pinned inventory: "<manifest-relative-path> <dep-name>", sorted.
 #
-# 12 entries as of 2026-09-18 (Issue 124 added riir-llm). `[patch]` entries
-# resolve through the same lexical scan (their lines are `name = { path = "…" }`
-# exactly like dependency lines) and are pinned — a new vendor patch is a new
-# repo CI must provision. `katgpt-core` appears twice in the root manifest (the
-# dependency table and `[patch."https://github.com/katopz/katgpt-rs"]`) and is
-# pinned once; the scan dedupes the same way.
+# 12 entries as of 2026-09-24 (Plan 610 S6 / reflex Issue 008 T2.3: the
+# ternary lane retargeted from riir-engine/riir-gpu to riir-infer-core/
+# riir-infer-gpu — same count, two rows swapped; the cubecl-wgpu patch row
+# dropped with the old edge, arc-swap's genlock fork was a git dep and was
+# never pinned here). `[patch]` entries resolve through the same lexical
+# scan (their lines are `name = { path = "…" }` exactly like dependency
+# lines) and are pinned — a new vendor patch is a new repo CI must
+# provision. `katgpt-core` appears twice in the root manifest (the
+# dependency table and `[patch."https://github.com/katopz/katgpt-rs"]`) and
+# is pinned once; the scan dedupes the same way.
 EXPECTED=$(
     cat <<'EOF'
 Cargo.toml cubecl-runtime
-Cargo.toml cubecl-wgpu
 Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
 Cargo.toml katgpt-micro-belief
-Cargo.toml riir-engine
-Cargo.toml riir-gpu
+Cargo.toml riir-infer-core
+Cargo.toml riir-infer-gpu
 Cargo.toml riir-kat
 Cargo.toml riir-llm
 Cargo.toml riir-neuron-db
@@ -148,8 +154,8 @@ if [ "$ACTUAL" = "$EXPECTED" ]; then
     echo "  (this repo is still NOT standalone-buildable; the gate pins the gap,"
     echo "   it does not close it. CI provisions every sibling the resolve needs —"
     echo "   seven checkouts: the five pinned siblings + riir-auth (riir-kat's"
-    echo "   transitive) + riir-infer (riir-ai Issue 998's carve, transitive"
-    echo "   through riir-ai's riir-engine/riir-gpu) — see"
+    echo "   transitive) + riir-infer (the ternary lane's direct substrate since"
+    echo "   the T2.3 retarget — no longer transitive through riir-ai) — see"
     echo "   .github/workflows/rust.yml, feature-guard job.)"
     exit 0
 fi
