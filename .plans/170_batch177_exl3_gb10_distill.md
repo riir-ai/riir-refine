@@ -1,12 +1,14 @@
 # Plan 170 — Batch 177: the EXL3/GB10 serving-recipe distill (Research 207)
 
-**Status:** EXECUTED 2026-09-25 (shikuwa/4090 session) — fired AHEAD of the
+**Status:** EXECUTED + LANDED 2026-09-25 as `3a1e96f0b` (shikuwa/4090 session) — fired AHEAD of the
 event-blocked B176 FWHT rider (#29096 frozen through the 35th check;
 cadence slot open post-B175, one-batch-per-day holds). **6 rules + 1 rider
 landed** (T4 fork resolved: #2 = ONE rule — the T2 re-verification caught
 `factor-affine-quant-scale-out-of-element-loop` as the loop-stage half of
 #2's placement, which the verdict's phrase-grep could not see). All gates
-green; close-out in `.distill/001` + Research 207 appendix.
+green; close-out in `.distill/001` + Research 207 appendix. Post-landing
+riders done: global binary rebuilt + refreshed (631/155/96 verified),
+gate-calibration run (known standing state, unchanged).
 
 **Source pin:** `vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @
 e0ebee8ddc4391b5e66d86fdce993b0756e00986` (MIT). Verdict, dedup evidence,
