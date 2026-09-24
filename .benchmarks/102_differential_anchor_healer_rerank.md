@@ -53,3 +53,26 @@ Every mode, including `off` (pure retrieval), is identical at every λ.
 ## Verdict
 
 **Not promoted.** Promotion needs a GOAT on the real-labeled gate, and that gate is flat. The eval-set gain is one span. The feature stays opt-in as a consumer of the katgpt-core primitive. The substrate itself stays proven (Bench 886); this socket just has little common-mode signal to reject.
+
+## Addendum — the score-bench heal-rate half of the rider's gate (2026-09-25, 4090 box)
+
+The rider's gate names TWO halves — oracle top-1 at λ* vs λ=0 (above) and
+**score-bench heal rate at λ* vs λ=0**. This addendum measures the second
+half against the LANDED implementation (`7f27de9d3`, same-binary env-flip
+`RIIR_CLIPPY_DIFF_ANCHOR_LAMBDA` unset vs `0.25`, release build, features
+`score_bench,differential_anchor,kat_service`, the frozen v1 fixture set,
+the kat lease/gate/meter kill-switches held off):
+
+| arm | heal_rate | n_ran | strata (repo / authored resolved·created) |
+|---|---|---|---|
+| λ unset (0) | **0.96363634** | 35 | 3·0 / 50·1 |
+| λ = 0.25 | **0.96363634** | 35 | 3·0 / 50·1 |
+
+**Exactly flat — bit-identical rates and strata.** Consistent with the
+mechanism: the fix lane's dispatch keys on the oracle feed + proposer
+evidence, and the v1 fixture set is clippy-domain, where the anchor moves
+nothing (Bench 102 G1: clippy top-1 unchanged at every λ). The rider's
+gate is now fully measured: +1/138 eval top-1, 0 lost, heal rate flat —
+the not-promoted verdict stands on both halves. (The A/B rows were run
+with the committed `score_history.jsonl` backed up and restored — only the
+designed frontier-snapshot tail rows remain, both baseline-identical.)
