@@ -1335,8 +1335,8 @@ pub fn print_report(report: &EvalReport) {
                 .taxonomy_by_rule
                 .iter()
                 .filter(|(_, (_, t))| {
-                    (t.correct_rule + t.correct_via_acceptable + t.wrong_rule) as u32
-                        >= MIN_PER_RULE_N
+                    t.correct_rule + t.correct_via_acceptable + t.wrong_rule
+                        >= MIN_PER_RULE_N as usize
                 })
                 .map(|(rule, (d, t))| {
                     eval_row(canonical_domain(d.label()), Some(rule), t)

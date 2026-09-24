@@ -493,11 +493,16 @@ mod tests {
     #[test]
     fn eval_row_pins_the_taxonomy_mapping() {
         use crate::draft::ChoiceTaxonomy;
-        let mut t = ChoiceTaxonomy::default();
-        t.correct_rule = 10;
-        t.correct_via_acceptable = 3;
-        t.wrong_rule = 7;
-        t.wrong_span = 9;
+        // Functional-update construction, not default-then-assign — the
+        // pedantic field_reassign_with_default lint (fires only under
+        // --all-targets, which T1's --lib validation never compiled).
+        let t = ChoiceTaxonomy {
+            correct_rule: 10,
+            correct_via_acceptable: 3,
+            wrong_rule: 7,
+            wrong_span: 9,
+            ..ChoiceTaxonomy::default()
+        };
         let r = eval_row("clippy", None, &t);
         assert_eq!(r.source, Source::EvalTaxonomy);
         assert_eq!((r.selected, r.rejected, r.selected_partial, r.excluded_generation), (13, 7, 0, 9));

@@ -56,15 +56,24 @@ impl RuleDomains {
     }
 
     fn build() -> Self {
-        use crate::domain::HealEntry as _;
+        // `mut` is feature-conditional (every domain feature off → never
+        // mutated); the allow is scoped to this statement, not the module.
+        #[allow(unused_mut)]
         let mut out = Self::empty();
         macro_rules! corpus_domain {
             ($feat:literal, $name:literal, $build:path) => {
+                // The trait import rides INSIDE the expansion: present iff
+                // its feature is, so the zero-dep build never sees an
+                // unused import (the --all-targets --no-default-features
+                // clippy lane T1 never compiled).
                 #[cfg(feature = $feat)]
-                for e in $build().entries {
-                    out.rules
-                        .entry(e.rule_id().to_string())
-                        .or_insert_with(|| $name.to_string());
+                {
+                    use crate::domain::HealEntry as _;
+                    for e in $build().entries {
+                        out.rules
+                            .entry(e.rule_id().to_string())
+                            .or_insert_with(|| $name.to_string());
+                    }
                 }
             };
         }

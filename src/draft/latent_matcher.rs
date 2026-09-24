@@ -139,6 +139,13 @@ pub struct LatentMatcher {
     /// automatically — the fade-predictive gate stays closed, and only the
     /// operator-written marker file (`.heal/active_set.json`) demotes.
     active_exclusions: crate::active_set::ActiveSet,
+    /// Issue 134 T2: the pool-depth allocation policy — per-domain factors
+    /// over the retrieval pool + truncation K, built from the standing
+    /// demonstrability constants. Default identity (byte-identical
+    /// posture); the ONLY writer is [`Self::with_depth_policy`] (the
+    /// auto-arm path lives in the CLI).
+    #[cfg(feature = "demonstrability_gate")]
+    depth_policy: crate::demonstrability_gate::DepthPolicy,
 }
 
 impl LatentMatcher {
@@ -433,6 +440,8 @@ impl LatentMatcher {
             #[cfg(feature = "set_rerank")]
             set_cfg: super::set_rerank::SetRerankConfig::default(),
             active_exclusions: crate::active_set::ActiveSet::empty(),
+            #[cfg(feature = "demonstrability_gate")]
+            depth_policy: crate::demonstrability_gate::DepthPolicy::identity(),
         })
     }
 
@@ -468,6 +477,31 @@ impl LatentMatcher {
     #[must_use]
     pub fn active_exclusions(&self) -> &crate::active_set::ActiveSet {
         &self.active_exclusions
+    }
+
+    /// Issue 134 T2: attach a pool-depth allocation policy — the
+    /// demonstrability-scaled per-domain factors over the retrieval pool and
+    /// the truncation K in [`Self::suggest_span`]. Default is identity
+    /// (byte-identical posture, the A/B control); an armed policy is built
+    /// either explicitly here (the A/B override — NOT env-guarded) or through
+    /// [`DepthPolicy::standing`](crate::demonstrability_gate::DepthPolicy::standing)
+    /// (the auto-arm path, guarded by `RIIR_HEAL_DEMONSTRABILITY=0`).
+    #[cfg(feature = "demonstrability_gate")]
+    #[must_use]
+    pub fn with_depth_policy(
+        mut self,
+        policy: crate::demonstrability_gate::DepthPolicy,
+    ) -> Self {
+        self.depth_policy = policy;
+        self
+    }
+
+    /// Issue 134 T2: read-only view of the attached depth policy (the
+    /// wiring tests' identity pin reads it without re-deriving).
+    #[cfg(feature = "demonstrability_gate")]
+    #[must_use]
+    pub fn depth_policy(&self) -> &crate::demonstrability_gate::DepthPolicy {
+        &self.depth_policy
     }
 
     pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
@@ -623,7 +657,18 @@ impl LatentMatcher {
                 // Retrieve a POOL deeper than the caller's top_k: re-ranking
                 // can only promote a rule that was retrieved, and the residual
                 // T3.5.2 misses sat at rank 2-3 (T3.5.4).
+                #[cfg(feature = "demonstrability_gate")]
+                let mut pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
+                #[cfg(not(feature = "demonstrability_gate"))]
                 let pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
+                // Issue 134 T2 (cfg(demonstrability_gate)): scale the
+                // fan-out width by the domain's measured demonstrability
+                // factor — identity returns the base EXACTLY (the
+                // byte-identity fast path; the default posture).
+                #[cfg(feature = "demonstrability_gate")]
+                {
+                    pool = self.depth_policy.scale(domain.label(), pool);
+                }
                 let mut rules = index
                     .suggest_deep_into(code, pool, &mut self.scratch)
                     .to_vec();
@@ -654,6 +699,15 @@ impl LatentMatcher {
                 // No parse (or Off): no evidence in any domain — identical to
                 // the per-domain `mark_instantiation` short-circuit.
                 super::instantiation_rerank::rerank(&mut rules);
+                // Issue 134 T2 (cfg(demonstrability_gate)): the truncation K
+                // scales by the SAME factor as the pool above (a max is
+                // preserved under positive scaling, so pool >= k holds); K is
+                // clamped to >= 1 — a depth is never zeroed.
+                #[cfg(feature = "demonstrability_gate")]
+                let top_k = self
+                    .depth_policy
+                    .scale(domain.label(), top_k)
+                    .min(pool);
                 rules.truncate(top_k);
                 out.push((domain, rules));
             }

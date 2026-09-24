@@ -7203,7 +7203,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
                 for line in
                     riir_clippy::demonstrability::render_column(&rows).lines().skip(1)
                 {
-                    say(&format!("{line}"));
+                    say(line);
                 }
             }
             Ok(None) => say(
@@ -9008,6 +9008,32 @@ fn main() {
         std::process::exit(1);
     });
     matcher = matcher.with_active_set(active_set.clone());
+
+    // Issue 134 T2 (cfg(demonstrability_gate)): the pool-depth allocation
+    // AUTO-arm — read the standing demonstrability constants from THIS
+    // repo's score history (resolve_corpus_repo_root, the corpus-stats
+    // precedent: the constants are a property of the healer's corpus, not
+    // of the scanned target) and install the policy when it is
+    // non-identity. The kill-switch (RIIR_HEAL_DEMONSTRABILITY=0), an
+    // absent history, and an identity policy all leave the run at the
+    // default posture — standing() returns None and says nothing (the
+    // absent-history case is the ordinary one on installed binaries, where
+    // no score-bench history exists).
+    #[cfg(feature = "demonstrability_gate")]
+    {
+        if let Some(root) = resolve_corpus_repo_root() {
+            if let Some(policy) =
+                riir_clippy::demonstrability_gate::DepthPolicy::standing(&root)
+            {
+                println!(
+                    "demonstrability gate: armed from {} — per-domain depth factors: {}",
+                    riir_clippy::demonstrability_gate::STANDING_RELPATH,
+                    policy.render()
+                );
+                matcher = matcher.with_depth_policy(policy);
+            }
+        }
+    }
 
     // T2.4 domain gating: an explicitly requested domain whose feature is
     // off is an error, not a silent skip.

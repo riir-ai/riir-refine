@@ -72,6 +72,12 @@ pub mod edit_emitter;
 // inputs; the eval half of its API is cfg(latent_retrieval) and the bench
 // half cfg(score_bench), mirroring the two labeled-outcome sources.
 pub mod demonstrability;
+// Issue 134 T2 — the pool-depth ALLOCATION gate (feature
+// `demonstrability_gate`, default off). This module is the PURE policy +
+// the standing loader (ungated so the policy tests run at default
+// features); the matcher wiring that consumes it is
+// cfg(demonstrability_gate) in `draft/latent_matcher.rs`.
+pub mod demonstrability_gate;
 pub mod elo;
 pub mod embedder;
 pub mod fmt;

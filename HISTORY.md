@@ -1,5 +1,76 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-24 — Issue 134 T2: the pool-depth allocation gate (`demonstrability_gate`)
+
+The Research-585 allocation law landed its CONSUMER: the measured per-domain
+constant now scales the suggest lane's depth choices — high-demonstrability
+domains get deeper pools, low get shallower, budget conserved. Feature
+`demonstrability_gate` (default off through T3); byte-identical when off OR
+unarmed (the identity fast path returns `base` exactly — pinned by test).
+
+- **`src/demonstrability_gate.rs`** (UNGATED pure policy + the standing
+  loader — the policy tests run at default features): raw factors
+  `0.5 + 1.5·constant`, normalized to unit mean over the MEASURED set only,
+  clamped [0.5, 2.0]. Unmeasured domains stay at EXACTLY 1.0 (the
+  frontier-report law one layer up: absence of a measurement is never a low
+  measurement). Two honest consequences, both pinned: a SINGLE measured
+  domain is identity (nothing to reallocate against), and the standing
+  constants (clippy 0.935 / rust_perf 0.962 → factors 0.990/1.011) round to
+  INERT at pool 28 / K 3 — the gate arms but does nothing until domains
+  diverge. That is the correct answer at two nearly-equal high constants,
+  not a defect; the gate earns teeth as more domains carry labeled sets
+  (T3's ≥5-domain power floor is the same shape).
+- **The matcher wiring** (`cfg(demonstrability_gate)`): `suggest_all_domains`
+  scales BOTH the retrieval pool and the truncation K by the same per-domain
+  factor (`k.min(pool)` as the invariant guard — a max is preserved under
+  positive scaling). `pool_and_ranked` (the Issue-036 read surface — the T1
+  MEASUREMENT itself) deliberately does NOT scale: scaling the measurement
+  contaminates the column the gate consumes.
+- **Kill-switch**: `RIIR_HEAL_DEMONSTRABILITY=0` guards the AUTO-arm loader
+  (`DepthPolicy::standing`) — exact literal `"0"`, a typo must not disarm
+  (the auto-oracle truthy-spelling law). Explicit `with_depth_policy`
+  injection is the A/B override, deliberately NOT env-guarded: the suggest
+  lane's per-span hot path forbids a per-call env lookup, so the check rides
+  the loader (documented departure from the `set_rerank` use-site precedent,
+  with cause).
+- **The CLI AUTO-arm** (`bin/heal.rs`): reads the standing constants from
+  `resolve_corpus_repo_root()` — the constants are a property of the
+  HEALER's corpus, not the scanned target (the `--corpus-stats` precedent);
+  one loud arming line with the per-domain factors when armed.
+- **L4 arming thresholds: scoped out with a printed reason** — the shipped
+  L4 contract is structural (only-on-a-genuine-miss, `l4_fallback`'s four
+  invariants); no numeric threshold exists to scale. The future surface if
+  one ever ships, recorded in the module doc.
+- **The landing's own defect, caught by its own tests before any commit**:
+  `standing()` shipped with a `bool::then_some` INVERSION — it armed exactly
+  when the policy was identity and declined when it had teeth. The two
+  standing tests failed in complementary directions (identity-case got
+  `Some`, diverging-case got `None`), which is what localized it in one
+  look. Fixed before landing; the tests now pin both directions.
+- **Riders taken in passing — all pre-existing at HEAD, surfaced by the new
+  feature-combo lanes this work compiled** (the gate-coverage law working):
+  the T1 `retrieval_eval.rs` `usize→u32` narrowing cast (fired under plain
+  `latent_retrieval`, a combo T1's `--lib`-only clippy never linted); the
+  T1 `demonstrability.rs` test `field_reassign_with_default` + the T1
+  `bin/heal.rs` `useless format!` (both fire only under `--all-targets`/
+  bins — target lanes T1 never compiled); the T1 `rule_domains.rs`
+  unused-import/unused-mut at `--no-default-features` (would have red the
+  guard's layer-5a no-default arm — fixed by moving the trait import inside
+  the per-feature macro expansion, present iff its feature is).
+- Gates: default lib **2285/0** (+14 policy tests); gate-feature lib
+  2455/0/1i + wiring **3/3**; kat_sync_payload_g4 **11/0** (golden bytes
+  unchanged through the macro restructure); clippy clean at default /
+  `latent_retrieval` / `score_bench` / `demonstrability_gate` (lib +
+  all-targets) / bins at gate+kat_service / `--all-features` lib /
+  `--all-targets --no-default-features -D` (layer-5a no-default arm — now
+  green, was red at HEAD on the T1 leftovers); e2e smoke: the real binary
+  at the gate feature runs the unarmed path cleanly (no standing row
+  carries the field yet — the bench half's first row lands at the next
+  `--score-bench`). No corpus delta (freeze tables untouched).
+- Known pre-existing (NOT this landing's, left for the mining queue): 8
+  clippy warnings in `src/domains/rust_perf/corpus/tests.rs` (Batch 174's
+  corpus-test additions, `--all-targets` lane) — `cargo heal --fix` fodder.
+
 ## 2026-09-24 — Issue 134 T1: the standing demonstrability column (SAT / katgpt-rs Research 585)
 
 The Research-585 follow-up landed its measurement half: a per-domain

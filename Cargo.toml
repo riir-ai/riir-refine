@@ -219,6 +219,16 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # precedent).
 set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 
+# Issue 134 T2 — the pool-depth allocation gate: scale the suggest lane's
+# per-domain retrieval pool + truncation K by the measured demonstrability
+# constant (Research 585 / SAT arXiv:2609.22682 — depth pays where selection
+# discriminates). Budget-conserving across the MEASURED domains; unmeasured
+# stay at exactly 1.0. Default-off through T3 (the issue's kill-switch
+# discipline); runtime override RIIR_HEAL_DEMONSTRABILITY=0 guards the
+# auto-arm path. Byte-identical when off OR unarmed. Implies
+# latent_retrieval (the matcher seam).
+demonstrability_gate = ["latent_retrieval"]
+
 # Issue 062 T3 (Bench 063): TPR role-filler structure fit over the healer
 # corpus. Enables katgpt-core's `tpr` primitive (Issue 707) and measures
 # whether a TPR artifact is *admissible* on this corpus at all before T4
@@ -1232,6 +1242,15 @@ required-features = ["cf_workers_ai"]
 [[test]]
 name = "set_rerank_ab"
 required-features = ["set_rerank", "clippy_verify", "clippy_lints", "rust_perf"]
+
+# Issue 134 T2 — the pool-depth allocation gate's wiring gates: identity
+# policy = byte-identical suggest output; an armed policy scales the served
+# per-domain depth (pool + K) without ever zeroing it. The PURE policy tests
+# live ungated in src/demonstrability_gate.rs (default-features lib tests);
+# this row covers the matcher seam, which only exists under the feature.
+[[test]]
+name = "demonstrability_gate_wiring"
+required-features = ["demonstrability_gate"]
 
 [[test]]
 name = "uncontaminated_g1"
