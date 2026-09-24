@@ -31,7 +31,7 @@ v0.11.0-pre.4; cubecl #1686 @ `8ccbde3f5`; bevy #25851 @ `1fb979e37`).
   double-checked-lookup at the throughput-probe cache — "Asked again inside:
   another thread may have answered while this one queued" — plus the
   device-to-itself exclusivity rationale (upstream confirmation of our own
-  GPU-exclusivity discipline, Bench 649's class).
+  GPU-exclusivity discipline, riir-ai Bench 649's class).
 
 Gates: 102 rust_perf corpus tests green (7 count-pin sites walked + the
 third annotated site the pins' own grep had missed); full lib 2220/0;
