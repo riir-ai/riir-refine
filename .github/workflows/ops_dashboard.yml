@@ -128,7 +128,7 @@ jobs:
           [ "${CF_DEPLOY_SET}" = "true" ] || echo "::warning::CLOUDFLARE_API_TOKEN not set — Worker deploy will be skipped"
 
       - name: Checkout riir-clippy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # 30d of history: the generator greps `git log --since=30.days`
           fetch-depth: 2000
@@ -142,7 +142,7 @@ jobs:
       # still fails the build step below.
       - name: Checkout katgpt-rs (public)
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: katopz/katgpt-rs
           ref: develop
@@ -151,7 +151,7 @@ jobs:
 
       - name: Checkout riir-ai
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-ai
           ref: develop
@@ -161,7 +161,7 @@ jobs:
 
       - name: Checkout riir-train (develop — default since 2026-09-04, was main)
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-train
           ref: develop
@@ -171,7 +171,7 @@ jobs:
 
       - name: Checkout riir-neuron-db
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-neuron-db
           ref: develop
@@ -181,7 +181,7 @@ jobs:
 
       - name: Checkout riir-chain
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-chain
           ref: develop
@@ -191,7 +191,7 @@ jobs:
 
       - name: Checkout riir-game-sdk
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-game-sdk
           ref: develop
@@ -201,7 +201,7 @@ jobs:
 
       - name: Checkout riir-mmorpg-examples
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-mmorpg-examples
           ref: develop
@@ -211,7 +211,7 @@ jobs:
 
       - name: Checkout riir-unity
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-unity
           ref: develop
@@ -221,7 +221,7 @@ jobs:
 
       - name: Checkout riir-viewbridge
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-viewbridge
           ref: develop
@@ -231,7 +231,7 @@ jobs:
 
       - name: Checkout riir-dapps
         continue-on-error: true
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: gist-rs/riir-dapps
           ref: develop
