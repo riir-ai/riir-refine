@@ -4901,6 +4901,12 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
 
         /// Returns (newlines, candidates). SAFETY: caller probed avx2 and
         /// checked len == 64.
+        // loadu is the UNALIGNED load — casting *const u8 to *const __m256i is
+        // the intrinsic's own contract, not an alignment claim; set1_epi8 takes
+        // i8 and the u8→i8 wrap is the two's-complement bit pattern by design
+        // (the rule_embed dequant precedent).
+        #[allow(clippy::cast_ptr_alignment)]
+        #[allow(clippy::cast_possible_wrap)]
         #[target_feature(enable = "avx2")]
         pub unsafe fn scan_block(block: &[u8], searched: &[u8]) -> (u64, u64) {
             let lo = _mm256_loadu_si256(block.as_ptr().cast::<__m256i>());
@@ -4920,10 +4926,14 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
         }
 
         /// SAFETY: avx2.
+        // movemask yields i32 whose bit 31 is byte 31's sign bit — the u32
+        // reinterpretation is bit-pattern reassembly (lo_bits | hi_bits << 32);
+        // value semantics are never used.
+        #[allow(clippy::cast_sign_loss)]
         #[target_feature(enable = "avx2")]
         unsafe fn gather(lo: __m256i, hi: __m256i) -> u64 {
-            let lo_bits = _mm256_movemask_epi8(lo) as u32 as u64;
-            let hi_bits = _mm256_movemask_epi8(hi) as u32 as u64;
+            let lo_bits = u64::from(_mm256_movemask_epi8(lo) as u32);
+            let hi_bits = u64::from(_mm256_movemask_epi8(hi) as u32);
             lo_bits | (hi_bits << 32)
         }
     }
