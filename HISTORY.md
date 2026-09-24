@@ -1,5 +1,61 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-24 — Issue 134 CLOSED (T3 re-arm executed): seven-domain sweep, the ρ=0.536 artifact, and the degenerate-axis guard
+
+The re-arm triggers Bench 100 named were discharged: the thin-domain
+labeled fixture sets landed (`eval_fixtures_{sec,docker,dist,shader}.rs` —
+16/31/6/8 hand-authored variants, one span per rule, labels verified
+against the corpus + own proposers by four committed label tests), n
+reached 7 at the full state, and the sweep answered. Final record:
+[Bench 101](.benchmarks/101_demonstrability_t3_rearm_seven_domains.md);
+landing `099ef6cde` (issue file removed at closure — this entry is the
+record).
+
+- **Standing constants with real spread**: clippy 0.935 / rust_perf 0.962 /
+  kernel_opt 1.000 / sec 1.000 / docker 0.867 / dist 0.800 / shader_perf
+  1.000. docker/dist measure REAL near-duplicate corpus difficulty
+  (cache-mount-missing and manifest-first-layer-split carry byte-identical
+  buggy texts; dist's three ship-size rules share the bare-`[[bin]]`
+  shape) — the difficulty is documented in the fixture files, not hidden.
+- **The artifact the instrument caught in itself**: the first n=7 run
+  printed ρ = 0.536 ≥ 0.5 → "PASS" while every gain-from-depth value was
+  EXACTLY 0.0 — Spearman against a constant vector is undefined, and the
+  tie-averaged formula renders a pseudo-value off the other axis's rank
+  structure alone (1 − 6·26/336 = 0.536). Promoting on it would have been
+  the satisfied-by-absent-work class (`timed_region_guard_gate`). The
+  sweep now refuses on a degenerate axis (`variance_nonzero` on BOTH
+  axes), naming which axis died — the same philosophy as its own power
+  floor, one level up.
+- **Final verdict: REFUSED (degenerate gain axis)** — pool depth is a dead
+  allocation axis at this corpus scale; top-1 is decided within the
+  head-28 in every domain, and domains whose corpus is smaller than the
+  baseline pool (dist: 6 rules) cannot gain from depth by construction.
+  `demonstrability_gate` stays default-off BY VERDICT; T1 survives as
+  standing instrumentation. Re-open triggers: a domain whose corpus grows
+  past the pool with gold at raw ranks 28–112, or a rerank-head change
+  that makes head-8 composition pool-sensitive.
+- **Population-growth re-pins (deltas in-file)**: blended floors at the
+  weakest state (123/129/131 of 138), all five reachable router arms
+  (default 105/138, +shader 109/146, +sec 82/154, +kernel 100/168, ALL
+  81/192 — the seven-domain state compounds the B131 sec-centroid
+  mechanism), the rule_embed exact pins (population 101 → 138; baseline
+  90/34/31, trained 95/34/31) with a loud measured-numbers eprintln
+  beside them.
+- **Latent bug fired by the new fixtures and fixed**:
+  `HeadroomReport.per_domain` was `[_; 3]` through the docker/dist/shader
+  landings — the exact out-of-bounds class `EvalReport`'s sizing law
+  documents ("never fired only because no sec-labeled fixture existed").
+  Now `[HeadroomMetrics; DomainId::ALL.len()]` + the generalized print
+  table.
+- **Fix-before-repin honored first** (the Issue 022 order): four
+  under-authored docker spans re-authored to the corpus shape (they
+  carried non-canonical base-image tokens — retrieval identity, not the
+  anti-pattern); docker measured 74.2% → 83.9% before any floor moved.
+- Also healed in passing: 3 pre-existing doc_markdown sites (Batch-174
+  era) firing only under `--all-features`, and earlier this session the 8
+  intrinsic-contract cast lints in the dual-mask corpus test's x86_64 arm
+  (`1aa42bb7e`).
+
 ## 2026-09-24 — Issue 134 T4: the fanout controls — best-single-domain + homogeneous-at-budget
 
 T4 landed the paper's linearization/homogeneous controls (Research 585) in
