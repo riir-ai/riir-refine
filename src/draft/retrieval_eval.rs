@@ -340,6 +340,17 @@ pub struct EvalReport {
     /// and the three-way decline axis (covered / declined / proposer-blind)
     /// over the same labeled population as `blended`.
     pub taxonomy: ChoiceTaxonomy,
+    /// Issue 134 T1: the SAME taxonomy partitioned by the span's own domain
+    /// (the demonstrability column's eval half). Sized by
+    /// `DomainId::ALL.len()` — the `per_domain` sizing law (an index exists
+    /// for every domain whether or not it carries fixtures).
+    pub taxonomy_by_domain: [ChoiceTaxonomy; DomainId::ALL.len()],
+    /// Issue 134 T1: the SAME taxonomy keyed by gold rule — the per-rule
+    /// demonstrability rows above the n≥20 floor live here (most rules
+    /// carry 1–3 fixtures and never reach the floor; the map is the honest
+    /// record either way). The `DomainId` is the span's own domain.
+    pub taxonomy_by_rule:
+        std::collections::BTreeMap<String, (DomainId, ChoiceTaxonomy)>,
     /// Issue 121: the Vendi axis — the geometric diversity of the DELIVERED
     /// slate (the per-domain top-[`PROBE_TOP_K`] latents, exact cosine-
     /// kernel certificate via katgpt-core `set_admission`). `None` when the
@@ -977,6 +988,16 @@ pub fn run_eval_inner(
             |rule_id| super::instantiation_rerank::probeable(domain, rule_id),
         );
         report.taxonomy.absorb(choice);
+        // Issue 134 T1: the same choice, partitioned by domain + gold rule —
+        // the demonstrability column's eval half (SpanChoice is Copy, so
+        // the second absorb is free).
+        report.taxonomy_by_domain[di].absorb(choice);
+        report
+            .taxonomy_by_rule
+            .entry(label.to_string())
+            .or_insert((domain, ChoiceTaxonomy::default()))
+            .1
+            .absorb(choice);
     }
 
     for (tag, code) in CLEAN_SPANS {
@@ -1286,6 +1307,42 @@ pub fn print_report(report: &EvalReport) {
             t.correct_rule, report.blended.hits_at_1,
             "taxonomy strict hits diverged from blended top-1 — one of the two axes is miscomputed"
         );
+    }
+    // Issue 134 T1 — the demonstrability column (eval half): per-domain
+    // selection-discriminability constants, coverage-conditioned by
+    // construction (correct-present denominators only; wrong-span is the
+    // generation-side exclusion, reported beside). Measurement only — this
+    // observes the ranking the eval already computed, never reorders it.
+    // rustc_errors is never asserted ≈1 anywhere (a free coordinate in T3's
+    // Spearman); the drop ledger says so where it has no labeled set.
+    {
+        use crate::demonstrability::{canonical_domain, eval_row, render_column, MIN_PER_RULE_N};
+        let mut rows: Vec<crate::demonstrability::Row> = report
+            .taxonomy_by_domain
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.labeled > 0)
+            .map(|(i, t)| {
+                eval_row(
+                    canonical_domain(DomainId::ALL[i].label()),
+                    None,
+                    t,
+                )
+            })
+            .collect();
+        rows.extend(
+            report
+                .taxonomy_by_rule
+                .iter()
+                .filter(|(_, (_, t))| {
+                    (t.correct_rule + t.correct_via_acceptable + t.wrong_rule) as u32
+                        >= MIN_PER_RULE_N
+                })
+                .map(|(rule, (d, t))| {
+                    eval_row(canonical_domain(d.label()), Some(rule), t)
+                }),
+        );
+        print!("{}", render_column(&rows));
     }
 }
 
@@ -2128,6 +2185,42 @@ mod tests {
         assert_eq!(a.blended, b.blended);
         assert_eq!(a.per_domain, b.per_domain);
         assert_eq!(a.router_correct, b.router_correct);
+    }
+
+    /// Issue 134 T1: the per-domain and per-rule taxonomy partitions must
+    /// sum EXACTLY to the aggregate taxonomy (a partition that loses a span
+    /// would silently bias the demonstrability column's constants — the
+    /// same span counted twice or not at all moves a ratio that T3 will
+    /// correlate on).
+    #[test]
+    fn taxonomy_partitions_by_domain_and_rule() {
+        let r = run_eval();
+        let mut by_domain = crate::draft::retrieval_eval::ChoiceTaxonomy::default();
+        for t in &r.taxonomy_by_domain {
+            by_domain.labeled += t.labeled;
+            by_domain.correct_rule += t.correct_rule;
+            by_domain.correct_via_acceptable += t.correct_via_acceptable;
+            by_domain.wrong_rule += t.wrong_rule;
+            by_domain.wrong_span += t.wrong_span;
+            by_domain.covered += t.covered;
+            by_domain.declined += t.declined;
+            by_domain.proposer_blind += t.proposer_blind;
+            by_domain.selective_correct += t.selective_correct;
+        }
+        assert_eq!(by_domain, r.taxonomy, "per-domain partition ≠ aggregate");
+        let mut by_rule = crate::draft::retrieval_eval::ChoiceTaxonomy::default();
+        for (_, t) in r.taxonomy_by_rule.values() {
+            by_rule.labeled += t.labeled;
+            by_rule.correct_rule += t.correct_rule;
+            by_rule.correct_via_acceptable += t.correct_via_acceptable;
+            by_rule.wrong_rule += t.wrong_rule;
+            by_rule.wrong_span += t.wrong_span;
+            by_rule.covered += t.covered;
+            by_rule.declined += t.declined;
+            by_rule.proposer_blind += t.proposer_blind;
+            by_rule.selective_correct += t.selective_correct;
+        }
+        assert_eq!(by_rule, r.taxonomy, "per-rule partition ≠ aggregate");
     }
 
     /// Label truth: every clippy fixture fires its labeled lint under OUR

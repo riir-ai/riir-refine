@@ -5892,7 +5892,20 @@ fn finish_score_bench(
         rule_read.rows.len(),
         rule_read.skipped_multi_target
     );
+    // Issue 134 T1 — the standing demonstrability column (measurement only,
+    // no behavior change): per-domain selection-discriminability constants
+    // over the per-rule outcomes (`resolved / (resolved + persist)`,
+    // coverage-conditioned — the formula correction recorded in the issue),
+    // printed + appended to the jsonl row (additive; the store mirror drops
+    // it — the instrumentation law). Attribution through the compiled
+    // rule→domain table. Computed BEFORE the rows are moved into the record.
+    let demo = riir_clippy::demonstrability::from_rule_outcomes(&rule_read.rows);
     rec = rec.with_rule_outcomes(rule_read.rows);
+    print!(
+        "{}",
+        riir_clippy::demonstrability::render_column(&demo)
+    );
+    rec = rec.with_demonstrability(demo);
     // Issue 098 T4 — the cross-OOO axis on the console (the row carries it
     // too, via HistoryRecord::cross_ooo; one shared cached measurement).
     {
@@ -7173,6 +7186,31 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
         say(&format!(
             "  {domain:<14} {count:>5}  compiled={compiled}  ({source})"
         ));
+    }
+
+    // Issue 134 T1 — the STANDING demonstrability column: the LAST
+    // committed score-bench rows (the bench half; the eval half prints in
+    // the retrieval-eval report). Ungated reader (serde_json is a core
+    // dep) so every bin build carries it; a missing file or pre-T1-only
+    // history is the honest "not yet measured" — never a confident zero.
+    if with_stats {
+        let path = repo.join(".benchmarks").join("score_history.jsonl");
+        match riir_clippy::demonstrability::standing_from_jsonl(&path) {
+            Ok(Some((ts, rows))) => {
+                say(&format!(
+                    "demonstrability column (134 T1, standing — last bench row {ts}):"
+                ));
+                for line in
+                    riir_clippy::demonstrability::render_column(&rows).lines().skip(1)
+                {
+                    say(&format!("{line}"));
+                }
+            }
+            Ok(None) => say(
+                "demonstrability column (134 T1): not yet measured — no score-history row carries the field (run a --score-bench at HEAD)",
+            ),
+            Err(e) => eprintln!("demonstrability column: history unreadable: {e}"),
+        }
     }
 
     #[cfg(feature = "latent_retrieval")]

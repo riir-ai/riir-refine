@@ -67,6 +67,11 @@ pub mod dispersion;
 pub mod domain;
 pub mod drafter;
 pub mod edit_emitter;
+// Issue 134 T1 — the standing demonstrability column (measurement only,
+// no behavior change; Research 585 / SAT arXiv:2609.22682). Pure over its
+// inputs; the eval half of its API is cfg(latent_retrieval) and the bench
+// half cfg(score_bench), mirroring the two labeled-outcome sources.
+pub mod demonstrability;
 pub mod elo;
 pub mod embedder;
 pub mod fmt;
@@ -357,7 +362,14 @@ pub mod traj_store;
 // band-mass is predictive).
 pub mod frontier_report;
 
-// Issue 122 PoC: the PowerPlay frontier miner — a modelless, deterministic,
+// Issue 134 T1 — the compiled rule→domain table, moved UNGATED from
+// kat_sync_payload (which re-exports it at its historical path): the
+// demonstrability column + the score-bench lane project through the SAME
+// table without the kat_service dep tree. Pure in-memory read; lazily
+// built, zero cost when unused.
+pub mod rule_domains;
+
+// Issue 122 PoC: the PowerPlay frontier miner — modelless, deterministic,
 // zero-LLM generator that constructs the simplest fixtures the current
 // fix-rule corpus cannot repair, verifies them with the real clippy oracle
 // only, and commits admissible rows (unsolved-before / solved-after /

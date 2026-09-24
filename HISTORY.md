@@ -1,5 +1,46 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-24 — Issue 134 T1: the standing demonstrability column (SAT / Research 585)
+
+The Research-585 follow-up landed its measurement half: a per-domain
+**demonstrability constant** (selection discriminability, coverage-conditioned)
+printed in the retrieval-eval report, appended to every score-bench jsonl row,
+and readable as the STANDING column in `--corpus-stats`. Measurement only —
+no behavior change, no corpus delta (freeze tables untouched).
+
+- **The formula correction is the landing's own finding**: the issue text
+  wrote the bench constant as `persist / (persist + shaped)`, transposed
+  against `RuleOutcome`'s field semantics — `persist` is the
+  target-STILL-FIRING fork (the correct fix was AVAILABLE — the rule fired
+  on its own fixture — and selection did not land it: the `wrong_rule`
+  analog), while `shaped ⊆ resolved` (`is_shaped()` requires `resolved() >
+  0`) is a decomposition of the SUCCESS class. Implemented as the
+  eval-symmetric `resolved / (resolved + persist)`, `broken`
+  generation-side and `shaped` (half-win share) both reported beside,
+  never pooled. The correction is recorded in the issue + the module doc
+  (`.issues/134` T1 note).
+- **`src/rule_domains.rs`**: the compiled rule→domain table moved UNGATED
+  from `kat_sync_payload` (re-exported at its historical path — the golden
+  payload bytes + the 12 kat_sync tests pass unchanged through it) so the
+  bench half attributes through the SAME table the sync payload + pending
+  estimator project through, without the kat_service dep tree.
+- **Coverage-conditioning is by construction** (the T3 contamination guard):
+  correct-present denominators only; a raw success rate would make the T3
+  Spearman pass for the wrong reason. Per-rule rows floor at n≥20
+  (producer-side); the renderer is display-only (fidelity to what was
+  committed); `Row::constant()` returns `None` on empty labeled sets and the
+  renderer prints REFUSED — the frontier-report law. rustc_errors prints
+  its never-asserted drop reason; `"other"` rows are visible but never
+  T3-qualifying (attribution is membership).
+- **First live readings** (eval half): clippy 0.935 (n=46), rust_perf 0.962
+  (n=53) — selection discriminates well in both retrieval domains today,
+  which is itself the T3 premise to test (depth sweeps next, T2/T3).
+- Gates: default lib 2271/0 (+10 demonstrability, +4 rule_domains tests);
+  score_bench lib 2595/0/8i; kat_sync_payload 12/0 through the re-export;
+  clippy clean at default / score_bench / all-features lib / the bin at
+  score_bench+kat_service; `--no-default-features` compiles (both new
+  modules ungated); standalone dep gate green (no new deps).
+
 ## 2026-09-24 — Batch 174: the cubecl/bevy merged-fix distill (host-lock + flush-hoist + the B56 rider)
 
 Batch 174 landed at the 09-24 ~00:0x +07 cadence slot (`feat:` commit, Plan

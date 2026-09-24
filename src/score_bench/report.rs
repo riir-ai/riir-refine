@@ -98,6 +98,17 @@ pub struct HistoryRecord {
     /// deserialize as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rule_outcomes: Option<Vec<super::RuleOutcome>>,
+    /// Issue 134 T1 — the standing demonstrability column (measurement
+    /// only, no behavior change): per-domain + per-rule selection-
+    /// discriminability constants over the rule outcomes above
+    /// (`resolved / (resolved + persist)`, coverage-conditioned — see
+    /// [`crate::demonstrability`]). The same additive law as
+    /// `ood`/`strata`/`shaped`/`rule_outcomes`: instrumentation, not a
+    /// scored axis — the SVG renderer and the saturation detector ignore
+    /// it, and the Warm-tier mirror drops it. Rows predating the field
+    /// deserialize as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub demonstrability: Option<Vec<crate::demonstrability::Row>>,
 }
 
 /// The shaped-verdict read of one bench run (Issue 089 T7) — the half-win
@@ -265,6 +276,7 @@ impl HistoryRecord {
                 half_counts: score.shaped_half_counts.clone(),
             }),
             rule_outcomes: None,
+            demonstrability: None,
         }
     }
 
@@ -292,6 +304,15 @@ impl HistoryRecord {
     #[must_use]
     pub fn with_rule_outcomes(mut self, rows: Vec<super::RuleOutcome>) -> Self {
         self.rule_outcomes = Some(rows);
+        self
+    }
+
+    /// Attach the demonstrability column (Issue 134 T1) — the same additive
+    /// law: absent on rows predating the field, never a scored axis, never
+    /// a behavior change (T2's gate consumes it read-only, later).
+    #[must_use]
+    pub fn with_demonstrability(mut self, rows: Vec<crate::demonstrability::Row>) -> Self {
+        self.demonstrability = Some(rows);
         self
     }
 }
@@ -716,6 +737,7 @@ mod tests {
             strata: None,
             shaped: None,
             rule_outcomes: None,
+            demonstrability: None,
         }
     }
 
@@ -838,6 +860,35 @@ mod tests {
         assert!(line.contains("\"rule_outcomes\":"), "{line}");
         let back: HistoryRecord = serde_json::from_str(&line).unwrap();
         assert_eq!(back.rule_outcomes, Some(rows));
+    }
+
+    /// Issue 134 T1 — the additive-`demonstrability` law (the
+    /// rule_outcomes precedent): rows predating the field deserialize as
+    /// `None`, a `with_demonstrability` row round-trips, and the standing
+    /// reader (ungated, in `crate::demonstrability`) reads the LAST row
+    /// carrying the field.
+    #[test]
+    fn demonstrability_field_is_additive_and_round_trips() {
+        // A pre-T1 row (no `demonstrability` key in the JSON at all).
+        let old_row = "{\"ts\":\"2026-08-19T10:00:00\",\"sha\":\"abc\",\"n_ran\":1,\"n_healable\":1,\"n_clean\":0,\"heal_rate\":0.5,\"created_rate\":0.0,\"parse_safety\":1.0,\"decline_correctness\":1.0,\"edits_total\":1,\"vocab_size\":33,\"generation\":1,\"rule_outcomes\":null}";
+        let base: HistoryRecord = serde_json::from_str(old_row).expect("old row deserializes");
+        assert_eq!(base.demonstrability, None);
+
+        // A demonstrability row round-trips through the jsonl encoding.
+        let rows = vec![crate::demonstrability::Row {
+            domain: "clippy".to_string(),
+            rule: None,
+            source: crate::demonstrability::Source::ScoreBench,
+            selected: 30,
+            rejected: 5,
+            selected_partial: 2,
+            excluded_generation: 1,
+        }];
+        let with = base.with_demonstrability(rows.clone());
+        let line = serde_json::to_string(&with).unwrap();
+        assert!(line.contains("\"demonstrability\":"), "{line}");
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.demonstrability, Some(rows));
     }
 
     #[test]
