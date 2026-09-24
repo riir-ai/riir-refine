@@ -1,0 +1,77 @@
+# Research 209 — cinference (satellitedown) DFlash2 verify-kernel distill verdict
+
+**Status:** DISTILLED — pending owner decision (queued as nominal **Batch 178** behind B176 FWHT rider + B177 EXL3; plan [171](../.plans/171_batch178_cinference_dflash2_verify_distill.md))
+
+## Source
+
+- **URL:** https://github.com/satellitedown/cinference
+- **Pin:** `37814b1e1843315e456b60883a8c8ba08cc2aef0` (shallow clone, HEAD; Apache-2.0 source; clone deleted at verdict close per the ephemeral-clone law)
+- **Inspection date:** 2026-09-24 (4090 box)
+- **Provenance chain:** cinference (fork, source-level engine changes) → **NInfer** (upstream C++/CUDA inference engine, the base) → model *fafstmobel* (Swift-based **Qwen3.8-27B** derivative, Huihui abliteration delta, NVFP4/FP8 text weights — Swift Open License v1.0 on the MODEL only; the source under distill is Apache-2.0). NOT the `splash` DFlash2 reference (separate engine, already a league watch row).
+- **What it is:** single-RTX-5090 (32 GB, SM120/Blackwell) engine with 256K context, **DFlash2 decoding** (GDN-family speculative decoding, MTP window raised 5→10), capture-based CUDA Graph reuse, and a rewritten **DFlash2-15 verify-kernel family** with the repo's own before/after sha-pinned measurements.
+- **Measured record (README, commit-pinned):** verify-round time `b4e8ed4` → `4994a0c`: **−16.6% @8K / −19.2% @32K / −22.6% @131K**; tokens/s **+19.8% / +28.3%¹ / +29.2%** (¹32K conflates acceptance 9.14→9.48 tokens/round; engine-speed-alone ≈ +24%). Passes 2–4 are **bit-exact** with per-pass deltas quoted (2.8–3.7%, 2.1–2.3%, 1.5–2.4%); pass 1 (the biggest) has NO per-kernel attribution split. Board at 575 W power limit with desktop workloads, ~8.5% above previous record — the source's own "compare within one table" caveat (good hygiene, cite it).
+
+## Verdict
+
+**YES, B+ corpus / LANE INTEL HIGH (the owner's in-focus 4090 qwen3.8/DFlash2 chat+verify lane) / product-coverage minor (first NInfer-family source in kernel_opt — recorded as checked, not a famous-lib seeding).**
+
+Route: **`kernel_opt`** (CUDA kernel patterns + host GPU orchestration; measured-GOAT distillation class — the source landed perf fixes with its own measured table, the B49/B52/B54/B55 precedent shape). NOT `rust_perf` (zero Rust), NOT recipe-only (they modified the native engine, not launch flags).
+
+## Ranked candidates (dedup-grepped both vocabularies; evidence lines below)
+
+| # | Pattern | Source site | Grade | Notes |
+|---|---|---|---|---|
+| 1 | `producer-store-evict-last-pins-cross-stream-consumer` | `src/ops/common/memory.cuh:94-101` | **A− (GOAT lead)** | Store-side L2 policy — NEW axis. "Stores a key whose consumer runs after a larger weight stream: the evict-last fill keeps the line in L2 until that consumer reads it" (`st.global.L2::cache_hint` + `createpolicy.fractional.L2::evict_last`). The complement of evict-first LOAD fills: pin produced lines that a later kernel consumes across an intervening weight stream. Pure hint ⇒ bit-identical by construction (same class as `weight-stream-non-temporal-loads`' correctness-neutral clause). Zero corpus hits under `evict_last|evict-last|store.*policy`. |
+| 2 | `graph-exec-update-gated-by-captured-topology-signature` | `src/core/decode_graph.{h,cpp}` + `src/models/qwen3_5/program/graphs.cpp:362-382,73` | **A−** | Sharing/update legality derived FROM THE CAPTURED GRAPH, not construction params: `topology_signature()` = node count + FNV-1a over captured node types (+ kernel-node function identity); routes with equal signatures **share one executable** and re-captures go through `cudaGraphExecUpdate`, never re-instantiate. Header contract verbatim: "a CUDA graph executable can be updated across profiles only while the topology is unchanged." Distinct from `identity-keyed-graph-retention-stable-arena` (retain by construction key + bucket), `captured-graph-bakes-buffer-addresses` (drop-or-survive), `device-m-runtime-mblock-graph-stable-gemm` (shape-free via device-side M), and the Batch-100 rebind rule (which name-checks `cudaGraphExecUpdate` only as an analogy). Independently benchable on OUR 4090 CUDA-graphs lane (Issue 965; `RIIR_PREFILL_CUDA_GRAPHS`). |
+| 3 | `dead-line-l2-discard-after-last-consumer` | `memory.cuh:103-107` | **B+** | `discard.global.L2 [line], 128` — invalidate without writeback; the decision content is the SAFETY CONTRACT verbatim: "Only for lines whose data is dead: every later read of the line must follow a new write." Capacity reclamation for consumed attention partials (the README's "L2 discards of consumed attention partials"). Zero corpus hits. |
+| 4 | `exact-widening-enables-fp16-pv-accumulation` | `small_t_k8v4.cuh:8-11` | **B** | Numerics-lane decision: rotated V in group-16 NVFP4 "widens **exactly** to FP16 at half scale for the PV MMA, which accumulates each 32-key product in FP16 before adding it to the FP32 accumulator. Split numerators and inverse rotation remain FP32." Two-regime: exact widening ⇒ cheap-precision MMA legal; lossy widening ⇒ refuse. Tolerance strategy: the source's own "greedy speculative output still matches plain target decoding" oracle + our Issue-750-T3 per-family retention-walk precedent. Distinct from the B92 dequant-extraction family (mechanics, not the accumulation-precision decision). |
+| 5 | `wide-verify-warp-specialized-scores-in-registers-pv` | `small_t_k8v4.cuh:13-17` | **B** | Two-regime kernel selection by query width: narrow (≤3×16-row tiles) → tiled kernel, "producer warps score a key tile and publish P through shared memory to all warps"; wide (full 27B verify width) → warp-specialized: "each compute warp owns one 16-row tile for the whole split and **keeps its scores in registers as the PV operand**, while two loader warps stream and widen the K/V tiles, so the Tensor Core work of one warp overlaps the softmax of another." P never touches smem in the wide arm. No warp-specialization rule in corpus (grep: only `warp-shuffle-intrinsics-for-sub-warp-reduction`, `shared-operand-groups-per-warp`, `warp-aggregated-atomic-scatter`). |
+| 6 | per-tile evict-first by CTA-read-count | `memory.cuh:72-75` | **RIDER** on `weight-stream-non-temporal-loads` | Regime split refined from operand-class to **per-tile**: "a weight tile that a single CTA reads (one token tile) is streamed once… Tiles that several token-tile CTAs reuse keep the normal priority." Third external proof of the rule (after IQ4_XS + our 742 T9.16), on verify weights, Blackwell. |
+| 7 | single-resident-wave double-buffer regime | `fp8_linear_add_mma.cu:14-19` | **RIDER** on `cpasync-multistage-tile-pipeline` | The K-split group double-buffer (48 KiB static staging) core is a positive instance; the NEW content is the regime condition: "**The grid is a single resident wave, so** a 16-token tile double-buffers its groups… to keep the next group's copies in flight while the current group multiplies" — pipelining pays specifically when no co-resident CTA already hides the stall. |
+| 8 | `row-slice-expensive-epilogue-across-ctas` | `nvfp4_rmsnorm_quantize.cu:17-20` | **B−** | "Quantizing costs three IEEE divisions per lane and step, so five CTAs share each row, two of the ten steps apiece (T=16: 1, 2, 5 and 10 slices measured 2.94, 2.24, 1.82 and 2.14 µs)" — redundant row-statistics recompute traded for epilogue parallelism, with a measured slice-count sweep in-source. The fused RMSNorm→NVFP4 kernel itself is a positive instance of `fused-activation-quantize-for-gemv-consumer` (two-consumer fan-out note rides that rule). |
+| 9 | `warp-bitonic-topk-merge-shuffle` | `linear_topk/merge.cu:14-60` | **B−/C+** | Packed u64 score|id keys, per-lane bitonic sort + five `__shfl_xor` butterfly merge rounds ("max(A[i], B[15−i]) is a bitonic sequence holding the top-k of both lists"), one warp per output group / one input group per lane. Adjacent to the topk/select family (`topk-select-nth-over-full-vocab-sort`, `order-stable-topk-via-index-sort`, ds4 MTP-select rider); the shuffle-merge mechanism itself is absent from corpus. |
+| 10 | GDN replay-record staging | `core/gdn_replay_records.h` | **RIDER** on `gdn-transition-replay-log-commit-many` | Bound non-owning all-layer ReplaySSM transition records (conv/key/value/gate planes, layer×row outer index). Positive instance; may be re-routed into the **971-gated composed GDN-kernel batch** (lukdmine + tetherto + GTR rows) at owner discretion — it is GDN-lane-specific. |
+| 11 | prepare-once-copy-per-split (verify query tile) | `small_t_k8v4.cuh:18-20` | **C+ rider** | "query tile is rotated and quantized once per block by a preceding kernel and copied by every split, instead of being derived again in each split" — invariant-hoist across a split-KV kernel family; adjacent to `stream-invariant-operand-skips-staging-pipeline`. |
+| — | **DROPS** | | | fused qk-RMSNorm-RoPE (positive instance, fusion family + vLLM RoPE rider already covers the write-quantized-slot form); `k8v4_write_neutral` (exact positive instance of `mask-sentinel-matches-reduction-identity`); MTP-10 window raise (config knob, recipe-class); "mask-free softmax for unmasked key tiles" (read as the mask-sentinel/elision family's tile-regime — adjudicate at mine time whether a tile-level elision rule survives beyond the existing family, provisional C+). |
+
+## Dedup evidence (one line per candidate)
+
+- evict-first loads / non-temporal: HIT `weight-stream-non-temporal-loads` (entries_gpu_07) → candidate #1 (evict_last STORES) and #3 (discard) grepped `evict_last|evict-last|discard.global|discard_l2` → **zero rule hits** (only Batch-100's `cudaGraphExecUpdate` analogy text matched "update") → #1/#3 novel.
+- graph reuse: HIT `identity-keyed-graph-retention-stable-arena` (B81), `captured-graph-bakes-buffer-addresses` (B58), `device-m-runtime-mblock-graph-stable-gemm`, `captured-graph-init-unconditional-and-stream-ordered`, `cuda-graph-scalar-via-device-pointer`, Batch-100 rebind rule — all READ; none keys on the captured node sequence hash nor routes profiles to shared execs via update → #2 novel.
+- double-buffer/pipelining: HIT `cpasync-multistage-tile-pipeline` + `register-double-buffer-operand-pipeline` (entries_gpu_09) → core is a positive instance; regime condition is rider content (#7).
+- warp: HIT only sub-warp-reduction / operand-groups / atomic-scatter / lds-cluster / fwht-staging — no warp-specialization/producer-loader split, no scores-as-PV-operand → #5 novel.
+- top-k: HIT `topk-select-nth-over-full-vocab-sort`, `order-stable-topk-via-index-sort`, `device-side-argmax-minimal-download` (+ds4 MTP-GPU-select rider), `softmax-topk-renormalize-scatter` → #9 mechanism-level novel, family-adjacent.
+- fusion/norm/rope/quantize: HIT `fused-activation-quantize-for-gemv-consumer` (+vLLM RoPE rider), `fuse-gate-up-gemv-activation`, `chain-dispatches-single-sync-point` → drops.
+- GDN verify family: HIT `wy-transform-tree-verify-state-free`, `gdn-transition-replay-log-commit-many`, `tree-verify-recurrent-state-parent-reload`, `rotated-ring-undo-via-rebind-reference-snapshot` → #10 rider.
+- masked-lane participation: HIT `mask-sentinel-matches-reduction-identity` → `k8v4_write_neutral` drop.
+
+## GOAT gate (lead #1, with #2 the strongest independently-benchable-on-our-box rule)
+
+1. **Benchable:** kernel_opt's promotion gate is pending; rules land decision-content with the source's measured table as the measured-GOAT evidence. #2 is additionally benchable on our own 4090 CUDA-graphs lane (instantiate vs `cudaGraphExecUpdate` cost). L2 policies benchable in a toy streaming kernel (sm_89 supports the PTX).
+2. **Exact semantics:** #1/#2/#3 bit-identical by construction (hints + runtime graph ops, zero arithmetic change); #4 needs a tolerance strategy (stated above).
+3. **Magnitude:** composite −17…−23% verify-round (attribution composite — honest caveat recorded); instantiate-vs-update is a 10²–10³× cost-class mechanism; L2 policy preserves the activation/record working set resident across layers (the in-code argument).
+4. **Deterministic:** yes (hints, hashing, fixed kernels).
+
+## Lane intel (the 4090 qwen3.8/DFlash2 axis — owner IN-FOCUS since 2026-09-20, Research 383/385)
+
+- **Mapped lane:** the DFlash2 chat/verify lanes on the 4090 — Issue 846 (chat 0.36×; verify-chunk C = 2.478 vs ask ≤1.34), Issue 989 (chat counterfactual), Issue 629's 09-21 triage naming the lane in-focus. Our consuming surface: **riir-infer-gpu** (`qwen38_dflash2`, `qwen38_dflash2_gpu`, `qwen38_verify_mma`, CUDA-graph lane Issue 965).
+- **Transferable:** the L2 policy trio (`createpolicy.fractional`/`discard.global.L2`/`prefetch.global.L2` are sm_80+ — work on the 4090; re-verify at mine time); topology-signature graph sharing (pure CUDA-runtime, silicon-independent); warp-specialized register-PV scheduling (tensor-core generic); the single-wave regime condition. These are the mining value.
+- **NOT transferable:** absolute tok/s (RTX 5090/SM120 vs 4090/SM89); **NVFP4** (Blackwell tcgen05 block-scaled FP4 — the 4090 has no hardware for it) and FP8-at-Blackwell-rates; the model card's 304–313 tok/s (16K, FP8-KV, different workload). **This does NOT reopen the physics-closed verify-chunk lane:** the 846 ncu ground truth (absolute-DRAM-floor C ≥ ~1.44 on 4090/W4A16/f16-KV) stands — their win rides halved KV bytes + Blackwell MMA throughput, a different silicon/quant operating point, not a violated floor. No 846/971 trigger fires from this source.
+- **Follow-up:** lane-intel line recorded in the queue snapshot (this commit); sibling issues NOT edited (a verdict does not edit sibling repos) — an 846/989 addendum quoting this pin is offered at owner discretion.
+
+## Product coverage
+
+kernel_opt gains its **first NInfer-family source** (cinference/NInfer join cubecl/bevy/vllm/llama.cpp/ds4/oMLX/MLX/emmy/PrismML-fork/qwen-3.8-mtp-challenge as source lineages). Minor, recorded as checked — not a famous-lib seeding event.
+
+## Honest caveats
+
+- 4★, 25 commits, single-author fork; maintenance note only (patterns are timeless).
+- Per-mechanism attribution for pass 1 is composite (no per-kernel split); passes 2–4 bit-exact with per-pass deltas — annotation carries the split honestly.
+- 32K cell conflates an acceptance change; power-limit/desktop-load caveat in-source.
+- Shallow clone: pass shas (b4e8ed4, f6a654c, 6b1c3fa, 0ddb836, b2215c4, 3dc5297, 4994a0c) are README-pinned; a full clone at mine time is required if per-pass diffs are quoted.
+- Unread/ungraded (verify at mine time): `prompt_*` kernels beyond headers, `sparse_moe/`, `gdn_gating_proj/`, `gdn_input_proj/`, `dynamic_grouped_conv/`, `context_kv_materialize/`, `apps/`, `bench/` (the ninfer_bench harness — relevant to measured-GOAT verification), `eval/`, `third_party/`.
+- Rules must be authored at the MECHANISM level (L2 policy axes, warp-role split, signature-gated update), never at the NVFP4/SM120 format level — the formats do not exist on our silicon.
+
+## Yield + queue
+
+Expected after ~50% coordinator falsification: **3–4 new rules + 3–4 riders** (leads #1–#5, riders #6/#7/#10/#11, maybes #8/#9). Comparable density to Batch 170 (mlxfast-gemma4, +7+9). **Queued as nominal Batch 178** behind B176 (FWHT rider) + B177 (EXL3); plan-first per the discipline — no corpus edit made at verdict time. Composition option recorded for the owner: rider #10 (GDN replay-record staging) may re-route into the 971-gated composed GDN-kernel batch instead.
