@@ -10365,7 +10365,7 @@ cut release's assets (never retype the tag), and curl the URL once before
 pushing — a 404 in a bucket manifest is a broken install for every Windows
 user, not a docs nit.
 
-Found during the riir-reflex Plan 606 T2.3 session (previously carried as
+Found during the katgpt-rs Plan 606 (riir-reflex Phase 2) T2.3 session (previously carried as
 "noted, not mine" in the Phase-2 handoff); the reflex-side record is
 riir-reflex `e5dcfc9`. Issue file removed per the noise-reduction rule —
 this row is the durable record.
