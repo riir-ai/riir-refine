@@ -3524,8 +3524,8 @@ fn batch174_rules_present_and_parse() {
 }
 
 /// Batch 174's benchable half: the flush-hoist spec runs and lands its
-/// verdict (ParetoDominant expected — the barrier's fixed-cost share; the
-/// measured numbers + the model caveat live in the entry's context_notes).
+/// verdict (`ParetoDominant` expected — the barrier's fixed-cost share; the
+/// measured numbers + the model caveat live in the entry's `context_notes`).
 #[cfg(feature = "rust_perf_bench")]
 #[test]
 #[ignore = "slow: spawns cargo build+run per rule (temp bench crates)"]

@@ -43,7 +43,11 @@ pub mod domain_router;
 pub mod eval_fixtures_clippy;
 pub mod eval_fixtures_composite;
 pub mod eval_fixtures_cross_domain;
+pub mod eval_fixtures_dist;
+pub mod eval_fixtures_docker;
 pub mod eval_fixtures_perf;
+pub mod eval_fixtures_sec;
+pub mod eval_fixtures_shader;
 pub mod headroom_probe;
 pub mod instantiation_rerank;
 #[cfg(feature = "clippy_verify")]

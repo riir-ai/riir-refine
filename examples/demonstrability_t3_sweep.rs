@@ -17,17 +17,19 @@
 //!   error: the sweep table still prints (the per-domain data accumulates
 //!   as thin domains gain labeled sets — the instrument is the deliverable).
 //!
-//! The available domain set today: clippy + rust_perf always, kernel with
-//! `kernel_heal` (the labeled-fixture population, `labeled_eval_spans`) —
-//! n=2–3 < 5, so the honest landing verdict is REFUSED. That is the answer
-//! the issue anticipated ("the thin ones may not qualify and the refusal is
-//! the honest answer then").
+//! The available domain set since the Issue-134 T3 re-arm (2026-09-24):
+//! clippy + rust_perf + docker + dist at default features (the thin-domain
+//! fixture sets), kernel with `kernel_heal`, sec with `sec`, shader_perf
+//! with `shader_perf` — n=7 at the full state, ABOVE the power floor.
+//! The re-arm run's verdict was REFUSED on the DEGENERATE-AXIS guard (see
+//! below), which is the honest reading: every depth curve was flat, so the
+//! gain axis carried zero variance and the Spearman was undefined.
 //!
 //! ```bash
 //! cargo run --release --features latent_retrieval,clippy_lints,rust_perf \
 //!   --example demonstrability_t3_sweep
-//! # with the kernel domain (n=3):
-//! cargo run --release --features latent_retrieval,clippy_lints,rust_perf,kernel_heal \
+//! # the full seven-domain state (n=7):
+//! cargo run --release --features latent_retrieval,kernel_heal,sec,shader_perf \
 //!   --example demonstrability_t3_sweep
 //! ```
 
@@ -183,8 +185,33 @@ fn main() {
         );
         return;
     }
-    let rho = spearman(&rows.iter().map(|(_, c, _)| *c).collect::<Vec<_>>(),
-        &rows.iter().map(|(_, _, g)| *g).collect::<Vec<_>>());
+    // The DEGENERATE-AXIS guard (the power floor's own logic one level up):
+    // Spearman against a CONSTANT vector is undefined — zero variance on
+    // either axis means the tie-averaged formula produces a pseudo-value
+    // determined by the OTHER axis's rank structure alone (measured here:
+    // all-flat gain curves rendered ρ=0.536 against n=7 — a number that
+    // looks like evidence and is an artifact). A verdict on a degenerate
+    // axis is "satisfied by absent work" — refuse it, neither pass nor
+    // fail, and name which axis died and why that is a real finding.
+    let consts: Vec<f32> = rows.iter().map(|(_, c, _)| *c).collect();
+    let gains: Vec<f32> = rows.iter().map(|(_, _, g)| *g).collect();
+    let const_var = variance_nonzero(&consts);
+    let gain_var = variance_nonzero(&gains);
+    if !const_var || !gain_var {
+        println!(
+            "\nVERDICT: REFUSED — degenerate axis: {} variance. The Spearman is\n\
+             undefined against a constant vector (the tie-averaged formula renders a\n\
+             pseudo-value off the other axis's ranks alone — the promotion question\n\
+             cannot be answered by this measurement). If the GAIN axis is flat everywhere\n\
+             that is itself the finding: pool depth is a dead allocation axis at this\n\
+             corpus scale — top-1 is decided within the head-28 in every domain, and\n\
+             domains whose corpus is smaller than the baseline pool (dist: 6 rules)\n\
+             cannot gain from depth by construction.",
+            if !const_var { "demonstrability" } else { "gain-from-depth" }
+        );
+        return;
+    }
+    let rho = spearman(&consts, &gains);
     println!("\nSpearman ρ(demonstrability, gain-from-depth) = {rho:.3}  (n={n})");
     // The paper's association is positive (ρ=0.90 across their 8 benchmarks);
     // our gate bar is the standard 0.5-tier for a promotion GOAT — below it,
@@ -194,6 +221,20 @@ fn main() {
     } else {
         println!("VERDICT: FAIL — keep measurement-only (T1 survives as instrumentation); record the negative.");
     }
+}
+
+/// True when the vector carries real spread (max > min). A Spearman over a
+/// zero-variance axis is undefined — the guard that consumes this exists
+/// because the first n=7 run measured ρ=0.536 against an all-zero gain
+/// vector and the number read as evidence.
+fn variance_nonzero(v: &[f32]) -> bool {
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+    for &x in v {
+        min = min.min(x);
+        max = max.max(x);
+    }
+    max > min
 }
 
 fn canonical_label(d: DomainId) -> &'static str {

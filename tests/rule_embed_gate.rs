@@ -3,19 +3,18 @@
 //! hold the measured gates. Count-pinned at the 2026-09-20 landing
 //! (`.benchmarks/099_rule_embed_sigmoid_nce.md`):
 //!
-//! - **G2 (floor):** full-rig trained hits-at-1 ≥ 98 = train 67 + withheld
-//!   31 (baseline 94 + the 4 rescued misses: `useless_conversion`,
-//!   `single_char_pattern`, `comparison_to_empty`, `box-str-immutable`
-//!   outranked; `needless_borrow` rescued from not-retrieved to rank 6).
+//! - **G2 (floor):** full-rig trained hits-at-1 ≥ 129 = train 95 + withheld
+//!   34 (re-pinned 2026-09-24 at the Issue-134 T3 re-arm population 138;
+//!   the 2026-09-20 landing measured 98 = 67 + 31 over 101 spans).
 //!   Fires downward on a corpus/trainer regression.
-//! - **G2-OOD (floor):** withheld-split trained hits-at-1 = 31 (the baseline
+//! - **G2-OOD (floor):** withheld-split trained hits-at-1 ≥ 34 (the baseline
 //!   is already perfect there — zero headroom; the split is the
 //!   anti-memorization read, no harm off-distribution).
 //! - **G1 (wall at 0):** zero top-1 regressions vs baseline.
-//! - **G3 (floor):** clean-span fixable top-1 ≤ 26 (baseline's own count —
+//! - **G3 (floor):** clean-span fixable top-1 ≤ 31 (baseline's own count —
 //!   the FP class must not grow).
 //!
-//! The BASELINE counts are pinned too (94/31/26): a baseline shift re-pins
+//! The BASELINE counts are pinned too (90/34/31): a baseline shift re-pins
 //! the trained floors beside it — a silent re-pin is the failure shape the
 //! count law exists for.
 //!
@@ -30,20 +29,39 @@ use riir_clippy::draft::rule_embed::embedded_tables;
 const PINNED_WEIGHT: f32 = 16.0;
 
 // Baseline floors (the untrained posture, same run — re-pin on corpus drift).
-const BASELINE_TRAIN_HITS: usize = 63;
-const BASELINE_WITHHELD_HITS: usize = 31;
-const BASELINE_CLEAN_FIXABLE: usize = 26;
+// Issue 134 T3 re-arm re-pin (2026-09-24): the labeled population grew
+// 101 → 138 (the thin-domain fixture sets — docker 31 + dist 6 spans at
+// the default-feature state this gate runs in; kernel/sec/shader are not
+// implied by rule_embed_poc). All floors re-measured in the same run; the
+// clean-fixable CEILING moved 26 → 31 because `clean_top1_fixable` counts
+// every (clean span, ENABLED DOMAIN) top-1 pair — docker/dist were enabled
+// by default and added pairs whose top-1 is probeable. The G3 semantic is
+// unchanged: trained (31) must not exceed the baseline's own count (31).
+const BASELINE_TRAIN_HITS: usize = 90;
+const BASELINE_WITHHELD_HITS: usize = 34;
+const BASELINE_CLEAN_FIXABLE: usize = 31;
 
 // Trained floors at PINNED_WEIGHT (the landing's measured values; the G2
-// win floor is their SUM — 67 + 31 = 98 vs baseline 63 + 31 = 94).
-const TRAINED_TRAIN_HITS: usize = 67;
-const TRAINED_WITHHELD_HITS: usize = 31;
-const TRAINED_CLEAN_FIXABLE: usize = 26;
+// win floor is their SUM — 95 + 34 = 129 vs baseline 90 + 34 = 124).
+const TRAINED_TRAIN_HITS: usize = 95;
+const TRAINED_WITHHELD_HITS: usize = 34;
+const TRAINED_CLEAN_FIXABLE: usize = 31;
 
 #[test]
 fn rule_embed_posture_holds_the_pinned_gates() {
     let tables = std::sync::Arc::new(embedded_tables().clone());
     let rep = run_split_eval(&tables, PINNED_WEIGHT);
+    // The measured numbers beside every pin — a re-pin (population growth,
+    // corpus drift) reads its new values HERE, not from a panic message.
+    eprintln!(
+        "rule_embed gate: baseline train {}/{} withheld {}/{} | trained train {}/{} withheld {}/{} | clean fixable baseline {} trained {} | regressions {}",
+        rep.baseline_train.hits_at_1, rep.baseline_train.labeled,
+        rep.baseline_withheld.hits_at_1, rep.baseline_withheld.labeled,
+        rep.trained_train.hits_at_1, rep.trained_train.labeled,
+        rep.trained_withheld.hits_at_1, rep.trained_withheld.labeled,
+        rep.clean_top1_fixable_baseline, rep.clean_top1_fixable_trained,
+        rep.regressions_vs_baseline,
+    );
 
     // G1 — wall at 0.
     assert_eq!(
@@ -100,5 +118,5 @@ fn rule_embed_posture_holds_the_pinned_gates() {
     // in the test output (not a failure: uncovered rules fall back to the
     // baseline term by design).
     let total_rules = rep.baseline_train.labeled + rep.baseline_withheld.labeled;
-    assert_eq!(total_rules, 101, "labeled span population shifted");
+    assert_eq!(total_rules, 138, "labeled span population shifted");
 }

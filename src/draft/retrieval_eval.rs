@@ -23,6 +23,15 @@
 //!   bounds crowding from above), which is exactly the decay signal the
 //!   gate watches — when own-variants stop ranking top-1 among 343 rules,
 //!   crowding is real.
+//! - **thin domains (Issue 134 T3 re-arm, 2026-09-24 — see Bench 101)**:
+//!   `sec` (16, `sec` only) / `docker` (31) / `dist` (6) / `shader_perf`
+//!   (8, `shader_perf` only) — hand-authored variants of the corpus
+//!   anti-patterns, one span per rule, labels verified against the corpus
+//!   + their own proposers by the committed label tests. Honest
+//!   confusability documented in the fixture files: docker's
+//!   cache-mount/manifest-first corpus texts are byte-identical, and dist's
+//!   three ship-size rules share the bare-`[[bin]]` shape — their constants
+//!   (0.867 / 0.800) measure that real selection difficulty.
 //! - **clean (12)**: REAL production code excerpts from this repo. The
 //!   clean-snippet class matters because `--suggest` has no score threshold
 //!   (Bench 018 addendum — measured dead end); the eval records WHAT tops
@@ -789,6 +798,46 @@ pub fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
             label: rule,
             domain: DomainId::Kernel,
             code,
+            acceptable: Vec::new(),
+        });
+    }
+    // Issue 134 T3 re-arm — the thin-domain labeled sets, in `DomainId::ALL`
+    // order. Each block is inert until its domain feature is on; the spans
+    // are hand-authored variants of the corpus anti-patterns (the
+    // `eval_fixtures_perf` convention, one span per rule).
+    #[cfg(feature = "sec")]
+    for (rule, code) in super::eval_fixtures_sec::SEC_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: rule.to_string(),
+            domain: DomainId::Sec,
+            code: code.to_string(),
+            acceptable: Vec::new(),
+        });
+    }
+    #[cfg(feature = "docker")]
+    for (rule, code) in super::eval_fixtures_docker::DOCKER_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: rule.to_string(),
+            domain: DomainId::Docker,
+            code: code.to_string(),
+            acceptable: Vec::new(),
+        });
+    }
+    #[cfg(feature = "dist")]
+    for (rule, code) in super::eval_fixtures_dist::DIST_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: rule.to_string(),
+            domain: DomainId::Dist,
+            code: code.to_string(),
+            acceptable: Vec::new(),
+        });
+    }
+    #[cfg(feature = "shader_perf")]
+    for (rule, code) in super::eval_fixtures_shader::SHADER_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: rule.to_string(),
+            domain: DomainId::ShaderPerf,
+            code: code.to_string(),
             acceptable: Vec::new(),
         });
     }
@@ -1839,9 +1888,32 @@ mod tests {
         // perf **51/52/53** of 53, kernel **30/30/30** of 30, router 74/101
         // at `latent_retrieval` and 83/131 with `sec,kernel_heal`. Confirmed
         // in both feature states and across a two-arm A/B in one worktree.
-        pub const BLENDED_TOP1: f32 = 93.0 / 101.0;
-        pub const BLENDED_TOP3: f32 = 95.0 / 101.0;
-        pub const BLENDED_TOP5: f32 = 97.0 / 101.0;
+        //
+        // Issue 134 T3 re-arm re-pin (2026-09-24) — the thin-domain fixture
+        // sets (docker 31 + dist 6 spans, both DEFAULT features) grew the
+        // default-state population 101 → 138. Four under-authored docker
+        // spans were re-authored to the corpus shape FIRST (fix-before-repin,
+        // the Issue 022 order — the four carried non-canonical base-image
+        // tokens where the corpus entries pin `FROM scratch` / `FROM rust…`;
+        // docker measured 74.2% → 83.9% after). Measured at the WEAKEST state
+        // (default: clippy+perf+docker+dist — every other state adds domains
+        // that only raise the blended): top-1 **124/138 (89.9%)**, top-3
+        // **130/138 (94.2%)**, top-5 **132/138 (95.7%)**; the other states:
+        // +shader 132/138/140 of 146, +sec 140/146/148 of 154, +kernel
+        // 154/160/162 of 168, ALL 178/184/186 of 192. Floors = measured − ONE
+        // span at the weakest state. Per-domain rows UNCHANGED (clippy
+        // 43/44/46 of 48, perf 51/52/53 of 53 — the new domains' rows are
+        // their own measurement, printed by the demonstrability column:
+        // docker constant 0.867, dist 0.800 — honest near-duplicate-corpus
+        // difficulty: cache-mount-missing-on-cargo-build and
+        // manifest-first-layer-split carry byte-identical corpus buggy texts,
+        // and dist's three ship-size rules share the bare-`[[bin]]` shape).
+        // New per-domain floors for the thin domains are NOT pinned here yet —
+        // one fixture-set generation of stability first (the Batch-48
+        // precedent: first measurements move as the set converges).
+        pub const BLENDED_TOP1: f32 = 123.0 / 138.0;
+        pub const BLENDED_TOP3: f32 = 129.0 / 138.0;
+        pub const BLENDED_TOP5: f32 = 131.0 / 138.0;
         pub const CLIPPY_TOP1: f32 = 42.0 / 48.0;
         // Issue 063 sweep, 2026-09-02 — **convention alignment, NOT a
         // loosened bar.** This const was `45.0 / 48.0` while clippy top-3
@@ -1918,7 +1990,9 @@ mod tests {
             // floor 69 held); `kernel_heal + latent_retrieval` = 92/131
             // (70.2%) — IDENTICAL to its dist-off twin (delta 0; the floor
             // 87 it inherited was already the right pin). No re-pin owed.
-            let dist_on = cfg!(feature = "dist");
+            // (`dist` joined `default` 2026-09-13 — every docker-on arm below
+            // is the dist-on state; the historical dist_on selector was
+            // folded away at the Issue-134 re-pin.)
             match (
                 cfg!(feature = "kernel_heal"),
                 cfg!(feature = "sec"),
@@ -1957,18 +2031,19 @@ mod tests {
                 // to Proposal 006's open question about a 5th domain's cost
                 // to the router: for THIS domain it is not a cost.
                 (false, false, true) => {
-                    // Plan 134 shader-on twin (MEASURED 2026-09-16, the
-                    // landing run — `default + latent_retrieval +
-                    // shader_perf`): 67/101 (66.3%), −6 spans vs the 74/101
-                    // dist-on twin; floor = 62. The B131 sec mechanism (see
-                    // the fn header), not docker's.
+                    // Issue 134 T3 re-arm (MEASURED 2026-09-24, the
+                    // thin-domain fixture landing): population 101 → 138
+                    // (docker 31 + dist 6 spans). Shader-off default state:
+                    // 110/138 (79.7%) — floor = 105. The shader-on twin
+                    // (146 spans): 114/146 (78.1%) — floor = 109. (The
+                    // historical dist-off twin arm is folded in: `dist` is a
+                    // default feature, so a docker-on dist-off state is
+                    // reachable only via --no-default-features feature
+                    // surgery that nothing runs.)
                     if cfg!(feature = "shader_perf") {
-                        62.0 / 101.0 // measured 67/101 (66.3%)
-                    } else if dist_on {
-                        // Issue 085 measured arm (see the fn header).
-                        69.0 / 101.0 // measured 74/101 (73.3%)
+                        109.0 / 146.0 // measured 114/146 (78.1%)
                     } else {
-                        68.0 / 101.0 // measured 73/101 (72.3%)
+                        105.0 / 138.0 // measured 110/138 (79.7%)
                     }
                 }
                 // Batch 130 (2026-09-08, Plan 111): the 5 kernel CloudRift
@@ -1989,9 +2064,10 @@ mod tests {
                 // mass than B137's was; floor = measured - 5 per the
                 // Plan-030 convention.
                 (true, false, true) => {
-                    // dist-on combo not gated anywhere (Issue 085) — inherits
-                    // the dist-off twin until it becomes a gated state.
-                    87.0 / 131.0 // measured 92/131 (70.2%)
+                    // Issue 134 T3 re-arm (MEASURED 2026-09-24): population
+                    // 131 → 168 (the thin-domain fixtures at the kernel state).
+                    // 105/168 (62.5%) — floor = 100 per the Plan-030 convention.
+                    100.0 / 168.0
                 }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file
@@ -2006,7 +2082,7 @@ mod tests {
                 // = 34.7% at B131) -- the read_to_end/TcpStream vocabulary
                 // keeps the B131 sec-centroid drift ticking (-1 span);
                 // floor = 34 - 5 = 29.
-                (false, true, true) => 29.0 / 101.0, // measured 34/101 (33.7%); no dist-on gated state
+                (false, true, true) => 82.0 / 154.0, // measured 87/154 (56.5%) — Issue 134 T3 re-arm, 2026-09-24 (population 101 → 154; was 34/101 at Batch 140, the no-docker era pin)
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.
@@ -2017,25 +2093,15 @@ mod tests {
                 // consistent with the B130 kernel-vocabulary raise); floor
                 // = 83 - 5 = 78.
                 (true, true, true) => {
-                    // ALL-ON dist-on: MEASURED 2026-09-10 (post kernel_verify
-                    // repair, all-features live run) 83/131 (63.4%) — BIT-
-                    // IDENTICAL to its dist-off twin (83/131 at Batch 140):
-                    // the dist corpus costs the router nothing at full state
-                    // (the docker-precedent mechanism saturates here; the
-                    // default+dist arm's +1 span does not survive the kernel
-                    // vocabulary). Floor = 83 - 5 = 78 per the Plan-030
-                    // convention.
-                    //
-                    // Issue 120 (2026-09-16, the doc_markdown corpus add):
-                    // re-measured 77/131 (58.8%, was 83/131 = 63.4%) — a
-                    // -6-span decay from the RULE'S PRESENCE, not its
-                    // fixture tokens (a doc-flavored fixture reword measured
-                    // bit-identical 77/131: the clippy centroid aggregate
-                    // shifts for every added rule, and 6 generic spans' top
-                    // domain annotation flipped). Delta recorded, not
-                    // weakened silently — floor = 77 - 5 = 72 per the
-                    // Plan-030 convention.
-                    72.0 / 131.0 // measured 77/131 (58.8%)
+                    // Issue 134 T3 re-arm (MEASURED 2026-09-24, the full
+                    // seven-domain state): population 131 → 192 — every
+                    // thin domain adds spans whose Rust-shaped text routes
+                    // poorly (the compound B131 sec-centroid mechanism; the
+                    // shader corpus's generic control-flow vocabulary
+                    // compounds it). 86/192 (44.8%) — floor = 81 per the
+                    // Plan-030 convention. Annotation only: gating stays
+                    // killed (85% bar, Bench 025).
+                    81.0 / 192.0 // measured 86/192 (44.8%)
                 }
             }
         }
@@ -2354,6 +2420,101 @@ mod tests {
                 assert!(
                     propose_fix(rule, code).is_some(),
                     "proposer-covered fixture for {rule} does not fire its proposer"
+                );
+            }
+        }
+    }
+
+    // ── Issue 134 T3 re-arm — thin-domain fixture verification ──────────
+    //
+    // Two invariants per domain, both the perf/clippy convention: (1) every
+    // label is a REAL corpus rule id (a typo'd id would read as wrong_span
+    // on every run forever — the measurement would silently carry it); (2)
+    // proposer-covered rules (FIXABLE_SEC / FIXABLE_DOCKER / FIXABLE_SHADER)
+    // fire their own proposer on their span. dist ships no proposers
+    // (suggest-only by design) — membership is its only check.
+    #[cfg(feature = "sec")]
+    #[test]
+    fn sec_fixture_labels_verify() {
+        use crate::domain::HealDomain;
+        let corpus: std::collections::BTreeSet<String> = crate::domains::sec::SecDomain::build_corpus()
+            .into_iter()
+            .map(|e| e.rule_id().to_string())
+            .collect();
+        for &(rule, code) in super::super::eval_fixtures_sec::SEC_SPANS {
+            assert!(
+                corpus.contains(rule),
+                "sec fixture label {rule} is not a corpus rule id"
+            );
+            if crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule) {
+                let file = syn::parse_file(code)
+                    .unwrap_or_else(|e| panic!("sec fixture for {rule} does not parse: {e}"));
+                assert!(
+                    !crate::domains::sec::proposers::collect_edits(rule, code, &file).is_empty(),
+                    "proposer-covered sec fixture for {rule} does not fire its proposer"
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "docker")]
+    #[test]
+    fn docker_fixture_labels_verify() {
+        use crate::domain::HealDomain;
+        let corpus: std::collections::BTreeSet<String> =
+            crate::domains::docker::DockerDomain::build_corpus()
+                .into_iter()
+                .map(|e| e.rule_id().to_string())
+                .collect();
+        for &(rule, code) in super::super::eval_fixtures_docker::DOCKER_SPANS {
+            assert!(
+                corpus.contains(rule),
+                "docker fixture label {rule} is not a corpus rule id"
+            );
+            if crate::domains::docker::rules::FIXABLE_DOCKER.contains(&rule) {
+                assert!(
+                    !crate::domains::docker::proposers::collect_edits(rule, code).is_empty(),
+                    "proposer-covered docker fixture for {rule} does not fire its proposer"
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "dist")]
+    #[test]
+    fn dist_fixture_labels_verify() {
+        use crate::domain::HealDomain;
+        let corpus: std::collections::BTreeSet<String> =
+            crate::domains::dist::DistDomain::build_corpus()
+                .into_iter()
+                .map(|e| e.rule_id().to_string())
+                .collect();
+        for &(rule, _code) in super::super::eval_fixtures_dist::DIST_SPANS {
+            assert!(
+                corpus.contains(rule),
+                "dist fixture label {rule} is not a corpus rule id"
+            );
+        }
+    }
+
+    #[cfg(feature = "shader_perf")]
+    #[test]
+    fn shader_fixture_labels_verify() {
+        use crate::domain::HealDomain;
+        let corpus: std::collections::BTreeSet<String> =
+            crate::domains::shader_perf::ShaderPerfDomain::build_corpus()
+                .into_iter()
+                .map(|e| e.rule_id().to_string())
+                .collect();
+        for &(rule, code) in super::super::eval_fixtures_shader::SHADER_SPANS {
+            assert!(
+                corpus.contains(rule),
+                "shader fixture label {rule} is not a corpus rule id"
+            );
+            if crate::domains::shader_perf::proposers::FIXABLE_SHADER.contains(&rule) {
+                assert!(
+                    !crate::domains::shader_perf::proposers::collect_edits(rule, code).is_empty(),
+                    "proposer-covered shader fixture for {rule} does not fire its proposer"
                 );
             }
         }

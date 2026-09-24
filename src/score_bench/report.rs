@@ -863,7 +863,7 @@ mod tests {
     }
 
     /// Issue 134 T1 — the additive-`demonstrability` law (the
-    /// rule_outcomes precedent): rows predating the field deserialize as
+    /// `rule_outcomes` precedent): rows predating the field deserialize as
     /// `None`, a `with_demonstrability` row round-trips, and the standing
     /// reader (ungated, in `crate::demonstrability`) reads the LAST row
     /// carrying the field.

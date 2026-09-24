@@ -155,8 +155,15 @@ pub struct HeadroomMiss {
 /// Probe output.
 #[derive(Debug, Default)]
 pub struct HeadroomReport {
-    /// Fixed domain order: clippy, perf, kernel (`labeled == 0` = domain off).
-    pub per_domain: [HeadroomMetrics; 3],
+    /// Fixed domain order: [`DomainId::ALL`] (clippy, perf, kernel, sec,
+    /// docker, dist, shader — `labeled == 0` = domain off). Sized by
+    /// `DomainId::ALL.len()`, NOT by the number of domains that happen to
+    /// carry fixtures — the `EvalReport::per_domain` sizing law. This array
+    /// was `[_; 3]` through the docker/dist/shader landings: a latent
+    /// out-of-bounds at `domain_index(Docker) == 4` that never fired only
+    /// because no sec/docker/dist/shader-labeled fixture existed — fired for
+    /// the first time by the Issue-134 T3 re-arm fixture sets (2026-09-24).
+    pub per_domain: [HeadroomMetrics; DomainId::ALL.len()],
     /// All labeled spans across enabled domains.
     pub blended: HeadroomMetrics,
     /// Every missed span, classified by [`MissKind`].
@@ -338,19 +345,21 @@ pub fn print_headroom_report(report: &HeadroomReport) {
     }
     println!(" {:>10}", "headroom");
 
-    let names = ["clippy", "perf", "kernel", "blended"];
-    let rows = [
-        &report.per_domain[0],
-        &report.per_domain[1],
-        &report.per_domain[2],
-        &report.blended,
-    ];
-    for (name, m) in names.iter().zip(rows) {
+    // Every domain slot, in `DomainId::ALL` order (the `per_domain` sizing
+    // law) — a domain with labeled == 0 (feature off / no fixtures) prints
+    // its empty row rather than being silently omitted, so the table's
+    // shape pins the full domain set.
+    let mut rows: Vec<(&str, &HeadroomMetrics)> = DomainId::ALL
+        .iter()
+        .map(|d| (d.label(), &report.per_domain[domain_index(*d)]))
+        .collect();
+    rows.push(("blended", &report.blended));
+    for (name, m) in rows {
         if m.labeled == 0 {
-            println!("{name:<8} {:>8} {:>9}", 0, "-");
+            println!("{name:<12} {:>8} {:>9}", 0, "-");
             continue;
         }
-        print!("{name:<8} {:>8} {:>9}", m.labeled, pct(m.recall_at_1()));
+        print!("{name:<12} {:>8} {:>9}", m.labeled, pct(m.recall_at_1()));
         for i in 0..HEADROOM_DEPTHS.len() {
             print!(" {:>9}", pct(m.pool_recall(i)));
         }
