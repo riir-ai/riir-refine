@@ -1795,6 +1795,36 @@ fn fourteen_rules_are_not_benchable() {
     // Batch 109 — a gate whose baseline folds to zero has nothing to ratio
 }
 
+#[cfg(feature = "rust_perf_bench")]
+#[test]
+fn not_benchable_fixable_pin() {
+    // P39 (2026-09-25): the default-features-visible NOT_BENCHABLE_FIXABLE
+    // const (the --repo-posture fix lane's decline gate) must equal
+    // FIXABLE_RULES ∩ no-bench-spec, BOTH directions — a fixable rule that
+    // gains a bench spec leaves the list (the gate would over-decline); a
+    // new fixable landed without a spec joins it (the gate would silently
+    // exempt an un-benchmarked edit). The field only exists under this
+    // feature, which is why the const cannot be derived at default
+    // features — this pin is the join.
+    use crate::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
+    let corpus = build_perf_seed_corpus();
+    let derived: Vec<&str> = FIXABLE_RULES
+        .iter()
+        .filter(|r| {
+            corpus
+                .entries
+                .iter()
+                .any(|e| e.rule_id == **r && e.bench_spec.is_none())
+        })
+        .copied()
+        .collect();
+    assert_eq!(
+        derived,
+        NOT_BENCHABLE_FIXABLE,
+        "the posture gate's NotBenchable list must match the corpus (both directions)"
+    );
+}
+
 /// Bench 013 found 4 rules with non-dominant verdicts in the default
 /// config (2 `ParetoDominated` + 2 Mixed). Their `context_notes` annotation
 /// records the finding so consumers don't unconditionally suggest them.

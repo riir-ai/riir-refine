@@ -13,6 +13,9 @@
 //! |---|---|
 //! | the gate | only the feed-confirmed occurrence is rewritten; the unconfirmed one stays byte-identical; exit 0; the decline is reported |
 //! | the refusal | `--repo-posture` with no feed (auto-oracle off, no `--clippy-json`) exits **2** — never a silently-unverified apply wearing the posture name |
+//! | P39 the NotBenchable gate | under posture the BENCHABLE perf edit applies and the NotBenchable one (`shrink-to-fit-after-build`, the dapps specimen class) is declined loudly; exit 0 |
+//! | P39 the override | `--apply-notbenchable` re-enables the declined edit; the benchable edit still applies |
+//! | P39 the misuse | `--apply-notbenchable` without `--repo-posture` exits **2** — the flag overrides nothing there |
 //!
 //! Hermetic: `RIIR_HEAL_KAT_LEASE=0` (the lease phase's own CI knob —
 //! never touches the network), `RIIR_HEAL_KAT_METER=0` + `RIIR_HEAL_KAT_GATE=0`
@@ -174,6 +177,129 @@ fn rejects_posture_without_fix() {
     assert_eq!(code, Some(2), "misuse must exit 2. output:\n{text}");
     assert!(
         text.contains("--repo-posture requires --fix"),
+        "the misuse message must name the requirement:\n{text}"
+    );
+}
+
+/// P39 (post-mining intake, 2026-09-25): the posture lane's NotBenchable
+/// decline. The fixture carries ONE NotBenchable perf site (the
+/// `shrink-to-fit-after-build` guessed-hint shape — the exact dapps
+/// specimen class) beside ONE benchable perf site (`vec-with-capacity`, a
+/// measured rule). Under `--repo-posture` the benchable edit applies and
+/// the NotBenchable one is declined loudly; `--apply-notbenchable`
+/// re-enables it; the flag without the mode is misuse. The feed is an
+/// EMPTY file — a clean-tree posture run proceeds (the documented
+/// behavior) and the perf lane is what moves.
+const NOTBENCH_FIXTURE: &str = "pub fn live_avatar_ids(roster: &[u64]) -> Vec<u64> {
+    let mut ids = Vec::with_capacity(4096);
+    for &id in roster {
+        if id != 0 {
+            ids.push(id);
+        }
+    }
+    ids
+}
+
+pub fn build(n: usize) -> Vec<u32> {
+    let mut v = Vec::new();
+    for i in 0..n {
+        v.push(i as u32);
+    }
+    v
+}
+";
+
+fn notbench_fixture_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "repo_posture_notbench_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default()
+    ));
+    std::fs::create_dir_all(dir.join("src")).expect("mkdir src");
+    std::fs::write(dir.join("src/lib.rs"), NOTBENCH_FIXTURE).expect("write fixture");
+    // An EMPTY feed: a clean tree is a legitimate posture input (warn +
+    // proceed) — the perf lane is the only thing this arm exercises.
+    std::fs::write(dir.join("feed.json"), "").expect("write feed");
+    dir
+}
+
+#[test]
+fn posture_declines_notbenchable_perf_edits() {
+    let dir = notbench_fixture_dir();
+    let (code, text) = heal(
+        &dir,
+        &[
+            "--fix",
+            "--no-fmt",
+            "--repo-posture",
+            "--clippy-json",
+            "feed.json",
+            "src/lib.rs",
+        ],
+    );
+    let healed = std::fs::read_to_string(dir.join("src/lib.rs")).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(code, Some(0), "posture run must exit 0. output:\n{text}");
+    assert!(
+        healed.contains("Vec::with_capacity(n)"),
+        "the BENCHABLE perf edit must apply under posture:\n{healed}"
+    );
+    assert!(
+        !healed.contains("shrink_to_fit"),
+        "the NotBenchable edit must be declined under posture:\n{healed}"
+    );
+    assert!(
+        healed.contains("Vec::with_capacity(4096)"),
+        "the declined site's original text must stay byte-identical:\n{healed}"
+    );
+    assert!(
+        text.contains("declined 1 NotBenchable rust_perf edit"),
+        "the decline must be reported loudly with the override named:\n{text}"
+    );
+}
+
+#[test]
+fn apply_notbenchable_overrides_the_decline() {
+    let dir = notbench_fixture_dir();
+    let (code, text) = heal(
+        &dir,
+        &[
+            "--fix",
+            "--no-fmt",
+            "--repo-posture",
+            "--apply-notbenchable",
+            "--clippy-json",
+            "feed.json",
+            "src/lib.rs",
+        ],
+    );
+    let healed = std::fs::read_to_string(dir.join("src/lib.rs")).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(code, Some(0), "override run must exit 0. output:\n{text}");
+    assert!(
+        healed.contains("ids.shrink_to_fit();"),
+        "the explicit override must re-enable the NotBenchable edit:\n{healed}"
+    );
+    assert!(
+        healed.contains("Vec::with_capacity(n)"),
+        "the benchable edit still applies:\n{healed}"
+    );
+}
+
+#[test]
+fn rejects_apply_notbenchable_without_posture() {
+    let dir = fixture_dir(None);
+    let (code, text) = heal(
+        &dir,
+        &["--fix", "--no-fmt", "--apply-notbenchable", "src/lib.rs"],
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(code, Some(2), "misuse must exit 2. output:\n{text}");
+    assert!(
+        text.contains("--apply-notbenchable requires --repo-posture"),
         "the misuse message must name the requirement:\n{text}"
     );
 }

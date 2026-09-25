@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        631,
-        "kernel batches through Batch 177 should have 631 rules"
+        638,
+        "kernel batches through Batch 178 should have 638 rules"
     );
 }
 
@@ -5398,13 +5398,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 177).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 178).
     let expected = [
-        (KernelCategory::MemoryAccess, 134),
-        (KernelCategory::Compute, 67),
+        (KernelCategory::MemoryAccess, 136),
+        (KernelCategory::Compute, 68),
         (KernelCategory::Fusion, 47),
-        (KernelCategory::Dispatch, 138),
-        (KernelCategory::Parallelism, 59),
+        (KernelCategory::Dispatch, 139),
+        (KernelCategory::Parallelism, 61),
         (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
@@ -5413,7 +5413,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 46),
+        (KernelCategory::DtypeAlignment, 47),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5428,9 +5428,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 631.
+    // Sum must equal 638.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 631, "Plan 003: category totals must sum to 631");
+    assert_eq!(total, 638, "Plan 003: category totals must sum to 638");
 }
 
 #[test]
@@ -5441,8 +5441,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 631,
-        "Plan 003: grouped corpus has {total} rules, expected 631"
+        total, 638,
+        "Plan 003: grouped corpus has {total} rules, expected 638"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9549,8 +9549,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        631,
-        "Batch 177: corpus should have 631 rules"
+        638,
+        "Batch 178: corpus should have 638 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12638,6 +12638,187 @@ fn batch177_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-177 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch178_rules_present() {
+    // Batch 178 (the cinference DFlash2 verify-kernel distill -- Plan 171 /
+    // Research 209): 7 kernel_opt rules (A +2: the L2 policy pair; B +1:
+    // the warp bitonic topk merge; D +1: the topology-signature graph-exec
+    // sharing rule; E +2: the warp-role specialization by query width +
+    // the row-slice epilogue rule; N +1: the exact-widening accumulator-
+    // precision rule) + 4 riders (entries_gpu_07/08/09/38), distilled from
+    // satellitedown/cinference @ 37814b1e (Apache-2.0; fork -> NInfer ->
+    // fafstmobel Qwen3.8-27B). Every quote re-verified VERBATIM at the pin
+    // THIS batch (full clone; master +9 past the pin, the K8V4 warp trio
+    // merged into the LEAD-5 regime clause). RTX 5090/SM120/NVFP4 numbers
+    // are source-reported, never ours; rules are mechanism-level, never
+    // format-level.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "producer-store-evict-last-pins-cross-stream-consumer",
+        "dead-line-l2-discard-after-last-consumer",
+        "graph-exec-update-gated-by-captured-topology-signature",
+        "exact-widening-enables-fp16-pv-accumulation",
+        "wide-verify-warp-specialized-scores-in-registers-pv",
+        "row-slice-expensive-epilogue-across-ctas",
+        "warp-bitonic-topk-merge-shuffle",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-178 rule '{id}' missing from corpus"
+        );
+    }
+    // The riders: each annotation must be IN the landed rule text.
+    let ws = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "weight-stream-non-temporal-loads")
+        .expect("weight-stream rule present");
+    assert!(
+        ws.gpu_concept.contains("RIDER (Batch 178"),
+        "batch-178 per-tile evict-first rider missing"
+    );
+    let cp = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "cpasync-multistage-tile-pipeline")
+        .expect("cpasync rule present");
+    assert!(
+        cp.gpu_concept.contains("RIDER (Batch 178"),
+        "batch-178 single-resident-wave regime rider missing"
+    );
+    let gdn = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "gdn-transition-replay-log-commit-many")
+        .expect("gdn replay rule present");
+    assert!(
+        gdn.gpu_concept.contains("RIDER (Batch 178"),
+        "batch-178 GDN replay-record staging rider missing"
+    );
+    let inv = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "stream-invariant-operand-skips-staging-pipeline")
+        .expect("stream-invariant rule present");
+    assert!(
+        inv.gpu_concept.contains("RIDER (Batch 178"),
+        "batch-178 prepare-once/copy-per-split regime-widening rider missing"
+    );
+}
+
+#[test]
+fn batch178_concepts_covered() {
+    // G1 for Batch 178: the decision-content needles must survive
+    // (case-sensitive contains -- the B51 lesson). One needle per lead
+    // quoting the source verbatim, one naming the regime/kinship law.
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "producer-store-evict-last-pins-cross-stream-consumer",
+            &[
+                "Stores a key whose consumer runs after a larger weight stream: the evict-last fill keeps the line in L2 until that consumer reads it.",
+                "createpolicy.fractional.L2::evict_last",
+                "evict-LAST on the record that MUST",
+            ],
+        ),
+        (
+            "dead-line-l2-discard-after-last-consumer",
+            &[
+                "Only for lines whose data is dead: every later read of the line must follow a new write.",
+                "Invalidates the 128-byte L2 line at `line` without writing it back.",
+                "pin what a later consumer needs, discard what no consumer needs",
+            ],
+        ),
+        (
+            "graph-exec-update-gated-by-captured-topology-signature",
+            &[
+                "a CUDA graph executable can be updated across profiles only while the topology is unchanged.",
+                "Those boundaries are not enumerable from the plan, so the class is derived from the capture itself",
+                "instantiate is 10^2-10^3x an in-place update",
+            ],
+        ),
+        (
+            "exact-widening-enables-fp16-pv-accumulation",
+            &[
+                "widens exactly to FP16 at half scale for the PV MMA, which accumulates each 32-key product in FP16 before adding it to the FP32 accumulator",
+                "the widening's exactness is the entire legality question, never a generic",
+                "refuses the fp16 accumulator",
+            ],
+        ),
+        (
+            "wide-verify-warp-specialized-scores-in-registers-pv",
+            &[
+                "keeps its scores in registers as the PV operand, while two loader warps stream and widen the K/V tiles",
+                "consumer Ada has NO setmaxnreg",
+                "tensor pipes were idle ~40% of each key tile",
+            ],
+        ),
+        (
+            "row-slice-expensive-epilogue-across-ctas",
+            &[
+                "Quantizing costs three IEEE divisions per lane and step, so five CTAs share each row",
+                "1, 2, 5 and 10 slices measured 2.94, 2.24, 1.82 and 2.14",
+                "never 'more slices is better'",
+            ],
+        ),
+        (
+            "warp-bitonic-topk-merge-shuffle",
+            &[
+                "max(A[i], B[15 - i]) is a bitonic sequence holding the top kLinearTopK of both lists",
+                "Five butterfly rounds merge partner lists",
+                "the integer compare IS the float compare",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-178 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                entry.gpu_concept.contains(needle),
+                "batch-178 rule '{id}' lost needle: {needle}"
+            );
+        }
+    }
+}
+
+#[test]
+fn batch178_pseudocode_parses() {
+    // G1 for Batch 178: syn-parse gate (the seven cinference rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "producer-store-evict-last-pins-cross-stream-consumer",
+        "dead-line-l2-discard-after-last-consumer",
+        "graph-exec-update-gated-by-captured-topology-signature",
+        "exact-widening-enables-fp16-pv-accumulation",
+        "wide-verify-warp-specialized-scores-in-registers-pv",
+        "row-slice-expensive-epilogue-across-ctas",
+        "warp-bitonic-topk-merge-shuffle",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-178 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-178 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-178 opt_pattern for '{id}' must parse"
         );
     }
 }
