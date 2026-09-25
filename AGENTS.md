@@ -168,7 +168,6 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `clippy_lints` (default-on): the clippy lint healing domain.
 - `clippy_verify` (opt-in): lint-resolution verification via real `cargo clippy` re-run (slow, needs cargo+clippy on PATH). Implies `clippy_lints`.
 - `rust_perf` (default-on): rust performance healing domain (158 rules measured by `--corpus-stats`; the feature list's older "105"/"112"/"114"/"117"/"120"/"121"/"124"/"126"/"127"/"131"/"136"/"139"/"142"/"145"/"153"/"156" was stale — Pareto + alloc-count promoted).
->>>>>>> ee3b04f9 (feat(batch179): rsconstmap distill — paired-probe layout + block-hash MLP + immutable static map (Plan 172 / Research 210))
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
 - `kernel_heal` (opt-in): GPU kernel optimization domain (620 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
