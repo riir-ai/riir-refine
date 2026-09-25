@@ -333,8 +333,8 @@ mod tests {
     }
 
     /// The fix-review annotation layer (Issue 074 T2 + the riir-dapps worker
-    /// landing 2026-09-25): the NotBenchable regime-fragile rule MUST carry
-    /// its caveat — the posture-exempt rust_perf lane applies it into foreign
+    /// landing 2026-09-25): the `NotBenchable` regime-fragile rule MUST carry
+    /// its caveat — the posture-exempt `rust_perf` lane applies it into foreign
     /// repos, so the review print is the only warning the consumer gets.
     #[test]
     fn shrink_to_fit_carries_the_regime_caveat() {
