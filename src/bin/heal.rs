@@ -38,7 +38,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
-use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
+use riir_clippy::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
 use riir_clippy::draft::span_source::collect_source_files;
 use riir_clippy::draft::{
     parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
@@ -3893,13 +3893,26 @@ struct Args {
     /// auto-oracle) carries a same-lint diagnostic whose primary span
     /// overlaps the edit. `--fix` on a foreign repo then cannot restyle
     /// code the target's own gate never flagged (the 26:1 `doc_markdown`
-    /// churn that motivated the mode). The rust_perf/sec lanes (this
-    /// tool's own rules — the target's clippy says nothing about them) and
-    /// the P21 oracle-edits lane (consumed FROM the diagnostics — confirmed
-    /// by construction) are unaffected. REQUIRES a feed: with neither an
+    /// churn that motivated the mode). The P21 oracle-edits lane (consumed
+    /// FROM the diagnostics — confirmed by construction) and the sec lane
+    /// are unaffected; the rust_perf lane is POSTURE-GATED for its
+    /// NotBenchable fixables (`NOT_BENCHABLE_FIXABLE`, P39 2026-09-25):
+    /// those are declined under the mode (never benchmarked — the mode's
+    /// contract is "only what a gate verified"), with `--apply-
+    /// notbenchable` as the explicit override. REQUIRES a feed: with neither an
     /// auto-oracle run nor a manual feed the mode REFUSES (exit 2) rather
     /// than apply unverified edits wearing the posture name.
     repo_posture: bool,
+    /// `--apply-notbenchable` (post-mining intake P39, 2026-09-25): the
+    /// explicit override for the posture lane's NotBenchable decline —
+    /// under `--repo-posture` the rust_perf fix lane declines rules whose
+    /// corpus entry carries no bench spec (never benchmarked by us; the
+    /// target's clippy cannot speak to them either), because the mode's
+    /// whole contract is "only what a gate verified". This flag re-enables
+    /// them for operators who have judged the specific repo themselves.
+    /// Requires `--repo-posture` (setting it without the mode is misuse —
+    /// there is nothing to override).
+    apply_notbenchable: bool,
     top_k: usize,
     verify: bool,
     /// `--no-verify`: opt out of the compile gate that --fix now defaults
@@ -4201,6 +4214,7 @@ fn parse_args() -> Args {
         domain: None,
         clippy_json: None,
         repo_posture: false,
+        apply_notbenchable: false,
         top_k: 3,
         verify: false,
         no_verify: false,
@@ -4451,6 +4465,9 @@ fn parse_args() -> Args {
             }
             "--repo-posture" => {
                 args.repo_posture = true;
+            }
+            "--apply-notbenchable" => {
+                args.apply_notbenchable = true;
             }
             "--generation" => {
                 let Some(value) = it.next() else {
@@ -4909,6 +4926,14 @@ fn validate_mode_flags(args: &Args) -> Result<(), &'static str> {
     // posture flag already implies.
     if args.repo_posture && !args.fix {
         return Err("--repo-posture requires --fix (it gates the fix lane's edits)");
+    }
+    // P39: the override names the posture lane's decline — without the
+    // mode there is nothing to override, and a silently-inert flag is the
+    // confusion class this check exists to prevent.
+    if args.apply_notbenchable && !args.repo_posture {
+        return Err(
+            "--apply-notbenchable requires --repo-posture (it overrides the posture lane's NotBenchable decline)",
+        );
     }
     let (suggest, fix, fix_compile, dump_trajectories) = (
         args.suggest,
@@ -9404,6 +9429,10 @@ fn main() {
     let mut n_oracle_edits = 0usize;
     // P30 bench-guard: rust_perf edits declined on bench targets, run total.
     let mut n_bench_declined_total = 0usize;
+    // P39: NotBenchable rust_perf edits declined under --repo-posture, run
+    // total (never benchmarked — the posture mode declines them unless
+    // --apply-notbenchable says otherwise).
+    let mut n_notbench_declined_total = 0usize;
     // Issue 118 T2: oracle suggestions declined on bench targets (the P21
     // lane rides the P30 door), run total.
     let mut n_bench_oracle_declined = 0usize;
@@ -9524,7 +9553,18 @@ fn main() {
             // and a bench file's numbers ARE its artifact. Decline loudly,
             // never silently; the operator can still apply manually.
             let bench_guard = run_perf && bench_target;
+            // P39 (post-mining intake, 2026-09-25): under --repo-posture the
+            // rust_perf lane is exempt from the posture MECHANISM (the
+            // target's clippy says nothing about our rules) — but the MODE's
+            // contract is "only what a gate verified", and a NotBenchable
+            // fixable was verified by nobody. Decline those rules' edits
+            // (loudly, with the explicit --apply-notbenchable override) —
+            // the bench-guard pattern one lane over. Scope: the posture mode
+            // ONLY; plain --fix keeps the operator's full intent.
+            let notbench_guard =
+                run_perf && args.repo_posture && !args.apply_notbenchable;
             let mut n_bench_declined = 0usize;
+            let mut n_notbench_declined = 0usize;
                              // fxhashmap dep gate (Issue 015): skip the rule for files in
                              // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
@@ -9604,6 +9644,19 @@ fn main() {
                     if bench_guard {
                         if pass == 0 {
                             n_bench_declined += perf_edits.len();
+                        }
+                    } else if notbench_guard {
+                        // P39: the posture lane declines the NotBenchable
+                        // rules' edits (pass-0 counting, the bench-guard
+                        // law) and applies the rest untouched.
+                        for re in perf_edits {
+                            if NOT_BENCHABLE_FIXABLE.contains(&re.rule_id.as_str()) {
+                                if pass == 0 {
+                                    n_notbench_declined += 1;
+                                }
+                            } else {
+                                edits.push(re);
+                            }
                         }
                     } else {
                         edits.extend(perf_edits);
@@ -9875,6 +9928,16 @@ fn main() {
                     "bench-guard: declined {n_bench_declined} rust_perf edit(s) on {display} — \
                      measurement-altering on a bench target (the file's numbers ARE its \
                      artifact; apply manually only if judged safe)"
+                );
+            }
+            // P39: the NotBenchable decline line — same law (loud, named,
+            // actionable; the override is one flag away).
+            if n_notbench_declined > 0 {
+                n_notbench_declined_total += n_notbench_declined;
+                eprintln!(
+                    "repo-posture: declined {n_notbench_declined} NotBenchable rust_perf edit(s) \
+                     on {display} — never benchmarked, and the posture mode applies only what a \
+                     gate verified (--apply-notbenchable overrides)"
                 );
             }
             // Plan 165: the posture decline line — what the target repo's
@@ -10708,6 +10771,15 @@ fn main() {
         println!(
             "bench-guard: declined {n_bench_oracle_declined} oracle suggestion(s) on bench \
              target(s) (measurement-altering — apply manually only)"
+        );
+    }
+    // P39: the NotBenchable declines ride the same summary (the run-total
+    // law — a decline that only lives in a per-file line does not survive
+    // a scan of hundreds of files).
+    if n_notbench_declined_total > 0 {
+        println!(
+            "repo-posture: declined {n_notbench_declined_total} NotBenchable rust_perf edit(s) \
+             (never benchmarked — --apply-notbenchable overrides; see the per-file lines above)"
         );
     }
     // P12: report the suppressed re-proposals — the operator must see what
@@ -11617,6 +11689,7 @@ fn reheat_fix_pass(
     verify_mode: bool,
     fmt_active: bool,
     active_set: &riir_clippy::active_set::ActiveSet,
+    notbench_guard: bool,
 ) -> usize {
     const MAX_PASSES: usize = 4;
 
@@ -11632,6 +11705,9 @@ fn reheat_fix_pass(
     // loudly (count reported once, pass 0), never silently.
     let bench_guard = run_perf
         && riir_clippy::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
+    // P39: the posture lane's NotBenchable decline rides the reheat too —
+    // the guard semantic must be uniform across both fix paths.
+    let notbench_guard = run_perf && notbench_guard;
     let mut current = src.clone();
     let mut total_applied = 0usize;
     let mut changed = false;
@@ -11656,6 +11732,21 @@ fn reheat_fix_pass(
                     println!(
                         "reheat: bench-guard declined {} rust_perf edit(s) on {display} (measurement-altering)",
                         perf_edits.len()
+                    );
+                }
+            } else if notbench_guard {
+                // P39: pass-0 counting, the bench-guard law.
+                let mut declined = 0usize;
+                for re in perf_edits {
+                    if NOT_BENCHABLE_FIXABLE.contains(&re.rule_id.as_str()) {
+                        declined += 1;
+                    } else {
+                        edits.push(re);
+                    }
+                }
+                if pass == 0 && declined > 0 {
+                    println!(
+                        "reheat: repo-posture declined {declined} NotBenchable rust_perf edit(s) on {display} (never benchmarked)"
                     );
                 }
             } else {
@@ -11857,15 +11948,15 @@ fn run_reheat_pass(
             let mut new_fixes = 0usize;
             if args.fix {
                 for file in &file_changed {
-                    new_fixes +=
-                        reheat_fix_pass(
-                            file,
-                            args.domain,
-                            args.write,
-                            args.verify,
-                            !args.no_fmt,
-                            active_set,
-                        );
+                    new_fixes += reheat_fix_pass(
+                        file,
+                        args.domain,
+                        args.write,
+                        args.verify,
+                        !args.no_fmt,
+                        active_set,
+                        args.repo_posture && !args.apply_notbenchable,
+                    );
                 }
             }
             let report = riir_clippy::kat_lease_client::ReheatReport {

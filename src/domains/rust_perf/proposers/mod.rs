@@ -210,6 +210,21 @@ pub const FIXABLE_RULES: &[&str] = &[
     "shrink-to-fit-after-build",
 ];
 
+/// `FIXABLE_RULES` whose corpus entry carries NO bench spec — the win was
+/// never benchmarked (`NotBenchable`). `bench_spec` itself only exists
+/// under `rust_perf_bench`, so this list is the default-features-visible
+/// half of a derived pin: `corpus::tests::not_benchable_fixable_pin`
+/// asserts it equals `FIXABLE_RULES` ∩ no-bench-spec, both directions.
+/// Under `--repo-posture` the fix lane declines these (post-mining intake
+/// P39, 2026-09-25): the mode's contract is "only what a gate verified",
+/// and an un-benchmarked fixable was verified by nobody — the target's
+/// clippy cannot speak to our rules, so the conservative mode defaults to
+/// declining them rather than exempting them silently. `--apply-
+/// notbenchable` is the explicit override. `shrink-to-fit-after-build` is
+/// the founding specimen (the 09-25 riir-dapps request-scoped-Vec landing;
+/// its corpus entry's own words name LONG-LIVED Vecs as the win regime).
+pub const NOT_BENCHABLE_FIXABLE: &[&str] = &["shrink-to-fit-after-build"];
+
 /// Proposer option flags (Issue 015 verify-mode).
 ///
 /// `--fix` defaults to the conservative parse-only gates; `--fix
