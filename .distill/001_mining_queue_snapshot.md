@@ -88,3 +88,10 @@
 # Mining queue snapshot — the distill-program resume state
 
 > **FOLD 2026-09-24 ~11:1x +07 (M3 idle session — the recorded ~400-line fold budget reached at 345): pre-09-24 rows (09-23 and prior — idle passes, intake rows, standing notes, generator lessons) moved to `.research/206_distill_snapshot_fold_0923_and_prior.md` per the 05:3x maintenance note (the doc-sync 59.1KB-precedent class). This file keeps the 09-24 window + a rolling tail; the archive is the permanent record. Numbering: .research/.highwater 205 → 206 (ls + highwater + origin-log triple check clean — origin's latest allocation is 205 at `064f48c5`). NOTHING INVENTED — move-only fold, archive byte-preserves the section.**
+
+## Post-mining intake
+
+> *(Section header restored 2026-09-25 ~08:3x +07 — the 09-24 fold `b2173d104` moved the previous header + rows verbatim to `.research/206` and the self-evolve audit (§3) splits on this exact header, leaving it reading "intake section header missing" since; closed P1-P11 + the P4 defers live in `.research/108`, narrative intake rows b-e in `.research/206`. New rows keep the standing `- [ ]` / `- [x]` P-item format.)*
+
+- [ ] P12 — **NotBenchable regime-fragile fixables in a foreign repo require an explicit `--repo-posture` override?** Specimen: the 09-25 dapps sweep applied `shrink-to-fit-after-build` (corpus words: the win regime is LONG-LIVED Vecs) into request-scoped render Vecs with zero warning — the posture-EXEMPT rust_perf lane. Root-cause-lite landed `23ab220e9` (the fix-review `context_note` + fixture); the OPEN question is whether the LANE needs an override gate when crossing repos. Adjudicates: the next rust_perf-touching mining pass.
+
