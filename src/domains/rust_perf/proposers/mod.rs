@@ -292,7 +292,7 @@ pub fn collect_edits_opts(
 
 /// One-line semantic-shift annotations for the signature-visible fixables
 /// (Issue 074 T2) — printed by the `--fix` review as
-/// `⚠ semantic change: {note}`. The other nine `FIXABLE_RULES` are
+/// `⚠ semantic change: {note}`. The other eight `FIXABLE_RULES` are
 /// semantics-preserving by construction and stay un-annotated (an
 /// annotation that fires on most fixes is warning fatigue).
 #[must_use]
@@ -306,6 +306,13 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // (pack_bools at the boundary); fires only when the fn has no
         // live in-file caller (the caller gate).
         "bool-to-bitpack" => Some("signature-visible — the &[bool] param becomes packed &[u64]; callers must pack at the boundary (fires only with no live in-file caller)"),
+        // NotBenchable + regime-fragile (the riir-dapps worker landing,
+        // 2026-09-25: six request-scoped render Vecs got the shrink through
+        // the posture-EXEMPT rust_perf lane with zero warning). The win
+        // regime is LONG-LIVED Vecs (the corpus entry's own words); on
+        // transient/request-scoped Vecs the realloc costs the build path
+        // ~µs and the Vec drops before the freed capacity matters.
+        "shrink-to-fit-after-build" => Some("regime-fragile (NotBenchable) — the win is PEAK MEMORY on LONG-LIVED Vecs; on request-scoped/transient Vecs the realloc costs the build path and the Vec drops before the freed capacity matters (apply where the Vec outlives the build's caller)"),
         _ => None,
     }
 }
@@ -323,6 +330,23 @@ mod tests {
     #[test]
     fn unknown_rule_returns_none() {
         assert_eq!(propose_fix("not_a_real_rule", "fn foo() {}"), None);
+    }
+
+    /// The fix-review annotation layer (Issue 074 T2 + the riir-dapps worker
+    /// landing 2026-09-25): the NotBenchable regime-fragile rule MUST carry
+    /// its caveat — the posture-exempt rust_perf lane applies it into foreign
+    /// repos, so the review print is the only warning the consumer gets.
+    #[test]
+    fn shrink_to_fit_carries_the_regime_caveat() {
+        let note = context_note("shrink-to-fit-after-build")
+            .expect("the regime-fragile NotBenchable rule must be annotated");
+        assert!(note.contains("LONG-LIVED"), "{note}");
+        assert!(note.contains("NotBenchable"), "{note}");
+        // The two shipped signature-visible annotations stay.
+        assert!(context_note("static-str").is_some());
+        assert!(context_note("bool-to-bitpack").is_some());
+        // And an unlisted fixable stays silent (warning-fatigue guard).
+        assert!(context_note("vec-with-capacity").is_none());
     }
 
     #[test]
