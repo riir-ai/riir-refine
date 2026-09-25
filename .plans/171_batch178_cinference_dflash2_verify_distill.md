@@ -1,6 +1,7 @@
 # Plan 171 — Batch 178: cinference DFlash2 verify-kernel distill (kernel_opt)
 
-**Status:** QUEUED (nominal Batch 178, behind B176 FWHT rider + B177 EXL3; one-batch-per-day cadence)
+**Status:** QUEUED (nominal Batch 178, behind B176 FWHT rider + B177 EXL3; one-batch-per-day cadence; **B179 landed 09-25 by the M3 — the slot is ~19:5x 09-25 / ~00:0x 09-26 +07**)
+**Pre-slot verification (T0+T1 read-only) DONE 2026-09-25 ~07:5x +07** — see the `.distill/001` row of that timestamp: pin LIVE via direct sha-fetch; repo moved **+9 past the pin** (5 substantive K8V4-warp/fusion/verify-tree + 4 docs incl. the fifth-pass sweep — slot-time adjudication: merge into LEAD-4/5 regime clauses vs rider); all 5 lead quotes re-verified VERBATIM at the pin; T1 dedup re-run vs post-B177 corpus = **ALL 5 LEADS STILL NOVEL** with the **LEAD-4 REFRAME** (exact-widening framing, not generic fp16 accumulation — kinship `fast-accumulate-periodic-promote-bounded-error` gpu_40 / contrast `per-block-int32-chunk-rescale-fp32-accum` gpu_33) + LEAD-5's sm_89 `setmaxnreg` regime clause (kinship gpu_37) + the MAYBEs' adjudication inputs pre-loaded.
 **Source verdict:** [Research 209](../.research/209_cinference_dflash2_verify_distill_verdict.md) — YES B+ / LANE INTEL HIGH
 **Pin:** satellitedown/cinference @ `37814b1e1843315e456b60883a8c8ba08cc2aef0` (Apache-2.0; pass shas README-pinned `b4e8ed4`→`4994a0c`)
 
