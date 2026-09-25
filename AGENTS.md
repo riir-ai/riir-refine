@@ -170,7 +170,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `rust_perf` (default-on): rust performance healing domain (158 rules measured by `--corpus-stats`; the feature list's older "105"/"112"/"114"/"117"/"120"/"121"/"124"/"126"/"127"/"131"/"136"/"139"/"142"/"145"/"153"/"156" was stale — Pareto + alloc-count promoted).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
-- `kernel_heal` (opt-in): GPU kernel optimization domain (620 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
+- `kernel_heal` (opt-in): GPU kernel optimization domain (631 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - `kernel_verify` (opt-in): CubeCL compile check (STUB — delegates to the shared `RustAnalyzerPruner`). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search (pattern reuse, no dep; once per invocation, not per-tick). Implies `clippy_lints`.
 - `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag; powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light).
