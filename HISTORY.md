@@ -10687,3 +10687,56 @@ Found during the katgpt-rs Plan 606 (riir-reflex Phase 2) T2.3 session (previous
 "noted, not mine" in the Phase-2 handoff); the reflex-side record is
 riir-reflex `e5dcfc9`. Issue file removed per the noise-reduction rule —
 this row is the durable record.
+
+## 2026-09-26 — Issue 130: RRSI admission-generalization gate — closed report-only, both unblock paths measured shut
+
+The RRSI (arXiv:2609.24972) distill asked whether the corpus's admission
+gate could key on measured strata spread (δ) the way RRSI's does on
+stochastic verifier trials. The measured answer across three sessions:
+**it cannot, and the report is the artifact.**
+
+- T1 (09-23): the δ-calibration harness over the score history's provenance
+  strata. The repo stratum reached depth (21 findings ≥ the 20-finding
+  floor) but measures δ = 0.000 — the oracle axis is deterministic per
+  pinned toolchain, so a zero-δ floor admits everything and is never
+  trusted as calibrated. The `construction` gen-3 SUPPORTED verdict
+  (δ = 0.080) was adjudicated corpus drift (the findings range 120–134
+  means the INPUT changed between runs), not verifier spread.
+- T2 path (a)-as-repeats: refuted BY CONSTRUCTION — the score-bench path
+  carries no timeout and no parallel execution (grepped: zero
+  timeout/rayon/thread hits in the bench path), so box-load varies
+  wall-clock, never resolution. Repeats of an unchanged corpus produce
+  identical rates; running them would only append zero-variance rows.
+- T2 path (a)-as-OOD (09-26, `c2c028f6`): the 85 OOD-bearing score-history
+  rows (the Issue 077 T4 entropy-gap axis) parse and group by
+  (ref→ood set, regime). The decisive read: the δ = 0.247-nat window
+  spread is corpus-state drift, NOT repeat noise — 20 distinct measurement
+  artifacts (same artifact ⟺ bit-identical entropies), within-state
+  repeats bit-identical (max plateau 28 runs, within-state δ 0.000). The
+  OOD rigs are deterministic per corpus state — the same class the repeats
+  refutation named.
+- T2 path (b): narrowed by the same construction — a δ produced by growing
+  the fixture corpus is corpus movement, never verifier noise; wiring T2's
+  Δ > δ gate to it would admit batches because the corpus grew.
+- CLI (09-26, `8f3222f0`): the OOD-axis readout wired into
+  `--gate-calibration` (the c2c028f6 follow-up, unblocked when the sibling
+  heal.rs WIP `c1c6cf21` landed); live wired verdict byte-matches the
+  recorded one.
+
+**Terminal state:** T0's gate-vs-close question answered by the data —
+report-only stands; T2 stays deferred behind exactly two re-arms (a
+nondeterminism source landing in the heal path — a verify timeout, a
+parallel fixture runner, iteration-order-dependent rule application — or
+in the entropy kernel). The re-arm vocabulary + live verdicts persist in
+AGENTS.md's `--gate-calibration` row; `.distill/001`'s standing rule (run
+the report at each corpus-generation landing) is unchanged.
+
+En-route fix in the wiring session (`8c5b7a4e`): the cargo-heal bin's own
+`required-features` combo (latent_retrieval,rust_perf,clippy_lints,
+kat_service) had stopped compiling — `breakdown_of` carried a stray
+kat_transport cfg over ungated call sites (E0425 at the combo; the release
+set masked it), and `reheat_fix_pass` was ungated while its only caller is
+kat_transport-gated (dead-code warning at every set without it).
+
+Issue file removed per the noise-reduction rule — this row is the durable
+record.
