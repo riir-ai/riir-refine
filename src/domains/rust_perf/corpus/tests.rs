@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 158); // Batch 177 (+2) then Batch 179 (+3) on the 153 base
+    assert_eq!(corpus.entries.len(), 160); // Batch 177 (+2), Batch 179 (+3) on the 153 base, Batch 181 (+2: the mlxfast mask-memo + seed-warm members)
     // Per-category standing counts (Batch 179 landing): allocation 28, io 26,
     // concurrency 23, complexity 25, layout 13, iterators 11, simd 9,
     // arithmetic 8, caching 7, dispatch 5, bevy 2, wasm 1 — asserted via the
@@ -1762,7 +1762,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 59); // 158 total − 99 benchable — Batch 177 added BOTH its rules as NotBenchable (measurement-honesty #3 + #4); Batch 179 added three BENCHABLE rules
+    assert_eq!(without_spec.len(), 61); // 160 total − 99 benchable — Batch 177 added BOTH its rules as NotBenchable (measurement-honesty #3 + #4); Batch 179 added three BENCHABLE rules; Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1778,6 +1778,8 @@ fn fourteen_rules_are_not_benchable() {
     assert!(without_spec.contains(&"streaming-prefix-holdback-bounded-buffer")); // Batch 141 — streaming-latency discipline, not an A/B axis
     assert!(without_spec.contains(&"macro-generated-code-optimize-at-generation-point")); // Batch 143 — build-time emission content, no runtime A/B axis
     assert!(without_spec.contains(&"batch-blocking-pool-segment")); // Batch 152 — blocking-pool coordination timing, the Batch-78 platform class
+    assert!(without_spec.contains(&"mask-memo-hoist-to-owner-lifetime")); // Batch 181 — graph-node reuse + alloc churn, measurable only end-to-end in a spec-decode loop
+    assert!(without_spec.contains(&"seed-warm-the-scored-seam")); // Batch 181 — the fix IS measurement hygiene, no fixable code shape to A/B
     assert!(without_spec.contains(&"adaptive-yield-consecutive-ready")); // Batch 152 — fairness/p99-under-contention metric mismatch
     assert!(without_spec.contains(&"bounded-fanout-semaphore")); // Batch 152 — external-resource concurrency budget, not wall-clock
     assert!(without_spec.contains(&"layout-reorder"));
@@ -1875,7 +1877,9 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 104, "expected 104 context-annotated rules (Batch 177: 98 → 100 the measurement-honesty pair; Batch 179: 100 → 104 — the three rsconstmap annotations + the bufwriter-batched serialize rider)");
+    assert_eq!(annotated.len(), 106, "expected 106 context-annotated rules (Batch 179: 100 → 104 — the three rsconstmap annotations + the bufwriter-batched serialize rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations)");
+    assert!(annotated.contains(&"mask-memo-hoist-to-owner-lifetime")); // Batch 181 — the owner-lifetime/graph-reuse annotation
+    assert!(annotated.contains(&"seed-warm-the-scored-seam")); // Batch 181 — the seam-warm measurement-honesty annotation (+ the per-depth-oracle rider)
     assert!(annotated.contains(&"aa-control-prices-the-fidelity-instrument")); // Batch 177 — NotBenchable measurement-honesty #3 (the comparator)
     assert!(annotated.contains(&"observer-sync-bias-differs-by-change-class")); // Batch 177 — NotBenchable measurement-honesty #4 (the observer-consumer bias)
     assert!(annotated.contains(&"paired-probe-layout-present-vs-absent")); // Batch 179 — measured verdict + absent-key regime content
@@ -1954,7 +1958,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 54, "expected 54 unannotated rules (158 total - 104 annotated; Batch 179 annotated its 3 new rules + flipped bufwriter-batched with the serialize rider)");
+    assert_eq!(unannotated, 54, "expected 54 unannotated rules (160 total - 106 annotated; Batch 181 added both its rules annotated: the mlxfast mask-memo + seed-warm members)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1966,7 +1970,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 104); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100; Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider)
+    assert_eq!(annotated, 106); // Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100; Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider); Batch 181: 104 → 106 (the mlxfast mask-memo + seed-warm annotations)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2007,7 +2011,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 104, "expected 104 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider)");
+    assert_eq!(annotated.len(), 106, "expected 106 annotated rules (Batch 154: 86 → 89; Batch 172: 89 → 94; Batch 173: 94 → 96; Batch 174: 96 → 98; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2046,7 +2050,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (158 total − 104 annotated; Batch 177 added 2 annotated rules; Batch 179 added 3 annotated rules + flipped bufwriter-batched)");
+    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (160 total − 106 annotated; Batch 181 added both its rules annotated)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),

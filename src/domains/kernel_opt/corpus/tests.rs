@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        642,
-        "kernel batches through Batch 180 should have 642 rules"
+        648,
+        "kernel batches through Batch 181 should have 648 rules"
     );
 }
 
@@ -1667,7 +1667,7 @@ fn batch29_concepts_covered() {
     // A: defer-readback-gated-by-live-output-size (riir-gpu deltanet_input_proj_fused.rs L17-32 — Bench 437 contrast)
     assert!(concepts.contains(&"deferring all sibling readbacks to one final drain is NOT an unconditional win — gate it on total simultaneously-live output bytes. When the chained outputs are small (e.g. 4 input projections, ~8 KB total), keeping them all GPU-resident to the end is free and one sync point replaces N; when they are large (5 concurrent ~70 KB FFN buffers, ~350 KB live), the deferral itself increases memory pressure and measured 16% SLOWER on Metal — sync per stage and release each buffer instead. The rule converts 'defer readback' from an always-apply transformation into a footprint-gated one; the existing deferral rules carry the timing/mechanism, this carries the failure boundary. Distinct from defer-readback-until-after-submit (the timing rule — read after submit; this is the precondition that decides whether deferral helps at all) and from chain-dispatches-single-sync-point (the dispatch-side mechanism — this is the output-sizing decision that makes the chaining a win rather than a loss)"), "size-gate concept");
     // A: weight-handle-cache-keyed-by-allocation-identity (riir-gpu deltanet_input_proj_fused.rs L279-281 + L301-327 + L361-372)
-    assert!(concepts.contains(&"when a GPU offload hook's public API must accept plain CPU weight references (it cannot require callers to thread device handles through existing model code), key a lock-free host-side cache of pre-uploaded device handles by the CPU weight allocation's POINTER IDENTITY — e.g. (pos_bits.as_ptr(), neg_bits.as_ptr()), unique per layer allocation. The hot path is one O(1) map lookup; a cache miss degrades gracefully to an on-the-fly upload + insert, so the hook works with or without a preupload warm-up and never blocks adoption. The keying is what lets the cache be invisible to the API surface. Distinct from host-cache-immutable-device-weights (the upload-once rule — this is the identity-keyed transparent lookup layered on top) and from per-dispatch-pointer-re-extraction (device pointers re-read per dispatch — CPU heap pointers as a persistent key, opposite direction)"), "pointer-identity cache concept");
+    assert!(concepts.contains(&"when a GPU offload hook's public API must accept plain CPU weight references (it cannot require callers to thread device handles through existing model code), key a lock-free host-side cache of pre-uploaded device handles by the CPU weight allocation's POINTER IDENTITY — e.g. (pos_bits.as_ptr(), neg_bits.as_ptr()), unique per layer allocation. The hot path is one O(1) map lookup; a cache miss degrades gracefully to an on-the-fly upload + insert, so the hook works with or without a preupload warm-up and never blocks adoption. The keying is what lets the cache be invisible to the API surface. Distinct from host-cache-immutable-device-weights (the upload-once rule — this is the identity-keyed transparent lookup layered on top) and from per-dispatch-pointer-re-extraction (device pointers re-read per dispatch — CPU heap pointers as a persistent key, opposite direction). RIDER (Batch 181, mlxfast-bonsai2 @ cfb35b0d -- Qwen35.swift GDN derived-decay, the DERIVED-SCALAR instance): -exp(A_log) computed ONCE in a tiny kernel ('the same FP32 intermediate and Metal intrinsic as the prework expression... It depends on the model parameter only, never on request data') and cached on parameter identity ('if let cachedDecay, decaySource === aLog { return cachedDecay }') — pointer-keys a DERIVED value (not just an upload) and the owning projection invalidates on parameter update."), "pointer-identity cache concept");
     // D: first-readback-pays-queue-drain (riir-gpu deltanet_input_proj_fused.rs L242-245)
     assert!(concepts.contains(&"after a single dispatch burst on one command queue, the FIRST blocking read drains the whole queue and every subsequent read of an already-completed buffer returns immediately — N sequential readbacks ordered after one burst cost ~1 sync + N small transfers, with no restructuring into a merged download op needed. Sync count is a function of dispatch BURSTS, not read CALLS: don't add per-read defensive syncs, and don't build batched-download machinery when the reads naturally follow one burst. Distinct from batched-downloads-single-sync-cycle (restructures N readbacks into one submit/map/poll cycle — this is the cheaper ordering-only alternative that makes that machinery unnecessary) and from chain-dispatches-single-sync-point (the dispatch-side mechanism — this is the read-side cost model)"), "queue-drain concept");
     // C: epilogue-at-register-write-phase (riir-gpu epilogue/mod.rs L8-26 + gemv_residual_cubecl.rs L103-109 + L24-31)
@@ -5398,14 +5398,16 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 180:
-    // A +1 plane layout, D +1 item-space flattening, E +1 fixed-order epilogue,
-    // N +1 deferred-bias exact-isum).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 181:
+    // B +1 tensor-core MMA staged codes, C +1 the fused transform-quantize
+    // writer, D +2 the work-interval thread-shape pin + the in-flight-cap
+    // split submission, N +2 signed-activation codes + proven operand
+    // load elision).
     let expected = [
         (KernelCategory::MemoryAccess, 137),
-        (KernelCategory::Compute, 68),
-        (KernelCategory::Fusion, 47),
-        (KernelCategory::Dispatch, 140),
+        (KernelCategory::Compute, 69),
+        (KernelCategory::Fusion, 48),
+        (KernelCategory::Dispatch, 142),
         (KernelCategory::Parallelism, 62),
         (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
@@ -5415,7 +5417,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 48),
+        (KernelCategory::DtypeAlignment, 50),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5430,9 +5432,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 642.
+    // Sum must equal 648.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 642, "Plan 003: category totals must sum to 642");
+    assert_eq!(total, 648, "Plan 003: category totals must sum to 648");
 }
 
 #[test]
@@ -5443,8 +5445,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 642,
-        "Plan 003: grouped corpus has {total} rules, expected 642"
+        total, 648,
+        "Plan 003: grouped corpus has {total} rules, expected 648"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9551,8 +9553,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        642,
-        "Batch 180: corpus should have 642 rules"
+        648,
+        "Batch 181: corpus should have 648 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13101,4 +13103,226 @@ fn batch178_pseudocode_parses() {
             "batch-178 opt_pattern for '{id}' must parse"
         );
     }
+}
+
+#[test]
+fn batch181_rules_present() {
+    // Batch 181 (the mlxfast-bonsai2 arena distill -- Plan 174 / Research
+    // 212): 6 kernel_opt rules (N +2: signed-activation-codes offset
+    // elimination + proven-redundant-operand-load-elision; C +1: the
+    // fused transform-quantize writer; B +1: tensor-core MMA over staged
+    // quantized codes; D +2: the engine work-interval thread-shape pin +
+    // the in-flight-cap split submission) + 2 rust_perf members
+    // (entries_09), distilled from Layr-Labs/mlxfast-bonsai2-27b-engine
+    // @ cfb35b0d (MIT) -- the MLX/Metal ARENA engine for OUR league
+    // model. Every quote re-verified VERBATIM at the pin THIS batch
+    // (fresh full-history clone, the ephemeral-clone law; the
+    // validate->partial-adopt->tree-replacement->restore arc read at
+    // tree level). All perf numbers SOURCE-REPORTED (M4/M5 Max).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "signed-activation-codes-drop-dequant-offset-term",
+        "fused-transform-quantize-writer",
+        "tensor-core-mma-staged-quantized-codes-double-buffered",
+        "proven-redundant-operand-load-elision",
+        "engine-work-interval-performance-core-pin",
+        "split-submission-in-flight-cap-overlap",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-181 rule '{id}' missing from corpus"
+        );
+    }
+    // The riders: each annotation must be IN the landed rule text.
+    let b115 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "warm-reachable-dispatch-signatures-before-timed-window")
+        .expect("B115 rule present");
+    assert!(
+        b115.gpu_concept.contains("RIDER (Batch 181"),
+        "batch-181 warm-by-alignment-class rider missing"
+    );
+    let b29 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "weight-handle-cache-keyed-by-allocation-identity")
+        .expect("B29 rule present");
+    assert!(
+        b29.gpu_concept.contains("RIDER (Batch 181"),
+        "batch-181 GDN derived-constant rider missing"
+    );
+    let gdn = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "gdn-transition-replay-log-commit-many")
+        .expect("gdn rule present");
+    assert!(
+        gdn.gpu_concept.contains("RIDER (Batch 181"),
+        "batch-181 DVPL promote-then-demote rider missing"
+    );
+}
+
+#[test]
+fn batch181_pseudocode_parses() {
+    // G1 for Batch 181: syn-parse gate (the six mlxfast rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "signed-activation-codes-drop-dequant-offset-term",
+        "fused-transform-quantize-writer",
+        "tensor-core-mma-staged-quantized-codes-double-buffered",
+        "proven-redundant-operand-load-elision",
+        "engine-work-interval-performance-core-pin",
+        "split-submission-in-flight-cap-overlap",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-181 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-181 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-181 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch181_signed_codes_mantissa_gate() {
+    // The N rule's load-bearing contract: the signed-codes epilogue forms
+    // fma(s, C, -128 s colsum) and s * (C - 128 colsum) are BIT-IDENTICAL
+    // inside the mantissa budget (bits(scale) + bits(colsum) <= 24) and
+    // GENUINELY BREAK outside it. The NEGATIVE arm is mandatory (Plan 174
+    // T3.1): a pass-only-inside fixture would hide the regime.
+    //   2-bit g128: colsum <= 384 (9 bits) + FP16 scale (11 bits) = 20 -> exact
+    //   4-bit:      colsum <= 1920 (11 bits) + 11 = 22 -> exact
+    //   8-bit:      colsum to 32,640 (15 bits) + 11 = 26 -> NOT exact
+    // Worked-number pins first.
+    let bits_colsum = |max_cs: i32| -> u32 { 32 - (max_cs as u32).leading_zeros() };
+    assert_eq!(bits_colsum(384), 9);
+    assert_eq!(bits_colsum(1920), 11);
+    assert_eq!(bits_colsum(32_640), 15);
+    assert_eq!(11 + 9, 20); // 2-bit g128: inside 24
+    assert_eq!(11 + 11, 22); // 4-bit: inside 24
+    assert_eq!(11 + 15, 26); // 8-bit: OUTSIDE 24
+
+    // FP16-exact scales with full fraction range: s = (1024 + k) / 1024,
+    // k in 0..=1023 -- 11-bit significands, exactly representable.
+    let scales: Vec<f32> = [0, 1, 2, 3, 5, 17, 100, 511, 512, 1000, 1023]
+        .iter()
+        .map(|&k| (1024 + k) as f32 / 1024.0)
+        .collect();
+    // In-regime colsums (2-bit g128 worst case) and code-dot products C
+    // small enough that every intermediate integer stays exact (< 2^24).
+    let colsums_in: Vec<i32> = vec![0, 1, 42, 127, 128, 255, 256, 300, 383, 384];
+    let cs: Vec<i32> = vec![1, 3, 1000, 33_555, 100_000];
+
+    let mut diverged_in = false;
+    for &s in &scales {
+        for &colsum in &colsums_in {
+            for &c in &cs {
+                let form1 = s.mul_add(c as f32, -128.0 * s * (colsum as f32));
+                let form2 = s * (c as f32 - 128.0 * colsum as f32);
+                if form1.to_bits() != form2.to_bits() {
+                    diverged_in = true;
+                }
+            }
+        }
+    }
+    assert!(!diverged_in, "forms must be bit-identical INSIDE the 2-bit g128 regime");
+
+    // OUT of regime: 8-bit colsums (15-bit values). The offset term
+    // 128*s*colsum exceeds the FP32 significand budget and ROUNDS, so the
+    // fma form and the folded form genuinely diverge for some C. The arm
+    // searches a small grid and REQUIRES a counterexample to exist -- a
+    // regime claim without a measured break is a guess.
+    let colsums_out: Vec<i32> = vec![32_640, 32_641, 32_500, 30_000];
+    let mut found_break = false;
+    'outer: for &s in &scales {
+        for &colsum in &colsums_out {
+            for c in 1..=64 {
+                let form1 = s.mul_add(c as f32, -128.0 * s * (colsum as f32));
+                let form2 = s * (c as f32 - 128.0 * colsum as f32);
+                if form1.to_bits() != form2.to_bits() {
+                    found_break = true;
+                    break 'outer;
+                }
+            }
+        }
+    }
+    assert!(found_break, "the 8-bit shape must produce a REAL divergence (the NEGATIVE arm)");
+}
+
+#[test]
+fn batch181_negative_scale_bias_bit_gate() {
+    // The LEAD-7 proof contract: FP16 sign-flip (xor 0x8000) is EXACT
+    // negation including signed zero, so a bitwise equality of the flipped
+    // scale bits with the bias bits proves bias == -scale with no
+    // arithmetic; the NEG arm (bv = -sv, no load) is then bit-identical to
+    // the base form, and the proof REFUSES (keeps both loads) on any
+    // mismatched bias.
+    let widen = |bits: u16| -> f32 {
+        let sign = ((bits & 0x8000) as u32) << 16;
+        let e = ((bits >> 10) & 0x1f) as u32;
+        let m = (bits & 0x03ff) as u32;
+        if e == 0 && m == 0 {
+            f32::from_bits(sign)
+        } else if e == 0 {
+            (m as f32) * 2_f32.powi(-24) * if bits & 0x8000 != 0 { -1.0 } else { 1.0 }
+        } else if e == 0x1f {
+            f32::from_bits(sign | 0x7f80_0000 | (m << 13))
+        } else {
+            f32::from_bits(sign | ((e + 112) << 23) | (m << 13))
+        }
+    };
+    // (a) the sign-flip identity over every finite pattern: normals by the
+    // bit formula, subnormals by the value formula, both zeros explicit.
+    for bits in 0x0001..=0x7bff {
+        let flipped = widen(bits ^ 0x8000);
+        assert_eq!(flipped, -widen(bits), "sign-flip broke at {bits:#06x}");
+    }
+    assert_eq!(widen(0x0000 ^ 0x8000).to_bits(), (-widen(0x0000)).to_bits()); // -0.0 == -0.0 bitwise
+    assert_eq!(widen(0x8000 ^ 0x8000).to_bits(), (-widen(0x8000)).to_bits());
+    // (b) the NEG-arm epilogue is bit-identical to the base form where the
+    // proof holds, over a small fixture grid.
+    let scales: Vec<u16> = vec![0x3c00, 0x3d00, 0x2c00, 0x0001, 0x8000];
+    let biases: Vec<u16> = scales.iter().map(|s| s ^ 0x8000).collect();
+    for g in 0..scales.len() {
+        let base = widen(scales[g]) * 5.0 + widen(biases[g]);
+        let neg = widen(scales[g]) * 5.0 + -widen(scales[g]);
+        assert_eq!(base.to_bits(), neg.to_bits(), "NEG arm diverged at group {g}");
+    }
+    // (c) the proof REFUSES on any mismatched bias (the negative arm).
+    let mut bad_biases = biases.clone();
+    bad_biases[2] = bad_biases[2] ^ 0x0010; // one payload bit off
+    let holds: bool = scales.iter().zip(bad_biases.iter()).all(|(&s, &b)| s ^ 0x8000 == b);
+    assert!(!holds, "the proof must refuse a corrupted bias table");
+}
+
+#[test]
+#[cfg(feature = "kernel_heal")]
+fn batch181_neg_bias_proof_is_not_vacuous() {
+    // Runtime probe made permanent (the batch29 exact-element lesson): the
+    // corpus text carries BOTH the old needle (element-equality tests in
+    // this file compare FULL concept strings, never substrings) AND the
+    // rider -- the two tests above pin each half; this one pins the JOIN
+    // (the rider sits after the old tail, so neither half drifted).
+    let corpus = build_kernel_seed_corpus();
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "weight-handle-cache-keyed-by-allocation-identity")
+        .expect("b29 present");
+    let tail = "and the owning projection invalidates on parameter update.";
+    assert!(e.gpu_concept.ends_with(tail));
+    assert!(e.gpu_concept.contains("RIDER (Batch 181"));
 }
