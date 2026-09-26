@@ -601,6 +601,13 @@ ternary_inference = ["dep:riir-infer-core", "dep:riir-infer-gpu"]
 # G6 10/10 corpus truthfulness, G7 50.0pp improvement (50% → 100%).
 # Opt-out (pure loop): RIIR_HEAL_SELF_EVOLVE=0.
 self_evolve = []
+# Issue 136 (reef P1+P3+P5): the structural self-mutation lane's persistent
+# surface — the content-addressed artifact store + the two-head CAS chain
+# file under .heal/structural/. Opt-in so no default build can persist
+# structural state; the vocabulary itself (gates, review classes, chain
+# state machine) is UNGATED in src/structural_admission.rs. Activation of
+# any auto-serve kind stays a separate owner call.
+structural_admission = []
 
 [[bench]]
 name = "bench_001_l1_matvec"

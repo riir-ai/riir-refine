@@ -132,6 +132,14 @@ pub mod active_set;
 // per-stratum δ calibration + the corpus-stall predicate. Report-only by
 // design (T0): nothing here gates admission until the strata support a δ.
 pub mod gate_calibration;
+// Issue 136 (reef P1+P3+P5, Research 213): the structural self-mutation
+// admission vocabulary — per-kind shape gates, kind-keyed review classes,
+// and the two-head commit-chain state machine. UNGATED pure: nothing here
+// mutates anything, and no auto-serve kind is activated (owner call
+// reserved). The only filesystem surface is the store below, feature-gated.
+pub mod structural_admission;
+#[cfg(feature = "structural_admission")]
+pub mod structural_admission_store;
 pub mod gp_acquisition;
 pub mod memory;
 pub mod recorder;

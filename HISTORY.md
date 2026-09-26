@@ -10740,3 +10740,58 @@ kat_transport-gated (dead-code warning at every set without it).
 
 Issue file removed per the noise-reduction rule — this row is the durable
 record.
+
+## 2026-09-27 — Issue 136: the structural self-mutation lane landed (reef P1+P3+P5, Plan 175)
+
+The reef distill's triage issue became the vocabulary: per-kind SHAPE
+gates, kind-keyed person-review classes, and the two-head CAS commit
+chain, mapped onto the healer's own surface (corpus rule / fixture /
+config knob / active-set marker / playbook).
+
+Landing shape (Plan 175, commit recorded in the landing commit):
+
+- `src/structural_admission.rs` — UNGATED pure: `ProposalKind` (derived
+  from the payload, never carried), `review_class` (4 of 5 kinds
+  `AlwaysReviewed` — fixture/config/active-set/playbook execute or change
+  executed behavior; `CorpusRule` is the one data-shaped `AutoServable`
+  class), `admit()` shape gates (bench-spec-or-NotBenchable for corpus
+  rules, known-knob membership for config, known-domain + token shape for
+  markers, rel-path shape for files), the reef P2 secret-shape scan
+  (9 prefix shapes + PEM blocks, word-boundary-guarded — `task-` does not
+  fire), and the `ChainState` CAS machine (`advance` / `install_checkpoint`
+  / `prepare_live` / `rollback_to_checkpoint` — rollback is a repoint, a
+  commit with a fresh allocation, never a revert).
+- `src/structural_admission_store.rs` — feature-gated
+  (`structural_admission = []`): content-addressed immutable artifacts
+  under `.heal/structural/artifacts/<blake3-64>` (every touch re-verifies
+  the hash; a tampered file is refused, never reused) + the heads file
+  `.heal/structural/heads.json` under compare-and-save (a save whose
+  on-disk state moved since observation is a `CasRace`); unknown heads
+  versions refuse loudly.
+- The flat-tree invariant is enforced by the TYPE: one
+  `ProposalPayload` variant = one edit; no list-of-edits exists.
+- Tests: 24 ungated (kinds/classes enumerated, every gate arm, 7 secret
+  shapes + 6 near-misses, chain CAS/checkpoint/live/rollback/round-trip) +
+  7 store tests (round-trip/idempotent, corruption refused, genesis,
+  CAS race, version + torn-file corruption) — pid+counter-suffixed temp
+  roots, never fixed shared paths.
+- Gates: lib 2340/0 default + 2347/0 at `--features structural_admission`;
+  clippy `-D warnings` clean at default, feature, and no-default postures
+  (fresh target dir verified warning-free); `--no-default-features` keeps
+  the gated store compiled to nothing.
+
+Standing posture, unchanged by the landing: NOTHING auto-mutates — no
+production caller, no auto-serve kind activated (owner call reserved).
+Quality layers stay where they were: oracle for content, bench/freeze
+gates for corpora, GEPA-D for numeric config values. The P1 x
+frontier_miner fusion (shape gate -> oracle -> commit chain) is the
+anticipated first consumer of the lane.
+
+En-route fixes worth keeping: the Fixture/Playbook gate arms merged
+(identical by design — the kinds differ in review class, never in shape;
+clippy `match_same_arms` enforced the honesty), and `cas_save` takes the
+next state by reference (pedantic `trivially_copy_pass_by_ref` — the state
+machine already consumed it at the caller).
+
+Issue file removed per the noise-reduction rule — this row is the durable
+record.
