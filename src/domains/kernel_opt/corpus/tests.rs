@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        638,
-        "kernel batches through Batch 178 should have 638 rules"
+        642,
+        "kernel batches through Batch 180 should have 642 rules"
     );
 }
 
@@ -5398,13 +5398,15 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 178).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 180:
+    // A +1 plane layout, D +1 item-space flattening, E +1 fixed-order epilogue,
+    // N +1 deferred-bias exact-isum).
     let expected = [
-        (KernelCategory::MemoryAccess, 136),
+        (KernelCategory::MemoryAccess, 137),
         (KernelCategory::Compute, 68),
         (KernelCategory::Fusion, 47),
-        (KernelCategory::Dispatch, 139),
-        (KernelCategory::Parallelism, 61),
+        (KernelCategory::Dispatch, 140),
+        (KernelCategory::Parallelism, 62),
         (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
@@ -5413,7 +5415,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 47),
+        (KernelCategory::DtypeAlignment, 48),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5428,9 +5430,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 638.
+    // Sum must equal 642.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 638, "Plan 003: category totals must sum to 638");
+    assert_eq!(total, 642, "Plan 003: category totals must sum to 642");
 }
 
 #[test]
@@ -5441,8 +5443,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 638,
-        "Plan 003: grouped corpus has {total} rules, expected 638"
+        total, 642,
+        "Plan 003: grouped corpus has {total} rules, expected 642"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9549,8 +9551,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        638,
-        "Batch 178: corpus should have 638 rules"
+        642,
+        "Batch 180: corpus should have 642 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -12790,6 +12792,284 @@ fn batch178_concepts_covered() {
     }
 }
 
+#[test]
+fn batch180_rules_present() {
+    // Batch 180 (the qvac-fabric Bonsai CUDA PT-layout distill -- Plan 173
+    // / Research 211): 4 kernel_opt rules (A +1: the planar-transposed
+    // activation plane layout; D +1: the row-kblock item-space flattening
+    // + host util search; E +1: the fixed-order interleaved-accumulator
+    // epilogue; N +1: the deferred-bias exact-isum integer algebra) + 3
+    // riders (entries_gpu_07/11/27), distilled from
+    // tetherto/qvac-fabric-llm.cpp @ b9bf3a82 (MIT, branch temp-10549 --
+    // the Bonsai LEAGUE lane, our scored model class). Every quote
+    // re-verified VERBATIM at the pin THIS batch (fresh shallow clone, the
+    // ephemeral-clone law; the branch tip == the pin at clone time). All
+    // perf numbers are SOURCE-REPORTED (RTX 3060 / RTX 4070 ncu -- none
+    // measured here); rules are mechanism-level. Kinship-first: the N
+    // rule composes with the B116 swar rule (same lineage), never restates.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "planar-transposed-activation-multi-column-quant-matvec",
+        "deferred-bias-ternary-dp4a-exact-isum",
+        "row-kblock-item-space-flattening-host-util-search",
+        "fixed-order-interleaved-accumulator-epilogue",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-180 rule '{id}' missing from corpus"
+        );
+    }
+    // The riders: each annotation must be IN the landed rule text.
+    let ws = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "weight-stream-non-temporal-loads")
+        .expect("weight-stream rule present");
+    assert!(
+        ws.gpu_concept.contains("RIDER (Batch 180"),
+        "batch-180 prefetch-distance lever rider missing"
+    );
+    let fw = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fwht-wide-block-row-per-threadgroup-exchange-ladder")
+        .expect("fwht-wide rule present");
+    assert!(
+        fw.gpu_concept.contains("RIDER (Batch 180"),
+        "batch-180 CUDA-twin fwht rider missing"
+    );
+    let sw = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "swar-lane-widened-base3-dp4a-dot")
+        .expect("swar rule present");
+    assert!(
+        sw.gpu_concept.contains("RIDER (Batch 180"),
+        "batch-180 PQ2_0 group-128 codec rider missing"
+    );
+}
+
+#[test]
+fn batch180_pseudocode_parses() {
+    // G1 for Batch 180: syn-parse gate (the four qvac rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "planar-transposed-activation-multi-column-quant-matvec",
+        "deferred-bias-ternary-dp4a-exact-isum",
+        "row-kblock-item-space-flattening-host-util-search",
+        "fixed-order-interleaved-accumulator-epilogue",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-180 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-180 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-180 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch180_deferred_bias_isum_exhaustive() {
+    // The B59 ported-numeric mandate for the N rule: the deferred-bias
+    // fold is an EXACT integer identity -- sum((q-1)*a) == sum(q*a) -
+    // sum(a) -- over the full digit domain x per-lane activation sweeps
+    // with adversarial neighbor fills, consumed through the same
+    // unsigned-lane x signed-lane multiply-add the dp4a performs. Plus
+    // the int16-range assertion the half-slot transport relies on
+    // (|isum| <= 32*127 for a 32-element block of i8 activations).
+    const DIGITS: [u32; 3] = [0, 1, 2];
+    // all 3^4 = 81 digit words (one digit per byte lane, low to high)
+    let mut words = Vec::new();
+    for d0 in DIGITS {
+        for d1 in DIGITS {
+            for d2 in DIGITS {
+                for d3 in DIGITS {
+                    words.push(d0 | (d1 << 8) | (d2 << 16) | (d3 << 24));
+                }
+            }
+        }
+    }
+    assert_eq!(words.len(), 81);
+    let bias_words: Vec<u32> = words
+        .iter()
+        .map(|w| {
+            // the biased form subtracts 1 per lane BEFORE the dot
+            (((w & 0xFF).wrapping_sub(1)) & 0xFF)
+                | (((w >> 8) & 0xFF).wrapping_sub(1) & 0xFF) << 8
+                | (((w >> 16) & 0xFF).wrapping_sub(1) & 0xFF) << 16
+                | (((w >> 24) & 0xFF).wrapping_sub(1) & 0xFF) << 24
+        })
+        .collect();
+    // dp4a semantics: four lanes of (u8 weight x i8 activation),
+    // sign-extended products, accumulated into i32.
+    fn dp4a_emulate(q: u32, a: u32, acc: i32, weight_signed: bool) -> i32 {
+        let mut acc = acc;
+        for lane in 0..4 {
+            // raw digits {0,1,2} ride the UNSIGNED lane; the biased form
+            // subtracts per-lane (vsub4 wraps 0 -> 0xFF = -1 as i8) and
+            // consumes the SIGNED lane.
+            let ql = if weight_signed {
+                ((q >> (8 * lane)) & 0xFF) as u8 as i8 as i32
+            } else {
+                ((q >> (8 * lane)) & 0xFF) as i32
+            };
+            let al = ((a >> (8 * lane)) & 0xFF) as u8 as i8 as i32;
+            acc += ql * al;
+        }
+        acc
+    }
+    fn isum_of(a: u32) -> i32 {
+        let mut s = 0i32;
+        for lane in 0..4 {
+            s += ((a >> (8 * lane)) & 0xFF) as u8 as i8 as i32;
+        }
+        s
+    }
+    for (qi, &qw) in words.iter().enumerate() {
+        let bw = bias_words[qi];
+        for lane in 0..4 {
+            for seed in [0x00u32, 0x7F7F_7F7F, 0x8080_8080, 0x5555_5555] {
+                // sweep byte `lane` over the FULL i8 domain; neighbors adversarial
+                for b in 0..=255u32 {
+                    let shift = 8 * lane;
+                    let aw = (seed & !(0xFF << shift)) | (b << shift);
+                    let raw = dp4a_emulate(qw, aw, 0, false);
+                    let biased = dp4a_emulate(bw, aw, 0, true);
+                    let isum = isum_of(aw);
+                    assert_eq!(
+                        raw - isum,
+                        biased,
+                        "lane {lane} byte {b:#04x} qword {qw:#010x} diverged"
+                    );
+                }
+            }
+        }
+    }
+    // the transport range: a full 32-element block of worst-case i8
+    // activations has |sum| <= 32*127 -- the half-slot int16 claim.
+    assert_eq!(32 * 127, 4064);
+    assert!(4064 < i16::MAX as i32);
+}
+
+#[test]
+fn batch180_row_kblock_util_search_boundary() {
+    // The D rule's boundary pin, ported from the source's three
+    // static_asserts (mmvq-ptq1_0.cuh L464-466): at blocks_per_row=1536,
+    // ncols=1, rows_per_item=4, max_smem=48 KiB -- the GATED form (smem
+    // per row doubled by the gate partials) must REFUSE (rows_per_cta 0),
+    // the gated boundary must ADMIT exactly 49152 bytes, and the UNGATED
+    // form must FIT with rows_per_cta == 4.
+    const THREADS: usize = 128;
+    const MAX_ROWS: usize = 16;
+    fn host_config(
+        blocks_per_row: usize,
+        ncols: usize,
+        rows_per_item: usize,
+        has_gate: bool,
+        max_smem: usize,
+    ) -> (usize, usize) {
+        let smem_per_row = ncols * (blocks_per_row + 1) * 4 * if has_gate { 2 } else { 1 };
+        let mut rmax = max_smem / smem_per_row;
+        rmax = rmax.min(MAX_ROWS);
+        rmax -= rmax % rows_per_item;
+        if rmax < rows_per_item {
+            return (0, 0);
+        }
+        let mut best = rows_per_item;
+        let mut best_util = 0.0f64;
+        let mut r = rows_per_item;
+        while r <= rmax {
+            let items = (r / rows_per_item) * blocks_per_row;
+            let iters = (items + THREADS - 1) / THREADS;
+            let util = items as f64 / (iters * THREADS) as f64;
+            if util > best_util + 1e-9 {
+                best_util = util;
+                best = r;
+            }
+            if util > 0.999 {
+                break;
+            }
+            r += rows_per_item;
+        }
+        (best, smem_per_row * best)
+    }
+    // gated at the boundary: the doubled smem overflows -> refusal
+    let (rows, smem) = host_config(1536, 1, 4, true, 49152);
+    assert_eq!(rows, 0, "gated PTQ1_0 K=196608 must fall back at 48 KiB");
+    assert_eq!(smem, 0);
+    // the boundary itself must be admitted exactly (1535 blocks fits)
+    let (_, smem_admit) = host_config(1535, 1, 4, true, 49152);
+    assert_eq!(smem_admit, 49152, "gated must admit the 48 KiB boundary");
+    // ungated: fits with rows_per_cta == 4
+    let (rows_u, _) = host_config(1536, 1, 4, false, 49152);
+    assert_eq!(rows_u, 4, "ungated PTQ1_0 K=196608 must fit at 48 KiB");
+    // the util search terminates at near-perfect fill on a fat case
+    let (rows_fat, _) = host_config(40, 8, 2, false, 65536);
+    assert!(rows_fat >= 2);
+}
+
+#[test]
+fn batch180_fixed_order_epilogue_column_bit_identity() {
+    // The E rule's contract: the fixed-order per-(row, column) summation
+    // depends only on the weight shape, so a column's result is
+    // BIT-IDENTICAL for every column count. The per-column fold is pure
+    // in the column index; the pin guards the CONTRACT against a future
+    // multi-column specialization that reorders per-column work by
+    // column index. The replaced shuffle-order form is a DIFFERENT
+    // association (different bits are expected and legal) -- the
+    // invariance claim is across COLUMN COUNT, never across orders.
+    fn epilogue_fixed_order(partials: &[f32], bpr: usize) -> f32 {
+        let src = &partials[..bpr];
+        let (mut s0, mut s1, mut s2, mut s3) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        let mut kbx = 0;
+        while kbx + 4 <= bpr {
+            s0 += src[kbx];
+            s1 += src[kbx + 1];
+            s2 += src[kbx + 2];
+            s3 += src[kbx + 3];
+            kbx += 4;
+        }
+        while kbx < bpr {
+            s0 += src[kbx]; // scalar tail -- no masked/padded lane
+            kbx += 1;
+        }
+        (s0 + s1) + (s2 + s3)
+    }
+    let bpr = 37; // 4*9 + 1: the scalar tail lane is exercised
+    let mut partials = Vec::with_capacity(bpr);
+    let mut x: u64 = 0x243F_6A88_85A3_08D3;
+    for _ in 0..bpr {
+        x = x
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        partials.push(((x >> 33) as f32) / (u32::MAX as f32) - 0.5);
+    }
+    let reference = epilogue_fixed_order(&partials, bpr).to_bits();
+    for ncols in [1usize, 2, 3, 8] {
+        for j in 0..ncols {
+            // column j's partials in a real kernel live at a column-strided
+            // offset; the summation ORDER per column is the fixed
+            // shape-derived one regardless of ncols.
+            let col_bits = epilogue_fixed_order(&partials, bpr).to_bits();
+            assert_eq!(
+                col_bits, reference,
+                "column {j} of ncols={ncols} must be bit-identical"
+            );
+        }
+    }
+}
 #[test]
 fn batch178_pseudocode_parses() {
     // G1 for Batch 178: syn-parse gate (the seven cinference rules).

@@ -1934,6 +1934,7 @@ mod entries_gpu_45;
 mod entries_gpu_46;
 mod entries_gpu_47;
 mod entries_gpu_48;
+mod entries_gpu_49;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1958,6 +1959,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_46::entries());
     entries.extend(entries_gpu_47::entries());
     entries.extend(entries_gpu_48::entries());
+    entries.extend(entries_gpu_49::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2007,7 +2009,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 638-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 642-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2015,8 +2017,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (136 rules; Batch 178 +2: the L2 policy
-    // pair -- evict-last producer stores + dead-line discard)
+    // A: Memory access patterns (137 rules; Batch 178 +2: the L2 policy
+    // pair -- evict-last producer stores + dead-line discard;
+    // Batch 180 +1: the planar-transposed activation plane layout)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2157,6 +2160,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "extent-clamped-operand-views-partial-k-tile",
             "producer-store-evict-last-pins-cross-stream-consumer",
             "dead-line-l2-discard-after-last-consumer",
+            "planar-transposed-activation-multi-column-quant-matvec",
         ],
     ),
     // B: Compute patterns (68 rules) -- was 64 in the comment while the
@@ -2291,9 +2295,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-stats-precompute-exp-in-gemm-loader",
         ],
     ),
-    // D: Dispatch patterns (139 rules; Batch 177 +2: the host-gather graph
+    // D: Dispatch patterns (140 rules; Batch 177 +2: the host-gather graph
     // split + the unified-memory page-cache rule; Batch 178 +1: the
-    // topology-signature graph-exec sharing rule)
+    // topology-signature graph-exec sharing rule; Batch 180 +1: the
+    // row-kblock item-space flattening + host util search)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2437,10 +2442,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "host-gather-splits-the-graph-and-the-split-is-the-separable-price",
             "unified-memory-page-cache-is-device-allocatable",
             "graph-exec-update-gated-by-captured-topology-signature",
+            "row-kblock-item-space-flattening-host-util-search",
         ],
     ),
-    // E: Parallelism patterns (61 rules; Batch 178 +2: the warp-role
-    // specialization by query width + the row-slice epilogue rule)
+    // E: Parallelism patterns (62 rules; Batch 178 +2: the warp-role
+    // specialization by query width + the row-slice epilogue rule;
+    // Batch 180 +1: the fixed-order interleaved-accumulator epilogue)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2506,6 +2513,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "compile-out-rare-paths-register-worst-case",
             "wide-verify-warp-specialized-scores-in-registers-pv",
             "row-slice-expensive-epilogue-across-ctas",
+            "fixed-order-interleaved-accumulator-epilogue",
         ],
     ),
     // F: Flash-attention tiling (16 rules)
@@ -2700,9 +2708,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pipeline-cache-key-covers-every-function-constant",
         ],
     ),
-    // N: dtype + alignment specialization (47 rules; Batch 177 +2: the
+    // N: dtype + alignment specialization (48 rules; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
-    // Batch 178 +1: the exact-widening accumulator-precision rule)
+    // Batch 178 +1: the exact-widening accumulator-precision rule;
+    // Batch 180 +1: the deferred-bias exact-isum integer algebra)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2754,6 +2763,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "quantized-pack-residency-audit-unquantized-minority-first",
             "bpw-reduction-buys-memory-not-decode-when-dequant-bound",
             "exact-widening-enables-fp16-pv-accumulation",
+            "deferred-bias-ternary-dp4a-exact-isum",
         ],
     ),
     // O: IR strength reduction (4 rules)
