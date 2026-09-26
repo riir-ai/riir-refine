@@ -3399,7 +3399,7 @@ USAGE:
     cargo heal --coverage-report                       (corpus coverage debt, 119)
     cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
     cargo heal --fixseq-stats [PATHS]                  (cascade law + derailment index, 128)
-    cargo heal --gate-calibration                      (Issue 130 T1+T3 report — strata δ calibration + corpus-stall flag; ungated, report-only)
+    cargo heal --gate-calibration                      (Issue 130 T1+T3+OOD report — strata δ calibration + OOD-axis readout + corpus-stall flag; ungated, report-only)
     cargo heal --active-set                            (Issue 102 marker — print demotions + caps)
     cargo heal --active-set-demote <domain:rule>       (demote a rule out of the fan-out + fix dispatch; e.g. clippy:manual_div_ceil)
     cargo heal --active-set-readmit <domain:rule>      (remove a demotion — the manual re-admit)
@@ -3979,10 +3979,11 @@ struct Args {
     necessity_rule: Option<String>,
     /// Issue 130: `--gate-calibration` — the admission-gate evidence
     /// report (standalone, ungated, report-only): the T1 δ calibration
-    /// over the score-history strata + the T3 corpus-stall predicate over
-    /// the frontier snapshots. Nothing here gates; the T2 admission
-    /// predicate stays deferred until the report says the repo stratum
-    /// can support a δ.
+    /// over the score-history strata, the T2-path-(a) OOD-axis readout
+    /// over the same rows' `ood` entropy-gap blocks, and the T3 corpus-stall
+    /// predicate over the frontier snapshots. Nothing here gates; the T2
+    /// admission predicate stays deferred until the report says the repo
+    /// stratum can support a δ.
     gate_calibration: bool,
     /// Issue 102 T2: `--active-set` — print the corpus active-set marker
     /// (standalone). The marker file is the ONLY demotion writer; the
@@ -5567,12 +5568,13 @@ fn parse_active_set_id(id: &str) -> Result<(String, String), String> {
     Ok((domain.to_string(), rule.to_string()))
 }
 
-/// Issue 130 T1+T3: the admission-gate evidence report (standalone,
-/// ungated, report-only). Reads the committed artifacts — the score
-/// history's per-run provenance strata (T1) and the frontier snapshot
-/// series (T3) — and prints both verdicts. Nothing here gates: the T2
-/// admission predicate stays deferred until this report says the repo
-/// stratum can support a δ.
+/// Issue 130 T1+T3 + the T2-path-(a) OOD axis: the admission-gate evidence
+/// report (standalone, ungated, report-only). Reads the committed artifacts
+/// — the score history's per-run provenance strata (T1), its per-row `ood`
+/// entropy-gap blocks (the T2 path-(a) axis readout), and the frontier
+/// snapshot series (T3) — and prints all three. Nothing here gates: the T2
+/// admission predicate stays deferred until a recorded re-arm fires (a
+/// nondeterminism source in the heal path or the entropy kernel).
 fn run_gate_calibration() {
     use riir_clippy::gate_calibration as gc;
     let hist = std::path::Path::new(gc::SCORE_HISTORY_JSONL);
@@ -5585,6 +5587,7 @@ fn run_gate_calibration() {
         std::process::exit(1);
     };
     let mut runs = Vec::new();
+    let mut ood = Vec::new();
     let mut bad_rows = 0usize;
     for line in text.lines() {
         let line = line.trim();
@@ -5602,9 +5605,24 @@ fn run_gate_calibration() {
                 eprintln!("gate-calibration: skipped one history row: {e}");
             }
         }
+        // The ood axis is independent of the strata: a row can carry valid
+        // strata and a malformed ood block (or vice versa). Non-object rows
+        // are already counted by the stratum arm above — ood_runs would only
+        // repeat the same error, so they are skipped here.
+        if v.is_object() {
+            match gc::ood_runs(&v) {
+                Ok(mut parsed) => ood.append(&mut parsed),
+                Err(e) => {
+                    bad_rows += 1;
+                    eprintln!("gate-calibration: skipped one history row's ood block: {e}");
+                }
+            }
+        }
     }
     let rows = gc::calibrate(&runs);
     println!("{}", gc::render_calibration(&rows));
+    let ood_groups = gc::calibrate_ood(&ood);
+    println!("{}", gc::render_ood_axis(&ood_groups));
     let snaps_path = std::path::Path::new(gc::FRONTIER_SNAPSHOTS_JSONL);
     match std::fs::read_to_string(snaps_path) {
         Err(_) => println!(
