@@ -1,6 +1,6 @@
 # Plan 173 — Batch 180: qvac-fabric Bonsai CUDA PT-layout distill
 
-**Status:** IN PROGRESS — staged (pre-slot; awaiting the ~19:5x 09-26 cadence slot, behind the B176 FWHT rider if #29096 merges first)
+**Status:** IN PROGRESS — **CLAIMED at the ~19:5x slot 2026-09-26 19:06 +07 (shikuwa/4090; origin twin-check CLEAN — no twin landing; the M3 sibling's B181 = Plan 174, different batch, behind this one)** — executing T0 now
 **Verdict:** Research 211 (YES, A− corpus / LANE INTEL HIGH / kernel_opt)
 **Source pin:** `tetherto/qvac-fabric-llm.cpp @ b9bf3a820731b70e5f05130484bdb1518a66beee` (temp-10549 tip; CUDA arm = merge `a95b44152`, PR #285) — MIT. **T0 re-clones at the pin** (the ephemeral-clone law).
 
