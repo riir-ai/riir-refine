@@ -37,6 +37,9 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
+use riir_clippy::domains::clippy_lints::lint_level::{
+    gated_lints, LevelResolver, ALLOW_BY_DEFAULT_GROUPS,
+};
 use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_clippy::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
 use riir_clippy::draft::span_source::collect_source_files;
@@ -3763,6 +3766,15 @@ USAGE:
                     run REFUSES exit 2 rather than apply unverified edits.
                     The rust_perf/sec lanes and the oracle-consumed edits
                     are unaffected (not target-gate mirrors).
+    --groups <g,..> With --fix ONLY (Issue 135): also apply edits for
+                    allow-by-default clippy groups (pedantic, nursery,
+                    restriction, cargo, or all) the TARGET crate does not
+                    enable. By default such a lint (doc_markdown, match_bool,
+                    uninlined_format_args, ...) is fixed only where the crate
+                    enables it or its group — [lints.clippy], inherited
+                    [workspace.lints.clippy], or a crate-root / file
+                    #![warn(clippy::...)] — and is reported as skipped
+                    otherwise, never silently.
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
@@ -3913,6 +3925,14 @@ struct Args {
     /// Requires `--repo-posture` (setting it without the mode is misuse —
     /// there is nothing to override).
     apply_notbenchable: bool,
+    /// `--groups pedantic,nursery` (Issue 135 T3): opt the clippy fix lane
+    /// into allow-by-default groups the TARGET crate does not enable.
+    /// Without it an allow-by-default lint's edits apply only where the
+    /// crate enables the lint or its group (`[lints.clippy]`, inherited
+    /// `[workspace.lints.clippy]`, crate-root / file inner
+    /// `#![warn(clippy::…)]`) and are reported as skipped otherwise. `all`
+    /// = every allow-by-default group (the pre-135 behaviour).
+    fix_groups: Vec<String>,
     top_k: usize,
     verify: bool,
     /// `--no-verify`: opt out of the compile gate that --fix now defaults
@@ -4215,6 +4235,7 @@ fn parse_args() -> Args {
         clippy_json: None,
         repo_posture: false,
         apply_notbenchable: false,
+        fix_groups: Vec::new(),
         top_k: 3,
         verify: false,
         no_verify: false,
@@ -4468,6 +4489,22 @@ fn parse_args() -> Args {
             }
             "--apply-notbenchable" => {
                 args.apply_notbenchable = true;
+            }
+            "--groups" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--groups requires a value (pedantic,nursery,restriction,cargo or all)");
+                    usage();
+                };
+                for g in value.split(',').map(str::trim).filter(|g| !g.is_empty()) {
+                    if g != "all" && !ALLOW_BY_DEFAULT_GROUPS.contains(&g) {
+                        eprintln!(
+                            "--groups: unknown allow-by-default group `{g}` (pedantic, nursery, \
+                             restriction, cargo, all)"
+                        );
+                        usage();
+                    }
+                    args.fix_groups.push(g.to_string());
+                }
             }
             "--generation" => {
                 let Some(value) = it.next() else {
@@ -4930,6 +4967,11 @@ fn validate_mode_flags(args: &Args) -> Result<(), &'static str> {
     // P39: the override names the posture lane's decline — without the
     // mode there is nothing to override, and a silently-inert flag is the
     // confusion class this check exists to prevent.
+    // Issue 135 T3: the opt-in names the fix lane's level gate — without
+    // --fix there is nothing to opt into.
+    if !args.fix_groups.is_empty() && !args.fix {
+        return Err("--groups requires --fix (it opts the fix lane into allow-by-default groups)");
+    }
     if args.apply_notbenchable && !args.repo_posture {
         return Err(
             "--apply-notbenchable requires --repo-posture (it overrides the posture lane's NotBenchable decline)",
@@ -9419,6 +9461,13 @@ fn main() {
     let mut n_posture_declined_total = 0usize;
     let mut posture_declined_by_lint: std::collections::BTreeMap<String, usize> =
         std::collections::BTreeMap::new();
+    // Issue 135 T2: clippy-lane edits skipped because the lint is
+    // allow-by-default and the TARGET crate never enables it (per-lint run
+    // totals; pass-0 counted, the bench-guard law). The resolver caches
+    // each crate's manifest + root attributes once per run.
+    let mut level_resolver = LevelResolver::new();
+    let mut level_skipped_by_lint: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
     // Issue 116: the per-span `[no corpus rule]` lists, kept so the run can
     // report WHICH of the two messages that marker is delivering. Collected
     // rather than counted because the delta is per-LINT: the existing
@@ -9596,6 +9645,20 @@ fn main() {
                     None
                 };
             let mut n_posture_declined_file = 0usize;
+            // Issue 135 T2: the lints this file's crate never enabled (an
+            // unparseable file breaks out of the pass loop anyway).
+            let level_gated: Vec<&'static str> = if run_clippy {
+                syn::parse_file(&src).map_or_else(
+                    |_| Vec::new(),
+                    |parsed| {
+                        gated_lints(&level_resolver.levels_for(file, &parsed), &args.fix_groups)
+                    },
+                )
+            } else {
+                Vec::new()
+            };
+            let mut level_skipped_file: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
 
             for pass in 0..MAX_FIX_PASSES {
                 let Ok(parsed) = syn::parse_file(&current) else {
@@ -9714,6 +9777,15 @@ fn main() {
                             riir_clippy::domains::clippy_lints::proposers::collect_edits(
                                 lint, &current, &parsed,
                             );
+                        // Issue 135 T2: allow-by-default and not enabled by
+                        // the target crate — counted (pass 0), never applied.
+                        if level_gated.contains(&lint) {
+                            if pass == 0 && !collected.is_empty() {
+                                *level_skipped_file.entry(lint.to_string()).or_default() +=
+                                    collected.len();
+                            }
+                            continue;
+                        }
                         match &posture_pass {
                             None => edits.extend(collected),
                             Some(idx) => {
@@ -9754,11 +9826,26 @@ fn main() {
                 // construction (that text was rewritten).
                 if pass == 0 && run_clippy {
                     if let Some(feed) = &clippy_feed {
+                        // Issue 135 T2: the level gate rides the oracle door
+                        // too — a feed run under `-W clippy::pedantic` is the
+                        // operator's flags, not the crate's configuration.
+                        let oracle_set: Vec<&str> = lint_set
+                            .iter()
+                            .copied()
+                            .filter(|l| !level_gated.contains(l))
+                            .collect();
+                        for d in feed.iter().filter(|d| {
+                            d.suggestion.is_some()
+                                && level_gated.contains(&d.lint.as_str())
+                                && riir_clippy::draft::clippy_feed::paths_ref_match(&d.file, &display)
+                        }) {
+                            *level_skipped_file.entry(d.lint.clone()).or_default() += 1;
+                        }
                         let lane = riir_clippy::draft::clippy_feed::oracle_edits(
                             feed,
                             &display,
                             &current,
-                            &lint_set,
+                            &oracle_set,
                         );
                         if lane.dropped > 0 {
                             eprintln!(
@@ -9783,6 +9870,16 @@ fn main() {
                                  981 tail-slice class. Fix manually with a bounded \
                                  slice: &mut buf[base..][..n] or .take(n))",
                                 lane.range_declined
+                            );
+                        }
+                        // Issue 135 T4: clippy's argv-token backtick on a
+                        // shell-command doc line — declined, never applied.
+                        if lane.doc_command_declined > 0 {
+                            eprintln!(
+                                "oracle lane: declined {} doc_markdown suggestion(s) for {display} \
+                                 on shell-command doc line(s) — backticking one argv token breaks \
+                                 copy-paste; fence or indent the command by hand",
+                                lane.doc_command_declined
                             );
                         }
                         // Issue 118 T2: the oracle lane rides the same bench-guard
@@ -9942,6 +10039,20 @@ fn main() {
             }
             // Plan 165: the posture decline line — what the target repo's
             // own clippy never flagged stays UNTOUCHED, loudly.
+            // Issue 135 T2: the level-gate skip line — loud, named, and the
+            // opt-in one flag away.
+            if !level_skipped_file.is_empty() {
+                let n: usize = level_skipped_file.values().sum();
+                eprintln!(
+                    "lint-level: skipped {n} clippy-lane edit(s) on {display} — allow-by-default \
+                     at crate level ({}); the crate enables neither the lint nor its group \
+                     ([lints.clippy] / #![warn(clippy::…)]) — --groups <group> applies them",
+                    breakdown_of(&level_skipped_file)
+                );
+                for (lint, k) in level_skipped_file {
+                    *level_skipped_by_lint.entry(lint).or_default() += k;
+                }
+            }
             if n_posture_declined_file > 0 {
                 n_posture_declined_total += n_posture_declined_file;
                 eprintln!(
@@ -10875,9 +10986,21 @@ fn main() {
     } else {
         String::new()
     };
+    // Issue 135 T2: the level-gate skips ride the verdict line, whatever
+    // the feed state (the posture/oracle notes above need a feed; this
+    // gate does not).
+    let level_note = if level_skipped_by_lint.is_empty() {
+        String::new()
+    } else {
+        let n: usize = level_skipped_by_lint.values().sum();
+        format!(
+            " · {n} skipped: allow-by-default at crate level ({}; --groups opts in)",
+            breakdown_of(&level_skipped_by_lint)
+        )
+    };
     println!(
         "\nscanned {} {file_pl} · {} {span_pl} · {} with {sugg_pl} (top-{} per \
-         domain){mode}{non_syn_note}{fmt_note}{oracle_note}",
+         domain){mode}{non_syn_note}{fmt_note}{oracle_note}{level_note}",
         files.len(),
         n_chunks,
         n_suggestions,
@@ -11682,6 +11805,16 @@ struct ReheatCtx {
 /// the edits land deterministically on the next run, the epoch being
 /// pinned).
 #[cfg(feature = "kat_transport")]
+/// `lint×n, lint×n` — the per-lint decline breakdown shape.
+fn breakdown_of(by_lint: &std::collections::BTreeMap<String, usize>) -> String {
+    by_lint
+        .iter()
+        .map(|(lint, n)| format!("{lint}×{n}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+#[allow(clippy::too_many_arguments)]
 fn reheat_fix_pass(
     path: &Path,
     domain: Option<DomainId>,
@@ -11690,6 +11823,7 @@ fn reheat_fix_pass(
     fmt_active: bool,
     active_set: &riir_clippy::active_set::ActiveSet,
     notbench_guard: bool,
+    fix_groups: &[String],
 ) -> usize {
     const MAX_PASSES: usize = 4;
 
@@ -11708,6 +11842,18 @@ fn reheat_fix_pass(
     // P39: the posture lane's NotBenchable decline rides the reheat too —
     // the guard semantic must be uniform across both fix paths.
     let notbench_guard = run_perf && notbench_guard;
+    // Issue 135 T2: the level gate rides the reheat too (uniform across
+    // both fix paths).
+    let level_gated: Vec<&'static str> = if run_clippy {
+        syn::parse_file(&src).map_or_else(
+            |_| Vec::new(),
+            |parsed| gated_lints(&LevelResolver::new().levels_for(path, &parsed), fix_groups),
+        )
+    } else {
+        Vec::new()
+    };
+    let mut level_skipped: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
     let mut current = src.clone();
     let mut total_applied = 0usize;
     let mut changed = false;
@@ -11759,10 +11905,23 @@ fn reheat_fix_pass(
                 if active_set.excludes("clippy", lint) {
                     continue;
                 }
-                edits.extend(
-                    riir_clippy::domains::clippy_lints::proposers::collect_edits(
-                        lint, &current, &parsed,
-                    ),
+                let collected = riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                    lint, &current, &parsed,
+                );
+                if level_gated.contains(lint) {
+                    if pass == 0 && !collected.is_empty() {
+                        *level_skipped.entry((*lint).to_string()).or_default() += collected.len();
+                    }
+                    continue;
+                }
+                edits.extend(collected);
+            }
+            if pass == 0 && !level_skipped.is_empty() {
+                println!(
+                    "reheat: lint-level skipped {} clippy-lane edit(s) on {display} — \
+                     allow-by-default at crate level ({}; --groups opts in)",
+                    level_skipped.values().sum::<usize>(),
+                    breakdown_of(&level_skipped)
                 );
             }
         }
@@ -11956,6 +12115,7 @@ fn run_reheat_pass(
                         !args.no_fmt,
                         active_set,
                         args.repo_posture && !args.apply_notbenchable,
+                        &args.fix_groups,
                     );
                 }
             }

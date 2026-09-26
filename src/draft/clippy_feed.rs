@@ -360,6 +360,10 @@ pub struct OracleLane {
     /// well-formed suggestion, never staleness — the caller names the
     /// manual path (bounded slice) instead of questioning the feed.
     pub range_declined: usize,
+    /// `doc_markdown` suggestions declined on a shell-command doc line
+    /// (Issue 135 T4 — backticking one argv token breaks copy-paste; the
+    /// repair is to fence/indent the command, by hand).
+    pub doc_command_declined: usize,
 }
 
 /// Compute the oracle-anchored edits for ONE scanned file (P21).
@@ -406,6 +410,7 @@ pub fn oracle_edits(
     let mut candidates: Vec<(usize, usize, String, String)> = Vec::new();
     let mut dropped = 0usize;
     let mut range_declined = 0usize;
+    let mut doc_command_declined = 0usize;
     for d in feed {
         if !lane_lints.contains(&d.lint.as_str()) {
             continue;
@@ -450,6 +455,17 @@ pub fn oracle_edits(
                     range_declined += 1;
                     continue;
                 }
+                // Issue 135 T4: the proposer's command-line skip, mirrored
+                // at the oracle door (clippy suggests the same argv-token
+                // backtick the proposer refuses).
+                if d.lint == "doc_markdown"
+                    && crate::domains::clippy_lints::proposers::doc_markdown::doc_source_line_is_command(
+                        src, edit.start,
+                    )
+                {
+                    doc_command_declined += 1;
+                    continue;
+                }
                 candidates.push((edit.start, edit.end, edit.replacement, d.lint.clone()));
             }
             None => dropped += 1, // stale offsets / misaligned boundaries
@@ -470,7 +486,7 @@ pub fn oracle_edits(
         kept.push(cand);
     }
     if kept.is_empty() {
-        return OracleLane { edits: Vec::new(), dropped, range_declined };
+        return OracleLane { edits: Vec::new(), dropped, range_declined, doc_command_declined };
     }
     // The whole-file syntax gate: the oracle edits ALONE must leave the
     // file parseable. All-or-nothing on failure.
@@ -488,6 +504,7 @@ pub fn oracle_edits(
             edits: Vec::new(),
             dropped: dropped + kept.len(),
             range_declined,
+            doc_command_declined,
         };
     }
     let edits = edits
@@ -498,7 +515,7 @@ pub fn oracle_edits(
             edit,
         })
         .collect();
-    OracleLane { edits, dropped, range_declined }
+    OracleLane { edits, dropped, range_declined, doc_command_declined }
 }
 
 /// P34 (riir-ai Issue 981, live evidence): does the for-loop containing
@@ -988,6 +1005,32 @@ mod tests {
                 ],
             }),
         }]
+    }
+
+    #[test]
+    fn oracle_edits_decline_doc_markdown_on_command_lines() {
+        // Issue 135 T4: clippy's own suggestion for the reflex-site line is
+        // the argv-token backtick — declined at the oracle door too, while
+        // the same lint on a prose line is still consumed.
+        let src = "//! Regen the shader_perf corpus.\n//!   cargo run --bin gen_corpus\npub fn one() {}\n";
+        let diag = |word: &str| {
+            let at = src.find(word).expect("marker");
+            ClippyDiagnostic {
+                span: Some((at, at + word.len())),
+                file: "src/lib.rs".to_string(),
+                line: 1,
+                lint: "doc_markdown".to_string(),
+                suggestion: Some(FeedSuggestion {
+                    parts: vec![(at, at + word.len(), format!("`{word}`"))],
+                }),
+            }
+        };
+        let feed = vec![diag("shader_perf"), diag("gen_corpus")];
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"]);
+        assert_eq!(lane.doc_command_declined, 1);
+        assert_eq!(lane.dropped, 0, "a decline is not staleness");
+        assert_eq!(lane.edits.len(), 1);
+        assert_eq!(lane.edits[0].edit.replacement, "`shader_perf`");
     }
 
     #[test]

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{HealDomain, HealEntry};
 
 pub mod corpus;
+pub mod lint_level;
 pub mod proposers;
 
 #[cfg(feature = "clippy_verify")]

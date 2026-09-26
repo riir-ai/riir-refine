@@ -43,7 +43,19 @@ cargo heal --fix --no-verify <paths>                      # write without the co
 cargo heal --suggest <paths>                              # rule suggestions, no edits
 cargo heal --fix --verify --verify-args "--features <set>" <paths>   # gated code
 cargo heal --info                                        # ONE COMMAND stats: wallet + account + mining + local work
+cargo heal --fix --groups pedantic <paths>                # also fix allow-by-default groups the crate does NOT enable
 ```
+
+- **Level gate (Issue 135)**: an allow-by-default lint (pedantic/nursery —
+  `doc_markdown`, `match_bool`, `uninlined_format_args`, `map_unwrap_or`,
+  `semicolon_if_nothing_returned`, … 20 of the fix set at clippy 1.98) is
+  fixed ONLY where the target crate enables it or its group:
+  `[lints.clippy]`, inherited `[workspace.lints.clippy]`, or a crate-root /
+  file `#![warn(clippy::…)]`. Otherwise it is skipped LOUDLY
+  (`lint-level: skipped …` per file + ` · N skipped: allow-by-default at
+  crate level` on the verdict line). `--groups pedantic,nursery` (or `all`)
+  restores the old apply-everything behaviour. `RUSTFLAGS` /
+  `.cargo/config.toml` `-W clippy::…` are NOT read — pass `--groups` there.
 
 - `--fix` WRITES by default now (the explicit flag is the consent) and
   verify-gates by default on `fix_verify` builds. `--write` still parses
@@ -103,7 +115,7 @@ REFUSES BY DESIGN (fix manually — the healer is SAFER than clippy here):
 | NaN-unsound negated comparisons (`!(a > b)` → `a <= b`, the `neg_cmp_op_on_partial_ord` shape) | NOT equivalent on floats — `!(NaN > x)` ≠ `NaN <= x`; the rewrite silently changes NaN semantics (the only correct fix is semantic) |
 | cfg-attributed trailing `return` (needless_return; any attribute on the target stmt) | the edit span covers the stmt's attrs — the rewrite would drop them; a `#[cfg]`'d trailing return is only "last" on the arches whose cfg keeps it (clippy is post-expansion and SILENT on the switch — probe 2026-09-04, the seal-remake fps_bench misfire) |
 | measurement-altering perf rules at BENCH targets (`benches/*.rs`, `#[bench]` fns — `dead-result-timing-loop → black_box`, loop restructures, allocation hoists) | the rewrite changes WHAT THE BENCH MEASURES; `--verify` proves compilation, never measurement validity — a GOAT bench's numbers are the artifact, and an LTO-folded timing loop is often the exact defect the bench exists to expose (observed 2026-09-16: the rule routed at katgpt-core `bench_775_adjoint_goat.rs` spans; declined manually). **AUTOMATED since P30 (2026-09-16): the lane declines-and-flags — `--fix` drops rust_perf edits on bench targets with a loud `bench-guard:` line (file byte-identical), `--suggest` stamps perf rows `⚠ bench-guard`; detection = `benches/` path component or a harness marker (`#[bench]`, criterion/divan/iai/bencher) — see `rust_perf::bench_guard`. Since Issue 118 (2026-09-16) the SAME door guards `--fix-compile` writes (declined on the routine path; an explicit bench path flags-and-proceeds) and oracle-consumed bench spans — manual divergence only for sec/docker/dist measurement-adjacent shapes |
-| `doc_markdown` context shapes (Issue 120, 2026-09-16 — all SKIP-direction: clippy fires, the proposer stays silent) | words inside fenced/indented code blocks, blockquote lines, lines with an odd raw backtick count (clippy's per-paragraph unbalanced-tick suppression), link-shaped tokens (`[text](dest)` — clippy checks the TEXT through pulldown events), bare URLs (clippy suggests `<url>` — a different fix shape we do not produce), `#[doc = "…"]` attribute-form docs, doc text inside macro token trees. The `--clippy-json` oracle lane consumes clippy's own spans for all of these — feed it when the proposer's silence leaves findings standing |
+| `doc_markdown` context shapes (Issue 120, 2026-09-16 — all SKIP-direction: clippy fires, the proposer stays silent) | words inside fenced/indented code blocks, blockquote lines, lines with an odd raw backtick count (clippy's per-paragraph unbalanced-tick suppression), link-shaped tokens (`[text](dest)` — clippy checks the TEXT through pulldown events), bare URLs (clippy suggests `<url>` — a different fix shape we do not produce), `#[doc = "…"]` attribute-form docs, doc text inside macro token trees, shell-command doc lines (Issue 135 T4 — first word `cargo`/`rustup`/`npm`/`git`/…, a `$ ` prompt, or `./`·`../`·`scripts/` path: backticking one argv token breaks copy-paste; fence/indent it by hand — the oracle lane DECLINES these too). The `--clippy-json` oracle lane consumes clippy's own spans for all of these — feed it when the proposer's silence leaves findings standing |
 | LENGTH-MISMATCH iterator rewrites (`needless_range_loop` and kin — `for i in 0..N { slice[i] }` → `for x in slice` / `.iter_mut()` / `.enumerate()`, P34 2026-09-20, live evidence riir-ai Issue 981) | the rewrite is mechanical ONLY when `N == slice.len()` — a slice offset into a larger buffer (`let gs = &mut buf[h * sph..]` runs to the parent's END, len > sph) makes every iterator form a SEMANTIC rewrite (981: one head's decay multiplied every later head's BPTT slab; misread as a GPU kernel failure for a forensic session; note `.enumerate()` does NOT bound the iteration either — it iterates the WHOLE collection, `min` semantics differ from `0..N`). **The proposer refuses non-`len()` bounds + local collections (fixture-pinned); the oracle door declines range-dropping suggestions whose end is not a syntactic zero-arg `.len()` (P34). MANUAL conversions — the actual 981 emitter — must verify `N == coll.len()` at the site, or keep the range visible: `&mut buf[base..][..N]`, `.take(N)`** |
 
 Semantic lints (`if_same_then_else`, …) are not heal class — owner call.

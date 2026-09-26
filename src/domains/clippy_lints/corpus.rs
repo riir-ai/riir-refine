@@ -147,7 +147,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "needless_lifetimes".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "complexity".to_string(),
             buggy_code: "fn first<'a>(s: &'a String) -> &'a str { s.as_str() }".to_string(),
             fixed_code: "fn first(s: &String) -> &str { s.as_str() }".to_string(),
         },
@@ -160,7 +160,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         // ── complexity group ─────────────────────────────────────────────
         ClippyFixEntry {
             lint_name: "manual_map".to_string(),
-            lint_group: "complexity".to_string(),
+            lint_group: "style".to_string(),
             // NOTE: uses `match ... { Some => Some, None => None }` which is the
             // canonical manual_map pattern. (The old `if x.is_some()` version
             // triggered `unnecessary_unwrap` instead — caught by G6 in Issue 008.)
@@ -175,27 +175,27 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "needless_range_loop".to_string(),
-            lint_group: "complexity".to_string(),
+            lint_group: "style".to_string(),
             buggy_code: "fn sum_vec(v: &Vec<i32>) -> i32 {\n    let mut total = 0;\n    for i in 0..v.len() { total += v[i]; }\n    total\n}".to_string(),
             fixed_code: "fn sum_vec(v: &Vec<i32>) -> i32 {\n    v.iter().sum()\n}".to_string(),
         },
         // ── perf group ───────────────────────────────────────────────────
         ClippyFixEntry {
             lint_name: "useless_conversion".to_string(),
-            lint_group: "perf".to_string(),
+            lint_group: "complexity".to_string(),
             buggy_code: "fn add_one(x: i32) -> i32 {\n    let y: i32 = x.into();\n    y + 1\n}".to_string(),
             fixed_code: "fn add_one(x: i32) -> i32 {\n    x + 1\n}".to_string(),
         },
         ClippyFixEntry {
             lint_name: "unnecessary_mut_passed".to_string(),
-            lint_group: "perf".to_string(),
+            lint_group: "style".to_string(),
             buggy_code: "fn length(s: &str) -> usize { s.len() }\nfn caller(mut s: String) -> usize { length(&mut s) }".to_string(),
             fixed_code: "fn length(s: &str) -> usize { s.len() }\nfn caller(s: String) -> usize { length(&s) }".to_string(),
         },
         // ── nursery / pedantic ───────────────────────────────────────────
         ClippyFixEntry {
             lint_name: "needless_borrow".to_string(),
-            lint_group: "nursery".to_string(),
+            lint_group: "style".to_string(),
             // Both shapes (P11 receiver extension, 2026-09-13): the free-fn
             // arg strip + the whitelisted method-receiver strip.
             buggy_code: "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(&x) }\nfn recv(v: Vec<u8>) -> usize { let n = (&v).as_slice().len(); n }".to_string(),
@@ -218,7 +218,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "collapsible_else_if".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "pedantic".to_string(),
             buggy_code: "fn work() {}\nfn f(a: bool, b: bool) { if a { work(); } else { if b { work(); } } }".to_string(),
             fixed_code: "fn work() {}\nfn f(a: bool, b: bool) { if a { work(); } else if b { work(); } }".to_string(),
         },
@@ -252,7 +252,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "range_plus_one".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "pedantic".to_string(),
             buggy_code: "fn f(n: usize) -> usize { let mut s = 0; for i in 0..n+1 { s += i; } s }".to_string(),
             fixed_code: "fn f(n: usize) -> usize { let mut s = 0; for i in 0..=n { s += i; } s }".to_string(),
         },
@@ -323,7 +323,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         // MachineApplicable.
         ClippyFixEntry {
             lint_name: "unnecessary_map_or".to_string(),
-            lint_group: "pedantic".to_string(),
+            lint_group: "style".to_string(),
             buggy_code: "fn f(x: Option<u8>) -> bool { x.map_or(false, |v| v > 1) }".to_string(),
             fixed_code: "fn f(x: Option<u8>) -> bool { x.is_some_and(|v| v > 1) }".to_string(),
         },
@@ -363,7 +363,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "deref_addrof".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "complexity".to_string(),
             buggy_code: "fn f(x: u8) -> u8 { let y = *&x; y }".to_string(),
             fixed_code: "fn f(x: u8) -> u8 { let y = x; y }".to_string(),
         },
@@ -375,7 +375,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "unnecessary_sort_by".to_string(),
-            lint_group: "perf".to_string(),
+            lint_group: "complexity".to_string(),
             buggy_code: "fn f(mut v: Vec<u8>) { v.sort_by(|a, b| a.cmp(b)); }".to_string(),
             fixed_code: "fn f(mut v: Vec<u8>) { v.sort(); }".to_string(),
         },
@@ -408,13 +408,13 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "single_char_pattern".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "pedantic".to_string(),
             buggy_code: "fn f(s: &str) -> bool { s.contains(\"x\") }".to_string(),
             fixed_code: "fn f(s: &str) -> bool { s.contains('x') }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "manual_is_multiple_of".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "complexity".to_string(),
             // Post-mining P7. VERIFY-tier: parse-only cannot see dividend
             // signedness and `is_multiple_of` is unsigned-only — the
             // `--verify` compile gate reverts any signed-dividend break.
@@ -423,7 +423,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "manual_range_patterns".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "complexity".to_string(),
             // Post-mining P31 intake (2026-09-17, the riir-chain 51b456f
             // MISS artifact — the file carried `0 | 1 | 2` the suggest lane
             // could not rank). FIXABLE: clippy's own algorithm ported
@@ -434,7 +434,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "use_self".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "nursery".to_string(),
             // Batch 89 (the Plan 049 fired histogram: 130 real instances).
             // FIXABLE: inherent-impl path rewrite with the soundness guards
             // from the module docs (nested items, bounds, attrs, macros,
@@ -445,7 +445,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "suboptimal_flops".to_string(),
-            lint_group: "perf".to_string(),
+            lint_group: "nursery".to_string(),
             // Batch 89 (206 real instances). VERIFY-tier: the receiver's
             // type is invisible to syn. The powf(2.0)→powi(2) shape carries
             // the Batch-53 powi-vs-powf measured-TIE annotation — this is a
@@ -559,13 +559,13 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         // narrow the MaybeIncorrect class → VERIFY tier.
         ClippyFixEntry {
             lint_name: "filter_map_bool_then".to_string(),
-            lint_group: "complexity".to_string(),
+            lint_group: "style".to_string(),
             buggy_code: "fn kept(xs: Vec<i32>) -> Vec<i32> {\n    xs.into_iter().filter_map(|x| (x > 0).then(|| x * 2)).collect()\n}".to_string(),
             fixed_code: "fn kept(xs: Vec<i32>) -> Vec<i32> {\n    xs.into_iter().filter(|&x| (x > 0)).map(|x| x * 2).collect()\n}".to_string(),
         },
         ClippyFixEntry {
             lint_name: "vec_init_then_push".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "perf".to_string(),
             buggy_code: "fn build() -> Vec<u8> {\n    let mut v = Vec::new();\n    v.push(1);\n    v.push(2);\n    v\n}".to_string(),
             fixed_code: "fn build() -> Vec<u8> {\n    let v = vec![1, 2];\n    v\n}".to_string(),
         },
@@ -706,7 +706,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "ptr_arg".to_string(),
-            lint_group: "perf".to_string(),
+            lint_group: "style".to_string(),
             buggy_code: "fn total(v: &Vec<i32>) -> i32 { v.iter().sum() }".to_string(),
             fixed_code: "fn total(v: &[i32]) -> i32 { v.iter().sum() }".to_string(),
         },
@@ -718,7 +718,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "map_flatten".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "complexity".to_string(),
             buggy_code: "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }".to_string(),
             fixed_code: "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().flat_map(|x| x.split(' ')).collect() }".to_string(),
         },
@@ -789,7 +789,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "manual_clamp".to_string(),
-            lint_group: "style".to_string(),
+            lint_group: "complexity".to_string(),
             buggy_code: "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }".to_string(),
             fixed_code: "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.clamp(3, 5) }".to_string(),
         },
@@ -974,7 +974,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         },
         ClippyFixEntry {
             lint_name: "map_clone".to_string(),
-            lint_group: "perf".to_string(),
+            lint_group: "style".to_string(),
             // The DEREF shape is the corpus atom (the regen's catch: the
             // clone shape co-fires clone_on_copy on Copy elements AND
             // redundant_closure_for_method_calls BY NATURE — `|x| x.clone()`

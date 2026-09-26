@@ -92,6 +92,15 @@
 //!   slicing only holds for comment-style docs).
 //! - **`#[doc(hidden)]` items** — clippy skips them entirely; we do not
 //!   (the wrap is cosmetic there, never wrong syntax).
+//! - **Shell-command lines** (Issue 135 T4) — a doc line whose first word
+//!   is a command (`cargo`, `rustup`, `npm`, `git`, …), a `$ ` prompt, or
+//!   a relative script path (`./x`, `../x`, `scripts/x`) is skipped whole.
+//!   Below the 4-space indented-code threshold such a line IS a paragraph
+//!   and clippy suggests backticking one argv token (`--bin gen_corpus` →
+//!   ``--bin `gen_corpus` ``), which leaves a line that no longer
+//!   copy-pastes into a shell. The right repair is to fence or indent the
+//!   command — a human edit. The oracle lane declines the same lines
+//!   ([`doc_source_line_is_command`]).
 
 use super::SourceEdit;
 use syn::File;
@@ -148,6 +157,51 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     edits
 }
 
+/// Issue 135 T4: first words that make a doc line a shell command. Case
+/// sensitive on purpose — `Python`/`Git` in prose stay prose.
+const COMMAND_HEADS: &[&str] = &[
+    "cargo", "rustup", "rustc", "npm", "npx", "pnpm", "yarn", "uv", "pip", "python", "python3",
+    "bash", "sh", "git", "docker", "wrangler", "curl",
+];
+
+/// Whether a doc line's text (after the `///` / `//!` marker) reads as a
+/// shell command: a `$ ` prompt, a relative script path as the first word,
+/// or a [`COMMAND_HEADS`] word followed by at least one argument. A prose
+/// line that happens to start `cargo resolves …` is skipped too — a missed
+/// cosmetic wrap, the safe direction.
+#[must_use]
+pub fn doc_line_is_command(text: &str) -> bool {
+    let t = text.trim_start();
+    if t.starts_with("$ ") {
+        return true;
+    }
+    let mut words = t.split_whitespace();
+    let Some(head) = words.next() else {
+        return false;
+    };
+    if head.starts_with("./") || head.starts_with("../") || head.starts_with("scripts/") {
+        return true;
+    }
+    COMMAND_HEADS.contains(&head) && words.next().is_some()
+}
+
+/// [`doc_line_is_command`] for the comment-style doc line holding byte
+/// `offset` of `src` — the oracle lane's door (it holds a span, not a
+/// parsed doc line). A non-doc line is never a command line here.
+#[must_use]
+pub fn doc_source_line_is_command(src: &str, offset: usize) -> bool {
+    let Some(before) = src.get(..offset) else {
+        return false;
+    };
+    let start = before.rfind('\n').map_or(0, |i| i + 1);
+    let end = src[start..].find('\n').map_or(src.len(), |i| start + i);
+    let line = src[start..end].trim_start();
+    match line.strip_prefix("//!").or_else(|| line.strip_prefix("///")) {
+        Some(text) => doc_line_is_command(text),
+        None => false,
+    }
+}
+
 /// Process one doc line's text (`base` = byte offset of `text[0]` in the
 /// file). Skips code/quote contexts, then applies clippy's word logic to
 /// every outside-backtick segment.
@@ -168,6 +222,11 @@ fn process_doc_line(text: &str, base: usize, in_fence: &mut bool, edits: &mut Ve
     }
     // Blockquote content is exempt (clippy: blockquote_level > 0).
     if t.starts_with('>') {
+        return;
+    }
+    // Issue 135 T4: a shell-command line is fenced/indented by a human,
+    // never token-backticked (the result stops copy-pasting).
+    if doc_line_is_command(t) {
         return;
     }
     // Per-line unbalanced-tick approximation: an odd raw backtick count
@@ -512,6 +571,42 @@ mod tests {
     fn blockquote_lines_skipped() {
         let src = "/// Quote:\n/// > shader_perf lives here.\nfn go() {}";
         assert!(propose_fix("doc_markdown", src).is_none());
+    }
+
+    #[test]
+    fn shell_command_lines_skipped_issue_135() {
+        // The reflex-site `466e331` artifact: 3 spaces is below the
+        // indented-code threshold, so the line is a paragraph — and still a
+        // command nobody should backtick one argv token of.
+        for line in [
+            "//!   cargo run -p arena-head-wasm --bin gen_corpus",
+            "/// cargo test --features shader_perf",
+            "/// $ make shader_perf",
+            "/// scripts/full_gate.sh --allow_partial",
+            "/// ./gen_corpus.sh --out corpus_dir",
+            "/// git log --grep=shader_perf",
+        ] {
+            let src = format!("{line}\nfn go() {{}}");
+            assert!(propose_fix("doc_markdown", &src).is_none(), "{line}");
+        }
+        // Prose around the command line still fires; a capitalised head and
+        // a lone head word are prose.
+        let src = "//! Regen the shader_perf corpus:\n//!\n//!   cargo run --bin gen_corpus\nfn go() {}";
+        let out = propose_fix("doc_markdown", src).expect("fires on the prose line");
+        assert!(out.contains("`shader_perf`") && out.contains("--bin gen_corpus"), "{out}");
+        assert!(propose_fix("doc_markdown", "/// Python runs shader_perf.\nfn go() {}").is_some());
+        assert!(propose_fix("doc_markdown", "/// cargo\nfn go() {}").is_none());
+    }
+
+    #[test]
+    fn source_line_command_probe_reads_the_doc_marker() {
+        use super::doc_source_line_is_command as probe;
+        let src = "fn a() {}\n//!   cargo run --bin gen_corpus\n/// The shader_perf lane.\nlet s = \"cargo run x\";\n";
+        let at = |needle: &str| src.find(needle).unwrap();
+        assert!(probe(src, at("gen_corpus")));
+        assert!(!probe(src, at("shader_perf")));
+        assert!(!probe(src, at("run x")), "a string literal is not a doc line");
+        assert!(!probe(src, src.len() + 5), "out-of-range offset");
     }
 
     #[test]
