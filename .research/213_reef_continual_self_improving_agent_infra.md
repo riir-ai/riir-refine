@@ -38,7 +38,7 @@ One-line reasoning: reef packages a safety vocabulary for letting an agent **mut
 
 Mandatory outputs:
 - **Issue (riir-clippy `.issues/136`)** — admission-gated structural self-mutation lane: per-kind shape gates + ALWAYS_REVIEWED class + flat-tree invariant + commit chain, applied to the healer's config/corpus surface; GEPA-D (values) and frontier_miner (oracle) stay as the quality layers above it.
-- **Issue (riir-game-sdk `.issues/040`)** — ScenarioDag liveness admission (P4): reef's reachability / terminal-reachability / cycle-through-budget rules applied at `load_scenario` time to the authored yaml scenario DAGs in riir-scenelab (the store that actually holds executed control flow as data — `FsmPreset` does not: it is a closed 4-variant enum, reviewer-verified at `crates/riir-static-ai/src/static_ai.rs:151`). Additive validation only; the yaml corpus stays the contract.
+- **Issue (riir-game-sdk `.issues/040`) — CLOSED, landed `e250d77` 2026-09-27** — ScenarioDag liveness admission (P4): refused at the ENGINE ENTRY (tick 0, zero world work) + a public `ScenarioDag::admit()`, with 3 verdict-reviewed corrections vs this row's original wording (edge direction per `check_ordering`; reef rule 1 subsumed by membership + acyclicity — skipped with proof; reef rule 2 literal unsound for parallel-assertion DAGs — replaced by the terminal-sink core). Record: riir-game-sdk `HISTORY.md` 2026-09-27.
 - **No plan** — nothing to implement in katgpt-rs itself; P5 is adjacent to shipped freeze/thaw.
 
 ## Fusion section (novelty TBD, not claimed)
