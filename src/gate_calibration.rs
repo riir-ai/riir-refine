@@ -19,6 +19,15 @@
 //!   at "grow the repo fixture corpus first" (Issue 130 Caution 1,
 //!   mechanized). Dissimilar generations are never pooled: a class present in
 //!   several generations yields one row per generation.
+//! - **T2 path (a) — the OOD-axis readout** ([`ood_runs`] / [`calibrate_ood`] /
+//!   [`render_ood_axis`]): the score history's per-row entropy-gap `ood` block
+//!   (Issue 077 T4) parsed at last — the consumer-side gap the 2026-09-26
+//!   re-read measured (85 of 168 rows carried the field; T1 never read it).
+//!   Rows group by (ref→ood set, regime) — dissimilar regimes are never pooled
+//!   (the 102 lesson) — and each group reports the gap spread, the measurement
+//!   states behind it (distinct artifacts; same artifact ⟺ bit-identical
+//!   entropies), and whether the spread is corpus-state drift or repeat noise.
+//!   Instrumentation per the T6 law: the axis is reported, never gated on.
 //! - **T3 — the corpus-stall predicate** ([`stall_scan`] / [`render_stall`]):
 //!   RRSI mechanism C, `σ_t = 1[progress ≤ δ over window w]`, over the
 //!   committed [`FrontierSnapshot`] series — zero generation advances across a
@@ -460,6 +469,435 @@ pub fn render_calibration(rows: &[StratumCalibration]) -> String {
             "repo stratum: absent from this history — the Issue 130 T2 admission floor has \
              nothing to calibrate"
         );
+    }
+    out
+}
+
+// ── T2 path (a) — the OOD-axis readout over the score history ──────────────
+
+/// One (score-history row, entropy-gap OOD measurement) view — the raw
+/// material [`calibrate_ood`] groups. Tolerantly extracted from a row by
+/// [`ood_runs`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct OodRunView {
+    /// The row's UTC ISO-8601 timestamp (provenance only — the axis has no
+    /// ts of its own; grouping keys on set + regime, never on wall-clock).
+    pub ts: String,
+    /// The reference set id (`v1_frozen` on record).
+    pub ref_set: String,
+    /// The OOD set id (`gen6_real_repo` on record).
+    pub ood_set: String,
+    /// The regime classification (`anomalous_negative` on record).
+    pub regime: String,
+    /// OOD fixtures that produced an entropy — the gap's resolution axis
+    /// (the [`MIN_STRATUM_FINDINGS`] transposition: one fixture's entropy
+    /// shift moves the mean by 1/`n_ood`, exactly as one flipped finding
+    /// moves a stratum's heal rate by 1/`vocab_before`).
+    pub n_ood: usize,
+    /// `mean_ood − mean_ref` (nats) — the axis's comparable numeric.
+    pub mean_gap: f32,
+    /// 64-hex BLAKE3 over both entropy samples — identical artifacts mean
+    /// bit-identical measurements, so distinct artifacts count the corpus
+    /// states the group's spread is spread OVER.
+    pub artifact: String,
+}
+
+/// Read a required string field out of one row's `ood` block.
+fn ood_str_field(
+    block: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<String, String> {
+    match block.get(key) {
+        Some(serde_json::Value::String(s)) => Ok(s.clone()),
+        Some(other) => Err(format!(
+            "score-history row's `ood`.`{key}` is not a string (found {})",
+            json_kind(other)
+        )),
+        None => Err(format!(
+            "score-history row's `ood` is missing the `{key}` field"
+        )),
+    }
+}
+
+/// Read a required unsigned-integer field out of one row's `ood` block.
+fn ood_usize_field(
+    block: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<usize, String> {
+    match block.get(key) {
+        Some(value) => {
+            let n = value.as_u64().ok_or_else(|| {
+                format!(
+                    "score-history row's `ood`.`{key}` is not an unsigned integer (found {})",
+                    json_kind(value)
+                )
+            })?;
+            usize::try_from(n)
+                .map_err(|_| format!("score-history row's `ood`.{key} = {n} does not fit usize"))
+        }
+        None => Err(format!(
+            "score-history row's `ood` is missing the `{key}` field"
+        )),
+    }
+}
+
+/// Read a required numeric field out of one row's `ood` block. The jsonl
+/// stores `mean_gap` as an f32-rounded decimal, so the f64→f32 narrowing
+/// recovers the written value, never invents one.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn ood_f32_field(
+    block: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<f32, String> {
+    match block.get(key) {
+        Some(value) => value
+            .as_f64()
+            .map(|n| n as f32)
+            .ok_or_else(|| {
+                format!(
+                    "score-history row's `ood`.`{key}` is not a number (found {})",
+                    json_kind(value)
+                )
+            }),
+        None => Err(format!(
+            "score-history row's `ood` is missing the `{key}` field"
+        )),
+    }
+}
+
+/// Tolerantly extract the entropy-gap OOD view from one score-history row.
+///
+/// Missing or null `ood` (83 of 168 rows at the 2026-09-26 re-read — every
+/// row written before the axis landed, 2026-09-09) yields `Ok(vec![])`:
+/// absence of instrumentation is not malformed data — the pre-strata
+/// precedent, applied one field over. A present-but-malformed block is a
+/// precise `Err` naming the offending field — never silently skipped,
+/// because a silently-skipped axis measurement would read as a clean run.
+///
+/// `generation` and `strata` are deliberately NOT demanded: 13 ood-bearing
+/// rows predate the strata field entirely, and the axis groups on
+/// (ref→ood set, regime), never on generation. Only `ts` is read from the
+/// row itself (the block carries no timestamp of its own).
+///
+/// # Errors
+///
+/// A row with no `ood` field (or a null one) extracts to an empty vec,
+/// NEVER an error. Errors when the row is not a JSON object; when `ood` is
+/// present but not an object; or — for an ood-BEARING row — when `ts` is
+/// missing or of the wrong type, or the block is missing/mistypes one of
+/// `ref_set` / `ood_set` / `regime` / `n_ood` / `mean_gap` / `artifact`.
+/// The message names `ood.field` at fault.
+pub fn ood_runs(row: &serde_json::Value) -> Result<Vec<OodRunView>, String> {
+    let obj = row
+        .as_object()
+        .ok_or_else(|| "score-history row is not a JSON object".to_string())?;
+    // The ood check runs FIRST: rows from before the axis existed carry
+    // neither `ood` nor anything to attribute, and they contribute nothing
+    // — demanding attribution fields from them would print cries-wolf
+    // errors for every pre-axis row on every report.
+    let block = match obj.get("ood") {
+        None | Some(serde_json::Value::Null) => return Ok(Vec::new()),
+        Some(value) => value.as_object().ok_or_else(|| {
+            format!(
+                "score-history row's `ood` is not an object (found {})",
+                json_kind(value)
+            )
+        })?,
+    };
+    let ts = match obj.get("ts") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(other) => {
+            return Err(format!(
+                "score-history row's `ts` is not a string (found {})",
+                json_kind(other)
+            ))
+        }
+        None => {
+            return Err(
+                "score-history row has no `ts` field — the ood block cannot be attributed"
+                    .to_string(),
+            )
+        }
+    };
+    Ok(vec![OodRunView {
+        ts,
+        ref_set: ood_str_field(block, "ref_set")?,
+        ood_set: ood_str_field(block, "ood_set")?,
+        regime: ood_str_field(block, "regime")?,
+        n_ood: ood_usize_field(block, "n_ood")?,
+        mean_gap: ood_f32_field(block, "mean_gap")?,
+        artifact: ood_str_field(block, "artifact")?,
+    }])
+}
+
+/// One (ref→ood set, regime) axis group: the measured gap spread, the
+/// measurement states behind it, and whether it can support a δ.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OodAxisGroup {
+    /// The reference set id.
+    pub ref_set: String,
+    /// The OOD set id.
+    pub ood_set: String,
+    /// The regime all runs in this group share.
+    pub regime: String,
+    /// Rows observed at this (set pair, regime).
+    pub runs: usize,
+    /// Earliest `ts` (ISO-8601 strings sort chronologically).
+    pub ts_first: String,
+    /// Latest `ts`.
+    pub ts_last: String,
+    /// Smallest `n_ood` across the group's runs.
+    pub n_ood_min: usize,
+    /// Largest `n_ood` — the number the [`MIN_STRATUM_FINDINGS`] floor is
+    /// tested against (mirrors `findings_max` in [`StratumCalibration`]).
+    pub n_ood_max: usize,
+    /// Smallest observed `mean_gap` (nats).
+    pub gap_min: f32,
+    /// Largest observed `mean_gap` (nats).
+    pub gap_max: f32,
+    /// `gap_max - gap_min` — the empirical spread a δ must exceed.
+    pub delta: f32,
+    /// Distinct measurement states (artifacts) in the group. Same artifact
+    /// ⟺ bit-identical entropies, so this counts how many corpus states the
+    /// spread is spread OVER.
+    pub states: usize,
+    /// Most runs sharing one artifact — the within-state repeat depth.
+    pub max_plateau: usize,
+    /// Largest within-artifact gap spread across the group's states. Zero
+    /// everywhere on real data BY CONSTRUCTION (the artifact hashes the
+    /// entropies), verified here from the rows: a nonzero reading would be
+    /// a corruption finding, not noise.
+    pub state_delta_max: f32,
+    /// See [`CalibrationVerdict`].
+    pub verdict: CalibrationVerdict,
+}
+
+/// Group OOD runs into per-(ref→ood set, regime) axis rows.
+///
+/// Output is sorted by ref set, ood set, then regime (`BTreeMap` iteration
+/// order — deterministic). Dissimilar regimes are never pooled (the Issue
+/// 102 lesson): the group key is the full (`ref_set`, `ood_set`, `regime`)
+/// triple.
+/// δ is plain f32 subtraction over the group's observed gaps.
+///
+/// Verdict order mirrors [`calibrate`]: the runs check fires BEFORE the
+/// sample-size check (a single run has no spread to measure whether its
+/// sample is deep or thin); the zero-spread check fires LAST, because a
+/// degenerate δ is only decidable once repeats and depth have established
+/// that the spread SHOULD have had content.
+#[must_use]
+pub fn calibrate_ood(runs: &[OodRunView]) -> Vec<OodAxisGroup> {
+    let mut groups: BTreeMap<(&str, &str, &str), Vec<&OodRunView>> = BTreeMap::new();
+    for run in runs {
+        groups
+            .entry((
+                run.ref_set.as_str(),
+                run.ood_set.as_str(),
+                run.regime.as_str(),
+            ))
+            .or_default()
+            .push(run);
+    }
+    let mut out = Vec::with_capacity(groups.len());
+    for ((ref_set, ood_set, regime), group) in groups {
+        let mut n_ood_min = usize::MAX;
+        let mut n_ood_max = 0;
+        let mut gap_min = f32::INFINITY;
+        let mut gap_max = f32::NEG_INFINITY;
+        let mut ts_first = group[0].ts.clone();
+        let mut ts_last = group[0].ts.clone();
+        // Per-state (count, gap min, gap max) — the drift/noise
+        // decomposition the render reads.
+        let mut per_state: BTreeMap<&str, (usize, f32, f32)> = BTreeMap::new();
+        for run in &group {
+            n_ood_min = n_ood_min.min(run.n_ood);
+            n_ood_max = n_ood_max.max(run.n_ood);
+            gap_min = gap_min.min(run.mean_gap);
+            gap_max = gap_max.max(run.mean_gap);
+            if run.ts < ts_first {
+                ts_first.clone_from(&run.ts);
+            }
+            if run.ts > ts_last {
+                ts_last.clone_from(&run.ts);
+            }
+            let state = per_state
+                .entry(run.artifact.as_str())
+                .or_insert((0, f32::INFINITY, f32::NEG_INFINITY));
+            state.0 += 1;
+            state.1 = state.1.min(run.mean_gap);
+            state.2 = state.2.max(run.mean_gap);
+        }
+        let states = per_state.len();
+        let mut max_plateau = 0;
+        let mut state_delta_max = 0.0_f32;
+        for (count, state_min, state_max) in per_state.values() {
+            max_plateau = max_plateau.max(*count);
+            state_delta_max = state_delta_max.max(*state_max - *state_min);
+        }
+        let verdict = if group.len() < MIN_REPEAT_RUNS {
+            CalibrationVerdict::Deferred(
+                "single run at this axis — no repeat evidence".to_string(),
+            )
+        } else if n_ood_max < MIN_STRATUM_FINDINGS {
+            CalibrationVerdict::Deferred(format!(
+                "thin OOD sample ({n_ood_max} fixtures) — grow the OOD fixture corpus first"
+            ))
+        } else if gap_max - gap_min == 0.0 {
+            CalibrationVerdict::Degenerate
+        } else {
+            CalibrationVerdict::Supported
+        };
+        out.push(OodAxisGroup {
+            ref_set: ref_set.to_string(),
+            ood_set: ood_set.to_string(),
+            regime: regime.to_string(),
+            runs: group.len(),
+            ts_first,
+            ts_last,
+            n_ood_min,
+            n_ood_max,
+            gap_min,
+            gap_max,
+            delta: gap_max - gap_min,
+            states,
+            max_plateau,
+            state_delta_max,
+            verdict,
+        });
+    }
+    out
+}
+
+/// The axis-level read for the LARGEST group (by runs) — the verdict plus
+/// the drift-vs-noise decomposition. Data, never a verdict: does the
+/// group's δ come from corpus-state movement (drift — the axis is
+/// deterministic per state, the repeats-refutation class) or from
+/// within-state repeat movement (noise — a real δ read becomes possible)?
+fn render_ood_axis_read(out: &mut String, biggest: &OodAxisGroup) {
+    use std::fmt::Write as _;
+    let label = format!(
+        "{}→{} regime={}",
+        biggest.ref_set, biggest.ood_set, biggest.regime
+    );
+    match &biggest.verdict {
+        CalibrationVerdict::Supported => {
+            let _ = writeln!(
+                out,
+                "OOD axis (largest group {label}, {} runs): ✓ spread present — the δ read \
+                 on this axis is possible",
+                biggest.runs
+            );
+        }
+        CalibrationVerdict::Degenerate => {
+            let _ = writeln!(
+                out,
+                "OOD axis (largest group {label}, {} runs): ⚠ UNCALIBRATED — zero spread \
+                 (the axis is deterministic per corpus state)",
+                biggest.runs
+            );
+        }
+        CalibrationVerdict::Deferred(reason) => {
+            let _ = writeln!(
+                out,
+                "OOD axis (largest group {label}, {} runs): ⚠ floor cannot calibrate yet \
+                 — {reason}",
+                biggest.runs
+            );
+        }
+    }
+    if biggest.states >= 2 && biggest.state_delta_max == 0.0 {
+        let _ = writeln!(
+            out,
+            "  spread reading: the δ={:.3} window spread is corpus-state drift, NOT repeat \
+             noise — {} measurement state(s), within-state repeats bit-identical (max \
+             plateau {} runs, max within-state δ={:.3}): the axis is deterministic per \
+             corpus state — the same class the repeats refutation named; T2 path (a) \
+             narrows further (re-arm: a nondeterminism source in the entropy kernel, or \
+             an OOD set grown past {MIN_STRATUM_FINDINGS} fixtures)",
+            biggest.delta,
+            biggest.states,
+            biggest.max_plateau,
+            biggest.state_delta_max
+        );
+    } else if biggest.state_delta_max > 0.0 {
+        let _ = writeln!(
+            out,
+            "  spread reading: within-state repeats MOVE (max within-state δ={:.3}) — the \
+             axis carries repeat noise; the δ read on the OOD axis is real once the \
+             sample depth clears",
+            biggest.state_delta_max
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "  spread reading: one measurement state — no cross-state evidence yet"
+        );
+    }
+}
+
+/// Render the OOD-axis report (house voice: header with the constants, one
+/// line per group, DEFERRED rows carry their reason, empty input is loud,
+/// and a closing read for the largest group — the axis-level drift-vs-noise
+/// decomposition the T2 path (a) decision consumes).
+#[must_use]
+pub fn render_ood_axis(groups: &[OodAxisGroup]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(1024);
+    let n_groups = groups.len();
+    let _ = writeln!(
+        out,
+        "## OOD axis (Issue 130 T2 path (a) — entropy-gap readout, report-first, gates nothing)"
+    );
+    let _ = writeln!(
+        out,
+        "per (ref→ood set, regime): the OOD sample size floors at MIN_STRATUM_FINDINGS = \
+             {MIN_STRATUM_FINDINGS} (the gap's per-fixture resolution axis), MIN_REPEAT_RUNS = \
+             {MIN_REPEAT_RUNS} | {n_groups} group(s)"
+    );
+    if groups.is_empty() {
+        let _ = writeln!(
+            out,
+            "no `ood` rows found — run --score-bench on a build carrying the entropy-gap axis \
+             (Issue 077 T4) first"
+        );
+        return out;
+    }
+    for group in groups {
+        let (mark, verdict_text) = match &group.verdict {
+            CalibrationVerdict::Supported => ("✓", "SUPPORTED".to_string()),
+            CalibrationVerdict::Degenerate => (
+                "⚠",
+                "UNCALIBRATED — zero spread (the axis is deterministic per corpus state; a \n                 δ=0 floor admits everything)"
+                    .to_string(),
+            ),
+            CalibrationVerdict::Deferred(reason) => ("⚠", format!("DEFERRED: {reason}")),
+        };
+        let _ = writeln!(
+            out,
+            "  {}→{} regime={}  runs={}  ts {}..{}  gap {:.3}..{:.3} nats  δ={:.3}  n_ood \
+             {}..{}  states={} (max plateau {}, within-state δ max {:.3})  {} {}",
+            group.ref_set,
+            group.ood_set,
+            group.regime,
+            group.runs,
+            group.ts_first,
+            group.ts_last,
+            group.gap_min,
+            group.gap_max,
+            group.delta,
+            group.n_ood_min,
+            group.n_ood_max,
+            group.states,
+            group.max_plateau,
+            group.state_delta_max,
+            mark,
+            verdict_text
+        );
+    }
+    // Axis-level read for the LARGEST group — the drift-vs-noise
+    // decomposition the T2 path (a) decision consumes.
+    if let Some(biggest) = groups.iter().max_by_key(|g| g.runs) {
+        render_ood_axis_read(&mut out, biggest);
     }
     out
 }
@@ -1146,6 +1584,264 @@ mod tests {
         let text = render_stall(&[]);
         assert!(
             text.contains("no frontier snapshots found — the snapshot series is empty"),
+            "{text}"
+        );
+    }
+
+    // ── T2 path (a) — the OOD-axis readout ──────────────────────────────────
+
+    fn ood_run(ts: &str, regime: &str, n_ood: usize, gap: f32, artifact: &str) -> OodRunView {
+        OodRunView {
+            ts: ts.to_string(),
+            ref_set: "v1_frozen".to_string(),
+            ood_set: "gen6_real_repo".to_string(),
+            regime: regime.to_string(),
+            n_ood,
+            mean_gap: gap,
+            artifact: artifact.to_string(),
+        }
+    }
+
+    #[test]
+    fn ood_runs_parses_the_real_row_shape() {
+        // Field names + values confirmed against
+        // .benchmarks/score_history.jsonl (row ts=2026-09-09T01:35:46, the
+        // first ood-bearing row).
+        let row: serde_json::Value = serde_json::from_str(
+            r#"{"ts": "2026-09-09T01:35:46", "generation": 1, "heal_rate": 0.9622642,
+                "ood": {"ref_set": "v1_frozen", "ood_set": "gen6_real_repo",
+                        "n_ref": 35, "n_ood": 17, "n_ref_skipped": 0, "n_ood_skipped": 0,
+                        "mean_ref_entropy": 3.8395944, "mean_ood_entropy": 3.1104226,
+                        "mean_gap": -0.7291717, "standardized_gap": -1.112886,
+                        "regime": "anomalous_negative",
+                        "artifact": "faa021c89d1dbd2ce972e2e87bfe85dbd79fe93450b38dfa7bee866c31161904"}}"#,
+        )
+        .unwrap();
+        let views = ood_runs(&row).expect("well-formed row");
+        assert_eq!(views.len(), 1);
+        let view = &views[0];
+        assert_eq!(view.ts, "2026-09-09T01:35:46");
+        assert_eq!(view.ref_set, "v1_frozen");
+        assert_eq!(view.ood_set, "gen6_real_repo");
+        assert_eq!(view.regime, "anomalous_negative");
+        assert_eq!(view.n_ood, 17);
+        assert!(close(view.mean_gap, -0.729_171_7));
+        assert_eq!(
+            view.artifact,
+            "faa021c89d1dbd2ce972e2e87bfe85dbd79fe93450b38dfa7bee866c31161904"
+        );
+    }
+
+    #[test]
+    fn ood_runs_tolerates_missing_and_null_ood() {
+        let missing: serde_json::Value =
+            serde_json::from_str(r#"{"generation": 1, "ts": "t"}"#).unwrap();
+        assert!(ood_runs(&missing).unwrap().is_empty());
+        let null: serde_json::Value =
+            serde_json::from_str(r#"{"ts": "t", "ood": null}"#).unwrap();
+        assert!(ood_runs(&null).unwrap().is_empty());
+        // The axis does NOT demand `generation` or `strata`: 13 ood-bearing
+        // rows predate the strata field. A bare ts+ood row parses.
+        let no_generation: serde_json::Value = serde_json::from_str(
+            r#"{"ts": "t", "ood": {"ref_set": "v1_frozen", "ood_set": "gen6_real_repo",
+                "n_ood": 17, "mean_gap": -0.73, "regime": "anomalous_negative",
+                "artifact": "aa"}}"#,
+        )
+        .unwrap();
+        assert_eq!(ood_runs(&no_generation).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn ood_runs_errs_precisely_on_malformed_input() {
+        let not_an_object: serde_json::Value =
+            serde_json::from_str(r#"{"ts": "t", "ood": 17}"#).unwrap();
+        let err = ood_runs(&not_an_object).unwrap_err();
+        assert!(err.contains("`ood` is not an object"), "{err}");
+
+        let missing_field: serde_json::Value = serde_json::from_str(
+            r#"{"ts": "t", "ood": {"ref_set": "v1_frozen", "ood_set": "s",
+                "n_ood": 17, "mean_gap": -0.7, "regime": "anomalous_negative"}}"#,
+        )
+        .unwrap();
+        let err = ood_runs(&missing_field).unwrap_err();
+        assert!(err.contains("`ood` is missing the `artifact` field"), "{err}");
+
+        let bad_gap: serde_json::Value = serde_json::from_str(
+            r#"{"ts": "t", "ood": {"ref_set": "v1_frozen", "ood_set": "s",
+                "n_ood": 17, "mean_gap": "wide", "regime": "anomalous_negative",
+                "artifact": "aa"}}"#,
+        )
+        .unwrap();
+        let err = ood_runs(&bad_gap).unwrap_err();
+        assert!(err.contains("`ood`.`mean_gap` is not a number"), "{err}");
+
+        // An ood-BEARING row must attribute it: a missing `ts` is a real
+        // error, never a silent skip.
+        let missing_ts: serde_json::Value = serde_json::from_str(
+            r#"{"ood": {"ref_set": "v1_frozen", "ood_set": "s", "n_ood": 17,
+                "mean_gap": -0.7, "regime": "anomalous_negative", "artifact": "aa"}}"#,
+        )
+        .unwrap();
+        let err = ood_runs(&missing_ts).unwrap_err();
+        assert!(err.contains("no `ts` field"), "{err}");
+    }
+
+    #[test]
+    fn calibrate_ood_groups_by_set_and_regime_and_never_pools() {
+        // Scrambled on purpose: output must come out sorted by the full
+        // (ref, ood, regime) key regardless of input order.
+        let runs = vec![
+            ood_run("t3", "converged", 24, 0.1, "b1"),
+            ood_run("t1", "anomalous_negative", 17, -0.73, "a1"),
+            ood_run("t4", "anomalous_negative", 17, -0.72, "a3"),
+            ood_run("t2", "anomalous_negative", 17, -0.74, "a2"),
+        ];
+        let groups = calibrate_ood(&runs);
+        assert_eq!(groups.len(), 2, "regimes never pool");
+        let an = &groups[0];
+        assert_eq!(an.regime, "anomalous_negative");
+        assert_eq!(an.runs, 3);
+        assert_eq!(an.ts_first, "t1");
+        assert_eq!(an.ts_last, "t4");
+        assert!(close(an.gap_min, -0.74));
+        assert!(close(an.gap_max, -0.72));
+        assert!(close(an.delta, 0.02));
+        assert_eq!(an.states, 3, "one state per distinct artifact");
+        assert_eq!(an.max_plateau, 1);
+        assert_eq!(
+            an.verdict,
+            CalibrationVerdict::Deferred(
+                "thin OOD sample (17 fixtures) — grow the OOD fixture corpus first".to_string()
+            )
+        );
+        let cv = &groups[1];
+        assert_eq!(cv.regime, "converged");
+        assert_eq!(cv.runs, 1);
+        assert_eq!(
+            cv.verdict,
+            CalibrationVerdict::Deferred(
+                "single run at this axis — no repeat evidence".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn calibrate_ood_thin_defers_before_spread_even_with_repeats() {
+        // The verdict order is deliberate: the thin check fires BEFORE the
+        // δ checks, so a thin sample with real spread still defers — the
+        // resolution argument (1 fixture = 1/n_ood of the mean) does not
+        // depend on what the spread happened to read.
+        let runs = vec![
+            ood_run("t1", "anomalous_negative", 17, -0.73, "a1"),
+            ood_run("t2", "anomalous_negative", 17, -0.90, "a2"),
+        ];
+        let groups = calibrate_ood(&runs);
+        assert_eq!(groups.len(), 1);
+        assert!(close(groups[0].delta, 0.17));
+        assert_eq!(
+            groups[0].verdict,
+            CalibrationVerdict::Deferred(
+                "thin OOD sample (17 fixtures) — grow the OOD fixture corpus first".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn calibrate_ood_zero_spread_at_depth_is_degenerate_never_supported() {
+        // The planted direction: deleting the zero-spread check turns this
+        // arm's expectation into `Supported` and fails the render needle
+        // below — the same direction the strata arm plants.
+        let runs = vec![
+            ood_run("t1", "anomalous_negative", 24, -0.73, "a1"),
+            ood_run("t2", "anomalous_negative", 24, -0.73, "a1"),
+        ];
+        let groups = calibrate_ood(&runs);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].runs, 2);
+        assert_eq!(groups[0].states, 1, "identical blocks share one artifact");
+        #[allow(clippy::float_cmp)]
+        let degenerate = groups[0].delta == 0.0;
+        assert!(degenerate);
+        assert_eq!(groups[0].verdict, CalibrationVerdict::Degenerate);
+        let text = render_ood_axis(&groups);
+        assert!(text.contains("UNCALIBRATED — zero spread"), "{text}");
+    }
+
+    #[test]
+    fn calibrate_ood_supported_at_depth_and_spread_prints() {
+        // Exactly at the floors: 2 runs, 24-fixture sample, nonzero spread
+        // over two states → supported, and the spread prints.
+        let runs = vec![
+            ood_run("t1", "anomalous_negative", 24, -0.73, "a1"),
+            ood_run("t2", "anomalous_negative", 24, -0.71, "a2"),
+        ];
+        let groups = calibrate_ood(&runs);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].verdict, CalibrationVerdict::Supported);
+        assert!(close(groups[0].delta, 0.02));
+        let text = render_ood_axis(&groups);
+        assert!(text.contains("SUPPORTED"), "{text}");
+        assert!(text.contains("δ=0.020"), "{text}");
+        // Differing states, each state constant → the drift reading, not
+        // the noise one.
+        assert!(text.contains("corpus-state drift, NOT repeat noise"), "{text}");
+    }
+
+    #[test]
+    fn render_ood_axis_covers_verdicts_states_and_the_drift_reading() {
+        // The live shape: a 28-run plateau at one artifact plus a drifted
+        // state, all thin (17 fixtures) — deferred verdict, drift reading.
+        let mut runs = vec![ood_run("t1", "anomalous_negative", 17, -0.7292, "plateau")];
+        runs.extend((2..=28).map(|i| {
+            ood_run(
+                &format!("t{i:02}"),
+                "anomalous_negative",
+                17,
+                -0.7292,
+                "plateau",
+            )
+        }));
+        runs.push(ood_run("t29", "anomalous_negative", 17, -0.9765, "drifted"));
+        let groups = calibrate_ood(&runs);
+        assert_eq!(groups.len(), 1);
+        let group = &groups[0];
+        assert_eq!(group.runs, 29);
+        assert_eq!(group.states, 2);
+        assert_eq!(group.max_plateau, 28);
+        assert_eq!(
+            group.verdict,
+            CalibrationVerdict::Deferred(
+                "thin OOD sample (17 fixtures) — grow the OOD fixture corpus first".to_string()
+            )
+        );
+        let text = render_ood_axis(&groups);
+        assert!(text.contains("MIN_STRATUM_FINDINGS = 20"), "{text}");
+        assert!(text.contains("regime=anomalous_negative"), "{text}");
+        assert!(text.contains("max plateau 28"), "{text}");
+        assert!(text.contains("DEFERRED: thin OOD sample"), "{text}");
+        assert!(text.contains("corpus-state drift, NOT repeat noise"), "{text}");
+        assert!(text.contains("T2 path (a) narrows further"), "{text}");
+        assert!(!text.contains("SUPPORTED"), "{text}");
+
+        // A within-state repeat MOVEMENT is the noise reading (a corruption
+        // finding on real data — the artifact hashes the entropies — but
+        // the reading must name what the rows show).
+        let noisy = vec![
+            ood_run("t1", "anomalous_negative", 24, -0.73, "a1"),
+            ood_run("t2", "anomalous_negative", 24, -0.70, "a1"),
+        ];
+        let text = render_ood_axis(&calibrate_ood(&noisy));
+        assert!(text.contains("within-state repeats MOVE"), "{text}");
+        assert!(!text.contains("corpus-state drift"), "{text}");
+    }
+
+    #[test]
+    fn render_ood_axis_empty_is_loud() {
+        let text = render_ood_axis(&[]);
+        assert!(
+            text.contains(
+                "no `ood` rows found — run --score-bench on a build carrying the entropy-gap axis"
+            ),
             "{text}"
         );
     }
