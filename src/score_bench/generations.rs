@@ -453,6 +453,20 @@ pub fn specs() -> Vec<GenSpec> {
 // (the 10 = exactly the lwie k1 + its 9 stride windows), M4 PASS; v3 94
 // verified / 10 newly excluded / 22 pre-excluded (same class),
 // stratification PASS.
+// Issue 089 orphan prune (2026-09-26, the follow-up sweep's catch): the
+// Batch 175 splice had left 9 dissolved pre-shift exclusion rows in EACH
+// lane's EXCLUDED table (18 total — windows the 77-atom stride no longer
+// produces), so the gen-3 lane refused `orphan_excluded` at HEAD. Pruned
+// data-only (admission-invariant: orphans match zero produced specs);
+// tables read 94 v2 labels / 19 v2 exclusions, 94 v3 labels / 23 v3
+// exclusions after. The gen-3 lane was re-verified at the prune (94
+// verified / 0 newly excluded, stratification PASS — the issue-089
+// landing); **the v2 lane re-verified 2026-09-26 at HEAD `c2c028f6` (the
+// owed second half, run in a detached worktree)**: 94 verified / 0 newly
+// excluded / 19 pre-excluded, solve 100.0% at every k (67/67, 26/26,
+// 27/27, 20/20), M4 PASS, branch (A) — bad-atom set unchanged at 9 (the
+// known exportation/co-fire classes; no new interference). Both lanes
+// green post-prune; the record stands.
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]),  // k=1
     ("gen2-k1-bool_comparison", &["bool_comparison"]),  // k=1
