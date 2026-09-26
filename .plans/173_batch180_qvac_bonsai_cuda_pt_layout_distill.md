@@ -4,6 +4,8 @@
 **Verdict:** Research 211 (YES, A− corpus / LANE INTEL HIGH / kernel_opt)
 **Source pin:** `tetherto/qvac-fabric-llm.cpp @ b9bf3a820731b70e5f05130484bdb1518a66beee` (temp-10549 tip; CUDA arm = merge `a95b44152`, PR #285) — MIT. **T0 re-clones at the pin** (the ephemeral-clone law).
 
+**CROSS-REFERENCE (added 2026-09-26, the Research-212 verdict gate):** LEAD-2 below (`deferred-bias-ternary-dp4a-exact-isum`, WEIGHT-side deferral) is the mirror image of Research 212's LEAD-1 (`signed-activation-codes-drop-dequant-offset-term`, ACTIVATION-side elimination — Plan 174 / nominal Batch 181, the mlxfast-bonsai2 arena distill). Both are members of the offset-handling family (with B107 uzu consumer-lookup + B96 bit-plane). At mine time the two batches MAY share one offset-family fixture with a common A/B; whichever mines second MUST cite the first's landed rule in its entry's distinct-from clause, so the family is not counted twice. Family table: `.research/212` section "Family table".
+
 ## Leads (4 + 1 maybe)
 
 1. `planar-transposed-activation-multi-column-quant-matvec` (A−, GOAT) — mmvq-ptq1_0.cuh:1–79, 91–233. Measured 2.2×@2col / 3.3×@3col (RTX 3060); 8+1 aligned 16B pieces vs 32 scattered 4B loads; stride-compat with block_q8_1; bit-exact same-op-order; anti-regimes: HIP refusal, sm_120 NMSE gate, 1-col→SOA. Regime clause carries the NMSE arch escape + the three-regime enum (LEAD-5 folded in unless the dispatch table stands alone at authoring).
