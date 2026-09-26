@@ -1,6 +1,6 @@
 # Plan 174 — Batch 181: the mlxfast-bonsai2 arena distill (Research 212)
 
-**Status:** STAGED — nominal Batch 181, queued BEHIND Batch 180 (Plan 173, qvac Bonsai CUDA). One-batch-per-day cadence holds; this plan is created BEFORE any corpus edit per the plan-first law. Verdict note: [`.research/212_mlxfast_bonsai2_arena_distill_verdict.md`](../.research/212_mlxfast_bonsai2_arena_distill_verdict.md) (Status: DISTILLED — pending owner decision; Claude verdict ping-pong closed AGREE round 3, session `419201be`).
+**Status:** CLAIMED — Batch 181 slot executing 2026-09-27 (shikuwa/4090, the post-B180 day slot; origin twin-checked clean at `6c3ad2ba`, zero B181 landing rows on origin; T1.3 satisfied by the queue state + the session directive). One-batch-per-day cadence holds; this plan is created BEFORE any corpus edit per the plan-first law. Verdict note: [`.research/212_mlxfast_bonsai2_arena_distill_verdict.md`](../.research/212_mlxfast_bonsai2_arena_distill_verdict.md) (Status: DISTILLED — pending owner decision; Claude verdict ping-pong closed AGREE round 3, session `419201be`).
 
 **Source:** `Layr-Labs/mlxfast-bonsai2-27b-engine` @ **`cfb35b0d912012e13880ba669f3ff55e7a5427ca`** (MIT) — the mine-time pin, superseded twice by delta walks (b3050f0f → f5960db8 → **cfb35b0d**, addendum 2: the 297.5% record's code is in this tree; every new-lead quote re-verified at it 2026-09-26). T0 re-clones at THE CURRENT PIN (the `.raw` clone was removed at verdict close). Re-verify every quote at mine time (the B177/B178 law).
 
