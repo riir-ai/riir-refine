@@ -1,6 +1,6 @@
 # Research 211 — qvac-fabric Bonsai CUDA backend (QVAC-25280) distill verdict
 
-**Status:** DISTILLED — pending owner decision (nominal Batch 180, Plan 173)
+**Status:** RECORD — Batch 180 LANDED 2026-09-26 (~19:5x slot, +4 rules / +3 riders, corpus 638→642; gates lib 2317/0 · kernel_heal 2684/0 · +latent 2858/0 · retrieval floors held · clippy -D ×2 clean; the plan-time re-clone re-verified every quote verbatim — see the mine-time appendix below)
 **Date:** 2026-09-25 (~20:1x–21:0x +07, 4090 box — the post-envelope B180 pre-stage)
 **Source:** `tetherto/qvac-fabric-llm.cpp` @ `b9bf3a820731b70e5f05130484bdb1518a66beee` (branch `temp-10549` tip = the #286 Vulkan merge; MIT — "Copyright (c) 2023-2026 The ggml authors"; shallow clone `.raw/qvac-bonsai`, **removed at verdict close**). The CUDA arm's merge commit: `a95b44152` (PR #285, 2026-09-25T10:31Z, +2102/−123 across 27 files).
 
@@ -76,6 +76,38 @@ kernel_opt is the private corpus; the famous-lib axis does not gate. Continuity 
 - The MoE gate path (`ptq1_0_mmvq_moe_dot`, fusion/has_gate) was read once; the GLU-fusion epilogue is ambient (existing family).
 
 ## Records
+
+## Mine-time appendix (2026-09-26 ~19:5x slot, the landing)
+
+Executed at the ~19:5x 09-26 cadence slot by the 4090 idle-loop session (claim
+protocol: origin twin-check CLEAN — no twin landing; the M3 sibling's B181 =
+Plan 174 is a different batch). T0: fresh shallow clone at the pin — the
+branch tip was STILL `b9bf3a82` at clone time (re-verified at every hourly
+poll through the window), zero post-pin movement to adjudicate; every lead +
+rider quote re-verified verbatim (LEAD-1 L1-79/91-233, LEAD-2 L68-79/114-126
++ quantize.cu 177-202 + vecdotq.cuh 892-905, LEAD-3 L414-470, LEAD-4 L548-579,
+LEAD-5 common.cuh 1039-1052, the fwht rider fwht.cu 82/96-100/202-214, the
+prefetch rider mmvq-ptq1_0.cuh 236-248 + mmvq.cu 782-793, the PQ2_0 note
+vecdotq.cuh 115-117). T1 dedup re-run vs the post-B179 corpus under both
+vocabularies: all four leads NOVEL (zero hits); the three kinship rows
+confirmed present (`swar-lane-widened-base3-dp4a-dot` entries_gpu_27,
+`fold-query-tokens-for-occupancy` entries_gpu_01, `batch-invariance-locks-
+reduction-geometry` entries_gpu_22). T2 authoring deviations from the plan:
+none — LEAD-5 folded into LEAD-1's regime clause as pre-registered; the
+`prefetch.global.L2` rider landed with a LEVER-distinction wording stronger
+than the plan's shorthand (prefetch answers LATENCY, evict hints answer
+CAPACITY — the intake's '4th external proof' framing corrected to '4th
+external instance of the operand class'), and the two test-grade fixtures
+beyond the plan's list (the exhaustive isum identity test caught a real
+sign-extension subtlety: the biased form consumes SIGNED weight lanes —
+the vsub4 wraps 0→0xFF = −1 as i8) + the util-search boundary port. T4
+gates: batch180 ×5 green; lib default 2317/0 (+28 vs B178's 2289 — my 5 +
+the sibling's Issue-135/OOD additions); kernel_heal 2684/0; kernel_heal+
+latent 2858/0; retrieval floors held (the regression gate green with the 4
+new rules in the corpus); clippy -D clean at both postures (3 doc_markdown
+healed in-passing, compile-gated); score-bench NOT owed (zero clippy-corpus
+delta, the P30 precedent; freeze tables unmoved). `.raw/qvac-bonsai` removed
+at close.
 
 - Plan: `.plans/173_batch180_qvac_bonsai_cuda_pt_layout_distill.md`
 - Queue line: `.distill/001_mining_queue_snapshot.md` (this commit)
