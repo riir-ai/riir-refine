@@ -1,9 +1,8 @@
 # Plan 175 — Issue 136: admission-gated structural self-mutation lane (reef distill)
 
-**Status:** In progress — landing the reef P1+P3+P5 vocabulary (shape gates, person-review
-classes, two-head commit chain) for the healer's structural surface. No auto-mutation is
-activated (owner call reserved); no CLI wiring; the lane ships as opt-in vocabulary +
-a feature-gated persistent store.
+**Status:** COMPLETE — landed at `503f03b5` (2026-09-27). All tasks done; issue 136
+removed per the noise-reduction rule (HISTORY.md 2026-09-27 row is the durable
+record). No auto-serve kind activated — owner call reserved.
 
 ## Source
 
