@@ -1,5 +1,54 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-26 — Issue 135 CLOSED (`c1c6cf21`): `cargo heal --fix` gates allow-by-default lints on the target crate's effective level
+
+Filed from a katgpt-rs session's reflex-site registration (`466e331`): the
+healer backticked an argv token inside a `//!   cargo run … --bin gen_corpus`
+doc line in a crate that enables no pedantic group — `doc_markdown` is
+PEDANTIC, so plain `cargo clippy` there reports nothing. The old
+justification was this crate's own `#![warn(clippy::pedantic)]` root,
+applied to every crate the global binary is pointed at.
+
+- **T1** `domains::clippy_lints::lint_level::LINT_GROUPS` — group of every
+  `FIXABLE_LINTS ∪ VERIFY_LINTS` lint from the PINNED `clippy-driver -W
+  help` (0.1.98). ⛔ The issue's corpus-derived blast radius was wrong in
+  both directions: **20** allow-by-default (15 FIXABLE + 5 VERIFY), not 13 —
+  `collapsible_else_if`, `range_plus_one` (pedantic) and `use_self`
+  (nursery) were labelled style — and `uninlined_format_args`, which the
+  issue suspected stale, IS pedantic at 1.98 (only `unnecessary_map_or` was
+  stale that way). 22 corpus `lint_group` labels corrected; tests pin table
+  coverage, the 20-lint membership, corpus agreement, and a live driver
+  cross-check that prints UNSEEN (never passes) off the pinned driver —
+  reusing `corpus_coverage::parse_lint_help`, not a second parser.
+- **T2** `LevelResolver`: `[lints.clippy]` (cargo priority order, groups
+  before lints at equal priority), inherited `[workspace.lints.clippy]`,
+  crate-root inner attrs (cargo layout: lib/main/bin/tests/examples/
+  benches/build.rs), then the file's own inner attrs; `forbid` sticky, `all`
+  never raises an allow-by-default lint. Gated lints are counted at pass 0
+  and reported (`lint-level: skipped …` per file + verdict-line note).
+  Applied to the proposer loop, the P21 oracle lane (a feed produced under
+  `-W clippy::pedantic` is the operator's flags, not the crate's config)
+  and `reheat_fix_pass`. Documented skip-direction divergences:
+  `RUSTFLAGS`/`.cargo/config.toml` `-W`, `cfg_attr` wrappers, intermediate
+  parent-module attrs.
+- **T3** `--groups pedantic,nursery,restriction,cargo|all` (requires
+  `--fix`); katgpt-rs AGENTS.md § Lint healing names it (katgpt-rs enables
+  no pedantic group — measured, so `match_bool`/`map_or`/format-args heals
+  there now need the flag).
+- **T4** `doc_markdown` skips shell-command doc lines (first word
+  `cargo`/`rustup`/`npm`/`git`/…, a `$ ` prompt, `./` `../` `scripts/`) in
+  the proposer AND the oracle lane (`OracleLane::doc_command_declined`);
+  SKILL.md Issue-120 skip table row extended.
+- Repro on the rebuilt global binary (M3): plain crate → `1 skipped`, file
+  byte-identical; `--groups pedantic` or `[lints.clippy] pedantic = "warn"`
+  → the prose line fixed, the command line untouched; `--groups` without
+  `--fix` refused.
+- Secondary observation resolved: the global `cargo-heal` was a stale build
+  without `clippy_verify`; rebuilt with the SKILL.md feature set, the
+  `memory-only (learning disabled…)` line no longer prints.
+- Gates: `cargo clippy --lib --tests` + the bin at full heal features clean;
+  lib 2317 (default) / 2603 (full heal features) + bin 18 tests pass.
+
 ## 2026-09-25 — Batch 179 LANDED (Plan 172 / Research 210): the rsconstmap distill — the std-map-probe family's layout + MLP + map-selection cells
 
 Source: lemire/rsconstmap @ `bf7b3341` (MIT OR Apache-2.0, the Rust port of
