@@ -1,6 +1,6 @@
 # reef — continual-learning infra for self-improving agents: distill verdict
 
-**Status:** RECORD — Gain (architectural). Issue 136 filed (admission-gated structural self-mutation lane) — LANDED as Plan 175: per-kind shape gates + kind-keyed review classes + the two-head CAS chain, ungated vocabulary + `structural_admission`-gated store (`.heal/structural/`), 24+7 lib tests, no auto-serve activated (owner call reserved). FSM-admission fusion lead recorded → riir-ai issue.
+**Status:** RECORD — Gain (architectural). Issue 136 filed (admission-gated structural self-mutation lane) — LANDED as Plan 175: per-kind shape gates + kind-keyed review classes + the two-head CAS chain, ungated vocabulary + `structural_admission`-gated store (`.heal/structural/`), 24+7 lib tests, no auto-serve activated (owner call reserved). FSM-admission fusion lead recorded → riir-ai issue. ScenarioDag P4 lead — LANDED 2026-09-27 as riir-game-sdk `runner::admission` (engine-entry refusal, `FailReason::Admission`, 3 verdict-reviewed corrections: edge direction per code, rule-1 subsumed-by-membership+cycle with proof, rule-2 literal unsound → terminal-sink core; record: riir-game-sdk HISTORY.md 2026-09-27).
 
 - Source: https://github.com/Human-Agent-Society/reef @ `ecec4e20b29e7dcbd96150d4b4f1a80b146e120d` (shallow clone `.raw/reef`, to be removed at landing commit; re-clone at the pin if re-verified). Apache-2.0. ~1.8k files, Python 3.12+, PyPI `reef-infra`.
 - Inspection date: 2026-09-26 (4090 box, user-directed distill list `katgpt-rs/.issues/901_research_distil_listl.md` item 1).
