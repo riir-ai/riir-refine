@@ -30,7 +30,12 @@ applied to every crate the global binary is pointed at.
   `-W clippy::pedantic` is the operator's flags, not the crate's config)
   and `reheat_fix_pass`. Documented skip-direction divergences:
   `RUSTFLAGS`/`.cargo/config.toml` `-W`, `cfg_attr` wrappers, intermediate
-  parent-module attrs.
+  parent-module attrs. Measured the same day: **0 live instances** of the
+  first two across katgpt-rs + every `riir-*` repo (no tracked
+  `.cargo/config*` carries a clippy `-W/-D/-A`; the only
+  `cfg_attr(…, warn(clippy::pedantic|nursery))` is this crate's own
+  `lint_level/tests.rs` fixture), so no follow-up issue was filed — a
+  sibling adopting either form gets the loud skip line and needs `--groups`.
 - **T3** `--groups pedantic,nursery,restriction,cargo|all` (requires
   `--fix`); katgpt-rs AGENTS.md § Lint healing names it (katgpt-rs enables
   no pedantic group — measured, so `match_bool`/`map_or`/format-args heals
