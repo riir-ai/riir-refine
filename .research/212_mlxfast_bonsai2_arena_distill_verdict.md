@@ -96,3 +96,24 @@ kernel_opt/rust_perf are private corpora; the famous-lib axis does not gate. Fam
 - Cross-ref: `.plans/173_batch180_qvac_bonsai_cuda_pt_layout_distill.md` (this commit)
 - Clone `.raw/mlxfast-bonsai2-27b-engine` REMOVED at close (the ephemeral-clone law; T0 re-clones at the pin)
 - Verdict gate: Claude reviewer ping-pong round 1 REVISE → corrections applied → round 2 AGREE (session `419201be`, 2026-09-26)
+
+## Addendum (2026-09-26 ~18:2x +07) — the scores ARE public: mlx.fast verified, gem commits correlated
+
+The landing-hour caveat "scores NOT verifiable from git (leaderboard-side)" is CORRECTED by the owner's pointer: the arena leaderboard is PUBLIC at **https://mlx.fast** (Yukon / Eigen Labs, the `bonsai2-27b-mlx-v1` challenge page). Verified readings this session:
+
+- **Current record 278.8%** (polymorf, posted Sep 26 10:17 UTC, +22.82%) — Dec 212.9 tok/s, Pre 1732.8 tok/s. Score semantics per the page: composite speedup over the serial control = `prefill^0.25 · decode^0.75`, parity = 0%, i.e. 278.8% = ~3.79x composite.
+- **The user-cited 256%** = rank 02 (DPZZxlz, posted Sep 26 7:16 UTC, +0.97%, Dec 202.9 / Pre 1607.3) — the frontier when this verdict's source commit window landed.
+- **The drafter column is `stock DFlash` on EVERY promoted row**; the tok/round figure climbs 6.7 → 8.0 → 9.1 → 9.8 → 10.7 across the day. NO new head family appeared — the acceptance-length gain is ENGINE-side depth/acceptance tuning around the stock z-lab drafter. This confirms the lane-intel call (T-R1 not fed) and sharpens it: the arena's entire 33% → 278.8% arc (Sep 25 01:03 → Sep 26 10:17 UTC, under two days) is engine work on a frozen head.
+- **Jump → commit correlation (timestamp-matched against the git accept/validate log)**:
+
+| Leaderboard jump | Posted (UTC) | Git commit | Diff |
+|---|---|---|---|
+| +58.5% → 241.1% | Sep 26 1:43 AM | `4c8964f` Accept @ 01:43:32 | 1,976 ins — the Hadamard.swift +921 rewrite (Int8Activation/forwardInt8/forwardWithGroupSums + the tensor-route dispatch) |
+| +29.29% → 170% | Sep 25 8:16 PM | `6acc822` Accept @ 20:16:01 | 2,342 ins — the largest Qwen35 rewrite (quantized_utils +309) |
+| +22.33% → 125.8% | Sep 25 11:24 AM | `0f4dea5` Accept @ 11:24:44 | 527 ins |
+| +37.91% → 103.5% | Sep 25 10:59 AM | `b0552f2` Accept @ 09:39 (nearest) | 898 ins |
+| +22.82% → 278.8% (record) | Sep 26 10:17 AM | `f5960db` Validate @ 08:54 | 200 ins — the staged8 VERIFY route (below) |
+
+- **The record's technique (f5960db, in-tree at the new HEAD `f5960db8`)**: the `staged8` VERIFY-width route — verify/decode kernels run `int8 x int8 -> int32` tensor-unit ops over threadgroup-staged int8 weight slices, reading the prompt route's SIGNED int8 activation codes verbatim ("SIGNED codes only" in the source), affine map in FP32 from per-group scale + scaled-sum. In-source numbers: the int8 tensor rate is ~2x the FP16 rate (116 vs 58 TF/s on M5 Max); staged8 beats the native 2-bit-operand form by 3% of the decode window and the prior record's verify kernels by 5%. Three-form dispatch `staged8 | native2b | none`, env-forced via `DARKBLOOM_BONSAI_TENSOR_ROUTE_VERIFY_FORM`. The staging buffers are REUSED as the reduction buffers ("16 KB of threadgroup memory in all, two threadgroups per core").
+- **Verdict implication, stated plainly**: the 13.23%-flagged commit (b3050f0, the signed-codes plumbing) did not itself take the frontier — and it was not polish. It is the load-bearing ENABLER of the current record: signed int8 activation codes are what make the verify route's int8xint8 tensor ops clean (no offset term at the 2x-rate unit). LEAD-1's weight in the batch rises accordingly: the regime it unlocks (writer-controlled signed codes) is the same regime that lets a quantized matmul run at the tensor unit's int8 rate. The three-form dispatch (staged8/native2b/none) is also the answer shape our mine-time rule should carry: probe the ISA, pick the fastest legal operand form, keep the fallbacks.
+- Note-holder hygiene: the .raw clone was re-pinned at `f5960db8` for this addendum's reads and removed again at close; the batch's T0 re-clones at the NEW head pin (f5960db8 — supersedes b3050f0f as the mine-time tree, since the record's code is in it).
