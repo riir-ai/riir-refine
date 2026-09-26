@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="860" height="400" viewBox="0 0 860 400" font-family="ui-monospace,Menlo,monospace">
 <rect width="100%" height="100%" fill="#fdfdfd"/>
 <text x="64" y="24" font-size="15" font-weight="bold" fill="#212121">clippy-bench — frozen real-code healing score</text>
-<text x="64" y="42" font-size="11" fill="#616161">frozen denominator: 93/93 ran — corpus growth cannot move this score; created_rate (red) is down-is-better</text>
+<text x="64" y="42" font-size="11" fill="#616161">frozen denominator: 94/94 ran — corpus growth cannot move this score; created_rate (red) is down-is-better</text>
 <line x1="64" y1="356.0" x2="844" y2="356.0" stroke="#e0e0e0" stroke-width="1"/>
 <text x="56" y="360.0" font-size="11" fill="#757575" text-anchor="end">0%</text>
 <line x1="64" y1="281.0" x2="844" y2="281.0" stroke="#e0e0e0" stroke-width="1"/>
@@ -19,40 +19,46 @@
 <line x1="412.2" y1="36" x2="426.2" y2="36" stroke="#1565c0" stroke-width="3"/>
 <text x="412.2" y="40" font-size="11" fill="#424242">decline_correct 100%</text>
 <line x1="300.4" y1="36" x2="314.4" y2="36" stroke="#2e7d32" stroke-width="3"/>
-<text x="300.4" y="40" font-size="11" fill="#424242">heal_rate 95%</text>
-<path d="M 64.0 93.5 L 259.0 93.5 L 454.0 71.0 L 649.0 69.5 L 844.0 69.5" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="300.4" y="40" font-size="11" fill="#424242">heal_rate 96%</text>
+<path d="M 64.0 93.5 L 220.0 93.5 L 376.0 71.0 L 532.0 69.5 L 688.0 69.5 L 844.0 69.4" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="93.5" r="3" fill="#2e7d32"/>
-<circle cx="259.0" cy="93.5" r="3" fill="#2e7d32"/>
-<circle cx="454.0" cy="71.0" r="3" fill="#2e7d32"/>
-<circle cx="649.0" cy="69.5" r="3" fill="#2e7d32"/>
-<circle cx="844.0" cy="69.5" r="3" fill="#2e7d32"/>
-<path d="M 64.0 56.0 L 259.0 56.0 L 454.0 56.0 L 649.0 56.0 L 844.0 56.0" fill="none" stroke="#1565c0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="220.0" cy="93.5" r="3" fill="#2e7d32"/>
+<circle cx="376.0" cy="71.0" r="3" fill="#2e7d32"/>
+<circle cx="532.0" cy="69.5" r="3" fill="#2e7d32"/>
+<circle cx="688.0" cy="69.5" r="3" fill="#2e7d32"/>
+<circle cx="844.0" cy="69.4" r="3" fill="#2e7d32"/>
+<path d="M 64.0 56.0 L 220.0 56.0 L 376.0 56.0 L 532.0 56.0 L 688.0 56.0 L 844.0 56.0" fill="none" stroke="#1565c0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="259.0" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="454.0" cy="56.0" r="3" fill="#1565c0"/>
-<circle cx="649.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="220.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="376.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="532.0" cy="56.0" r="3" fill="#1565c0"/>
+<circle cx="688.0" cy="56.0" r="3" fill="#1565c0"/>
 <circle cx="844.0" cy="56.0" r="3" fill="#1565c0"/>
-<path d="M 64.0 56.0 L 259.0 56.0 L 454.0 56.0 L 649.0 56.0 L 844.0 56.0" fill="none" stroke="#6a1b9a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 64.0 56.0 L 220.0 56.0 L 376.0 56.0 L 532.0 56.0 L 688.0 56.0 L 844.0 56.0" fill="none" stroke="#6a1b9a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="56.0" r="3" fill="#6a1b9a"/>
-<circle cx="259.0" cy="56.0" r="3" fill="#6a1b9a"/>
-<circle cx="454.0" cy="56.0" r="3" fill="#6a1b9a"/>
-<circle cx="649.0" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="220.0" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="376.0" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="532.0" cy="56.0" r="3" fill="#6a1b9a"/>
+<circle cx="688.0" cy="56.0" r="3" fill="#6a1b9a"/>
 <circle cx="844.0" cy="56.0" r="3" fill="#6a1b9a"/>
-<path d="M 64.0 323.2 L 259.0 323.2 L 454.0 326.0 L 649.0 326.7 L 844.0 326.7" fill="none" stroke="#c62828" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 64.0 323.2 L 220.0 323.2 L 376.0 326.0 L 532.0 326.7 L 688.0 326.7 L 844.0 326.9" fill="none" stroke="#c62828" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="64.0" cy="323.2" r="3" fill="#c62828"/>
-<circle cx="259.0" cy="323.2" r="3" fill="#c62828"/>
-<circle cx="454.0" cy="326.0" r="3" fill="#c62828"/>
-<circle cx="649.0" cy="326.7" r="3" fill="#c62828"/>
-<circle cx="844.0" cy="326.7" r="3" fill="#c62828"/>
+<circle cx="220.0" cy="323.2" r="3" fill="#c62828"/>
+<circle cx="376.0" cy="326.0" r="3" fill="#c62828"/>
+<circle cx="532.0" cy="326.7" r="3" fill="#c62828"/>
+<circle cx="688.0" cy="326.7" r="3" fill="#c62828"/>
+<circle cx="844.0" cy="326.9" r="3" fill="#c62828"/>
 <text x="64.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-06</text>
 <text x="64.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">3d43c90d</text>
-<text x="259.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-13</text>
-<text x="259.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">b17c2dd8</text>
-<text x="454.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-18</text>
-<text x="454.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">447847f3</text>
-<text x="649.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-21</text>
-<text x="649.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">efd85d00</text>
-<text x="844.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-23</text>
-<text x="844.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">3e38c66c</text>
-<text x="64" y="392.0" font-size="10" fill="#9e9e9e">fixtures: 93 healable + 0 clean | vocab 75 lints | edits 152</text>
+<text x="220.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-13</text>
+<text x="220.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">b17c2dd8</text>
+<text x="376.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-18</text>
+<text x="376.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">447847f3</text>
+<text x="532.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-21</text>
+<text x="532.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">efd85d00</text>
+<text x="688.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-23</text>
+<text x="688.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">3e38c66c</text>
+<text x="844.0" y="372.0" font-size="10" fill="#757575" text-anchor="middle">09-26</text>
+<text x="844.0" y="384.0" font-size="9" fill="#9e9e9e" text-anchor="middle">4e1f0023</text>
+<text x="64" y="392.0" font-size="10" fill="#9e9e9e">fixtures: 94 healable + 0 clean | vocab 77 lints | edits 151</text>
 </svg>
