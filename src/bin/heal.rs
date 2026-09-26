@@ -11797,14 +11797,6 @@ struct ReheatCtx {
     spans_seen: usize,
 }
 
-/// The compact pass-2 fix loop over one file — the same proposer machinery
-/// and span-preserving splice as pass 1, without the verify-batching /
-/// evolve recording / line-remapping surfaces (pass-1 concerns). Review
-/// mode prints `reheat:` lines; `--write` applies + counts; under
-/// `--verify` the pass is REVIEW-ONLY (never-wrong: no unverified write —
-/// the edits land deterministically on the next run, the epoch being
-/// pinned).
-#[cfg(feature = "kat_transport")]
 /// `lint×n, lint×n` — the per-lint decline breakdown shape.
 fn breakdown_of(by_lint: &std::collections::BTreeMap<String, usize>) -> String {
     by_lint
@@ -11814,6 +11806,16 @@ fn breakdown_of(by_lint: &std::collections::BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
+/// The compact pass-2 fix loop over one file — the same proposer machinery
+/// and span-preserving splice as pass 1, without the verify-batching /
+/// evolve recording / line-remapping surfaces (pass-1 concerns). Review
+/// mode prints `reheat:` lines; `--write` applies + counts; under
+/// `--verify` the pass is REVIEW-ONLY (never-wrong: no unverified write —
+/// the edits land deterministically on the next run, the epoch being
+/// pinned). Gated with its only caller (`run_reheat_pass`): ungated, the
+/// fn is dead code — a build warning — at every feature set without
+/// kat_transport.
+#[cfg(feature = "kat_transport")]
 #[allow(clippy::too_many_arguments)]
 fn reheat_fix_pass(
     path: &Path,
