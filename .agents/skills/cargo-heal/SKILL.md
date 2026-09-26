@@ -96,11 +96,13 @@ cargo heal --fix --groups pedantic <paths>                # also fix allow-by-de
 
 ## What it fixes vs refuses
 
-Fixes (default build): `uninlined_format_args`, `match_bool`, `map_unwrap_or`,
-`single_match`/`single_match_else`, `needless_return`, `needless_range_loop`,
-`semicolon_if_nothing_returned`, `redundant_pattern_matching`,
-`double_parens`, `vec-with-capacity`, `entry-vs-contains-insert`, and ~25
-more clippy classes + the rust_perf proposers.
+Fixes (default build): `needless_return`, `needless_range_loop`,
+`single_match`, `redundant_pattern_matching`, `double_parens`,
+`unnecessary_map_or`, `vec-with-capacity`, `entry-vs-contains-insert`, and ~50
+more clippy classes + the rust_perf proposers. The pedantic/nursery ones
+(`uninlined_format_args`, `match_bool`, `map_unwrap_or`, `single_match_else`,
+`semicolon_if_nothing_returned`, `doc_markdown`, …) apply only where the
+target crate enables them, or with `--groups` (Issue 135 level gate above).
 
 REFUSES BY DESIGN (fix manually — the healer is SAFER than clippy here):
 
