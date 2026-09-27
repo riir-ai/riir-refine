@@ -48,6 +48,9 @@
 use super::domain_router::DomainId;
 use super::instantiation_rerank::{detect_collapse_rule_ids, rule_family, CollapseVerdict};
 use super::latent_matcher::LatentMatcher;
+// dead under thin feature sets (its consumers live in the clippy_lints +
+// rust_perf lanes and the gated tests module); gated to match
+#[cfg_attr(not(all(feature = "clippy_lints", feature = "rust_perf")), allow(unused_imports))]
 use crate::domain::{HealDomain, HealEntry};
 
 /// Per-domain (or blended) recall counters.
@@ -773,6 +776,8 @@ pub struct OwnedEvalSpan {
 
 #[must_use]
 pub fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
+    // the pushes are cfg'd per-domain; thin sets leave it empty
+    #[cfg_attr(not(feature = "clippy_lints"), allow(unused_mut))]
     let mut spans = Vec::new();
     #[cfg(feature = "clippy_lints")]
     for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
@@ -1516,6 +1521,7 @@ const MISROUTE_FIXTURES: [(&str, DomainId); 2] = [
 /// the production path would build).
 #[allow(clippy::vec_init_then_push)] // cfg-gated per-domain pushes
 fn router_eval_domains() -> Vec<(DomainId, Vec<String>)> {
+    #[cfg_attr(not(any(feature = "clippy_lints", feature = "rust_perf")), allow(unused_mut))]
     let mut out = Vec::new();
     #[cfg(feature = "clippy_lints")]
     out.push((

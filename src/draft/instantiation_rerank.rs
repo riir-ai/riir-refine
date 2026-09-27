@@ -211,7 +211,11 @@ pub fn probeable(domain: DomainId, rule_id: &str) -> bool {
 fn instantiates(
     domain: DomainId,
     rule_id: &str,
+    // consumed only by the probeable domains' proposers; thin feature sets
+    // leave both params unread
+    #[cfg_attr(not(feature = "clippy_lints"), allow(unused_variables))]
     code: &str,
+    #[cfg_attr(not(feature = "clippy_lints"), allow(unused_variables))]
     file: &syn::File,
     mode: RerankMode,
 ) -> bool {

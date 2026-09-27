@@ -14,6 +14,9 @@
 use riir_rag::ast_chunker::AstChunker;
 use riir_rag::Chunker;
 
+// dead under thin feature sets (its consumers live in the clippy_lints +
+// rust_perf lanes and the gated tests module); gated to match
+#[cfg_attr(not(all(feature = "clippy_lints", feature = "rust_perf")), allow(unused_imports))]
 use crate::domain::{HealDomain, HealEntry};
 
 use super::clippy_feed::ClippyDiagnostic;
@@ -224,9 +227,16 @@ impl LatentMatcher {
                 .map(|(_, v)| v.clone())
                 .filter(|v| !v.is_empty())
         };
+        // under thin feature sets most domains are cfg'd out and neither
+        // binding sees its push — the mut stays for the enabled-domain path
+        #[cfg_attr(not(feature = "clippy_lints"), allow(unused_mut))]
         let mut router_domains = Vec::new();
-        let mut rule_book = std::collections::HashMap::new();
+        #[cfg_attr(not(feature = "clippy_lints"), allow(unused_mut))]
+        let mut rule_book: std::collections::HashMap<String, RuleInfo> =
+            std::collections::HashMap::new();
 
+        // same lane discipline: unused when every consumer domain is off
+        #[cfg_attr(not(feature = "clippy_lints"), allow(unused_macros))]
         macro_rules! index_domain {
             ($var:ident, $domain:expr, $corpus:expr) => {{
                 let entries: Vec<_> = $corpus;

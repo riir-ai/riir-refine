@@ -720,7 +720,7 @@ required-features = ["pav_data"]
 #   cargo run --release --features latent_retrieval --example t01_real_repo_label
 [[example]]
 name = "t01_real_repo_label"
-required-features = ["latent_retrieval"]
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
 
 # Phase 3: kernel_opt domain demo. Demonstrates the routed heal pipeline:
 # router → narrowed candidates → drafter → validator + thermal tier.
@@ -1235,9 +1235,13 @@ required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_servi
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]
 
+# Issue 137 follow-up (the latent_retrieval-only lane rot): these targets
+# exercise the suggest path over the clippy_lints + rust_perf domain corpora,
+# so the row must name every domain the body touches — a latent-only row
+# builds the target into an E0433 wall, not a green zero.
 [[test]]
 name = "latent_suggest_goat"
-required-features = ["latent_retrieval"]
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
 
 [[test]]
 name = "llm_spend_g2_alloc"
@@ -1350,7 +1354,7 @@ required-features = ["clippy_verify", "l4_lora"]
 
 [[test]]
 name = "t71_evolved_directions"
-required-features = ["latent_retrieval"]
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
 
 [[test]]
 name = "t73_memory_axis_headroom"

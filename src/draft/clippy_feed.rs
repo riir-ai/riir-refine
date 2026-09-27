@@ -410,6 +410,9 @@ pub fn oracle_edits(
     let mut candidates: Vec<(usize, usize, String, String)> = Vec::new();
     let mut dropped = 0usize;
     let mut range_declined = 0usize;
+    // the skip arm is cfg'd out under thin feature sets; the counter stays
+    // for the OracleLane shape
+    #[cfg_attr(not(feature = "clippy_lints"), allow(unused_mut))]
     let mut doc_command_declined = 0usize;
     for d in feed {
         if !lane_lints.contains(&d.lint.as_str()) {
@@ -457,7 +460,11 @@ pub fn oracle_edits(
                 }
                 // Issue 135 T4: the proposer's command-line skip, mirrored
                 // at the oracle door (clippy suggests the same argv-token
-                // backtick the proposer refuses).
+                // backtick the proposer refuses). The skip mirrors a
+                // clippy_lints proposer rule, so the arm exists only under
+                // the domain's own feature (the latent_retrieval-only lane
+                // compiles this module with the domain configured out).
+                #[cfg(feature = "clippy_lints")]
                 if d.lint == "doc_markdown"
                     && crate::domains::clippy_lints::proposers::doc_markdown::doc_source_line_is_command(
                         src, edit.start,
