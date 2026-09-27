@@ -1,15 +1,17 @@
 # Plan 176 — Batch 176: the FWHT dtype-native source read (the #29096 merge rider, FIRED)
 
-**Status:** IN PROGRESS — claimed 2026-09-27 ~07:5x +07 (shikuwa/4090, riir-clippy idle
-loop). Trigger FIRED: ggml-org/llama.cpp #29096 "cuda: add F16 input to the FWHT"
-MERGED 2026-09-26 as `6f856c7` (`6f856c70990a1b5a159b0d4b2355160c83c3697b`) — the
-rider's `merged_at` trigger, armed 09-21/09-23/09-24 (re-arm + adjudication rows in
-`.research/206` + the snapshot). Composition was pre-graded (`8f2af1ae` pre-study +
-the 09-25 addendum + the 09-24 03:5x adjudication); quotes re-verified VERBATIM at
-the tree this session (shallow clone at `6f856c7`, T1 below). **LANDING CONSTRAINT:
-B181 landed 05:20 +0700 today — the landing commit goes ≥14:20 +0700 (~9h, the
-B175-fired-early precedent), nominal slot ~19:5x.** Same-day corpus work (authoring,
-gates) runs now; the push waits for the window.
+**Status:** COMPLETE — landed 2026-09-27 07:5x +07 (shikuwa/4090, riir-clippy idle
+loop) as `88d6e95a` + `436757b8`, pushed `09654bfc..436757b8` after the clock
+check (07:52 09-27 = 26.5h after B181's 05:20 09-26 — the 14:20 target was for
+09-26 itself and passed while the session was down) + origin twin-check
+(origin still at the claim commit, no sibling batch rows). Trigger: ggml-org/
+llama.cpp #29096 "cuda: add F16 input to the FWHT" MERGED 2026-09-26 as `6f856c7`
+— the rider's `merged_at` trigger, armed 09-21/09-23/09-24 (re-arm +
+adjudication rows in `.research/206` + the snapshot). Composition was
+pre-graded (`8f2af1ae` pre-study + the 09-25 addendum + the 09-24 03:5x
+adjudication); quotes re-verified VERBATIM at the tree (shallow clone at
+`6f856c7`, removed at landing). Global binary rebuilt: kernel_opt 649 / release
+set complete (prior session).
 
 ## The composition (fully pre-graded; this plan pins it)
 
@@ -127,11 +129,10 @@ gates) runs now; the push waits for the window.
       doc_markdown mechanical healed); retrieval floors 21/21. DONE.
 - [x] T6 research note `.research/214_fwht_dtype_native_b176.md` (highwater
       213→214) + snapshot row + this plan closed. DONE.
-- [ ] T7 global binary rebuild + stamp verify (649/160); `.raw` clone removed;
-      landing commit + push **at ≥14:20 +0700** (the ≥9h B175 precedent; B181
-      landed 05:20 today). The gated work sits as a LOCAL commit; the next
-      session pushes it after a clock check + origin twin-check if this one is
-      gone by then.
+- [x] T7 global binary rebuild + stamp verify (649/160; prior session);
+      `.raw` clone removed (prior session); landing commit + push 2026-09-27
+      07:52 +0700 — `09654bfc..436757b8` (clock 26.5h after B181, origin
+      twin-check clean).
 
 ## Landing checklist (the slot session's order)
 
