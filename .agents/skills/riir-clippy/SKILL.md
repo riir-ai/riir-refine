@@ -1,14 +1,15 @@
 ---
 name: riir-clippy
-description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo heal --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
+description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo heal --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. EVERY activation starts with Protocol H housekeeping — sync git both boxes, kill orphaned git/ssh zombies, prune leftover worktrees, disk check — before the queue. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
 ---
 
 # riir-clippy — the auto-continue idle loop
 
 You are the idle-time worker for the workspace. When activated without a
-specific task, run the priority queue below, **one unit per cycle**,
-re-scanning after each completed unit. **Commit + push each completed unit
-before starting the next.**
+specific task, run **Protocol H — housekeeping** below FIRST (sync, zombies,
+worktrees, disk), then the priority queue, **one unit per cycle**, re-scanning
+after each completed unit. **Commit + push each completed unit before starting
+the next.**
 
 **Not a hijack — auto_prompt handoffs (precedence).** A context-overflow
 handoff opens a fresh thread whose message carries a `## 1. Thread Summary`
@@ -37,6 +38,63 @@ standing discipline (re-scan folders at WRITE time, commit only your own
 hunks, isolate builds under `/tmp`, never `git stash` sibling WIP — see
 Discipline below). The Plan 337 measurement carve-out (Discipline below)
 still applies whenever a measurement saturates the box, at any hour.
+
+## Protocol H — housekeeping (EVERY activation, before the queue — owner mandate 2026-09-27)
+
+Sync BEFORE anything else; then clear the process/worktree/disk debris that
+past sessions left behind. Each step is read-only until a finding is
+adjudicated. Findings are reported in the cycle's summary — deletions only
+after the safety checks named per step.
+
+1. **Sync git — both boxes, all repos.** M3: per repo under
+   `/Users/katopz/git/*` (top-level dirs with a `.git` dir): `git fetch origin`
+   + `git status -sb`; ff-only merge (`git merge --ff-only origin/<branch>`)
+   CLEAN behind repos only. Dirty repos: fetch + report, never pull through a
+   dirty tree (adjudicate the dirt first — see 3). katgpt-web + reflex-site
+   ride `main`; obsolete/ repos are lineage-only — skip.
+   4090 (`katop@100.85.179.44`, Tailscale fallback from `192.168.1.33`; LAN
+   port 22 is often firewalled): ⛔ **never run `git fetch` directly inside a
+   nested ssh session — git's ssh child inherits the session's open stdin
+   pipe and hangs forever, leaving orphaned git.exe+ssh.exe pairs** (measured
+   2026-09-27: 46+24 orphans from one sweep). Use DETACHED execution:
+   `Start-Process -FilePath "C:\Program Files\Git\cmd\git.exe" -ArgumentList
+   @("-C","E:\git\<repo>","fetch","origin") -RedirectStandardError
+   E:\git\_sync\<repo>.err -WindowStyle Hidden`, then poll statuses in a
+   SECOND ssh call. ff-only clean behind repos; discard machine-local
+   Cargo.lock churn (`git checkout -- Cargo.lock`) only when the incoming
+   commits touch it — it is build noise, not work.
+2. **Kill process zombies — VERIFY before killing.** M3: `ps aux | grep -E
+   "git|ssh|cargo" | grep -v grep` — a wedged pair is a git process whose
+   child ssh holds a fetch with no CPU and no progress. Check parentage +
+   start time BEFORE killing: a process whose parent is a live PowerShell /
+   agent session belongs to that session — LEAVE IT and report; only kill
+   confirmed ORPHANS (parent gone) and stuck-since-«minutes» pairs (a fetch
+   takes seconds; 25 min stuck = dead). Never kill another session's active
+   work — one wipe of "suspicious" processes once deleted a sibling's
+   in-flight fetches mid-run.
+3. **Worktree clean.** Per repo: `git worktree list` + `git worktree prune
+   --dry-run` (prunable = stale registration — prune immediately). For each
+   non-main worktree: `git -C <wt> status --porcelain` — CLEAN + detached →
+   `git worktree remove --force`; DIRTY → report the dirt, remove only when
+   it is plainly build churn (Cargo.lock), never source WIP. Also sweep
+   `.wNNN`-style dirs beside the repos and temp-path worktrees
+   (`/private/tmp/*`, `E:\git\wt*`, `C:\t980`). KEEP: anything holding ops
+   credentials (the 4090's `E:\git\kat141` carries live signing keys),
+   branch-holding worktrees whose branch has unmerged commits, and another
+   session's checked-out worktree (parent = live session).
+4. **Disk check → clean only when needed.** `df -h /` and `df -h
+   /Volumes/SDXC1TB` — internal < 100Gi free OR SD < 100Gi free → invoke the
+   `disk-clean` skill (its contract: LIST first, delete only user-approved
+   items). Healthy disk → report the two numbers, delete nothing. The
+   incremental-dir slice (`*/target/debug/incremental`, ~30G when dirty) is
+   the standing zero-risk pick. LOAD-BEARING, never delete:
+   `riir-clippy/target/release` (the `~/.cargo/bin/cargo-heal` symlink
+   target) and every repo's `target/release`.
+
+Housekeeping findings (hung processes killed, worktrees removed, repos
+ff'd) are reportable work — name them in the cycle summary — but they are
+NOT a queue unit and never substitute for one: after housekeeping, proceed
+to queue item 1.
 
 ## The idle priority queue
 
