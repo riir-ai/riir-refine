@@ -3,6 +3,11 @@
 **Status:** RECORD — verdict landed 2026-09-27 after a 3-round Claude verdict negotiation
 (REVISE round 1 → AGREE round 2; the reviewer's reheat/generation corrections were
 accepted and are folded through this note, the issue, and the riir-train plan).
+**Instrument LANDED 2026-09-28**: generation v9 + the arming gate + the T5 POC
+(outcome (c) infrastructure-ahead-of-consumer — the ranking separates CRB corruption,
+relative gap +0.191, but no semantic-bug consumer exists) — measured record:
+`.benchmarks/103_generation_v9_crb_corruption_localization.md` (commits `c2faf248`,
+`5912e144`).
 **Date:** 2026-09-27 (M3, AC power)
 **Source:** [arXiv:2512.15596](https://arxiv.org/abs/2512.15596) "Corrective Diffusion
 Language Models" — Zhang, Peng, Zhang, Pan, Chrysos (UW–Madison + Duke), v2 2026-01-29.
