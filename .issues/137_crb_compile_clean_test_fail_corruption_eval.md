@@ -1,12 +1,15 @@
 # Issue 137 — CRB-style compile-clean / test-failing corruption eval (new score-bench generation + DLM remask arming check)
 
-**Status:** Active — T1–T4 LANDED + T6's instruments LANDED (generation v9 corpus: 48
-execution-verified fixtures; localization metrics + arming gate + panel; per-class
-rows, loop-harm detector, seeded CI). T5 (healer span-ranking POC run) and T7
-(bench doc + research-note status + AGENTS line) remain. Control arm: WIRED but
-empty by construction for the v1 type-preserving engine (disclosed in the pin
-test + panel — no compile-failing candidate arises from a type-preserving swap
-table on these seeds); the bucket + verify arm stay live for future engines.
+**Status:** Active — T1–T6 LANDED (generation v9 corpus: 48 execution-verified
+fixtures; localization metrics + arming gate + panel; per-class rows, loop-harm
+detector, seeded CI; T5 healer-ranking POC measured OUTCOME (c)
+infrastructure-ahead-of-consumer: item-level relative gap +0.191, hit@1 0.438
+vs chance 0.323 — the ranking separates CRB corruption but no semantic-bug
+consumer exists). T7 (bench doc + research-note status + AGENTS line) remains.
+Control arm: WIRED but empty by construction for the v1 type-preserving engine
+(disclosed in the pin test + panel — no compile-failing candidate arises from a
+type-preserving swap table on these seeds); the bucket + verify arm stay live
+for future engines.
 **Date:** 2026-09-27
 **Source:** arXiv:2512.15596 "Corrective Diffusion Language Models" (CRB instrument),
 code `zhangshuibai/CDLM` @ `12fe555aa815959fe1323a85f3d8a9656c480149` (MIT)
@@ -90,13 +93,21 @@ validation + known-position localization metrics. Three facts shape the Rust por
       refused with named reasons — re-proven every panel run). The PRODUCTION
       confidence source is the pending half: it lands by implementing the trait
       when the d2f/Plan-414 arm exists — the gate is consumer-ready.**
-- [ ] **T5 — healer span-ranking POC (secondary, negative-result pre-registered
+- [x] **T5 — healer span-ranking POC (secondary, negative-result pre-registered
       BOTH ways):** run the healer's existing span ranking over T3 fixtures; record
       whether scores separate corrupted from clean spans. Pre-registered outcomes:
       (a) separation AND a consumer → promote; (b) no separation → recorded finding;
       (c) separation but no consumer (the healer has no semantic-bug fixer today) →
       recorded as infrastructure-ahead-of-consumer. All three are legitimate
-      closers; only silence is a failure.
+      closers; only silence is a failure. **MEASURED 2026-09-28 OUTCOME (c):
+      `run_healer_ranking_poc` (item granularity, max fused rule-similarity per
+      top-level item, test modules excluded): clean items mean 87.92 vs corrupted
+      71.14 — relative gap +0.191, hit@1 0.438 vs chance 0.323. The ranking
+      SEPARATES CRB corruption (a real contrast with the Bench-018 lint-shaped
+      caveat: semantic corruption is corpus-ATYPICAL, so similarity drops) — but
+      the healer has no semantic-bug fixer to consume a span ranking, so the
+      recorded finding is infrastructure-ahead-of-consumer; the instrument rides
+      the generation-9 panel for the DLM remask gate.**
 - [x] **T6 — panel rows:** loop-harm A/B detector (paired non-inferiority on planted
       errors: the loop must fix them without breaking previously-correct positions —
       the paper's measured failure mode); oracle-anchored-vs-heuristic gap audit

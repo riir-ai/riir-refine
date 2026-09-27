@@ -44,9 +44,11 @@
 //! (the loop fixes planted errors while breaking previously-correct
 //! positions) — consumed by the DLM lane when it exists.
 
+use std::collections::BTreeSet;
 use std::ops::Range;
 
 use proc_macro2::{TokenStream, TokenTree};
+use syn::spanned::Spanned;
 
 use super::corruption::{self, CorruptionClass, CorruptionSpec, SplitMix64};
 
@@ -1014,6 +1016,162 @@ pub fn run_generation9_panel() {
     println!(
         "  seam: no production confidence source wired — SpanScorer is the consumer contract;\n        the d2f remask / Plan 414 trained gap implement it and face these floors"
     );
+    println!("────────────────────────────────────────────────────────────────");
+
+    // T5 — the healer span-ranking POC (pre-registered: all three outcomes
+    // are legitimate closers; only silence is a failure).
+    run_healer_ranking_poc();
+}
+
+/// One item-level read for the T5 POC: the fixture split into top-level
+/// non-test items, each tagged corrupted (contains an error span) or clean.
+struct ItemRead<'a> {
+    fixture_id: &'a str,
+    corrupted: bool,
+    /// The matcher's max rule-similarity score for this item's text —
+    /// CONFIDENCE polarity (high = text looks corpus-typical = likely
+    /// clean; the documented Bench-018 caveat says this is text similarity,
+    /// not a certainty signal — exactly what T5 prices).
+    score: f32,
+}
+
+/// Split one fixture into top-level items (the test module excluded — the
+/// grader is trusted and never corrupted), tag each by error-span
+/// containment, and score it with the healer's span ranking.
+fn item_reads_for_fixture<'a>(
+    matcher: &mut crate::draft::latent_matcher::LatentMatcher,
+    fixture: &'a CorruptionSpec,
+) -> Vec<ItemRead<'a>> {
+    let Ok(file) = syn::parse_file(fixture.code) else {
+        return Vec::new();
+    };
+    // the test module's byte range (excluded from the split)
+    let test_range = fixture
+        .code
+        .find("mod tests")
+        .map(|position| position..fixture.code.len());
+    let mut reads = Vec::new();
+    for item in &file.items {
+        let span = item.span().byte_range();
+        if span.start >= span.end || span.end > fixture.code.len() {
+            continue;
+        }
+        if let Some(tests) = &test_range {
+            if span.start >= tests.start {
+                continue; // inside the test module
+            }
+        }
+        let item_text = &fixture.code[span.clone()];
+        let corrupted = fixture
+            .spans
+            .iter()
+            .any(|(start, end)| span.start <= *start && *end <= span.end);
+        let (_, by_domain) = matcher.suggest_span(item_text, 3);
+        let score = by_domain
+            .iter()
+            .flat_map(|(_, rules)| rules.iter().map(|rule| rule.score))
+            .fold(0.0f32, f32::max);
+        reads.push(ItemRead {
+            fixture_id: fixture.id,
+            corrupted,
+            score,
+        });
+    }
+    reads
+}
+
+/// T5 — run the healer's span ranking over the generation-v9 fixtures at
+/// ITEM granularity and pre-register the outcome:
+/// (a) separation AND a consumer → promote (no consumer exists — the
+///     healer has no semantic-bug fixer — so a positive gap lands as (c));
+/// (b) no separation → the recorded finding (consistent with the
+///     Bench-018 text-similarity caveat on `ScoredRule.score`);
+/// (c) separation but no consumer → infrastructure-ahead-of-consumer.
+fn run_healer_ranking_poc() {
+    let mut matcher = match crate::draft::latent_matcher::LatentMatcher::from_enabled_domains() {
+        Ok(matcher) => matcher,
+        Err(why) => {
+            println!("  T5 healer ranking: matcher unavailable ({why}) — skipped loud");
+            return;
+        }
+    };
+    let fixtures = corruption::generation_v9();
+    let mut reads = Vec::new();
+    for fixture in &fixtures {
+        reads.extend(item_reads_for_fixture(&mut matcher, fixture));
+    }
+    let corrupted: Vec<&ItemRead> = reads.iter().filter(|read| read.corrupted).collect();
+    let clean: Vec<&ItemRead> = reads.iter().filter(|read| !read.corrupted).collect();
+    println!("─ T5 healer span-ranking POC (item granularity) ────────────────");
+    if corrupted.is_empty() || clean.is_empty() {
+        println!(
+            "  T5: population degenerate ({} corrupted / {} clean items) — loud skip",
+            corrupted.len(),
+            clean.len()
+        );
+        return;
+    }
+    let corrupted_mean = mean(corrupted.iter().map(|read| f64::from(read.score)));
+    let clean_mean = mean(clean.iter().map(|read| f64::from(read.score)));
+    let gap = clean_mean - corrupted_mean;
+    // hit@1 under confidence polarity: within each fixture, the corrupted
+    // item is the LOWEST-similarity item (flagged first).
+    let mut fixtures_total = 0usize;
+    let mut hit1 = 0usize;
+    for fixture_id in corrupted.iter().map(|read| read.fixture_id).collect::<BTreeSet<_>>() {
+        let items: Vec<&ItemRead> = reads.iter().filter(|read| read.fixture_id == fixture_id).collect();
+        if items.len() < 2 {
+            continue;
+        }
+        fixtures_total += 1;
+        let worst = items
+            .iter()
+            .min_by(|a, b| a.score.partial_cmp(&b.score).unwrap_or(std::cmp::Ordering::Equal))
+            .expect("non-empty");
+        if worst.corrupted {
+            hit1 += 1;
+        }
+    }
+    let hit1_rate = count_to_f64(hit1) / count_to_f64(fixtures_total.max(1));
+    // per-fixture rank-random chance: 1 / items-in-fixture, averaged over
+    // the fixtures the hit arm actually scored
+    let mut chance_sum = 0.0f64;
+    for fixture_id in corrupted.iter().map(|read| read.fixture_id).collect::<BTreeSet<_>>() {
+        let items = reads.iter().filter(|read| read.fixture_id == fixture_id).count();
+        if items >= 2 {
+            chance_sum += 1.0 / count_to_f64(items);
+        }
+    }
+    let chance1 = chance_sum / count_to_f64(fixtures_total.max(1));
+    // scale-free separation: the gap relative to the clean mean (similarity
+    // scores are fused latent/BM25 in the tens — an absolute threshold would
+    // be noise-level)
+    let relative_gap = if clean_mean > 0.0 {
+        gap / clean_mean
+    } else {
+        0.0
+    };
+    println!(
+        "  items: {} corrupted / {} clean; means clean {clean_mean:.2} vs corrupted {corrupted_mean:.2}; gap {gap:+.2} (relative {relative_gap:+.3}); hit@1 {:.3} vs chance {:.3}",
+        corrupted.len(),
+        clean.len(),
+        hit1_rate,
+        chance1
+    );
+    let separated = relative_gap > 0.10 && hit1_rate > chance1 + 0.10;
+    if separated {
+        println!(
+            "  T5 OUTCOME (c): the ranking SEPARATES corrupted from clean items — \
+             but the healer has no semantic-bug fixer to consume it; \
+             recorded infrastructure-ahead-of-consumer"
+        );
+    } else {
+        println!(
+            "  T5 OUTCOME (b): NO separation — text-similarity scores do not localize \
+             CRB corruption (consistent with the ScoredRule.score Bench-018 caveat); \
+             recorded finding"
+        );
+    }
     println!("────────────────────────────────────────────────────────────────");
 }
 
