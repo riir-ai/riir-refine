@@ -1936,6 +1936,7 @@ mod entries_gpu_47;
 mod entries_gpu_48;
 mod entries_gpu_49;
 mod entries_gpu_50;
+mod entries_gpu_51;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1962,6 +1963,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_48::entries());
     entries.extend(entries_gpu_49::entries());
     entries.extend(entries_gpu_50::entries());
+    entries.extend(entries_gpu_51::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2011,7 +2013,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 648-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 649-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2777,6 +2779,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "deferred-bias-ternary-dp4a-exact-isum",
             "signed-activation-codes-drop-dequant-offset-term",
             "proven-redundant-operand-load-elision",
+            "dtype-native-source-read-with-shared-admission-predicate",
         ],
     ),
     // O: IR strength reduction (4 rules)

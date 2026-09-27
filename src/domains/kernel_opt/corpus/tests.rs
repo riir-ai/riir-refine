@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        648,
-        "kernel batches through Batch 181 should have 648 rules"
+        649,
+        "kernel batches through Batch 176 should have 649 rules"
     );
 }
 
@@ -5398,11 +5398,8 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 181:
-    // B +1 tensor-core MMA staged codes, C +1 the fused transform-quantize
-    // writer, D +2 the work-interval thread-shape pin + the in-flight-cap
-    // split submission, N +2 signed-activation codes + proven operand
-    // load elision).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 176:
+    // N +1 the dtype-native source read with the shared admission predicate).
     let expected = [
         (KernelCategory::MemoryAccess, 137),
         (KernelCategory::Compute, 69),
@@ -5417,7 +5414,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 50),
+        (KernelCategory::DtypeAlignment, 51),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5432,9 +5429,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 648.
+    // Sum must equal 649.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 648, "Plan 003: category totals must sum to 648");
+    assert_eq!(total, 649, "Plan 003: category totals must sum to 649");
 }
 
 #[test]
@@ -5445,8 +5442,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 648,
-        "Plan 003: grouped corpus has {total} rules, expected 648"
+        total, 649,
+        "Plan 003: grouped corpus has {total} rules, expected 649"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9553,8 +9550,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        648,
-        "Batch 181: corpus should have 648 rules"
+        649,
+        "Batch 176: corpus should have 649 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13194,6 +13191,57 @@ fn batch181_pseudocode_parses() {
             "batch-181 opt_pattern for '{id}' must parse"
         );
     }
+}
+
+#[test]
+fn batch176_rules_present() {
+    // Batch 176 (Plan 176 / Research 214) -- the #29096 merge rider: the
+    // FWHT dtype-native source read + the shared admission predicate.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["dtype-native-source-read-with-shared-admission-predicate"];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-176 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-176 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-176 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch176_riders_present() {
+    // The two rider surfaces: B96 carries the branchless select rider, B116
+    // carries the upstream width-ladder instance -- both in the rule TEXT.
+    let corpus = build_kernel_seed_corpus();
+    let b96 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fwht-shuffle-xor-butterfly-register-resident")
+        .expect("B96 present");
+    assert!(
+        b96.gpu_concept.contains("RIDER (Batch 176"),
+        "B96 must carry the batch-176 branchless-select rider"
+    );
+    let b116 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fwht-wide-block-row-per-threadgroup-exchange-ladder")
+        .expect("B116 present");
+    assert!(
+        b116.gpu_concept.contains("RIDER (Batch 176"),
+        "B116 must carry the batch-176 upstream-instance rider"
+    );
 }
 
 #[test]

@@ -107,24 +107,31 @@ gates) runs now; the push waits for the window.
       drop the comment") is IN the merged form — the load reads ggml_cuda_cast,
       NOT the pre-studied head's manual cast; the pre-study's quotes were re-graded
       against the merge, no composition change.
-- [ ] T2 author `entries_gpu_51.rs` (the new N rule + module doc), register in
+- [x] T2 author `entries_gpu_51.rs` (the new N rule + module doc), register in
       `corpus/mod.rs`, rider 2 on entries_gpu_11 (B96), rider 3 on entries_gpu_27
-      (B116).
-- [ ] T3 count pins 648→649: router.rs:472; tests.rs:106 + :5437/:5448
-      (category table: N 50→51) + :9556; mod.rs:2014 doc + the header prose;
+      (B116). DONE — plus the DtypeAlignment registration in mod.rs's
+      KERNEL_CATEGORIES (the category table lives there, not in the plan's
+      original guess).
+- [x] T3 count pins 648→649: router.rs:472; tests.rs:106 + :5437/:5448
+      (category table: DtypeAlignment 50→51) + :9556; mod.rs:2016 doc;
       AGENTS.md (kernel_opt bullet + kernel_heal feature line);
       `.docs/11_domains/kernel_opt.md` (seed-corpus row + the batch paragraph);
-      README rows if they carry corpus counts; corpus_history.
-- [ ] T4 standing gate: the batch176 parse test in corpus/tests.rs (batch181
-      pattern), + the category-table entry for the new rule.
-- [ ] T5 GOAT: G1 syn-parse all new/edited rule text; G2 lib tests;
-      G3 clippy -D at default + kernel_heal postures; retrieval floors
-      re-measure (kernel_heal,latent_retrieval, CARGO_TARGET_DIR=/tmp).
-- [ ] T6 research note `.research/214_fwht_dtype_native_b176.md` (highwater
-      213→214) + snapshot row + this plan closed.
+      README kernel_opt row; corpus_history.jsonl 09-27 second row. DONE.
+- [x] T4 standing gate: `batch176_rules_present` + `batch176_riders_present` in
+      corpus/tests.rs. DONE (the first insertion nested inside
+      batch181_pseudocode_parses by a fuzzy-edit mis-aim — caught by the
+      unclosed-delimiter compile error, repaired to the original body + two
+      top-level fns; the miss recorded here).
+- [x] T5 GOAT: G1 syn-parse (kernel slice 374/0); G2 lib default 2340/0 +
+      kernel_heal 2714/0; G3 clippy -D at default + kernel_heal postures (one
+      doc_markdown mechanical healed); retrieval floors 21/21. DONE.
+- [x] T6 research note `.research/214_fwht_dtype_native_b176.md` (highwater
+      213→214) + snapshot row + this plan closed. DONE.
 - [ ] T7 global binary rebuild + stamp verify (649/160); `.raw` clone removed;
       landing commit + push **at ≥14:20 +0700** (the ≥9h B175 precedent; B181
-      landed 05:20 today).
+      landed 05:20 today). The gated work sits as a LOCAL commit; the next
+      session pushes it after a clock check + origin twin-check if this one is
+      gone by then.
 
 ## Landing checklist (the slot session's order)
 
