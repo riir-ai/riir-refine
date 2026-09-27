@@ -3374,7 +3374,7 @@ fn usage() -> ! {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8|9>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold); 9 = the CRB corruption ladder (Issue 137: compile-clean/test-failing known-position localization + the DLM remask arming gate — own runner, no clippy oracle, never appended to the heal score history). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
@@ -3943,14 +3943,16 @@ struct Args {
     /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
     /// score history, re-render the SVG. Standalone mode — no paths.
     score_bench: bool,
-    /// `--generation <1|2|3|4|5|6>` (Plan 092 M5 + Bench 069 reopen #1 +
-    /// Plan 093 + Plan 094 + Plan 095): which bench generation to run.
+    /// `--generation <1|2|3|4|5|6|7|8|9>` (Plan 092 M5 + Bench 069 reopen #1 +
+    /// Plan 093 + Plan 094 + Plan 095 + Issue 137): which bench generation to run.
     /// Absent = 1 (the frozen v1 set, unchanged). 2 = the construction-built generation-v2
     /// k-ladder (issue 072 T5); 3 = the persist-stratified generation-v3
     /// ladder (Bench 069 reopen #1); 4 = the rustc-errors-side k-ladder
     /// (Plan 093 — measures the `--fix-compile` driver against rustc
     /// coded-error ground truth); 5 = the `rust_perf` vocabulary ladder (Plan
-    /// 094 — the mechanical shape oracle over the FIXABLE perf vocabulary).
+    /// 094 — the mechanical shape oracle over the FIXABLE perf vocabulary);
+    /// 9 = the CRB corruption ladder (Issue 137 — compile-clean/test-failing
+    /// known-position localization + the DLM remask arming gate, own runner).
     /// A NEW generation's first append is gated on non-vacuity — a
     /// generation that is not harder than v1 is refused, never appended.
     generation: Option<u8>,
@@ -4509,15 +4511,15 @@ fn parse_args() -> Args {
             }
             "--generation" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, 6, 7, or 8)");
+                    eprintln!("--generation requires a value (1, 2, 3, 4, 5, 6, 7, 8, or 9)");
                     usage();
                 };
                 let g: u8 = value.parse().unwrap_or_else(|_| {
                     eprintln!("--generation expects a number, got {value:?}");
                     usage();
                 });
-                if !(1..=8).contains(&g) {
-                    eprintln!("--generation accepts 1, 2, 3, 4, 5, 6, 7, or 8, got {g}");
+                if !(1..=9).contains(&g) {
+                    eprintln!("--generation accepts 1, 2, 3, 4, 5, 6, 7, 8, or 9, got {g}");
                     usage();
                 }
                 args.generation = Some(g);
@@ -5768,6 +5770,13 @@ fn run_score_bench(generation: u8) {
     }
     if generation == 5 {
         run_score_bench_perf();
+        return;
+    }
+    if generation == 9 {
+        // Issue 137: the CRB corruption ladder — own runner, no clippy
+        // oracle, never appended to the heal score history (the gen-4/5
+        // dispatch shape).
+        riir_clippy::score_bench::localization::run_generation9_panel();
         return;
     }
 

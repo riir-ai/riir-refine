@@ -1075,6 +1075,15 @@ required-features = ["score_bench"]
 name = "generation_v7_freeze"
 required-features = ["score_bench"]
 
+# Generation-9 freeze (Issue 137): the CRB corruption ladder. The --ignored
+# arm spawns real cargo per candidate (two-tier filter: check clean + test
+# fail); the write mode (RIIR_CRB_GEN_WRITE=1) regenerates the committed
+# corpus module. The `#![cfg]` protects the count; this row protects the
+# reader (713-T3).
+[[test]]
+name = "corruption_corpus_freeze"
+required-features = ["score_bench"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

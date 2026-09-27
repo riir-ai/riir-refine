@@ -1,7 +1,12 @@
 # Issue 137 — CRB-style compile-clean / test-failing corruption eval (new score-bench generation + DLM remask arming check)
 
-**Status:** Active — approved 2026-09-27 (Claude verdict AGREE round 2; research note
-`../riir-clippy/.research/215_cdlm_corrective_diffusion_distill_verdict.md`)
+**Status:** Active — T1–T4 LANDED + T6's instruments LANDED (generation v9 corpus: 48
+execution-verified fixtures; localization metrics + arming gate + panel; per-class
+rows, loop-harm detector, seeded CI). T5 (healer span-ranking POC run) and T7
+(bench doc + research-note status + AGENTS line) remain. Control arm: WIRED but
+empty by construction for the v1 type-preserving engine (disclosed in the pin
+test + panel — no compile-failing candidate arises from a type-preserving swap
+table on these seeds); the bucket + verify arm stay live for future engines.
 **Date:** 2026-09-27
 **Source:** arXiv:2512.15596 "Corrective Diffusion Language Models" (CRB instrument),
 code `zhangshuibai/CDLM` @ `12fe555aa815959fe1323a85f3d8a9656c480149` (MIT)
@@ -38,7 +43,7 @@ validation + known-position localization metrics. Three facts shape the Rust por
 
 ## Tasks
 
-- [ ] **T1 — corruption generator** (`score_bench` fixture construction lane or a
+- [x] **T1 — corruption generator** (`score_bench` fixture construction lane or a
       `scripts/` sibling): syn-AST slot classes (operator table `+↔-`, `<↔<=`,
       `&&↔||`; identifier-from-same-scope; literal-same-type), token-count preserving,
       seeded. Two-tier filter: `cargo check` must stay CLEAN, then `cargo test` must
@@ -46,25 +51,45 @@ validation + known-position localization metrics. Three facts shape the Rust por
       manifest `E`. `CARGO_TARGET_DIR=/tmp/...` isolation per house rules. Gates:
       BLAKE3-pinned corpus; zero-corruption draw never kept as "corrupted"; planted
       no-op corruption REJECTED by the filter (proves it discriminates); per-|E|
-      count floors.
-- [ ] **T2 — localization metrics** over any span scorer: confidence gap
+      count floors. **LANDED: `src/score_bench/corruption.rs` (engine: 8 seed
+      programs — the seed gate caught two real authoring bugs pre-run — op table
+      `+↔- *↔/ <↔<= ==↔!= &&↔||`, int-literal XOR-1, same-type param-swap plans
+      with shadow guards; `while`-condition sites excluded by the hang-safety law;
+      spans recomputed in CORRUPTED-code coordinates) +
+      `tests/corruption_corpus_freeze.rs` (two-tier filter, pid-scoped probe crate,
+      30s wall cap, signal/timeout rejection, text-dedup, write/verify modes) +
+      `src/score_bench/corruption_corpus_v9.rs` (48 fixtures = 16 per |E| rung,
+      blake3 digest pin; floors 10/10/10 fire downward only).**
+- [x] **T2 — localization metrics** over any span scorer: confidence gap
       (mean clean − mean error), hit@K, FPR, MRR. Loud-zero laws: constant-confidence
       scorer → gap must read 0 and the gate REFUSES (never "perfectly calibrated");
       shuffled-confidence control → hit@K must fall to chance (proves the metric
       discriminates); partial rankings never fold into a pass (two floors that break
-      separately: fixture walk + full-ranking emission).
-- [ ] **T3 — the new generation row** (next free `generation_v*` — v8 already
-      exists, so v9+ after re-reading `generations.rs`): compile-clean
+      separately: fixture walk + full-ranking emission). **LANDED:
+      `src/score_bench/localization.rs` (confidence-polarity contract — high =
+      likely correct, the d2f/Plan-414 native polarity; chance_hit_at_k hypergeometric;
+      emission floor + fixture-walk floor; unit-tested per law).**
+- [x] **T3 — the new generation row** (`generation_v9` — v8 was the highest;
+      re-read `generations.rs` at implementation time): compile-clean
       / test-failing fixtures at |E| ∈ {1,2,4} (the gen2/gen4 k convention), oracle-
       anchorable spans EXCLUDED from the headline bucket (they form the control arm:
       compile-failing corruption, reported separately, expected near-trivial).
-      Append-refusal law asserted in the freeze test.
-- [ ] **T4 — DLM remask arming check (primary consumer):** a small instrument that
+      Append-refusal law asserted in the freeze test. **LANDED: `generation_v9` /
+      `v9_freeze_status` in corruption.rs (digest self-check = the append-refusal;
+      always-on `corpus_v9_pins_hold`); dispatch `--generation 9` → its own runner
+      (the gen-4/5 shape, no clippy oracle, never appended to the heal score
+      history). Control arm: wired, empty by construction for v1 (disclosed).**
+- [x] **T4 — DLM remask arming check (primary consumer):** a small instrument that
       runs the arm's confidence source (d2f remask confidence, or Plan 414's trained
       gap once it exists) over the T3 fixtures and reports gap/hit@K/FPR; arming gate:
       below floor → refuse to enable the remask loop. Negative control: permuted
       confidence vector must be refused. Byte-identical when the instrument is not
-      invoked (never in any default path).
+      invoked (never in any default path). **LANDED: the `SpanScorer` seam +
+      `arming_verdict` (pre-registered `DEFAULT_ARMING_FLOORS`, fixed check order,
+      named refusals) + live controls (oracle arms; constant/shuffled/inverse
+      refused with named reasons — re-proven every panel run). The PRODUCTION
+      confidence source is the pending half: it lands by implementing the trait
+      when the d2f/Plan-414 arm exists — the gate is consumer-ready.**
 - [ ] **T5 — healer span-ranking POC (secondary, negative-result pre-registered
       BOTH ways):** run the healer's existing span ranking over T3 fixtures; record
       whether scores separate corrupted from clean spans. Pre-registered outcomes:
@@ -72,12 +97,18 @@ validation + known-position localization metrics. Three facts shape the Rust por
       (c) separation but no consumer (the healer has no semantic-bug fixer today) →
       recorded as infrastructure-ahead-of-consumer. All three are legitimate
       closers; only silence is a failure.
-- [ ] **T6 — panel rows:** loop-harm A/B detector (paired non-inferiority on planted
+- [x] **T6 — panel rows:** loop-harm A/B detector (paired non-inferiority on planted
       errors: the loop must fix them without breaking previously-correct positions —
       the paper's measured failure mode); oracle-anchored-vs-heuristic gap audit
       reported per class, never pooled (pooled-equals-min arm must fail); Bernoulli
       re-draws with CI-width disclosure, seeded (born compliant with the
-      unseeded-global-RNG gate).
+      unseeded-global-RNG gate). **LANDED: `loop_harm_verdict` +
+      `paired_non_inferior` (unit-tested both directions); per-class rows never
+      pooled + `class_floor_verdict` min-class binding (pooled-equals-min arm fails
+      by test); seeded Wilson + bootstrap CI width disclosed in the panel. The
+      oracle-anchored-vs-heuristic GAP audit completes with T5's heuristic rows —
+      the control arm is empty for v1, so the oracle-anchored half reports its
+      empty bucket honestly.**
 - [ ] **T7 — close-out:** bench doc in `.benchmarks/` with box state; update the
       research note's Status; cite cargo-mutants + Pydra in the doc's prior-art
       paragraph; remove scratch target dirs.

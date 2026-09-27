@@ -43,9 +43,12 @@
 //!   toolchains — the oracle's caveat). Disagreement with the frozen
 //!   `expect_lints` prints a loud drift warning; the fresh verdict wins.
 
+pub mod corruption;
+pub mod corruption_corpus_v9;
 pub mod cross_ooo;
 pub mod fixtures;
 pub mod generations;
+pub mod localization;
 pub mod necessity;
 pub mod ood;
 pub mod report;
