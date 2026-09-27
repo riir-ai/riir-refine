@@ -12879,6 +12879,13 @@ fn batch180_pseudocode_parses() {
     }
 }
 
+// The u8→i8 lane reinterpretation IS dp4a's signed-lane semantics, and
+// the helper fns follow the fixture tables on purpose (data-first reading).
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::items_after_statements
+)]
 #[test]
 fn batch180_deferred_bias_isum_exhaustive() {
     // The B59 ported-numeric mandate for the N rule: the deferred-bias
@@ -12962,6 +12969,9 @@ fn batch180_deferred_bias_isum_exhaustive() {
     assert!(4064 < i16::MAX as i32);
 }
 
+// The util search mirrors the source's host-side float arithmetic; the
+// ratio IS the pinned quantity, and the operands are tiny by construction.
+#[allow(clippy::cast_precision_loss)]
 #[test]
 fn batch180_row_kblock_util_search_boundary() {
     // The D rule's boundary pin, ported from the source's three
@@ -12991,7 +13001,7 @@ fn batch180_row_kblock_util_search_boundary() {
         let mut r = rows_per_item;
         while r <= rmax {
             let items = (r / rows_per_item) * blocks_per_row;
-            let iters = (items + THREADS - 1) / THREADS;
+            let iters = items.div_ceil(THREADS);
             let util = items as f64 / (iters * THREADS) as f64;
             if util > best_util + 1e-9 {
                 best_util = util;
@@ -13019,6 +13029,9 @@ fn batch180_row_kblock_util_search_boundary() {
     assert!(rows_fat >= 2);
 }
 
+// The LCG draws are the fixture itself: u64→f32 truncation is the
+// reproducible noise source the bit-identity pin is built on.
+#[allow(clippy::cast_precision_loss)]
 #[test]
 fn batch180_fixed_order_epilogue_column_bit_identity() {
     // The E rule's contract: the fixed-order per-(row, column) summation
@@ -13051,8 +13064,8 @@ fn batch180_fixed_order_epilogue_column_bit_identity() {
     let mut x: u64 = 0x243F_6A88_85A3_08D3;
     for _ in 0..bpr {
         x = x
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         partials.push(((x >> 33) as f32) / (u32::MAX as f32) - 0.5);
     }
     let reference = epilogue_fixed_order(&partials, bpr).to_bits();
@@ -13244,6 +13257,10 @@ fn batch176_riders_present() {
     );
 }
 
+// The `as` widenings are the subject under test: mantissa/colsum values
+// are small by the regime the gate pins, and the claim is bit-exactness
+// of the two float FORMS, so the casts must stay literal.
+#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
 #[test]
 fn batch181_signed_codes_mantissa_gate() {
     // The N rule's load-bearing contract: the signed-codes epilogue forms
@@ -13310,6 +13327,12 @@ fn batch181_signed_codes_mantissa_gate() {
     assert!(found_break, "the 8-bit shape must produce a REAL divergence (the NEGATIVE arm)");
 }
 
+// Half-precision widen + the sign-flip identity: the u16→u32 widenings
+// are infallible From conversions; `m as f32` is the subnormal formula;
+// the float compare is exact by construction (sign bit applied both
+// ways); and `0x0000 ^ 0x8000` is the operation under test, kept
+// symmetric with the -0.0 line below it.
+#[allow(clippy::cast_precision_loss, clippy::float_cmp, clippy::identity_op)]
 #[test]
 fn batch181_negative_scale_bias_bit_gate() {
     // The LEAD-7 proof contract: FP16 sign-flip (xor 0x8000) is EXACT
@@ -13319,9 +13342,9 @@ fn batch181_negative_scale_bias_bit_gate() {
     // the base form, and the proof REFUSES (keeps both loads) on any
     // mismatched bias.
     let widen = |bits: u16| -> f32 {
-        let sign = ((bits & 0x8000) as u32) << 16;
-        let e = ((bits >> 10) & 0x1f) as u32;
-        let m = (bits & 0x03ff) as u32;
+        let sign = u32::from(bits & 0x8000) << 16;
+        let e = u32::from((bits >> 10) & 0x1f);
+        let m = u32::from(bits & 0x03ff);
         if e == 0 && m == 0 {
             f32::from_bits(sign)
         } else if e == 0 {
@@ -13351,7 +13374,7 @@ fn batch181_negative_scale_bias_bit_gate() {
     }
     // (c) the proof REFUSES on any mismatched bias (the negative arm).
     let mut bad_biases = biases.clone();
-    bad_biases[2] = bad_biases[2] ^ 0x0010; // one payload bit off
+    bad_biases[2] ^= 0x0010; // one payload bit off
     let holds: bool = scales.iter().zip(bad_biases.iter()).all(|(&s, &b)| s ^ 0x8000 == b);
     assert!(!holds, "the proof must refuse a corrupted bias table");
 }
