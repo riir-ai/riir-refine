@@ -1,6 +1,6 @@
 # Research 208 — SIFT: judge-ordered evaluation for recursive self-improvement (the cost-shape paper for Issue 130)
 
-**Status:** DISTILLED — record + input to open [Issue 130](../.issues/130_rrsi_admission_generalization_gate.md)'s OOD-rig axis (T2 deferred by measurement 2026-09-23: δ = 0 on the deterministic oracle axis; the issue's live unblock path is the OOD rigs); no plan opened. No class-level novelty claimed.
+**Status:** DISTILLED — record + input to open `Issue 130`'s OOD-rig axis (T2 deferred by measurement 2026-09-23: δ = 0 on the deterministic oracle axis; the issue's live unblock path is the OOD rigs); no plan opened. No class-level novelty claimed.
 
 **Date:** 2026-09-24
 **Source:** [arXiv:2609.19526](https://arxiv.org/abs/2609.19526) — "Self Improvement via Fast Tree-search" (Fu, Kulanthaivelu, Yamada; MIT + Sakana AI; 2026-09-17, 24 pp)

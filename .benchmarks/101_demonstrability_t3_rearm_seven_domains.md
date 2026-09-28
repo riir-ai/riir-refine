@@ -3,7 +3,7 @@
 **Status:** RECORD — instrument re-armed, verdict REFUSED (degenerate gain axis); `demonstrability_gate` stays default-off (measurement-only).
 
 **Date:** 2026-09-24
-**Plan/Issue:** [Issue 134](../.issues/134_demonstrability_selection_gap_gate.md) T3 re-arm
+**Plan/Issue:** `Issue 134` T3 re-arm
 **Predecessor:** [Bench 100](100_demonstrability_t3_depth_sweep.md) (the REFUSED-at-n=3 landing)
 **Box:** 4090 workstation (Windows 11, i7-13700K) — build+eval wall only, no GPU compute; quiet-ish (one sibling session).
 

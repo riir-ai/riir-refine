@@ -172,7 +172,7 @@ of the same doc block swaps in at zero drift cost.
 
 ## Refs
 
-- [`.issues/132_role_flow_perspectives_doc_svg.md`](../../.issues/132_role_flow_perspectives_doc_svg.md) — the issue (both phases; removed on close — `HISTORY.md` 2026-09-23 carries the record + the landing commit)
+- `.issues/132_role_flow_perspectives_doc_svg.md` — the issue (both phases; removed on close — `HISTORY.md` 2026-09-23 carries the record + the landing commit)
 - [`node_tiers.md`](node_tiers.md) — the tier spec (Proposal 013/015), the corrections ledger
 - [`kat_billing.md`](kat_billing.md) — the billing + TUNA plane
 - [`replay_lane.md`](replay_lane.md) — the fixer replay lane's gates + pinned rate rule

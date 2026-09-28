@@ -2,7 +2,7 @@
 
 **Status:** DONE — instrument landed; verdict REFUSED at the power floor (the designed answer at the current fixture population).
 **Date:** 2026-09-24
-**Source:** [Issue 134](../.issues/134_demonstrability_selection_gap_gate.md) T3 · [katgpt-rs Research 585](../../katgpt-rs/.research/585_SAT_Teamwork_Strategy_Banks_Demonstrability.md) · SAT arXiv:2609.22682
+**Source:** `Issue 134` T3 · [katgpt-rs Research 585](../../katgpt-rs/.research/585_SAT_Teamwork_Strategy_Banks_Demonstrability.md) · SAT arXiv:2609.22682
 **Harness:** `examples/demonstrability_t3_sweep.rs` (`cargo run --release --features latent_retrieval,clippy_lints,rust_perf[,kernel_heal] --example demonstrability_t3_sweep`)
 **Box:** 4090 workstation (i7-13700K), Windows 11, AC power; cargo build/release under light concurrent load (sibling agent eval running; the sweep itself is CPU-deterministic retrieval — no GPU, no timing claims).
 

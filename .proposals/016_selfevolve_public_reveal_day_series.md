@@ -4,7 +4,7 @@ Status: **LANDED 2026-09-23 — owner GO executed via riir-dapps Plan 037 (dapps
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: riir-dapps Proposal 004 (fix-stats lane) × riir-dapps Issues 102+104 (corpus-days signed sync) × riir-clippy Issues 037/039 (self-evolve stores + Elo) × riir-clippy Issues 089/102 (frontier snapshots + fade)
-Related: [Research 203 — RRSI](../.research/203_rrsi_regularized_harness_evolution.md), [riir-dapps .proposals/004](../../../riir-dapps/.proposals/004_fix_stats_lane_consent_gated.md), katgpt-rs Research 440 (AIDE2), arXiv:2607.07663
+Related: [Research 203 — RRSI](../.research/203_rrsi_regularized_harness_evolution.md), [riir-dapps .proposals/004](../../riir-dapps/.proposals/004_fix_stats_lane_consent_gated.md), katgpt-rs Research 440 (AIDE2), arXiv:2607.07663
 
 ## TL;DR
 
@@ -378,7 +378,7 @@ mainnet enablement (devnet first, per every prior lane).
 ## References
 
 1. arXiv:2607.07663 — *Recursive Self-Improvement in AI: From Bounded to Open-Ended* — the bounded-refinement-is-evaluable frame (distilled here).
-2. arXiv:2609.11873 — *The Last AI Built by Humans* (RSI survey) — in-house as [Research 167](../../../katgpt-rs/.research/167_RSI_Survey_Autonomy_Ladder_Positioning.md) (cited).
+2. arXiv:2609.11873 — *The Last AI Built by Humans* (RSI survey) — in-house as `Research 167` (cited).
 3. katgpt-rs Research 440 — AIDE2 recursive self-improvement, measured PASS (cited).
 4. Lilian Weng, *Harness Engineering for Self-Improvement* (2026-07) (cited-only).
 5. riir-dapps Proposal 004 + Issues 102/104 — the lanes this instantiates (in-house precedent).

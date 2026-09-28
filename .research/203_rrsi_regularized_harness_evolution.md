@@ -1,6 +1,6 @@
 # Research 203 — RRSI: regularized recursive self-improvement (the keeper discipline, empirically pinned)
 
-**Status:** DISTILLED — pending owner decision ([Issue 130](../.issues/130_rrsi_admission_generalization_gate.md) filed; no plan opened). No class-level novelty claimed — the paper itself plus the GP parsimony lineage are the prior art; this note records the dense shipped-cousin mapping and exactly one conjunction gap.
+**Status:** DISTILLED — pending owner decision (`Issue 130` filed; no plan opened). No class-level novelty claimed — the paper itself plus the GP parsimony lineage are the prior art; this note records the dense shipped-cousin mapping and exactly one conjunction gap.
 
 **Date:** 2026-09-22
 **Source:** [arXiv:2609.24972](https://arxiv.org/abs/2609.24972) — "RRSI: Regularized Recursive Self-Improvement of Agent Harnesses" (Xia, Han, Wang, Chen, Zhang, Lee, Huang, Yu, CuiZhu, Ming, Yao, Gokturk, Pfister, Lee; Google Cloud AI Research + UNC-Chapel Hill + Stanford + WashU; 2026-09-21, 24 pp; code: github.com/google-research/rrsi)
@@ -73,7 +73,7 @@ Pinned fusion claim (written before searching): *"Acceptance-side regularizers �
 | Tier | **Gain** (modelless track — the loop and every cousin runs in-process, zero GPU; serving-envelope native) |
 | MOAT gate (riir-clippy, consumer-first) | PASS on fit — targets the in-scope OOD-generalization axis. No katgpt-core residue worth filing: the δ-calibration helper only earns a crate if Issue 130 is taken. |
 | Ladder check | Priority #2 (healer) primary; priority #1 (game) coverage found (DeltaGatedAbsorbCompress + cgsp), no filing. |
-| Files | This note · [Issue 130](../.issues/130_rrsi_admission_generalization_gate.md) · redirect line on 178 |
+| Files | This note · `Issue 130` · redirect line on 178 |
 
 ### Fusion (skill §1 step 6)
 
