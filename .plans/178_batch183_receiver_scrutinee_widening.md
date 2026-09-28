@@ -30,7 +30,7 @@ Four new corpus atoms widening receiver/scrutinee coverage on EXISTING lints (no
 - [x] T6 — clippy ×2 clean (default + --all-features: zero lint findings; the grep-count noise was cargo's hard-linking cache warnings, 54 echo pairs, not lints)
 - [x] T7 — score-bench ×2 appended (gen-1, heal 96.4% FLAT, parse_safety 1.0, decline_correctness 1.0 — floors HELD; the 2 "frozen labels stale" drift warnings are the pre-existing v1-lane state, unchanged by this batch — the v2/v3 freeze e2es that own label truth ran 0-drift)
 - [x] T8 — snapshot update: P40/P41 fix halves marked `[x]` with the landing evidence; AGENTS.md count unchanged (96 lints — the corpus-size-pin doc carries the Batch-183 note)
-- [ ] T9 — commit `feat: batch 183: …` + push (same commit: corpus, tests, docs, snapshot) ← this commit
+- [x] T9 — commit `feat: batch 183: …` + push (same commit: corpus, tests, docs, snapshot) — LANDED `2fba14678` + pushed (verified: origin in sync; the box was unticked at commit time — the self-referential checkbox, ticked 09-28 by the follow-on idle session)
 
 ## Gates
 
