@@ -313,8 +313,22 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "map_unwrap_or".to_string(),
             lint_group: "pedantic".to_string(),
-            buggy_code: "fn f(x: Option<u8>) -> u8 { x.map(|v| v + 1).unwrap_or(0) }".to_string(),
-            fixed_code: "fn f(x: Option<u8>) -> u8 { x.map_or(0, |v| v + 1) }".to_string(),
+            // Batch 183 (P41 fix half): WIDENED to a two-fn file — the
+            // original bare-receiver fn plus the method-chain fn-path
+            // mapper fn (the Elo-1222 toughest-span class, the riir-clippy
+            // store's own top-1). PROBE (2026-09-28, box clippy 1.98.1,
+            // temp crate removed after): upstream `map_unwrap_or` is
+            // SILENT on the recorded store spelling
+            // `strip_suffix(..).map(f).unwrap_or(a)` — it fires on the
+            // `unwrap_or_else` variant only (the bare-receiver `unwrap_or`
+            // form still fires, so the blocker is the method-call receiver
+            // under `unwrap_or`) — the widened fn carries the FIRING form;
+            // the similarity bag still template-matches the `unwrap_or`
+            // store span (the `strip_suffix` + `map(str::to_string)`
+            // tokens dominate). rustc-verified. Entry count unchanged; the
+            // ATOM's code changed → freeze-table regen in this batch.
+            buggy_code: "fn f(x: Option<u8>) -> u8 { x.map(|v| v + 1).unwrap_or(0) }\nfn g(text: &str, suffix: &str, fallback: &str) -> String { text.strip_suffix(suffix).map(str::to_string).unwrap_or_else(|| fallback.to_string()) }".to_string(),
+            fixed_code: "fn f(x: Option<u8>) -> u8 { x.map_or(0, |v| v + 1) }\nfn g(text: &str, suffix: &str, fallback: &str) -> String { text.strip_suffix(suffix).map_or_else(|| fallback.to_string(), str::to_string) }".to_string(),
         },
         // P15 post-mining intake (2026-09-14, the born-lint closure — the
         // healer's own map_unwrap_or `map_or(false, f)` fallback output is
@@ -418,8 +432,20 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // Post-mining P7. VERIFY-tier: parse-only cannot see dividend
             // signedness and `is_multiple_of` is unsigned-only — the
             // `--verify` compile gate reverts any signed-dividend break.
-            buggy_code: "fn f(n: u64) -> bool { n % 4 == 0 }".to_string(),
-            fixed_code: "fn f(n: u64) -> bool { n.is_multiple_of(4) }".to_string(),
+            // Batch 183 (P40 fix half): WIDENED to a two-fn file — the
+            // original literal-divisor fn plus the variable-divisor fn,
+            // because the apply leg had no template for `n % d == 0`
+            // (riir-clippy store L=2, riir-ai L=4 recorded misses; upstream
+            // FIRES all three recorded spellings — probe 2026-09-27,
+            // verdict in the snapshot's P40 row). The proposer splices
+            // variable divisors verbatim
+            // (`non_literal_divisor_spliced_verbatim`). rustc-verified +
+            // upstream-FIRES-verified 2026-09-28. Entry count unchanged
+            // (the corpus is one entry per lint); the ATOM's code changed,
+            // so the generation fixtures moved → freeze-table regen in
+            // this batch.
+            buggy_code: "fn f(n: u64) -> bool { n % 4 == 0 }\nfn g(n: u64, d: u64) -> bool { n % d == 0 }".to_string(),
+            fixed_code: "fn f(n: u64) -> bool { n.is_multiple_of(4) }\nfn g(n: u64, d: u64) -> bool { n.is_multiple_of(d) }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "manual_range_patterns".to_string(),
@@ -475,10 +501,22 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes,
             // non-diverging fallbacks); divergence is judged visibly
             // (return/break/continue/panic-family macro).
-            buggy_code: "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, None => return 0 }; v + 1 }"
-                .to_string(),
-            fixed_code: "fn f(x: Option<u32>) -> u32 { let Some(v) = x else { return 0 }; v + 1 }"
-                .to_string(),
+            // Batch 183 (P41 fix half): WIDENED to a two-fn file — the
+            // original bare-Path scrutinee fn plus the unsafe-BLOCK
+            // scrutinee fn (the live riir-chain `match unsafe {
+            // read_array(..) }` shapes): the block's text ends in `}`, so
+            // the rewrite must parenthesize (`let Some(v) = (unsafe {
+            // … }) else` — the riir-wallet-worker escape, already the
+            // proposer's own behavior; the module test pins it). The new
+            // fn is AUTHORED for edition 2021: a LOCAL raw pointer in a
+            // safe fn (an `unsafe fn` + explicit block trips
+            // `unused_unsafe`; a pointer-ARG deref trips deny-by-default
+            // `not_unsafe_ptr_arg_deref` — both P41 fixture lessons).
+            // rustc-verified + upstream-FIRES-verified 2026-09-28. Entry
+            // count unchanged; the ATOM's code changed → freeze-table
+            // regen in this batch.
+            buggy_code: "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, None => return 0 }; v + 1 }\nfn g(data: &mut u32) -> u32 { let p = data as *mut u32; let v = match unsafe { p.as_ref() } { Some(v) => v, None => return 0 }; *v + 1 }".to_string(),
+            fixed_code: "fn f(x: Option<u32>) -> u32 { let Some(v) = x else { return 0 }; v + 1 }\nfn g(data: &mut u32) -> u32 { let p = data as *mut u32; let Some(v) = (unsafe { p.as_ref() }) else { return 0 }; *v + 1 }".to_string(),
         },
         // ── Batch 91 (the 2026-09-05 P9 clippy-1.98 new-lint batch) ──
         // Populations measured workspace-wide by the 1.98.1 re-gate sweep:
@@ -545,8 +583,24 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // 1.98.1 and real clippy is MSRV-aware (it never fires on an
             // older declared rust-version), so the suggest path is
             // inherently safe; the module doc carries the note.
-            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}\nfn firsts(bytes: &[u8]) -> Vec<u8> {\n    bytes.chunks_exact(4).map(|p| p[0]).collect()\n}".to_string(),
-            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(chunk));\n    }\n    out\n}\nfn firsts(bytes: &[u8]) -> Vec<u8> {\n    bytes.as_chunks::<4>().0.iter().map(|p| p[0]).collect()\n}".to_string(),
+            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}\nfn firsts(bytes: &[u8]) -> Vec<u8> {\n    bytes.chunks_exact(4).map(|p| p[0]).collect()\n}\nfn tails(payload: &[u8]) -> u32 {\n    let mut t = 0u32;\n    for c in payload[5..].chunks_exact(4) {\n        t += u32::from_le_bytes(c.try_into().unwrap());\n    }\n    t\n}".to_string(),
+            // Batch 183 (P41 fix half): the third fn `tails` carries the
+            // offset-SUBSCRIPT receiver (the recorded non-bare-receiver
+            // class: katgpt-rs `payload[5..].chunks_exact(4)`, riir-train
+            // `remap_bytes.chunks_exact(4)` multi-line; the riir-ai
+            // `bytes.chunks_exact(shard_size)` non-const-size form stays
+            // UNFIXABLE by design — the proposer's const-expr guard
+            // refuses it). REPAIR in the same edit: the old fixed
+            // `from_le_bytes(chunk)` was an E0308 — the for-loop iterates
+            // `&[[u8; 4]]`, so `chunk` is `&[u8; 4]` and `from_le_bytes`
+            // takes the array BY VALUE (`*chunk`). The pipeline never
+            // compiled `fixed_code` (the freeze labels only the buggy
+            // side; the standing gate is syn-parse), so the broken
+            // template shipped — the apply leg would paste it and burn a
+            // verify-revert. rustc-verified + upstream-FIRES-verified
+            // 2026-09-28. Entry count unchanged; the ATOM's code changed
+            // → freeze-table regen in this batch.
+            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(*chunk));\n    }\n    out\n}\nfn firsts(bytes: &[u8]) -> Vec<u8> {\n    bytes.as_chunks::<4>().0.iter().map(|p| p[0]).collect()\n}\nfn tails(payload: &[u8]) -> u32 {\n    let mut t = 0u32;\n    for c in payload[5..].as_chunks::<4>().0 {\n        t += u32::from_le_bytes(*c);\n    }\n    t\n}".to_string(),
         },
         // ── P10 post-mining intake (2026-09-13, the 089-T3 usage artifact) ──
         // Both probe-verified on-by-default in clippy 1.98 (probe crate,
@@ -1128,7 +1182,11 @@ mod tests {
     ///
     /// (`len_without_is_empty`, `cast_abs_to_unsigned` — the
     /// coverage-report pack XV, the Plan-163 overturns on new evidence,
-    /// Plan 169) = 96.
+    /// Plan 169) = 96. Batch 183 (2026-09-28) added NO new entries — it
+    /// WIDENED four existing entries into multi-fn files (the P40/P41
+    /// receiver-scrutinee fix halves) and repaired one latent E0308 in a
+    /// `fixed_code`, so the one-entry-per-lint schema and the 96 count
+    /// hold.
     ///
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
