@@ -157,13 +157,18 @@ pub enum RerankMode {
 /// (`single_char_add_str` + `manual_clamp`) crowded the casualty to
 /// first-found at depth **21** (measured by the guard's discovery sweep)
 /// — 21 is the measured minimum and 24 the ladder-rung pin with slack 3.
-/// Re-pinned 24 → 28 (2026-09-19, Batch 162 / Plan 153): the pack VIII
-/// pair (`bytes_count_to_len` + `bool_comparison`) crowded the casualty
-/// to first-found at depth **25** (the guard's discovery sweep) — 25 is
-/// the measured minimum and 28 the ladder-rung pin with slack 3.
+/// Re-pinned 16 → 24 (P11, 2026-09-13: pre-P11 raw rank 9 buried by the
+/// P10/P11 corpus growth), then 24 → 28 (2026-09-19, Batch 162 / Plan
+/// 153: the pack VIII pair crowded the casualty to first-found at depth
+/// **25** — 25 the measured minimum, 28 the ladder-rung pin with slack
+/// 3), then 28 → 33 (2026-09-28, Batch 184 / Plan 179: the pack XVI pair
+/// plus the intervening corpus growth crowded it to first-found at
+/// depth **29-30** (30 at the 96-entry corpus, 29 at 98 — organic
+/// crowding, not this batch's entries); 30 the measured minimum, 33 the
+/// ladder rung with slack 3).
 /// The `pool_depth_rescue_guard` re-firing on the next vec-shaped corpus
 /// entry is the designed prompt to re-measure, not a defect.
-pub const RERANK_POOL: usize = 28;
+pub const RERANK_POOL: usize = 33;
 
 /// Does `rule_id`'s proposer visitor actually match `file`?
 ///

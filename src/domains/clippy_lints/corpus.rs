@@ -1060,6 +1060,30 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "pub fn cau_a(x: i64) -> u64 {\n    x.abs() as u64\n}".to_string(),
             fixed_code: "pub fn cau_a(x: i64) -> u64 {\n    x.unsigned_abs()\n}".to_string(),
         },
+        // ── Batch 184 (2026-09-28, the coverage-report pack XVI, Plan 179,
+        // probe scripts/plan179_pack16_probe.py): both atoms fire ALONE
+        // (zero co-fires, measured) and both FIXED forms compile clean +
+        // silent at probe time (the batch-183 latent-E0308 class closed in
+        // the probe). powc = the as_ptr-local shape — the pointer-
+        // provenance rewrite, the Plan-169 staged IOU; the negative arm
+        // and the u64 operand are probe-measured upstream-silent (the
+        // usize precondition is parity, not divergence). nbr = the let
+        // &ref shape with an auto-deref usage (tolerates the one-level
+        // binding move the deletion makes) — the plan158 RETIRE overturned
+        // on the plan169 probe's measured firing; the match shape co-fires
+        // match_ref_pats and is refused by construction. ──
+        ClippyFixEntry {
+            lint_name: "ptr_offset_with_cast".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "pub fn powc_a(b: &[u8], i: usize) -> u8 {\n    let p = b.as_ptr();\n    unsafe { *p.offset(i as isize) }\n}".to_string(),
+            fixed_code: "pub fn powc_a(b: &[u8], i: usize) -> u8 {\n    let p = b.as_ptr();\n    unsafe { *p.add(i) }\n}".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "needless_borrowed_reference".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "pub fn nbr_b(a: u64) -> String {\n    let &ref y = &a;\n    y.to_string()\n}".to_string(),
+            fixed_code: "pub fn nbr_b(a: u64) -> String {\n    let ref y = &a;\n    y.to_string()\n}".to_string(),
+        },
     ])
 }
 
@@ -1175,7 +1199,10 @@ mod tests {
     /// the 2 Batch 171 rows (`tabs_in_doc_comments`, `map_clone` — the
     /// coverage-report pack XIV, Plan 163), and the 2 Batch 175 rows
     /// (`len_without_is_empty`, `cast_abs_to_unsigned` — the
-    /// coverage-report pack XV, the Plan-163 overturns, Plan 169) = 96.
+    /// coverage-report pack XV, the Plan-163 overturns, Plan 169) = 96,
+    /// and the 2 Batch 184 rows (`ptr_offset_with_cast`,
+    /// `needless_borrowed_reference` — the coverage-report pack XVI, the
+    /// Plan-169 staged IOU pair, Plan 179) = 98.
     ///
     /// (`match_ref_pats`, `into_iter_on_ref` — the coverage-report pack
     /// XIII, the Batch-168 staged alternates, Plan 160) = 92.
@@ -1186,7 +1213,8 @@ mod tests {
     /// WIDENED four existing entries into multi-fn files (the P40/P41
     /// receiver-scrutinee fix halves) and repaired one latent E0308 in a
     /// `fixed_code`, so the one-entry-per-lint schema and the 96 count
-    /// hold.
+    /// hold. Batch 184 (the pack XVI, Plan 179) then added the 2 staged
+    /// IOU rows = 98.
     ///
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
@@ -1194,7 +1222,7 @@ mod tests {
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 96);
+        assert_eq!(corpus.entries.len(), 98);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

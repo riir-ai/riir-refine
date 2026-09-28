@@ -110,6 +110,8 @@
 //! `new_without_default` | `impl W { pub fn new() -> Self }` with no Default → insert `impl Default for W` delegating to `new()` — purely additive, clippy's own suggestion shape (Batch 168) |
 //! `len_without_is_empty` | inherent impl with a public `len(&self) -> <int>` and no `is_empty` on the type → INSERT `pub fn is_empty(&self) -> bool { self.len() == 0 }` before the impl's closing brace — the additive-insertion precedent; traits refuse v1 (Batch 175) |
 //! `cast_abs_to_unsigned` | `x.abs() as uN` → `x.unsigned_abs()` on a signature-proven signed-int param — whole-expr replacement iff the unsigned twin width equals the cast target, else the cast survives (narrow/wide); release-identical + debug-strictly-better (the lint's own "can panic" motivation) (Batch 175) |
+//! `ptr_offset_with_cast` | `p.offset(i as isize)` → `p.add(i)` (+ `wrapping_offset` → `wrapping_add`) — receiver proven a raw pointer by the fn head (`*const/*mut` param) or an `as_ptr`/`as_mut_ptr`-initialized local (never-rebound, never-assigned); operand a `usize` param (upstream's own firing precondition, probe-measured) (Batch 184) |
+//! `needless_borrowed_reference` | `let &ref y = e;` → `let ref y = e;` — the leading `&` deleted (upstream's own one-span MachineApplicable); LET-bindings only (the match shape co-fires `match_ref_pats`, which owns it); exactly `&ref IDENT`, non-mut, no subpat, no let-else (Batch 184) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
@@ -180,12 +182,14 @@
 //! `excessive_precision`, Plan 155 — and the 2 Batch 167 coverage-report
 //! re-arm rules — `unnecessary_cast` / `clone_on_copy`, Plan 158 — and
 //! the 2 Batch 168 coverage-report re-arm rules —
-//! `empty_line_after_doc_comments` / `new_without_default`, Plan 159 — and
+//! `empty_line_after_doc_comments` / `new_without_default`, Plan 159 —
 //! the 2 Batch 175 coverage-report re-arm rules — `len_without_is_empty` /
 //! `cast_abs_to_unsigned`, Plan 169, the pack-XV overturns of two Plan-163
 //! refusals on NEW evidence: the landed `new_without_default` insertion
 //! precedent and the `scalar_param_heads_over` signature-provenance
-//! substrate, both gate-proven since); future lints drop in by extending
+//! substrate, both gate-proven since — and the 2 Batch 184 pack-XVI rules
+//! (`ptr_offset_with_cast` / `needless_borrowed_reference`, Plan 179 — the
+//! Plan-169 staged IOU pair); future lints drop in by extending
 //! the match.
 
 pub mod assign_op_pattern;
@@ -241,6 +245,7 @@ pub mod map_unwrap_or;
 pub mod match_bool;
 pub mod needless_bool;
 pub mod needless_bool_assign;
+pub mod needless_borrowed_reference;
 pub mod needless_borrow;
 pub mod needless_lifetimes;
 pub mod needless_match;
@@ -250,6 +255,7 @@ pub mod needless_return;
 pub mod partialeq_to_none;
 pub mod print_write_with_newline;
 pub mod ptr_arg;
+pub mod ptr_offset_with_cast;
 pub mod question_mark;
 pub mod range_plus_one;
 pub mod receiver_kind;
@@ -803,6 +809,12 @@ pub const FIXABLE_LINTS: &[&str] = &[
     "map_clone",
     "len_without_is_empty",
     "cast_abs_to_unsigned",
+    // ── Batch 184 (the staged IOU pair, Plan 179): the pointer-provenance
+    // offset rewrite (usize-only operand = upstream's own firing
+    // precondition, measured) + the one-`&`-deletion let shape (the match
+    // shape stays match_ref_pats' — the measured co-fire). ──
+    "ptr_offset_with_cast",
+    "needless_borrowed_reference",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1150,6 +1162,10 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 175 (the coverage-report pack XV — Plan 169) ──
         "len_without_is_empty" => len_without_is_empty::collect_edits(source, file),
         "cast_abs_to_unsigned" => cast_abs_to_unsigned::collect_edits(source, file),
+        // ── Batch 184 (the coverage-report pack XVI — Plan 179, the
+        // staged IOU pair) ──
+        "ptr_offset_with_cast" => ptr_offset_with_cast::collect_edits(source, file),
+        "needless_borrowed_reference" => needless_borrowed_reference::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1290,7 +1306,11 @@ mod tests {
         // signature-proven unsigned_abs rewrite in three measured regimes
         // (the Plan-149 provenance law, overturned Plan-163 typeck
         // refusal)).
-        assert_eq!(FIXABLE_LINTS.len(), 77);
+        // + 2 Batch 184 (ptr_offset_with_cast + needless_borrowed_reference
+        // — the coverage-report pack XVI, Plan 179; the Plan-169 staged IOU
+        // pair — the pointer-provenance offset rewrite + the one-&-deletion
+        // let shape).
+        assert_eq!(FIXABLE_LINTS.len(), 79);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
