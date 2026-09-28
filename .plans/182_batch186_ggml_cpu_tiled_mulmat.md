@@ -56,7 +56,7 @@ is the designated kernel-slot content. TAKEN. No twin rows on origin (checked 10
 - [x] T6 — Research 218 (`.research/.highwater` 217->218) + AGENTS.md (kernel_opt bullet +
   kernel_heal line + rust_perf bullet) + kernel_opt.md + rust_perf.md + README rows +
   `.distill/001_mining_queue_snapshot.md` landing row (same commit).
-- [ ] T7 — Commit `feat: batch 186: ggml-cpu tiled mul_mat distill (17 rules)` + push; plan
+- [x] T7 — Commit `feat: batch 186: ggml-cpu tiled mul_mat distill (17 rules)` + push; plan
   COMPLETE. No .raw cleanup owed (source read from the standing vendor clone — flagged-not-mine,
   left in place).
 
