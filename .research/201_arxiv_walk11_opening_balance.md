@@ -1,7 +1,8 @@
 # Research 201 — arxiv pool refill walk #11: opening balance (the Mon-announce tail, caught 2026-09-22)
 
-**Status:** OPEN — opening balance BANKED 2026-09-22 08:29 +07 (M3); walk
-proper opens Mon 09-28 with the ordinary five-lane window; differential
+**Status:** RECORD — opening balance BANKED 2026-09-22 08:29 +07 (M3); walk
+proper CLOSED 2026-09-28 (Research 217 — the five-lane window graded, 0
+corpus delta); differential
 base = **2609.23388** (submitted 2026-09-20T06:11Z). Zero corpus delta at
 open: 0 rule-batches, 3 lane records, 1 league-intel row, 1 riir-train
 doctrine echo.
