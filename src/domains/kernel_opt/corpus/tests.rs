@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        649,
-        "kernel batches through Batch 176 should have 649 rules"
+        655,
+        "kernel batches through Batch 182 should have 655 rules"
     );
 }
 
@@ -5398,14 +5398,16 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 176:
-    // N +1 the dtype-native source read with the shared admission predicate).
+    // Pin per-category rule counts to the Plan 003 table (updated for
+    // Batch 182: A +2 the GQA repeat-fold + the prework reorder, C +1 the
+    // argmax epilogue swap, D +1 the residency-restore scheduling, E +2 the
+    // draft-block exchange + the redundant small reduction).
     let expected = [
-        (KernelCategory::MemoryAccess, 137),
+        (KernelCategory::MemoryAccess, 139),
         (KernelCategory::Compute, 69),
-        (KernelCategory::Fusion, 48),
-        (KernelCategory::Dispatch, 142),
-        (KernelCategory::Parallelism, 62),
+        (KernelCategory::Fusion, 49),
+        (KernelCategory::Dispatch, 143),
+        (KernelCategory::Parallelism, 64),
         (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 29),
@@ -5429,9 +5431,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 649.
+    // Sum must equal 655.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 649, "Plan 003: category totals must sum to 649");
+    assert_eq!(total, 655, "Plan 003: category totals must sum to 655");
 }
 
 #[test]
@@ -5442,8 +5444,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 649,
-        "Plan 003: grouped corpus has {total} rules, expected 649"
+        total, 655,
+        "Plan 003: grouped corpus has {total} rules, expected 655"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9550,8 +9552,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        649,
-        "Batch 176: corpus should have 649 rules"
+        655,
+        "Batch 182: corpus should have 655 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13202,6 +13204,87 @@ fn batch181_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-181 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch182_rules_present() {
+    // Batch 182 (the mlxfast-bonsai2 DELTA distill -- Plan 177 / Research
+    // 216): 6 kernel_opt rules (A +2: the GQA repeat-fold tile-fill + the
+    // verify-window prework reorder; C +1: the argmax epilogue swap; D +1:
+    // the post-idle residency-restore scheduling; E +2: the draft-block
+    // KV-split exchange + the redundant small reduction) distilled from
+    // Layr-Labs/mlxfast-bonsai2-27b-engine delta cfb35b0d..831fae7 (MIT) --
+    // the post-B181 accept wave (the armed Research-212-Addendum-3 rider
+    // fired). Every quote re-verified VERBATIM at HEAD THIS batch (fresh
+    // clone, the ephemeral-clone law). All perf numbers SOURCE-REPORTED
+    // (M4/M5 Max class).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "verify-fold-gqa-repeats-into-row-axis-tile-fill",
+        "draft-block-simdgroup-kv-split-smem-softmax-exchange",
+        "simdgroup-redundant-small-reduction-over-barrier-broadcast",
+        "argmax-epilogue-replaces-output-materialization",
+        "verify-window-prework-loads-before-stores",
+        "idle-gpu-residency-restore-overlapped-behind-queued-work",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-182 rule '{id}' missing from corpus"
+        );
+    }
+    // The riders: each annotation must be IN the landed rule text.
+    let rider_rules = [
+        "engine-work-interval-performance-core-pin",
+        "split-submission-in-flight-cap-overlap",
+        "fused-transform-quantize-writer",
+        "gdn-transition-replay-log-commit-many",
+        "defer-promoted-write-to-first-consumer-dispatch",
+        "in-place-write-through-input-emits-fence-consumer",
+    ];
+    for id in rider_rules {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("{id} present"));
+        assert!(
+            rule.gpu_concept.contains("RIDER (Batch 182"),
+            "batch-182 rider missing on {id}"
+        );
+    }
+}
+
+#[test]
+fn batch182_pseudocode_parses() {
+    // G1 for Batch 182: syn-parse gate (the six mlxfast-delta rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "verify-fold-gqa-repeats-into-row-axis-tile-fill",
+        "draft-block-simdgroup-kv-split-smem-softmax-exchange",
+        "simdgroup-redundant-small-reduction-over-barrier-broadcast",
+        "argmax-epilogue-replaces-output-materialization",
+        "verify-window-prework-loads-before-stores",
+        "idle-gpu-residency-restore-overlapped-behind-queued-work",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-182 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-182 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-182 opt_pattern for '{id}' must parse"
         );
     }
 }

@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 160 entries across 12 categories (allocation 28, io 26, concurrency 23,
-//! complexity 26, layout 13, iterators 11, simd 9, arithmetic 8, caching 8,
-//! dispatch 5, bevy 2, wasm 1). 99 are benchable; 61 are honestly//! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
+//! 163 entries across 12 categories (allocation 28, io 26, concurrency 23,
+//! complexity 28, layout 13, iterators 11, simd 9, arithmetic 8, caching 8,
+//! dispatch 6, bevy 2, wasm 1). 99 are benchable; 64 are honestly//! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) and again by the 09-24 housekeeping pass
 //! (the header prose had gone stale at 145/92/53 through B172–B174; the
@@ -395,13 +395,14 @@ mod entries_06;
 mod entries_07;
 mod entries_08;
 mod entries_09;
+mod entries_10;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 160 entries/// covering the main perf pattern categories (complexity, allocation, simd,
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 163 entries/// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (28 rules — Batch 173 added the two
 /// serde zero-copy rules); complexity has 24 (the measurement-honesty family
@@ -441,5 +442,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_07::entries());
     entries.extend(entries_08::entries());
     entries.extend(entries_09::entries());
+    entries.extend(entries_10::entries());
     Corpus::new(entries)
 }

@@ -1937,6 +1937,7 @@ mod entries_gpu_48;
 mod entries_gpu_49;
 mod entries_gpu_50;
 mod entries_gpu_51;
+mod entries_gpu_52;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1964,6 +1965,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_49::entries());
     entries.extend(entries_gpu_50::entries());
     entries.extend(entries_gpu_51::entries());
+    entries.extend(entries_gpu_52::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2013,7 +2015,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 649-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 655-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2021,10 +2023,11 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (137 rules; Batch 178 +2: the L2 policy
+    // A: Memory access patterns (139 rules; Batch 178 +2: the L2 policy
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
-    // Batch 181 +0)
+    // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
+    // verify-window prework reorder)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2166,6 +2169,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "producer-store-evict-last-pins-cross-stream-consumer",
             "dead-line-l2-discard-after-last-consumer",
             "planar-transposed-activation-multi-column-quant-matvec",
+            "verify-fold-gqa-repeats-into-row-axis-tile-fill",
+            "verify-window-prework-loads-before-stores",
         ],
     ),
     // B: Compute patterns (69 rules) -- was 64 in the comment while the
@@ -2248,8 +2253,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tensor-core-mma-staged-quantized-codes-double-buffered",
         ],
     ),
-    // C: Fusion patterns (48 rules; Batch 181 +1:
-    // fused-transform-quantize-writer)
+    // C: Fusion patterns (49 rules; Batch 181 +1:
+    // fused-transform-quantize-writer; Batch 182 +1: the argmax/top-k
+    // epilogue swap)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2302,14 +2308,16 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-residual-update-writes-separate-next-buffer",
             "softmax-stats-precompute-exp-in-gemm-loader",
             "fused-transform-quantize-writer",
+            "argmax-epilogue-replaces-output-materialization",
         ],
     ),
-    // D: Dispatch patterns (142 rules; Batch 177 +2: the host-gather graph
+    // D: Dispatch patterns (143 rules; Batch 177 +2: the host-gather graph
     // split + the unified-memory page-cache rule; Batch 178 +1: the
     // topology-signature graph-exec sharing rule; Batch 180 +1: the
     // row-kblock item-space flattening + host util search; Batch 181 +2:
     // the engine work-interval thread-shape pin + the in-flight-cap
-    // split submission)
+    // split submission; Batch 182 +1: the post-idle residency-restore
+    // touch scheduling)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2456,11 +2464,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-kblock-item-space-flattening-host-util-search",
             "engine-work-interval-performance-core-pin",
             "split-submission-in-flight-cap-overlap",
+            "idle-gpu-residency-restore-overlapped-behind-queued-work",
         ],
     ),
-    // E: Parallelism patterns (62 rules; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (64 rules; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
-    // Batch 180 +1: the fixed-order interleaved-accumulator epilogue)
+    // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
+    // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
+    // redundant small reduction)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2527,6 +2538,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "wide-verify-warp-specialized-scores-in-registers-pv",
             "row-slice-expensive-epilogue-across-ctas",
             "fixed-order-interleaved-accumulator-epilogue",
+            "draft-block-simdgroup-kv-split-smem-softmax-exchange",
+            "simdgroup-redundant-small-reduction-over-barrier-broadcast",
         ],
     ),
     // F: Flash-attention tiling (16 rules)

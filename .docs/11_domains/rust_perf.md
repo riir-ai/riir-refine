@@ -25,7 +25,25 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 160 rules — Batch 181 (2026-09-27,
+profiling guide, Research 032; **now 163 rules — Batch 182 (2026-09-28,
+Plan 177 / Research 216 — the mlxfast-bonsai2 DELTA distill, delta
+cfb35b0d..831fae7): three NotBenchable annotated rules —
+`host-mirror-shared-scalar-advance-one-time-verdict` (dispatch — N layers
+advancing the SAME +L scalar = 16 one-element launches/verify-window → host
+mirror at the same code sites + ONE shared array + a ONE-TIME
+device-vs-host equivalence verdict: match ⇒ host path for the process,
+mismatch ⇒ device op forever) + `prompt-continuation-draft-override-measured-min-match`
+(complexity — override ONLY draft ids on a UNIQUE ≥16-token match (floor 8;
+the measured NEGATIVE at n=2..4: 12→15 rounds — the floor is evidence),
+SKIP the drafter block on the round after a from-prompt proposal,
+on-device-scored splice in the early rounds; the target still verifies
+everything) + `whole-round-in-situ-adoption-trial` (complexity — the
+measurement-honesty family's ADOPTION member: kernel-variant selection on
+WHOLE workload rounds interleaved — first round discarded, >1.5× median
+dropped, >0.5% margin, ≥4 kept rounds; 'a 0.5-0.7 ms burst never reaches
+the clock state of the decode window, so it mispicks'; pinned constants +
+the L18 orthogonal-array per-shape sub-arm). Previously 160 rules — Batch
+181 (2026-09-27,
 Plan 174 / Research 212 — the mlxfast-bonsai2 arena distill): two
 NotBenchable annotated rules — `seed-warm-the-scored-seam` (complexity,
 the measurement-honesty family's SEAM-WARM member beside B177's
