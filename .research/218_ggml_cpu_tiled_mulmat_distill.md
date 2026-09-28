@@ -1,6 +1,6 @@
 # Research 218 — ggml-cpu tiled mul_mat k-quant distill verdict (Batch 186 / Plan 182)
 
-**Status:** RECORD (Batch 186 landed 2026-09-28 — the staged 09-26 lead converted at the kernel slot; 15 kernel_opt rules + 2 rust_perf members + 5 staged; plan renumbered 181→182 in-commit, the sibling pickup session took 181 first — the dual-allocation gate adjudicated by mentions, zero inbound to mine)
+**Status:** RECORD (Batch 186 landed 2026-09-28 — the staged 09-26 lead converted at the kernel slot; 15 kernel_opt rules + 2 rust_perf members + 5 staged; plan renumbered 181→182 in-commit, the sibling pickup session took 181 first — the dual-allocation gate adjudicated by mentions, zero inbound to mine). **UPDATE Batch 187 (2026-09-28): the 5 staged rules CONVERTED** at the next kernel slot (Plan 183, `entries_gpu_55.rs`, corpus 670→675) — the staging queue is empty; the record below stands as the distill of record for all 20 rules.
 
 ## Provenance
 
@@ -158,6 +158,12 @@ rust_perf (entries_10.rs, both NotBenchable complexity-annotated):
 ## STAGED for the next kernel slot (full quotes — zero re-mining needed)
 
 All five verified at the pin this session; quotes below are the conversion record.
+**CONVERTED at Batch 187 (Plan 183, 2026-09-28)** — entries_gpu_55.rs (A×1 + B×3 + E×1),
+corpus 670 → 675 (A 145→146, B 71→74, E 64→65); quotes re-verified VERBATIM at the pin
+again at conversion time; gates: batch187 parse gate, kernel slice 2763/0, lib 2385/0,
+clippy -D ×2, retrieval floors HELD (21/21); score-bench + freeze not owed (zero
+clippy-corpus delta). The staging queue is now EMPTY — the next kernel slot needs a
+fresh lead.
 
 S1. `jmajor-acc-buffer-transpose-writeback` (A) — accumulate in a j-major buffer (row
     stride buf_stride) so MAC stores are contiguous, then write back to the i-major dst

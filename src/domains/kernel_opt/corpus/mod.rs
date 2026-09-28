@@ -1940,6 +1940,7 @@ mod entries_gpu_51;
 mod entries_gpu_52;
 mod entries_gpu_53;
 mod entries_gpu_54;
+mod entries_gpu_55;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1970,6 +1971,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_52::entries());
     entries.extend(entries_gpu_53::entries());
     entries.extend(entries_gpu_54::entries());
+    entries.extend(entries_gpu_55::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2019,7 +2021,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 655-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 675-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2027,14 +2029,15 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (145 rules; Batch 178 +2: the L2 policy
+    // A: Memory access patterns (146 rules; Batch 178 +2: the L2 policy
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
     // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
     // verify-window prework reorder; Batch 186 +6: the ggml-cpu tiled
     // mul_mat family -- dequant-once staging, VNNI stage transpose,
     // plan-time thread slots, narrow L1 panels, jit band repack,
-    // zero-pad ragged tails)
+    // zero-pad ragged tails; Batch 187 +1: the j-major accumulator
+    // buffer + the 16x8 register-transpose writeback)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2184,14 +2187,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "narrow-m-l1-panel-sizing",
             "jit-band-repack-stage-per-use-l1-hot",
             "zero-pad-ragged-tail-additive-identity",
+            "jmajor-acc-buffer-transpose-writeback",
         ],
     ),
-    // B: Compute patterns (71 rules) -- was 64 in the comment while the
+    // B: Compute patterns (74 rules) -- was 64 in the comment while the
     // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
     // Batch 166, 67 at Batch 170 (scale-identity-elide); 68 at Batch 178
     // (warp-bitonic-topk-merge-shuffle); 69 at Batch 181
     // (tensor-core-mma-staged-quantized-codes-double-buffered); 71 at
-    // Batch 186 (the maddubs overflow selector + the scale-hoist epilogue)
+    // Batch 186 (the maddubs overflow selector + the scale-hoist epilogue);
+    // 74 at Batch 187 (the register-band partition, the lut16-pshufb
+    // folded-bias expansion, the GFNI sign-mask expand)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2267,6 +2273,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tensor-core-mma-staged-quantized-codes-double-buffered",
             "maddubs-overflow-two-exact-mac-selector",
             "hoist-row-invariant-scale-to-subblock-epilogue",
+            "register-budget-band-partition-indep-correction-offband",
+            "lut16-pshufb-byte-expansion-at-stage",
+            "gfni-sign-mask-expand-cmpeq-fallback",
         ],
     ),
     // C: Fusion patterns (49 rules; Batch 181 +1:
@@ -2489,11 +2498,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "owned-input-transform-early-admission",
         ],
     ),
-    // E: Parallelism patterns (64 rules; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (65 rules; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
-    // redundant small reduction)
+    // redundant small reduction; Batch 187 +1: the chunk-downsize
+    // work-stealing microtile-floor ladder)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2562,6 +2572,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fixed-order-interleaved-accumulator-epilogue",
             "draft-block-simdgroup-kv-split-smem-softmax-exchange",
             "simdgroup-redundant-small-reduction-over-barrier-broadcast",
+            "chunk-downsize-work-stealing-microtile-floor",
         ],
     ),
     // F: Flash-attention tiling (16 rules)
