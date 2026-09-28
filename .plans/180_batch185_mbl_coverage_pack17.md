@@ -1,7 +1,6 @@
 # Plan 180 — Batch 185: coverage-report pack XVII, `multiple_bound_locations` (MBL solo)
 
-**Status:** IN PROGRESS — T0/T1 pre-verified 2026-09-28 (4090); the landing
-(T2–T9) is this plan's remaining work.
+**Status:** COMPLETE — landed `d95bb8d1d` on develop, pushed 2026-09-28 (4090). All tasks [x].
 
 **Context.** Batch 184 (Plan 179) consumed the staged pack XVI pair. The
 staged queue for pack XVII was `multiple_bound_locations` (staged fresh,
@@ -93,7 +92,7 @@ fresh derivation + probe re-adjudicated both and the MTA candidate:
 - [x] T8 — docs: AGENTS.md clippy_lints row (99 corpus / 80 fixable) + the
       pack XVII narrative line; `.docs/11_domains/` if the folder's index
       carries a count
-- [ ] T9 — commit `feat: batch 185: ...` + push (develop) + snapshot update +
+- [x] T9 — commit `feat: batch 185: ...` + push (develop) + snapshot update +
       global binary rebuild (the release feature set; verify `--version`
       stamp complete)
 
