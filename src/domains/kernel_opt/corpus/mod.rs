@@ -1938,6 +1938,8 @@ mod entries_gpu_49;
 mod entries_gpu_50;
 mod entries_gpu_51;
 mod entries_gpu_52;
+mod entries_gpu_53;
+mod entries_gpu_54;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1966,6 +1968,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_50::entries());
     entries.extend(entries_gpu_51::entries());
     entries.extend(entries_gpu_52::entries());
+    entries.extend(entries_gpu_53::entries());
+    entries.extend(entries_gpu_54::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2023,11 +2027,14 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (139 rules; Batch 178 +2: the L2 policy
+    // A: Memory access patterns (145 rules; Batch 178 +2: the L2 policy
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
     // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
-    // verify-window prework reorder)
+    // verify-window prework reorder; Batch 186 +6: the ggml-cpu tiled
+    // mul_mat family -- dequant-once staging, VNNI stage transpose,
+    // plan-time thread slots, narrow L1 panels, jit band repack,
+    // zero-pad ragged tails)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2171,13 +2178,20 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "planar-transposed-activation-multi-column-quant-matvec",
             "verify-fold-gqa-repeats-into-row-axis-tile-fill",
             "verify-window-prework-loads-before-stores",
+            "dequant-once-macrotile-stage-reuse-across-microtiles",
+            "stage-operand-mac-layout-inplace-transpose-at-repack",
+            "plan-time-thread-slot-scratch",
+            "narrow-m-l1-panel-sizing",
+            "jit-band-repack-stage-per-use-l1-hot",
+            "zero-pad-ragged-tail-additive-identity",
         ],
     ),
-    // B: Compute patterns (69 rules) -- was 64 in the comment while the
+    // B: Compute patterns (71 rules) -- was 64 in the comment while the
     // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
     // Batch 166, 67 at Batch 170 (scale-identity-elide); 68 at Batch 178
     // (warp-bitonic-topk-merge-shuffle); 69 at Batch 181
-    // (tensor-core-mma-staged-quantized-codes-double-buffered)
+    // (tensor-core-mma-staged-quantized-codes-double-buffered); 71 at
+    // Batch 186 (the maddubs overflow selector + the scale-hoist epilogue)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2251,6 +2265,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "scale-identity-elide-in-framework-graph-transcription",
             "warp-bitonic-topk-merge-shuffle",
             "tensor-core-mma-staged-quantized-codes-double-buffered",
+            "maddubs-overflow-two-exact-mac-selector",
+            "hoist-row-invariant-scale-to-subblock-epilogue",
         ],
     ),
     // C: Fusion patterns (49 rules; Batch 181 +1:
@@ -2309,15 +2325,18 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-stats-precompute-exp-in-gemm-loader",
             "fused-transform-quantize-writer",
             "argmax-epilogue-replaces-output-materialization",
+            "consumer-offset-absorption-precomputed-weight-row-correction",
         ],
     ),
-    // D: Dispatch patterns (143 rules; Batch 177 +2: the host-gather graph
+    // D: Dispatch patterns (146 rules; Batch 177 +2: the host-gather graph
     // split + the unified-memory page-cache rule; Batch 178 +1: the
     // topology-signature graph-exec sharing rule; Batch 180 +1: the
     // row-kblock item-space flattening + host util search; Batch 181 +2:
     // the engine work-interval thread-shape pin + the in-flight-cap
     // split submission; Batch 182 +1: the post-idle residency-restore
-    // touch scheduling)
+    // touch scheduling; Batch 186 +3: the ggml-cpu tiled family -- the
+    // batch-floor force escape, the dead-tail admission defect, the
+    // early-admission owned transform)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2465,6 +2484,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "engine-work-interval-performance-core-pin",
             "split-submission-in-flight-cap-overlap",
             "idle-gpu-residency-restore-overlapped-behind-queued-work",
+            "regime-batch-floor-force-escape",
+            "unified-admission-dead-tail",
+            "owned-input-transform-early-admission",
         ],
     ),
     // E: Parallelism patterns (64 rules; Batch 178 +2: the warp-role
@@ -2601,7 +2623,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (29 rules)
+    // H: MoE dispatch + backward pass (30 rules; Batch 186 +1: the
+    // per-expert mixed dispatch + worst-case workspace rule)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2635,6 +2658,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "moe-broadcast-quantize-once-scatter",
             "expert-remainder-routed-to-smaller-tile-twins",
             "expert-major-tile-order-token-tile-cache-resident",
+            "moe-per-expert-mixed-dispatch-worst-case-workspace",
         ],
     ),
     // I: NSA block-sparse selection (7 rules)
@@ -2707,7 +2731,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "window-recurrence-halo-snapshot-block-parallel",
         ],
     ),
-    // M: Kernel parametric polymorphism (20 rules)
+    // M: Kernel parametric polymorphism (21 rules; Batch 186 +1: the
+    // const-generic format unification rule)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2732,12 +2757,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "warm-reachable-dispatch-signatures-before-timed-window",
             "row-aware-indexing-reuses-static-single-token-kernel",
             "pipeline-cache-key-covers-every-function-constant",
+            "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (50 rules; Batch 177 +2: the
+    // N: dtype + alignment specialization (52 rules; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
     // Batch 178 +1: the exact-widening accumulator-precision rule;
-    // Batch 180 +1: the deferred-bias exact-isum integer algebra)
+    // Batch 180 +1: the deferred-bias exact-isum integer algebra;
+    // Batch 186 +1: the convert-once metadata widening)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2793,6 +2820,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "signed-activation-codes-drop-dequant-offset-term",
             "proven-redundant-operand-load-elision",
             "dtype-native-source-read-with-shared-admission-predicate",
+            "widen-metadata-once-to-mac-native-widths",
         ],
     ),
     // O: IR strength reduction (4 rules)

@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        655,
-        "kernel batches through Batch 182 should have 655 rules"
+        670,
+        "kernel batches through Batch 186 should have 670 rules"
     );
 }
 
@@ -5399,24 +5399,28 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for
-    // Batch 182: A +2 the GQA repeat-fold + the prework reorder, C +1 the
-    // argmax epilogue swap, D +1 the residency-restore scheduling, E +2 the
-    // draft-block exchange + the redundant small reduction).
+    // Batch 186: A +6 the ggml-cpu tiled staging family (dequant-once,
+    // VNNI stage transpose, thread slots, narrow panels, jit repack,
+    // zero-pad), B +2 the maddubs overflow selector + the scale hoist,
+    // C +1 the consumer offset absorption, D +3 the floor/force escape
+    // + the dead-tail admission defect + the early-admission owned
+    // transform, H +1 the per-expert mixed dispatch, M +1 the
+    // const-generic format unification, N +1 the convert-once widening).
     let expected = [
-        (KernelCategory::MemoryAccess, 139),
-        (KernelCategory::Compute, 69),
-        (KernelCategory::Fusion, 49),
-        (KernelCategory::Dispatch, 143),
+        (KernelCategory::MemoryAccess, 145),
+        (KernelCategory::Compute, 71),
+        (KernelCategory::Fusion, 50),
+        (KernelCategory::Dispatch, 146),
         (KernelCategory::Parallelism, 64),
         (KernelCategory::FlashAttnTiling, 16),
         (KernelCategory::LinearAttnRecurrence, 29),
-        (KernelCategory::MoeDispatchBackward, 29),
+        (KernelCategory::MoeDispatchBackward, 30),
         (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
-        (KernelCategory::KernelPolymorphism, 20),
-        (KernelCategory::DtypeAlignment, 51),
+        (KernelCategory::KernelPolymorphism, 21),
+        (KernelCategory::DtypeAlignment, 52),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5431,9 +5435,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 655.
+    // Sum must equal 670.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 655, "Plan 003: category totals must sum to 655");
+    assert_eq!(total, 670, "Plan 003: category totals must sum to 670");
 }
 
 #[test]
@@ -5444,8 +5448,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 655,
-        "Plan 003: grouped corpus has {total} rules, expected 655"
+        total, 670,
+        "Plan 003: grouped corpus has {total} rules, expected 670"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9552,8 +9556,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        655,
-        "Batch 182: corpus should have 655 rules"
+        670,
+        "Batch 186: corpus should have 670 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13285,6 +13289,48 @@ fn batch182_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-182 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch186_pseudocode_parses() {
+    // G1 for Batch 186: syn-parse gate (the ggml-cpu tiled mul_mat
+    // distill -- 15 kernel_opt rules across entries_gpu_53/54).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "dequant-once-macrotile-stage-reuse-across-microtiles",
+        "stage-operand-mac-layout-inplace-transpose-at-repack",
+        "plan-time-thread-slot-scratch",
+        "narrow-m-l1-panel-sizing",
+        "jit-band-repack-stage-per-use-l1-hot",
+        "zero-pad-ragged-tail-additive-identity",
+        "maddubs-overflow-two-exact-mac-selector",
+        "hoist-row-invariant-scale-to-subblock-epilogue",
+        "consumer-offset-absorption-precomputed-weight-row-correction",
+        "regime-batch-floor-force-escape",
+        "unified-admission-dead-tail",
+        "owned-input-transform-early-admission",
+        "moe-per-expert-mixed-dispatch-worst-case-workspace",
+        "const-generic-microkernel-format-unification",
+        "widen-metadata-once-to-mac-native-widths",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-186 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-186 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-186 opt_pattern for '{id}' must parse"
         );
     }
 }

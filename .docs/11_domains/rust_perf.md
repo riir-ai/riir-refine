@@ -25,7 +25,7 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 163 rules — Batch 182 (2026-09-28,
+profiling guide, Research 032; **now 165 rules — Batch 186 (2026-09-28, +2 measurement-honesty members from the ggml-cpu tiled mul_mat distill, Plan 181 / Research 218: `fallthrough-toggle-oracle` (the ORACLE member — same graph through one admission switch, magnitude-scaled tolerance) + `cold-l3-evict-min-of-n` (the COLD member — 256MB LLC flush between reps, min-of-5; inverse polarity of B181's seed-warm); both NotBenchable, both complexity-annotated) — Batch 182 (2026-09-28,
 Plan 177 / Research 216 — the mlxfast-bonsai2 DELTA distill, delta
 cfb35b0d..831fae7): three NotBenchable annotated rules —
 `host-mirror-shared-scalar-advance-one-time-verdict` (dispatch — N layers
