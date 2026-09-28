@@ -1,7 +1,7 @@
 # Plan 183 — Batch 187: the ggml-cpu staged kernel pack of 5 (Research 218 S1–S5)
 
-**Status:** COMPLETE — landed + pushed (the staged pack of 5 converted; corpus 670→675;
-all gates green; see the landing commit for the hash).
+**Status:** COMPLETE — landed `9e7178f44` + pushed (the staged pack of 5 converted; corpus
+670→675; all gates green).
 
 - [x] T0 — Pin re-verification: all 5 staged quotes VERBATIM at
   `E:/git/vendor/prismml-llama.cpp @ d834d44e` (tiled.cpp:679 + 686-695;
