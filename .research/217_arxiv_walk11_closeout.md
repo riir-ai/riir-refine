@@ -90,9 +90,13 @@ lead + P40/P41 pack) is unchanged by this walk.
   https export.arxiv.org (the M3 path worked first-try — the two-path
   non-atomicity caveat from 201 stands for future walks).
 - Window end extended past now (09-29 00:00Z) — the freshest row returned is
-  09-25 14:43Z; the Mon-announce batch (Fri-cutoff → Sun submissions, announce
-  Mon 20:00 ET = Mon 09-28 08:00–09:00 +07) had NOT landed at read time (UTC
-  01:11 = 08:11 +07, announce propagation in flight). **The next idle pass
-  should re-probe for the announce tail** (freshest-id check; if 09-26/09-27
-  rows appear, they are walk #12's opening balance per the Research-201
-  catch-early precedent — no re-walk owed this session).
+  09-25 14:43Z (Fri 10:43 ET, BEFORE the Fri 14:00 ET cutoff, i.e. it rode the
+  Sunday announce Sun 20:00 ET = Mon 00:00 UTC, which had propagated). Weekend
+  submissions (Fri 14:00 ET → Sun 14:00 ET = 09-25 18:00Z → 09-27 18:00Z)
+  announce **Mon 20:00 ET = Tue 09-29 00:00 UTC = Tue 07:00 +07** — an earlier
+  draft of this note wrote "Mon 09-28 08:00–09:00 +07", a timezone
+  mis-conversion that sent the next session probing ~22 h before any 09-26/27
+  row could exist (re-probes 09-28 01:17Z + 01:42Z both returned the identical
+  78-row set, as this arithmetic predicts). **Walk #12's opening balance
+  (if any 09-26/09-27 rows appear) is checkable from Tue 00:00 UTC** per the
+  Research-201 catch-early precedent — no re-walk owed before then.
