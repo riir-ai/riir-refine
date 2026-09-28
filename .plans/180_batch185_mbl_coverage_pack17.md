@@ -64,7 +64,7 @@ fresh derivation + probe re-adjudicated both and the MTA candidate:
       not naked calls, not partial turbofish; re-adjudicated to the REJECT
       record above; mbl_trait_impl/mbl_struct moved FIXTURE→SILENT,
       fn-only surface measured)
-- [ ] T2 — `multiple_bound_locations` proposer (`src/domains/clippy_lints/
+- [x] T2 — `multiple_bound_locations` proposer (`src/domains/clippy_lints/
       proposers/multiple_bound_locations.rs`): syn-scan fn items; the guard
       set is (a) a generic param with ≥1 inline bound, (b) a where-clause
       predicate naming the SAME param with a SUBSET-or-equal bound set —
@@ -76,21 +76,21 @@ fresh derivation + probe re-adjudicated both and the MTA candidate:
       direction first); fix is a synthesized deletion spanning the where
       predicate (or the inline bound segment); every other shape refuses
       (lifetimes, const params, associated-type bounds, where-for<> forms)
-- [ ] T3 — corpus entry (`buggy_code` = the MBL_PLAIN fixture shape,
+- [x] T3 — corpus entry (`buggy_code` = the MBL_PLAIN fixture shape,
       `fixed_code` = the docs' consolidated-into-where form) + module tests
       (fire/refuse matrix mirroring the probe; the lint name in the entry
       metadata stays the canon)
-- [ ] T4 — wiring: dispatch arm + `pub mod` decl + FIXABLE_LINTS (79→80) +
+- [x] T4 — wiring: dispatch arm + `pub mod` decl + FIXABLE_LINTS (79→80) +
       `CLIPPY_LINTS` count pin (98→99) wherever the corpus count test pins it
-- [ ] T5 — the Batch-151 law: corpus delta → v2+v3 freeze tables regenerated
+- [x] T5 — the Batch-151 law: corpus delta → v2+v3 freeze tables regenerated
       in-batch (the plan179_freeze_paste.py mechanisation, re-labelled for
       this batch) + the e2es; bad-atom delta recorded
-- [ ] T6 — gates: default lib count-pin move (+proposer tests), score_bench
+- [x] T6 — gates: default lib count-pin move (+proposer tests), score_bench
       lib suite (the Batch-183 gap closure, ~140s), floor_corpus_integrity,
       retrieval floors HELD, clippy `-D` clean default+all-features
-- [ ] T7 — score-bench appended (gen-1 row; heal-rate floor HELD) + frontier
+- [x] T7 — score-bench appended (gen-1 row; heal-rate floor HELD) + frontier
       snapshot + gate-calibration rows as owed
-- [ ] T8 — docs: AGENTS.md clippy_lints row (99 corpus / 80 fixable) + the
+- [x] T8 — docs: AGENTS.md clippy_lints row (99 corpus / 80 fixable) + the
       pack XVII narrative line; `.docs/11_domains/` if the folder's index
       carries a count
 - [ ] T9 — commit `feat: batch 185: ...` + push (develop) + snapshot update +

@@ -1084,6 +1084,23 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "pub fn nbr_b(a: u64) -> String {\n    let &ref y = &a;\n    y.to_string()\n}".to_string(),
             fixed_code: "pub fn nbr_b(a: u64) -> String {\n    let ref y = &a;\n    y.to_string()\n}".to_string(),
         },
+        // ── Batch 185 (2026-09-28, the coverage-report pack XVII — MBL
+        // solo, Plan 180, probe scripts/plan180_pack17_probe.py): the
+        // subset-driven generic-bound consolidation. Upstream emits NO
+        // replacement (both duplicate locations are primary spans —
+        // probe-measured), so the fix is synthesized; the atom fires
+        // ALONE (zero co-fires) and both fixed directions compile clean +
+        // silent at probe time. fn-only surface = upstream parity (trait
+        // impls / struct definitions probe-silent). MTA
+        // (missing_transmute_annotations) was the LEAD-2 candidate and is
+        // probe-REJECTED this batch — the negative matrix is permanent
+        // record in the probe + plan. ──
+        ClippyFixEntry {
+            lint_name: "multiple_bound_locations".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "pub fn mbl_a<T: Default>(t: T) -> T\nwhere\n    T: Default,\n{\n    t\n}".to_string(),
+            fixed_code: "pub fn mbl_a<T>(t: T) -> T\nwhere\n    T: Default,\n{\n    t\n}".to_string(),
+        },
     ])
 }
 
@@ -1204,6 +1221,9 @@ mod tests {
     /// `needless_borrowed_reference` — the coverage-report pack XVI, the
     /// Plan-169 staged IOU pair, Plan 179) = 98.
     ///
+    /// (`multiple_bound_locations` — the coverage-report pack XVII, MBL
+    /// solo — Plan 180) = 99.
+    ///
     /// (`match_ref_pats`, `into_iter_on_ref` — the coverage-report pack
     /// XIII, the Batch-168 staged alternates, Plan 160) = 92.
     ///
@@ -1222,7 +1242,7 @@ mod tests {
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 98);
+        assert_eq!(corpus.entries.len(), 99);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

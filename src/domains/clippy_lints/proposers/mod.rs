@@ -112,6 +112,7 @@
 //! `cast_abs_to_unsigned` | `x.abs() as uN` → `x.unsigned_abs()` on a signature-proven signed-int param — whole-expr replacement iff the unsigned twin width equals the cast target, else the cast survives (narrow/wide); release-identical + debug-strictly-better (the lint's own "can panic" motivation) (Batch 175) |
 //! `ptr_offset_with_cast` | `p.offset(i as isize)` → `p.add(i)` (+ `wrapping_offset` → `wrapping_add`) — receiver proven a raw pointer by the fn head (`*const/*mut` param) or an `as_ptr`/`as_mut_ptr`-initialized local (never-rebound, never-assigned); operand a `usize` param (upstream's own firing precondition, probe-measured) (Batch 184) |
 //! `needless_borrowed_reference` | `let &ref y = e;` → `let ref y = e;` — the leading `&` deleted (upstream's own one-span MachineApplicable); LET-bindings only (the match shape co-fires `match_ref_pats`, which owns it); exactly `&ref IDENT`, non-mut, no subpat, no let-else (Batch 184) |
+//! `multiple_bound_locations` | `<T: Default>` + `where T: Default` → the duplicated bound consolidated into ONE location — subset-driven (inline ⊆ where deletes the inline segment; where ⊆ inline deletes the predicate/whole clause); fn-only surface = upstream parity (trait impls/structs probe-silent); disjoint sets refuse — the merge case, the documented v1 divergence (Batch 185) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
@@ -246,6 +247,7 @@ pub mod match_bool;
 pub mod needless_bool;
 pub mod needless_bool_assign;
 pub mod needless_borrowed_reference;
+pub mod multiple_bound_locations;
 pub mod needless_borrow;
 pub mod needless_lifetimes;
 pub mod needless_match;
@@ -815,6 +817,11 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // shape stays match_ref_pats' — the measured co-fire). ──
     "ptr_offset_with_cast",
     "needless_borrowed_reference",
+    // ── Batch 185 (the coverage-report pack XVII — Plan 180): the
+    // subset-driven generic-bound consolidation (fn-only surface =
+    // upstream parity, probe-measured; synthesized deletion — upstream
+    // emits no replacement). ──
+    "multiple_bound_locations",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1166,6 +1173,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // staged IOU pair) ──
         "ptr_offset_with_cast" => ptr_offset_with_cast::collect_edits(source, file),
         "needless_borrowed_reference" => needless_borrowed_reference::collect_edits(source, file),
+        // ── Batch 185 (the coverage-report pack XVII — Plan 180) ──
+        "multiple_bound_locations" => multiple_bound_locations::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1310,7 +1319,10 @@ mod tests {
         // — the coverage-report pack XVI, Plan 179; the Plan-169 staged IOU
         // pair — the pointer-provenance offset rewrite + the one-&-deletion
         // let shape).
-        assert_eq!(FIXABLE_LINTS.len(), 79);
+        // + 1 Batch 185 (multiple_bound_locations — the coverage-report
+        // pack XVII, Plan 180; the subset-driven generic-bound
+        // consolidation, MBL solo pack).
+        assert_eq!(FIXABLE_LINTS.len(), 80);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
@@ -1819,6 +1831,12 @@ impl S {
                 "cast_abs_to_unsigned",
                 "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); x.abs() as u64 }",
                 "hits.push(0); x.unsigned_abs() }",
+            ),
+            // ── Batch 185 (the coverage-report pack XVII — Plan 180) ──
+            (
+                "multiple_bound_locations",
+                "pub fn m<T: Default + Clone>(t: T) -> T\nwhere\n    T: Default + Clone,\n{\n    t.clone()\n}",
+                "pub fn m<T>(t: T)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
