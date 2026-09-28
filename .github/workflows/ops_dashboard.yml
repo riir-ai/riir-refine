@@ -209,16 +209,6 @@ jobs:
           path: ${{ runner.temp }}/git/riir-mmorpg-examples
           fetch-depth: 2000
 
-      - name: Checkout riir-unity
-        continue-on-error: true
-        uses: actions/checkout@v6
-        with:
-          repository: gist-rs/riir-unity
-          ref: develop
-          token: ${{ secrets.GH_PAT }}
-          path: ${{ runner.temp }}/git/riir-unity
-          fetch-depth: 2000
-
       - name: Checkout riir-viewbridge
         continue-on-error: true
         uses: actions/checkout@v6
@@ -253,7 +243,7 @@ jobs:
           # Make the sibling-beside-workspace layout that riir-clippy's own
           # `../<name>` cargo path deps expect.
           for name in katgpt-rs riir-ai riir-train riir-neuron-db riir-chain \
-                      riir-game-sdk riir-mmorpg-examples riir-unity \
+                      riir-game-sdk riir-mmorpg-examples \
                       riir-viewbridge riir-dapps; do
             if [ -d "${GITROOT}/${name}" ]; then
               ln -sfn "${GITROOT}/${name}" "${WS_PARENT}/${name}"

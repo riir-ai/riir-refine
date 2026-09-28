@@ -1,6 +1,11 @@
 # Research 083 — oMLX external distill, Batch 71 (Research 082 consumed)
 
 **Status:** RECORD — batch landed 2026-08-24 (Plan 022; corpus 370 → 372, A 88 / D 74).
+**Numbering note:** 083 was dual-allocated historically — the other holder was
+`083_elo_selection_gate.md` (removed; record: `.research/084_dirty_encoding_write_elision_batch72.md`
+§"Generator lessons", and master `.issues/1016` E5). THIS file keeps **083**
+(most inbound references); no renumber — live citations break (owner REC
+leave-as-is).
 
 - **Source:** `github.com/jundot/omlx` @ `main`, read 2026-08-24 mine time.
   The Research 082 verdict queued this batch; the 2026-08-24 idle-loop

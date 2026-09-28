@@ -1,5 +1,46 @@
 # HISTORY.md — riir-clippy
 
+## 2026-09-28 — Owner-gate pickup E3/E4/E5/C7/E8 (master riir-ai `.issues/1016`; plan 181 / issue 138)
+
+- **E3 DONE — the dead `gist-rs/riir-unity` checkout is gone from `ops_dashboard.yml`**
+  (the checkout step + both mentions in the scaffold loop's name list; the repo
+  was retired to `git/obsolete/` 2026-09-04 and `continue-on-error: true` was
+  silently absorbing its absence). Mirror set = the contract repos the lane
+  actually consumes. No generator/script read `riir-unity` (grep-verified:
+  zero hits in `scripts/` + `src/`).
+- **E4 STALE-NO-OP — the 4 never-defined-feature targets DO NOT EXIST today.**
+  The `crowd_attention_bench` / `crowd_coherence_bench` names appear in NO
+  commit's `*.toml`/`*.rs` (git log -S + rev-grep at `6661fe40` and HEAD: zero
+  hits outside the pickup docs and this row's own sweep record) — whatever the
+  09-14 sweep's worktree carried was gone before it ever landed. Verified
+  TODAY: all 37 distinct `required-features` values across `Cargo.toml`
+  resolve against the 46 defined features (comm -23 = empty). Nothing to
+  delete; the E4 half of this row is the verification record.
+- **E5 DONE — one-line disambiguator added to `.research/083_omlx_external_distill_batch71.md`**
+  (083 dual-allocated historically with the removed `083_elo_selection_gate.md`;
+  this file keeps 083; no renumber per the owner REC — live references break).
+- **C7 RECORDED — `structural_admission` stays INERT until a priced first consumer**
+  (the P1×frontier_miner fusion is the recorded re-open trigger). No activation
+  work exists or is queued; the posture text lives in the Cargo.toml feature
+  entry and Proposal-175's charter; this row is the standing record.
+- **E8 DRAFT (OWNER-GATED adjudication — verdict lands in this row):** the
+  C8/C9 interpretation call the boundary runs keep flagging. Mechanically:
+  **C8 audits each git-rev pin individually** (rev-existence = hard ROT;
+  behind-count + security-gap = NOTE) and **C9 fires when ONE owner resolves
+  to ≥2 distinct revs across tracked lockfiles** (build roots disagree) — a
+  "four-rev split" in run notes IS a C9 multi-rev finding on one owner, not a
+  separate check; the "C8 four-rev" phrasing in idle-pass notes is informal
+  shorthand. The interpretation to ratify: a multi-rev split composed entirely
+  of same-branch (`main`) lag pins — the branch-policy class the 09-24 run
+  documented (@3c844aeb/@5e2b730f vs @c478ab9f) — reads as **C9 NOTES, not
+  violations** (each pin real, auditable, and deployment lag is the posture
+  C8's own header blesses); the standing response is per-root lockfile-regen
+  discipline at the owner's cadence, NOT pin convergence. The actionable case
+  is a split MIXING branches/forks (one root on a non-owner branch) — that
+  stays a loud C9 worth triage. DRAFT until the owner names E8.
+
+Docs/cfg only — no cargo (plan 181's verification note).
+
 ## 2026-09-26 — Issue 135 CLOSED (`c1c6cf21`): `cargo heal --fix` gates allow-by-default lints on the target crate's effective level
 
 Filed from a katgpt-rs session's reflex-site registration (`466e331`): the
