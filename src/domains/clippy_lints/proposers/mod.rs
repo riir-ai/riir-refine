@@ -214,6 +214,7 @@ pub mod match_like_matches_macro;
 pub mod match_ref_pats;
 pub mod tabs_in_doc_comments;
 pub mod map_clone;
+pub mod mem_replace_with_default;
 pub mod needless_late_init;
 pub mod new_without_default;
 pub mod double_parens;
@@ -822,6 +823,29 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // upstream parity, probe-measured; synthesized deletion — upstream
     // emits no replacement). ──
     "multiple_bound_locations",
+    // ── Batch 191 (the coverage-report pack XVIII — Plan 188):
+    // `std::mem::replace(dst, Default::default())` → `std::mem::take(dst)`
+    // — FIXABLE by STD'S OWN DEFINITION IDENTITY: `take` is literally
+    // defined as `replace(dest, T::default())` (the std source), and the
+    // input's own compilation proves `T: Default` — zero type-blindness
+    // (the `from_str_radix_10` / `bytes_count_to_len` construction-identity
+    // class). Bounded to the two QUALIFIED path spellings
+    // (`std::mem::replace` + the `mem::replace` import-verified form with
+    // the legacy_numeric_constants shadow-guard — probe-measured upstream
+    // SILENT on a local `mem::replace`, so the guard is parity); the
+    // second arg EXACTLY the bare `Default::default()` path call (the
+    // `<T as Default>::default()` turbofish is SILENT upstream — parity
+    // refusal; `<_>::default()` FIRES upstream but refuses v1, the
+    // documented narrower-than-clippy divergence). Bare `replace(..)`
+    // FIRES upstream but refuses here — a syntax-only proposer cannot
+    // prove the one-name import (a local `fn replace` would make the
+    // rewrite broken code) — the SAFER-than-clippy divergence class.
+    // Upstream's own suggestion is whole-call MachineApplicable
+    // (probe-measured); we keep the author's path prefix where clippy
+    // rewrites to the full `std::mem::take` spelling (the map_clone
+    // cloned-over-copied precedent). Style-group (default-on; the
+    // installed driver is the authority).
+    "mem_replace_with_default",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1175,6 +1199,10 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "needless_borrowed_reference" => needless_borrowed_reference::collect_edits(source, file),
         // ── Batch 185 (the coverage-report pack XVII — Plan 180) ──
         "multiple_bound_locations" => multiple_bound_locations::collect_edits(source, file),
+        // ── Batch 191 (the coverage-report pack XVIII — Plan 188) ──
+        "mem_replace_with_default" => {
+            mem_replace_with_default::collect_edits(source, file)
+        }
         _ => Vec::new(),
     }
 }
@@ -1322,12 +1350,15 @@ mod tests {
         // + 1 Batch 185 (multiple_bound_locations — the coverage-report
         // pack XVII, Plan 180; the subset-driven generic-bound
         // consolidation, MBL solo pack).
-        assert_eq!(FIXABLE_LINTS.len(), 80);
+        // + 1 Batch 191 (mem_replace_with_default — the coverage-report
+        // pack XVIII, Plan 188; the std definition-identity take()
+        // rewrite).
+        assert_eq!(FIXABLE_LINTS.len(), 81);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 92-row fixture table — length is the point.
+    /// 93-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1837,6 +1868,12 @@ impl S {
                 "multiple_bound_locations",
                 "pub fn m<T: Default + Clone>(t: T) -> T\nwhere\n    T: Default + Clone,\n{\n    t.clone()\n}",
                 "pub fn m<T>(t: T)",
+            ),
+            // ── Batch 191 (the coverage-report pack XVIII — Plan 188) ──
+            (
+                "mem_replace_with_default",
+                "fn t(dst: &mut Vec<u32>, sink: &mut Vec<Vec<u32>>) { sink.push(Vec::new()); sink.push(std::mem::replace(dst, Default::default())); }",
+                "std::mem::take(dst)",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

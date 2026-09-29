@@ -1101,6 +1101,27 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "pub fn mbl_a<T: Default>(t: T) -> T\nwhere\n    T: Default,\n{\n    t\n}".to_string(),
             fixed_code: "pub fn mbl_a<T>(t: T) -> T\nwhere\n    T: Default,\n{\n    t\n}".to_string(),
         },
+        // ── Batch 191 (2026-09-30, the coverage-report pack XVIII — the
+        // mem_replace_with_default solo, Plan 188, probe
+        // scripts/plan188_pack18_probe.py): `std::mem::replace(dst,
+        // Default::default())` → `std::mem::take(dst)` — the STD
+        // DEFINITION IDENTITY (`take` IS `replace(dest, T::default())`,
+        // the std source). Both firing path spellings verified
+        // (std-path + the import-verified `mem::` form), the turbofish /
+        // non-default / take-already shapes probe-SILENT, and both fixed
+        // forms compile clean + silent. The atom avoids the let-tail
+        // shape (the probe's let_and_return co-fire — designed out).
+        // Bare `replace(..)` FIRES upstream but refuses here (the
+        // SAFER-than-clippy import-ambiguity divergence, probe-recorded);
+        // `<_>::default()` fires upstream, refuses v1 (documented
+        // narrower divergence). Style-group (default-on; the installed
+        // driver is the authority — the lint_level gate's own derivation). ──
+        ClippyFixEntry {
+            lint_name: "mem_replace_with_default".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn mrw(dst: &mut Vec<u32>, sink: &mut Vec<Vec<u32>>) { sink.push(Vec::new()); sink.push(std::mem::replace(dst, Default::default())) }".to_string(),
+            fixed_code: "fn mrw(dst: &mut Vec<u32>, sink: &mut Vec<Vec<u32>>) { sink.push(Vec::new()); sink.push(std::mem::take(dst)) }".to_string(),
+        },
     ])
 }
 
@@ -1242,7 +1263,7 @@ mod tests {
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 99);
+        assert_eq!(corpus.entries.len(), 100);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

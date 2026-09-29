@@ -104,6 +104,7 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("match_bool", "pedantic"),
     ("match_like_matches_macro", "style"),
     ("match_ref_pats", "style"),
+    ("mem_replace_with_default", "style"),
     ("multiple_bound_locations", "style"),
     ("needless_bool", "complexity"),
     ("needless_bool_assign", "complexity"),
