@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 675, "Plan 003: experts cover all 675 corpus rules (Batch 187 +5)");
+        assert_eq!(total, 684, "Plan 003: experts cover all 684 corpus rules (Batch 189 +5; the 675 pin went stale at Batch 188, which did not touch router.rs)");
     }
 
     #[test]

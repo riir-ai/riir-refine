@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        679,
-        "kernel batches through Batch 188 should have 679 rules"
+        684,
+        "kernel batches through Batch 189 should have 684 rules"
     );
 }
 
@@ -5399,6 +5399,10 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for
+    // Batch 189: B +1 the exact bf16-domain activation LUT, D +2 the
+    // shape-bucketed graph-cache LRU + the fused-serving measured-
+    // negative ledger, F +1 the ancestor-mask bit-visibility tree
+    // attention, G +1 the two-chunk state-independent overlap;
     // Batch 188: A +2 the low-bit warp-run load + the register prefetch
     // ring, D +1 the shape-only row-invariant plan, H +1 the sorted-
     // gather run-scan elimination; Batch 187: A +1 the j-major
@@ -5410,12 +5414,12 @@ fn kernel_categories_counts_match_plan_003_table() {
     // N +1).
     let expected = [
         (KernelCategory::MemoryAccess, 148),
-        (KernelCategory::Compute, 74),
+        (KernelCategory::Compute, 75),
         (KernelCategory::Fusion, 50),
-        (KernelCategory::Dispatch, 147),
+        (KernelCategory::Dispatch, 149),
         (KernelCategory::Parallelism, 65),
-        (KernelCategory::FlashAttnTiling, 16),
-        (KernelCategory::LinearAttnRecurrence, 29),
+        (KernelCategory::FlashAttnTiling, 17),
+        (KernelCategory::LinearAttnRecurrence, 30),
         (KernelCategory::MoeDispatchBackward, 31),
         (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
@@ -5437,9 +5441,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 679.
+    // Sum must equal 684.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 679, "Plan 003: category totals must sum to 679");
+    assert_eq!(total, 684, "Plan 003: category totals must sum to 684");
 }
 
 #[test]
@@ -5450,8 +5454,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 679,
-        "Plan 003: grouped corpus has {total} rules, expected 679"
+        total, 684,
+        "Plan 003: grouped corpus has {total} rules, expected 684"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9558,8 +9562,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        679,
-        "Batch 188: corpus should have 679 rules"
+        684,
+        "Batch 189: corpus should have 684 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13368,6 +13372,57 @@ fn batch187_pseudocode_parses() {
             "batch-187 opt_pattern for '{id}' must parse"
         );
     }
+}
+
+#[test]
+fn batch189_pseudocode_parses() {
+    // G1 for Batch 189: syn-parse gate (the open-jev-fast kernel pack of
+    // 5 -- Research 221 / Plan 185: the G overlap rule + the F tree
+    // attention + the B activation LUT + the two D rules across
+    // entries_gpu_57).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "two-chunk-state-independent-overlap-serial-chunk-recurrence",
+        "ancestor-mask-bit-visibility-block-skip-tree-attention",
+        "exact-bf16-domain-activation-lut",
+        "shape-bucketed-graph-cache-lru",
+        "fused-serving-stack-measured-negative-ledger",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-189 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-189 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-189 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch189_riders_present() {
+    // The Batch-189 rider surface: the split-K fold-at-consumer epilogue
+    // placement rides split-k-two-pass-attention-decode-long-context
+    // (entries_gpu_18) as rule TEXT, not a new rule.
+    let corpus = build_kernel_seed_corpus();
+    let host = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "split-k-two-pass-attention-decode-long-context")
+        .expect("split-k-two-pass host rule present");
+    assert!(
+        host.gpu_concept.contains("RIDER (Batch 189"),
+        "the split-K fold-at-consumer rider must ride the split-k rule"
+    );
 }
 
 #[test]

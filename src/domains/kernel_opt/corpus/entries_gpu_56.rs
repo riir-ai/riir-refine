@@ -1,7 +1,7 @@
 //! Entries slice — Batch 188 (Plan 184 / Research 220) — the graded
-//! opponent-watch leads pack of 4: TensorFold EXL3 wave (A1 low-bit warp-run
+//! opponent-watch leads pack of 4: `TensorFold` EXL3 wave (A1 low-bit warp-run
 //! load + shuffle redistribute, A2 register prefetch ring with its measured
-//! cutoff, A3 shape-only row-invariant plan) + MLX gather_qmm (B1 sorted-gather
+//! cutoff, A3 shape-only row-invariant plan) + MLX `gather_qmm` (B1 sorted-gather
 //! tile compaction + warp-scan scheduler).
 //!
 //! Sources, both read from STANDING vendor clones (no fresh clone, no .raw):
@@ -12,35 +12,37 @@
 //!   `/Users/katopz/git/vendor/tensorfold`.
 //! - `ml-explore/mlx` @ `37c26e5755da637255d57ea34b4879196a485301` (MIT),
 //!   commits `a2a09fd` "[Metal] Gather mm improvement (#4567)" + `9008944`
-//!   "[Metal] gather_qmm improvement (#4572)" — clone
+//!   "[Metal] `gather_qmm` improvement (#4572)" — clone
 //!   `/Users/katopz/git/vendor/mlx`.
 //!
 //! Every load-bearing quote re-verified VERBATIM at the pins THIS batch (the
-//! Batch-31 discipline): the coalesced-run load `raw[c] = __ldg(step + c * 32
-//! + lane)` + the `step_shuffled<K2>() { K2 == 2 || K2 == 4 }` gate + the
-//! shuffle redistribution (tensorfold linear.cu @ 38235a9:89-103, and the
-//! `LPW` lanes-per-word-group comment); the prefetch ring `constexpr bool PF =
-//! K2 <= 12` + `uint32_t cur[PF ? SR : 1], nxt[PF ? SR : 1]` (:192-194) + the
-//! commit message's measured cutoff ("up to 6 bits; at 7 and 8 bits a step is
-//! 224 or 256 B of words a warp and the same build prefetching there reads
-//! 1-2% slower, so those widths load per tile") + the measured table (2-bit
-//! q_proj 4096x12288 157 -> 220 GB/s, o_proj 76 -> 186, down_proj 79 -> 193);
-//! the plan docstring "A function of the shape only, never of the rows: a
-//! layer keeps its plan for every call, which is what makes its rows
-//! independent." (linear.py) + the row-invariance header "Every output depends
-//! only on its own row: rows share an mma but mma keeps rows independent, the
-//! k ranges of warps and splits depend only on (K, N), and every sum runs in a
-//! fixed order." + the last-arrival split combine
-//! `atomicAdd(counters + pass * NB + nb, 1) == SK - 1` (linear.cu @ e9780ed);
-//! the MLX offsets kernel `gather_mm_offsets` (one thread per expert, binary
-//! search over the sorted indices) + `schedule_row_tile`'s
-//! `simd_prefix_inclusive_sum` / `simd_sum(int(tiles_through <= tile))` /
-//! `simd_shuffle` row recovery (mlx utils.h @ a2a09fd:503-533) + the
-//! worst-case grid `min(M, (M + bm - 1) / bm + E - 1)` (quantized.cpp @
-//! 9008944).
+//! Batch-31 discipline): the coalesced-run load
+//! `raw[c] = __ldg(step + c * 32 + lane)` + the
+//! `step_shuffled<K2>() { K2 == 2 || K2 == 4 }` gate + the shuffle
+//! redistribution (tensorfold linear.cu @ 38235a9:89-103, and the `LPW`
+//! lanes-per-word-group comment); the prefetch ring
+//! `constexpr bool PF = K2 <= 12` +
+//! `uint32_t cur[PF ? SR : 1], nxt[PF ? SR : 1]` (:192-194) + the
+//!   commit message's measured cutoff ("up to 6 bits; at 7 and 8 bits a step is
+//!   224 or 256 B of words a warp and the same build prefetching there reads
+//!   1-2% slower, so those widths load per tile") + the measured table (2-bit
+//!   `q_proj` 4096x12288 157 -> 220 GB/s, `o_proj` 76 -> 186, `down_proj` 79 -> 193);
+//!   the plan docstring "A function of the shape only, never of the rows: a
+//!   layer keeps its plan for every call, which is what makes its rows
+//!   independent." (linear.py) + the row-invariance header "Every output depends
+//!   only on its own row: rows share an mma but mma keeps rows independent, the
+//!   k ranges of warps and splits depend only on (K, N), and every sum runs in a
+//!   fixed order." + the last-arrival split combine
+//!   `atomicAdd(counters + pass * NB + nb, 1) == SK - 1` (linear.cu @ e9780ed);
+//!   the MLX offsets kernel `gather_mm_offsets` (one thread per expert, binary
+//!   search over the sorted indices) + `schedule_row_tile`'s
+//!   `simd_prefix_inclusive_sum` / `simd_sum(int(tiles_through <= tile))` /
+//!   `simd_shuffle` row recovery (mlx utils.h @ a2a09fd:503-533) + the
+//!   worst-case grid `min(M, (M + bm - 1) / bm + E - 1)` (quantized.cpp @
+//!   9008944).
 //!
 //! B1 carries NO source-measured number (MLX's commit messages are one-liners;
-//! the regime is pinned by the shipped swiglu_qmm_bench.py configs, e.g.
+//! the regime is pinned by the shipped `swiglu_qmm_bench.py` configs, e.g.
 //! GLM-5.3-Flash (D=4096, I=2048, E=288, top-8)) — it lands as a
 //! decision-content + mechanism-arithmetic entry, the Batch-136 shape.
 //!

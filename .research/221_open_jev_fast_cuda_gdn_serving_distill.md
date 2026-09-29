@@ -1,6 +1,6 @@
 # 221 — open-jev-fast: fused-CUDA GDN + tree-attention serving distill (lyuyiqi)
 
-**Status:** DISTILLED — pending owner decision (nominal Batch 189 staged behind the sibling's 188; conversion cargo-deferred per Plan-337 load discipline; reflex-side lane candidate filed as riir-reflex Issue 054)
+**Status:** RECORD — Batch 189 LANDED 2026-09-30 (`feat: batch 189`, Plan 185; 5 kernel_opt rules + 1 rider: the two-chunk overlap GOAT lead G, tree attention F, the bf16 LUT B, the graph-cache LRU D, the measured-negative ledger D, the split-K fold-at-consumer rider on split-k-two-pass). Reflex-side lane candidate stays filed as riir-reflex Issue 054 (hardware-gated).
 
 ## TL;DR
 

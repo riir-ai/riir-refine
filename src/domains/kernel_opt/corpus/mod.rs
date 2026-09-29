@@ -1942,6 +1942,7 @@ mod entries_gpu_53;
 mod entries_gpu_54;
 mod entries_gpu_55;
 mod entries_gpu_56;
+mod entries_gpu_57;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1974,6 +1975,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_54::entries());
     entries.extend(entries_gpu_55::entries());
     entries.extend(entries_gpu_56::entries());
+    entries.extend(entries_gpu_57::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2194,14 +2196,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "register-prefetch-ring-measured-cutoff",
         ],
     ),
-    // B: Compute patterns (74 rules) -- was 64 in the comment while the
+    // B: Compute patterns (75 rules) -- was 64 in the comment while the
     // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
     // Batch 166, 67 at Batch 170 (scale-identity-elide); 68 at Batch 178
     // (warp-bitonic-topk-merge-shuffle); 69 at Batch 181
     // (tensor-core-mma-staged-quantized-codes-double-buffered); 71 at
     // Batch 186 (the maddubs overflow selector + the scale-hoist epilogue);
     // 74 at Batch 187 (the register-band partition, the lut16-pshufb
-    // folded-bias expansion, the GFNI sign-mask expand)
+    // folded-bias expansion, the GFNI sign-mask expand); 75 at Batch 189
+    // (the exact bf16-domain activation LUT)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2280,6 +2283,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "register-budget-band-partition-indep-correction-offband",
             "lut16-pshufb-byte-expansion-at-stage",
             "gfni-sign-mask-expand-cmpeq-fallback",
+            "exact-bf16-domain-activation-lut",
         ],
     ),
     // C: Fusion patterns (49 rules; Batch 181 +1:
@@ -2341,7 +2345,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "consumer-offset-absorption-precomputed-weight-row-correction",
         ],
     ),
-    // D: Dispatch patterns (147 rules; Batch 188 +1: the shape-only\n    // row-invariant plan; Batch 177 +2: the host-gather graph
+    // D: Dispatch patterns (149 rules; Batch 189 +2: the shape-bucketed
+    // graph-cache LRU + the fused-serving measured-negative ledger;
+    // Batch 188 +1: the shape-only\n    // row-invariant plan; Batch 177 +2: the host-gather graph
     // split + the unified-memory page-cache rule; Batch 178 +1: the
     // topology-signature graph-exec sharing rule; Batch 180 +1: the
     // row-kblock item-space flattening + host util search; Batch 181 +2:
@@ -2501,6 +2507,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "unified-admission-dead-tail",
             "owned-input-transform-early-admission",
             "shape-only-plan-row-invariant-kernel",
+            "shape-bucketed-graph-cache-lru",
+            "fused-serving-stack-measured-negative-ledger",
         ],
     ),
     // E: Parallelism patterns (65 rules; Batch 178 +2: the warp-role
@@ -2580,7 +2588,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-downsize-work-stealing-microtile-floor",
         ],
     ),
-    // F: Flash-attention tiling (16 rules)
+    // F: Flash-attention tiling (17 rules; Batch 189 +1: the ancestor-mask
+    // bit-visibility block-skip tree attention with its measured
+    // dispatch cross-over)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -2601,9 +2611,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dense-fast-path-bounded-by-selector-coverage",
             "kv-split-decode-underfill-per-slot-validity",
             "fixed-ref-softmax-decode-walk",
+            "ancestor-mask-bit-visibility-block-skip-tree-attention",
         ],
     ),
-    // G: Linear-attention recurrence (29 rules)
+    // G: Linear-attention recurrence (30 rules; Batch 189 +1: the
+    // two-chunk state-independent overlap scheduling rule)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -2637,6 +2649,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "smem-envelope-gate-kernel-variant",
             "recurrence-prefill-exact-restructure-before-reformulation",
             "chunk-transition-consumed-by-mma",
+            "two-chunk-state-independent-overlap-serial-chunk-recurrence",
         ],
     ),
     // H: MoE dispatch + backward pass (31 rules; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
