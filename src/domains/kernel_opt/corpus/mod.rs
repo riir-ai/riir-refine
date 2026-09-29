@@ -1941,6 +1941,7 @@ mod entries_gpu_52;
 mod entries_gpu_53;
 mod entries_gpu_54;
 mod entries_gpu_55;
+mod entries_gpu_56;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1972,6 +1973,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_53::entries());
     entries.extend(entries_gpu_54::entries());
     entries.extend(entries_gpu_55::entries());
+    entries.extend(entries_gpu_56::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2029,7 +2031,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (146 rules; Batch 178 +2: the L2 policy
+    // A: Memory access patterns (148 rules; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
     // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
@@ -2188,6 +2190,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "jit-band-repack-stage-per-use-l1-hot",
             "zero-pad-ragged-tail-additive-identity",
             "jmajor-acc-buffer-transpose-writeback",
+            "low-bit-warp-run-load-shuffle-redistribute",
+            "register-prefetch-ring-measured-cutoff",
         ],
     ),
     // B: Compute patterns (74 rules) -- was 64 in the comment while the
@@ -2337,7 +2341,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "consumer-offset-absorption-precomputed-weight-row-correction",
         ],
     ),
-    // D: Dispatch patterns (146 rules; Batch 177 +2: the host-gather graph
+    // D: Dispatch patterns (147 rules; Batch 188 +1: the shape-only\n    // row-invariant plan; Batch 177 +2: the host-gather graph
     // split + the unified-memory page-cache rule; Batch 178 +1: the
     // topology-signature graph-exec sharing rule; Batch 180 +1: the
     // row-kblock item-space flattening + host util search; Batch 181 +2:
@@ -2496,6 +2500,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "regime-batch-floor-force-escape",
             "unified-admission-dead-tail",
             "owned-input-transform-early-admission",
+            "shape-only-plan-row-invariant-kernel",
         ],
     ),
     // E: Parallelism patterns (65 rules; Batch 178 +2: the warp-role
@@ -2634,8 +2639,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (30 rules; Batch 186 +1: the
-    // per-expert mixed dispatch + worst-case workspace rule)
+    // H: MoE dispatch + backward pass (31 rules; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2670,6 +2674,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "expert-remainder-routed-to-smaller-tile-twins",
             "expert-major-tile-order-token-tile-cache-resident",
             "moe-per-expert-mixed-dispatch-worst-case-workspace",
+            "sorted-gather-tile-compaction-warp-scan-scheduler",
         ],
     ),
     // I: NSA block-sparse selection (7 rules)
