@@ -358,6 +358,20 @@ for r in rows:
           f"created={float(r.get('created_rate',0))*100:4.1f}%  "
           f"safety={float(r.get('parse_safety',0))*100:5.1f}%  edits={r.get('edits_total','?')}")
 last = rows[-1] if rows else {}
+# E4 population discipline (2026-09-30): the post-P9 floor is calibrated
+# on the STANDARD generation-1 score-bench population (n_ran≈35, edits≈69).
+# score_history also accumulates generation-2/3 rows — the freeze-regen e2e
+# and the adopted per-batch gen-N full-corpus sweep cadence (Issues 089/102;
+# n_ran≈98, edits≈150+, created≈10% = the documented closure-birth class
+# priced at shaped_rate in gen-8). Adjudicating those against this floor is
+# population mixing: after every batch landing the sweep row would read
+# "FAIL — DECAY" over a healthy standard population (measured 2026-09-30:
+# sweep row #174 read 95.7/10.1 while the gen-1 row an hour earlier read
+# 96.4/1.8, floor holding). E4 adjudicates on the latest gen-1 row and NAMES
+# that row; non-gen-1 rows stay printed above but never gate this floor.
+# Rows predating the `generation` field were gen-1 by construction.
+gen1 = [r for r in rows if str(r.get('generation', '1')) == '1'] or rows
+last = gen1[-1] if gen1 else {}
 hr = float(last.get('heal_rate', 0)) * 100
 cr = float(last.get('created_rate', 0)) * 100
 # E4 floor re-pinned 2026-09-03 (post-mining triage): the old 98.1 reference
@@ -374,7 +388,9 @@ cr = float(last.get('created_rate', 0)) * 100
 E4_HEAL_FLOOR = 96.1   # 96.2 stable − tie slack
 E4_CREATED_CEIL = 2.0  # 1 created = 1.9%
 verdict = 'PASS' if (hr >= E4_HEAL_FLOOR and cr <= E4_CREATED_CEIL) else 'FAIL — DECAY (investigate the miss map: cargo heal --score-bench)'
+adj_ts = (last.get('ts') or last.get('timestamp') or '?')[:19]
 print(f"  E4 (no decay vs post-P9 floor 96.2/<=1.9): {verdict} — latest heal={hr:.1f}% created={cr:.1f}%")
+print(f"    adjudicated on the gen-1 row {adj_ts} (n_ran={last.get('n_ran','?')}, edits={last.get('edits_total','?')}); non-gen-1 sweep/regen rows do not gate this floor")
 EOF
 else
   echo "  score_history.jsonl ABSENT — run: cargo heal --score-bench"
