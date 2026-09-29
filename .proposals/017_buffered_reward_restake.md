@@ -1,6 +1,6 @@
 # Proposal 017 — Buffered reward restake: burn-adaptive auto-stake + the two missing surfaces
 
-**Status:** AGREE — Claude verdict rounds 1–3 (REVISE, REVISE, AGREE-conditional); the conditional `rows_resolved += n` fix applied. Awaiting owner gate (2026-09-29)
+**Status:** IMPLEMENTED (2026-09-29, owner GO recorded — plan 186 Phase C); default stays OFF (the soak clock + the dormancy conjunct are wall-time/code prerequisites, not approvals). C1–C4 + C5b landed across riir-dapps/riir-kat/riir-clippy; C5 (devnet deploy + soak start) is the remaining step
 
 ## TL;DR
 

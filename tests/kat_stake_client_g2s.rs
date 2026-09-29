@@ -224,6 +224,12 @@ fn info_fixture() -> StakeInfo {
             epoch: 0,
             ticks_per_epoch: 604_800,
         },
+        // Proposal 017 additive fields — the fixture renders the pre-017
+        // shape (all None); the buffered render has its own arm below.
+        restake_posture: None,
+        op_seq: None,
+        buffer: None,
+        nudge: None,
     }
 }
 
@@ -246,6 +252,14 @@ impl StakeTransport for MockStakeTransport {
     fn post_unstake(&self, json: &str) -> HttpResponse {
         let t = transport_at(&self.server.base());
         t.post_unstake(json)
+    }
+    fn post_restake(&self, json: &str) -> HttpResponse {
+        let t = transport_at(&self.server.base());
+        t.post_restake(json)
+    }
+    fn post_redeem(&self, json: &str) -> HttpResponse {
+        let t = transport_at(&self.server.base());
+        t.post_redeem(json)
     }
 }
 

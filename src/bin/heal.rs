@@ -1992,7 +1992,7 @@ fn service_acct_or_raw(account_id: &str) -> String {
         .to_string()
 }
 
-fn run_kat_stake(usd: Option<&str>, info: bool) {
+fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: bool) {
     use riir_clippy::kat_stake_client as stake;
 
     let dir = riir_clippy::kat_account::KatAccount::default_dir();
@@ -2014,8 +2014,44 @@ fn run_kat_stake(usd: Option<&str>, info: bool) {
         return;
     }
 
+    // Proposal 017: the posture + redeem ops precede the QR compose (one
+    // command = one op; `--usd` beside them is a usage error, not a mode).
+    if restake.is_some() || redeem {
+        if usd.is_some() {
+            eprintln!("stake: --restake/--redeem are account-state ops — drop --usd");
+            std::process::exit(2);
+        }
+        #[cfg(feature = "kat_transport")]
+        {
+            let url = riir_clippy::kat_lease_client::service_url_for_command();
+            let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
+            let flow = match account.signing_key() {
+                Ok(key) => {
+                    if let Some(posture) = restake {
+                        riir_clippy::kat_stake_client::restake_flow(
+                            &transport, &key, posture, &account_id,
+                        )
+                    } else {
+                        riir_clippy::kat_stake_client::redeem_flow(&transport, &key, &account_id)
+                    }
+                }
+                Err(e) => Err(format!("stake: account key unreadable ({e}) — run `cargo heal login`")),
+            };
+            match flow {
+                Ok(line) => println!("{line}"),
+                Err(e) => {
+                    eprintln!("stake: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(feature = "kat_transport"))]
+        riir_clippy::build_stamp::refuse("stake --restake/--redeem", &["kat_transport"]);
+        return;
+    }
+
     let Some(usd) = usd else {
-        eprintln!("stake: --usd <N> is required (the stake amount in dollars), or --info for the position");
+        eprintln!("stake: --usd <N> is required (the stake amount in dollars), or --info for the position, or --restake off|buffered / --redeem for the posture ops");
         std::process::exit(2);
     };
     let Some(amount_base) = stake::parse_usd_to_base(usd) else {
@@ -4058,6 +4094,12 @@ struct Args {
     /// Proposal 007 T2.1: `--info` — render the stake position instead of
     /// composing a stake request.
     stake_info: bool,
+    /// Proposal 017: `--restake off|buffered` — the signed posture op
+    /// (account state with server truth; never a machine-local consent).
+    stake_restake: Option<String>,
+    /// Proposal 017: `--redeem` — the signed redeem op (drain every
+    /// UNLOCKED KAT tranche to the liquid balance).
+    stake_redeem: bool,
     /// Proposal 008 T2.4: `--proposal <id>` — the governance proposal id.
     vote_proposal: Option<u64>,
     /// Proposal 008 T2.4: `--yes` — vote for.
@@ -4271,6 +4313,8 @@ fn parse_args() -> Args {
         config_set: false,
         stake_usd: None,
         stake_info: false,
+        stake_restake: None,
+        stake_redeem: false,
         vote_proposal: None,
         vote_yes: false,
         vote_no: false,
@@ -4597,6 +4641,14 @@ fn parse_args() -> Args {
                 };
                 args.stake_usd = Some(value);
             }
+            "--restake" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--restake requires a posture: off | buffered");
+                    usage();
+                };
+                args.stake_restake = Some(value);
+            }
+            "--redeem" => args.stake_redeem = true,
             // `--info` is TWO surfaces: `stake --info` (the position) and
             // the standalone stats view. The subcommand word parses FIRST
             // when it leads (`cargo heal stake --info`), so this arm sees
@@ -7567,7 +7619,12 @@ fn main() {
             KatCommand::Update => run_kat_update(),
             #[cfg(feature = "kat_transport")]
             KatCommand::Sync => run_kat_sync(),
-            KatCommand::Stake => run_kat_stake(args.stake_usd.as_deref(), args.stake_info),
+            KatCommand::Stake => run_kat_stake(
+                args.stake_usd.as_deref(),
+                args.stake_info,
+                args.stake_restake.as_deref(),
+                args.stake_redeem,
+            ),
             KatCommand::Unstake => run_kat_unstake(),
             KatCommand::Vote => run_kat_vote(args.vote_proposal, args.vote_yes, args.vote_no),
             KatCommand::Pay => run_kat_pay(
