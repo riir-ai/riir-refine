@@ -1943,6 +1943,7 @@ mod entries_gpu_54;
 mod entries_gpu_55;
 mod entries_gpu_56;
 mod entries_gpu_57;
+mod entries_gpu_58;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1976,6 +1977,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_55::entries());
     entries.extend(entries_gpu_56::entries());
     entries.extend(entries_gpu_57::entries());
+    entries.extend(entries_gpu_58::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2286,9 +2288,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "exact-bf16-domain-activation-lut",
         ],
     ),
-    // C: Fusion patterns (49 rules; Batch 181 +1:
+    // C: Fusion patterns (50 rules; Batch 181 +1:
     // fused-transform-quantize-writer; Batch 182 +1: the argmax/top-k
-    // epilogue swap)
+    // epilogue swap; Batch 186 +1: consumer-offset-absorption — the
+    // comment read 49 through B186..B189, repaired at Batch 190)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2852,7 +2855,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "widen-metadata-once-to-mac-native-widths",
         ],
     ),
-    // O: IR strength reduction (4 rules)
+    // O: IR strength reduction (5 rules; Batch 190 +1: the runtime-divisor
+    // umax clamp that admits LSR — the family's first RUNTIME-divisor
+    // member, generalizing the constant pow2 shift arms)
     (
         KernelCategory::IrStrengthReduction,
         "O: IR strength reduction",
@@ -2861,6 +2866,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "strength-reduce-mul-pow2-plus-minus-one",
             "strength-reduce-div-pow2",
             "strength-reduce-mod-pow2",
+            "clamp-runtime-divisor-for-lsr-address-reduction",
         ],
     ),
 ];
