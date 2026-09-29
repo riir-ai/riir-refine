@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        685,
-        "kernel batches through Batch 190 should have 685 rules"
+        689,
+        "kernel batches through Batch 192 should have 689 rules",
     );
 }
 
@@ -5399,6 +5399,9 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for
+    // Batch 192: D +3 the MoE tile-picker shape-truth + the descriptor-
+    // set destroy-epoch memo + the vendor-keyed lane-partition, N +1 the
+    // dot-family f32-accumulate;
     // Batch 190: O +1 the clamp-runtime-divisor umax LSR rule — the
     // IR-strength-reduction family's first runtime-divisor member;
     // Batch 189: B +1 the exact bf16-domain activation LUT, D +2 the
@@ -5418,7 +5421,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 148),
         (KernelCategory::Compute, 75),
         (KernelCategory::Fusion, 50),
-        (KernelCategory::Dispatch, 149),
+        (KernelCategory::Dispatch, 152),
         (KernelCategory::Parallelism, 65),
         (KernelCategory::FlashAttnTiling, 17),
         (KernelCategory::LinearAttnRecurrence, 30),
@@ -5428,7 +5431,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 13),
         (KernelCategory::ConvGemmLayout, 17),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 52),
+        (KernelCategory::DtypeAlignment, 53),
         (KernelCategory::IrStrengthReduction, 5),
     ];
     for (cat, count) in expected {
@@ -5443,9 +5446,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 685.
+    // Sum must equal 689.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 685, "Plan 003: category totals must sum to 685");
+    assert_eq!(total, 689, "Plan 003: category totals must sum to 689");
 }
 
 #[test]
@@ -5456,8 +5459,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 685,
-        "Plan 003: grouped corpus has {total} rules, expected 685"
+        total, 689,
+        "Plan 003: grouped corpus has {total} rules, expected 689"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9564,8 +9567,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        685,
-        "Batch 190: corpus should have 685 rules"
+        689,
+        "Batch 192: corpus should have 689 rules",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13423,6 +13426,125 @@ fn batch190_unsigned_only_contract_rides_the_rule() {
         rule.gpu_concept.contains("SDivOp/SRemOp"),
         "the source's deliberate signed-div absence must be cited"
     );
+}
+
+#[test]
+fn batch192_pseudocode_parses() {
+    // G1 for Batch 192: syn-parse gate (the llama.cpp master-delta pack of
+    // 4 -- Plan 189 / Research 224: the MoE tile-picker shape-truth, the
+    // descriptor-set binding memo with destroy-epoch, the vendor-keyed
+    // reduction lane-partition + subgroup request, and the dot macro
+    // family that widens at load -- across entries_gpu_59).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "tile-picker-input-from-dispatch-grid-partition",
+        "descriptor-set-binding-memo-destroy-epoch",
+        "vendor-keyed-reduction-lane-partition-subgroup-request",
+        "dot-macro-family-widens-at-load-f32-accumulate",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-192 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-192 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-192 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch192_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-192 decision-content contracts (the batch190_unsigned_only
+    // precedent): each rule's load-bearing caveat must ride the rule text
+    // so a heal suggestion never strips it.
+    let corpus = build_kernel_seed_corpus();
+    let picker = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "tile-picker-input-from-dispatch-grid-partition")
+        .expect("batch-192 picker rule present");
+    assert!(
+        picker.gpu_concept.contains("DERIVED quantity"),
+        "the picker rule's DERIVED-vs-tensor-dim contract must ride the text"
+    );
+    let memo = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "descriptor-set-binding-memo-destroy-epoch")
+        .expect("batch-192 memo rule present");
+    assert!(
+        memo.gpu_concept.contains("bump before destroying"),
+        "the destroy-epoch happens-before ordering must ride the text"
+    );
+    let lane = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "vendor-keyed-reduction-lane-partition-subgroup-request")
+        .expect("batch-192 lane rule present");
+    assert!(
+        lane.gpu_concept.contains("IN-SOURCE COMMENT claims"),
+        "the ~10x numbers-honesty caveat must ride the text"
+    );
+    let dot = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "dot-macro-family-widens-at-load-f32-accumulate")
+        .expect("batch-192 dot rule present");
+    assert!(
+        dot.gpu_concept.contains("NO rate cliff"),
+        "the no-rate-cliff refusal-pole justification must ride the text"
+    );
+}
+
+#[test]
+fn batch192_riders_landed_on_their_hosts() {
+    // The 4 riders + 1 amend (Plan 189): each host entry must now carry
+    // its Batch-192 rider sentence (the batch116 membership precedent --
+    // a rider that never landed is a staging note, not corpus).
+    let corpus = build_kernel_seed_corpus();
+    let hosts = [
+        (
+            "dequant-byte-pairs-as-aligned-u16-loads",
+            "FULL-WIDTH-ELEMENT arm",
+        ),
+        (
+            "fwht-wide-block-row-per-threadgroup-exchange-ladder",
+            "GGML_METAL_FWHT_TG_MIN_N 512",
+        ),
+        (
+            "maddubs-overflow-two-exact-mac-selector",
+            "INVERSE-polarity member",
+        ),
+        (
+            "wide-row-copy-tile-rows-across-workgroups",
+            "widening-axis CONTRAST arm",
+        ),
+        (
+            "dtype-native-source-read-with-shared-admission-predicate",
+            "64-256 simdgroup / 512-8192 tg-gated",
+        ),
+    ];
+    for (host, marker) in hosts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == host)
+            .unwrap_or_else(|| panic!("rider host '{host}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "Batch-192 rider marker '{marker}' missing on host '{host}'"
+        );
+    }
 }
 
 #[test]

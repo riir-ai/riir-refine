@@ -1944,6 +1944,7 @@ mod entries_gpu_55;
 mod entries_gpu_56;
 mod entries_gpu_57;
 mod entries_gpu_58;
+mod entries_gpu_59;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1978,6 +1979,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_56::entries());
     entries.extend(entries_gpu_57::entries());
     entries.extend(entries_gpu_58::entries());
+    entries.extend(entries_gpu_59::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2348,7 +2350,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "consumer-offset-absorption-precomputed-weight-row-correction",
         ],
     ),
-    // D: Dispatch patterns (149 rules; Batch 189 +2: the shape-bucketed
+    // D: Dispatch patterns (152 rules; Batch 192 +3: the MoE tile-picker
+    // shape-truth + the descriptor-set binding memo with destroy-epoch +
+    // the vendor-keyed reduction lane-partition; Batch 189 +2: the shape-bucketed
     // graph-cache LRU + the fused-serving measured-negative ledger;
     // Batch 188 +1: the shape-only\n    // row-invariant plan; Batch 177 +2: the host-gather graph
     // split + the unified-memory page-cache rule; Batch 178 +1: the
@@ -2512,6 +2516,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shape-only-plan-row-invariant-kernel",
             "shape-bucketed-graph-cache-lru",
             "fused-serving-stack-measured-negative-ledger",
+            "tile-picker-input-from-dispatch-grid-partition",
+            "descriptor-set-binding-memo-destroy-epoch",
+            "vendor-keyed-reduction-lane-partition-subgroup-request",
         ],
     ),
     // E: Parallelism patterns (65 rules; Batch 178 +2: the warp-role
@@ -2792,7 +2799,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (52 rules; Batch 177 +2: the
+    // N: dtype + alignment specialization (53 rules; Batch 192 +1: the dot
+    // macro family that widens at load + f32 accumulation — the CPU refusal
+    // pole of the accumulator-dtype family; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
     // Batch 178 +1: the exact-widening accumulator-precision rule;
     // Batch 180 +1: the deferred-bias exact-isum integer algebra;
@@ -2853,6 +2862,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "proven-redundant-operand-load-elision",
             "dtype-native-source-read-with-shared-admission-predicate",
             "widen-metadata-once-to-mac-native-widths",
+            "dot-macro-family-widens-at-load-f32-accumulate",
         ],
     ),
     // O: IR strength reduction (5 rules; Batch 190 +1: the runtime-divisor
