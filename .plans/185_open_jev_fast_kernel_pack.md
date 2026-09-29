@@ -41,9 +41,9 @@ Distill source: `lyuyiqi/open-jev-fast @ c52b8bb958c1f0d241d4eb7fce4ecd8d885bf1e
 
 - [x] Research 221 status → RECORD (batch landed) in the same commit
 - [x] Queue snapshot: Batch 189 row appended
-- [ ] Global binary rebuild + repoint (corpus is compile-time) — at a cargo slot (IN FLIGHT at closeout; the release-set rebuild in an isolated CARGO_TARGET_DIR, then the `--corpus-stats` confirm + the ~/.cargo/bin/cargo-heal repoint)
+- [x] Global binary rebuild + repoint (corpus is compile-time) — DONE: release-set build (latent_retrieval,kat_service,kat_transport,fix_verify) in an isolated CARGO_TARGET_DIR, stamp `release set: complete`, `--corpus-stats` kernel_opt **684**, copied over the symlink target, temp dirs removed
 - [x] Lane-intel follow-ups stay DETECTION-ONLY: riir-ai GDN prefill lead + riir-infer GDN reference + reflex Issue 054 (hardware-gated) — this batch does not implement any of them
-- [ ] Commit + push (`feat:` prefix, develop)
+- [x] Commit + push (`feat:` prefix, develop) — `95456c9f` pushed (8d6aa421..95456c9f)
 - [-] DEFERRED: any measured-GOAT re-measurement on our hardware (riir-ai/riir-infer owning sessions' call, not this batch)
 
 ## Constraints carried from the verdict
