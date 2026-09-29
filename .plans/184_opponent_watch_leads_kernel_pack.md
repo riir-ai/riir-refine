@@ -1,6 +1,6 @@
 # Plan 184 — Batch 188: convert the graded opponent-watch leads (TensorFold EXL3 wave + MLX gather_qmm family)
 
-**Status:** IN LANDING — staged by the 2026-09-29 grading ([Research 220](../.research/220_opponent_watch_leads_tensorfold_exl3_mlx_gather_qmm.md)); conversion deferred from that session (box Plan-337-saturated — sibling measurement at ~9 cores; every task below needs cargo). Conversion slot: the next kernel/corpus batch slot on whichever box is quiet (the 4090's standing cadence or a quiet M3 window).
+**Status:** COMPLETE — landed as Batch 188 at `f6be4133` (2026-09-29); staged by the 2026-09-29 grading ([Research 220](../.research/220_opponent_watch_leads_tensorfold_exl3_mlx_gather_qmm.md)); conversion deferred from that session (box Plan-337-saturated — sibling measurement at ~9 cores; every task below needs cargo). Conversion slot: the next kernel/corpus batch slot on whichever box is quiet (the 4090's standing cadence or a quiet M3 window).
 
 **Sources (pinned, standing vendor clones — no .raw):**
 - TensorFold `/Users/katopz/git/vendor/tensorfold` @ `8c1291cc7e9e75ad71e127f7c557b34e6ef8985a` (MIT) — commits `b16fb91`, `e9780ed`, `38235a9`, `1bbd2dd` (all quotes in Research 220 re-verified at these).
@@ -34,9 +34,9 @@ Expected landing: 5–8 rules (A1/B1 near-certain; A2/A3 strong; the rest adjudi
 - [x] T7 — GOAT shape: these land as measured-GOAT distillations (source-measured, sha-pinned) per the B176–B187 precedent; where our validator cannot host the surface (CUDA/Metal), the entry carries the NotBenchable annotation with the source numbers as the evidence, never a fabricated local bench.
 - [x] T8 — Retrieval-precision re-measure: `CARGO_TARGET_DIR=/tmp/riir-clippy-b188 cargo test --features kernel_heal,latent_retrieval --lib retrieval -- --nocapture` — the floors (kernel self-variants 100%, blended 3-domain 77.1/86.4/92.4) must HOLD; a decay fails the batch (fix retrieval or re-pin with the delta recorded — never silently).
 - [x] T9 — G3 no-regression: `cargo clippy` `-D warnings` at BOTH feature states; default `cargo test --lib` green (count pins intact). Freeze tables NOT owed if the clippy corpus has zero delta (P30) — verify and state it.
-- [ ] T10 — Docs: bump the kernel_opt count in AGENTS.md (the Batch-NN row), update `.docs/11_domains/` if the family adds a page-worthy cluster, append the queue-snapshot BATCH 188 row (same commit), and cross-reference Research 220 + this plan from the batch row.
-- [ ] T11 — Rebuild the global binary with the RELEASE feature set (the corpus is compile-time — the standing staleness footgun) + `--corpus-stats` confirms the new kernel_opt count; remove any isolated CARGO_TARGET_DIR after.
-- [ ] T12 — Commit `feat: batch 188: ...` + push; update `.distill/001_mining_queue_snapshot.md` staging section in the same commit.
+- [x] T10 — Docs: bump the kernel_opt count in AGENTS.md (the Batch-NN row), update `.docs/11_domains/` if the family adds a page-worthy cluster, append the queue-snapshot BATCH 188 row (same commit), and cross-reference Research 220 + this plan from the batch row.
+- [x] T11 — Rebuild the global binary with the RELEASE feature set (the corpus is compile-time — the standing staleness footgun) + `--corpus-stats` confirms the new kernel_opt count; remove any isolated CARGO_TARGET_DIR after.
+- [x] T12 — Commit `feat: batch 188: ...` + push; update `.distill/001_mining_queue_snapshot.md` staging section in the same commit.
 
 ## Notes
 
