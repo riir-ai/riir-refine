@@ -101,10 +101,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 119 (2): ss16118/low-latency-nccl near-SoL collectives distill (Research 143 / Plan 098) -- sentinel-readiness-over-separate-flag + ll-flag-in-data-packed-poll (E +2; the DEVICE-side peer-poll half of barrier elimination: dtype-poison init + poll-non-sentinel with reset-before-reuse, vs the 16B {flag,data} packed poll with the 2..=255 epoch band; the LL128-atomic determinism caveat carried in-rule as decision text; rider: B58 += the bidirectional peer-exchange credit face); source ss16118/low-latency-nccl @ 5357eff3 (BSD-3 NVIDIA; the repo names the sentinel POISON -- ncclLLPoisonBuffer(Async) fills, IsPoisoned polls, the receive Reset arm re-poisons; LL128 enumerated NOT-YET-IMPLEMENTED so the caveat cites the paper) + arXiv:2607.16100 (the measured basis: barriers ~= 40% of a small-message AllReduce -- their silicon, never ours).
     // Batch 170 (7): mlxfast-gemma4 successor-arena pack (Research 198 / Plan 162) -- softmax-stats-precompute-exp-in-gemm-loader (C +1, at1: P never materialized, per-row stats 8 B/row, exp regenerated in the P*V GEMM's A-loader bit-identically, 4->2 passes over the score rectangle), fixed-ref-softmax-decode-walk (F +1, SLIDE-SOFTREF: prologue-pinned self-score reference replaces online max/rescale/branch, bounded divergence + span-0 bit-exact control), scale-identity-elide-in-framework-graph-transcription (B +1, QSCALE-ELIDE: delete the scale==1.0 multiply when transcribing the framework fallback graph -- 232 dispatches / 1.11e9 elements / ~4.4 GB of identity per prefill step), sentinel-operand-encoding-routes-fused-kernel (D +1, CAUSAL-CLOAD: dispatch decision encoded in an operand's shape signature -- stride kL+1 synthesis + the ldc==4/beta=-0.0 carry -- with graceful degradation on unpatched arms), tier-mismatched-grid-pruning-relaunch (E +1, LMH-001: 196608 of 262144 launched threadgroups exist only to early-return; relaunch the SAME kernel at the tier's claimed extent, bit-identical), compile-out-rare-paths-register-worst-case (E +1, RUN-CAP: register allocation is worst-case across inlined paths; cap the ladder at the measured run-length distribution, +9.12% s/token tokens bit-identical), batch-width-aware-partition-shrink (K +1, PARTITION: stock 1-row partition heuristic over-partitions the 8-wide batch ~8x; min(batch, stock) + the 1 MB-in-flight DRAM argument + merge-side simdgroup packing); source Layr-Labs/mlxfast-gemma4-26b-a4b-engine @ 27c821c4 (MIT; all 20 quote sites re-verified at the pin at authoring time) + 9 riders (B63-adjacent MMA bias-as-K-slot-64; B98 quad u32 load arm; B25-family LGH plane elision; B115-family teacher-forced-replay instrument; gate-up strided-view hazard; B100 write-fence graph spelling; B111-register-pipeline prefetch phase-multiplex negative; row-packing kL-keyed rows-per-TG table; B63 pointer-chain scatter-hoist store-side twin).
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
+    // Batch 194 (14): DeepGEMM-Ascend distill (Research 226 / Plan 191) -- fp4-nibble-gather-lut-replicated-index-width (N +1: FP4->FP8 via ONE gather against a 16-entry LUT replicated x16 across the byte-index width so the low-nibble gather takes the RAW byte with no pre-mask; magnitude remap + the sign-bit move baked into the table build; fp8_dequant_gemm.hpp:24-25,73-76), decode-sidecar-coroutine-writes-consumer-stage-ring (A +1: a decode coroutine converts packed FP4 in unified-buffer scratch and writes DECODED bytes into the consumer's own L1 stage ring — per-stage cross-coroutine-class events, no separate decoded buffer; dual-decoder widening gated on the direct-store epilogue; fp8_dequant_gemm.hpp:111,406-412,209-210), ring-overwrite-gated-k-back-readiness (H +1: GM ring slots recycled at fixed distance K — overwrite slot i only after the consumer of slot i-K published readiness; the ring depth IS the safety margin; mega_moe.hpp:606-610,778-783), empty-participant-progress-credit (H +1: fixed-arity readiness counters require every participant to publish completion even with ZERO work — skew cannot deadlock the wait; mega_moe.hpp:770-772, comm/mega_moe.hpp:266-268), issue-latency-priced-mad-cost-model (K +1: an analytical tile cost model must price ISSUE latency per MAD — BF16 64 / FP4 40 / FP8 116 cycles measured — plus the L0-ring turnover term and post-pipeline K-tile re-selection; heuristics.hpp:566-577,653-677), multiwave-dual-decode-admission-gate (D +1: enabling a two-decoder worker-split is gated by a 10-conjunct admission — multiwave only, decode rate <= half MAD rate, sector alignment, amortization bound; heuristics.hpp:691-702), work-size-gated-overlap-reduce-mode (H +1: overlap-drain vs final-drain plans switch at a MEASURED 32 MiB combine-work threshold; the overlap machinery is pure overhead below it; mega_moe.hpp:1137-1140,1082-1088,1171-1172), l1-resident-operand-reuse-address-identity-rewind (A +1, the Research-226 A- GOAT lead: skip the GM->L1 load when a.addr == last_a under two-conjunct admission + ring-residency; rewind the stage ring and replay the resident stages; fp8_gemm.hpp:123-125,139-149), decoupled-sf-sidecar-pipeline-own-granularity (A +1: the scale-factor stream rides its OWN ring at its OWN granularity — chunked loads, own event base, wait deferred to the first consumer tile; reused chunks rewind one back-step mod the SF ring; fp8_dequant_gemm.hpp:266-281, fp8_gemm.hpp:246-249), coprime-stride-cross-rank-source-interleave (H +1: N consumers drain one concatenated multi-segment queue with a stride co-prime to the segment total — sync-free segment spread, assignment recorded to metadata; mega_moe.hpp:756-757,801-807), paged-page-pair-deferred-permutation-bitmask (F +1: paged-KV pages gathered in PHYSICAL order, logical-order restore deferred to store time as a precomputed per-pair bitmask — page 128 XORs the dst vector, page 64 half-swaps; mqa_logits.hpp:82-84,593-599,91-96), dual-consumer-alternating-stage-ownership-scale-lane (E +1: a sidecar stream split across two coroutines by STAGE PARITY — both run the cursor, only the parity-owner transfers; mqa_logits.hpp:318-322,488-492,249), dependency-wave-task-picker-one-wave-lookahead (H +1: a persistent-core picker over dependent GEMM stages interleaves waves with a closed-form one-wave lookahead bound; scheduler/mega_moe.hpp:93-105), in-order-pipe-credit-release-completion-collapse (A +1: on in-order pipes, credits publish on the pipe that both produced and consumed the buffer, and one completion covers all earlier same-queue copies — events scale with pipes touched, not copies; mqa_logits.hpp:617-620, mega_moe.hpp:559-561,594-596) + 4 riders (l1-resident admission-gate text folded at authoring; sf-sidecar rewind facet folded at authoring; weight-stream-non-temporal-loads += the reuse-count-keyed hint instances on a third backend; ue8m0-pow2-scale += the branchless significand-carry ceil arm); source deepseek-ai/DeepGEMM-Ascend @ 8491bbb4b8c02a094a2318965f50c70438a3e73c (MIT; heuristics.hpp read in full by the coordinator, slices A+B by 2 read subagents, coordinator re-verified the Tier-1 quote sites at the pin).
     assert_eq!(
         corpus.entries.len(),
-        703,
-        "kernel batches through Batch 193 should have 703 rules",
+        717,
+        "kernel batches through Batch 194 should have 717 rules",
     );
 }
 
@@ -5427,20 +5428,20 @@ fn kernel_categories_counts_match_plan_003_table() {
     // ggml-cpu tiled staging family, B +2, C +1, D +3, H +1, M +1,
     // N +1).
     let expected = [
-        (KernelCategory::MemoryAccess, 151),
+        (KernelCategory::MemoryAccess, 155),
         (KernelCategory::Compute, 76),
         (KernelCategory::Fusion, 50),
-        (KernelCategory::Dispatch, 158),
-        (KernelCategory::Parallelism, 66),
-        (KernelCategory::FlashAttnTiling, 17),
+        (KernelCategory::Dispatch, 159),
+        (KernelCategory::Parallelism, 67),
+        (KernelCategory::FlashAttnTiling, 18),
         (KernelCategory::LinearAttnRecurrence, 31),
-        (KernelCategory::MoeDispatchBackward, 31),
+        (KernelCategory::MoeDispatchBackward, 36),
         (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 13),
+        (KernelCategory::AutotuneDispatch, 14),
         (KernelCategory::ConvGemmLayout, 18),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 54),
+        (KernelCategory::DtypeAlignment, 55),
         (KernelCategory::IrStrengthReduction, 5),
     ];
     for (cat, count) in expected {
@@ -5457,7 +5458,7 @@ fn kernel_categories_counts_match_plan_003_table() {
     }
     // Sum must equal 703.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 703, "Plan 003: category totals must sum to 703");
+    assert_eq!(total, 717, "Plan 003: category totals must sum to 717");
 }
 
 #[test]
@@ -5468,8 +5469,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 703,
-        "Plan 003: grouped corpus has {total} rules, expected 703"
+        total, 717,
+        "Plan 003: grouped corpus has {total} rules, expected 717"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9576,8 +9577,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        703,
-        "Batch 193: corpus should have 703 rules",
+        717,
+        "Batch 194: corpus should have 717 rules",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13712,6 +13713,156 @@ fn batch193_riders_landed_on_their_hosts() {
         host.fixed_code().contains("1.5"),
         "the pinned ADOPT_MARGIN_PCT constant must move to 1.5"
     );
+}
+
+#[test]
+fn batch194_pseudocode_parses() {
+    // G1 for Batch 194: syn-parse gate (the DeepGEMM-Ascend pack of 14 --
+    // Research 226 / Plan 191: 7 + the two verdict leads in entries_gpu_61,
+    // 5 in entries_gpu_62).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "fp4-nibble-gather-lut-replicated-index-width",
+        "decode-sidecar-coroutine-writes-consumer-stage-ring",
+        "ring-overwrite-gated-k-back-readiness",
+        "empty-participant-progress-credit",
+        "issue-latency-priced-mad-cost-model",
+        "multiwave-dual-decode-admission-gate",
+        "work-size-gated-overlap-reduce-mode",
+        "l1-resident-operand-reuse-address-identity-rewind",
+        "decoupled-sf-sidecar-pipeline-own-granularity",
+        "coprime-stride-cross-rank-source-interleave",
+        "paged-page-pair-deferred-permutation-bitmask",
+        "dual-consumer-alternating-stage-ownership-scale-lane",
+        "dependency-wave-task-picker-one-wave-lookahead",
+        "in-order-pipe-credit-release-completion-collapse",
+    ];
+    assert_eq!(ids.len(), 14, "batch-194 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-194 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-194 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-194 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch194_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-194 decision-content contracts (the batch193 precedent):
+    // each rule's load-bearing caveat must ride the rule text.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "fp4-nibble-gather-lut-replicated-index-width",
+            "repeats every 16 entries",
+        ),
+        (
+            "decode-sidecar-coroutine-writes-consumer-stage-ring",
+            "kDirectStore",
+        ),
+        (
+            "ring-overwrite-gated-k-back-readiness",
+            "slot i-K",
+        ),
+        (
+            "empty-participant-progress-credit",
+            "Empty row owners must also contribute",
+        ),
+        (
+            "issue-latency-priced-mad-cost-model",
+            "40 : 116",
+        ),
+        (
+            "multiwave-dual-decode-admission-gate",
+            "after final tiling",
+        ),
+        (
+            "work-size-gated-overlap-reduce-mode",
+            "32 MiB",
+        ),
+        (
+            "l1-resident-operand-reuse-address-identity-rewind",
+            "kNumCores",
+        ),
+        (
+            "decoupled-sf-sidecar-pipeline-own-granularity",
+            "first L0 copy",
+        ),
+        (
+            "coprime-stride-cross-rank-source-interleave",
+            "without changing their counts",
+        ),
+        (
+            "paged-page-pair-deferred-permutation-bitmask",
+            "physical-address order",
+        ),
+        (
+            "dual-consumer-alternating-stage-ownership-scale-lane",
+            "owner of each even/odd stage pair",
+        ),
+        (
+            "dependency-wave-task-picker-one-wave-lookahead",
+            "lookahead",
+        ),
+        (
+            "in-order-pipe-credit-release-completion-collapse",
+            "same MTE1 queue",
+        ),
+    ];
+    for (id, marker) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-194 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-194 contract marker '{marker}' missing on '{id}'"
+        );
+    }
+}
+
+#[test]
+fn batch194_riders_landed_on_their_hosts() {
+    // The Batch-194 riders (the batch193 membership precedent — a rider
+    // that never landed is a staging note, not corpus): two hosts in the
+    // existing files carry their rider sentences; the other two riders are
+    // folded INTO their rules at authoring (l1-resident + sf-sidecar),
+    // asserted via their own contract markers above.
+    let corpus = build_kernel_seed_corpus();
+    let hosts = [
+        (
+            "weight-stream-non-temporal-loads",
+            "RIDER (Batch 194",
+        ),
+        (
+            "ue8m0-pow2-scale-as-biased-exponent-byte",
+            "RIDER (Batch 194",
+        ),
+    ];
+    for (host, marker) in hosts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == host)
+            .unwrap_or_else(|| panic!("rider host '{host}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "Batch-194 rider marker '{marker}' missing on host '{host}'"
+        );
+    }
 }
 
 #[test]

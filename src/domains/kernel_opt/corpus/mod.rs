@@ -1946,6 +1946,8 @@ mod entries_gpu_57;
 mod entries_gpu_58;
 mod entries_gpu_59;
 mod entries_gpu_60;
+mod entries_gpu_61;
+mod entries_gpu_62;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1982,6 +1984,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_58::entries());
     entries.extend(entries_gpu_59::entries());
     entries.extend(entries_gpu_60::entries());
+    entries.extend(entries_gpu_61::entries());
+    entries.extend(entries_gpu_62::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2039,7 +2043,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (148 rules; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
+    // A: Memory access patterns (155 rules; Batch 194 +4: the decode sidecar ring write, the l1-resident address-identity rewind, the SF sidecar own-granularity, the in-order credit collapse; was 148; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
     // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
@@ -2203,6 +2207,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kv-first-append-unzeroed-alloc-offset-gated-tail",
             "dual-layout-transpose-at-stage",
             "plane-form-activation-reuse-topology",
+            "decode-sidecar-coroutine-writes-consumer-stage-ring",
+            "l1-resident-operand-reuse-address-identity-rewind",
+            "decoupled-sf-sidecar-pipeline-own-granularity",
+            "in-order-pipe-credit-release-completion-collapse"
         ],
     ),
     // B: Compute patterns (75 rules) -- was 64 in the comment while the
@@ -2356,7 +2364,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "consumer-offset-absorption-precomputed-weight-row-correction",
         ],
     ),
-    // D: Dispatch patterns (152 rules; Batch 192 +3: the MoE tile-picker
+    // D: Dispatch patterns (159 rules; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
     // shape-truth + the descriptor-set binding memo with destroy-epoch +
     // the vendor-keyed reduction lane-partition; Batch 189 +2: the shape-bucketed
     // graph-cache LRU + the fused-serving measured-negative ledger;
@@ -2531,9 +2539,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "adoption-staged-leading-layers-gpu-idle-fill",
             "seed-first-command-buffer-earliest-submission",
             "adoption-trial-rotate-operands-per-launch-dram-streaming",
+            "multiwave-dual-decode-admission-gate"
         ],
     ),
-    // E: Parallelism patterns (65 rules; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (67 rules; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2609,9 +2618,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "simdgroup-redundant-small-reduction-over-barrier-broadcast",
             "chunk-downsize-work-stealing-microtile-floor",
             "redundant-row-reduction-per-width-block-grid-split",
+            "dual-consumer-alternating-stage-ownership-scale-lane"
         ],
     ),
-    // F: Flash-attention tiling (17 rules; Batch 189 +1: the ancestor-mask
+    // F: Flash-attention tiling (18 rules; Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
     // bit-visibility block-skip tree attention with its measured
     // dispatch cross-over)
     (
@@ -2635,6 +2645,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kv-split-decode-underfill-per-slot-validity",
             "fixed-ref-softmax-decode-walk",
             "ancestor-mask-bit-visibility-block-skip-tree-attention",
+            "paged-page-pair-deferred-permutation-bitmask"
         ],
     ),
     // G: Linear-attention recurrence (30 rules; Batch 189 +1: the
@@ -2676,7 +2687,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "full-accept-state-store-host-observable-predictor",
         ],
     ),
-    // H: MoE dispatch + backward pass (31 rules; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
+    // H: MoE dispatch + backward pass (36 rules; Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2712,6 +2723,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "expert-major-tile-order-token-tile-cache-resident",
             "moe-per-expert-mixed-dispatch-worst-case-workspace",
             "sorted-gather-tile-compaction-warp-scan-scheduler",
+            "ring-overwrite-gated-k-back-readiness",
+            "empty-participant-progress-credit",
+            "work-size-gated-overlap-reduce-mode",
+            "coprime-stride-cross-rank-source-interleave",
+            "dependency-wave-task-picker-one-wave-lookahead"
         ],
     ),
     // I: NSA block-sparse selection (7 rules)
@@ -2740,7 +2756,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (13 rules)
+    // K: Autotune dispatch (14 rules; Batch 194 +1: the issue-latency MAD cost model)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -2758,6 +2774,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "offline-device-tuned-table-dispatch",
             "tuned-config-resource-limit-fallback",
             "batch-width-aware-partition-shrink",
+            "issue-latency-priced-mad-cost-model"
         ],
     ),
     // L: Conv-as-GEMM + memory layout (17 rules)
@@ -2814,7 +2831,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (53 rules; Batch 192 +1: the dot
+    // N: dtype + alignment specialization (55 rules; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
     // macro family that widens at load + f32 accumulation — the CPU refusal
     // pole of the accumulator-dtype family; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
@@ -2879,6 +2896,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "widen-metadata-once-to-mac-native-widths",
             "dot-macro-family-widens-at-load-f32-accumulate",
             "construction-identity-row-classes-replace-probe",
+            "fp4-nibble-gather-lut-replicated-index-width"
         ],
     ),
     // O: IR strength reduction (5 rules; Batch 190 +1: the runtime-divisor

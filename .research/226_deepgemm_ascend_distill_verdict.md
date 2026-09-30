@@ -1,6 +1,6 @@
 # DeepGEMM-Ascend distill verdict — the Ascend 950 GEMM/MoE kernel library
 
-**Status:** DISTILLED — pending owner decision (nominal Batch 194 staged behind the queue; conversion needs the next cargo-calm slot)
+**Status:** RECORD — Batch 194 LANDED 2026-10-01 ~04:0x-05:1x +07 (M3, riir-clippy idle loop; Plan 191 executed at the cargo-calm slot; corpus 703→717, entries_gpu_61.rs + entries_gpu_62.rs; all gates green, see the plan + AGENTS.md row). Mine-time appendix follows the verdict body.
 
 - Source: https://github.com/deepseek-ai/DeepGEMM-Ascend @ `8491bbb4b8c02a094a2318965f50c70438a3e73c` (MIT; "OSS release from cef9f4a777ed4292a79b711ce29f2327f61fde05", committed 2026-09-30 09:07 +0800 — hours old at verdict, pin load-bearing).
 - Provenance: DeepGEMM-Ascend (Ascend C/Bisheng, dav-* arch, CANN 9.20) ← upstream DeepGEMM (CUDA, API-compatible) ← CUTLASS; JIT runtime = deepseek-ai/DeepJIT; mHC prenorm kernel = tilelang-backed. The original CUDA DeepGEMM has NO prior distill in this repo (grep .research/ — only a provenance mention in 163); no prior-art collision.
@@ -44,3 +44,18 @@ League: NOT mapped — our scored models (Ternary-Bonsai-2-27B PQ2_0, Qwen3.8-27
 Released TODAY; expect drift (pin is load-bearing). Ascend-only hardware specifics (NZ fractal, FIX pipe, UB/L1/L0 buffers, HCCL) require vocabulary translation at authoring — the corpus laws already handle this (operator-name spellings). heuristics.hpp 300-722 + the mega_moe body are UNREAD (listed above) — never grade an unread file; T0 completes the read. Numbers are n=1 box (Ascend 950DT, CANN 9.20), cold-L2 msprof.
 
 Queue slot: nominal Batch 194, Plan 191, behind the standing queue (TensorFold intake candidates + the mlxfast rider), one-batch-per-day cadence governs.
+
+## Mine-time appendix (the T0 read + conversion record, 2026-10-01)
+
+**The unread read (T0, complete):** heuristics.hpp 1-722 IN FULL by the coordinator — 6 new leads graded inline (the issue-latency MAD cost term BF16 64/FP4 40/FP8 116 cycles L566-568; the L0-ring turnover term L569-571; the enumeration lower-bound pruning L619-624; the K-tile re-selection post-pipeline L653-677; the multiwave dual-decode 10-conjunct admission L691-702; the FP4 full-MAD admission L679-689). Slices A (fp8_dequant_gemm, bf16_gemm, ascend/copy, transform_sf, layout/mega_moe, scheduler/mega_moe, scheduler/mqa_logits) + B (mega_moe body, mqa_logits body, comm/mega_moe, simd/mega_moe) read IN FULL by 2 subagents — 22 standalone candidates + 17 riders + 24 drops returned, every quote VERBATIM with file:line.
+
+**Corrections the full read made to the verdict (the staging-correction precedent, disclosed):**
+1. comm/mega_moe.hpp carries NO HCCL calls — barriers + dispatch-metadata + readiness polling; the collective transport is inline remote-GM copy through SymBuffer in the main pipeline body (the verdict's "HCCL push/pull" framing was wrong).
+2. The verdict's candidate 3 (l0-operand-pin) has a COST-SIDE twin the verdict missed: the turnover term prices the NON-skip (num_turnovers = k/block_k × max(0, block_k/mad_k − stages), at max(mad_cycles, load_cycles)) — folded as a clause of the issue-latency rule.
+3. The subagents found 22 candidates where the verdict estimated 10 — the falsification pass cut to 14 landed + 4 riders; 12 below-rider-grade candidates dropped (kv-window-union, ring-capacity-overlap-window, barrier-slots-epoch, layout-conversion-descriptor, batched-readiness-prefix, per-branch-weight-fold, row-window-mirror, writeahead-sentinel, parity-remainder, grid-sync-tag, watchdog-context, enum-pruning) with reasons (thin / diagnostics-class / comment-only "measured" / ambient branch-and-bound).
+4. The l1-resident admission gates are TWO-conjunct (shape fits one block && other axis exceeds cores) + the ring-residency third predicate — richer than the verdict's "two-conjunct admission" summary; folded into the rule text at authoring.
+5. The SF sidecar's rewind is to the LAST-CONSUMED stage (one back-step mod the SF ring), NOT to base — a genuinely different rewind arithmetic from the operand ring's; folded into the sidecar rule at authoring.
+
+**Landed (Batch 194):** 14 rules (9 in entries_gpu_61.rs + 5 in entries_gpu_62.rs) + riders on weight-stream-non-temporal-loads + ue8m0-pow2-scale (host edits) + 2 folded-at-authoring. Gates: batch194 parse (14) + contracts (14 markers) + riders (2 hosts); lib default 2398/0; kernel_heal 2790/0; retrieval 21/21 floors HELD (214.5s); clippy -D clean ×4 postures (default / no-default / kernel_heal / all-features — 3 doc-lint mechanicals in the new headers fixed en route, the B192 class + the too_many_lines allow attr the sibling files already carry). Score-bench + freeze NOT owed (zero clippy-corpus delta, P30).
+
+**Dedup re-verification (T1):** the subagents ran the corpus greps at read time; the coordinator's pack selection cross-checked the verdict's distinct-from sets; zero deepgemm-derived rows existed before this batch (confirmed — the 14 landed rule-ids are all corpus-new).
