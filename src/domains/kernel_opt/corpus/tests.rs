@@ -103,8 +103,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 177 (4): EXL3/GB10 serving-recipe distill (Research 207 / Plan 170) -- quantized-pack-residency-audit-unquantized-minority-first, bpw-reduction-buys-memory-not-decode-when-dequant-bound (N +2: the (class,dtype) residency audit with the contracted-dim-constant scale placement, + the bpw-axis two-regime rule), host-gather-splits-the-graph-and-the-split-is-the-separable-price, unified-memory-page-cache-is-device-allocatable (D +2: the PIECEWISE separable-price attribution rule + the unified-memory page-cache-as-device-RAM rule) + the readout-trim scope rider (draft-only trim with full verify = acceptance loss, never correctness); source vcruz305/Qwen3.8-Flash-Next-EXL3-DGX-Spark-recipe @ e0ebee8d (MIT; executed AHEAD of the event-blocked B176 FWHT rider; the T2 re-verification caught factor-affine-quant-scale-out-of-element-loop as #2's loop-stage half, so #2 landed as ONE rule).
     assert_eq!(
         corpus.entries.len(),
-        689,
-        "kernel batches through Batch 192 should have 689 rules",
+        703,
+        "kernel batches through Batch 193 should have 703 rules",
     );
 }
 
@@ -5399,6 +5399,15 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for
+    // Batch 193: A +3 the offset-gated KV first-append + the dual-layout
+    // stage transpose + the plane-form activation topology, B +1 the
+    // branch-free top-2 insert, D +6 the first-CB mapping split + the
+    // deadline-bounded completion poll + the readback-domain exclusion +
+    // the adoption idle-fill + the seed earliest-submission trio + the
+    // DRAM-streaming adoption-trial rotation, E +1 the width-block grid
+    // split, G +1 the host-observable-predictor state store, L +1 the
+    // register-built right operand, N +1 the construction-identity probe
+    // replacement;
     // Batch 192: D +3 the MoE tile-picker shape-truth + the descriptor-
     // set destroy-epoch memo + the vendor-keyed lane-partition, N +1 the
     // dot-family f32-accumulate;
@@ -5418,20 +5427,20 @@ fn kernel_categories_counts_match_plan_003_table() {
     // ggml-cpu tiled staging family, B +2, C +1, D +3, H +1, M +1,
     // N +1).
     let expected = [
-        (KernelCategory::MemoryAccess, 148),
-        (KernelCategory::Compute, 75),
+        (KernelCategory::MemoryAccess, 151),
+        (KernelCategory::Compute, 76),
         (KernelCategory::Fusion, 50),
-        (KernelCategory::Dispatch, 152),
-        (KernelCategory::Parallelism, 65),
+        (KernelCategory::Dispatch, 158),
+        (KernelCategory::Parallelism, 66),
         (KernelCategory::FlashAttnTiling, 17),
-        (KernelCategory::LinearAttnRecurrence, 30),
+        (KernelCategory::LinearAttnRecurrence, 31),
         (KernelCategory::MoeDispatchBackward, 31),
         (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 13),
-        (KernelCategory::ConvGemmLayout, 17),
+        (KernelCategory::ConvGemmLayout, 18),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 53),
+        (KernelCategory::DtypeAlignment, 54),
         (KernelCategory::IrStrengthReduction, 5),
     ];
     for (cat, count) in expected {
@@ -5446,9 +5455,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 689.
+    // Sum must equal 703.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 689, "Plan 003: category totals must sum to 689");
+    assert_eq!(total, 703, "Plan 003: category totals must sum to 703");
 }
 
 #[test]
@@ -5459,8 +5468,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 689,
-        "Plan 003: grouped corpus has {total} rules, expected 689"
+        total, 703,
+        "Plan 003: grouped corpus has {total} rules, expected 703"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9567,8 +9576,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        689,
-        "Batch 192: corpus should have 689 rules",
+        703,
+        "Batch 193: corpus should have 703 rules",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13545,6 +13554,164 @@ fn batch192_riders_landed_on_their_hosts() {
             "Batch-192 rider marker '{marker}' missing on host '{host}'"
         );
     }
+}
+
+#[test]
+fn batch193_pseudocode_parses() {
+    // G1 for Batch 193: syn-parse gate (the mlxfast-bonsai2 post-reorg
+    // accept-wave pack of 14 -- Plan 190 / Research 225: the submission/
+    // scheduling/KV slice + the kernel/numerics/layout slice + the
+    // coordinator's DRAM-streaming adoption rotation -- across
+    // entries_gpu_60).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "adoption-trial-rotate-operands-per-launch-dram-streaming",
+        "first-command-buffer-fresh-buffer-mapping-split",
+        "kv-first-append-unzeroed-alloc-offset-gated-tail",
+        "deadline-bounded-poll-of-submitted-completion-event",
+        "full-accept-state-store-host-observable-predictor",
+        "readback-domain-excludes-cold-tap-copies",
+        "adoption-staged-leading-layers-gpu-idle-fill",
+        "seed-first-command-buffer-earliest-submission",
+        "construction-identity-row-classes-replace-probe",
+        "redundant-row-reduction-per-width-block-grid-split",
+        "branch-free-top2-insert-order-invariant-guard",
+        "register-built-right-operand-lane-contiguous-plane-layout",
+        "dual-layout-transpose-at-stage",
+        "plane-form-activation-reuse-topology",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-193 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-193 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-193 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch193_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-193 decision-content contracts (the batch190_unsigned_only
+    // precedent): each rule's load-bearing caveat must ride the rule text
+    // so a heal suggestion never strips it.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "kv-first-append-unzeroed-alloc-offset-gated-tail",
+            "structurally unreachable",
+        ),
+        (
+            "deadline-bounded-poll-of-submitted-completion-event",
+            "0.25 s",
+        ),
+        (
+            "full-accept-state-store-host-observable-predictor",
+            "the host cannot tell",
+        ),
+        (
+            "readback-domain-excludes-cold-tap-copies",
+            "completion event",
+        ),
+        (
+            "construction-identity-row-classes-replace-probe",
+            "7 of 43",
+        ),
+        (
+            "branch-free-top2-insert-order-invariant-guard",
+            "count == 2",
+        ),
+        (
+            "register-built-right-operand-lane-contiguous-plane-layout",
+            "not in the trial",
+        ),
+        (
+            "dual-layout-transpose-at-stage",
+            "load-time trial",
+        ),
+        (
+            "adoption-trial-rotate-operands-per-launch-dram-streaming",
+            "ranks the two the other way",
+        ),
+    ];
+    for (id, marker) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-193 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-193 contract marker '{marker}' missing on '{id}'"
+        );
+    }
+}
+
+#[test]
+fn batch193_riders_landed_on_their_hosts() {
+    // The Batch-193 riders + the rust_perf host amend (the batch116
+    // membership precedent — a rider that never landed is a staging note,
+    // not corpus): two kernel_opt hosts carry their rider sentences, and
+    // the rust_perf family host carries the premise+margin amendment.
+    let corpus = build_kernel_seed_corpus();
+    let hosts = [
+        (
+            "exact-widening-enables-fp16-pv-accumulation",
+            "RIDER (Batch 193",
+        ),
+        (
+            "planar-transposed-activation-multi-column-quant-matvec",
+            "nwarps is pinned to 4",
+        ),
+    ];
+    for (host, marker) in hosts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == host)
+            .unwrap_or_else(|| panic!("rider host '{host}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "Batch-193 rider marker '{marker}' missing on host '{host}'"
+        );
+    }
+    // The rust_perf family host: the adoptMargin amend + the premise
+    // correction + the rotation cross-reference.
+    let rust_corpus = crate::domains::rust_perf::corpus::build_perf_seed_corpus();
+    let host = rust_corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "whole-round-in-situ-adoption-trial")
+        .expect("rust_perf family host present");
+    let Some(notes) = &host.context_notes else {
+        panic!("rust_perf family host carries context_notes");
+    };
+    assert!(
+        notes.contains("AMENDMENT (Batch 193"),
+        "the Batch-193 amendment paragraph must ride the family host"
+    );
+    assert!(
+        notes.contains("adoptMargin 0.005 → 0.015"),
+        "the margin amend must name the constant move"
+    );
+    assert!(
+        notes.contains("RETIRED"),
+        "the correctness-free premise correction must ride the host"
+    );
+    assert!(
+        host.fixed_code().contains("1.5"),
+        "the pinned ADOPT_MARGIN_PCT constant must move to 1.5"
+    );
 }
 
 #[test]

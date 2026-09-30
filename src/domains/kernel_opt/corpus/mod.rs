@@ -1945,6 +1945,7 @@ mod entries_gpu_56;
 mod entries_gpu_57;
 mod entries_gpu_58;
 mod entries_gpu_59;
+mod entries_gpu_60;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1980,6 +1981,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_57::entries());
     entries.extend(entries_gpu_58::entries());
     entries.extend(entries_gpu_59::entries());
+    entries.extend(entries_gpu_60::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2198,6 +2200,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "jmajor-acc-buffer-transpose-writeback",
             "low-bit-warp-run-load-shuffle-redistribute",
             "register-prefetch-ring-measured-cutoff",
+            "kv-first-append-unzeroed-alloc-offset-gated-tail",
+            "dual-layout-transpose-at-stage",
+            "plane-form-activation-reuse-topology",
         ],
     ),
     // B: Compute patterns (75 rules) -- was 64 in the comment while the
@@ -2288,6 +2293,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lut16-pshufb-byte-expansion-at-stage",
             "gfni-sign-mask-expand-cmpeq-fallback",
             "exact-bf16-domain-activation-lut",
+            "branch-free-top2-insert-order-invariant-guard",
         ],
     ),
     // C: Fusion patterns (50 rules; Batch 181 +1:
@@ -2519,6 +2525,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tile-picker-input-from-dispatch-grid-partition",
             "descriptor-set-binding-memo-destroy-epoch",
             "vendor-keyed-reduction-lane-partition-subgroup-request",
+            "first-command-buffer-fresh-buffer-mapping-split",
+            "deadline-bounded-poll-of-submitted-completion-event",
+            "readback-domain-excludes-cold-tap-copies",
+            "adoption-staged-leading-layers-gpu-idle-fill",
+            "seed-first-command-buffer-earliest-submission",
+            "adoption-trial-rotate-operands-per-launch-dram-streaming",
         ],
     ),
     // E: Parallelism patterns (65 rules; Batch 178 +2: the warp-role
@@ -2596,6 +2608,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "draft-block-simdgroup-kv-split-smem-softmax-exchange",
             "simdgroup-redundant-small-reduction-over-barrier-broadcast",
             "chunk-downsize-work-stealing-microtile-floor",
+            "redundant-row-reduction-per-width-block-grid-split",
         ],
     ),
     // F: Flash-attention tiling (17 rules; Batch 189 +1: the ancestor-mask
@@ -2660,6 +2673,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "recurrence-prefill-exact-restructure-before-reformulation",
             "chunk-transition-consumed-by-mma",
             "two-chunk-state-independent-overlap-serial-chunk-recurrence",
+            "full-accept-state-store-host-observable-predictor",
         ],
     ),
     // H: MoE dispatch + backward pass (31 rules; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
@@ -2768,6 +2782,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-byte-pairs-as-aligned-u16-loads",
             "device-affine-scratch-admission-with-pool-fallback",
             "window-recurrence-halo-snapshot-block-parallel",
+            "register-built-right-operand-lane-contiguous-plane-layout",
         ],
     ),
     // M: Kernel parametric polymorphism (21 rules; Batch 186 +1: the
@@ -2863,6 +2878,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dtype-native-source-read-with-shared-admission-predicate",
             "widen-metadata-once-to-mac-native-widths",
             "dot-macro-family-widens-at-load-f32-accumulate",
+            "construction-identity-row-classes-replace-probe",
         ],
     ),
     // O: IR strength reduction (5 rules; Batch 190 +1: the runtime-divisor

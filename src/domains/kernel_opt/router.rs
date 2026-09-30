@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 689, "Plan 003: experts cover all 689 corpus rules (Batch 192 +4, the llama.cpp master-delta pack — picker shape-truth, descriptor-set destroy-epoch memo, vendor-keyed lane-partition, dot-family f32-accumulate; the 685 pin went stale at no point — re-pinned 689 with the honest label)");
+        assert_eq!(total, 703, "Plan 003: experts cover all 703 corpus rules (Batch 193 +14, the mlxfast-bonsai2 post-reorg accept-wave pack — first-CB mapping split, offset-gated KV first-append, deadline-bounded poll, host-predictor state store, readback-domain exclusion, adoption idle-fill, seed earliest-submission, construction-identity probe, width-block grid split, branch-free top-2, register-built right operand, dual-layout transpose, plane-form topology, DRAM-streaming trial rotation; re-pinned 703 with the honest label)");
     }
 
     #[test]
