@@ -21,7 +21,7 @@ Source: `deepseek-ai/DeepGEMM-Ascend` @ `8491bbb4b8c02a094a2318965f50c70438a3e73
 - [x] T3 — standing gates: batch194 parse gate (fixture count = landed rules); kernel_heal slice green; lib default green; clippy -D ×3 postures (default / no-default / all-features — heal doc-lint mechanicals en route, the B192 class); retrieval 21/21 floors HELD.
 - [x] T4 — count pins walked: corpus total + per-category + router.rs + mod.rs doc + AGENTS.md kernel bullet + `.docs/11_domains/kernel_opt.md` seed row + batch paragraph + README (the B192 ledger).
 - [x] T5 — score-bench + freeze NOT owed unless the clippy corpus moved (P30 — kernel_opt-only batch); `.research/226` → Status RECORD with the mine-time appendix (corrections disclosed, the B192/B193 staging-correction precedent).
-- [ ] T6 — commit + push (`feat:` prefix, Session line per convention); `.raw/deepgemm-ascend` REMOVED in the same unit (an unfinished batch keeps no live clone).
+- [x] T6 — commit + push (`feat:` prefix, Session line per convention); `.raw/deepgemm-ascend` REMOVED in the same unit (an unfinished batch keeps no live clone). LANDED `c13f0429`, pushed to origin/develop.
 - [x] T7 — queue row close-out in `.distill/001` (landing row: counts, gates, corrections, queue-after state).
 
 ## Notes
