@@ -396,7 +396,7 @@ fn enforce_kat_soft_gate(args: &Args) {
     // is gone (Some ≤ 0 is a fact). `None` (a pre-v4 ack / pre-TUNA
     // server) prints nothing — the pre-006 refusal, byte for byte.
     if final_tuna.is_some_and(|tuna| tuna <= 0) {
-        eprintln!("Trial credit (TUNA) is exhausted too — healing draws it before KAT.");
+        eprintln!("Trial credit (TUNA) is exhausted too — the network draws it before KAT (refine, rethink, everything).");
     }
     // riir-dapps Issue 094 D4: the free daily faucet/drip tier is RETIRED
     // and `--refill` retired with it (devnet-ops only). The refuel paths a
