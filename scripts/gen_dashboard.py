@@ -8,7 +8,7 @@ SVG charts, zero external deps — works offline, no CDN).
 Data sources (ALL optional — each degrades gracefully):
   1. .benchmarks/llm_cost_ledger.jsonl   — committed LLM spend ledger
   2. .benchmarks/score_history.jsonl     — clippy-bench score curve
-  3. .heal/trajectories.kv per repo      — self-evolve adoption (via the
+  3. .refine/trajectories.kv per repo      — self-evolve adoption (via the
                                             healer binary's --dump-trajectories)
   4. git heal-commit cadence per repo    — 30d word-boundary grep (A1 gate
                                             method; 'health' must not match)
@@ -346,7 +346,7 @@ CORPUS_DOMAINS = [
 # Issue 050 T2 flipped the direction: the Warm-tier store is the source of
 # truth and this file is a generated PROJECTION (rewritten store-first each
 # regen; jsonl-only days survive the merge). It cannot be deleted — it is
-# the only cross-clone durable record (`.heal/` is gitignored). The legacy
+# the only cross-clone durable record (`.refine/` is gitignored). The legacy
 # append-today's-working-tree behavior remains only as the no-store
 # fallback. Recorded rows win over git-mined points for overlapping days;
 # git-mining backfills everything before the file existed and stays as the
@@ -507,7 +507,7 @@ def collect_trajectories() -> list[dict]:
         return []
     out = []
     for repo in REPOS:
-        store = GIT_ROOT / repo / ".heal" / "trajectories.kv"
+        store = GIT_ROOT / repo / ".refine" / "trajectories.kv"
         if not store.is_dir():
             continue
         env = dict(os.environ)

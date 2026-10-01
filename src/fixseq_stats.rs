@@ -414,7 +414,7 @@ impl FixseqRefusal {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
-            FixseqRefusal::Empty => "EMPTY — zero runs parsed (no .heal/fixseq store here)",
+            FixseqRefusal::Empty => "EMPTY — zero runs parsed (no .refine/fixseq store here)",
             FixseqRefusal::NoTransitions => {
                 "NO TRANSITIONS — runs exist but no run reaches 2 attempts; the cascade law needs depth"
             }

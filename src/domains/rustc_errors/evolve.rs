@@ -24,7 +24,7 @@
 //! ## Miss capture (T4.4 — the corpus-growth loop)
 //!
 //! A miss (no playbook proposed, or the playbooks' edits all reverted) is
-//! the authoring queue for the NEXT template: `<repo>/.heal/misses/
+//! the authoring queue for the NEXT template: `<repo>/.refine/misses/
 //! {code}-{ts}.md` with the rendered diagnostic verbatim + a source
 //! excerpt. The `wgsl_mine` precedent — mine fix-pairs out of history;
 //! here history is handed to you pre-packaged.
@@ -87,11 +87,11 @@ pub fn record_run(rec: &mut EvolveRecorder, report: &FixCompileReport) {
     }
 }
 
-/// Where misses land: `<root>/.heal/misses/`. `root` is the workspace (or
+/// Where misses land: `<root>/.refine/misses/`. `root` is the workspace (or
 /// package) root the caller resolved for the run.
 #[must_use]
 pub fn misses_dir(root: &Path) -> PathBuf {
-    root.join(".heal").join("misses")
+    root.join(".refine").join("misses")
 }
 
 /// Write one miss as a self-contained authoring-queue entry.
@@ -179,10 +179,10 @@ pub fn dump_misses(root: &Path, misses: &[MissRecord]) -> (Vec<PathBuf>, Vec<Str
 // ── Issue 91 T1.5: the per-attempt ring's dump ──────────────────────────
 
 /// Where per-run attempt sequences land (Issue 91 T1.5):
-/// `<root>/.heal/fixseq/` — the `misses` sibling.
+/// `<root>/.refine/fixseq/` — the `misses` sibling.
 #[must_use]
 pub fn fixseq_dir(root: &Path) -> PathBuf {
-    root.join(".heal").join("fixseq")
+    root.join(".refine").join("fixseq")
 }
 
 /// The standing README for the fixseq store (idempotent — the misses
@@ -318,7 +318,7 @@ pub struct QueueRow {
 }
 
 /// The frontier-ordered authoring queue (issue 072 T4's control law wired
-/// into the `.heal/misses/` loop): each queue code is a candidate pool whose
+/// into the `.refine/misses/` loop): each queue code is a candidate pool whose
 /// outcomes are the store's kept/reverted history for `{code}:*` plus ONE
 /// Missed per queue occurrence; [`frontier_order`] puts informative pools
 /// (mixed evidence — resolving them converts the most) first, saturated last.
@@ -414,7 +414,7 @@ pub fn frontier_queue_report(
 
 // ── Plan 091 T1.3 — the conversion ledger (the real-G8 instrument) ────
 
-/// The `.heal/misses/` frontier-ordering commit (Plan 091 T1.1/T1.2) —
+/// The `.refine/misses/` frontier-ordering commit (Plan 091 T1.1/T1.2) —
 /// the FIFO/frontier window boundary. Everything before it is the FIFO
 /// era; the authoring queue orders by dispersion evidence from here on.
 pub const WIRING_COMMIT: &str = "3580477";
@@ -677,14 +677,14 @@ mod tests {
             body.contains("**component:** E (corpus/proposer)"),
             "Issue 047 attribution line present: {body}"
         );
-        assert!(root.join(".heal").join("misses").join("README.md").exists());
+        assert!(root.join(".refine").join("misses").join("README.md").exists());
 
         // Second dump: README NOT rewritten (idempotent), new entry lands.
         let m2 = miss("E0499");
         let (written2, warns2) = dump_misses(&root, std::slice::from_ref(&m2));
         assert!(warns2.is_empty());
         assert_eq!(written2.len(), 1);
-        let n: usize = std::fs::read_dir(root.join(".heal").join("misses"))
+        let n: usize = std::fs::read_dir(root.join(".refine").join("misses"))
             .unwrap()
             .filter(|e| {
                 e.as_ref().is_ok_and(|e| {
@@ -709,7 +709,7 @@ mod tests {
         // Attempt-less: no file, no warnings, no dir creation.
         let (none, warns0) = dump_fixseq(&root, &[]);
         assert!(none.is_none() && warns0.is_empty());
-        assert!(!root.join(".heal").join("fixseq").exists());
+        assert!(!root.join(".refine").join("fixseq").exists());
 
         let attempts = vec![
             AttemptRecord {
@@ -775,7 +775,7 @@ mod tests {
         }
 
         // The README landed once (idempotent on a second dump).
-        let dir = root.join(".heal").join("fixseq");
+        let dir = root.join(".refine").join("fixseq");
         assert!(dir.join("README.md").exists());
         let (_, warns2) = dump_fixseq(&root, &attempts[..1]);
         assert!(warns2.is_empty());

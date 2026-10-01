@@ -2,7 +2,7 @@
 //!
 //! The **versioned serialization contract** for shipping [`TrajStore`] rows to
 //! the KAT service (the proposal's words: the Worker consumes it *as data*).
-//! NDJSON — one JSON object per line — matching the `.heal/` jsonl store
+//! NDJSON — one JSON object per line — matching the `.refine/` jsonl store
 //! convention: streamable, debuggable, append-friendly.
 //!
 //! ```text
@@ -149,7 +149,7 @@ pub struct PayloadHeader {
     /// Rows that passed the gate and are present below. Signed.
     pub rows_included: u32,
     /// Rows excluded by the gate (count only — details stay in the local
-    /// `.heal/redaction_log.jsonl`). Signed.
+    /// `.refine/redaction_log.jsonl`). Signed.
     pub rows_blocked: u32,
     /// `blake3` full 64-hex over the exact row-line bytes (each + `\n`). Signed.
     pub batch_commitment: String,

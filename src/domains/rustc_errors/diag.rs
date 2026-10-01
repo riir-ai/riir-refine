@@ -109,7 +109,7 @@ pub struct RustcErrorDiag {
     /// carries a label + byte offsets). The Phase 2 playbooks' anchors.
     pub labeled_spans: Vec<LabeledSpan>,
     /// The full pre-rendered diagnostic text, when cargo included it. The
-    /// Phase 4 miss-capture dumps write this verbatim (`<repo>/.heal/misses/`).
+    /// Phase 4 miss-capture dumps write this verbatim (`<repo>/.refine/misses/`).
     pub rendered: Option<String>,
 }
 

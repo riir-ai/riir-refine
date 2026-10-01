@@ -132,7 +132,7 @@ fi
 
 echo ""
 echo "── 1. Memory (loop state — verdicts & tiers; 038: store-first) ──"
-# 038-T4: the repo-local .heal/trajectories.kv store is the ACTIVE backend
+# 038-T4: the repo-local .refine/trajectories.kv store is the ACTIVE backend
 # (latent_retrieval builds); the envelope is legacy/fallback. Read BOTH:
 # per-repo store rows via the binary's backend-agnostic dump, then the
 # envelope if it still exists (or its .migrated tombstone).
@@ -142,7 +142,7 @@ DUMP_TMP="$(mktemp)"
 STORE_REPOS=""
 for r in $REPOS; do
   d="$GIT_ROOT/$r"
-  [ -d "$d/.heal/trajectories.kv" ] || continue
+  [ -d "$d/.refine/trajectories.kv" ] || continue
   STORE_REPOS="$STORE_REPOS $r"
   if [ -x "$HEAL_BIN" ]; then
     RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$DUMP_TMP" 2>/dev/null
@@ -483,7 +483,7 @@ echo "  A2 gate (>=2 repos with heal commits): see above"
 echo ""
 echo "── 5. Cadence (A1 — distinct heal-activity days, >=3 in any 14-day window) ──"
 # Union of the gate's own two evidence halves:
-#   store days  — .heal/trajectories.kv rows' last_seen_at (a stamped row
+#   store days  — .refine/trajectories.kv rows' last_seen_at (a stamped row
 #                 only exists where the tool RAN and recorded — the
 #                 memory-growth half)
 #   commit days — git heal-mentioning commits since adoption (CONSUMER
@@ -493,7 +493,7 @@ DAYS_TMP="$(mktemp)"
 A1_DUMP="$(mktemp)"
 for r in $REPOS; do
   d="$GIT_ROOT/$r"
-  if [ -d "$d/.heal/trajectories.kv" ] && [ -x "$HEAL_BIN" ]; then
+  if [ -d "$d/.refine/trajectories.kv" ] && [ -x "$HEAL_BIN" ]; then
     RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$A1_DUMP" 2>/dev/null
     run_py - "$r" "$A1_DUMP" >> "$DAYS_TMP" <<'EOF'
 import json, sys, datetime

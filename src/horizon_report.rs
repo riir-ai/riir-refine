@@ -1,5 +1,5 @@
 //! Issue 107 T1 — the fixseq **horizon report**: AUC(k) vs lead k over the
-//! per-attempt ring (`.heal/fixseq/run-*.jsonl`, Issue 91 T1.5).
+//! per-attempt ring (`.refine/fixseq/run-*.jsonl`, Issue 91 T1.5).
 //!
 //! REPORT-FIRST, gates nothing (the frontier-report law): the question is
 //! lane viability for the probe-gated fix-verification proposal — is an
@@ -136,7 +136,7 @@ pub struct RunRing {
 
 // ── Loading ─────────────────────────────────────────────────────────────────
 
-/// Load every run ring under `root` — `root/.heal/fixseq/run-*.jsonl`
+/// Load every run ring under `root` — `root/.refine/fixseq/run-*.jsonl`
 /// (the `dump_fixseq` layout), or `root` itself when it IS a ring file.
 /// Files sort by name; within a file, lines order by `seq` (the dump order
 /// is already ordered — the sort is a defense, not a re-sort).
@@ -148,7 +148,7 @@ pub fn load_runs(root: &Path) -> (Vec<RunRing>, usize, usize) {
     let mut files: Vec<std::path::PathBuf> = Vec::new();
     if root.is_file() {
         files.push(root.to_path_buf());
-    } else if let Ok(rd) = std::fs::read_dir(root.join(".heal").join("fixseq")) {
+    } else if let Ok(rd) = std::fs::read_dir(root.join(".refine").join("fixseq")) {
         for entry in rd.flatten() {
             let p = entry.path();
             if p.is_file()
@@ -532,7 +532,7 @@ impl HorizonRefusal {
     #[must_use]
     pub fn label(self) -> &'static str {
         match self {
-            Self::Empty => "EMPTY — zero runs parsed (no .heal/fixseq store here)",
+            Self::Empty => "EMPTY — zero runs parsed (no .refine/fixseq store here)",
             Self::BlindWalk => {
                 "BLIND WALK — runs exist but no run reaches 2 attempts; lead-k needs depth"
             }
@@ -1069,7 +1069,7 @@ fn render_family_table(families: &[FamilyRow], thin: usize) -> String {
 /// `evolve::fixseq_dir`, ungated here).
 #[must_use]
 pub fn fixseq_layout(root: &Path) -> std::path::PathBuf {
-    root.join(".heal").join("fixseq")
+    root.join(".refine").join("fixseq")
 }
 
 #[cfg(test)]

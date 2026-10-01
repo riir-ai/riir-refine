@@ -35,7 +35,7 @@
 # cargo first; isolate per-session when concurrent.)
 #
 # ── Store paths (the Phase 4 amendment) ───────────────────────────────────
-# Self-evolution state lives at <repo>/.heal/:
+# Self-evolution state lives at <repo>/.refine/:
 #   trajectories.kv/  — the durable neuron-db store (latent_retrieval
 #                       builds; encrypted WAL + BM25 + 8-D axis)
 #   memory.json       — the JSON-envelope fallback (default builds)

@@ -1437,7 +1437,7 @@ pub fn append_snapshot_at_frontier(
     root: &std::path::Path,
     snapshots_path: &std::path::Path,
 ) -> std::io::Result<SnapshotOutcome> {
-    let kv = root.join(".heal").join("trajectories.kv");
+    let kv = root.join(".refine").join("trajectories.kv");
     if !kv.exists() {
         return Ok(SnapshotOutcome::NoStore);
     }

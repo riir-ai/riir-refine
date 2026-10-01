@@ -299,7 +299,7 @@ impl RevertReason {
 }
 
 /// A coded error no playbook proposed for — the template-authoring queue
-/// (Phase 4 T4.4 dumps these to `<repo>/.heal/misses/`).
+/// (Phase 4 T4.4 dumps these to `<repo>/.refine/misses/`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissRecord {
     pub code: String,
@@ -360,7 +360,7 @@ pub struct FixCompileReport {
     /// The ORDERED per-attempt ring (Issue 91 T1.5) — every candidate the
     /// loop tried, in try order, regardless of outcome. Empty in review
     /// mode (no attempts are made) and on a clean first check. Dumped per
-    /// run to `<root>/.heal/fixseq/run-<ts>.jsonl` by the CLI (the
+    /// run to `<root>/.refine/fixseq/run-<ts>.jsonl` by the CLI (the
     /// `dump_misses` law: an aid, never a gate).
     pub attempts: Vec<AttemptRecord>,
     /// Issue 118 T1: bench-target error sites DECLINED by the bench guard
@@ -468,7 +468,7 @@ pub type OrderingFn = std::sync::Arc<dyn Fn(&mut [FixCandidate]) + Send + Sync>;
 /// The per-attempt observer signature (Issue 093 T2): called once per
 /// completed attempt with the ring record (code, strategy, outcome, errors
 /// before→after) — the in-process feed the per-run strategy posterior
-/// consumes (the offline twin is the `.heal/fixseq/` ring dump).
+/// consumes (the offline twin is the `.refine/fixseq/` ring dump).
 pub type ObserverFn = std::sync::Arc<dyn Fn(&AttemptRecord) + Send + Sync>;
 
 /// The tried-candidate revive signature (Issue 093 T2): consulted for a

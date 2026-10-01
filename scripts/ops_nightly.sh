@@ -6,7 +6,7 @@
 # checked out, cargo-refine is already installed and wrangler OAuth already
 # authenticates — so this needs ZERO provisioned secrets, finishes in ~5 min
 # instead of ~30-50, and can populate the self-evolve adoption card that a
-# fresh CI checkout structurally cannot (`.heal/trajectories.kv` is gitignored
+# fresh CI checkout structurally cannot (`.refine/trajectories.kv` is gitignored
 # local state).
 #
 # Install / uninstall the schedule:

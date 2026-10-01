@@ -156,7 +156,7 @@ for n in a b c; do
   git -C "$WORK/scratch_$n" init -q 2>/dev/null || true
   git -C "$WORK/scratch_$n" add -A 2>/dev/null || true
   git -C "$WORK/scratch_$n" -c user.email=e2e@test -c user.name=e2e commit -qm e2e 2>/dev/null || true
-  cat > "$WORK/scratch_$n/.heal-sync-policy" <<'POL'
+  cat > "$WORK/scratch_$n/.refine-sync-policy" <<'POL'
 {
   "version": 3,
   "sync_enabled": true,
@@ -282,14 +282,14 @@ env $(acct_env b) RIIR_HEAL_KAT_PROMPT_YES=1 RIIR_HEAL_KAT_GATE=0 \
 # burn a fresh metered delta so the burn drain carries the v3 flag into the ack
 python3 -c "
 import json
-p = '$WORK/scratch_b/.heal/kat_charge.json'
+p = '$WORK/scratch_b/.refine/kat_charge.json'
 d = json.load(open(p))
 d['charged_kat'] += 1_000_000
 json.dump(d, open(p, 'w'))
 " 2>/dev/null || true
 env $(acct_env b) sh -c "cd '$WORK/scratch_b' && '$BIN' sync" >/dev/null 2>&1 || true
 CONTRIB=$(api "/history?acct=$ACCT_B" | python3 -c 'import json,sys; print(json.load(sys.stdin)["contributed"])')
-ACK_CONTRIB=$(python3 -c "import json; print(json.load(open('$WORK/scratch_b/.heal/kat_burn_ack.json')).get('contributed'))" 2>/dev/null || echo False)
+ACK_CONTRIB=$(python3 -c "import json; print(json.load(open('$WORK/scratch_b/.refine/kat_burn_ack.json')).get('contributed'))" 2>/dev/null || echo False)
 FIX8_RC=1
 if [ "$CONTRIB" = "True" ] && [ "$ACK_CONTRIB" = "True" ]; then
   FIX8_OUT=$(env $(acct_env b) sh -c "cd '$WORK/scratch_b' && '$BIN' --fix src/fixture_points.rs" 2>&1) && FIX8_RC=0 || FIX8_RC=$?

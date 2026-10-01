@@ -19,7 +19,7 @@
 | [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo refine --fix` wiring (Issue 018) |
 | [`self_evolve_flow.md`](self_evolve_flow.md) | The e2e self-evolve flywheel diagram (local loop + fleet loop) + the canonical static SVG for the KAT network pages' hero (Issue 131) |
 | [`l4_fallback.md`](l4_fallback.md) | The L4 generative fallback seam (`l4_lora`): trait + `DaemonL4` transport + the local Bonsai-27B story + measured verdicts + the serving-lane decision (UNARMED) |
-| [`structural_admission.md`](structural_admission.md) | Issue 136 / reef P1+P3+P5: per-kind shape gates + kind-keyed review classes + the two-head CAS commit chain over content-addressed artifacts (`.heal/structural/`) — vocabulary only, no auto-serve activated |
+| [`structural_admission.md`](structural_admission.md) | Issue 136 / reef P1+P3+P5: per-kind shape gates + kind-keyed review classes + the two-head CAS commit chain over content-addressed artifacts (`.refine/structural/`) — vocabulary only, no auto-serve activated |
 
 ## Source
 

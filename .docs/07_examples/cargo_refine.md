@@ -150,7 +150,7 @@ without `kernel_heal`).
   authored atoms on the first freeze run and they were REPLACED, not
   pinned). Pre-092 history rows read as generation 1; each generation
   gets its own SVG.
-- `--misses [--limit N]` — print the `.heal/misses/` authoring queue in
+- `--misses [--limit N]` — print the `.refine/misses/` authoring queue in
   FRONTIER order (Plan 091 T1.2): dispersion-informative error codes first
   (resolving THOSE converts uncertain candidates), then unobserved /
   regenerate / saturated. Standalone + read-only; without

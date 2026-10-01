@@ -338,7 +338,7 @@ exit code. It rides the login, so `--unmine` does not stop it (billing ≠
 contribution).
 
 Offline runs **stack like local commits**: the ack watermark
-(`.heal/kat_burn_ack.json`) advances only on a 200-accepted response, so a
+(`.refine/kat_burn_ack.json`) advances only on a 200-accepted response, so a
 push that fails is a local commit — the next run (or `cargo refine sync`)
 reports the FULL stacked total in one signed report, and the server's
 monotone watermark makes a replayed report a no-op. The service debits the
@@ -478,7 +478,7 @@ encodes them, and a hand-rolled variant must too:
    the recorded sibling-collision discipline. The watch TRIGGER may be the
    tree; the HEAL SCOPE stays the list.
 
-Self-evolution state lives at `<repo>/.heal/`: `trajectories.kv/` (the
+Self-evolution state lives at `<repo>/.refine/`: `trajectories.kv/` (the
 durable neuron-db store, `latent_retrieval` builds — encrypted WAL + BM25
 + the 8-D latent axis), `memory.json` (the default-build fallback), and
 `misses/` (the template-authoring queue — each miss is a self-contained
@@ -560,7 +560,7 @@ generated; every seed carries a ground-truth behavior test):
   borrow, drop-order, ownership transfer, lifetime loosening) prints its
   `⚠ semantic change` note in the diff — never silent.
 - Coverage is partial BY DESIGN and per-family numbers are the product
-  claim, not a blended total. Misses land in `.heal/misses/` — the
+  claim, not a blended total. Misses land in `.refine/misses/` — the
   template-authoring queue.
 
 ## Usage

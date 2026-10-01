@@ -396,7 +396,7 @@ pub mod rule_domains;
 pub mod frontier_miner;
 
 // Issue 107 T1: the fixseq horizon report — lead-k linear decodability of
-// attempt outcomes over the `.heal/fixseq/` ring (AUC(k) vs the base and
+// attempt outcomes over the `.refine/fixseq/` ring (AUC(k) vs the base and
 // history-aggregate floors, LORO-held-out ridge readout). Pure stats over
 // the ring's jsonl wire shape, ungated so lib tests cover it at default
 // features. Report-first, gates nothing (the frontier-report law); refuses
@@ -492,7 +492,7 @@ pub mod score_bench;
 
 /// Plan 356 A1 — PAV (process-advantage) dataset curation for the L4
 /// fixer: (prefix, MC-Q) pairs over the frozen score-bench spans, the
-/// `.heal/` store, and extra miss dumps. The GPU half (daemon rollouts)
+/// `.refine/` store, and extra miss dumps. The GPU half (daemon rollouts)
 /// runs via `examples/pav_data_curate.rs`; the module + tests are CPU.
 #[cfg(feature = "pav_data")]
 pub mod pav_data;

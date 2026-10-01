@@ -59,10 +59,10 @@ pub const CANDIDATE_SCHEMA_VERSION: u32 = 1;
 /// The registry file schema version this build defines.
 pub const REGISTRY_VERSION: u32 = 1;
 
-/// Registry file name under the `.heal` root.
+/// Registry file name under the `.refine` root.
 pub const REGISTRY_FILE: &str = "kat_promotion.json";
 
-/// Append-only audit NDJSON under the `.heal` root (the `score_history`
+/// Append-only audit NDJSON under the `.refine` root (the `score_history`
 /// precedent — committed history of every gate decision).
 pub const AUDIT_FILE: &str = "kat_promotion_audit.jsonl";
 

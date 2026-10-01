@@ -1216,7 +1216,7 @@ impl CfClient {
     ///
     /// Issue 046: the model must be in the pricing table (an unpriced model
     /// is refused here, fail-fast, rather than per-call) and the USD daily
-    /// cap ledger opens at `KAT_LLM_SPEND_FILE` or `./.heal/kat_llm_spend.json`.
+    /// cap ledger opens at `KAT_LLM_SPEND_FILE` or `./.refine/kat_llm_spend.json`.
     ///
     /// Override precedence: explicit arg > `RIIR_CF_MODEL` env >
     /// [`Self::DEFAULT_MODEL`] (Issue: owner asks for a no-rebuild model
@@ -1704,7 +1704,7 @@ pub struct RegateHarness {
     pub matcher: LatentMatcher,
     pub verifier: ClippyVerifier,
     /// The durable trajectory store (Issue 049's growing-input source),
-    /// best-effort opened at `<repo root>/.heal/trajectories.kv`. `None`
+    /// best-effort opened at `<repo root>/.refine/trajectories.kv`. `None`
     /// when absent/unopenable — the growing channels then degrade to empty
     /// (arm G ≡ arm B for that sample, honestly recorded by the runner).
     pub store: Option<crate::traj_store::TrajStore>,

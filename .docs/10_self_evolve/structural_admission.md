@@ -44,7 +44,7 @@
 | File | Scope |
 |---|---|
 | [`src/structural_admission.rs`](../../src/structural_admission.rs) | The UNGATED pure vocabulary: kinds, review classes, shape gates, secret scan, chain state machine |
-| [`src/structural_admission_store.rs`](../../src/structural_admission_store.rs) | The `structural_admission`-gated store: `.heal/structural/artifacts/<blake3>` + `.heal/structural/heads.json` CAS |
+| [`src/structural_admission_store.rs`](../../src/structural_admission_store.rs) | The `structural_admission`-gated store: `.refine/structural/artifacts/<blake3>` + `.refine/structural/heads.json` CAS |
 
 ## Standing posture
 

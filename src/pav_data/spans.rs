@@ -4,13 +4,13 @@
 //!    directly). Includes the clean/decline fixtures: the driver
 //!    short-circuits them to a trivial root pair (q=1, `n_mc`=0) without
 //!    spending daemon calls on code that has nothing to fix.
-//! 2. **Store** — the lived-experience spans from `.heal/trajectories.kv`
+//! 2. **Store** — the lived-experience spans from `.refine/trajectories.kv`
 //!    (`TrajRowDoc.shape`, the buggy half the healer actually met). Deduped
 //!    by BLAKE3; rows whose `shape` does not parse standalone are counted
 //!    and skipped (the daemon's prompt contract needs parseable code).
 //! 3. **Extra** — a JSONL `{ "id": ..., "code": ..., "provenance": ... }`
 //!    seam for real-repo miss dumps. The clippy lane has no persistent miss
-//!    dump today (`.heal/misses/` is the `rustc_errors` queue and carries
+//!    dump today (`.refine/misses/` is the `rustc_errors` queue and carries
 //!    rendered diagnostics, not code spans); when A5's reachable-miss set
 //!    gets dumped it plugs in here without touching the driver.
 
@@ -64,7 +64,7 @@ pub fn fixture_spans() -> Vec<PavSpan> {
         .collect()
 }
 
-/// Load lived-experience spans from the `.heal/` store under `root`.
+/// Load lived-experience spans from the `.refine/` store under `root`.
 ///
 /// Rows whose `shape` does not parse standalone are skipped (counted in the
 /// return); duplicate shapes (the same span met under several lint keys)

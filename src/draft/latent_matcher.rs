@@ -140,7 +140,7 @@ pub struct LatentMatcher {
     /// per domain, dropped from every similarity fan-out before ranking.
     /// Default-empty (byte-identical posture): nothing demotes
     /// automatically — the fade-predictive gate stays closed, and only the
-    /// operator-written marker file (`.heal/active_set.json`) demotes.
+    /// operator-written marker file (`.refine/active_set.json`) demotes.
     active_exclusions: crate::active_set::ActiveSet,
     /// Issue 134 T2: the pool-depth allocation policy — per-domain factors
     /// over the retrieval pool + truncation K, built from the standing

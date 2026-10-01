@@ -126,7 +126,7 @@ pub struct FailureSignal {
 }
 
 impl FailureSignal {
-    /// A miss where no candidate was proposed at all (the `.heal/misses/`
+    /// A miss where no candidate was proposed at all (the `.refine/misses/`
     /// `rustc_errors` shape) — classifies E (corpus gap).
     #[must_use]
     pub fn miss_no_candidates() -> Self {
@@ -259,7 +259,7 @@ pub fn classify(sig: &FailureSignal) -> ComponentClass {
         };
     }
     // No ground truth, no verdict signals: the plain no-candidate miss —
-    // the corpus-gap default (the `.heal/misses/` `rustc_errors` shape).
+    // the corpus-gap default (the `.refine/misses/` `rustc_errors` shape).
     ComponentClass::Corpus
 }
 

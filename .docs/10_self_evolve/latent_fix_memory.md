@@ -182,7 +182,7 @@ feature build (**one active backend per run — never both**, Issue 038):
 
 | Build | Backend | Location | Why |
 |---|---|---|---|
-| `latent_retrieval` | **neuron-db store (`TrajStore`)** — the ONE backend | repo-local `.heal/trajectories.kv` (encrypted WAL; root = `RIIR_HEAL_TRAJ_ROOT` → first path's repo root → cwd) | per-key Pod rows, incremental puts via `CommitBatch`, WAL encryption at rest, run-attributed timestamps |
+| `latent_retrieval` | **neuron-db store (`TrajStore`)** — the ONE backend | repo-local `.refine/trajectories.kv` (encrypted WAL; root = `RIIR_HEAL_TRAJ_ROOT` → first path's repo root → cwd) | per-key Pod rows, incremental puts via `CommitBatch`, WAL encryption at rest, run-attributed timestamps |
 | default (light) | JSON envelope (Issue 018) | `~/.cache/riir-clippy/memory.json` (`RIIR_HEAL_MEMORY` override) | zero heavy deps for light builds |
 
 ### The store backend (Issue 038 — commit `e4ce8ba`)

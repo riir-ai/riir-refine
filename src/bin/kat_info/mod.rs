@@ -8,7 +8,7 @@
 //! | wallet (balance / grant / burned / contributed / receipts) | `GET /history` (dapps Issue 092) |
 //! | staking | `GET /stake/info` (the `stake --info` read) |
 //! | mining (this machine's pushed/earned/dup/unproven) | `GET /mining/adoption`, matched by pseudonym |
-//! | local work (store rows / outbox / repo burn) | `.heal/` state |
+//! | local work (store rows / outbox / repo burn) | `.refine/` state |
 //! | soft gate | `kat_soft_gate::evaluate` over the burn-ack server truth |
 //!
 //! Degradation is per-section and honest (the `account` precedent): an
@@ -300,7 +300,7 @@ fn local_section(paths: &[PathBuf]) {
     println!("  healed:      (this build cannot read the neuron store — latent_retrieval off)");
 
     // unsynced batches — the outbox the push half drains.
-    let outbox = root.join(".heal").join("outbox");
+    let outbox = root.join(".refine").join("outbox");
     let queued = std::fs::read_dir(&outbox)
         .map(|rd| rd.filter_map(|e| e.ok()).count())
         .unwrap_or(0);
@@ -311,7 +311,7 @@ fn local_section(paths: &[PathBuf]) {
     }
 
     // local burn — this repo's charge ledger (per-repo by design).
-    let charge_path = root.join(".heal").join("kat_charge.json");
+    let charge_path = root.join(".refine").join("kat_charge.json");
     match std::fs::read_to_string(&charge_path)
         .ok()
         .and_then(|t| serde_json::from_str::<ChargeState>(&t).ok())
@@ -333,7 +333,7 @@ fn local_section(paths: &[PathBuf]) {
 
     // the burn-ack server truth + the 075 soft gate over it.
     let ack_path = root
-        .join(".heal")
+        .join(".refine")
         .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
     let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {

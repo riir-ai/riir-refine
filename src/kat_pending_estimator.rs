@@ -168,7 +168,7 @@ impl Default for SyncWatermark {
 }
 
 impl SyncWatermark {
-    /// The watermark file name under the `.heal` root.
+    /// The watermark file name under the `.refine` root.
     pub const FILE_NAME: &'static str = "kat_sync_state.json";
 
     /// The never-synced watermark: everything gate-passed is pending.
@@ -207,14 +207,14 @@ impl SyncWatermark {
         }
     }
 
-    /// Load the watermark from `<root>/.heal/kat_sync_state.json`. Never
+    /// Load the watermark from `<root>/.refine/kat_sync_state.json`. Never
     /// aborts: missing → empty (bootstrap, no warning); corrupt / version
     /// mismatch → empty + warning (re-pend everything — over-sync is the
     /// fail-safe direction). The estimator stays pure; surfacing the
     /// warning belongs to the CLI.
     #[must_use]
     pub fn load(root: &Path) -> (Self, Option<String>) {
-        Self::load_at(&root.join(".heal").join(Self::FILE_NAME))
+        Self::load_at(&root.join(".refine").join(Self::FILE_NAME))
     }
 
     /// Exact-path loader (tests + the env-override pattern).
@@ -361,7 +361,7 @@ impl PendingEstimate {
     pub fn blocked_line(&self) -> String {
         format!(
             "Records blocked by redaction policy: {} (never synced; adjust \
-             .heal-sync-policy to include them)",
+             .refine-sync-policy to include them)",
             thousands(self.blocked)
         )
     }

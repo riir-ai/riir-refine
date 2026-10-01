@@ -28,7 +28,7 @@
 //!
 //! ## Persistence + versions
 //!
-//! `<root>/.heal/kat_llm_spend.json` (`KAT_LLM_SPEND_FILE` overrides) — a
+//! `<root>/.refine/kat_llm_spend.json` (`KAT_LLM_SPEND_FILE` overrides) — a
 //! per-UTC-day accumulator, version-stamped (`SPEND_VERSION` +
 //! `PRICING_VERSION`, the `kat_meter.json` discipline: a reprice is an
 //! explicit versioned delta, never silent). Missing/corrupt/unknown-version →
@@ -328,13 +328,13 @@ pub struct SpendLedger {
 }
 
 impl SpendLedger {
-    /// The ledger file name under the `.heal` root.
+    /// The ledger file name under the `.refine` root.
     pub const FILE_NAME: &'static str = "kat_llm_spend.json";
 
-    /// Open (or create) at `<root>/.heal/kat_llm_spend.json`, cap from env.
+    /// Open (or create) at `<root>/.refine/kat_llm_spend.json`, cap from env.
     #[must_use]
     pub fn open(root: &Path) -> Self {
-        Self::open_at(root.join(".heal").join(Self::FILE_NAME))
+        Self::open_at(root.join(".refine").join(Self::FILE_NAME))
     }
 
     /// Open at an explicit path, cap from env (the `KAT_LLM_SPEND_FILE`

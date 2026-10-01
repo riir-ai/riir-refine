@@ -538,7 +538,7 @@ mod tests {
         ///
         /// Env:
         /// - `RIIR_COLLAPSE_ENVELOPE` — path to a memory.json[.migrated] copy
-        /// - `RIIR_COLLAPSE_STORE_ROOT` — dir of `<repo>/.heal/…` COPIES
+        /// - `RIIR_COLLAPSE_STORE_ROOT` — dir of `<repo>/.refine/…` COPIES
         ///   (never the live stores — copy first).
         #[test]
         fn collapse_monitor_production_measurement() {
@@ -626,7 +626,7 @@ mod tests {
                     "riir-game-sdk",
                     "riir-mmorpg-examples",
                 ] {
-                    let dir = std::path::Path::new(&root).join(repo).join(".heal");
+                    let dir = std::path::Path::new(&root).join(repo).join(".refine");
                     if !dir.join("trajectories.kv").exists() {
                         continue;
                     }

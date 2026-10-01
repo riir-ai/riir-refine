@@ -3,8 +3,8 @@
 //!
 //! ## What it is
 //!
-//! [`LocalKvStore`] at `<repo>/.heal/trajectories.kv/` (encrypted WAL,
-//! passphrase = a generated seed at `<repo>/.heal/key` — the threat model
+//! [`LocalKvStore`] at `<repo>/.refine/trajectories.kv/` (encrypted WAL,
+//! passphrase = a generated seed at `<repo>/.refine/key` — the threat model
 //! is integrity + durability, not secrecy), plus the two retrieval axes
 //! the plan's shape-conditional ordering (T4.2) consumes:
 //!
@@ -380,7 +380,7 @@ impl TrajNeighbor {
 pub struct TrajStore {
     kv: LocalKvStore,
     bm25: Bm25Index,
-    /// The store root (`.heal/trajectories.kv`), for diagnostics.
+    /// The store root (`.refine/trajectories.kv`), for diagnostics.
     pub root: PathBuf,
 }
 
@@ -460,7 +460,7 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Resolve or create the per-repo key seed at `<root>/.heal/key`. The
+/// Resolve or create the per-repo key seed at `<root>/.refine/key`. The
 /// threat model is integrity + durability, not secrecy — the seed just
 /// needs to be STABLE so the WAL stays readable across runs.
 fn ensure_key_seed(heal_dir: &Path) -> std::io::Result<String> {
@@ -482,7 +482,7 @@ fn ensure_key_seed(heal_dir: &Path) -> std::io::Result<String> {
 }
 
 impl TrajStore {
-    /// Open (or create) the store under `<root>/.heal/trajectories.kv` and
+    /// Open (or create) the store under `<root>/.refine/trajectories.kv` and
     /// rebuild the BM25 axis from the rows.
     ///
     /// # Errors
@@ -492,7 +492,7 @@ impl TrajStore {
     /// is skipped + counted in the returned warning count (one bad row
     /// must not brick the store).
     pub fn open(root: &Path) -> Result<(Self, usize), String> {
-        let heal = root.join(".heal");
+        let heal = root.join(".refine");
         let store_dir = heal.join("trajectories.kv");
         let passphrase = ensure_key_seed(&heal).map_err(|e| format!("key seed: {e}"))?;
         let kv = LocalKvStore::open_dir(&store_dir, &passphrase)

@@ -200,7 +200,7 @@ fn build_samples(args: &Args) -> Result<Vec<Sample>, String> {
 /// T0.2 (Plan 026): run every sample through the redaction gate BEFORE any
 /// arm sees it. Arms A/B send prompts to CF Workers AI (real egress) and
 /// every arm writes corpus rows via `record_case` — a blocked span must
-/// reach neither. Deny-by-default: no discoverable `.heal-sync-policy`
+/// reach neither. Deny-by-default: no discoverable `.refine-sync-policy`
 /// blocks all (fail-loud, exit 4 — running on zero samples is pointless).
 ///
 /// Sample origins: the `reachable:` set is authored in-repo (fixtures);
@@ -219,7 +219,7 @@ fn gate_samples(samples: Vec<Sample>, args: &Args) -> Vec<Sample> {
         (Some(_), Some(w)) => eprintln!("[regate] redaction policy: {w} — DENY-ALL in force"),
         (None, None) => eprintln!(
             "[regate] redaction policy: NONE FOUND — deny-by-default blocks every span; \
-             create .heal-sync-policy at the repo root (Proposal 005 T0.2)"
+             create .refine-sync-policy at the repo root (Proposal 005 T0.2)"
         ),
         (None, Some(w)) => eprintln!("[regate] redaction policy: {w} — DENY-ALL in force"),
     }

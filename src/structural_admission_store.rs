@@ -4,11 +4,11 @@
 //! state. The state machine it persists lives UNGATED in
 //! [`crate::structural_admission`]; this module is bytes-on-disk only:
 //!
-//! - artifacts: `<root>/.heal/structural/artifacts/<blake3-64hex>` —
+//! - artifacts: `<root>/.refine/structural/artifacts/<blake3-64hex>` —
 //!   content-addressed, write-once, re-verified on every touch (an
 //!   existing file whose bytes no longer hash to its address is CORRUPT,
 //!   never silently reused);
-//! - heads: `<root>/.heal/structural/heads.json` — the [`ChainState`],
+//! - heads: `<root>/.refine/structural/heads.json` — the [`ChainState`],
 //!   saved under compare-and-save: the caller names the state it observed,
 //!   and a save whose on-disk state moved since is refused (CAS at the
 //!   store layer, mirroring the head-level CAS).
@@ -26,7 +26,7 @@ use crate::structural_admission::{
 };
 
 /// The structural chain store rooted at a repo root (the same root the
-/// `.heal/` trajectory store hangs off).
+/// `.refine/` trajectory store hangs off).
 #[derive(Debug, Clone)]
 pub struct ChainStore {
     root: PathBuf,

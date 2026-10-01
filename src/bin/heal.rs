@@ -127,7 +127,7 @@ fn default_memory_path() -> PathBuf {
     base.join("riir-clippy").join("memory.json")
 }
 
-/// Resolve the repo-local `.heal` root shared by the trajectory store and the
+/// Resolve the repo-local `.refine` root shared by the trajectory store and the
 /// KAT meter: `RIIR_HEAL_TRAJ_ROOT` → else the first path arg's nearest
 /// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
 /// per-repo adoption audit) → else cwd.
@@ -197,7 +197,7 @@ fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj
 /// this run. `None` when disabled — `RIIR_HEAL_KAT_METER=0|off|false|no`
 /// (the `RIIR_HEAL_SELF_EVOLVE=0` kill-switch pattern) or an unreachable
 /// meter location (never fatal to a heal). `RIIR_HEAL_KAT_METER_FILE`
-/// overrides the exact file; otherwise `<resolve_heal_root>/.heal/kat_meter.json`
+/// overrides the exact file; otherwise `<resolve_heal_root>/.refine/kat_meter.json`
 /// (beside the trajectory store).
 /// The shared billing kill-switch (Plan 024 — ONE switch for the whole KAT
 /// billing plane): `RIIR_HEAL_KAT_METER=0|off|false|no` disables the meter,
@@ -320,7 +320,7 @@ fn enforce_kat_soft_gate(args: &Args) {
     }
     let root = resolve_heal_root(&args.paths);
     let ack_path = root
-        .join(".heal")
+        .join(".refine")
         .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
     let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
@@ -508,7 +508,7 @@ fn survey_fixable_count(paths: &[PathBuf]) -> Option<usize> {
 /// `cargo refine sync` drains), 0 when the dir does not exist yet.
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn mining_queued_batches() -> u32 {
-    let outbox = resolve_heal_root(&[]).join(".heal").join("outbox");
+    let outbox = resolve_heal_root(&[]).join(".refine").join("outbox");
     u32::try_from(
         std::fs::read_dir(&outbox).map_or(0, |rd| {
                 rd.filter_map(std::result::Result::ok)
@@ -584,7 +584,7 @@ fn kat_gate_disabled() -> bool {
 /// the policy warning, the web link, and the login → heal → sync →
 /// account loop. Feature halves (account status / outbox) appear only
 /// when their feature compiled in — the explainer itself never needs one.
-/// The default `.heal-sync-policy` `--mine` writes (version 3, the
+/// The default `.refine-sync-policy` `--mine` writes (version 3, the
 /// [`riir_clippy::kat_redact`] schema): own-repo rows sync, the standard
 /// source globs, findings redacted in place, secrets still blocked by the
 /// gate itself. WITHOUT a policy the gate is deny-by-default and every sync
@@ -694,24 +694,24 @@ fn run_mine_intro() {
     println!("opt out any time: cargo refine --unmine");
 
     // The policy moment rides the consent moment: opting IN here while the
-    // repo has no `.heal-sync-policy` would make the very next `sync` print
+    // repo has no `.refine-sync-policy` would make the very next `sync` print
     // `0 included, N blocked` (deny-by-default) with no named remedy. Write
     // the default once, loudly; never overwrite; never write outside a git
     // repo (the root resolver falls back to cwd — a non-repo cwd has nothing
     // to sync from anyway).
     let policy_root = resolve_heal_root(&[]);
-    let policy_path = policy_root.join(".heal-sync-policy");
+    let policy_path = policy_root.join(".refine-sync-policy");
     if policy_path.exists() {
         println!("policy: using existing {}", policy_path.display());
     } else if policy_root.join(".git").exists() {
         match std::fs::write(&policy_path, DEFAULT_SYNC_POLICY_JSON) {
             Ok(()) => println!(
-                "policy: wrote default .heal-sync-policy at {} — rows from this repo now sync \
+                "policy: wrote default .refine-sync-policy at {} — rows from this repo now sync \
                  (secrets are still blocked by the redaction gate)",
                 policy_path.display()
             ),
             Err(e) => eprintln!(
-                "policy: could not write .heal-sync-policy ({e}) — `cargo refine sync` will block \
+                "policy: could not write .refine-sync-policy ({e}) — `cargo refine sync` will block \
                  rows until one exists"
             ),
         }
@@ -764,7 +764,7 @@ fn run_mine_intro() {
 ///   were always local and stay local; this flag does not touch them.
 /// - **Stopped**: the outbound push half of `cargo refine sync`. The lease
 ///   PULL half still runs — a read is not a contribution.
-/// - **Not deleted**: whatever is already queued in `.heal/outbox/`. The
+/// - **Not deleted**: whatever is already queued in `.refine/outbox/`. The
 ///   path is named and the files are the user's to remove; a tool that
 ///   silently deletes the evidence of what it queued is not auditable.
 /// - **Sent (best-effort, one-shot)**: a signed consent tier note to the
@@ -844,7 +844,7 @@ fn run_unmine() {
     //    not auditable; they are inert while opted out and the user
     //    decides).
     let watermark = resolve_heal_root(&[])
-        .join(".heal")
+        .join(".refine")
         .join("kat_sync_watermark.json");
     match std::fs::remove_file(&watermark) {
         Ok(()) => println!(
@@ -1037,7 +1037,7 @@ fn run_unmine_purge() {
                 Err(e) => eprintln!("  purge: could not clear the outbox: {e}"),
             }
             let watermark = resolve_heal_root(&[])
-                .join(".heal")
+                .join(".refine")
                 .join("kat_sync_watermark.json");
             match std::fs::remove_file(&watermark) {
                 Ok(()) => println!("  watermark cleared: {}", watermark.display()),
@@ -1078,15 +1078,15 @@ fn run_unmine_purge() {
     }
 }
 
-/// The `.heal/outbox/` dir `run_kat_sync`'s `queue_outbox` writes into,
-/// resolved the SAME way (`resolve_heal_root` → `.heal/outbox`) so the path
+/// The `.refine/outbox/` dir `run_kat_sync`'s `queue_outbox` writes into,
+/// resolved the SAME way (`resolve_heal_root` → `.refine/outbox`) so the path
 /// `--unmine` names is the path a queued batch actually sits at. No cfg
 /// fallback: `resolve_heal_root` compiles behind
 /// `latent_retrieval`/`kat_service` and this binary's `required-features`
 /// include BOTH, so a build of `cargo-refine` without it cannot exist — an
 /// unreachable cfg arm would be an untested claim, not extra safety.
 fn unmine_outbox_dir() -> PathBuf {
-    resolve_heal_root(&[]).join(".heal").join("outbox")
+    resolve_heal_root(&[]).join(".refine").join("outbox")
 }
 
 /// The login-outcome lines, shared by `cargo refine login` and `--mine`'s
@@ -1216,7 +1216,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // arg or cwd) when one exists. Per-repo by design (Plans 023/024) until
     // the server aggregates at Phase 1.
     let root = resolve_heal_root(paths);
-    let charge_path = root.join(".heal").join("kat_charge.json");
+    let charge_path = root.join(".refine").join("kat_charge.json");
     let charge = std::fs::read_to_string(&charge_path).ok().and_then(|text| {
         match serde_json::from_str::<ChargeState>(&text) {
             Ok(charge) => Some(charge),
@@ -1468,7 +1468,7 @@ fn run_kat_update() {
 /// build the redacted payload from the repo trajectory store (the
 /// sanctioned egress path — every row gated) + POST /sync; with the service
 /// plane deferred the payload is validated + queued locally
-/// (`.heal/outbox/`) and the honest state prints. Pull: the lease refresh
+/// (`.refine/outbox/`) and the honest state prints. Pull: the lease refresh
 /// (shared with `update`). The sync watermark advances ONLY on a real push
 /// acceptance (queued batches stay "pending" — the honest accounting).
 /// What the mining-batch push did (the quiet tail prints one line via
@@ -1522,7 +1522,7 @@ fn push_mining_batch(
 
     let sv = !quiet; // verbose mode = the `cargo refine sync` report
     let root = resolve_heal_root(&[]);
-    let kv = root.join(".heal").join("trajectories.kv");
+    let kv = root.join(".refine").join("trajectories.kv");
     if !kv.exists() {
         if sv {
             println!(
@@ -1606,7 +1606,7 @@ fn push_mining_batch(
             )
         })
     {
-        let policy_path = root.join(".heal-sync-policy");
+        let policy_path = root.join(".refine-sync-policy");
         eprintln!(
             "sync: {} row(s) BLOCKED — no {} (the redaction gate is deny-by-default)",
             payload.rows_blocked,
@@ -1646,7 +1646,7 @@ fn push_mining_batch(
             // The outbox copy of THIS batch is now delivered mail — remove
             // it (pruned per-file, never the directory; re-push is
             // idempotent server-side, so an early crash here is harmless).
-            let batch_file = root.join(".heal").join("outbox").join(format!(
+            let batch_file = root.join(".refine").join("outbox").join(format!(
                 "{}.ndjson",
                 &payload.commitment[..12.min(payload.commitment.len())]
             ));
@@ -1686,7 +1686,7 @@ fn push_mining_batch(
             let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(&payload);
             if let Err(e) = wm.save(
                 &root
-                    .join(".heal")
+                    .join(".refine")
                     .join(riir_clippy::kat_pending_estimator::SyncWatermark::FILE_NAME),
             ) {
                 eprintln!("sync: watermark save failed: {e}");
@@ -2584,7 +2584,7 @@ fn run_kat_refill(wait_secs: u64) {
         if let Some(b) = &outcome.final_balance {
             let root = resolve_heal_root(&[]);
             let ack_path = root
-                .join(".heal")
+                .join(".refine")
                 .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
             let (mut ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = warning {
@@ -2665,7 +2665,7 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
         }
         let fixed = apply_edits(WETRUN_FIXTURE, edits);
 
-        // The REAL meter + charge ledger, on the repo-local `.heal` root.
+        // The REAL meter + charge ledger, on the repo-local `.refine` root.
         let mut meter = KatMeter::open(&self.root);
         meter.record_span(fixed.as_bytes());
         let mut charge = KatCharge::open(&self.root, meter.state());
@@ -3478,9 +3478,9 @@ USAGE:
                     codes report as misses until Phase 3. Every --write run also
                     dumps the ORDERED per-attempt ring (Issue 91 T1.5 — seq, error
                     code, span_hash, strategy, outcome, errors before→after) to
-                    <repo>/.heal/fixseq/run-<ts>.jsonl — the replay substrate for
+                    <repo>/.refine/fixseq/run-<ts>.jsonl — the replay substrate for
                     the oscillation detector (T2) + the per-run strategy posterior
-                    (Issue 093); the misses queue (.heal/misses/) stays the
+                    (Issue 093); the misses queue (.refine/misses/) stays the
                     authoring surface.
     --max-iters <N> --fix-compile iteration bound (default 5).
     --dump-trajectories  Export the self-evolve trajectory store to stdout as
@@ -3528,7 +3528,7 @@ USAGE:
                     attempt time since T2) — run only at full column
                     coverage, skipped loud otherwise with the coverage
                     count in the header.
-                    Reads <path>/.heal/fixseq/run-*.jsonl directly — no
+                    Reads <path>/.refine/fixseq/run-*.jsonl directly — no
                     store, no domain features, works on every feature build.
                     Report-first, gates nothing; refuses (exit 1) on empty
                     ring / blind walk (no run reaches 2 attempts) /
@@ -3628,7 +3628,7 @@ USAGE:
                     run). Reads paths from the CLI (default `.`; the
                     positional paths are the PRE side when --vs is given).
     --misses       Print the authoring queues in FRONTIER order (Plan 091
-                    + Issue 089 T3): the `.heal/misses/` rustc_errors
+                    + Issue 089 T3): the `.refine/misses/` rustc_errors
                     per-CODE queue (dispersion-informative error codes first
                     — resolving THOSE converts uncertain candidates), then
                     one per-RULE queue per ENABLED retrieval domain
@@ -3693,7 +3693,7 @@ USAGE:
                     machine-global consent = opted out, so `cargo refine sync`
                     refuses its PUSH half (the lease pull still runs), and
                     clears the local sync bookkeeping (watermark; the queued
-                    .heal/outbox/ batches are named, never deleted). Your key,
+                    .refine/outbox/ batches are named, never deleted). Your key,
                     balance and rewards are UNTOUCHED — fully reversible with
                     --mine. Healing (--fix / --suggest / the bare dry run) is
                     UNCHANGED and was always local.
@@ -3754,7 +3754,7 @@ USAGE:
                     the lease. The payload is SIGNED with the account key
                     (v2 — Issue 008; `login` first). With the service plane
                     deferred, the push is validated + queued locally
-                    (.heal/outbox/) — nothing is faked.
+                    (.refine/outbox/) — nothing is faked.
     claim           T1.6 payment claim (--tx <sig>, kat_service): validate +
                     compose + submit (or queue locally when the service
                     plane is not yet live). NEVER mints client-side (G9d).
@@ -4047,7 +4047,7 @@ struct Args {
     /// Read-only standalone mode (no paths, no recording, ignores the
     /// opt-out env — a query, not a run).
     memory_stats: bool,
-    /// Plan 091 T1.2: `--misses` — print the `.heal/misses/` authoring
+    /// Plan 091 T1.2: `--misses` — print the `.refine/misses/` authoring
     /// queue in FRONTIER order (dispersion-informative codes first, the
     /// real-G8 enabler). Read-only standalone mode (the memory-stats
     /// pattern: early return before `validate_mode_flags`).
@@ -4172,7 +4172,7 @@ struct Args {
     /// population (never a green zero). Needs `latent_retrieval` (the store).
     frontier_report: bool,
     /// Issue 107 T1: `--horizon-report` — lead-k linear decodability of
-    /// fix-compile attempt outcomes over the `.heal/fixseq/` ring jsonl:
+    /// fix-compile attempt outcomes over the `.refine/fixseq/` ring jsonl:
     /// AUC(k) for a LORO-held-out closed-form ridge readout over
     /// ring-native features at i-k, against the base floor (0.5) and the
     /// history-aggregate floor (per-strategy Laplace prior, LORO). Report-
@@ -5247,7 +5247,7 @@ fn print_suggestion(
 /// generalization): the frontier-ordered authoring queue — read-only,
 /// standalone. Two halves:
 ///
-/// - the ORIGINAL `rustc_errors` per-code queue (`.heal/misses/`, Plan 091
+/// - the ORIGINAL `rustc_errors` per-code queue (`.refine/misses/`, Plan 091
 ///   verbatim — kept, not replaced);
 /// - one frontier-ordered RULE queue per ENABLED retrieval domain
 ///   (clippy/perf/kernel/sec/docker — corpus membership attributes store
@@ -5438,7 +5438,7 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
         e.1 += reverted;
     }
     #[cfg(feature = "latent_retrieval")]
-    if root.join(".heal").join("trajectories.kv").exists() {
+    if root.join(".refine").join("trajectories.kv").exists() {
         if let Ok((store, _)) = riir_clippy::traj_store::TrajStore::open(root) {
             let mut out = std::collections::BTreeMap::new();
             for r in store.dump() {
@@ -5476,7 +5476,7 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
 /// canary invalidates every verdict this run produced (the
 /// audit-instrument law) → exit 1.
 /// Issue 102 T2/T3: the active-set marker commands — the ONLY writers of
-/// `.heal/active_set.json`. Nothing in the heal path ever demotes: the
+/// `.refine/active_set.json`. Nothing in the heal path ever demotes: the
 /// fade-predictive gate (Issue 102's ≥3-future-generations clock, started
 /// 2026-09-21) is the only thing that could automate a demotion, and until
 /// it opens, an operator writes the marker through these commands. The
@@ -7208,7 +7208,7 @@ fn run_conversion_report() {
     let mut signals: Vec<evolve::ConversionSignal> = Vec::new();
     let mut store_present = false;
     #[cfg(feature = "latent_retrieval")]
-    if root.join(".heal").join("trajectories.kv").exists() {
+    if root.join(".refine").join("trajectories.kv").exists() {
         match riir_clippy::traj_store::TrajStore::open(&root) {
             Ok((store, bad)) => {
                 if bad > 0 {
@@ -7409,7 +7409,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
             }
             say(&format!(
                 "stamped {day}: {stamped} row(s) → {}",
-                root.join(".heal").join("trajectories.kv").display()
+                root.join(".refine").join("trajectories.kv").display()
             ));
         }
         if do_import {
@@ -7784,7 +7784,7 @@ fn main() {
 
     // ── Plan 091 T1.2: --misses — the frontier-ordered authoring queue ──
     // Read-only standalone mode (the memory-stats pattern: early return,
-    // validate_mode_flags never sees it). Prints `.heal/misses/*.md`
+    // validate_mode_flags never sees it). Prints `.refine/misses/*.md`
     // frontiers-ordered by per-code dispersion: informative pools first —
     // resolving THOSE codes converts uncertain candidates — then unobserved
     // (one probe is cheap), regenerate, saturated last. The G8 enabler:
@@ -7912,7 +7912,7 @@ fn main() {
     // Read-only standalone mode (like the score arms above: early return,
     // validate_mode_flags never sees it). Summarizes whichever backend the
     // build ships: the JSON envelope always; the repo-local neuron-db store
-    // (`.heal/trajectories.kv`, `latent_retrieval` builds) when present.
+    // (`.refine/trajectories.kv`, `latent_retrieval` builds) when present.
     // ── Issue 102: the active-set marker (standalone — no paths) ────
     if args.active_set_list
         || args.active_set_demote.is_some()
@@ -7935,12 +7935,12 @@ fn main() {
         match std::fs::read_to_string(&path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // 038: the envelope may have been migrated — the ACTIVE
-                // backend is then the repo-local .heal/trajectories.kv
+                // backend is then the repo-local .refine/trajectories.kv
                 // (summarized below). Not an error; fall through.
                 let migrated = path.with_extension("json.migrated");
                 if migrated.exists() {
                     println!(
-                        "memory store: {} (MIGRATED — the active backend is the repo-local .heal/trajectories.kv)",
+                        "memory store: {} (MIGRATED — the active backend is the repo-local .refine/trajectories.kv)",
                         migrated.display()
                     );
                 } else {
@@ -7972,14 +7972,14 @@ fn main() {
             }
         }
         // The neuron-db backend (`latent_retrieval` builds): repo-local
-        // `.heal/trajectories.kv` — same root resolution as --dump-trajectories.
+        // `.refine/trajectories.kv` — same root resolution as --dump-trajectories.
         #[cfg(feature = "latent_retrieval")]
         {
             let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
-            let kv = root.join(".heal").join("trajectories.kv");
+            let kv = root.join(".refine").join("trajectories.kv");
             if kv.exists() {
                 match riir_clippy::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
@@ -8015,7 +8015,7 @@ fn main() {
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
-            let kv = root.join(".heal").join("trajectories.kv");
+            let kv = root.join(".refine").join("trajectories.kv");
             if !kv.exists() {
                 eprintln!(
                     "frontier-report: no store at {} — run any --fix in this repo first",
@@ -8252,7 +8252,7 @@ fn main() {
 
     // ── Issue 107 T1: --horizon-report — the fixseq lead-k report ──────────
     // Report-first, gates nothing (the frontier-report law): reads the
-    // `.heal/fixseq/` ring jsonl directly — no store, no domain features,
+    // `.refine/fixseq/` ring jsonl directly — no store, no domain features,
     // so this runs on EVERY feature build. Refuses exit 1 on empty ring /
     // blind walk / single-class labels — never a confident green zero
     // (the measurement on a store that exists NOWHERE in the workspace
@@ -8291,7 +8291,7 @@ fn main() {
 
     // ── Issue 128 (T1-T4): --fixseq-stats — the cascade + derailment report ──
     // Report-first, gates nothing (the frontier-report law): reads the
-    // `.heal/fixseq/` rings through the SAME loader as --horizon-report.
+    // `.refine/fixseq/` rings through the SAME loader as --horizon-report.
     // Each PATH is one CORPUS (per-corpus cascade tables + the T7 transfer
     // verdict across corpora; the T5 mint manifest names its configs).
     // Refuses exit 1 on empty / no-transition populations — never a green
@@ -8492,7 +8492,7 @@ fn main() {
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
-            let kv = root.join(".heal").join("trajectories.kv");
+            let kv = root.join(".refine").join("trajectories.kv");
             if !kv.exists() {
                 eprintln!(
                     "recompute-elo: no store at {} — run any --fix in this repo first",
@@ -8569,7 +8569,7 @@ fn main() {
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
-            if root.join(".heal").join("trajectories.kv").exists() {
+            if root.join(".refine").join("trajectories.kv").exists() {
                 match riir_clippy::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
                         if bad > 0 {
@@ -8681,14 +8681,14 @@ fn main() {
     if args.dump_trajectories {
         // The neuron-db backend (`latent_retrieval` builds): the repo-local
         // durable store. Requires a path (the repo root to resolve
-        // `.heal/trajectories.kv`) — `RIIR_HEAL_TRAJ_ROOT` overrides.
+        // `.refine/trajectories.kv`) — `RIIR_HEAL_TRAJ_ROOT` overrides.
         #[cfg(feature = "latent_retrieval")]
         {
             let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
-            if root.join(".heal").join("trajectories.kv").exists() {
+            if root.join(".refine").join("trajectories.kv").exists() {
                 match riir_clippy::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
                         if bad > 0 {
@@ -10734,7 +10734,7 @@ fn main() {
 
         // ── 037-T2/038: the durable verdict landing — fix_verify implies
         // latent_retrieval, so the verdict events ALSO land in the
-        // repo-local neuron-db store (`.heal/trajectories.kv`), the backend
+        // repo-local neuron-db store (`.refine/trajectories.kv`), the backend
         // 038 unifies on. Transitional dual-record with memory.json below
         // (the same events — no drift; 038-T3 retires the envelope half).
         // 038: the store was hoisted + opened at the --fix path entry (the
@@ -11460,7 +11460,7 @@ fn main() {
         } else {
             let root = resolve_heal_root(&args.paths);
             let ack_path = root
-                .join(".heal")
+                .join(".refine")
                 .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
             let (ack, _) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
             kat_balance = ack.last_balance_micro.map(MicroKat);

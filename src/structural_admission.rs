@@ -74,12 +74,12 @@ pub const MAX_TITLE_BYTES: usize = 200;
 pub const CHAIN_STATE_VERSION: u32 = 1;
 
 /// The heads file, RELATIVE to the repo root the caller resolves (the same
-/// root the `.heal/` trajectory store hangs off).
-pub const CHAIN_STATE_FILE: &str = ".heal/structural/heads.json";
+/// root the `.refine/` trajectory store hangs off).
+pub const CHAIN_STATE_FILE: &str = ".refine/structural/heads.json";
 
 /// The immutable content-addressed artifact directory, RELATIVE to the same
 /// root. Artifact address = BLAKE3 of the canonical proposal bytes.
-pub const ARTIFACTS_DIR: &str = ".heal/structural/artifacts";
+pub const ARTIFACTS_DIR: &str = ".refine/structural/artifacts";
 
 /// The healer's mutable structural surface, typed (reef P1's node-kind
 /// vocabulary mapped onto OUR surface). Kind is DERIVED from the payload —

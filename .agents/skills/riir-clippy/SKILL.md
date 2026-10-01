@@ -230,7 +230,7 @@ skill points agents there). Per sweep:
 1. Gather (one command: `scripts/self_evolve_audit.sh` — Issue 037's
    instrument): `~/.cache/riir-clippy/memory.json` (trajectory counts by lint,
   tier/outcome distribution), `.benchmarks/score_history.jsonl` delta,
-  `.heal/misses/`, verify-gate revert reports, grep target-repo session
+  `.refine/misses/`, verify-gate revert reports, grep target-repo session
   records for `divergence|backlog|miss`.
 2. Triage each open class: **probe against real clippy FIRST** (temp crate,
   JSON output — the established discipline; a rule without probe evidence

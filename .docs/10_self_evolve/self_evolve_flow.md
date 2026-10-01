@@ -52,7 +52,7 @@ flowchart TB
         LEARN --> RET
     end
 
-    REC -->|"opt-in consent --mine"| OUT["mining batch<br/>.heal/outbox"]
+    REC -->|"opt-in consent --mine"| OUT["mining batch<br/>.refine/outbox"]
 
     subgraph NET["network — the KAT fleet (ai.gist.rs)"]
         direction LR
@@ -96,7 +96,7 @@ flowchart TB
 - No memory yet → the pipeline degenerates to the static-corpus path
   (the L0–L2 GOAT gates still hold — the layers are additive).
 - No oracle → learning disabled, memory still records.
-- No consent → nothing leaves the machine; `.heal/outbox/` is named,
+- No consent → nothing leaves the machine; `.refine/outbox/` is named,
   never deleted.
 - Unfunded deployment → claims answer `unconfigured`, healing bills KAT
   directly (fail-closed).

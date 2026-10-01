@@ -48,9 +48,9 @@ use serde::{Deserialize, Serialize};
 pub const ACTIVE_SET_VERSION: u32 = 1;
 
 /// The marker file path, RELATIVE to the repo root the caller resolves
-/// (the heal CLI's project root — the same root the `.heal/` trajectory
+/// (the heal CLI's project root — the same root the `.refine/` trajectory
 /// store hangs off).
-pub const ACTIVE_SET_FILE: &str = ".heal/active_set.json";
+pub const ACTIVE_SET_FILE: &str = ".refine/active_set.json";
 
 /// The domain key of the clippy domain — the only domain with a
 /// fresh-unresolved-span signal (its findings list is the fix lane's only
