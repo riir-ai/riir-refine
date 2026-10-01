@@ -118,6 +118,7 @@ graph-dependency fence spelling).
 - The verify-path wins (rules 1/2/4/5) are M3-lane league-adjacent: their metal attention
   shapes map to ourbonsai decode/prefill windows; the Issue-846/971 watch lanes may cite this
   pin at owner discretion (the B178 T10-lane-intel OFFER convention — not made).
+- **PASS-Redirect (synthesis):** Yamaguchi et al. [arXiv:2609.39827 "Synthetic Pre-pretraining Survives Scale, but Not as a Grammatical Prior"] retro-validates rule 8's firing condition from the training side: their mechanism isolation shows warm-up tasks that require retrieving a SPECIFIC EARLIER POSITION install the capability (verbatim-retrieval NLL 12/12) while membership-tracking warm-up ("has this token appeared before", no position) DEGRADES performance −7.2 pts — i.e. fire on positional matches (the unique ≥16-token span match), never on membership/co-occurrence-shaped triggers, which is exactly the rule's design. No corpus change.
 - `whole-round-in-situ-adoption-trial` is directly consumable by OUR bench harnesses: any
   kernel-variant A/B that picks on synthetic bursts risks the same mispick the source measured.
 - The idle-residency rule (6) is the formal statement of this workspace's own bench_preflight
