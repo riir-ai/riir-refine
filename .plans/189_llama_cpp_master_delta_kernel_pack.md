@@ -60,8 +60,11 @@ tree untouched on `dflash2`). Route: kernel_opt (kernel-only → zero clippy-cor
   recorded in Research 224.
 - [x] One authoring-subagent count claim corrected at landing (N was 52, not 75 — grep hits
   vs slice entries); every count re-derived from KERNEL_CATEGORIES.
-- [ ] Healer global binary STALE stamp found this session (missing kat_transport,fix_verify)
+- [-] Healer global binary STALE stamp found this session (missing kat_transport,fix_verify)
   — the rebuild remains owed AFTER this batch (standing hazard, separate unit; the batch gates
-  used cargo test/clippy directly, not the global binary). DEFERRED to the next unit with
-  reason: the rebuild is a release build contending with this batch's gates on the same
-  target dir; next session takes it as its first unit.
+  used cargo test/clippy directly, not the global binary). DEFERRED with reason: the rebuild
+  is a release build that contends with sibling measurement/build lanes on the box; re-deferred
+  twice (09-30 + 10-01 idle passes) on cargo contention, with the staleness ADJUDICATED BENIGN
+  in the 10-01 pass (the `75c244b0` heal.rs return-move is load-bearing only at the kat_transport-OFF
+  posture; the shipped release-set binary — kat_transport ON — is behavior-identical; the rebuild
+  clears the flag cosmetically). Unblock: the next cargo-calm slot (no sibling cargo/measurement active).
