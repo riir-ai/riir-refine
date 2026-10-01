@@ -1,0 +1,25 @@
+# Issue 140: Insight-conditioned fix retry + abstraction-gated insight store (RLTL;DR modelless lane)
+
+**Status:** OPEN — filed 2026-10-01 from `.research/228` (arXiv:2609.37633 distill). The modelless track; the training twin is riir-train `.plans/432`.
+
+## The mechanism (paper-measured, zero gradients needed)
+
+arXiv:2609.37633 shows: (1) sequential retries conditioned on accumulated one-sentence insights distilled from verifier outputs find solutions for 57% of Pass@128=0 tasks vs 6% i.i.d. (frozen model — the LOOP alone, no training); (2) one-sentence GENERIC insights transfer cross-task while detailed traces don't (episode-bound literals = label noise); (3) verifier access is the critical signal (21.4% vs 3.4% without); (4) conditioning on raw attempt summaries FAILS (contextual drag); (5) consult memory only when running success ≤50%.
+
+Our mapping: fix attempts = rollouts (the `.heal/fixseq/` rings are already the sequential rollout log — write-only today), clippy/rustc = the verifier (denser than the paper's unit tests), the frontier fixtures = the Pass@k=0 population.
+
+## Tasks
+
+- [ ] T1 **Modelless distiller** — `f = template(verifier_out)`: deterministic extractive insight over the structured diagnostic (error-code + shape-class + one-line guard ≈ the 17-token budget). The paper's generator-identity ablation licenses this (identity barely matters; verifier access is what matters). Same verifier output → byte-identical insight (determinism pin).
+- [ ] T2 **Abstraction-level admission predicate** — `admit(f) ⇔ len(f) ≤ S_max ∧ literal_density(f) < θ` (episode-bound tokens: hashes, IDs, line numbers, paths, long verbatim span quotes). Plant both directions: a literal-laden trace refuses, a generic lesson admits.
+- [ ] T3 **Insight-conditioned retry in the CompileDriver** — the context builder accepts ONLY insight rows (structural refusal of raw ring text — the contextual-drag guard); insert up to N insights when the family's running success ≤50% (the goldilocks sigmoid gate, hysteresis on release). **REQUIRED CONTROL ARM (the claim lives or dies here):** insight-conditioning vs `with_ordering` keyed on the SAME (error-code, shape-class) features, paired, LB95 > 0 — a deterministic template over those features consumed by the strategy menu is ORDERING under a new name, and this arm is what separates conditioning from it. **Honesty note:** the paper's 57%-vs-6% exploration number came from an LLM READING the insights — it carries over only where a frozen generator (the L4/Bonsai lane, riir-train 432) reads them; the deterministic-template arm (T1) may collapse into ordering, and the control arm decides which arm earns the claim. Eval: fix-rate on frontier fixtures, insights-on vs off at equal attempt budget, paired LB95 > 0; negative control: raw-summary conditioning must NOT beat insight conditioning.
+- [ ] T4 **Closed-form internalization** — on admitted insight with LB95(advantage) > 0: `Elo_r += K·A(f)` for named rules, task-fingerprint centroid updates, gate-bias nudges — routing/prior state (the legal latent-update class), never base weights. Isolation gate: on KNN-similar-but-disjoint tasks served WITHOUT retrieval, first-attempt rate improves purely from routing.
+- [ ] T5 **Withdrawal rail** — extend `tier_guard.rs`'s Lemma-4.2 LR shape from rule-rows to insight-rows: withdraw when LB95(advantage) ≤ 0; the advantage/think-too-easy/think-too-hard counters as live gauges.
+
+## Substrate to consume (never fork)
+
+`tier_guard.rs` (the LR test), `self_evolve.rs` (Elo/Beta + EvolveRecorder), the rings (`.heal/fixseq/`), `clippy_oracle.rs`, the latent-retrieval surface (riir-rag KNN/BM25 — the (span→insight) store rides it), `frontier_miner` (the eval population), katgpt-core sigmoid/rating primitives.
+
+## Out of scope (filed elsewhere)
+
+Training the insight mapping (riir-train 432); game-side NPC lesson memory (riir-ai 1022).
