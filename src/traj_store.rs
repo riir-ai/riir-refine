@@ -2144,6 +2144,7 @@ mod tests {
             replacement: repl.to_string(),
             shape: "&v[0]".to_string(),
             semantic_note: None,
+            diag_digest: None,
             extra_edits: Vec::new(),
         };
         // Static min-delta would ALSO pick deref-removal here (shorter

@@ -769,6 +769,7 @@ fn to_fix_candidate(file: &FileCase, c: &Cand) -> FixCandidate {
         replacement: repl.to_string(),
         shape: file.sites[c.site].shape.clone(),
         semantic_note: None,
+        diag_digest: None,
         extra_edits: Vec::new(),
     }
 }

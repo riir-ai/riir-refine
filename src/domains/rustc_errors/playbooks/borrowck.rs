@@ -257,6 +257,7 @@ impl CompileProposer for E0502DerefRemoval {
             // template only fires on Copy-typed elements (see the family
             // gate), so there is no semantics change to name.
             semantic_note: None,
+            diag_digest: None,
             extra_edits: extras,
         }]
     }
@@ -453,6 +454,7 @@ impl CompileProposer for E0502ReadRelocate {
                 "hoists the read to just before its first use — the value read \
                  differs if the statements crossed mutated the indexed place",
             ),
+            diag_digest: None,
             extra_edits: extras,
         }]
     }

@@ -727,6 +727,8 @@ mod tests {
                 span_embed: Some(crate::span_embed::span_embed(
                     "let r = v.as_str();",
                 )),
+                shape_class: None,
+                insight: None,
             },
             AttemptRecord {
                 seq: 1,
@@ -739,6 +741,8 @@ mod tests {
                 journey_residual_sum: 0,
                 terminal_residual: 0,
                 span_embed: None,
+                shape_class: None,
+                insight: None,
             },
         ];
         let (path, warns) = dump_fixseq(&root, &attempts);

@@ -138,6 +138,8 @@ fn self_check() {
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     };
     // A -> B -> A at one span: exactly one recurrence on all three keys.
     let flip = [
@@ -191,6 +193,8 @@ fn self_check() {
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     }];
     assert_eq!(
         invariant_violations("canary", &bad).len(),
@@ -214,6 +218,8 @@ fn self_check() {
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     }];
     assert_eq!(
         invariant_violations("canary", &unmask_keep).len(),
@@ -231,6 +237,8 @@ fn self_check() {
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     }];
     assert_eq!(
         invariant_violations("canary", &strand_revert).len(),
@@ -248,6 +256,8 @@ fn self_check() {
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     }];
     assert_eq!(
         invariant_violations("canary", &reverted_progress).len(),

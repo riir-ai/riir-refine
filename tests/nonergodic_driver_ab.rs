@@ -70,6 +70,7 @@ fn cand(file: &str, line: usize, code: &str, strategy_id: &str, replacement: &st
         extra_edits: Vec::new(),
         shape: format!("shape of {strategy_id} at {file}:{line}"),
         semantic_note: None,
+        diag_digest: None,
     }
 }
 
@@ -90,6 +91,8 @@ fn attempt(file: &str, line: usize, code: &str, strategy_id: &str, outcome: Atte
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     }
 }
 

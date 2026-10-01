@@ -14,11 +14,12 @@
 //! | `cargo refine --suggest` | `no .rs/… files under the given paths`, exit 1 (scans nonexistent `refine/`) |
 //! | `cargo refine --suggest src/` | worked (dead root contributes nothing) — why T1.2d's smoke stayed green |
 //!
-//! Every other CLI test spawns the binary DIRECTLY (`CARGO_BIN_EXE_cargo-refine`
-//! + mode flags), which carries no subcommand word — this file is the only
-//! coverage of the convention path. The leading `"refine"` here is the exact
-//! first argument cargo passes; a regression in the strip fails these arms
-//! with the symptoms above, not with a fabricated harness shape.
+//! Every other CLI test spawns the binary DIRECTLY
+//! (`CARGO_BIN_EXE_cargo-refine` + mode flags), which carries no subcommand
+//! word — this file is the only coverage of the convention path. The leading
+//! `"refine"` here is the exact first argument cargo passes; a regression in
+//! the strip fails these arms with the symptoms above, not with a fabricated
+//! harness shape.
 //!
 //! The `heal` spelling stays covered by the same strip (the dist-era binaries
 //! keep that name until the owner's T1.2f flip), so it gets an arm too.

@@ -81,7 +81,54 @@ pub(crate) fn cand(
         replacement,
         shape: String::new(),
         semantic_note: None,
+        diag_digest: None,
         extra_edits: Vec::new(),
+    }
+}
+
+/// Issue 140 T3 — the proposing diagnostic's retry-conditioning digest,
+/// carried on [`FixCandidate`] and stamped into the attempt ring: the
+/// family key's shape half ([`DiagDigest::shape_class`]) plus the
+/// distilled insight text ([`DiagDigest::insight`]).
+///
+/// Computed ONCE per diagnostic at proposal time — the `span_embed`
+/// precedent: the message is current only where the diagnostic is, and
+/// offline re-derivation would read post-fix state. NOT admission-filtered
+/// — the ring records the honest text; admission is the consuming
+/// policy's judgment ([`crate::domains::rustc_errors::insight_retry`]),
+/// never baked into the record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagDigest {
+    /// The normalized message headline — the retry-family key's shape
+    /// half ([`crate::insight::shape_class`]).
+    pub shape_class: String,
+    /// The distilled insight ([`crate::insight::distill`] over the
+    /// diagnostic's code + message + best suggestion hint).
+    pub insight: String,
+}
+
+impl DiagDigest {
+    /// Digest one diagnostic. The guard extraction is the documented
+    /// caller-side recipe from [`crate::insight`]'s module doc, verbatim:
+    /// the first `MachineApplicable` suggestion's message, else the first
+    /// suggestion's message, else `None`.
+    #[must_use]
+    pub fn new(diag: &RustcErrorDiag) -> Self {
+        let guard = diag
+            .machine_applicable()
+            .first()
+            .copied()
+            .or_else(|| diag.suggestions.first())
+            .map(|s| s.message.as_str())
+            .filter(|m| !m.is_empty());
+        Self {
+            shape_class: crate::insight::shape_class(&diag.message),
+            insight: crate::insight::distill(&crate::insight::InsightInput {
+                code: &diag.code,
+                message: &diag.message,
+                guard,
+            }),
+        }
     }
 }
 
@@ -132,6 +179,11 @@ pub struct FixCandidate {
     /// driver surfaces it on every record so the diff NAMES the change —
     /// "compiles + tests pass" is not "means the same thing".
     pub semantic_note: Option<&'static str>,
+    /// Issue 140 T3 — the proposing diagnostic's digest (family key +
+    /// distilled insight), filled by the DRIVER at proposal time;
+    /// playbooks leave `None` exactly as they leave [`FixCandidate::shape`]
+    /// empty.
+    pub diag_digest: Option<DiagDigest>,
     /// Further edits applied atomically with the primary one (same file,
     /// non-overlapping with it and each other). Empty for the common
     /// single-edit candidate.
@@ -274,6 +326,7 @@ mod tests {
                 replacement: String::new(),
                 shape: String::new(),
                 semantic_note: None,
+                diag_digest: None,
                 extra_edits: Vec::new(),
             }]
         }

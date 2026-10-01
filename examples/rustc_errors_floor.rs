@@ -120,6 +120,9 @@ fn main() {
     if want("seeds") {
         seeds_section();
     }
+    if want("insight") {
+        insight_ab_section();
+    }
     if want("ab") {
         #[cfg(feature = "latent_retrieval")]
         ordering_ab_section();
@@ -443,6 +446,276 @@ fn seeds_section() {
 /// "candidate" (none) — ordering cannot matter there.
 #[cfg(feature = "latent_retrieval")]
 fn template_covered<'a>(
+    committed: &'a [riir_clippy::domains::rustc_errors::floor::MutantCase],
+    generated: &'a [riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase],
+) -> (
+    Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'a>>,
+    usize,
+) {
+    let mut cases = Vec::new();
+    let mut n = 0;
+    for c in committed {
+        if matches!(c.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
+            if let Ok(h) = riir_clippy::domains::rustc_errors::floor::HarnessCase::committed(c) {
+                cases.push(h);
+                n += 1;
+            }
+        }
+    }
+    for g in generated {
+        if matches!(g.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
+            cases.push(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(g));
+            n += 1;
+        }
+    }
+    (cases, n)
+}
+
+// ── section 6: Issue 140 T3 — the insight-conditioned retry A/B ─────
+
+/// The paired readout primitive: per-case wins/losses (McNemar's b/c)
+/// plus the one-sided 95% lower bound on the mean paired difference
+/// (`clean_a − clean_b` ∈ {−1, 0, +1} per case). `n < 2` or zero variance
+/// reads UNDEFINED — printed as such, never as a pass.
+fn paired_lb95(
+    a: &[(String, bool)],
+    b: &[(String, bool)],
+) -> (usize, usize, f64) {
+    let bm: std::collections::HashMap<&str, bool> =
+        b.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    let mut wins = 0usize;
+    let mut losses = 0usize;
+    let mut diffs: Vec<f64> = Vec::with_capacity(a.len());
+    for (k, va) in a {
+        let Some(vb) = bm.get(k.as_str()) else { continue };
+        let d = f64::from(u8::from(*va)) - f64::from(u8::from(*vb));
+        if d > 0.0 {
+            wins += 1;
+        } else if d < 0.0 {
+            losses += 1;
+        }
+        diffs.push(d);
+    }
+    let n = diffs.len();
+    if n < 2 {
+        return (wins, losses, f64::NAN);
+    }
+    let mean = diffs.iter().sum::<f64>() / n as f64;
+    let var = diffs.iter().map(|d| (d - mean) * (d - mean)).sum::<f64>() / (n - 1) as f64;
+    let lb = mean - 1.645 * var.sqrt() / (n as f64).sqrt();
+    (wins, losses, lb)
+}
+
+/// The EFFICIENCY-axis paired LB95: per-case `attempts_b − attempts_a`
+/// (POSITIVE ⇒ `a` reached its verdict on fewer apply→recheck decisions —
+/// the axis that discriminates when every arm eventually cleans; the
+/// clean axis saturates on corpora where all arms converge).
+fn paired_attempts_lb95(
+    a: &[(String, usize)],
+    b: &[(String, usize)],
+) -> f64 {
+    let bm: std::collections::HashMap<&str, usize> =
+        b.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    let mut diffs: Vec<f64> = Vec::with_capacity(a.len());
+    for (k, va) in a {
+        let Some(vb) = bm.get(k.as_str()) else { continue };
+        diffs.push(*vb as f64 - *va as f64);
+    }
+    let n = diffs.len();
+    if n < 2 {
+        return f64::NAN;
+    }
+    let mean = diffs.iter().sum::<f64>() / n as f64;
+    let var = diffs.iter().map(|d| (d - mean) * (d - mean)).sum::<f64>() / (n - 1) as f64;
+    mean - 1.645 * var.sqrt() / (n as f64).sqrt()
+}
+
+/// Issue 140 T3 — the REQUIRED control-arm eval: insight-conditioning vs
+/// `with_ordering`-shaped statistics over the SAME (error-code,
+/// shape-class) features, paired, at equal attempt budget; plus the
+/// negative control (site-keyed raw conditioning) and the static baseline.
+///
+/// Each arm carries a FRESH policy whose store accumulates DURING the
+/// arm's own corpus pass — cross-case transfer inside the eval, the
+/// paper's own measurement shape. The corpus flags are the ab section's
+/// (`--multi K`, `--strided`, `--interacting`).
+fn insight_ab_section() {
+    use riir_clippy::domains::rustc_errors::insight_retry::{InsightConditioning, Mode};
+    use riir_clippy::domains::rustc_errors::floor::DriverFixer;
+
+    println!("\n── 6. Issue 140 T3 — insight-conditioned retry A/B (static vs control vs insight vs raw) ──\n");
+    let harness = FloorHarness::new();
+    if !harness.is_available() {
+        println!("  SKIP — cargo not on PATH.");
+        return;
+    }
+    let multi: usize = std::env::args()
+        .position(|a| a == "--multi")
+        .and_then(|i| std::env::args().nth(i + 1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1);
+    let strided = std::env::args().any(|a| a == "--strided");
+    let interacting = std::env::args().any(|a| a == "--interacting");
+    let generated = if interacting {
+        riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs()
+            .iter()
+            .map(riir_clippy::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
+            .collect::<Vec<_>>()
+    } else {
+        match (multi > 1, strided) {
+            (true, true) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi_strided(
+                &generate_corpus(),
+                multi,
+            ),
+            (true, false) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi(
+                &generate_corpus(),
+                multi,
+            ),
+            (false, _) => generate_corpus(),
+        }
+    };
+    let (cases, n): (Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>>, usize) =
+        match multi > 1 || interacting {
+            true => {
+                let v: Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>> = generated
+                    .iter()
+                    .map(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated)
+                    .collect();
+                let n = v.len();
+                (v, n)
+            }
+            false => {
+                // The template-covered stratum: codes our playbooks propose
+                // for — ordering cannot matter where the menu is empty.
+                let (v, n) = template_covered_pub(MUTANT_CASES, &generated);
+                (v, n)
+            }
+        };
+    println!(
+        "  corpus: {} — {n} cases",
+        if interacting {
+            "INTERACTING pairs".to_string()
+        } else {
+            match multi > 1 {
+                true => format!("MULTI-{multi} ({})", if strided { "strided" } else { "chunked" }),
+                false => "template-covered stratum".to_string(),
+            }
+        }
+    );
+
+    // The headroom instrument (the Bench-088 law, carried over verbatim:
+    // `multi-attempt runs == 0` means this corpus cannot measure ANY
+    // stateful policy, independent of arm quality).
+    type ArmOut = (
+        Vec<(String, bool)>,
+        Vec<(String, usize)>,
+        usize,
+        usize,
+        usize,
+        usize,
+    );
+    let run_arm = |label: &str, fixer: &DriverFixer| -> ArmOut {
+        let (_, reports) = harness.measure_driver(fixer, &cases).expect(label);
+        let mut clean_by_case: Vec<(String, bool)> = Vec::new();
+        let mut attempts_by_case: Vec<(String, usize)> = Vec::new();
+        let (mut total_attempts, mut multi_attempt_runs, mut total_reverts, mut fixed_clean) =
+            (0usize, 0usize, 0usize, 0usize);
+        for (name, rep) in &reports {
+            total_attempts += rep.attempts.len();
+            total_reverts += rep.reverted.len();
+            if rep.attempts.len() > 1 {
+                multi_attempt_runs += 1;
+            }
+            if rep.clean {
+                fixed_clean += 1;
+            }
+            clean_by_case.push((name.clone(), rep.clean));
+            attempts_by_case.push((name.clone(), rep.attempts.len()));
+        }
+        println!(
+            "  {label:<28} clean {fixed_clean}/{n}  reverts {total_reverts}  attempts {total_attempts}  multi-attempt runs {multi_attempt_runs}"
+        );
+        (
+            clean_by_case,
+            attempts_by_case,
+            fixed_clean,
+            total_reverts,
+            total_attempts,
+            multi_attempt_runs,
+        )
+    };
+
+    let static_arm = run_arm("static (min-delta)", &DriverFixer::new());
+
+    let policy_arm = |label: &str, mode: Mode| {
+        let pol = InsightConditioning::new(mode);
+        let fixer = DriverFixer::new()
+            .with_ordering(pol.ordering())
+            .with_observer(pol.observer());
+        let out = run_arm(label, &fixer);
+        let st = pol.stats();
+        println!(
+            "    policy: recorded {} refused-admission {} families {} armed-now {} gate-arms {} gate-releases {}",
+            st.recorded, st.refused_admission, st.families, st.armed, st.gate_arms, st.gate_releases
+        );
+        out
+    };
+    let control_arm = policy_arm("control (code+shape-class)", Mode::Control);
+    let insight_arm = policy_arm("insight-conditioned", Mode::Insight);
+    let raw_arm = policy_arm("raw (site-keyed, neg-ctl)", Mode::Raw);
+
+    let verdict = |la: &str, a: &ArmOut, lb: &str, b: &ArmOut| {
+        let (wins, losses, lb95) = paired_lb95(&a.0, &b.0);
+        let eff = paired_attempts_lb95(&a.1, &b.1);
+        let read = if wins + losses == 0 {
+            "UNDEFINED (no discordant pairs — McNemar has nothing to test)"
+        } else if lb95.is_nan() {
+            "UNDEFINED (n < 2)"
+        } else if lb95 > 0.0 {
+            "EARNED (paired LB95 > 0)"
+        } else {
+            "NOT EARNED (paired LB95 ≤ 0)"
+        };
+        let eff_read = if eff.is_nan() {
+            "UNDEFINED".to_string()
+        } else {
+            format!(
+                "{eff:+.3} attempts/case ({})",
+                match eff > 0.0 {
+                    true => format!("{la} cheaper, LB95 > 0"),
+                    false => format!("{la} NOT cheaper, LB95 ≤ 0"),
+                }
+            )
+        };
+        println!(
+            "    {la} vs {lb}: {wins} wins / {losses} losses  paired-LB95 {lb95:+.4} — {read};  efficiency {eff_read}"
+        );
+        (wins, losses, lb95)
+    };
+
+    println!("\n  THE CONTROL ARM (conditioning vs ordering — the claim lives or dies here):");
+    let ctl = verdict("insight", &insight_arm, "control", &control_arm);
+    println!("\n  NEGATIVE CONTROL (raw conditioning must NOT beat insight):");
+    let raw = verdict("insight", &insight_arm, "raw", &raw_arm);
+    println!("\n  OVERALL (insight vs static):");
+    let stat = verdict("insight", &insight_arm, "static", &static_arm);
+
+    let multi_runs = static_arm.5 + control_arm.5 + insight_arm.5 + raw_arm.5;
+    println!(
+        "\n  HEADROOM PREDICATE: multi-attempt runs across all arms = {multi_runs} — {}",
+        match multi_runs {
+            0 => "ZERO ⇒ this corpus cannot measure ANY stateful policy; UNMEASURABLE, not refuted",
+            _ => "NON-ZERO ⇒ the gain axis is measurable on this corpus",
+        }
+    );
+    let _ = (ctl, raw, stat);
+    harness.cleanup();
+}
+
+/// `template_covered` for the insight section — the ab section's own fn is
+/// `latent_retrieval`-gated; this section needs no store, so it carries its
+/// own copy of the stratum filter (same codes, same order).
+fn template_covered_pub<'a>(
     committed: &'a [riir_clippy::domains::rustc_errors::floor::MutantCase],
     generated: &'a [riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase],
 ) -> (

@@ -190,6 +190,66 @@ pub fn admit(insight: &str) -> bool {
         && literal_density(trimmed) < INSIGHT_LITERAL_DENSITY_THETA
 }
 
+/// Issue 140 T3 — the retry-family key's shape half: the message's
+/// leading clause with backticked identifier spans blanked.
+///
+/// `"cannot borrow `x` as mutable, as it is behind…"` →
+/// `"cannot borrow _ as mutable"`. Two sites with different variable
+/// names but the same error SHAPE collapse to one family — the paper's
+/// L1 abstraction (generic insights transfer) applied at the KEY level:
+/// the family is what a distilled insight is ABOUT, so episode
+/// identifiers must not split it.
+///
+/// Differences from [`distill`]'s clause extraction, both deliberate:
+/// - backticked spans blank to `_` FIRST (the key must not name episode
+///   variables);
+/// - an over-long clause TRUNCATES at [`SHAPE_HEADLINE_MAX_WORDS`]
+///   words rather than dropping whole — a key needs collision
+///   CONSISTENCY, not admission honesty; dropping would fold every
+///   long-message shape into one `""` family and merge unrelated
+///   errors.
+///
+/// Deterministic: same message → byte-identical class.
+#[must_use]
+pub fn shape_class(message: &str) -> String {
+    // Pass 1: blank backticked spans (an unclosed backtick blanks to the
+    // end — conservative, same class as any other blanked tail).
+    let mut blanked = String::with_capacity(message.len());
+    let mut in_ticks = false;
+    for ch in message.chars() {
+        if ch == '`' {
+            if in_ticks {
+                blanked.push('_');
+            }
+            in_ticks = !in_ticks;
+            continue;
+        }
+        if !in_ticks {
+            blanked.push(ch);
+        }
+    }
+    if in_ticks {
+        blanked.push('_');
+    }
+    // Pass 2: first clause, whitespace-collapsed, capped.
+    let mut words: Vec<&str> = Vec::new();
+    for w in blanked.split_whitespace() {
+        let trimmed = w.trim_end_matches([',', ';', ':']);
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.len() != w.len() {
+            words.push(trimmed);
+            break; // clause boundary ends the headline
+        }
+        words.push(w);
+        if words.len() == SHAPE_HEADLINE_MAX_WORDS {
+            break; // cap — truncate, never drop (see the module-level doc)
+        }
+    }
+    words.join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,7 +372,7 @@ mod tests {
     fn admit_refuses_empty() {
         assert!(!admit(""));
         assert!(!admit("   "));
-        assert_eq!(literal_density(""), 0.0);
+        assert!((literal_density("") - 0.0).abs() < f32::EPSILON);
     }
 
     /// Constants pinned — they are the paper-law knobs (17-token budget,
@@ -344,5 +404,48 @@ mod tests {
     fn backticked_short_spans_admit() {
         let insight = "E0507 cannot borrow `x` as mutable — replace `&x` with `&mut x`";
         assert!(admit(insight));
+    }
+
+    // ── Issue 140 T3: shape_class ──────────────────────────────────────
+
+    /// Backticked identifiers blank — different variables, same error
+    /// shape, ONE family (the cross-task transfer the paper measures).
+    #[test]
+    fn shape_class_blanks_backticked_identifiers() {
+        let a = shape_class("cannot borrow `x` as mutable, as it is behind a `&` reference");
+        let b = shape_class("cannot borrow `owned_value` as mutable, as it is behind a `&` reference");
+        assert_eq!(a, "cannot borrow _ as mutable");
+        assert_eq!(a, b, "episode identifiers must not split the family");
+    }
+
+    /// Clause split + whitespace collapse; the `:` in the moved-value
+    /// message ends the clause exactly as in `distill`.
+    #[test]
+    fn shape_class_splits_at_clause_boundaries() {
+        assert_eq!(shape_class("use of moved value: `a`"), "use of moved value");
+        assert_eq!(shape_class("  cannot   borrow\n `v`  as mutable, more"), "cannot borrow _ as mutable");
+        assert_eq!(shape_class(""), "");
+    }
+
+    /// An over-long clause TRUNCATES at the word cap instead of dropping
+    /// whole — the key needs collision consistency (a drop would merge
+    /// every long-message shape into one empty family).
+    #[test]
+    fn shape_class_truncates_long_clauses() {
+        let long = "word ".repeat(30).trim().to_string() + ", tail";
+        let cls = shape_class(&long);
+        assert_eq!(cls.split(' ').count(), SHAPE_HEADLINE_MAX_WORDS);
+        assert!(cls.starts_with("word word"));
+        // The capped key is STABLE — the same long message maps to the
+        // same class every time (determinism pin).
+        assert_eq!(cls, shape_class(&long));
+    }
+
+    /// An unclosed backtick blanks to the end (conservative — the same
+    /// class as any other blanked tail, never a distinct literal-bearing
+    /// key).
+    #[test]
+    fn shape_class_blanks_unclosed_backtick_to_end() {
+        assert_eq!(shape_class("no method named `deref"), "no method named _");
     }
 }

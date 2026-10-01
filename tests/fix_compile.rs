@@ -59,6 +59,7 @@ impl CompileProposer for ReplacePlaybook {
             replacement: self.to.to_string(),
             shape: String::new(),
             semantic_note: None,
+            diag_digest: None,
             extra_edits: Vec::new(),
         }]
     }

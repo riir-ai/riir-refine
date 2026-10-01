@@ -105,6 +105,18 @@ pub struct AttemptRecord {
     /// post-run bytes. `None` on pre-T2 rings.
     #[serde(default)]
     pub span_embed: Option<[i8; SPAN_EMBED_DIMS]>,
+    /// Issue 140 T3 — the proposing diagnostic's normalized shape class
+    /// (the retry-family key's shape half, [`crate::insight::shape_class`]).
+    /// `None` on pre-140 rings and digest-less attempts.
+    #[serde(default)]
+    pub shape_class: Option<String>,
+    /// Issue 140 T3 — the distilled insight text at attempt time
+    /// ([`crate::insight::distill`]) — the admission predicate's subject.
+    /// NOT filtered: the ring records the honest text; admission is the
+    /// consuming policy's judgment, never baked into the record. `None`
+    /// on pre-140 rings.
+    #[serde(default)]
+    pub insight: Option<String>,
 }
 
 /// The loop outcome of one [`AttemptRecord`].
@@ -383,19 +395,14 @@ impl FixCompileReport {
         JourneyCredit::from_attempts(&self.attempts)
     }
     /// Append one attempt to the ring (seq = current length — the push
-    /// order IS the try order). 9 params: the record's own transition pair
-    /// (`errors` + `masking`) stays inline rather than behind a one-use
-    /// struct (same call as `push_case`'s allow upstream); `shape_text` is
-    /// the span's ORIGINAL bytes (embedded here, at the one chokepoint
-    /// every attempt path funnels through — Issue 107 T2).
-    #[allow(clippy::too_many_arguments)]
+    /// order IS the try order). Takes the CANDIDATE (not its scattered
+    /// fields) so the Issue-140-T3 digest rides along at the one chokepoint
+    /// every attempt path funnels through — the same single-point law as
+    /// `span_embed`; `best.shape` is the span's ORIGINAL bytes (embedded
+    /// here, at push time).
     fn push_attempt(
         &mut self,
-        code: &str,
-        file: &Path,
-        line: usize,
-        strategy_id: &str,
-        shape_text: &str,
+        best: &FixCandidate,
         outcome: AttemptOutcome,
         errors: (usize, usize),
         masking: (usize, usize),
@@ -403,13 +410,15 @@ impl FixCompileReport {
         let seq = self.attempts.len();
         self.attempts.push(AttemptRecord {
             seq,
-            code: code.to_string(),
-            span_hash: span_hash(file, line),
-            strategy_id: strategy_id.to_string(),
+            code: best.code.clone(),
+            span_hash: span_hash(&best.file, best.line),
+            strategy_id: best.strategy_id.clone(),
             outcome,
             errors,
             masking,
-            span_embed: Some(embed_shape(shape_text)),
+            span_embed: Some(embed_shape(&best.shape)),
+            shape_class: best.diag_digest.as_ref().map(|d| d.shape_class.clone()),
+            insight: best.diag_digest.as_ref().map(|d| d.insight.clone()),
             // Run-level Issue-105 values are unknown at push time; the
             // dump stamps them over these zeros.
             journey_residual_sum: 0,
@@ -423,7 +432,13 @@ impl FixCompileReport {
 /// extra edits; a two-byte pair beats a `.clone()` insertion). Phase 4 T4.2
 /// swaps in `BetaPosterior` ordering over `(error_code, strategy_id)`
 /// memory if it measures a gain; this function is the swappable seam.
-fn order_candidates(cands: &mut [FixCandidate]) {
+///
+/// `pub` since Issue 140 T3: the insight-conditioned retry policy's
+/// UNARMED fallback is this exact order (a family whose running success
+/// exceeds the consult gate must observe byte-identical behavior to the
+/// static arm — a policy that reordered even while unarmed would smuggle
+/// a second difference into the control comparison).
+pub fn order_candidates(cands: &mut [FixCandidate]) {
     cands.sort_by(|a, b| {
         a.file
             .cmp(&b.file)
@@ -754,11 +769,7 @@ impl CompileDriver {
             // Apply: splice + write.
             let Ok(original) = std::fs::read_to_string(&best.file) else {
                 report.push_attempt(
-                    &best.code,
-                    &best.file,
-                    best.line,
-                    &best.strategy_id,
-                    &best.shape,
+                    &best,
                     AttemptOutcome::RevertedIo,
                     (before_errors, before_errors),
                     (before_masking, before_masking),
@@ -790,11 +801,7 @@ impl CompileDriver {
                 // Span drifted (should not happen — proposed against the
                 // same read) — treat as no-progress revert.
                 report.push_attempt(
-                    &best.code,
-                    &best.file,
-                    best.line,
-                    &best.strategy_id,
-                    &shape,
+                    &best,
                     AttemptOutcome::RevertedNoProgress,
                     (before_errors, before_errors),
                     (before_masking, before_masking),
@@ -815,11 +822,7 @@ impl CompileDriver {
             };
             if std::fs::write(&best.file, &applied_text).is_err() {
                 report.push_attempt(
-                    &best.code,
-                    &best.file,
-                    best.line,
-                    &best.strategy_id,
-                    &shape,
+                    &best,
                     AttemptOutcome::RevertedIo,
                     (before_errors, before_errors),
                     (before_masking, before_masking),
@@ -863,11 +866,7 @@ impl CompileDriver {
             let kept = (after_masking, after_errors) < (before_masking, before_errors);
             if kept {
                 report.push_attempt(
-                    &best.code,
-                    &best.file,
-                    best.line,
-                    &best.strategy_id,
-                    &shape,
+                    &best,
                     AttemptOutcome::Kept,
                     (before_errors, after_errors),
                     (before_masking, after_masking),
@@ -895,11 +894,7 @@ impl CompileDriver {
                 // No progress → exact revert (T1.4).
                 let _ = std::fs::write(&best.file, &original);
                 report.push_attempt(
-                    &best.code,
-                    &best.file,
-                    best.line,
-                    &best.strategy_id,
-                    &shape,
+                    &best,
                     AttemptOutcome::RevertedNoProgress,
                     (before_errors, after_errors),
                     (before_masking, after_masking),
@@ -1029,6 +1024,14 @@ fn collect_candidates(
         });
         return Vec::new();
     }
+    // Issue 140 T3 — the retry-conditioning digest, computed ONCE per
+    // diagnostic (the span_embed law: the message is current only here)
+    // and carried on every candidate the diagnostic proposed.
+    let digest = super::playbooks::DiagDigest::new(d);
+    let mut cands = cands;
+    for c in &mut cands {
+        c.diag_digest = Some(digest.clone());
+    }
     if review {
         for c in &cands {
             report.planned.push(PlannedRecord {
@@ -1119,6 +1122,8 @@ mod tests {
             span_embed: Some(crate::span_embed::span_embed(
                 "pub fn f(v: &String) { let s = v; }",
             )),
+            shape_class: Some("use of moved value".to_string()),
+            insight: Some("E0507 use of moved value".to_string()),
         };
         let line = serde_json::to_string(&r).unwrap();
         let back: AttemptRecord = serde_json::from_str(&line).unwrap();
@@ -1183,6 +1188,8 @@ mod tests {
                 journey_residual_sum: 0,
                 terminal_residual: 0,
                 span_embed: None,
+                shape_class: None,
+                insight: None,
             },
             AttemptRecord {
                 seq: 1,
@@ -1195,6 +1202,8 @@ mod tests {
                 journey_residual_sum: 0,
                 terminal_residual: 0,
                 span_embed: None,
+                shape_class: None,
+                insight: None,
             },
         ];
         // The PRE-100 F3 strand (Bench 089's recorded poison): the
@@ -1212,6 +1221,8 @@ mod tests {
             journey_residual_sum: 0,
             terminal_residual: 0,
             span_embed: None,
+            shape_class: None,
+            insight: None,
         }];
         // Post-100 F3 (Bench 090's honest shape): everything reverts, the
         // file is byte-identical — no keeps, but the journey still records.
@@ -1226,6 +1237,8 @@ mod tests {
             journey_residual_sum: 0,
             terminal_residual: 0,
             span_embed: None,
+            shape_class: None,
+            insight: None,
         }];
 
         let c_f4 = JourneyCredit::from_attempts(&f4);
@@ -1336,6 +1349,7 @@ mod tests {
             replacement: repl.to_string(),
             shape: String::new(),
             semantic_note: None,
+            diag_digest: None,
             extra_edits: Vec::new(),
         };
         let mut cands = vec![
@@ -1364,6 +1378,7 @@ mod tests {
             replacement: String::new(),
             shape: String::new(),
             semantic_note: None,
+            diag_digest: None,
             extra_edits: extras,
         };
         // A two-byte deletion pair must sort BEFORE a `.clone()` insertion
@@ -1407,6 +1422,7 @@ mod tests {
             replacement: "x".to_string(),
             shape: String::new(),
             semantic_note: None,
+            diag_digest: None,
             extra_edits: Vec::new(),
         };
         let b = FixCandidate {

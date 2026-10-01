@@ -22,6 +22,13 @@
 //!   [`driver::CompileDriver`] seam. Pulls the trajectory store for the
 //!   composed arm — the opt-in's deliberate `latent_retrieval`
 //!   implication, outside the default no-retrieval rule above.
+//! - [`insight_retry`] (Issue 140 T3) — insight-conditioned retry at the
+//!   same seams: attempt-ring rows carrying a [`playbooks::DiagDigest`]
+//!   condition the next retry's candidate order through an
+//!   admission-filtered, family-gated (goldilocks ≤50%) store. The
+//!   [`insight_retry::Mode::Control`] arm is the required paired control
+//!   (same features, no admission judgment); no new deps — the store is
+//!   in-process, exact-keyed, never a retrieval surface.
 //!
 //! **Exact-keyed, so no retrieval.** The diagnostic carries the error code —
 //! nothing here needs latent lookup, which is why the `rustc_errors` feature
@@ -37,6 +44,7 @@ pub mod driver;
 pub mod evolve;
 pub mod floor;
 pub mod gp_ordering;
+pub mod insight_retry;
 #[cfg(feature = "nonergodic_driver")]
 pub mod nonergodic_order;
 pub mod playbooks;

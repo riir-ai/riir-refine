@@ -41,6 +41,8 @@ fn rec(seq: usize, code: &str, strat: &str, outcome: AttemptOutcome, errors: (us
         journey_residual_sum: 0,
         terminal_residual: 0,
         span_embed: None,
+        shape_class: None,
+        insight: None,
     }
 }
 

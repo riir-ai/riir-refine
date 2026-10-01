@@ -133,6 +133,7 @@ mod tests {
             replacement: shape.to_string(),
             shape: shape.to_string(),
             semantic_note: None,
+            diag_digest: None,
             extra_edits: Vec::new(),
         }
     }
