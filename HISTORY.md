@@ -1,5 +1,47 @@
 # HISTORY.md — riir-clippy
 
+## 2026-10-01 — `repo_posture_cli` red CLOSED + the mid-posture clippy red + three owed `[[test]]` rows (the rename's flagged remainder)
+
+The rename session flagged `repo_posture_cli` 3 arms RED at HEAD (stash-verified,
+not the rename's). This session root-caused and closed it.
+
+- **Root cause — a POSTURE-dependent test, invisible to the guard's own lanes.**
+  The three applying arms invoked `--fix` without `--no-verify`. At the armed
+  set the bin's required-features give (`latent_retrieval,rust_perf,kat_service`)
+  `fix_verify` is OFF — `--fix` writes without a compile gate — green. Under
+  `--all-features` `fix_verify` compiles in, the gate refuses the hermetic
+  fixture (`verify: FAILED — no Cargo.toml above src/lib.rs`), exits 1 and
+  reverts the edits — RED. The arms were authored + run at the armed set only.
+- **Fix — `--no-verify` on the three applying arms** (`applies_only_the_feed_confirmed_edit`,
+  `posture_declines_notbenchable_perf_edits`, `apply_notbenchable_overrides_the_decline`),
+  per the test's own hermeticity law ("no cargo spawn"; the temp fixture is
+  deliberately not a cargo project). 6/6 at BOTH postures now; the refusal/misuse
+  arms are unchanged (they exit before any fix work).
+- **En route 1 — the `heal.rs` unreachable-`return` clippy red at the MID posture**
+  (`required-features` WITHOUT `kat_transport`, e.g. the guard's per-feature lane
+  or any custom build): `build_stamp::refuse` returns `!`, so the `return;` after
+  the `#[cfg(not(kat_transport))]` call was unreachable code — a `-D warnings`
+  error exactly there, invisible at default (bin not compiled) and at
+  `--all-features` (`kat_transport` on → reachable). The `return;` moved INSIDE
+  the `kat_transport` block (load-bearing there: skips the `--usd` compose after
+  a restake/redeem op). Clippy `-D` clean at the mid posture + all-features.
+- **En route 2 — three owed `[[test]] required-features` rows** (T1.1e green-zero
+  law): `repo_posture_cli` + `auto_oracle_features_cli` + `coverage_report_cli`
+  all carried whole-file `#![cfg(all(latent_retrieval, rust_perf, clippy_lints,
+  kat_service))]` gates with NO manifest row — any feature set missing one gate
+  compiled the target to an empty binary printing a green `ok. 0 passed`.
+  Naming any of them at default features now REFUSES with the features it needs.
+  The rows match the file gates exactly (the `build_stamp_cli` precedent).
+- **4090 exe refresh** (Plan 192 T1.3d): repos were already at target (a prior
+  same-day session had pulled); rebuilt at the release set (12m15s), swapped
+  `cargo-refine.exe` into the global bin, REMOVED `cargo-heal.exe`, stamp
+  `release set: complete`. ⚠ Disclosed: GitHub SSH from the 4090 hangs
+  post-TCP (dozens of orphaned git+ssh pairs from other sessions dating to
+  09-29, left untouched) — owner attention; freshness could not be re-fetched.
+- Gates: `repo_posture_cli` 6/6 at the armed set AND `--all-features`;
+  `auto_oracle_features_cli` 1/1 + `coverage_report_cli` 2/2 at both;
+  clippy `-D warnings` clean at the mid posture and `--all-features`.
+
 ## 2026-10-01 — The refine rename, Phase 1 landed (`ac4b3d16` + docs; Proposal 018 / Plan 192): binary `cargo heal` → `cargo refine`
 
 Owner ask ("see `cargo heal` a lot, it should changed to `cargo refine`? grep more").
@@ -26,7 +68,7 @@ Owner ask ("see `cargo heal` a lot, it should changed to `cargo refine`? grep mo
 - Gates: lib 2398/0; clippy `-D` clean at the release feature set; CLI battery
   green (build_stamp 4/4, unmine 17/17, soft-gate 9/9, refill 5/5, parity 3/3).
   ⚠ `repo_posture_cli` 3 arms RED pre-existing at HEAD (stash-verified) — not
-  this rename; needs its own session.
+  this rename; RESOLVED same-day follow-up (see the entry above).
 - **Owner-side remainders**: the GitHub repo renames (riir-clippy →
   riir-refine; gist-rs/cargo-heal → gist-rs/refine + tap/scoop flip), local
   dir renames on both boxes, the 22-file registration, the first

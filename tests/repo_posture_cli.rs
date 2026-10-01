@@ -23,6 +23,11 @@
 //! writes), `RIIR_HEAL_AUTO_ORACLE=0` (no cargo spawn), and an unreachable
 //! loopback `RIIR_HEAL_KAT_SERVICE_URL` so any best-effort tail transport
 //! fails in milliseconds without an exit-code change (the tails' contract).
+//! Every applying arm also passes `--no-verify`: the temp fixture is
+//! deliberately NOT a cargo project (no manifest above `src/lib.rs`), so
+//! the `fix_verify` compile gate — compiled in under `--all-features` —
+//! would refuse the fixture and revert the edits. The gate's own contract
+//! is pinned by `build_stamp_cli`-class tests against real projects.
 //!
 //! File-level cfg = the cargo-refine bin's own `required-features` (the
 //! `build_stamp_cli.rs` law): with less there is no binary to invoke and
@@ -121,6 +126,7 @@ fn applies_only_the_feed_confirmed_edit() {
         &[
             "--fix",
             "--no-fmt",
+            "--no-verify",
             "--repo-posture",
             "--clippy-json",
             "feed.json",
@@ -234,6 +240,7 @@ fn posture_declines_notbenchable_perf_edits() {
         &[
             "--fix",
             "--no-fmt",
+            "--no-verify",
             "--repo-posture",
             "--clippy-json",
             "feed.json",
@@ -269,6 +276,7 @@ fn apply_notbenchable_overrides_the_decline() {
         &[
             "--fix",
             "--no-fmt",
+            "--no-verify",
             "--repo-posture",
             "--apply-notbenchable",
             "--clippy-json",

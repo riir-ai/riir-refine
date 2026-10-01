@@ -32,5 +32,13 @@ Parent: [Proposal 018](../.proposals/018_refine_rename_stake_domain_tiers.md) (o
 
 - [x] lib default 2398/0; clippy `-D warnings` clean at the full release feature set (covers riir-kat via path dep).
 - [x] CLI battery: build_stamp 4/4, unmine 17/17, kat_soft_gate 9/9, kat_refill 5/5, install_copy_parity 3/3.
-- [ ] ⚠ `repo_posture_cli` 3 arms RED — **pre-existing at HEAD** (verified by stash; not this rename). Filed for the owning session.
+- [x] `repo_posture_cli` 3 arms RED — RESOLVED same-day follow-up session: the applying arms
+      invoked `--fix` without `--no-verify`, so under `--all-features` (`fix_verify` compiled in)
+      the compile gate refused the manifest-less hermetic fixture (`verify: FAILED — no Cargo.toml
+      above src/lib.rs`) and reverted the edits. Fixed by `--no-verify` on the three applying arms
+      (the test's own no-cargo-spawn hermeticity law) — 6/6 at BOTH postures now. En route: the
+      `heal.rs` unreachable-`return` clippy red at the mid posture (required-features WITHOUT
+      `kat_transport`) fixed, and the three owed `[[test]] required-features` rows landed
+      (`repo_posture_cli` + `auto_oracle_features_cli` + `coverage_report_cli` — the T1.1e
+      green-zero law; naming any at default features now refuses instead of `ok. 0 passed`).
 - [x] riir-kat lib 236/236 after its sweep.

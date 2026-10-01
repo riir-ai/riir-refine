@@ -1239,6 +1239,24 @@ required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_servi
 name = "frame_time_report_cli"
 required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
 
+# The remaining process-boundary CLI contracts carry WHOLE-FILE cfg gates
+# (the bin's required-features) — the T1.1e law: the `#![cfg]` protects the
+# count, the row protects the reader. Without the row, any feature set that
+# misses one gate compiles the target to an empty binary that prints a
+# green `ok. 0 passed` forever; with it, naming the target at that set
+# refuses with the features it needs instead.
+[[test]]
+name = "auto_oracle_features_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
+[[test]]
+name = "coverage_report_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
+[[test]]
+name = "repo_posture_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
 [[test]]
 name = "kat_vote_client_g9gov"
 required-features = ["kat_transport"]

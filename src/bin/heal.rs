@@ -2044,10 +2044,10 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
                     std::process::exit(1);
                 }
             }
+            return;
         }
         #[cfg(not(feature = "kat_transport"))]
         riir_clippy::build_stamp::refuse("stake --restake/--redeem", &["kat_transport"]);
-        return;
     }
 
     let Some(usd) = usd else {
