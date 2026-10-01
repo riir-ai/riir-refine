@@ -98,21 +98,31 @@ fn main() {
         let dump_fixseq_cfg: Option<String> =
             std::env::args().position(|a| a == "--dump-fixseq-cfg")
                 .and_then(|p| std::env::args().nth(p + 1));
+        // Plan 432 T0.2a (riir-train) — the TEACHER-corpus mint: per case,
+        // the self-contained (seed, broken source, attempts-with-shapes+
+        // digests) row. The rings alone cannot serve the teacher pass —
+        // they carry no case linkage and (pre-140) no trigger text; this
+        // dump is the pure-data contract the 4090 teacher harness consumes
+        // with ZERO riir-clippy dep (the boundary law — riir-train cannot
+        // path-dep this crate). Composable with --dump-fixseq; early-returns
+        // like it.
+        let dump_teacher_root: Option<String> = std::env::args().position(|a| a == "--dump-teacher")
+            .and_then(|p| std::env::args().nth(p + 1));
         // Issue 128 T5 — cfg validation at the door: a cfg without a dump
         // root, or an unknown cfg name, refuses loudly (exit 2) rather than
         // minting an unlabeled corpus.
-        match (&dump_fixseq_cfg, &dump_fixseq_root) {
-            (Some(cfg), Some(_)) if cfg != "chunked" && cfg != "strided" => {
+        match (&dump_fixseq_cfg, &dump_fixseq_root, &dump_teacher_root) {
+            (Some(cfg), _, _) if cfg != "chunked" && cfg != "strided" => {
                 eprintln!("--dump-fixseq-cfg must be chunked|strided, got '{cfg}'");
                 std::process::exit(2);
             }
-            (Some(_), None) => {
+            (Some(_), None, None) => {
                 eprintln!("--dump-fixseq-cfg requires --dump-fixseq <dir>");
                 std::process::exit(2);
             }
             _ => {}
         }
-        driver_section(dump_fixseq_root, dump_fixseq_cfg);
+        driver_section(dump_fixseq_root, dump_fixseq_cfg, dump_teacher_root);
     }
     if want("null") {
         null_section();
@@ -239,7 +249,11 @@ fn floor_section() {
     harness.cleanup();
 }
 
-fn driver_section(dump_fixseq_root: Option<String>, dump_fixseq_cfg: Option<String>) {
+fn driver_section(
+    dump_fixseq_root: Option<String>,
+    dump_fixseq_cfg: Option<String>,
+    dump_teacher_root: Option<String>,
+) {
     let harness = FloorHarness::new();
     let fixer = DriverFixer::new();
     // Issue 128 T5 — a mint config REPLACES the stock floor list with the
@@ -275,6 +289,96 @@ fn driver_section(dump_fixseq_root: Option<String>, dump_fixseq_cfg: Option<Stri
     print_report(&report);
     print_integrity(&report);
     dump_diverged(&cases, &report);
+
+    // Plan 432 T0.2a — the teacher-corpus mint. One self-contained row per
+    // ATTEMPTED case: the seed (ground truth), the broken source (the task
+    // the driver saw — the teacher re-derives diagnostics from it in a
+    // fresh scaffold), and the FULL attempt ring — the T3 fields ride every
+    // attempt now (shape/strategy/outcome/shape_class/insight), so the
+    // fail→resolve scaffold has the failed EDIT and the corrected EDIT, not
+    // just their ids. Unattempted cases (first-check clean) carry nothing
+    // the teacher needs.
+    if let Some(root) = dump_teacher_root {
+        use std::path::PathBuf;
+        let root = PathBuf::from(root);
+        let _ = std::fs::create_dir_all(&root);
+        let by_name: std::collections::HashMap<&str, &riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>> =
+            cases.iter().map(|c| (c.name, c)).collect();
+        let mut rows = 0usize;
+        let mut attempts_total = 0usize;
+        let path = root.join("teacher_cases.jsonl");
+        let mut out = String::new();
+        for (name, rep) in &driver_reports {
+            if rep.attempts.is_empty() {
+                continue;
+            }
+            let Some(case) = by_name.get(name.as_str()) else { continue };
+            // The edit-level legs (Plan 432's scaffold wants the FAILED edit
+            // and the CORRECTED edit, not just their strategy ids): the
+            // applied/reverted records carry shape + fix text verbatim.
+            let applied: Vec<_> = rep
+                .applied
+                .iter()
+                .map(|a| {
+                    serde_json::json!({
+                        "code": a.code, "strategy_id": a.strategy_id,
+                        "line": a.line, "shape": a.shape, "fix": a.fix,
+                        "errors": a.errors,
+                    })
+                })
+                .collect();
+            let reverted: Vec<_> = rep
+                .reverted
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "code": r.code, "strategy_id": r.strategy_id,
+                        "line": r.line, "shape": r.shape, "fix": r.fix,
+                        "reason": r.reason.label(),
+                    })
+                })
+                .collect();
+            let row = serde_json::json!({
+                "case": case.name,
+                "expect_code": case.expect_code,
+                "seed": case.seed,
+                "broken": case.broken,
+                "attempts": rep.attempts,
+                "applied": applied,
+                "reverted": reverted,
+            });
+            out.push_str(&serde_json::to_string(&row).unwrap_or_default());
+            out.push('\n');
+            rows += 1;
+            attempts_total += rep.attempts.len();
+        }
+        match std::fs::write(&path, out) {
+            Ok(()) => println!(
+                "\n  teacher dump: {rows} case row(s) ({attempts_total} attempts, T3 digests \
+                 stamped) -> {}",
+                path.display()
+            ),
+            Err(e) => eprintln!("teacher dump: {e}"),
+        }
+        // The house-data manifest (per-file BLAKE3 + counts — the 128-T5 law).
+        let bytes = std::fs::read(&path).unwrap_or_default();
+        let manifest = serde_json::json!({
+            "plan": "432-T0.2a",
+            "rustc": rustc_version(),
+            "rows": rows,
+            "attempts": attempts_total,
+            "blake3": blake3::hash(&bytes).to_hex().to_string(),
+            "created_unix": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        });
+        let mpath = root.join("manifest.json");
+        let _ = std::fs::write(&mpath, serde_json::to_string_pretty(&manifest).unwrap_or_default());
+        println!("  manifest: {}", mpath.display());
+        harness.cleanup();
+        return;
+    }
 
     // Issue 126 T0 — optional fixseq ring dump: the hindsight-label corpus
     // (`span_embed` × `strategy_id` × `outcome`) the sigmoid-NCE rule-embedding
