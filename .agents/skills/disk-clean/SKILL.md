@@ -63,7 +63,7 @@ repo's debug dir**. Measured precedent (2026-09-13): that freed ~480G internal
 
 ### LOAD-BEARING — do not break these
 
-- **`riir-clippy/target/release/cargo-refine`** — `~/.cargo/bin/cargo-refine`
+- **`riir-refine/target/release/cargo-refine`** — `~/.cargo/bin/cargo-refine`
   symlinks here. NEVER `rm -rf` that repo's whole `target/`. Delete
   `target/debug` only. After touching that repo's target at all, verify
   `~/.cargo/bin/cargo-refine` still resolves and runs.

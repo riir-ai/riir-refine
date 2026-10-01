@@ -13,12 +13,12 @@ self-evolve trajectories on every apply.
 ## Setup (once per machine)
 
 - Global binary `cargo refine` = `~/.cargo/bin/cargo-refine` → symlink to
-  `/Users/katopz/git/riir-clippy/target/release/cargo-refine`
+  `/Users/katopz/git/riir-refine/target/release/cargo-refine`
   (built with `--features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport`
   — the bin's required-features + the verify features; Plan 107 T1 made
   kat_service mandatory).
 - Rebuild after healer source changes:
-  `cd /Users/katopz/git/riir-clippy && cargo build --release --features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport --bin cargo-refine`
+  `cd /Users/katopz/git/riir-refine && cargo build --release --features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport --bin cargo-refine`
   (the symlink keeps pointing at the rebuilt binary).
 - Fresh box without the sibling repo → fall back to manual fixes +
   `cargo clippy --fix`; do not block on the healer.
@@ -162,7 +162,7 @@ staging off the ranked head alone then stages opt-in lints. Report-only; it
 stages nothing and gates nothing.
 
 Audit adoption + loop state in one command (Issue 037's instrument):
-`/Users/katopz/git/riir-clippy/scripts/self_evolve_audit.sh` — memory
+`/Users/katopz/git/riir-refine/scripts/self_evolve_audit.sh` — memory
 tiers/outcomes, score-bench history, intake progress, heal-commit trail.
 
 ## Evidence (2026-08-24 adoption trial, M3)
