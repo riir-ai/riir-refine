@@ -18,8 +18,8 @@
 version = 1
 
 [[target]]
-repo     = "riir-clippy"
-path     = "/Users/katopz/git/riir-clippy"
+repo     = "riir-refine"
+path     = "/Users/katopz/git/riir-refine"
 # The healer's own bin surface — small, fast to verify (cargo check of this
 # crate only), never the full workspace.
 scope    = "src/bin"

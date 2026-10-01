@@ -213,7 +213,7 @@ run_drain() {
   if ! CARGO_TARGET_DIR="$DRAIN_TARGET_DIR" cargo build --release --features cf_workers_ai \
         --bin kat_drain >>"$log" 2>&1; then
     echo "[drain] BUILD FAILED (see $log)"
-    record_row drain riir-clippy - kat_drain 5 0 0 0 0 0 0 ""
+    record_row drain riir-refine - kat_drain 5 0 0 0 0 0 0 ""
     return 1
   fi
   /usr/bin/time -l "$DRAIN_TARGET_DIR/release/kat_drain" "${PASS_THROUGH[@]}" \
@@ -230,7 +230,7 @@ run_drain() {
   declines="$(sed -n 's/.*declined \([0-9]*\).*/\1/p' "$log" | tail -1)"
   queued="${queued:-0}"; keeps="${keeps:-0}"; declines="${declines:-0}"
   echo "[drain] exit=$rc queued=$queued — log $log"
-  record_row drain riir-clippy - kat_drain "$rc" "$TIME_WALL" "$TIME_CPU" "$TIME_RSS" \
+  record_row drain riir-refine - kat_drain "$rc" "$TIME_WALL" "$TIME_CPU" "$TIME_RSS" \
     "$queued" "$keeps" "$declines" ""
 }
 
