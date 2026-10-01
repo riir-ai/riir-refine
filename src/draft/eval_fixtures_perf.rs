@@ -265,10 +265,13 @@ pub fn zone_owner(zones: &HashMap<u32, u32>, zone: u32) -> Option<u32> {
         r#"pub fn audit_payload(payload: Vec<u8>) -> u64 {
     payload
         .iter()
-        .map(|&b| b as u64)
+        .map(|&b| u64::from(b))
         .sum()
 }
-"#,
+"#, // Issue 141 Class B: `b as u64` (u8→u64, lossless) co-fired `cast_lossless`
+            // beside the labeled `manual_map` in the merged-span oracle test —
+            // the lossless-explicit `u64::from` spelling keeps the span's
+            // clippy vocabulary exactly {manual_map}.
     ),
     (
         "box-str-immutable",
