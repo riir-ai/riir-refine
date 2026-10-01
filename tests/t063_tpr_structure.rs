@@ -6,7 +6,7 @@
 //! verdict rule were committed before this ran).
 //!
 //! ```bash
-//! CARGO_TARGET_DIR=/tmp/riir_clippy_063 cargo test --release \
+//! CARGO_TARGET_DIR=/tmp/riir_refine_063 cargo test --release \
 //!   --features tpr_structure --test t063_tpr_structure -- --nocapture
 //! ```
 //!
@@ -18,8 +18,8 @@
 
 #![cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 
-use riir_clippy::draft::tpr_fit::{print_space_report, run, ProbeStatus, StateSpace};
-use riir_clippy::draft::withheld_pair_ood::{
+use riir_refine::draft::tpr_fit::{print_space_report, run, ProbeStatus, StateSpace};
+use riir_refine::draft::withheld_pair_ood::{
     clippy_population, kernel_opt_population, rustc_errors_population, Binding,
 };
 

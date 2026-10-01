@@ -22,7 +22,7 @@
 #![allow(clippy::pedantic, clippy::type_complexity)]
 
 #[cfg(all(feature = "self_evolve", feature = "clippy_verify"))]
-use riir_clippy::{
+use riir_refine::{
     build_seed_corpus, ClippyFixEntry, ClippyTernaryDrafter, ClippyVerifier, HealPipeline,
     RustAnalyzerPruner,
 };
@@ -185,7 +185,7 @@ fn main() {
                 let vr = verifier.verify(&r.fixed_code, lint_name);
                 (vr.ran && vr.lint_resolved, r.source, r.context_notes)
             }
-            None => (false, riir_clippy::HealSource::Drafter, None),
+            None => (false, riir_refine::HealSource::Drafter, None),
         };
         if resolved {
             baseline_resolved += 1;
@@ -268,7 +268,7 @@ fn main() {
                 let vr = verifier.verify(&r.fixed_code, lint_name);
                 (vr.ran && vr.lint_resolved, r.source, r.context_notes)
             }
-            None => (false, riir_clippy::HealSource::Drafter, None),
+            None => (false, riir_refine::HealSource::Drafter, None),
         };
         if resolved {
             evolved_resolved += 1;

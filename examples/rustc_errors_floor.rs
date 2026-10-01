@@ -63,12 +63,12 @@
 //! writes `<dir>/manifest.json` — per-file BLAKE3 + counts, the house data
 //! discipline (the 049_t01 stamped-manifest law).
 
-use riir_clippy::domains::rustc_errors::corpus_gen::{generate_corpus, Territory};
-use riir_clippy::domains::rustc_errors::floor::{
+use riir_refine::domains::rustc_errors::corpus_gen::{generate_corpus, Territory};
+use riir_refine::domains::rustc_errors::floor::{
     CargoFixBaseline, DriverFixer, FixVerdict, FloorHarness, FloorOutcome, FloorReport, NullFixer,
     MUTANT_CASES,
 };
-use riir_clippy::domains::rustc_errors::probe::PremiseProbe;
+use riir_refine::domains::rustc_errors::probe::PremiseProbe;
 
 fn main() {
     let only: Vec<String> = std::env::args()
@@ -144,7 +144,7 @@ fn main() {
 fn case_count() -> usize {
     MUTANT_CASES.len()
         + generate_corpus().len()
-        + riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs().len()
+        + riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs().len()
 }
 
 fn rustc_version() -> String {
@@ -302,7 +302,7 @@ fn driver_section(
         use std::path::PathBuf;
         let root = PathBuf::from(root);
         let _ = std::fs::create_dir_all(&root);
-        let by_name: std::collections::HashMap<&str, &riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>> =
+        let by_name: std::collections::HashMap<&str, &riir_refine::domains::rustc_errors::floor::HarnessCase<'_>> =
             cases.iter().map(|c| (c.name, c)).collect();
         let mut rows = 0usize;
         let mut attempts_total = 0usize;
@@ -387,8 +387,8 @@ fn driver_section(
     // tables (the flag-less path is unchanged — the committed corpus run
     // keeps its full measurement session).
     if let Some(root) = dump_fixseq_root {
-        use riir_clippy::domains::rustc_errors::driver::AttemptOutcome;
-        use riir_clippy::domains::rustc_errors::evolve::dump_fixseq;
+        use riir_refine::domains::rustc_errors::driver::AttemptOutcome;
+        use riir_refine::domains::rustc_errors::evolve::dump_fixseq;
         use std::path::PathBuf;
         let root = PathBuf::from(root);
         let mut runs = 0usize;
@@ -550,17 +550,17 @@ fn seeds_section() {
 /// "candidate" (none) — ordering cannot matter there.
 #[cfg(feature = "latent_retrieval")]
 fn template_covered<'a>(
-    committed: &'a [riir_clippy::domains::rustc_errors::floor::MutantCase],
-    generated: &'a [riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase],
+    committed: &'a [riir_refine::domains::rustc_errors::floor::MutantCase],
+    generated: &'a [riir_refine::domains::rustc_errors::corpus_gen::GeneratedCase],
 ) -> (
-    Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'a>>,
+    Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'a>>,
     usize,
 ) {
     let mut cases = Vec::new();
     let mut n = 0;
     for c in committed {
         if matches!(c.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
-            if let Ok(h) = riir_clippy::domains::rustc_errors::floor::HarnessCase::committed(c) {
+            if let Ok(h) = riir_refine::domains::rustc_errors::floor::HarnessCase::committed(c) {
                 cases.push(h);
                 n += 1;
             }
@@ -568,7 +568,7 @@ fn template_covered<'a>(
     }
     for g in generated {
         if matches!(g.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
-            cases.push(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(g));
+            cases.push(riir_refine::domains::rustc_errors::floor::HarnessCase::generated(g));
             n += 1;
         }
     }
@@ -644,8 +644,8 @@ fn paired_attempts_lb95(
 /// paper's own measurement shape. The corpus flags are the ab section's
 /// (`--multi K`, `--strided`, `--interacting`).
 fn insight_ab_section() {
-    use riir_clippy::domains::rustc_errors::insight_retry::{InsightConditioning, Mode};
-    use riir_clippy::domains::rustc_errors::floor::DriverFixer;
+    use riir_refine::domains::rustc_errors::insight_retry::{InsightConditioning, Mode};
+    use riir_refine::domains::rustc_errors::floor::DriverFixer;
 
     println!("\n── 6. Issue 140 T3 — insight-conditioned retry A/B (static vs control vs insight vs raw) ──\n");
     let harness = FloorHarness::new();
@@ -661,29 +661,29 @@ fn insight_ab_section() {
     let strided = std::env::args().any(|a| a == "--strided");
     let interacting = std::env::args().any(|a| a == "--interacting");
     let generated = if interacting {
-        riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs()
+        riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs()
             .iter()
-            .map(riir_clippy::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
+            .map(riir_refine::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
             .collect::<Vec<_>>()
     } else {
         match (multi > 1, strided) {
-            (true, true) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi_strided(
+            (true, true) => riir_refine::domains::rustc_errors::corpus_gen::compose_multi_strided(
                 &generate_corpus(),
                 multi,
             ),
-            (true, false) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi(
+            (true, false) => riir_refine::domains::rustc_errors::corpus_gen::compose_multi(
                 &generate_corpus(),
                 multi,
             ),
             (false, _) => generate_corpus(),
         }
     };
-    let (cases, n): (Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>>, usize) =
+    let (cases, n): (Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>>, usize) =
         match multi > 1 || interacting {
             true => {
-                let v: Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>> = generated
+                let v: Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>> = generated
                     .iter()
-                    .map(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated)
+                    .map(riir_refine::domains::rustc_errors::floor::HarnessCase::generated)
                     .collect();
                 let n = v.len();
                 (v, n)
@@ -820,17 +820,17 @@ fn insight_ab_section() {
 /// `latent_retrieval`-gated; this section needs no store, so it carries its
 /// own copy of the stratum filter (same codes, same order).
 fn template_covered_pub<'a>(
-    committed: &'a [riir_clippy::domains::rustc_errors::floor::MutantCase],
-    generated: &'a [riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase],
+    committed: &'a [riir_refine::domains::rustc_errors::floor::MutantCase],
+    generated: &'a [riir_refine::domains::rustc_errors::corpus_gen::GeneratedCase],
 ) -> (
-    Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'a>>,
+    Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'a>>,
     usize,
 ) {
     let mut cases = Vec::new();
     let mut n = 0;
     for c in committed {
         if matches!(c.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
-            if let Ok(h) = riir_clippy::domains::rustc_errors::floor::HarnessCase::committed(c) {
+            if let Ok(h) = riir_refine::domains::rustc_errors::floor::HarnessCase::committed(c) {
                 cases.push(h);
                 n += 1;
             }
@@ -838,7 +838,7 @@ fn template_covered_pub<'a>(
     }
     for g in generated {
         if matches!(g.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
-            cases.push(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(g));
+            cases.push(riir_refine::domains::rustc_errors::floor::HarnessCase::generated(g));
             n += 1;
         }
     }
@@ -847,8 +847,8 @@ fn template_covered_pub<'a>(
 
 #[cfg(feature = "latent_retrieval")]
 fn ordering_ab_section() {
-    use riir_clippy::domains::rustc_errors::evolve::traj_key;
-    use riir_clippy::traj_store::{shape_conditional_order, TrajStore};
+    use riir_refine::domains::rustc_errors::evolve::traj_key;
+    use riir_refine::traj_store::{shape_conditional_order, TrajStore};
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -883,17 +883,17 @@ fn ordering_ab_section() {
     // `--multi` by construction (the interacting cases ARE composed).
     let interacting = std::env::args().any(|a| a == "--interacting");
     let generated = if interacting {
-        riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs()
+        riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs()
             .iter()
-            .map(riir_clippy::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
+            .map(riir_refine::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
             .collect::<Vec<_>>()
     } else {
         match (multi > 1, strided) {
-            (true, true) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi_strided(
+            (true, true) => riir_refine::domains::rustc_errors::corpus_gen::compose_multi_strided(
                 &generate_corpus(),
                 multi,
             ),
-            (true, false) => riir_clippy::domains::rustc_errors::corpus_gen::compose_multi(
+            (true, false) => riir_refine::domains::rustc_errors::corpus_gen::compose_multi(
                 &generate_corpus(),
                 multi,
             ),
@@ -905,9 +905,9 @@ fn ordering_ab_section() {
         // (which keys on a single declared code) would drop most of them, so
         // the MULTI lane takes the composed set whole.
         true => {
-            let v: Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'_>> = generated
+            let v: Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>> = generated
                 .iter()
-                .map(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated)
+                .map(riir_refine::domains::rustc_errors::floor::HarnessCase::generated)
                 .collect();
             let n = v.len();
             (v, n)
@@ -985,8 +985,8 @@ fn ordering_ab_section() {
         e.1 = e.1.saturating_add(row.fail_count);
     }
     let flat_ordering = Arc::new(
-        move |cands: &mut [riir_clippy::domains::rustc_errors::playbooks::FixCandidate]| {
-            let score = |c: &riir_clippy::domains::rustc_errors::playbooks::FixCandidate| {
+        move |cands: &mut [riir_refine::domains::rustc_errors::playbooks::FixCandidate]| {
+            let score = |c: &riir_refine::domains::rustc_errors::playbooks::FixCandidate| {
                 match flat_counts.get(&traj_key(&c.code, &c.strategy_id)) {
                     None => 0.32, // Beta(1,1) @ eps — the unseen prior
                     Some(&(s, f)) => katgpt_core::best_belief_score(s, f, 0.32),
@@ -1065,7 +1065,7 @@ fn ordering_ab_section() {
     // invocation, one driver run). ──
     #[cfg(feature = "nonergodic_driver")]
     {
-        use riir_clippy::domains::rustc_errors::nonergodic_order::NonergodicOrdering;
+        use riir_refine::domains::rustc_errors::nonergodic_order::NonergodicOrdering;
         use std::sync::atomic::{AtomicUsize, Ordering as AtomOrd};
 
         let shared = Arc::new(NonergodicOrdering::new(Some(Arc::clone(&store_arc))));
@@ -1102,7 +1102,7 @@ fn ordering_ab_section() {
                 // INERT, and an inert arm reads exactly like "no difference".
                 let inner = pol.observer();
                 let tk = Arc::clone(&ticks);
-                let counting: riir_clippy::domains::rustc_errors::driver::ObserverFn =
+                let counting: riir_refine::domains::rustc_errors::driver::ObserverFn =
                     Arc::new(move |rec| {
                         tk.fetch_add(1, AtomOrd::Relaxed);
                         inner(rec);
@@ -1226,7 +1226,7 @@ fn ordering_ab_section() {
 /// empty block or a reordered-but-equivalent program reads as diverged), and
 /// the two are only separable by looking. Off by default (0) — this prints
 /// whole source files.
-fn dump_diverged(cases: &[riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>], report: &FloorReport) {
+fn dump_diverged(cases: &[riir_refine::domains::rustc_errors::floor::HarnessCase<'static>], report: &FloorReport) {
     let k: usize = std::env::args()
         .position(|a| a == "--dump-diverged")
         .and_then(|i| std::env::args().nth(i + 1))
@@ -1275,13 +1275,13 @@ fn indent(s: &str) -> String {
         .join("\n")
 }
 
-fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>> {
+fn floor_case_list() -> Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'static>> {
     // 'static: committed cases are 'static consts; generated cases leak
     // their Strings once per process (the measurement is a one-shot binary
     // — Box::leak keeps the borrow simple without rebuilding per section).
     // Issue 099 T5: the interacting pairs join the stock floor list (the
     // admissibility gate passed 34/34 first — `examples/interacting_gate.rs`).
-    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
+    use riir_refine::domains::rustc_errors::floor::HarnessCase;
     let mut cases: Vec<HarnessCase<'static>> = MUTANT_CASES
         .iter()
         .map(|c| HarnessCase::committed(c).expect("committed case integrity"))
@@ -1289,7 +1289,7 @@ fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCa
     for g in generate_corpus() {
         cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
     }
-    for ix in riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs() {
+    for ix in riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs() {
         cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
     }
     cases
@@ -1302,9 +1302,9 @@ fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCa
 /// two seeds of one composer. Both configs append the interacting pairs
 /// (the E0614 masking chains) and EXCLUDE the solo MUTANT_CASES anchors
 /// (single-attempt runs carry no transitions).
-fn composed_case_list(cfg: &str) -> Option<Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>>> {
-    use riir_clippy::domains::rustc_errors::corpus_gen::{compose_multi, compose_multi_strided};
-    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
+fn composed_case_list(cfg: &str) -> Option<Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'static>>> {
+    use riir_refine::domains::rustc_errors::corpus_gen::{compose_multi, compose_multi_strided};
+    use riir_refine::domains::rustc_errors::floor::HarnessCase;
     const K: usize = 5;
     let generated = generate_corpus();
     let composed = match cfg {
@@ -1317,7 +1317,7 @@ fn composed_case_list(cfg: &str) -> Option<Vec<riir_clippy::domains::rustc_error
     for g in composed {
         cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
     }
-    for ix in riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs() {
+    for ix in riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs() {
         cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
     }
     Some(cases)
@@ -1391,7 +1391,7 @@ fn print_report(report: &FloorReport) {
         .outcomes
         .iter()
         .filter(|o| {
-            riir_clippy::domains::rustc_errors::corpus_gen::territory_of(o.expect_code)
+            riir_refine::domains::rustc_errors::corpus_gen::territory_of(o.expect_code)
                 == Territory::Uncontested
         })
         .collect();

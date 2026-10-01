@@ -27,7 +27,7 @@
 
 #![cfg(feature = "kernel_heal")]
 
-use riir_clippy::domains::kernel_opt::wgsl_scan::WgslScanner;
+use riir_refine::domains::kernel_opt::wgsl_scan::WgslScanner;
 
 const PREFIX: &str = include_str!("fixtures/m2p_attention_prefix_701.wgsl");
 const POSTFIX: &str = include_str!("fixtures/m2p_attention_postfix_701.wgsl");

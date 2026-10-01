@@ -21,10 +21,10 @@
 
 #![cfg(all(feature = "latent_retrieval", feature = "clippy_verify"))]
 
-use riir_clippy::draft::jury_disagreement::{
+use riir_refine::draft::jury_disagreement::{
     best_g2_threshold, print_jury_report, run_jury_poc, DisagreementSignals, FixOutcome,
 };
-use riir_clippy::draft::{ClippyOracle, DomainId, LatentMatcher};
+use riir_refine::draft::{ClippyOracle, DomainId, LatentMatcher};
 
 #[test]
 fn jury_disagreement_poc_harness() {
@@ -107,7 +107,7 @@ fn jury_disagreement_poc_harness() {
 /// The signals reduce correctly on a hand-built pool (unit-level, no cargo).
 #[test]
 fn disagreement_signals_reduce_on_a_fixed_pool() {
-    use riir_clippy::draft::corpus_index::ScoredRule;
+    use riir_refine::draft::corpus_index::ScoredRule;
 
     let sr = |id: &str, score: f32| ScoredRule {
         rule_id: id.to_string(),
@@ -129,7 +129,7 @@ fn disagreement_signals_reduce_on_a_fixed_pool() {
             .then_with(|| b.score.total_cmp(&a.score))
     });
     let s: DisagreementSignals =
-        riir_clippy::draft::jury_disagreement::disagreement_signals(&pool, &ranked);
+        riir_refine::draft::jury_disagreement::disagreement_signals(&pool, &ranked);
     assert_eq!(s.pool_len, 4);
     assert_eq!(s.pool_spread, 2, "two distinct rules in the pool");
     assert_eq!(s.instantiating, 1);
@@ -138,7 +138,7 @@ fn disagreement_signals_reduce_on_a_fixed_pool() {
 
     // A single-candidate pool is uncontested by emptiness.
     let one = vec![sr("only", 1.0)];
-    let s1 = riir_clippy::draft::jury_disagreement::disagreement_signals(&one, &one);
+    let s1 = riir_refine::draft::jury_disagreement::disagreement_signals(&one, &one);
     assert!(s1.rerank_margin.is_infinite());
 }
 
@@ -155,7 +155,7 @@ fn fix_outcome_classifies_the_three_verdicts() {
 
     // needless_return resolves its own lint.
     let code = "pub fn f() -> u8 {\n    return 1;\n}\n";
-    let out = riir_clippy::draft::jury_disagreement::fix_outcome(
+    let out = riir_refine::draft::jury_disagreement::fix_outcome(
         &oracle,
         DomainId::Clippy,
         code,
@@ -164,7 +164,7 @@ fn fix_outcome_classifies_the_three_verdicts() {
     assert_eq!(out, FixOutcome::Resolved, "the canonical fix must resolve");
 
     // A rule whose proposer does not fire on the span: no verdict.
-    let out = riir_clippy::draft::jury_disagreement::fix_outcome(
+    let out = riir_refine::draft::jury_disagreement::fix_outcome(
         &oracle,
         DomainId::Clippy,
         code,
@@ -177,7 +177,7 @@ fn fix_outcome_classifies_the_three_verdicts() {
 /// loosened bar (unit-level).
 #[test]
 fn g2_returns_none_when_nothing_qualifies() {
-    let sweep = vec![riir_clippy::draft::jury_disagreement::Contingency {
+    let sweep = vec![riir_refine::draft::jury_disagreement::Contingency {
         threshold: 2.0,
         total: 10,
         flagged: 9,

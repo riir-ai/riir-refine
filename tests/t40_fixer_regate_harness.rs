@@ -16,8 +16,8 @@
 
 #![cfg(feature = "cf_workers_ai")]
 
-use riir_clippy::cf_workers_ai::{self, reachable_samples, MissClass, RegateHarness, SampleSource};
-use riir_clippy::ClippyVerifier;
+use riir_refine::cf_workers_ai::{self, reachable_samples, MissClass, RegateHarness, SampleSource};
+use riir_refine::ClippyVerifier;
 
 fn harness() -> RegateHarness {
     RegateHarness::new().expect("harness init (corpus verify + reachable premise)")

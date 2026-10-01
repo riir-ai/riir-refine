@@ -27,7 +27,7 @@
 
 #![allow(clippy::cast_precision_loss)] // count/display fixtures
 
-use riir_clippy::gp_acquisition::{GpAcquisition, DIM};
+use riir_refine::gp_acquisition::{GpAcquisition, DIM};
 
 /// Relative σ² range below which the surface is called FLAT (the T5 bar:
 /// (max−min)/mean under this = the ordering carries no signal beyond noise).
@@ -88,7 +88,7 @@ use lcg::Lcg;
 fn labeled_pairs() -> Vec<(&'static str, &'static str)> {
     #[cfg(feature = "latent_retrieval")]
     {
-        use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+        use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
         CLIPPY_SPANS.to_vec()
     }
     #[cfg(not(feature = "latent_retrieval"))]
@@ -128,7 +128,7 @@ fn labeled_pairs() -> Vec<(&'static str, &'static str)> {
 }
 
 fn embed_pair(rule: &str, span: &str) -> [f32; DIM] {
-    riir_clippy::embedder::embed(rule, span)
+    riir_refine::embedder::embed(rule, span)
 }
 
 // ── G-flat: the σ-surface spread (T5's pre-registered probe) ─────────────
@@ -139,7 +139,7 @@ fn loo_sigmas(pairs: &[(&'static str, &'static str)]) -> Vec<f32> {
     let mut out = Vec::with_capacity(pairs.len());
     for i in 0..pairs.len() {
         let mut gp =
-            GpAcquisition::with_capacity(riir_clippy::gp_acquisition::DEFAULT_LAMBDA, pairs.len());
+            GpAcquisition::with_capacity(riir_refine::gp_acquisition::DEFAULT_LAMBDA, pairs.len());
         for (j, (rule, span)) in pairs.iter().enumerate() {
             if j != i {
                 gp.observe(&embed_pair(rule, span));
@@ -184,11 +184,11 @@ fn g_flat_sigma_surface_spread() {
 
 #[cfg(feature = "latent_retrieval")]
 mod ordering_ab {
-    use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
-    use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
-    use riir_clippy::draft::latent_matcher::LatentMatcher;
-    use riir_clippy::embedder::embed;
-    use riir_clippy::gp_acquisition::{GpAcquisition, DIM};
+    use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+    use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
+    use riir_refine::draft::latent_matcher::LatentMatcher;
+    use riir_refine::embedder::embed;
+    use riir_refine::gp_acquisition::{GpAcquisition, DIM};
 
     /// Pool probe depth per span (matches the harness's 12-deep pools).
     const POOL_K: usize = 12;
@@ -271,7 +271,7 @@ mod ordering_ab {
             let ret_rank = rank_of(&pool, label).unwrap();
             // Arm 2: GP σ² descending, LOO-trained on the OTHER pairs.
             let mut gp = GpAcquisition::with_capacity(
-                riir_clippy::gp_acquisition::DEFAULT_LAMBDA,
+                riir_refine::gp_acquisition::DEFAULT_LAMBDA,
                 embeddings.len(),
             );
             for (j, e) in embeddings.iter().enumerate() {

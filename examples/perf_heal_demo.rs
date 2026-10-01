@@ -13,15 +13,15 @@
 //! cargo run --example perf_heal_demo --features rust_perf_verify  # with cargo test
 //! ```
 
-use riir_clippy::corpus::Corpus;
-use riir_clippy::domain::HealDomain;
-use riir_clippy::domains::rust_perf::RustPerfDomain;
+use riir_refine::corpus::Corpus;
+use riir_refine::domain::HealDomain;
+use riir_refine::domains::rust_perf::RustPerfDomain;
 
 fn main() {
     println!("=== rust_perf domain — Phase 2 scaffold demo ===\n");
 
     // 1. Build the seed corpus.
-    let corpus: Corpus<RustPerfDomain> = riir_clippy::build_perf_seed_corpus();
+    let corpus: Corpus<RustPerfDomain> = riir_refine::build_perf_seed_corpus();
     println!("Seed corpus: {} entries", corpus.entries.len());
     println!(
         "Commitment (BLAKE3): {}",
@@ -99,7 +99,7 @@ fn main() {
     #[cfg(feature = "rust_perf_verify")]
     {
         println!("=== rust_perf_verify: running cargo test on first rule ===");
-        use riir_clippy::PerfVerifier;
+        use riir_refine::PerfVerifier;
         let verifier = PerfVerifier::new();
         if !verifier.is_cargo_available() {
             println!("  (cargo not on PATH — skipping cargo test verification)");

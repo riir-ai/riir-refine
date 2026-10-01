@@ -93,7 +93,7 @@ DEFAULT_OUT = REPO_ROOT / "cloudflare" / "dashboard" / "public" / "index.html"
 # Mirrors scripts/self_evolve_audit.sh REPOS.
 REPOS = [
     "katgpt-rs", "riir-ai", "riir-train", "riir-neuron-db", "riir-chain",
-    "riir-clippy", "riir-game-sdk", "riir-mmorpg-examples",
+    "riir-refine", "riir-game-sdk", "riir-mmorpg-examples",
     "riir-viewbridge", "riir-dapps",
 ]
 GIT_ROOT = Path(os.environ.get("RIIR_GIT_ROOT", "/Users/katopz/git"))

@@ -1,7 +1,7 @@
 //! Issue 098 T1+T2 — rule-corpus Cross-OOO axis driver (the measurement).
 //!
 //! Runs the absorption/splitting audit over the pooled real oracle-labeled
-//! clippy spans (see `riir_clippy::score_bench::cross_ooo`), plus the
+//! clippy spans (see `riir_refine::score_bench::cross_ooo`), plus the
 //! per-domain population scan: how many rules in each domain's corpus even
 //! HAVE ≥2 spans (the K ≥ 2 precondition for Cross-OOO). Verdict per Issue
 //! 098 T3: pairs under 0.6 ⇒ absorption candidates (wiring); none ⇒ the
@@ -17,8 +17,8 @@
 use std::collections::BTreeMap;
 
 use katgpt_core::ooo_audit::OooAuditConfig;
-use riir_clippy::domain::HealEntry;
-use riir_clippy::score_bench::cross_ooo::{audit_clippy_corpus, render_report};
+use riir_refine::domain::HealEntry;
+use riir_refine::score_bench::cross_ooo::{audit_clippy_corpus, render_report};
 
 /// One domain's corpus population verdict (the K ≥ 2 precondition scan).
 ///
@@ -55,26 +55,26 @@ fn main() {
     // ── population scan (per domain: the K ≥ 2 precondition) ──────────────
     let mut populations: Vec<Population> = Vec::new();
     {
-        let corpus = riir_clippy::build_seed_corpus();
+        let corpus = riir_refine::build_seed_corpus();
         populations.push(fold("clippy_lints (corpus)", &corpus.entries, corpus.entries.len()));
     }
     {
-        let corpus = riir_clippy::build_perf_seed_corpus();
+        let corpus = riir_refine::build_perf_seed_corpus();
         populations.push(fold("rust_perf (corpus)", &corpus.entries, corpus.entries.len()));
     }
     #[cfg(feature = "kernel_heal")]
     {
-        let corpus = riir_clippy::build_kernel_seed_corpus();
+        let corpus = riir_refine::build_kernel_seed_corpus();
         populations.push(fold("kernel_opt (corpus)", &corpus.entries, corpus.entries.len()));
     }
     #[cfg(feature = "sec")]
     {
-        let corpus = riir_clippy::build_sec_seed_corpus();
+        let corpus = riir_refine::build_sec_seed_corpus();
         populations.push(fold("sec (corpus)", &corpus.entries, corpus.entries.len()));
     }
     #[cfg(feature = "docker")]
     {
-        let corpus = riir_clippy::build_docker_seed_corpus();
+        let corpus = riir_refine::build_docker_seed_corpus();
         populations.push(fold("docker (corpus)", &corpus.entries, corpus.entries.len()));
     }
 
@@ -105,13 +105,13 @@ fn main() {
         println!(
             "VERDICT (T3): {} absorption candidate(s) at cross < {REDUNDANT} — wiring axis onward.",
             report.redundant_pairs.len(),
-            REDUNDANT = riir_clippy::score_bench::cross_ooo::REDUNDANT_PAIR_CROSS
+            REDUNDANT = riir_refine::score_bench::cross_ooo::REDUNDANT_PAIR_CROSS
         );
     } else {
         println!(
             "VERDICT (T3): no pair under {REDUNDANT} — the axis is hygiene-only at this pool \
              (recorded negative per the Issue 759 defend-wrong precedent).",
-            REDUNDANT = riir_clippy::score_bench::cross_ooo::REDUNDANT_PAIR_CROSS
+            REDUNDANT = riir_refine::score_bench::cross_ooo::REDUNDANT_PAIR_CROSS
         );
     }
 }

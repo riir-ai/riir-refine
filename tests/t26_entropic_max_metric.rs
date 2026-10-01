@@ -26,7 +26,7 @@
 //! cargo test --release --test t26_entropic_max_metric -- --nocapture
 //! ```
 
-use riir_clippy::selection_entropic::{
+use riir_refine::selection_entropic::{
     solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2,
 };
 

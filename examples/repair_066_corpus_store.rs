@@ -23,7 +23,7 @@
 //! True values are derived FROM GIT (`git show <rev>:corpus.rs | grep -c '    rule('`),
 //! not hardcoded — the same computation the git-mined dashboard layer runs.
 
-use riir_clippy::traj_store::TrajStore;
+use riir_refine::traj_store::TrajStore;
 
 fn main() {
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

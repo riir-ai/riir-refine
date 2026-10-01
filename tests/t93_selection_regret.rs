@@ -28,7 +28,7 @@
 //! cargo test --release --test t93_selection_regret -- --nocapture
 //! ```
 
-use riir_clippy::SelectionMode;
+use riir_refine::SelectionMode;
 
 const W_EVO: f32 = 0.6;
 const W_RATE: f32 = 0.4;

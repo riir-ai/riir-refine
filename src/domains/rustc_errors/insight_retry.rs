@@ -161,10 +161,10 @@ struct Store {
 /// Issue-093 composition shape — the two closures share one store).
 ///
 /// ```no_run
-/// use riir_clippy::domains::rustc_errors::insight_retry::{
+/// use riir_refine::domains::rustc_errors::insight_retry::{
 ///     InsightConditioning, Mode,
 /// };
-/// use riir_clippy::domains::rustc_errors::floor::DriverFixer;
+/// use riir_refine::domains::rustc_errors::floor::DriverFixer;
 ///
 /// let pol = InsightConditioning::new(Mode::Insight);
 /// let fixer = DriverFixer::new()

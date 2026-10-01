@@ -82,15 +82,15 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
-use riir_clippy::cf_workers_ai::{
+use riir_refine::cf_workers_ai::{
     self, ArmSummary, CaseScore, CfUsageToday, MissClass, RegateHarness, Sample, SampleSource,
     REASONING_OVERFLOW,
 };
-use riir_clippy::domain::HealEntry as _;
-use riir_clippy::groq::router::{LlmRouter, Provider, FREE_TIER_EXHAUSTED};
-use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
-use riir_clippy::traj_store::{shape_hash, TrajRowDoc, TrajStore};
-use riir_clippy::EvidenceTier;
+use riir_refine::domain::HealEntry as _;
+use riir_refine::groq::router::{LlmRouter, Provider, FREE_TIER_EXHAUSTED};
+use riir_refine::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
+use riir_refine::traj_store::{shape_hash, TrajRowDoc, TrajStore};
+use riir_refine::EvidenceTier;
 
 /// The daily smoke probe (caveat #18(d)): one call before any backlog burn —
 /// the 7.8k-neuron incident rule generalized from model-change probe to
@@ -742,7 +742,7 @@ fn main() {
              window"
         ),
     }
-    let (price_in, price_out) = riir_clippy::llm_spend::price_for(llm.model_id())
+    let (price_in, price_out) = riir_refine::llm_spend::price_for(llm.model_id())
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
 
     // Smoke (caveat #18(d)): one cheap call BEFORE the backlog. A failure
@@ -792,7 +792,7 @@ fn main() {
     }
     let smoke_neurons = smoke.as_ref().map_or(0.0, |g| g.neurons);
 
-    let verifier = std::mem::replace(&mut harness.verifier, riir_clippy::ClippyVerifier::new());
+    let verifier = std::mem::replace(&mut harness.verifier, riir_refine::ClippyVerifier::new());
     std::fs::create_dir_all(&args.behav_dir).ok();
     let mut out = args
         .out
@@ -956,7 +956,7 @@ fn main() {
             gstats.ok,
             gstats.prompt_tokens,
             gstats.completion_tokens,
-            riir_clippy::groq::router::avoided_usd(
+            riir_refine::groq::router::avoided_usd(
                 gstats.prompt_tokens,
                 gstats.completion_tokens,
                 price_in,
@@ -972,7 +972,7 @@ fn main() {
             istats.ok,
             istats.prompt_tokens,
             istats.completion_tokens,
-            riir_clippy::groq::router::avoided_usd(
+            riir_refine::groq::router::avoided_usd(
                 istats.prompt_tokens,
                 istats.completion_tokens,
                 price_in,
@@ -1034,7 +1034,7 @@ fn append_ledger(
     model: &str,
     summary: &ArmSummary,
     server: Option<&CfUsageToday>,
-    spend: Option<&riir_clippy::llm_spend::SpendState>,
+    spend: Option<&riir_refine::llm_spend::SpendState>,
     drain: &DrainStats,
     llm: &LlmRouter,
 ) {
@@ -1045,17 +1045,17 @@ fn append_ledger(
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let (price_in, price_out) = riir_clippy::llm_spend::price_for(model)
+    let (price_in, price_out) = riir_refine::llm_spend::price_for(model)
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
     let gstats = &llm.groq_stats;
     let istats = &llm.infron_stats;
-    let groq_avoided = riir_clippy::groq::router::avoided_usd(
+    let groq_avoided = riir_refine::groq::router::avoided_usd(
         gstats.prompt_tokens,
         gstats.completion_tokens,
         price_in,
         price_out,
     );
-    let infron_avoided = riir_clippy::groq::router::avoided_usd(
+    let infron_avoided = riir_refine::groq::router::avoided_usd(
         istats.prompt_tokens,
         istats.completion_tokens,
         price_in,
@@ -1064,7 +1064,7 @@ fn append_ledger(
     // Issues 051+106: the free tiers' absorption rides `providers.groq` /
     // `providers.infron` — the dashboard's card reads these; legacy rows
     // without the keys are unaffected.
-    let mut providers = riir_clippy::groq::router::providers_json(
+    let mut providers = riir_refine::groq::router::providers_json(
         gstats,
         llm.groq_model(),
         groq_avoided,

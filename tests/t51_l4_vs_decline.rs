@@ -77,9 +77,9 @@
 
 use std::time::Instant;
 
-use riir_clippy::l4_daemon::DaemonL4;
-use riir_clippy::l4_fallback::L4Fallback;
-use riir_clippy::{
+use riir_refine::l4_daemon::DaemonL4;
+use riir_refine::l4_fallback::L4Fallback;
+use riir_refine::{
     build_seed_corpus, ClippyFixEntry, ClippyVerifier, HealPipeline, HealSource,
     RustAnalyzerPruner, TernaryDrafter,
 };

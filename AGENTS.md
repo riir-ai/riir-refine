@@ -1,4 +1,4 @@
-# AGENTS.md — riir-clippy
+# AGENTS.md — riir-refine
 
 The global `~/.agents/` rules apply; this file documents repo-local context.
 History, batch records, sweep campaign records, score-bench history: `HISTORY.md`.

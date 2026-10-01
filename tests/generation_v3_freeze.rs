@@ -33,7 +33,7 @@
 
 #![cfg(feature = "score_bench")]
 
-use riir_clippy::score_bench::{draft_oracle, generations, wrap};
+use riir_refine::score_bench::{draft_oracle, generations, wrap};
 
 #[test]
 #[ignore = "spawns real cargo+clippy (the freeze oracle); run with --ignored --test-threads=1"]
@@ -55,7 +55,7 @@ fn freeze_and_measure_generation_v3() {
         let out = oracle.lints_for(&wrap(&atom.code));
         let vocab: std::collections::BTreeSet<String> = out
             .lints
-            .intersection(&riir_clippy::score_bench::vocabulary())
+            .intersection(&riir_refine::score_bench::vocabulary())
             .cloned()
             .collect();
         let want: std::collections::BTreeSet<String> = atom.expect.iter().cloned().collect();
@@ -80,7 +80,7 @@ fn freeze_and_measure_generation_v3() {
         .iter()
         .map(|(id, l)| (*id, *l))
         .collect();
-    let vocab = riir_clippy::score_bench::vocabulary();
+    let vocab = riir_refine::score_bench::vocabulary();
     let mut fresh_exclusions: Vec<String> = Vec::new();
     let mut drift: Vec<String> = Vec::new();
     let mut labeled_specs: Vec<(
@@ -132,7 +132,7 @@ fn freeze_and_measure_generation_v3() {
             }
         }
         // The solve measurement: heal, re-label, count per-lint resolution.
-        let (healed, _edits, _passes) = riir_clippy::score_bench::heal_fixpoint(&s.code);
+        let (healed, _edits, _passes) = riir_refine::score_bench::heal_fixpoint(&s.code);
         let after = oracle.lints_for(&wrap(&healed));
         let after_ok = after.ran && after.compiles;
         let vocab_before = want.len();
@@ -260,7 +260,7 @@ fn freeze_and_measure_generation_v3() {
 #[test]
 fn persist_table_joins_the_bench_vocabulary_and_parses() {
     // The whole-file always-on twin of the module gates.
-    let vocab = riir_clippy::score_bench::vocabulary();
+    let vocab = riir_refine::score_bench::vocabulary();
     assert!(
         generations::PERSIST_ATOMS.len() >= 3,
         "persist table too thin to stratify: {}",

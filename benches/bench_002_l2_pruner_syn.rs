@@ -8,7 +8,7 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::RustAnalyzerPruner;
+use riir_refine::RustAnalyzerPruner;
 use std::time::Instant;
 
 /// Representative corpus snippets — the shapes the pruner sees in production.

@@ -66,7 +66,7 @@ fn version_prints_the_compiled_feature_stamp() {
         "the stamp must name the compiled set. output:\n{text}"
     );
     assert!(
-        text.contains(riir_clippy::build_stamp::COMPILED_FEATURES),
+        text.contains(riir_refine::build_stamp::COMPILED_FEATURES),
         "the printed set must BE this build's set. output:\n{text}"
     );
     assert!(
@@ -93,14 +93,14 @@ fn short_v_prints_the_same_block() {
 #[test]
 fn the_release_verdict_matches_this_build() {
     let (_, text) = heal(&["--version"]);
-    let missing = riir_clippy::build_stamp::missing_release_features();
+    let missing = riir_refine::build_stamp::missing_release_features();
     if missing.is_empty() {
         assert!(text.contains("release set: complete"), "{text}");
         assert!(!text.contains("rebuild:"), "{text}");
     } else {
         assert!(text.contains("release set: STALE"), "{text}");
         assert!(
-            text.contains(&riir_clippy::build_stamp::rebuild_command()),
+            text.contains(&riir_refine::build_stamp::rebuild_command()),
             "a stale binary must print the rebuild command. output:\n{text}"
         );
         for f in &missing {
@@ -124,7 +124,7 @@ fn sync_refuses_loudly_instead_of_disappearing() {
     assert!(text.contains("sync: refused"), "{text}");
     assert!(text.contains("kat_transport"), "{text}");
     assert!(
-        text.contains(&riir_clippy::build_stamp::rebuild_command_for(&["kat_transport"])),
+        text.contains(&riir_refine::build_stamp::rebuild_command_for(&["kat_transport"])),
         "the refusal must name a rebuild that SUPPLIES what it asked for. output:\n{text}"
     );
     // The two shapes the class is mistaken for.
@@ -151,7 +151,7 @@ fn refill_refuses_loudly_too() {
 #[test]
 fn a_complete_build_never_prints_the_staleness_refusal() {
     assert!(
-        riir_clippy::build_stamp::missing_release_features()
+        riir_refine::build_stamp::missing_release_features()
             .iter()
             .all(|f| *f != "kat_transport"),
         "the stamp disagrees with cfg! about kat_transport"

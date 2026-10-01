@@ -46,9 +46,9 @@
 //! `RUSTUP_TOOLCHAIN` override for the child cargo — some sibling repos
 //! resolve a GNU host toolchain on this box and need the MSVC pin).
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
+use riir_refine::domains::clippy_lints::ClippyLintDomain;
 use riir_rag::ast_chunker::AstChunker;
 use riir_rag::chunker::Chunker;
 use serde::Serialize;

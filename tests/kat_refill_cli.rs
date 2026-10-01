@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use riir_clippy::kat_burn_client::KatBurnAck;
+use riir_refine::kat_burn_client::KatBurnAck;
 
 /// The closed loopback port — connection REFUSED, instantly, no network.
 const CLOSED_PORT: &str = "http://127.0.0.1:1";
@@ -171,7 +171,7 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, Option<String>, Strin
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "riir_clippy_refill_cli_{tag}_{}_{}",
+        "riir_refine_refill_cli_{tag}_{}_{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -250,7 +250,7 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
     let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
     std::fs::create_dir_all(dir.join(".refine")).expect(".heal dir");
     let depleted = KatBurnAck {
-        version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
+        version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
         meter_watermark_tokens: 500,
         acked_unix: 1_700_000_000,
@@ -343,7 +343,7 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
     std::fs::create_dir_all(dir.join(".refine")).expect(".heal dir");
     let ack = KatBurnAck {
-        version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
+        version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
         meter_watermark_tokens: 500,
         acked_unix: 1_700_000_000,
@@ -386,7 +386,7 @@ fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
     // the gate leaked, the mock would record a request.
     let (code, text) = heal(
         &dir,
-        riir_clippy::kat_service_urls::MAINNET_SERVICE_URL,
+        riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
         &[("RIIR_HEAL_KAT_CRANK_TOKEN", "ops-token")],
         &["--refill"],
     );

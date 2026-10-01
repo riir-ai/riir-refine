@@ -15,7 +15,7 @@
 #![allow(clippy::pedantic)]
 
 #[cfg(feature = "clippy_verify")]
-use riir_clippy::{ClippyVerifier, RustAnalyzerPruner};
+use riir_refine::{ClippyVerifier, RustAnalyzerPruner};
 #[cfg(feature = "clippy_verify")]
 use std::time::Instant;
 

@@ -27,7 +27,7 @@
 
 #![cfg(feature = "kat_service")]
 
-use riir_clippy::kat_redact::{
+use riir_refine::kat_redact::{
     glob_match, redact, scan_secrets, BlockReason, FindingKind, GateDecision, RedactionGate,
     RedactionLog, SpanOrigin, SyncPolicy, POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
 };
@@ -65,7 +65,7 @@ fn gate() -> RedactionGate {
 /// the (de-overlapped) finding ranges are byte-identical to the input.
 fn assert_g4_byte_exact(
     original: &str,
-    findings: &[riir_clippy::kat_redact::Finding],
+    findings: &[riir_refine::kat_redact::Finding],
     payload: &str,
 ) {
     // 1. No finding's original bytes survive.
@@ -77,7 +77,7 @@ fn assert_g4_byte_exact(
         );
     }
     // 2. Byte-exact outside ranges (de-overlapped, same rule as `redact`).
-    let mut kept: Vec<&riir_clippy::kat_redact::Finding> = findings.iter().collect();
+    let mut kept: Vec<&riir_refine::kat_redact::Finding> = findings.iter().collect();
     kept.sort_by_key(|f| (f.start, std::cmp::Reverse(f.len)));
     let mut cursor = 0;
     let mut chosen: Vec<(usize, usize, String)> = Vec::new();

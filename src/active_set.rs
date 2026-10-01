@@ -400,7 +400,7 @@ mod tests {
     /// shared-temp-path rule).
     fn scratch_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "riir_clippy_active_set_{}_{tag}",
+            "riir_refine_active_set_{}_{tag}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

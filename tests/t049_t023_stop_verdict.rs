@@ -19,7 +19,7 @@
 //!
 //! The T0.3 stop rule fires on layer 1 regardless of layer 2's outcome.
 
-use riir_clippy::draft::{
+use riir_refine::draft::{
     decompose_headroom_with_spans, print_headroom_decomposition, DomainId, OwnedEvalSpan,
 };
 

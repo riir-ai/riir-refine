@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use riir_clippy::kat_burn_client::{self, KatBurnAck};
+use riir_refine::kat_burn_client::{self, KatBurnAck};
 
 /// The closed loopback port — connection REFUSED, instantly, no network.
 const CLOSED_PORT: &str = "http://127.0.0.1:1";
@@ -68,13 +68,13 @@ fn write_a_rs(dir: &Path) {
     // arithmetic honest instead of trusting it.
     let mut words = ONE_RUN_MICRO_KAT.saturating_sub(8);
     let mut file = render(words);
-    let actual = riir_clippy::kat_meter::count_word_tokens(file.as_bytes());
+    let actual = riir_refine::kat_meter::count_word_tokens(file.as_bytes());
     if actual != ONE_RUN_MICRO_KAT {
         words += ONE_RUN_MICRO_KAT - actual;
         file = render(words);
     }
     assert_eq!(
-        riir_clippy::kat_meter::count_word_tokens(file.as_bytes()),
+        riir_refine::kat_meter::count_word_tokens(file.as_bytes()),
         ONE_RUN_MICRO_KAT,
         "the fixture must bill exactly one whole KAT per run"
     );
@@ -191,7 +191,7 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, String)> {
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "riir_clippy_burn_stack_{tag}_{}_{}",
+        "riir_refine_burn_stack_{tag}_{}_{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -382,7 +382,7 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
 
     // The ack advanced to exactly what the server confirmed.
     let ack = ack_of(&dir).expect("the ack must exist after an accepted push");
-    assert_eq!(ack.version, riir_clippy::kat_burn_client::BURN_ACK_VERSION);
+    assert_eq!(ack.version, riir_refine::kat_burn_client::BURN_ACK_VERSION);
     assert_eq!(ack.burn_kat_total, sent);
     assert_eq!(ack.meter_watermark_tokens, watermark);
     assert!(ack.acked_unix > 0);

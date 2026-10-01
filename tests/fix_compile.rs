@@ -22,9 +22,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use riir_clippy::domains::rustc_errors::diag::{Applicability, RustcErrorDiag, SuggestionSpan};
-use riir_clippy::domains::rustc_errors::driver::{CompileDriver, RevertReason};
-use riir_clippy::domains::rustc_errors::playbooks::{CompileProposer, FixCandidate, Playbooks};
+use riir_refine::domains::rustc_errors::diag::{Applicability, RustcErrorDiag, SuggestionSpan};
+use riir_refine::domains::rustc_errors::driver::{CompileDriver, RevertReason};
+use riir_refine::domains::rustc_errors::playbooks::{CompileProposer, FixCandidate, Playbooks};
 
 /// A test playbook: for `code`, replace `from` with `to` (first
 /// occurrence in the source). `code == None` proposes nothing (miss arm).
@@ -152,7 +152,7 @@ fn driver_applies_kept_fix_to_clean() {
         .expect("kept-path attempt carries the embedding column");
     assert_eq!(
         embed,
-        riir_clippy::span_embed::span_embed("let v = Vec::new();"),
+        riir_refine::span_embed::span_embed("let v = Vec::new();"),
         "embedding is a pure function of the attempt-time trigger text"
     );
     let on_disk = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();

@@ -16,8 +16,8 @@
 
 #![cfg(feature = "cf_workers_ai")]
 
-use riir_clippy::cf_workers_ai::CfClient;
-use riir_clippy::llm_spend::{
+use riir_refine::cf_workers_ai::CfClient;
+use riir_refine::llm_spend::{
     today_epoch_days, CapReached, SpendError, SpendLedger, SpendState, PRICING_VERSION,
     SPEND_VERSION,
 };
@@ -96,7 +96,7 @@ fn the_default_and_measured_models_are_priced() {
     ];
     for id in ids {
         assert!(
-            riir_clippy::llm_spend::price_for(id).is_some(),
+            riir_refine::llm_spend::price_for(id).is_some(),
             "from_env would refuse {id} — keep the pricing table in step with the client"
         );
     }

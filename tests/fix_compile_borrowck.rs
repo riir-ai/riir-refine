@@ -19,8 +19,8 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use riir_clippy::domains::rustc_errors::driver::CompileDriver;
-use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
+use riir_refine::domains::rustc_errors::driver::CompileDriver;
+use riir_refine::domains::rustc_errors::playbooks::Playbooks;
 
 /// Scaffold a standalone crate under a fresh temp root (pid + counter so
 /// parallel tests never share — the probe.rs pattern).
@@ -57,7 +57,7 @@ fn run(
     max_iters: usize,
 ) -> (
     PathBuf,
-    riir_clippy::domains::rustc_errors::driver::FixCompileReport,
+    riir_refine::domains::rustc_errors::driver::FixCompileReport,
 ) {
     let dir = scaffold(name, broken);
     let driver = CompileDriver::isolated().with_max_iters(max_iters);

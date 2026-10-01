@@ -8,9 +8,9 @@
 //! emit ([`refuses`]).
 #![cfg(feature = "dist")]
 
-use riir_clippy::domains::dist::rules::{scan_source_with, DIST_RULES, FIXABLE_DIST};
-use riir_clippy::domains::dist::{refuses, DistContext, DistDomain, ProfileKnobs};
-use riir_clippy::HealDomain;
+use riir_refine::domains::dist::rules::{scan_source_with, DIST_RULES, FIXABLE_DIST};
+use riir_refine::domains::dist::{refuses, DistContext, DistDomain, ProfileKnobs};
+use riir_refine::HealDomain;
 
 /// The suggest-only contract: the corpus, the detector table, and the
 /// fixable table agree, and Phase 1 ships NO bounded fix.
@@ -203,7 +203,7 @@ fn validate_is_structural() {
 /// to contents. Returns the fixture root; the caller removes it.
 fn fixture_tree(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "riir_clippy_dist_gates_{}_{}",
+        "riir_refine_dist_gates_{}_{}",
         name,
         std::process::id()
     ));
@@ -223,7 +223,7 @@ const SHIP_RULES: [&str; 3] = [
     "cli-panic-unwind-tables",
 ];
 
-fn rule_ids(findings: &[riir_clippy::domains::dist::rules::DistFinding]) -> Vec<&'static str> {
+fn rule_ids(findings: &[riir_refine::domains::dist::rules::DistFinding]) -> Vec<&'static str> {
     findings.iter().map(|f| f.rule_id).collect()
 }
 

@@ -56,7 +56,7 @@
 
 #![allow(clippy::cast_precision_loss)] // loop-index / count fixtures
 
-use riir_clippy::elo::{default_elo, expected_score, update_pair};
+use riir_refine::elo::{default_elo, expected_score, update_pair};
 
 /// Fixed per-span attempt budget — t26/t33's, so the max metric compares.
 const BUDGET: u32 = 3;
@@ -856,7 +856,7 @@ fn t39_store_grounding_report() {
         if !store_dir.is_dir() {
             continue; // never create — the read path only
         }
-        let Ok((store, _bad_rows)) = riir_clippy::traj_store::TrajStore::open(&root) else {
+        let Ok((store, _bad_rows)) = riir_refine::traj_store::TrajStore::open(&root) else {
             println!("  {repo}: store present but failed to open");
             continue;
         };

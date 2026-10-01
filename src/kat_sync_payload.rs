@@ -294,13 +294,13 @@ pub struct FindingMeta {
 ///
 /// ```
 /// # #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))] {
-/// # use riir_clippy::kat_redact::{RedactionGate, SpanOrigin};
-/// # use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
+/// # use riir_refine::kat_redact::{RedactionGate, SpanOrigin};
+/// # use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 /// let gate = RedactionGate::deny_all(); // or discover/load a policy
 /// let signer = ed25519_dalek::SigningKey::from_bytes(&[42; 32]); // a test key
 /// let builder = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
 /// let payload = builder.build(&[]); // header-only: 0 rows, 0 blocked
-/// assert!(riir_clippy::kat_sync_payload::verify_payload(&payload.ndjson).is_ok());
+/// assert!(riir_refine::kat_sync_payload::verify_payload(&payload.ndjson).is_ok());
 /// # }
 /// ```
 #[derive(Debug, Clone)]

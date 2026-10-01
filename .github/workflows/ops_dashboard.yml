@@ -74,7 +74,7 @@
 # Layout: siblings are checked out to ${{ runner.temp }}/git/<name> (the same
 # /git/<name> shape as the dev boxes — the generator's REPOS list resolves
 # naturally inside it, including sibling-internal `../..` path deps), then
-# symlinked beside the workspace so riir-clippy's OWN cargo path deps
+# symlinked beside the workspace so riir-refine's OWN cargo path deps
 # (`../katgpt-rs/...`, `../riir-ai/...`, `../riir-neuron-db`, and the
 # [patch.crates-io] ../riir-ai/vendor/* entries) resolve from
 # $GITHUB_WORKSPACE.
@@ -127,7 +127,7 @@ jobs:
           [ "${CF_API_SET}" = "true" ] || echo "::warning::CF_API_TOKEN not set — CF analytics sections will be empty"
           [ "${CF_DEPLOY_SET}" = "true" ] || echo "::warning::CLOUDFLARE_API_TOKEN not set — Worker deploy will be skipped"
 
-      - name: Checkout riir-clippy
+      - name: Checkout riir-refine
         uses: actions/checkout@v6
         with:
           # 30d of history: the generator greps `git log --since=30.days`
@@ -238,7 +238,7 @@ jobs:
           WS_PARENT="$(dirname "${GITHUB_WORKSPACE}")"
 
           # riir-clippy itself is part of the generator's REPOS list.
-          ln -sfn "${GITHUB_WORKSPACE}" "${GITROOT}/riir-clippy"
+          ln -sfn "${GITHUB_WORKSPACE}" "${GITROOT}/riir-refine"
 
           # Make the sibling-beside-workspace layout that riir-clippy's own
           # `../<name>` cargo path deps expect.

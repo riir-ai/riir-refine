@@ -21,12 +21,12 @@
 
 use std::collections::BTreeSet;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::switch_cost::cross_domain_spans;
-use riir_clippy::draft::{ClippyOracle, DomainId};
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::draft::switch_cost::cross_domain_spans;
+use riir_refine::draft::{ClippyOracle, DomainId};
 
 fn vocabulary() -> BTreeSet<String> {
-    riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+    riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
         .into_iter()
         .map(|e| e.rule_id().to_string())
         .collect()

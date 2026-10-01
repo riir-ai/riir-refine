@@ -32,12 +32,12 @@
 
 use std::path::PathBuf;
 
-use riir_clippy::dispersion::{
+use riir_refine::dispersion::{
     entropy_map, from_counts, frontier_order, outcome_entropy, PoolEntry, Regime,
 };
-use riir_clippy::elo::{default_elo, PairObservation};
-use riir_clippy::frontier_pairs::construction_pairs;
-use riir_clippy::traj_store::TrajStore;
+use riir_refine::elo::{default_elo, PairObservation};
+use riir_refine::frontier_pairs::construction_pairs;
+use riir_refine::traj_store::TrajStore;
 
 /// The playbook candidate universe (the `--fix-compile` driver's selection
 /// surface) — every strategy the playbooks can propose, plus the
@@ -228,15 +228,15 @@ fn poc_axis_b2_dispersion_telemetry_flags_vacuous_worlds() {
     let (store, _) = TrajStore::open(&root).unwrap();
     plant_sparse_outcomes(&store);
     let rows = store.dump();
-    let mut by_rule: std::collections::BTreeMap<&str, Vec<riir_clippy::dispersion::OutcomeClass>> =
+    let mut by_rule: std::collections::BTreeMap<&str, Vec<riir_refine::dispersion::OutcomeClass>> =
         std::collections::BTreeMap::new();
     for r in &rows {
         let e = by_rule.entry(r.lint_key.as_str()).or_default();
         for _ in 0..r.success_count {
-            e.push(riir_clippy::dispersion::OutcomeClass::Kept);
+            e.push(riir_refine::dispersion::OutcomeClass::Kept);
         }
         for _ in 0..r.fail_count {
-            e.push(riir_clippy::dispersion::OutcomeClass::Reverted);
+            e.push(riir_refine::dispersion::OutcomeClass::Reverted);
         }
     }
     let ents: Vec<f64> = by_rule
@@ -253,10 +253,10 @@ fn poc_axis_b2_dispersion_telemetry_flags_vacuous_worlds() {
     let _ = map;
     // The planted world is NOT vacuous: scope-hoist is 3-1, swap-second is
     // 0-2 — real dispersion exists for selection to consume.
-    assert!(!riir_clippy::dispersion::window_is_vacuous(&ents));
+    assert!(!riir_refine::dispersion::window_is_vacuous(&ents));
     // Contrast canary: an all-saturated world IS vacuous.
     let saturated: Vec<f64> = vec![outcome_entropy(&from_counts(4, 0, 0)); 3];
-    assert!(riir_clippy::dispersion::window_is_vacuous(&saturated));
+    assert!(riir_refine::dispersion::window_is_vacuous(&saturated));
     let _ = entropy_map(&[]);
 }
 

@@ -26,10 +26,10 @@
 
 use std::time::Instant;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS};
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
-use riir_clippy::pruner::RustAnalyzerPruner;
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS};
+use riir_refine::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::pruner::RustAnalyzerPruner;
 
 /// P11 — does L2 ever reject what `--fix` actually produces?
 #[test]
@@ -145,7 +145,7 @@ fn p12_fix_attempts_are_multi_step() {
 /// P14 — is T14.2's "O(N) hash scan" premise true?
 #[test]
 fn p14_evolution_lookup_is_already_constant_time() {
-    use riir_clippy::evolve::{EvolveConfig, LatentSkillEvolution};
+    use riir_refine::evolve::{EvolveConfig, LatentSkillEvolution};
     println!("\n=== P14 — T14.2 claims LatentSkillEvolution does an \"O(N) hash scan\" ===");
 
     let mut ev = LatentSkillEvolution::new(EvolveConfig::default());

@@ -34,7 +34,7 @@
 
 #![allow(clippy::cast_precision_loss)] // loop-index / count fixtures
 
-use riir_clippy::selection_tether::{fit_rho, sse, TetherFit, DEFAULT_RHO};
+use riir_refine::selection_tether::{fit_rho, sse, TetherFit, DEFAULT_RHO};
 
 /// Fixed per-span attempt budget — t26's, so the max metric is comparable.
 const BUDGET: u32 = 3;

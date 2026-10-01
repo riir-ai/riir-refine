@@ -23,8 +23,8 @@
 //! postures + 12 clean spans × 2).
 #![cfg(feature = "rule_embed_poc")]
 
-use riir_clippy::draft::retrieval_eval::run_split_eval;
-use riir_clippy::draft::rule_embed::embedded_tables;
+use riir_refine::draft::retrieval_eval::run_split_eval;
+use riir_refine::draft::rule_embed::embedded_tables;
 
 const PINNED_WEIGHT: f32 = 16.0;
 

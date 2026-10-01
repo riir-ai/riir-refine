@@ -118,7 +118,7 @@ impl ClippyOracle {
             cargo_bin: "cargo".to_string(),
             // Distinct from ClippyVerifier's root so a concurrent
             // self_evolve run and this harness never share a crate dir.
-            work_root: std::env::temp_dir().join("riir_clippy_oracle"),
+            work_root: std::env::temp_dir().join("riir_refine_oracle"),
         }
     }
 
@@ -729,7 +729,7 @@ mod tests {
         // cargo runs rustc from the crate dir, so real spans carry relative
         // paths — but a path-sensitive match must survive absolute ones too.
         let out = msg_in(
-            "/tmp/riir_clippy_oracle/batch_ab12/src/s2.rs",
+            "/tmp/riir_refine_oracle/batch_ab12/src/s2.rs",
             "warning",
             Some("clippy::unused_unit"),
             "x",
@@ -757,7 +757,7 @@ mod tests {
     #[test]
     fn batch_labels_agree_with_per_snippet_labels_on_an_all_clean_batch() {
         let oracle = ClippyOracle::new().with_work_root(
-            std::env::temp_dir().join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
+            std::env::temp_dir().join(format!("riir_refine_oracle_batch_{}", std::process::id())),
         );
         if !oracle.is_available() {
             // The parse-level gates above carry the contract offline.
@@ -798,7 +798,7 @@ mod tests {
         // whole batch falls back to per-snippet runs, and every verdict
         // must match its single-run twin exactly.
         let oracle = ClippyOracle::new().with_work_root(
-            std::env::temp_dir().join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
+            std::env::temp_dir().join(format!("riir_refine_oracle_batch_{}", std::process::id())),
         );
         if !oracle.is_available() {
             return;
@@ -832,7 +832,7 @@ mod tests {
         // dataset harness clip broken spans and label the clean remainder
         // in attributed batches instead of paying ~1 spawn per span.
         let oracle = ClippyOracle::new().with_work_root(
-            std::env::temp_dir().join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
+            std::env::temp_dir().join(format!("riir_refine_oracle_batch_{}", std::process::id())),
         );
         if !oracle.is_available() {
             return;
@@ -870,7 +870,7 @@ mod tests {
         // write_probe_source lesson, ported here). mtime equality is exact
         // under the guard: no write means no metadata change at all.
         let root =
-            std::env::temp_dir().join(format!("riir_clippy_oracle_mtime_{}", std::process::id()));
+            std::env::temp_dir().join(format!("riir_refine_oracle_mtime_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let oracle = ClippyOracle::new().with_work_root(&root);
         let mtime = |p: &std::path::Path| {

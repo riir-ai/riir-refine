@@ -39,7 +39,7 @@ use std::io::Write as _;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use riir_clippy::score_bench::corruption::{self, Candidate, SeedProgram};
+use riir_refine::score_bench::corruption::{self, Candidate, SeedProgram};
 
 /// The generator seed (fixed — the corpus must be reproducible).
 const GEN_SEED: u64 = 0x4352_4239; // "CRB9"

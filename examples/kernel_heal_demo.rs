@@ -35,9 +35,9 @@
 //!   signature would need. The scaffold always returns Plasma (modelless-first
 //!   mandate); Warm/Cold/Freeze require 4090 CUDA + LoRA (deferred).
 
-use riir_clippy::domain::HealDomain;
-use riir_clippy::domains::kernel_opt::KernelCategory;
-use riir_clippy::{
+use riir_refine::domain::HealDomain;
+use riir_refine::domains::kernel_opt::KernelCategory;
+use riir_refine::{
     build_activity, build_kernel_seed_corpus, KernelExpertRouter, KernelOptDomain, KernelRule,
     KernelThermalRouter, TernaryDrafter,
 };
@@ -65,7 +65,7 @@ fn main() {
         corpus.entries.len(),
         if corpus.verify() { "✅" } else { "❌" }
     );
-    let categories = riir_clippy::build_corpus_categorized();
+    let categories = riir_refine::build_corpus_categorized();
     println!("   Categories: {}", categories.len());
     for (cat, rules) in &categories {
         println!("     {} — {} rules", cat.as_str(), rules.len());
@@ -77,8 +77,8 @@ fn main() {
     let thermal = KernelThermalRouter::new();
     println!(
         "🔀 Router: {} experts, {}-dim activity vector",
-        riir_clippy::NUM_KERNEL_EXPERTS,
-        riir_clippy::ACTIVITY_DIM,
+        riir_refine::NUM_KERNEL_EXPERTS,
+        riir_refine::ACTIVITY_DIM,
     );
     println!("🌡️  Thermal: Plasma-first (Warm/Cold/Freeze deferred to 4090)");
     println!();

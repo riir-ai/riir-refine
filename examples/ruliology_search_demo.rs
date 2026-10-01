@@ -14,7 +14,7 @@
 #![allow(clippy::pedantic)]
 
 #[cfg(feature = "ruliology_search")]
-use riir_clippy::{
+use riir_refine::{
     build_seed_corpus,
     ruliology_search::{ast_delta_size, pareto_front},
     RuliologySearch,
@@ -58,7 +58,7 @@ fn main() {
 
         // G1c: best_fix picks the minimum-complexity Pareto-optimal fix.
         let search = RuliologySearch::new();
-        use riir_clippy::ClippyFixEntry;
+        use riir_refine::ClippyFixEntry;
         let candidates = vec![
             ClippyFixEntry {
                 lint_name: "needless_return".to_string(),

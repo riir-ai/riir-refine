@@ -36,9 +36,9 @@
 
 use std::time::Instant;
 
-use riir_clippy::build_seed_corpus;
-use riir_clippy::l4_daemon::DaemonL4;
-use riir_clippy::{HealPipeline, HealSource, RustAnalyzerPruner, TernaryDrafter};
+use riir_refine::build_seed_corpus;
+use riir_refine::l4_daemon::DaemonL4;
+use riir_refine::{HealPipeline, HealSource, RustAnalyzerPruner, TernaryDrafter};
 
 /// Read the three env vars, or return `None` so the caller can skip.
 fn config() -> Option<(String, String, String)> {

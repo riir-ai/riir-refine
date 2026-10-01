@@ -11,7 +11,7 @@
 
 #![cfg(feature = "kat_service")]
 
-use riir_clippy::kat_meter::count_word_tokens;
+use riir_refine::kat_meter::count_word_tokens;
 
 struct CountingAllocator;
 

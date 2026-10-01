@@ -23,7 +23,7 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::{
+use riir_refine::{
     build_seed_corpus, ClippyTernaryDrafter, ClippyVerifier, HealPipeline, RustAnalyzerPruner,
     TuneReport,
 };

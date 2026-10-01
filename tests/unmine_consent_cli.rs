@@ -74,18 +74,18 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
 }
 
 fn consent_file(dir: &Path) -> PathBuf {
-    dir.join(riir_clippy::kat_mining_consent::CONSENT_FILE)
+    dir.join(riir_refine::kat_mining_consent::CONSENT_FILE)
 }
 
-fn state(dir: &Path) -> riir_clippy::kat_mining_consent::MiningConsent {
-    riir_clippy::kat_mining_consent::read(dir)
+fn state(dir: &Path) -> riir_refine::kat_mining_consent::MiningConsent {
+    riir_refine::kat_mining_consent::read(dir)
 }
 
 /// Tier 3: `--unmine` records the opt-out, exits 0, and says what it did
 /// NOT turn off.
 #[test]
 fn unmine_records_the_opt_out_and_names_what_still_works() {
-    use riir_clippy::kat_mining_consent::MiningConsent;
+    use riir_refine::kat_mining_consent::MiningConsent;
     let dir = scratch("optout");
     assert_eq!(
         state(&dir),
@@ -151,7 +151,7 @@ fn unmine_deletes_no_queued_batch() {
 /// Idempotency: the second `--unmine` is a no-op that says so, exit 0.
 #[test]
 fn unmine_is_idempotent() {
-    use riir_clippy::kat_mining_consent::MiningConsent;
+    use riir_refine::kat_mining_consent::MiningConsent;
     let dir = scratch("idempotent");
     let (code1, _) = heal(&dir, &["--unmine"]);
     assert_eq!(code1, Some(0));
@@ -169,7 +169,7 @@ fn unmine_is_idempotent() {
 /// records the opt-in.
 #[test]
 fn mine_keeps_the_explainer_and_records_the_opt_in() {
-    use riir_clippy::kat_mining_consent::MiningConsent;
+    use riir_refine::kat_mining_consent::MiningConsent;
     let dir = scratch("optin");
     let (code, text) = heal(&dir, &["--mine"]);
     assert_eq!(code, Some(0), "--mine must exit 0. output:\n{text}");
@@ -219,7 +219,7 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
 /// `--mine` after `--unmine` re-enables — the tiers are reversible.
 #[test]
 fn mine_re_enables_after_unmine() {
-    use riir_clippy::kat_mining_consent::MiningConsent;
+    use riir_refine::kat_mining_consent::MiningConsent;
     let dir = scratch("reenable");
     assert_eq!(heal(&dir, &["--unmine"]).0, Some(0));
     assert_eq!(state(&dir), MiningConsent::OptedOut);
@@ -233,7 +233,7 @@ fn mine_re_enables_after_unmine() {
 /// that matters — NEITHER write happened.
 #[test]
 fn mine_and_unmine_together_are_rejected_without_writing() {
-    use riir_clippy::kat_mining_consent::MiningConsent;
+    use riir_refine::kat_mining_consent::MiningConsent;
     let dir = scratch("conflict");
     let (code, text) = heal(&dir, &["--mine", "--unmine"]);
     assert_eq!(code, Some(2), "the conflict must exit 2. output:\n{text}");
@@ -300,7 +300,7 @@ fn sync_refuses_the_push_half_while_opted_out() {
 /// never pushes anyway".
 #[test]
 fn sync_with_unset_consent_still_reaches_the_push_half() {
-    use riir_clippy::kat_mining_consent::MiningConsent;
+    use riir_refine::kat_mining_consent::MiningConsent;
     let dir = scratch("syncunset");
     let heal_dir = dir.join(".refine");
     std::fs::create_dir_all(&heal_dir).expect(".refine");

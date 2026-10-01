@@ -36,11 +36,11 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use katgpt_core::gw_alignment::{gw_coupling, GwScratch, GW_MAX};
-use riir_clippy::domains::clippy_lints::ClippyFixEntry;
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
-use riir_clippy::domains::rust_perf::PerfRule;
-use riir_clippy::domains::rust_perf::RustPerfDomain;
-use riir_clippy::domain::HealDomain;
+use riir_refine::domains::clippy_lints::ClippyFixEntry;
+use riir_refine::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::domains::rust_perf::PerfRule;
+use riir_refine::domains::rust_perf::RustPerfDomain;
+use riir_refine::domain::HealDomain;
 
 /// Review budget per arm (matched): top-K pairs a maintainer would read.
 const BUDGET: usize = 60;

@@ -11,7 +11,7 @@
 //! cargo run --example heal_demo
 //! ```
 
-use riir_clippy::{build_seed_corpus, ClippyTernaryDrafter, RustAnalyzerPruner};
+use riir_refine::{build_seed_corpus, ClippyTernaryDrafter, RustAnalyzerPruner};
 
 fn main() {
     println!("╔══════════════════════════════════════════════════════════════╗");

@@ -1,7 +1,7 @@
 //! Issue 062 **T6a** — the preregistered counterfactual-surgery gate.
 //!
 //! ```bash
-//! CARGO_TARGET_DIR=/tmp/riir_clippy_t6a cargo test --release \
+//! CARGO_TARGET_DIR=/tmp/riir_refine_t6a cargo test --release \
 //!   --features tpr_structure,score_bench --test t062_t6a_counterfactual -- --nocapture
 //! ```
 //!
@@ -24,11 +24,11 @@
     feature = "score_bench"
 ))]
 
-use riir_clippy::draft::tpr_t6a_counterfactual::{
+use riir_refine::draft::tpr_t6a_counterfactual::{
     print_t6a, run_t6a, FixtureOutcome, T6A_MARGIN_PP,
 };
-use riir_clippy::draft::withheld_pair_ood::{clippy_population, Binding};
-use riir_clippy::score_bench as sb;
+use riir_refine::draft::withheld_pair_ood::{clippy_population, Binding};
+use riir_refine::score_bench as sb;
 
 /// The Plan 049 T0.1 committed real-repo dataset — the T4a corpus's real
 /// shape-diversity half. Absent → the run proceeds on the hand-authored

@@ -35,7 +35,7 @@
 
 #![cfg(feature = "score_bench")]
 
-use riir_clippy::score_bench::generations;
+use riir_refine::score_bench::generations;
 
 #[test]
 #[ignore = "runs the freeze gates + prints the paste-ready record; run with --ignored --test-threads=1"]
@@ -46,7 +46,7 @@ fn freeze_and_verify_generation_v5() {
         generations::PERSIST_ATOMS_V5.iter().map(|p| p.id).collect();
 
     // ── G1 + G2: parse gate + the marker-discrimination fence ───────────
-    let corpus = riir_clippy::build_perf_seed_corpus();
+    let corpus = riir_refine::build_perf_seed_corpus();
     let fixed_by_rule: std::collections::BTreeMap<&str, &str> = corpus
         .entries
         .iter()
@@ -100,7 +100,7 @@ fn freeze_and_verify_generation_v5() {
     let mut strat_violations: Vec<String> = Vec::new();
     for p in generations::PERSIST_ATOMS_V5 {
         let rule = p.expect[0];
-        let (healed, _edits, _passes) = riir_clippy::score_bench::heal_fixpoint(p.code);
+        let (healed, _edits, _passes) = riir_refine::score_bench::heal_fixpoint(p.code);
         if syn::parse_file(&healed).is_err() {
             strat_violations.push(format!("{} healed to a non-parsing file", p.id));
             continue;
@@ -271,7 +271,7 @@ fn freeze_and_verify_generation_v5() {
 #[test]
 fn persist_table_joins_the_perf_vocabulary_and_parses() {
     // The whole-file always-on twin of the module gates.
-    let fixable = riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
+    let fixable = riir_refine::domains::rust_perf::proposers::FIXABLE_RULES;
     let vocab: std::collections::BTreeSet<&str> = fixable.iter().copied().collect();
     assert!(
         generations::PERSIST_ATOMS_V5.len() >= 3,

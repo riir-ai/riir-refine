@@ -9,7 +9,7 @@
 //!
 //! Two admissible tiers, measured per case over the structural 2×2
 //! (`seed` / `broken` / `a_only` / `b_only` — see
-//! [`riir_clippy::domains::rustc_errors::corpus_interacting`]):
+//! [`riir_refine::domains::rustc_errors::corpus_interacting`]):
 //!
 //! 1. **SET tier** — the pair's cold diagnostic multiset is NOT the sum of
 //!    the single-mutation multisets: `key(broken) != key(a_only) ⊎
@@ -37,10 +37,10 @@
 //! failed admissibility (drop it from the family table, loudly, per the
 //! issue — or investigate rustc drift). Exit 2 = harness unavailable.
 
-use riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs;
-use riir_clippy::domains::rustc_errors::diag::RustcErrorDiag;
-use riir_clippy::domains::rustc_errors::floor::FloorHarness;
-use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
+use riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs;
+use riir_refine::domains::rustc_errors::diag::RustcErrorDiag;
+use riir_refine::domains::rustc_errors::floor::FloorHarness;
+use riir_refine::domains::rustc_errors::playbooks::Playbooks;
 
 /// SET-tier key: (code, primary span's line text) — line TEXT, never the
 /// line NUMBER, so segment-length differences between variants cannot

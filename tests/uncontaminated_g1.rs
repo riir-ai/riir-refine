@@ -26,14 +26,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::{ClippyOracle, DomainId, LatentMatcher, RerankMode, RERANK_POOL};
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::draft::{ClippyOracle, DomainId, LatentMatcher, RerankMode, RERANK_POOL};
 
 /// Corpus lint vocabulary — real clippy reports far more than we have rules
 /// for, and scoring against unknown lints would measure corpus coverage
 /// rather than ranking quality.
 fn vocabulary() -> BTreeSet<String> {
-    riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+    riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
         .into_iter()
         .map(|e| e.rule_id().to_string())
         .collect()
@@ -57,7 +57,7 @@ impl Truth {
 }
 
 fn gather_truth() -> Vec<Truth> {
-    gather_truth_over(riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS)
+    gather_truth_over(riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS)
 }
 
 fn gather_truth_over(spans: &'static [(&'static str, &'static str)]) -> Vec<Truth> {
@@ -275,7 +275,7 @@ fn t355_composite_multi_lint_g1() {
         return;
     }
     println!("\n=== T3.5.5 — composite multi-lint G1 (the discriminating set) ===");
-    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let truth = gather_truth_over(riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS);
 
     let compiling: Vec<&Truth> = truth.iter().filter(|t| t.compiles).collect();
     let multi: Vec<&&Truth> = compiling.iter().filter(|t| t.real.len() > 1).collect();
@@ -398,7 +398,7 @@ fn t355_composite_multi_lint_g1() {
 #[test]
 fn t355_rerank_latency_g2() {
     use std::time::Instant;
-    let spans = riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS;
+    let spans = riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS;
     let cap_iter = [RerankMode::Off, RerankMode::Structural];
     let mut timings = Vec::with_capacity(cap_iter.len());
     for mode in cap_iter {
@@ -515,7 +515,7 @@ fn measure_composite_headroom_with(
     pairs: &[(&Truth, BTreeSet<String>)],
     rerank: RerankMode,
 ) -> CompositeHeadroom {
-    let depths = riir_clippy::draft::HEADROOM_DEPTHS;
+    let depths = riir_refine::draft::HEADROOM_DEPTHS;
     let mut matcher = LatentMatcher::from_enabled_domains()
         .expect("build matcher")
         .with_rerank_mode(rerank);
@@ -561,7 +561,7 @@ fn measure_composite_headroom_with(
 }
 
 fn print_composite_headroom(tag: &str, h: &CompositeHeadroom) {
-    let depths = riir_clippy::draft::HEADROOM_DEPTHS;
+    let depths = riir_refine::draft::HEADROOM_DEPTHS;
     print!(
         "\n  [{tag}] scored {} | recall@1 {:.1}%",
         h.scored,
@@ -587,7 +587,7 @@ fn print_composite_headroom(tag: &str, h: &CompositeHeadroom) {
             }
         }
     }
-    let bar = riir_clippy::draft::HEADROOM_STOP_BAR_PP;
+    let bar = riir_refine::draft::HEADROOM_STOP_BAR_PP;
     println!(
         "  [{tag}] T1.2 stop bar {bar:.1}pp -> {}",
         if h.headroom_pp() < bar {
@@ -636,7 +636,7 @@ fn t1_dflash2_composite_headroom() {
         return;
     }
     println!("\n=== Issue 034 T1 — headroom, real-clippy composite, ANY-TRUE ===");
-    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let truth = gather_truth_over(riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS);
     let scorable = composite_scorable(&truth);
     println!(
         "  authored {} | scorable multi-lint {}",
@@ -669,10 +669,10 @@ fn t1_dflash2_composite_headroom_fixable() {
         return;
     }
     println!("\n=== Issue 034 T1 — headroom, real-clippy composite, FIXABLE-TRUE ===");
-    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let truth = gather_truth_over(riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS);
     let scorable = composite_scorable(&truth);
 
-    let fixable: BTreeSet<&str> = riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS
+    let fixable: BTreeSet<&str> = riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS
         .iter()
         .copied()
         .collect();
@@ -733,7 +733,7 @@ fn t1_dflash2_composite_headroom_control() {
         return;
     }
     println!("\n=== Issue 034 T1 — headroom instrument-power control (rerank OFF vs shipped) ===");
-    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let truth = gather_truth_over(riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS);
     let scorable = composite_scorable(&truth);
     let pairs: Vec<(&Truth, BTreeSet<String>)> =
         scorable.iter().map(|t| (*t, t.real.clone())).collect();
@@ -753,7 +753,7 @@ fn t1_dflash2_composite_headroom_control() {
         "\n  instrument verdict: off {:+.1}pp vs shipped {:+.1}pp -> {}",
         off.headroom_pp(),
         shipped.headroom_pp(),
-        if off.headroom_pp() >= riir_clippy::draft::HEADROOM_STOP_BAR_PP {
+        if off.headroom_pp() >= riir_refine::draft::HEADROOM_STOP_BAR_PP {
             "METRIC HAS POWER — a weaker selector leaves a band this metric sees, so the \
              shipped 0.0pp is a real negative, not blindness"
         } else {
@@ -841,5 +841,5 @@ fn t1_dflash2_fixture_surface_headroom_real_labels() {
 
 /// The T1.2 stop bar, named once.
 fn riul_bar() -> f32 {
-    riir_clippy::draft::HEADROOM_STOP_BAR_PP
+    riir_refine::draft::HEADROOM_STOP_BAR_PP
 }

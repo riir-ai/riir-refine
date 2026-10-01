@@ -25,7 +25,7 @@ use std::path::PathBuf;
 /// reports on). Exits 1 only on a missing/unverifiable account; every
 /// other failure degrades to a printed line.
 pub(crate) fn run_kat_info(paths: &[PathBuf]) {
-    use riir_clippy::kat_account::KatAccount;
+    use riir_refine::kat_account::KatAccount;
 
     let dir = KatAccount::default_dir();
     let account = match KatAccount::load(&dir) {
@@ -51,15 +51,15 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     if let Some(user) = &state.github_user {
         println!("  github:   {user}");
     }
-    let (mining, mw) = riir_clippy::kat_mining_consent::read_with_warning(
-        &riir_clippy::kat_mining_consent::default_dir(),
+    let (mining, mw) = riir_refine::kat_mining_consent::read_with_warning(
+        &riir_refine::kat_mining_consent::default_dir(),
     );
     if let Some(w) = mw {
         eprintln!("{w}");
     }
     println!("  mining:   {} (contribution consent)", mining.label());
-    let (stats, sw) = riir_clippy::kat_stats_consent::read_with_warning(
-        &riir_clippy::kat_stats_consent::default_dir(),
+    let (stats, sw) = riir_refine::kat_stats_consent::read_with_warning(
+        &riir_refine::kat_stats_consent::default_dir(),
     );
     if let Some(w) = sw {
         eprintln!("{w}");
@@ -67,7 +67,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     println!("  stats:    {} (work-stats sharing)", stats.label());
 
     // ── the network sections ────────────────────────────────────────────
-    let acct32 = riir_clippy::kat_account_client::service_account_hex(&state.account_id)
+    let acct32 = riir_refine::kat_account_client::service_account_hex(&state.account_id)
         .map(str::to_string);
     #[cfg(feature = "kat_transport")]
     network_sections(acct32.as_deref());
@@ -87,12 +87,12 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
 /// remaining reads offline (one timeout total, never four).
 #[cfg(feature = "kat_transport")]
 fn network_sections(acct32: Option<&str>) {
-    use riir_clippy::kat_account_client as svc;
-    use riir_clippy::kat_account_client::AccountTransport as _;
-    use riir_clippy::kat_lease_client::HttpResponse;
-    use riir_clippy::kat_stake_client::StakeTransport as _;
+    use riir_refine::kat_account_client as svc;
+    use riir_refine::kat_account_client::AccountTransport as _;
+    use riir_refine::kat_lease_client::HttpResponse;
+    use riir_refine::kat_stake_client::StakeTransport as _;
 
-    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let url = riir_refine::kat_lease_client::service_url_for_command();
     let transport = svc::HttpAccountTransport::new(&url, 6);
 
     println!("SERVICE");
@@ -132,16 +132,16 @@ fn network_sections(acct32: Option<&str>) {
     if offline {
         println!("  (offline — skipped after the wallet read failed)");
     } else {
-        let stake = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 6);
+        let stake = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 6);
         match stake.get_stake_info(acct) {
             HttpResponse::Ok(body) => {
-                match serde_json::from_slice::<riir_clippy::kat_stake_client::StakeInfo>(&body) {
+                match serde_json::from_slice::<riir_refine::kat_stake_client::StakeInfo>(&body) {
                     Ok(info) => {
                         let now_unix = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .map_or(0, |d| d.as_secs());
                         for line in
-                            riir_clippy::kat_stake_client::render_info(&info, now_unix).lines()
+                            riir_refine::kat_stake_client::render_info(&info, now_unix).lines()
                         {
                             println!("{line}");
                         }
@@ -162,10 +162,10 @@ fn network_sections(acct32: Option<&str>) {
         println!("  (offline — skipped after the wallet read failed)");
     } else {
         match transport.get_adoption() {
-            HttpResponse::Ok(body) => match riir_clippy::kat_adoption::parse_adoption(&body) {
+            HttpResponse::Ok(body) => match riir_refine::kat_adoption::parse_adoption(&body) {
                 Ok(stats) => {
                     let mine = stats.machine_for(acct);
-                    for line in riir_clippy::kat_adoption::mining_lines(&stats, mine) {
+                    for line in riir_refine::kat_adoption::mining_lines(&stats, mine) {
                         println!("{line}");
                     }
                 }
@@ -184,8 +184,8 @@ fn network_sections(acct32: Option<&str>) {
 /// kat_service-only lane compiles it to nothing instead of warning; tests
 /// keep it alive in every lane.
 #[cfg(any(test, feature = "kat_transport"))]
-fn wallet_lines(h: &riir_clippy::kat_protocol_account::ServiceHistory) -> Vec<String> {
-    let kat = |micro: i64| riir_clippy::kat_units::render_kat(micro);
+fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<String> {
+    let kat = |micro: i64| riir_refine::kat_units::render_kat(micro);
     let mut lines = vec![
         format!(
             "  balance:     {} service credit",
@@ -206,13 +206,13 @@ fn wallet_lines(h: &riir_clippy::kat_protocol_account::ServiceHistory) -> Vec<St
         let expiry = h
             .tuna_expires_unix
             .map(|u| {
-                let (y, m, d) = riir_clippy::kat_footer::ymd_from_unix(u);
+                let (y, m, d) = riir_refine::kat_footer::ymd_from_unix(u);
                 format!(" · expires {y:04}-{m:02}-{d:02}")
             })
             .unwrap_or_default();
         lines.push(format!(
             "  tuna:        {}{expiry} · trial credit — heals only, non-transferable",
-            riir_clippy::kat_units::render_units(tuna, "TUNA")
+            riir_refine::kat_units::render_units(tuna, "TUNA")
         ));
     }
     lines.push(match h.burn_kat_total {
@@ -240,7 +240,7 @@ fn wallet_lines(h: &riir_clippy::kat_protocol_account::ServiceHistory) -> Vec<St
 /// allocated count (amounts set at settle), and the honest page bound.
 #[cfg(any(test, feature = "kat_transport"))]
 fn receipts_line(
-    h: &riir_clippy::kat_protocol_account::ServiceHistory,
+    h: &riir_refine::kat_protocol_account::ServiceHistory,
     kat: &dyn Fn(i64) -> String,
 ) -> String {
     if h.receipts.is_empty() {
@@ -277,14 +277,14 @@ fn receipts_line(
 /// The repo-local block: trajectory rows, pending outbox batches, the
 /// charge ledger, the burn-ack server truth, and the soft-gate verdict.
 fn local_section(paths: &[PathBuf]) {
-    use riir_clippy::kat_meter::ChargeState;
+    use riir_refine::kat_meter::ChargeState;
 
     let root = crate::resolve_heal_root(paths);
     println!("LOCAL WORK ({})", root.display());
 
     // healed rows — this repo's trajectory store.
     #[cfg(feature = "latent_retrieval")]
-    match riir_clippy::traj_store::TrajStore::open(&root) {
+    match riir_refine::traj_store::TrajStore::open(&root) {
         Ok((traj, bad)) => {
             if bad > 0 {
                 eprintln!("info: {bad} corrupt trajectory row(s) skipped");
@@ -318,7 +318,7 @@ fn local_section(paths: &[PathBuf]) {
     {
         Some(c) => {
             let kat = |micro: u64| {
-                riir_clippy::kat_units::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
+                riir_refine::kat_units::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
             };
             println!(
                 "  local burn:  {} charged this repo ({} tokens metered)",
@@ -334,13 +334,13 @@ fn local_section(paths: &[PathBuf]) {
     // the burn-ack server truth + the 075 soft gate over it.
     let ack_path = root
         .join(".refine")
-        .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
-    let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+        .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+    let (ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");
     }
-    let verdict = riir_clippy::kat_soft_gate::evaluate(
-        riir_clippy::kat_soft_gate::SoftGateInput {
+    let verdict = riir_refine::kat_soft_gate::evaluate(
+        riir_refine::kat_soft_gate::SoftGateInput {
             transport_capable: cfg!(feature = "kat_transport"),
             account_present: true,
             last_synced_balance_micro: ack.last_balance_micro,
@@ -348,8 +348,8 @@ fn local_section(paths: &[PathBuf]) {
             tuna_balance_micro: ack.tuna_balance_micro,
         },
     );
-    use riir_clippy::kat_soft_gate::SoftGateVerdict;
-    let kat = |micro: i64| riir_clippy::kat_units::render_kat(micro);
+    use riir_refine::kat_soft_gate::SoftGateVerdict;
+    let kat = |micro: i64| riir_refine::kat_units::render_kat(micro);
     match verdict {
         SoftGateVerdict::Allow => {
             let tuna = ack
@@ -365,7 +365,7 @@ fn local_section(paths: &[PathBuf]) {
             );
         }
         SoftGateVerdict::WarnOnly(reason) => {
-            use riir_clippy::kat_soft_gate::WarnOnlyReason;
+            use riir_refine::kat_soft_gate::WarnOnlyReason;
             let why = match reason {
                 WarnOnlyReason::NoTransport => "no kat_transport build",
                 WarnOnlyReason::NoAccount => "no account",
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn wallet_lines_render_trial_credit_only_when_the_server_sends_it() {
-        let base = |tuna: (Option<i64>, Option<u64>)| riir_clippy::kat_protocol_account::ServiceHistory {
+        let base = |tuna: (Option<i64>, Option<u64>)| riir_refine::kat_protocol_account::ServiceHistory {
             account_id: "ab".repeat(16),
             balance_micro: 97_000_000,
             granted: false,

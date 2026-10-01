@@ -21,8 +21,8 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use riir_clippy::domains::rustc_errors::driver::CompileDriver;
-use riir_clippy::domains::rustc_errors::playbooks::family;
+use riir_refine::domains::rustc_errors::driver::CompileDriver;
+use riir_refine::domains::rustc_errors::playbooks::family;
 
 /// Scaffold a standalone crate under a fresh temp root (the fix_compile.rs
 /// pattern — pid + counter keys the dir so parallel tests never share).

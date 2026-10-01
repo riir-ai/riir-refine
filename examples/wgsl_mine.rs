@@ -25,7 +25,7 @@
 
 use std::process::Command;
 
-use riir_clippy::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
+use riir_refine::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
 
 /// One mined candidate: a rule that fired pre-fix, went silent post-fix, and
 /// whose fired line is diff-associated (removed directly or inside a changed

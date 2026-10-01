@@ -61,8 +61,8 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use riir_clippy::memory::EvidenceTier;
-use riir_clippy::traj_store::{TrajRowDoc, TrajStore};
+use riir_refine::memory::EvidenceTier;
+use riir_refine::traj_store::{TrajRowDoc, TrajStore};
 
 /// Shape-bucket count (episode axis size). Deterministic FNV-1a spread.
 const K_BUCKET: usize = 32;

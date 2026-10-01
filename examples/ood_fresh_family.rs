@@ -92,9 +92,9 @@ use std::path::Path;
 use katgpt_core::regime_probe::{conditional_entropy_nats, entropy_gap_into, EntropyGapReport};
 use syn::spanned::Spanned;
 
-use riir_clippy::draft::{collect_source_files_sorted, span_margin, LatentMatcher};
-use riir_clippy::score_bench::generations::generation_v6;
-use riir_clippy::score_bench::ood::{rule_score_vector, GAP_REGIME_THRESHOLD_NATS};
+use riir_refine::draft::{collect_source_files_sorted, span_margin, LatentMatcher};
+use riir_refine::score_bench::generations::generation_v6;
+use riir_refine::score_bench::ood::{rule_score_vector, GAP_REGIME_THRESHOLD_NATS};
 
 /// OOD family A: absent from every known set (reference corpora come from
 /// katgpt-rs / riir-ai / riir-chain / riir-train states only).
@@ -342,7 +342,7 @@ fn main() {
     println!("\n── gen6 per-repo family breakdown ──");
     let mut families: Vec<(&str, Vec<f32>)> = Vec::new();
     for (fx, carve) in gen6.iter().zip(gen6_carves.iter()) {
-        let fam = riir_clippy::score_bench::ood::ood_set_family(fx);
+        let fam = riir_refine::score_bench::ood::ood_set_family(fx);
         match families.iter_mut().find(|(f, _)| *f == fam) {
             Some((_, ents)) => ents.push(carve.entropy_nats),
             None => families.push((fam, vec![carve.entropy_nats])),

@@ -8,7 +8,7 @@
 //! margin spectrum show that concentration — i.e. do the smallest-margin
 //! spans carry a disproportionate share of the `e^{−2M}` mass?
 //!
-//! Method (the shared substrate — [`riir_clippy::draft::margin_weight`]):
+//! Method (the shared substrate — [`riir_refine::draft::margin_weight`]):
 //! for every frozen fixture, the most-contested pre-rerank pool margin
 //! `M = top1 − top2` across enabled domains (the `rank_into` canon:
 //! score-desc, `total_cmp` + `rule_id` — margins ≥ 0 by construction).
@@ -28,8 +28,8 @@
 // Count→ratio casts over the fixture population (35); allowed with cause.
 #![allow(clippy::cast_precision_loss)]
 
-use riir_clippy::draft::{concentration_fraction, margin_weight, span_margin, LatentMatcher};
-use riir_clippy::score_bench::fixtures::fixtures;
+use riir_refine::draft::{concentration_fraction, margin_weight, span_margin, LatentMatcher};
+use riir_refine::score_bench::fixtures::fixtures;
 
 /// Spectrum buckets, ascending-margin order; the upper bound is INCLUSIVE
 /// (`M ≤ hi`). The last bucket catches everything above 0.5, including the

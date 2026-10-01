@@ -1,7 +1,7 @@
 //! Issue 062 **T4a** — the preregistered gate that decides route (b).
 //!
 //! ```bash
-//! CARGO_TARGET_DIR=/tmp/riir_clippy_t4a cargo test --release \
+//! CARGO_TARGET_DIR=/tmp/riir_refine_t4a cargo test --release \
 //!   --features tpr_structure --test t062_t4a_withheld_clippy -- --nocapture
 //! ```
 //!
@@ -18,10 +18,10 @@
 
 #![cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 
-use riir_clippy::draft::tpr_t4a_withheld::{
+use riir_refine::draft::tpr_t4a_withheld::{
     print_t4a, run_t4a, run_t4a_at, SkipReason, T4aVerdict, COALESCE_T, DS, T4A_MARGIN_PP,
 };
-use riir_clippy::draft::withheld_pair_ood::{clippy_population, Binding};
+use riir_refine::draft::withheld_pair_ood::{clippy_population, Binding};
 
 /// The Plan 049 T0.1 committed real-repo dataset — the only source of genuine
 /// shape diversity in the clippy population (Bench 062 §10). Absent → the run

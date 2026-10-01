@@ -37,10 +37,10 @@
 //!    and a revisit is structurally impossible: the zero in (1) is then a
 //!    consequence, not a sample.
 
-use riir_clippy::domains::rustc_errors::corpus_gen::{generate_corpus, GeneratedCase};
-use riir_clippy::domains::rustc_errors::driver::{AttemptOutcome, AttemptRecord};
-use riir_clippy::domains::rustc_errors::evolve::dump_fixseq;
-use riir_clippy::domains::rustc_errors::floor::{
+use riir_refine::domains::rustc_errors::corpus_gen::{generate_corpus, GeneratedCase};
+use riir_refine::domains::rustc_errors::driver::{AttemptOutcome, AttemptRecord};
+use riir_refine::domains::rustc_errors::evolve::dump_fixseq;
+use riir_refine::domains::rustc_errors::floor::{
     DriverFixer, FloorHarness, HarnessCase, MutatorKind, MUTANT_CASES,
 };
 
@@ -331,10 +331,10 @@ fn main() {
 
     let mut cases: Vec<HarnessCase<'_>> = Vec::new();
     if interacting {
-        let leaked: Vec<riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase> =
-            riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs()
+        let leaked: Vec<riir_refine::domains::rustc_errors::corpus_gen::GeneratedCase> =
+            riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs()
                 .iter()
-                .map(riir_clippy::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
+                .map(riir_refine::domains::rustc_errors::corpus_interacting::InteractingCase::as_generated)
                 .collect();
         // 'static: one-shot measurement binary; leaking keeps the borrowed
         // form simple (the floor example's floor_case_list precedent).

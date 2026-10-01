@@ -11,7 +11,7 @@
 //!
 //! ## How it works
 //!
-//! 1. Create a temp crate under `std::env::temp_dir()/riir_clippy_verify/<blake3_hash>/`
+//! 1. Create a temp crate under `std::env::temp_dir()/riir_refine_verify/<blake3_hash>/`
 //!    - Stable dir name (BLAKE3 of code) → cargo reuses build cache on repeat
 //! 2. Write `Cargo.toml` + `src/lib.rs` (the code being verified)
 //! 3. Run `cargo clippy --message-format=json -- -W clippy::<lint_name>`
@@ -87,7 +87,7 @@ impl ClippyVerifyResult {
 pub struct ClippyVerifier {
     /// Path to the cargo binary.
     cargo_bin: String,
-    /// Root directory for temp crates (default: `std::env::temp_dir()/riir_clippy_verify/`).
+    /// Root directory for temp crates (default: `std::env::temp_dir()/riir_refine_verify/`).
 ///
 /// DELIBERATE fixed root — `[documented-fixed-root]` (katgpt-rs Issue 832 T5
 /// adjudication): the crate dirs under it are BLAKE3 content-addressed and each
@@ -110,7 +110,7 @@ impl ClippyVerifier {
     #[must_use]
     pub fn new() -> Self {
         // [documented-fixed-root] — see `work_root` above (Issue 832 T5).
-        let work_root = std::env::temp_dir().join("riir_clippy_verify");
+        let work_root = std::env::temp_dir().join("riir_refine_verify");
         Self {
             cargo_bin: "cargo".to_string(),
             work_root,
@@ -121,7 +121,7 @@ impl ClippyVerifier {
     #[must_use]
     pub fn with_cargo_bin(cargo: impl Into<String>) -> Self {
         // [documented-fixed-root] — see `work_root` above (Issue 832 T5).
-        let work_root = std::env::temp_dir().join("riir_clippy_verify");
+        let work_root = std::env::temp_dir().join("riir_refine_verify");
         Self {
             cargo_bin: cargo.into(),
             work_root,
@@ -402,7 +402,7 @@ mod tests {
     fn new_uses_default_paths() {
         let v = ClippyVerifier::new();
         assert_eq!(v.cargo_bin, "cargo");
-        assert!(v.work_root.ends_with("riir_clippy_verify"));
+        assert!(v.work_root.ends_with("riir_refine_verify"));
     }
 
     #[test]
@@ -422,7 +422,7 @@ mod tests {
     #[test]
     fn prepare_crate_writes_valid_scaffold() {
         let tmp =
-            std::env::temp_dir().join(format!("riir_clippy_test_prepare_{}", std::process::id()));
+            std::env::temp_dir().join(format!("riir_refine_test_prepare_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let code = "fn foo() -> i32 { 42 }";
@@ -455,7 +455,7 @@ mod tests {
     fn prepare_crate_stable_dir_for_same_code() {
         // Same code → same BLAKE3 hash → same dir (cargo cache reuse).
         let tmp =
-            std::env::temp_dir().join(format!("riir_clippy_test_stable_{}", std::process::id()));
+            std::env::temp_dir().join(format!("riir_refine_test_stable_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let code = "fn bar() -> u64 { 99 }";
@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn prepare_crate_different_code_different_dir() {
         let tmp =
-            std::env::temp_dir().join(format!("riir_clippy_test_diff_{}", std::process::id()));
+            std::env::temp_dir().join(format!("riir_refine_test_diff_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let (dir1, _) = v.prepare_crate("fn a() {}").unwrap();
@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn prepare_crate_different_code_different_package_name() {
         let tmp =
-            std::env::temp_dir().join(format!("riir_clippy_test_unit_{}", std::process::id()));
+            std::env::temp_dir().join(format!("riir_refine_test_unit_{}", std::process::id()));
         let v = ClippyVerifier::new().with_work_root(&tmp);
 
         let name_of = |dir: &std::path::Path| {

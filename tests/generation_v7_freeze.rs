@@ -31,7 +31,7 @@
 
 #![cfg(feature = "score_bench")]
 
-use riir_clippy::score_bench::{draft_oracle, generations};
+use riir_refine::score_bench::{draft_oracle, generations};
 
 #[test]
 #[ignore = "runs the freeze gates + prints the paste-ready record; run with --ignored --test-threads=1"]
@@ -61,7 +61,7 @@ fn freeze_and_verify_generation_v7() {
             continue;
         }
         // ── G1: the compile fence (the oracle's std-only filter) ───────
-        let v = oracle.lints_for(&riir_clippy::score_bench::wrap(&s.code));
+        let v = oracle.lints_for(&riir_refine::score_bench::wrap(&s.code));
         if !v.ran {
             println!(
                 "⚠ spec {}: oracle did not run ({:?}) — excluding",
@@ -89,7 +89,7 @@ fn freeze_and_verify_generation_v7() {
             )
             .cloned()
             .collect();
-        let vocab_all = riir_clippy::score_bench::vocabulary();
+        let vocab_all = riir_refine::score_bench::vocabulary();
         let claimed_only: Vec<String> = s
             .expect_lints
             .iter()
@@ -142,7 +142,7 @@ fn freeze_and_verify_generation_v7() {
         //    with the oracle in hand): the measured pass count must match
         //    the id's pre-registered depth. A drift here means a proposer
         //    changed shape — re-adjudicate before landing the record.
-        let (_healed, _edits, passes) = riir_clippy::score_bench::heal_fixpoint(&s.code);
+        let (_healed, _edits, passes) = riir_refine::score_bench::heal_fixpoint(&s.code);
         assert_eq!(
             passes,
             generations::v7_expected_passes(&s.id),

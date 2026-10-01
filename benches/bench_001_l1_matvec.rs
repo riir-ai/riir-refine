@@ -8,8 +8,8 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::drafter::{DraftSource, TernaryDrafter};
-use riir_clippy::ClippyFixEntry;
+use riir_refine::drafter::{DraftSource, TernaryDrafter};
+use riir_refine::ClippyFixEntry;
 use std::time::Instant;
 
 fn mock_entries(n: usize) -> Vec<ClippyFixEntry> {

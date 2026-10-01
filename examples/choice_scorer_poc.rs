@@ -3,7 +3,7 @@
 //!
 //! The challenger hypothesis: a ~719k-param trained byte-level specialist
 //! (context = span bytes, options = candidate rules + skip, one logit per
-//! option — [`riir_clippy::draft::choice_scorer`]) beats the shipped
+//! option — [`riir_refine::draft::choice_scorer`]) beats the shipped
 //! modelless `RerankMode::Structural` rerank at composite top-1 on the
 //! SAME production pools. The modelless default is NOT challenged until
 //! the GOAT gates pass; a Bench-065 memorization signature = REFUTED.
@@ -26,17 +26,17 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use riir_clippy::domain::HealDomain;
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
-use riir_clippy::domains::rust_perf::RustPerfDomain;
-use riir_clippy::draft::choice_scorer::{
+use riir_refine::domain::HealDomain;
+use riir_refine::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::domains::rust_perf::RustPerfDomain;
+use riir_refine::draft::choice_scorer::{
     ChoiceScorer, Rng, ScorerConfig, ScorerGrads, AdamW,
 };
-use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
-use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
-use riir_clippy::draft::instantiation_rerank::rule_family;
-use riir_clippy::draft::latent_matcher::LatentMatcher;
-use riir_clippy::draft::retrieval_eval::CLEAN_SPANS;
+use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
+use riir_refine::draft::instantiation_rerank::rule_family;
+use riir_refine::draft::latent_matcher::LatentMatcher;
+use riir_refine::draft::retrieval_eval::CLEAN_SPANS;
 
 // ---------------------------------------------------------------------------
 // Constants (all seeds fixed — determinism is a gate, not a preference)
@@ -110,10 +110,10 @@ fn build_dataset() -> Result<Dataset, String> {
     let mut rule_idx: BTreeMap<String, u32> = BTreeMap::new();
     let cfg = ScorerConfig::default();
     {
-        let entries: Vec<&dyn riir_clippy::domain::HealEntry> = clippy
+        let entries: Vec<&dyn riir_refine::domain::HealEntry> = clippy
             .iter()
-            .map(|e| e as &dyn riir_clippy::domain::HealEntry)
-            .chain(perf.iter().map(|e| e as &dyn riir_clippy::domain::HealEntry))
+            .map(|e| e as &dyn riir_refine::domain::HealEntry)
+            .chain(perf.iter().map(|e| e as &dyn riir_refine::domain::HealEntry))
             .collect();
         for e in entries {
             let text = format!("{}\n{}", e.rule_id(), e.buggy_code());
@@ -143,7 +143,7 @@ fn build_dataset() -> Result<Dataset, String> {
         let mut pool_ids: Vec<u32> = Vec::new();
         if !span.clean {
             let (_routed, by_domain) = matcher.suggest_span(&span.code, POOL_TOP_K);
-            let mut all: Vec<&riir_clippy::draft::corpus_index::ScoredRule> = by_domain
+            let mut all: Vec<&riir_refine::draft::corpus_index::ScoredRule> = by_domain
                 .iter()
                 .flat_map(|(_, rs)| rs.iter())
                 .collect();

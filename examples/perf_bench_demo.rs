@@ -28,9 +28,9 @@
 #![allow(clippy::pedantic)]
 
 #[cfg(feature = "rust_perf_bench")]
-use riir_clippy::domains::rust_perf::bench::ALLOC_AXIS_EXEMPT;
+use riir_refine::domains::rust_perf::bench::ALLOC_AXIS_EXEMPT;
 #[cfg(feature = "rust_perf_bench")]
-use riir_clippy::{
+use riir_refine::{
     domain::HealDomain, domains::rust_perf::RustPerfDomain, PerfBenchValidator, SizeOutcome,
 };
 

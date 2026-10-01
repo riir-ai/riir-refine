@@ -62,8 +62,8 @@
 //! tests_ok)` — not GenRM prompt text. Rendering rows into a training corpus is
 //! riir-train's concern; producing verified edit outcomes is this repo's.
 
-use riir_clippy::domains::clippy_lints::proposers;
-use riir_clippy::edit_emitter::{apply_edits, SourceEdit};
+use riir_refine::domains::clippy_lints::proposers;
+use riir_refine::edit_emitter::{apply_edits, SourceEdit};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

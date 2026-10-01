@@ -20,8 +20,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use riir_clippy::domains::kernel_opt::cube_extract::extract_cube_items;
-use riir_clippy::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
+use riir_refine::domains::kernel_opt::cube_extract::extract_cube_items;
+use riir_refine::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

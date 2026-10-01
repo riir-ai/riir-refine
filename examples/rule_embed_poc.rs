@@ -27,10 +27,10 @@
 
 use std::path::PathBuf;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::latent_matcher::LatentMatcher;
-use riir_clippy::draft::retrieval_eval::{labeled_eval_spans, run_split_eval, DomainMetrics};
-use riir_clippy::draft::rule_embed::{
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::draft::latent_matcher::LatentMatcher;
+use riir_refine::draft::retrieval_eval::{labeled_eval_spans, run_split_eval, DomainMetrics};
+use riir_refine::draft::rule_embed::{
     fixture_is_withheld, train, TrainConfig, TrainData, FEATURE_BUCKETS,
 };
 
@@ -55,7 +55,7 @@ fn main() {
                 std::process::exit(2);
             };
             let bytes = std::fs::read(path).expect("artifact");
-            let tables = riir_clippy::draft::rule_embed::decode_verified(&bytes).expect("decode");
+            let tables = riir_refine::draft::rule_embed::decode_verified(&bytes).expect("decode");
             // (1) SELF-PAIR probe: the EXACT corpus buggy text of a training
             // pair. σ ≈ 1.0 here but ≈ 0.5 on fixture variants would mean
             // the towers memorized pairs without token-level transfer — an
@@ -102,7 +102,7 @@ fn main() {
 /// domain — the SAME enumeration the matcher indexes (one source).
 fn corpus_triples() -> Vec<(String, String, String)> {
     #[cfg(feature = "clippy_lints")]
-    let mut triples: Vec<_> = riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+    let mut triples: Vec<_> = riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
         .into_iter()
         .map(|e| {
             (
@@ -116,7 +116,7 @@ fn corpus_triples() -> Vec<(String, String, String)> {
     let mut triples = Vec::new();
     #[cfg(feature = "rust_perf")]
     triples.extend(
-        riir_clippy::domains::rust_perf::RustPerfDomain::build_corpus()
+        riir_refine::domains::rust_perf::RustPerfDomain::build_corpus()
             .into_iter()
             .map(|e| {
                 (
@@ -128,7 +128,7 @@ fn corpus_triples() -> Vec<(String, String, String)> {
     );
     #[cfg(feature = "docker")]
     triples.extend(
-        riir_clippy::domains::docker::DockerDomain::build_corpus()
+        riir_refine::domains::docker::DockerDomain::build_corpus()
             .into_iter()
             .map(|e| {
                 (
@@ -140,7 +140,7 @@ fn corpus_triples() -> Vec<(String, String, String)> {
     );
     #[cfg(feature = "dist")]
     triples.extend(
-        riir_clippy::domains::dist::DistDomain::build_corpus()
+        riir_refine::domains::dist::DistDomain::build_corpus()
             .into_iter()
             .map(|e| {
                 (
@@ -152,7 +152,7 @@ fn corpus_triples() -> Vec<(String, String, String)> {
     );
     #[cfg(feature = "kernel_heal")]
     triples.extend(
-        riir_clippy::domains::kernel_opt::KernelOptDomain::build_corpus()
+        riir_refine::domains::kernel_opt::KernelOptDomain::build_corpus()
             .into_iter()
             .map(|e| {
                 (
@@ -247,7 +247,7 @@ fn eval_mode(path: &str, rest: Vec<String>) {
         std::process::exit(1);
     });
     let tables = std::sync::Arc::new(
-        riir_clippy::draft::rule_embed::decode_verified(&bytes).unwrap_or_else(|e| {
+        riir_refine::draft::rule_embed::decode_verified(&bytes).unwrap_or_else(|e| {
             eprintln!("artifact refused: {e}");
             std::process::exit(1);
         }),
@@ -358,5 +358,5 @@ fn verdict(ok: bool) -> &'static str {
 // own matchers internally (the import documents the posture's substrate).
 #[allow(dead_code)]
 fn _typecheck_matcher(m: &LatentMatcher) -> bool {
-    m.has_domain(riir_clippy::draft::domain_router::DomainId::Clippy)
+    m.has_domain(riir_refine::draft::domain_router::DomainId::Clippy)
 }

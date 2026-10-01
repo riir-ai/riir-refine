@@ -1,6 +1,6 @@
 # Plan 192 — The refine rename, Phase 1 (binary + surface sweep)
 
-**Status:** IN PROGRESS — T1.1 + T1.2 + T1.3 LANDED 2026-10-01 (owner ask: "see `cargo heal` a lot, it should changed to `cargo refine`? grep more"); T1.1 (repo rename) + the dist flip remain OWNER-SIDE.
+**Status:** PHASE 1 LANDED 2026-10-01 + PHASE 2 LANDED 2026-10-01 (owner ask, same day: "why you still call riir-clippy? it's riir-refine now" — the crate/package name renamed `926fd4d2`→HEAD: package+lib `riir-refine`/`riir_refine`, the 138-file `riir_clippy::` sweep, the live script/workflow refs, AGENTS+BOUNDARY titles) + the T1.2f rider's test-fixture stragglers REPAIRED (`926fd4d2`, 24 red tests). Original phase-1 record below unchanged.
 Parent: [Proposal 018](../.proposals/018_refine_rename_stake_domain_tiers.md) (owner calls 2026-09-30: Refine picked, NO alias, Reflex stays free).
 
 ## What landed (2026-10-01)
@@ -29,6 +29,14 @@ Parent: [Proposal 018](../.proposals/018_refine_rename_stake_domain_tiers.md) (o
 - [ ] Revisit trigger (caveat 2): first verifiable external install → alias + compat pass owed.
 
 ## Gates
+
+### Phase 2 (2026-10-01, the crate-name rename — owner-triggered)
+
+- [x] `[package] name` `riir-clippy` → `riir-refine` + `[lib] name` `riir_clippy` → `riir_refine`; the 138-file `riir_clippy` ident sweep (imports, doc examples, temp-path strings); the live hyphen refs (self_evolve_audit's REPOS list + its self-exclusion guard, gen_dashboard's REPOS, ops_dashboard.yml's GITROOT symlink + comments, manual_release's root message, kat_seed_corpus_printer's `-p` doc command, t39's repos list); AGENTS.md + BOUNDARY.md titles. `Compiling riir-refine v0.2.0` verified; bin name `cargo-refine` unchanged (explicit `[[bin]]`).
+- [x] The T1.2f rider's test-fixture stragglers REPAIRED (`926fd4d2`, recorded above's sibling — see the commit message for the 24-test census): hermetic fixtures planted `.heal` state while the binary resolves `.refine`.
+- [x] Deliberately KEPT (internal-vocabulary axis, unchanged): the `RIIR_HEAL_*` env prefix (user-facing, fleet-wide), `~/.cache/riir-clippy/memory.json` (code+disk consistent), `resolve_heal_root`/`heal.rs` idents, historical `riir-clippy Issue/Proposal/Batch N` citations (katgpt-rs `DISK_SPELLING_ALIASES` leniency covers them).
+- [x] Gates: lib default **2423/0**; clippy `-D` clean at the release set; the release bin rebuilt + the `~/.cargo/bin/cargo-refine` symlink resolving (`cargo-refine 0.2.0`, stamp complete); unmine 9/9 + soft-gate 17/17 post-rename; integration reds that are NOT rename-class filed as Issue 141 (wetrun payload-floor fixtures, oracle cast_lossless drift, the unstake v2 mock script).
+- [ ] The 4090's global binary: rebuilt from the pre-rename tree (v0.2.0, functionally complete — the unstake v2 client is riir-kat, unaffected by the package name); rebuild from the renamed tree at the next 4090 pass for name purity.
 
 - [x] lib default 2398/0; clippy `-D warnings` clean at the full release feature set (covers riir-kat via path dep).
 - [x] CLI battery: build_stamp 4/4, unmine 17/17, kat_soft_gate 9/9, kat_refill 5/5, install_copy_parity 3/3.

@@ -14,9 +14,9 @@
 
 #![cfg(feature = "rustc_errors")]
 
-use riir_clippy::domains::rustc_errors::corpus_gen::generate_corpus;
-use riir_clippy::domains::rustc_errors::corpus_interacting::interacting_pairs;
-use riir_clippy::domains::rustc_errors::floor::{FixVerdict, FloorHarness, NullFixer};
+use riir_refine::domains::rustc_errors::corpus_gen::generate_corpus;
+use riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs;
+use riir_refine::domains::rustc_errors::floor::{FixVerdict, FloorHarness, NullFixer};
 
 /// One case per (family, sub-family) prefix — the first of each.
 #[test]
@@ -63,7 +63,7 @@ fn every_generated_family_produces_its_declared_code() {
     }
     let cases: Vec<_> = picked
         .iter()
-        .map(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated)
+        .map(riir_refine::domains::rustc_errors::floor::HarnessCase::generated)
         .collect();
     let report = harness
         .measure_cases(&NullFixer, &cases)
@@ -89,7 +89,7 @@ fn every_generated_family_produces_its_declared_code() {
 /// CI-when-wanted.
 #[test]
 fn full_corpus_declared_codes_hold() {
-    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
+    use riir_refine::domains::rustc_errors::floor::HarnessCase;
 
     if std::env::var("RIIR_FULL_CORPUS_INTEGRITY").ok().as_deref() != Some("1") {
         eprintln!("SKIP: set RIIR_FULL_CORPUS_INTEGRITY=1 to run the full-corpus gate");
@@ -100,7 +100,7 @@ fn full_corpus_declared_codes_hold() {
         eprintln!("SKIP: cargo not on PATH");
         return;
     }
-    let mut cases: Vec<HarnessCase<'_>> = riir_clippy::domains::rustc_errors::floor::MUTANT_CASES
+    let mut cases: Vec<HarnessCase<'_>> = riir_refine::domains::rustc_errors::floor::MUTANT_CASES
         .iter()
         .map(|c| HarnessCase::committed(c).expect("committed integrity"))
         .collect();

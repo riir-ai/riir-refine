@@ -35,9 +35,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use riir_clippy::domains::rustc_errors::diag::RustcErrorDiag;
-use riir_clippy::domains::rustc_errors::driver::CompileDriver;
-use riir_clippy::domains::rustc_errors::playbooks::{CompileProposer, FixCandidate, Playbooks};
+use riir_refine::domains::rustc_errors::diag::RustcErrorDiag;
+use riir_refine::domains::rustc_errors::driver::CompileDriver;
+use riir_refine::domains::rustc_errors::playbooks::{CompileProposer, FixCandidate, Playbooks};
 
 /// A test playbook: for `code`, replace `from` with `to` (first
 /// occurrence in the source) — the `fix_compile.rs` shape, verbatim.

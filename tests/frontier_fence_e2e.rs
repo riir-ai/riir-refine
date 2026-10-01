@@ -19,7 +19,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use riir_clippy::frontier_pairs::{construction_pairs, fence_sample, fence_verdicts, PairVerdict};
+use riir_refine::frontier_pairs::{construction_pairs, fence_sample, fence_verdicts, PairVerdict};
 
 /// Compile one source with plain rustc (the `behavioural_equivalence`
 /// house pattern — no cargo, no dep graph, no shared target dir) and
@@ -64,7 +64,7 @@ fn fence_sample_agrees_with_real_rustc_at_95pct() -> Result<(), Box<dyn std::err
         let broken = {
             // The pair row carries only the seeds; the broken form comes
             // from the corpus case the pair anchors (regenerate + match).
-            let cases = riir_clippy::domains::rustc_errors::corpus_gen::generate_corpus();
+            let cases = riir_refine::domains::rustc_errors::corpus_gen::generate_corpus();
             cases
                 .iter()
                 .find(|c| c.name == p.case_name)

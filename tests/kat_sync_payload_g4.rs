@@ -25,11 +25,11 @@
 
 #![cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 
-use riir_clippy::kat_redact::{
+use riir_refine::kat_redact::{
     scan_secrets, BlockReason, RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION,
 };
-use riir_clippy::kat_sync_payload::{parse_rows, verify_payload, RowOutcome, SyncPayloadBuilder};
-use riir_clippy::traj_store::TrajRowDoc;
+use riir_refine::kat_sync_payload::{parse_rows, verify_payload, RowOutcome, SyncPayloadBuilder};
+use riir_refine::traj_store::TrajRowDoc;
 
 /// The shipped-policy shape (mirrors `riir-clippy/.refine-sync-policy`).
 fn shipped_policy() -> SyncPolicy {

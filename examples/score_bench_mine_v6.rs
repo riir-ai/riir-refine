@@ -29,7 +29,7 @@
 //! With `--features margin_mining`, `--order margin` replaces step 1's
 //! ordering: every `.rs` file in the SAME diff universe is carved (syn
 //! only, no oracle), each carve gets the drafter's pre-rerank pool margin
-//! `M = top1 − top2` (`riir_clippy::draft::margin_weight::span_min_margin`
+//! `M = top1 − top2` (`riir_refine::draft::margin_weight::span_min_margin`
 //! — the `rank_into` canon, margins ≥ 0 by construction), and files rank by
 //! their total `e^{−2M}` weight mass — the paper's w(M) ∝ e^{−2M} law:
 //! smallest margin → largest weight → mined FIRST. Uncontested carves
@@ -73,13 +73,13 @@ use std::process::Command;
 
 use syn::spanned::Spanned;
 
-use riir_clippy::score_bench::{vocabulary, wrap};
+use riir_refine::score_bench::{vocabulary, wrap};
 
 #[cfg(feature = "margin_mining")]
-use riir_clippy::score_bench::BenchFixture;
+use riir_refine::score_bench::BenchFixture;
 
 #[cfg(feature = "margin_mining")]
-use riir_clippy::draft::{margin_weight, span_min_margin, LatentMatcher};
+use riir_refine::draft::{margin_weight, span_min_margin, LatentMatcher};
 
 const CARVE_MAX_BYTES: usize = 8000;
 const CHUNK: usize = 15;
@@ -146,8 +146,8 @@ fn main() {
         ab,
     };
 
-    let oracle = riir_clippy::draft::ClippyOracle::new()
-        .with_work_root(std::env::temp_dir().join("riir_clippy_score_bench_v6"));
+    let oracle = riir_refine::draft::ClippyOracle::new()
+        .with_work_root(std::env::temp_dir().join("riir_refine_score_bench_v6"));
     if !oracle.is_available() {
         eprintln!("cargo not on PATH — the oracle needs real clippy");
         std::process::exit(1);
@@ -233,7 +233,7 @@ fn main() {
 /// census, paste-ready emission. Shared unchanged by both `--order` modes.
 fn run_mine(
     cfg: &Cfg,
-    oracle: &riir_clippy::draft::ClippyOracle,
+    oracle: &riir_refine::draft::ClippyOracle,
     vocab: &BTreeSet<String>,
     repo_name: &str,
     candidates: Vec<Cand>,
@@ -279,7 +279,7 @@ fn run_mine(
 #[cfg(feature = "margin_mining")]
 fn run_ab(
     cfg: &Cfg,
-    oracle: &riir_clippy::draft::ClippyOracle,
+    oracle: &riir_refine::draft::ClippyOracle,
     vocab: &BTreeSet<String>,
     repo_name: &str,
 ) {
@@ -367,7 +367,7 @@ fn run_ab(
 #[allow(clippy::cast_precision_loss)] // count→ratio over fixture counts
 fn measure_arm(
     cfg: &Cfg,
-    oracle: &riir_clippy::draft::ClippyOracle,
+    oracle: &riir_refine::draft::ClippyOracle,
     vocab: &BTreeSet<String>,
     repo_name: &str,
     tag: &str,
@@ -407,7 +407,7 @@ fn measure_arm(
         mined.len(),
         candidates.len()
     );
-    let score = riir_clippy::score_bench::run_bench_with(oracle, &mined, &[]);
+    let score = riir_refine::score_bench::run_bench_with(oracle, &mined, &[]);
     let healable = score
         .outcomes
         .iter()
@@ -550,7 +550,7 @@ fn carve_file(cfg: &Cfg, path: &str) -> Option<Vec<Cand>> {
 /// it). The resolved text is what the A/B bench must measure — the tier the
 /// oracle actually adjudicated, not a T1/T2 guess.
 fn compile_and_label(
-    oracle: &riir_clippy::draft::ClippyOracle,
+    oracle: &riir_refine::draft::ClippyOracle,
     vocab: &BTreeSet<String>,
     candidates: &[Cand],
 ) -> Vec<Option<(BTreeSet<String>, String)>> {
@@ -680,7 +680,7 @@ fn build_cand(
     }
 }
 
-fn batch_compile(oracle: &riir_clippy::draft::ClippyOracle, snippets: &[String]) -> Vec<bool> {
+fn batch_compile(oracle: &riir_refine::draft::ClippyOracle, snippets: &[String]) -> Vec<bool> {
     let mut out = Vec::with_capacity(snippets.len());
     for chunk in snippets.chunks(CHUNK) {
         let refs: Vec<&str> = chunk.iter().map(String::as_str).collect();

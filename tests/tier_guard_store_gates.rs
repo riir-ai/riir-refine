@@ -1,10 +1,10 @@
 #![cfg(feature = "latent_retrieval")]
 //! Issue 126 lane (b) — the store-level G1/G3 arms for the Lemma-4.2 tier
-//! guard ([`riir_clippy::tier_guard`]).
+//! guard ([`riir_refine::tier_guard`]).
 //!
 //! The pure half (ratio arithmetic, boundaries, fail-closed) lives in the
 //! module's own tests and runs at default features. THIS target proves the
-//! guard on a real [`riir_clippy::traj_store::TrajStore`] — the G1
+//! guard on a real [`riir_refine::traj_store::TrajStore`] — the G1
 //! adversarial arm the issue demands (a poisoned wrong-goal trajectory MUST
 //! be excluded; a clean one MUST pass) plus the G3 monotonicity/determinism
 //! arms — where the goal-side probability is the CROSS-ROW Elo replay and
@@ -15,8 +15,8 @@
 //! tier_guard_store_gates` errors instead of a green zero); Layer 5d
 //! refuses an empty binary under `--all-features`.
 
-use riir_clippy::traj_store::TrajStore;
-use riir_clippy::{tier_guard, EvidenceTier};
+use riir_refine::traj_store::TrajStore;
+use riir_refine::{tier_guard, EvidenceTier};
 
 fn tmp_root(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!(

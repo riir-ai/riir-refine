@@ -28,19 +28,19 @@
 
 #![cfg(feature = "latent_retrieval")]
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::DomainId;
-use riir_clippy::evolve::{EvolveConfig, LatentSkillEvolution};
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::draft::DomainId;
+use riir_refine::evolve::{EvolveConfig, LatentSkillEvolution};
 
 const DIM: usize = 8;
 
 fn corpus_for(domain: DomainId) -> Vec<String> {
     match domain {
-        DomainId::Clippy => riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+        DomainId::Clippy => riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
             .into_iter()
             .map(|e| e.buggy_code().to_string())
             .collect(),
-        DomainId::Perf => riir_clippy::domains::rust_perf::RustPerfDomain::build_corpus()
+        DomainId::Perf => riir_refine::domains::rust_perf::RustPerfDomain::build_corpus()
             .into_iter()
             .map(|e| e.buggy_code().to_string())
             .collect(),
@@ -131,10 +131,10 @@ fn t71_evolved_vs_centroid_routing() {
 
     // ── Score both on spans NEITHER arm trained on ──
     let mut eval: Vec<(DomainId, &str)> = Vec::new();
-    for (_, code) in riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS {
+    for (_, code) in riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS {
         eval.push((DomainId::Clippy, code));
     }
-    for (_, code) in riir_clippy::draft::eval_fixtures_perf::PERF_SPANS {
+    for (_, code) in riir_refine::draft::eval_fixtures_perf::PERF_SPANS {
         eval.push((DomainId::Perf, code));
     }
     println!("  scored on {} held-out spans", eval.len());

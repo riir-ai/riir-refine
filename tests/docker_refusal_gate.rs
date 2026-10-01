@@ -12,12 +12,12 @@
 
 #![cfg(feature = "docker")]
 
-use riir_clippy::domains::docker::proposers::fix_all;
-use riir_clippy::domains::docker::rules::{scan_source, ScanContext};
-use riir_clippy::domains::docker::{refuses, SyntaxVersion};
+use riir_refine::domains::docker::proposers::fix_all;
+use riir_refine::domains::docker::rules::{scan_source, ScanContext};
+use riir_refine::domains::docker::{refuses, SyntaxVersion};
 
 fn run_count(src: &str) -> usize {
-    riir_clippy::domains::docker::scanner::scan(src)
+    riir_refine::domains::docker::scanner::scan(src)
         .stanzas
         .iter()
         .filter(|s| s.instruction_of(src) == "RUN")
@@ -159,7 +159,7 @@ fn refusals_are_declared_as_data() {
 
 #[test]
 fn a_rule_refuses_below_its_declared_syntax_floor() {
-    let corpus = riir_clippy::domains::docker::corpus::build_docker_seed_corpus();
+    let corpus = riir_refine::domains::docker::corpus::build_docker_seed_corpus();
     let rule = corpus
         .entries
         .iter()

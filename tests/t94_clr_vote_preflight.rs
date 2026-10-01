@@ -34,11 +34,11 @@
 
 use std::collections::BTreeSet;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::domains::clippy_lints::ClippyFixEntry;
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
-use riir_clippy::drafter::TernaryDrafter;
-use riir_clippy::pruner::RustAnalyzerPruner;
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::domains::clippy_lints::ClippyFixEntry;
+use riir_refine::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::drafter::TernaryDrafter;
+use riir_refine::pruner::RustAnalyzerPruner;
 
 /// K perturbed drafts for one (rule, code), emulating the QMC sweep by
 /// perturbing the drafter's input the only way its public surface allows:

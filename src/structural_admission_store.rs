@@ -216,7 +216,7 @@ mod tests {
     /// concurrent-process truncation class).
     fn temp_root(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
-            "riir_clippy_struct_adm_{}_{}_{}",
+            "riir_refine_struct_adm_{}_{}_{}",
             tag,
             std::process::id(),
             TEMP_SEQ.fetch_add(1, Ordering::Relaxed),

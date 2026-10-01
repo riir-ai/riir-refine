@@ -33,12 +33,12 @@
 
 use std::collections::BTreeSet;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::{ClippyOracle, DomainId, LatentMatcher, RERANK_POOL};
-use riir_clippy::memory::{LatentFixMemory, LatentQuery, RetrievalWeights};
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::draft::{ClippyOracle, DomainId, LatentMatcher, RERANK_POOL};
+use riir_refine::memory::{LatentFixMemory, LatentQuery, RetrievalWeights};
 
 fn vocabulary() -> BTreeSet<String> {
-    riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+    riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
         .into_iter()
         .map(|e| e.rule_id().to_string())
         .collect()
@@ -51,10 +51,10 @@ fn vocabulary() -> BTreeSet<String> {
 /// evidence tier is the honest one. Weaker tiers would only understate the
 /// axis, and the question here is whether it has headroom AT BEST.
 fn populate_memory() -> LatentFixMemory {
-    use riir_clippy::domains::clippy_lints::proposers::propose_fix;
+    use riir_refine::domains::clippy_lints::proposers::propose_fix;
     let mut memory = LatentFixMemory::new(RetrievalWeights::default());
     let mut recorded = 0usize;
-    for (lint, code) in riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS {
+    for (lint, code) in riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS {
         // Only record fixes we can actually produce — a trajectory needs a
         // fixed_code, and inventing one would poison the memory.
         if let Some(fixed) = propose_fix(lint, code) {
@@ -80,7 +80,7 @@ fn t73_memory_axis_headroom() {
 
     // Real-clippy ground truth for the held-out composite spans.
     let mut truth: Vec<(&str, &str, BTreeSet<String>)> = Vec::new();
-    for (tag, code) in riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS {
+    for (tag, code) in riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS {
         let v = oracle.lints_for(code);
         if !v.compiles {
             continue;

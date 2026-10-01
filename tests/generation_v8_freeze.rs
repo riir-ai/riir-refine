@@ -35,7 +35,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use riir_clippy::score_bench::{draft_oracle, generations, wrap};
+use riir_refine::score_bench::{draft_oracle, generations, wrap};
 
 #[test]
 #[ignore = "runs the freeze gates + prints the paste-ready record; run with --ignored --test-threads=1"]
@@ -87,7 +87,7 @@ fn freeze_and_verify_generation_v8() {
         }
         // ── G2: the label fence (target claims, both directions) ───────
         let claimed: BTreeSet<String> = s.expect_lints.iter().cloned().collect();
-        let vocab = riir_clippy::score_bench::vocabulary();
+        let vocab = riir_refine::score_bench::vocabulary();
         let fired: Vec<&str> = before
             .lints
             .iter()
@@ -124,7 +124,7 @@ fn freeze_and_verify_generation_v8() {
         //    pre-existing. Everything the heal leaves that already fired
         //    pre-heal is a PERSIST, not a creation.
         // ── G4: the SHAPE gate — heal, re-derive, adjudicate ────────────
-        let (healed, _edits, passes) = riir_clippy::score_bench::heal_fixpoint(&s.code);
+        let (healed, _edits, passes) = riir_refine::score_bench::heal_fixpoint(&s.code);
         assert_eq!(
             passes,
             generations::v8_expected_passes(&s.id),

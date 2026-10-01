@@ -25,7 +25,7 @@ case "$TAG" in
     v[0-9]*.[0-9]*.[0-9]*) ;;
     *) echo "tag must look like v0.1.3" >&2; exit 2 ;;
 esac
-[ -f .github/about/about.toml ] || { echo "run from the riir-clippy repo root" >&2; exit 2; }
+[ -f .github/about/about.toml ] || { echo "run from the riir-refine repo root" >&2; exit 2; }
 
 command -v gh > /dev/null || { echo "gh missing" >&2; exit 2; }
 command -v cargo-zigbuild > /dev/null || { echo "cargo-zigbuild missing (cargo install cargo-zigbuild --locked)" >&2; exit 2; }

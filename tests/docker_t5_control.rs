@@ -24,10 +24,10 @@
 
 #![cfg(feature = "docker")]
 
-use riir_clippy::domains::docker::rules::{
+use riir_refine::domains::docker::rules::{
     scan_source, scan_source_with, ScanContext, FIXABLE_DOCKER,
 };
-use riir_clippy::domains::docker::scanner::{self, Scope};
+use riir_refine::domains::docker::scanner::{self, Scope};
 
 /// The four in-tree Dockerfiles, as sibling-relative paths.
 const IN_TREE: &[(&str, &str)] = &[
@@ -356,7 +356,7 @@ fn g5_target_fixes_keep_the_file_scannable() {
     let Some(src) = read("edge-wallet") else {
         return;
     };
-    let fixed = riir_clippy::domains::docker::proposers::fix_all(&src, &ScanContext::default());
+    let fixed = riir_refine::domains::docker::proposers::fix_all(&src, &ScanContext::default());
     let scan = scanner::scan(&fixed);
     assert_eq!(scan.stages.len(), 2, "the fix changed the stage graph");
     assert!(
@@ -368,7 +368,7 @@ fn g5_target_fixes_keep_the_file_scannable() {
         "the pipefail SHELL was not applied"
     );
     // Idempotence: re-running finds nothing left to fix.
-    let twice = riir_clippy::domains::docker::proposers::fix_all(&fixed, &ScanContext::default());
+    let twice = riir_refine::domains::docker::proposers::fix_all(&fixed, &ScanContext::default());
     assert_eq!(twice, fixed, "the fix is not idempotent");
 }
 

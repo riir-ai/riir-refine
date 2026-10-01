@@ -31,8 +31,8 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use riir_clippy::kat_lease_client::HttpResponse;
-use riir_clippy::kat_stake_client::{self, StakeInfo, StakeOutcome, StakeTransport, TrancheView};
+use riir_refine::kat_lease_client::HttpResponse;
+use riir_refine::kat_stake_client::{self, StakeInfo, StakeOutcome, StakeTransport, TrancheView};
 
 // ── the mock server (std TCP; the g10 shape) ───────────────────────────────
 
@@ -263,8 +263,8 @@ impl StakeTransport for MockStakeTransport {
     }
 }
 
-fn transport_at(base: &str) -> riir_clippy::kat_stake_client::HttpStakeTransport {
-    riir_clippy::kat_stake_client::HttpStakeTransport::new(base, 5)
+fn transport_at(base: &str) -> riir_refine::kat_stake_client::HttpStakeTransport {
+    riir_refine::kat_stake_client::HttpStakeTransport::new(base, 5)
 }
 
 // ── the wire-shape + flow fixtures ─────────────────────────────────────────

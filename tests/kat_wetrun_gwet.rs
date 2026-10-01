@@ -44,8 +44,8 @@
 
 use std::cell::RefCell;
 
-use riir_clippy::kat_lease_client::HttpResponse;
-use riir_clippy::kat_wetrun::{
+use riir_refine::kat_lease_client::HttpResponse;
+use riir_refine::kat_wetrun::{
     self, LocalLegs, Network, RunMode, SupplyCounters, Verdict, WetrunReport, WetrunTransport,
 };
 
@@ -383,7 +383,7 @@ fn the_refund_lands_exactly_once_and_is_faucet_funded() {
     let refund = report
         .steps
         .iter()
-        .find(|s| s.step == riir_clippy::kat_wetrun::Step::RefundCredit)
+        .find(|s| s.step == riir_refine::kat_wetrun::Step::RefundCredit)
         .expect("step 5 ran");
     let joined = refund.lines.join("\n");
     assert!(joined.contains("FAUCET-funded"), "{joined}");
@@ -476,7 +476,7 @@ fn an_issue_010_treasury_skip_fails_loudly_and_never_retries() {
     let step2 = report
         .steps
         .iter()
-        .find(|s| s.step == riir_clippy::kat_wetrun::Step::FaucetTopUp)
+        .find(|s| s.step == riir_refine::kat_wetrun::Step::FaucetTopUp)
         .expect("step 2 ran");
     assert!(!step2.ok);
     let d = step2.lines.join("\n");
@@ -524,7 +524,7 @@ fn a_crank_the_operator_cannot_authorize_fails_with_the_row_left_open() {
     let d = report
         .steps
         .iter()
-        .find(|s| s.step == riir_clippy::kat_wetrun::Step::FaucetTopUp)
+        .find(|s| s.step == riir_refine::kat_wetrun::Step::FaucetTopUp)
         .expect("step 2 ran")
         .lines
         .join("\n");
@@ -688,7 +688,7 @@ fn a_payload_below_the_redact_floor_is_refused_rather_than_pushed() {
     let d = report
         .steps
         .iter()
-        .find(|s| s.step == riir_clippy::kat_wetrun::Step::SyncPush)
+        .find(|s| s.step == riir_refine::kat_wetrun::Step::SyncPush)
         .expect("step 4 ran")
         .lines
         .join("\n");
@@ -719,7 +719,7 @@ fn a_sync_that_cannot_confirm_the_record_is_not_a_pass() {
         let d = report
             .steps
             .iter()
-            .find(|s| s.step == riir_clippy::kat_wetrun::Step::SyncPush)
+            .find(|s| s.step == riir_refine::kat_wetrun::Step::SyncPush)
             .expect("step 4 ran")
             .lines
             .join("\n");

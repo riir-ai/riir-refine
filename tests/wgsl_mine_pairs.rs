@@ -21,7 +21,7 @@
 
 #![cfg(feature = "kernel_heal")]
 
-use riir_clippy::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
+use riir_refine::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
 
 const COV_PRE: &str = include_str!("fixtures/covariance_prefix_686.wgsl");
 const COV_POST: &str = include_str!("fixtures/covariance_postfix_686.wgsl");

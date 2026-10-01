@@ -37,12 +37,12 @@
 use std::collections::BTreeMap;
 
 use katgpt_core::linking_fold::{detect_linking, LinkingDetectorConfig};
-use riir_clippy::draft::domain_router::DomainId;
-use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
-use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
-use riir_clippy::draft::latent_matcher::LatentMatcher;
-use riir_clippy::draft::retrieval_eval::canonical_rank;
-use riir_clippy::draft::{RetrievalConfig, RerankMode};
+use riir_refine::draft::domain_router::DomainId;
+use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
+use riir_refine::draft::latent_matcher::LatentMatcher;
+use riir_refine::draft::retrieval_eval::canonical_rank;
+use riir_refine::draft::{RetrievalConfig, RerankMode};
 use riir_rag::{Embedder, ModellessEmbedder};
 
 /// Variants per rule cloud (salt 1..=M + the base span = M+1 points).
@@ -408,7 +408,7 @@ fn domain_of(label: &str) -> DomainId {
 }
 
 fn top1_of(
-    by_domain: &[(DomainId, Vec<riir_clippy::draft::ScoredRule>)],
+    by_domain: &[(DomainId, Vec<riir_refine::draft::ScoredRule>)],
     want: DomainId,
 ) -> Option<String> {
     by_domain

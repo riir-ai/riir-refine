@@ -27,7 +27,7 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::{
+use riir_refine::{
     build_seed_corpus, ClippyFixEntry, ClippyTernaryDrafter, HealPipeline, RustAnalyzerPruner,
 };
 use std::io::Write;

@@ -25,7 +25,7 @@ use std::process::Command;
 
 use syn::spanned::Spanned;
 
-use riir_clippy::score_bench::{vocabulary, wrap};
+use riir_refine::score_bench::{vocabulary, wrap};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -47,8 +47,8 @@ fn main() {
         std::process::exit(2);
     }
 
-    let oracle = riir_clippy::draft::ClippyOracle::new()
-        .with_work_root(std::env::temp_dir().join("riir_clippy_score_bench"));
+    let oracle = riir_refine::draft::ClippyOracle::new()
+        .with_work_root(std::env::temp_dir().join("riir_refine_score_bench"));
     if !oracle.is_available() {
         eprintln!("cargo not on PATH — the oracle needs real clippy");
         std::process::exit(1);
@@ -114,9 +114,9 @@ fn main() {
 /// Oracle-label the composite spans at freeze time + emit RawFixture
 /// entries (stdout) for pasting into fixtures.rs.
 fn freeze_composite() {
-    use riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS;
-    let oracle = riir_clippy::draft::ClippyOracle::new()
-        .with_work_root(std::env::temp_dir().join("riir_clippy_score_bench"));
+    use riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS;
+    let oracle = riir_refine::draft::ClippyOracle::new()
+        .with_work_root(std::env::temp_dir().join("riir_refine_score_bench"));
     if !oracle.is_available() {
         eprintln!("cargo not on PATH");
         std::process::exit(1);

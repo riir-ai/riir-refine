@@ -16,8 +16,8 @@
 #![cfg(feature = "self_evolve")]
 #![allow(clippy::pedantic)]
 
-use riir_clippy::domains::clippy_lints::proposers;
-use riir_clippy::RustAnalyzerPruner;
+use riir_refine::domains::clippy_lints::proposers;
+use riir_refine::RustAnalyzerPruner;
 
 /// One held-out case.
 #[derive(Debug, Clone)]
@@ -129,7 +129,7 @@ fn stage1_identity_guard_declines_all_10_heldout() {
     // Sanity check: the Stage 1 identity guard (the decline path) fires on
     // ALL 10 held-out cases. This is the "0/10" baseline — Stage 1 cannot
     // generalize; the proposers + Stage 2 are the fix.
-    use riir_clippy::{build_seed_corpus, ClippyTernaryDrafter};
+    use riir_refine::{build_seed_corpus, ClippyTernaryDrafter};
     let corpus = build_seed_corpus();
     let mut drafter = ClippyTernaryDrafter::fallback();
     assert!(
@@ -159,7 +159,7 @@ fn stage2_pipeline_serves_verified_fixes() {
     // Integration test: simulate the Stage 2 tuning loop with manually-verified
     // fixes (we know they're correct from the held-out fixture), then verify
     // `HealPipeline::heal` returns them via the `Stage2Adaptive` source.
-    use riir_clippy::{
+    use riir_refine::{
         build_seed_corpus, ClippyTernaryDrafter, HealPipeline, HealSource, RustAnalyzerPruner,
     };
     let corpus = build_seed_corpus();
@@ -192,7 +192,7 @@ fn stage2_beats_0_of_10_on_heldout() {
     // + the per-proposer unit tests' structural checks). The full
     // `cargo clippy` verification path is `tune_against_fixture` (feature-gated
     // `clippy_verify`, see `examples/stage2_tuning_demo.rs`).
-    use riir_clippy::{
+    use riir_refine::{
         build_seed_corpus, ClippyTernaryDrafter, HealPipeline, HealSource, RustAnalyzerPruner,
     };
     let corpus = build_seed_corpus();

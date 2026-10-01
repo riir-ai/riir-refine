@@ -16,7 +16,7 @@
 
 #![cfg(feature = "score_bench")]
 
-use riir_clippy::score_bench::{draft_oracle, generations, wrap};
+use riir_refine::score_bench::{draft_oracle, generations, wrap};
 
 #[test]
 #[ignore = "spawns real cargo+clippy (the freeze oracle); run with --ignored --test-threads=1"]
@@ -36,7 +36,7 @@ fn freeze_and_measure_generation_v2() {
         let out = oracle.lints_for(&wrap(&atom.code));
         let vocab: std::collections::BTreeSet<String> = out
             .lints
-            .intersection(&riir_clippy::score_bench::vocabulary())
+            .intersection(&riir_refine::score_bench::vocabulary())
             .cloned()
             .collect();
         let want: std::collections::BTreeSet<String> = std::iter::once(atom.lint.clone()).collect();
@@ -58,7 +58,7 @@ fn freeze_and_measure_generation_v2() {
         .iter()
         .map(|(id, l)| (*id, *l))
         .collect();
-    let vocab = riir_clippy::score_bench::vocabulary();
+    let vocab = riir_refine::score_bench::vocabulary();
     let mut fresh_exclusions: Vec<String> = Vec::new();
     let mut drift: Vec<String> = Vec::new();
     let mut labeled_specs: Vec<(
@@ -100,7 +100,7 @@ fn freeze_and_measure_generation_v2() {
             }
         }
         // The M4 solve measurement: heal, re-label, count per-lint resolution.
-        let (healed, _edits, _passes) = riir_clippy::score_bench::heal_fixpoint(&s.code);
+        let (healed, _edits, _passes) = riir_refine::score_bench::heal_fixpoint(&s.code);
         let after = oracle.lints_for(&wrap(&healed));
         let after_ok = after.ran && after.compiles;
         let vocab_before = want.len();
@@ -237,7 +237,7 @@ fn atom_table_joins_the_bench_vocabulary_and_parses() {
     // The whole-file always-on twin of the module gates: the generation is
     // benchable only when the atom table is non-trivial and vocabulary-clean.
     let atoms = generations::atoms();
-    let vocab = riir_clippy::score_bench::vocabulary();
+    let vocab = riir_refine::score_bench::vocabulary();
     assert!(
         atoms.len() >= 8,
         "atom table too thin for a k-ladder: {}",

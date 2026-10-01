@@ -4,7 +4,7 @@
 //! P1–P5 + the verdict rule were committed BEFORE this harness ran).
 //!
 //! ```bash
-//! CARGO_TARGET_DIR=/tmp/riir_clippy_062 cargo test --release \
+//! CARGO_TARGET_DIR=/tmp/riir_refine_062 cargo test --release \
 //!   --features latent_retrieval --test t062_withheld_pair_ood -- --nocapture
 //! ```
 //!
@@ -17,11 +17,11 @@
 
 #![cfg(all(feature = "latent_retrieval", feature = "clippy_lints"))]
 
-use riir_clippy::draft::withheld_pair_ood::{
+use riir_refine::draft::withheld_pair_ood::{
     clippy_population, print_matrix, print_report, print_rows, run_withheld_pair, Binding,
     WithheldReport,
 };
-use riir_clippy::draft::{DomainId, RerankMode};
+use riir_refine::draft::{DomainId, RerankMode};
 
 /// The Plan 049 T0.1 committed real-repo dataset — 2,128 finding-bearing
 /// spans from the workspace, 20 of which carry an in-corpus label. Real
@@ -157,7 +157,7 @@ fn t1_healer_corpus_withheld_pair_ood() {
 #[cfg(feature = "rustc_errors")]
 #[test]
 fn t2_rustc_errors_withheld_pair_ood() {
-    use riir_clippy::draft::withheld_pair_ood::rustc_errors_population;
+    use riir_refine::draft::withheld_pair_ood::rustc_errors_population;
 
     let pop = rustc_errors_population();
     println!("\n######## Issue 062 T2 — rustc_errors (code × pattern) ########");

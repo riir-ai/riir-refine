@@ -38,12 +38,12 @@
 // precedent, one module over).
 #![allow(clippy::cast_precision_loss)]
 
-use riir_clippy::demonstrability::{eval_row, Row, T3_DOMAINS};
-use riir_clippy::draft::instantiation_rerank::probeable;
-use riir_clippy::draft::retrieval_eval::{
+use riir_refine::demonstrability::{eval_row, Row, T3_DOMAINS};
+use riir_refine::draft::instantiation_rerank::probeable;
+use riir_refine::draft::retrieval_eval::{
     canonical_rank, classify_choice_span, labeled_eval_spans, ChoiceTaxonomy,
 };
-use riir_clippy::draft::{DomainId, LatentMatcher};
+use riir_refine::draft::{DomainId, LatentMatcher};
 
 /// Pool depths: baseline = `RERANK_POOL` (28 — the production posture),
 /// then 2× and 4×. Depth means POOL depth (`top_k >= 28 ⇒ pool = top_k`),
@@ -238,7 +238,7 @@ fn variance_nonzero(v: &[f32]) -> bool {
 }
 
 fn canonical_label(d: DomainId) -> &'static str {
-    riir_clippy::demonstrability::canonical_domain(d.label())
+    riir_refine::demonstrability::canonical_domain(d.label())
 }
 
 fn format_pct(v: f32) -> String {

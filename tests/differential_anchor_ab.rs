@@ -23,8 +23,8 @@
 //!   Finding 1 — the mean-sim skewness cannot move under a mean anchor).
 
 use katgpt_core::differential_anchor::{hubness_skewness, pick_lambda_by_eval};
-use riir_clippy::draft::retrieval_eval::{labeled_eval_spans, run_eval_on, EvalReport};
-use riir_clippy::draft::{DomainId, LatentMatcher, RetrievalConfig};
+use riir_refine::draft::retrieval_eval::{labeled_eval_spans, run_eval_on, EvalReport};
+use riir_refine::draft::{DomainId, LatentMatcher, RetrievalConfig};
 use std::collections::HashMap;
 
 const LAMBDAS: [f32; 7] = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
@@ -63,7 +63,7 @@ fn g3_lambda_zero_is_bit_identical() {
     // The base arm must be the UNCORRECTED matcher — the env knob would
     // seed it otherwise and the comparison would be corrected-vs-λ=0.
     assert!(
-        std::env::var(riir_clippy::draft::corpus_index::DIFF_ANCHOR_LAMBDA_ENV).is_err(),
+        std::env::var(riir_refine::draft::corpus_index::DIFF_ANCHOR_LAMBDA_ENV).is_err(),
         "unset RIIR_CLIPPY_DIFF_ANCHOR_LAMBDA for the G3 arm"
     );
     let mut base = LatentMatcher::from_enabled_domains().expect("build matcher");
@@ -172,7 +172,7 @@ fn g1_top1_flips_named() {
         let (_, by) = m.suggest_span(code, 12);
         by.iter()
             .find(|(x, _)| *x == d)
-            .and_then(|(_, r)| riir_clippy::draft::retrieval_eval::canonical_rank(r).first().map(|s| s.rule_id.clone()))
+            .and_then(|(_, r)| riir_refine::draft::retrieval_eval::canonical_rank(r).first().map(|s| s.rule_id.clone()))
             .unwrap_or_default()
     };
     let (mut gained, mut lost) = (0usize, 0usize);

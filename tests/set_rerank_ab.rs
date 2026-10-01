@@ -24,13 +24,13 @@
 use std::collections::BTreeSet;
 use std::time::Instant;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS;
-use riir_clippy::draft::set_rerank::{LatentChoice, SetRerankConfig, DEFAULT_SLATE_K};
-use riir_clippy::draft::{ClippyOracle, LatentMatcher, RerankMode, RERANK_POOL};
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS;
+use riir_refine::draft::set_rerank::{LatentChoice, SetRerankConfig, DEFAULT_SLATE_K};
+use riir_refine::draft::{ClippyOracle, LatentMatcher, RerankMode, RERANK_POOL};
 
 fn vocabulary() -> BTreeSet<String> {
-    riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+    riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
         .into_iter()
         .map(|e| e.rule_id().to_string())
         .collect()
@@ -90,7 +90,7 @@ struct ArmStats {
 }
 
 fn family(rule_id: &str) -> &str {
-    riir_clippy::draft::rule_family(rule_id)
+    riir_refine::draft::rule_family(rule_id)
 }
 
 fn pct(k: usize, d: usize) -> f32 {
@@ -313,10 +313,10 @@ fn set_rerank_ab_composite() {
 
 #[test]
 fn set_rerank_ood_withheld_pair() {
-    use riir_clippy::draft::run_withheld_pair;
-    use riir_clippy::draft::run_withheld_pair_set_admission;
+    use riir_refine::draft::run_withheld_pair;
+    use riir_refine::draft::run_withheld_pair_set_admission;
 
-    let pop = riir_clippy::draft::withheld_pair_ood::clippy_population();
+    let pop = riir_refine::draft::withheld_pair_ood::clippy_population();
     println!("\n== Issue 121 OOD rig — clippy_population, pure retrieval arms ==");
 
     let base = run_withheld_pair(pop.clone(), None, RerankMode::Off, "shipped (pure retrieval)");

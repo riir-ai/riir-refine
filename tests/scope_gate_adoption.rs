@@ -12,8 +12,8 @@
 //! makes a vacuous pass detectable (the g4_l4_composition precedent).
 #![cfg(feature = "contrastive_scope")]
 
-use riir_clippy::scope_model::{ScopeModel, THETA};
-use riir_clippy::{build_seed_corpus, HealPipeline, RustAnalyzerPruner, TernaryDrafter};
+use riir_refine::scope_model::{ScopeModel, THETA};
+use riir_refine::{build_seed_corpus, HealPipeline, RustAnalyzerPruner, TernaryDrafter};
 
 fn pipeline() -> HealPipeline {
     HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())
@@ -324,7 +324,7 @@ fn g3_in_distribution_healing_is_bit_identical() {
 #[cfg(feature = "l4_lora")]
 mod l4_savings {
     use super::*;
-    use riir_clippy::l4_fallback::L4Fallback;
+    use riir_refine::l4_fallback::L4Fallback;
 
     /// Probe double: counts calls (the g4_l4_composition `Probe` pattern).
     #[derive(Clone)]

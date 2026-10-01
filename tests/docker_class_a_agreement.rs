@@ -13,8 +13,8 @@
 
 #![cfg(feature = "docker_verify")]
 
-use riir_clippy::domains::docker::corpus::build_docker_seed_corpus;
-use riir_clippy::domains::docker::verify::{available, class_a_agreement, hadolint, Agreement};
+use riir_refine::domains::docker::corpus::build_docker_seed_corpus;
+use riir_refine::domains::docker::verify::{available, class_a_agreement, hadolint, Agreement};
 
 #[test]
 fn every_class_a_rule_agrees_with_hadolint() {
@@ -111,7 +111,7 @@ fn hadolint_is_silent_on_the_apt_split() {
         found.is_empty(),
         "hadolint is no longer silent on the apt split — re-pin the dedup ledger: {found:?}"
     );
-    let ours: Vec<&str> = riir_clippy::domains::docker::rules::scan_source(split)
+    let ours: Vec<&str> = riir_refine::domains::docker::rules::scan_source(split)
         .into_iter()
         .map(|f| f.rule_id)
         .collect();

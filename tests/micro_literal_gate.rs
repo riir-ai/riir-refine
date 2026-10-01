@@ -11,9 +11,9 @@
 //! The TWO-MILLIONS subtlety (the gate's founding lesson): token math
 //! (`tokens / 1_000_000` for per-Mtok pricing) is a DIFFERENT million, not
 //! the µKAT conversion. The token million is NAMED —
-//! `riir_clippy::kat_footer::TOKENS_PER_MTOK` — and every per-Mtok site
+//! `riir_refine::kat_footer::TOKENS_PER_MTOK` — and every per-Mtok site
 //! converts through it; the money million is
-//! `riir_clippy::kat_units::MICRO_PER_KAT`. Same value, different
+//! `riir_refine::kat_units::MICRO_PER_KAT`. Same value, different
 //! dimension; the gate reds on the ANONYMOUS form of either so the next
 //! one cannot arrive unconverted.
 //!

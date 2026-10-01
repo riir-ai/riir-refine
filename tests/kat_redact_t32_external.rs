@@ -58,7 +58,7 @@
 
 #![cfg(feature = "kat_service")]
 
-use riir_clippy::kat_redact::{
+use riir_refine::kat_redact::{
     scan_secrets, BlockReason, Finding, FindingKind, GateDecision, RedactionGate, SpanOrigin,
     SyncPolicy, REDACT_VERSION,
 };

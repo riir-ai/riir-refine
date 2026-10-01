@@ -190,7 +190,7 @@ mod tests {
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let n = SEQ.fetch_add(1, Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("riir_clippy_fmt_{}_{}", std::process::id(), n));
+            std::env::temp_dir().join(format!("riir_refine_fmt_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join(name);
         std::fs::write(&p, content).unwrap();
@@ -259,7 +259,7 @@ mod tests {
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let n = SEQ.fetch_add(1, Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("riir_clippy_fmt_ed_{}_{}", std::process::id(), n));
+            std::env::temp_dir().join(format!("riir_refine_fmt_ed_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("Cargo.toml"),
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(edition_for(&f), "2021");
         // No manifest above the unique temp root → default 2024.
         let lone_dir =
-            std::env::temp_dir().join(format!("riir_clippy_fmt_lone_{}_{}", std::process::id(), n));
+            std::env::temp_dir().join(format!("riir_refine_fmt_lone_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&lone_dir).unwrap();
         let lone = lone_dir.join("lone.rs");
         std::fs::write(&lone, "fn a() {}\n").unwrap();

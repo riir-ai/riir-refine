@@ -7,11 +7,11 @@
 //! case MUST pass — a checker that rejects the 3 clean wins would be useless in
 //! the other direction.
 
-use riir_clippy::behavioural_equivalence::{check, divergence_is_invisible_to_names, Verdict};
+use riir_refine::behavioural_equivalence::{check, divergence_is_invisible_to_names, Verdict};
 
 fn work(tag: &str) -> std::path::PathBuf {
     // Isolated under /tmp — never a shared target dir.
-    let d = std::env::temp_dir().join(format!("riir_clippy_equiv/{tag}"));
+    let d = std::env::temp_dir().join(format!("riir_refine_equiv/{tag}"));
     let _ = std::fs::create_dir_all(&d);
     d
 }

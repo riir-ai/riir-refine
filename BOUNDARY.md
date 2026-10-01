@@ -1,4 +1,4 @@
-# riir-clippy — boundary contract
+# riir-refine — boundary contract
 
 > The single source of truth for what may live in and depend on this repo.
 > Audited by the `boundary-guard` skill + two scripts:

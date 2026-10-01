@@ -1,5 +1,5 @@
 [package]
-name = "riir-clippy"
+name = "riir-refine"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -7,7 +7,7 @@ description = "Clippy-healing drafter+pruner pipeline: modelless ternary drafter
 publish = false
 
 [lib]
-name = "riir_clippy"
+name = "riir_refine"
 path = "src/lib.rs"
 
 [dependencies]

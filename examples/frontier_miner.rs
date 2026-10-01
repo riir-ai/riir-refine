@@ -47,14 +47,14 @@
 
 use std::collections::BTreeSet;
 
-use riir_clippy::draft::clippy_oracle::OracleVerdict;
-use riir_clippy::frontier_miner::{
+use riir_refine::draft::clippy_oracle::OracleVerdict;
+use riir_refine::frontier_miner::{
     admit, append_rows, apply_solution, band_rows, generate, heal_under_view, load_known,
     AdmittedRow, CorpusView, MinerRow, Mode, Rejection, Solution, MINER_ROWS_JSONL,
 };
-use riir_clippy::frontier_pairs::PROVENANCE;
-use riir_clippy::frontier_report;
-use riir_clippy::score_bench::draft_oracle;
+use riir_refine::frontier_pairs::PROVENANCE;
+use riir_refine::frontier_report;
+use riir_refine::score_bench::draft_oracle;
 
 fn main() {
     let oracle = draft_oracle();
@@ -262,7 +262,7 @@ fn load_rows(path: &std::path::Path) -> Vec<MinerRow> {
 }
 
 fn report(mode: &str, rejections: &[Rejection]) {
-    use riir_clippy::frontier_miner::Rejection::*;
+    use riir_refine::frontier_miner::Rejection::*;
     println!("\n{mode} rejections ({}):", rejections.len());
     for r in rejections {
         match r {
@@ -282,10 +282,10 @@ fn report(mode: &str, rejections: &[Rejection]) {
 /// uncovered).
 fn compiled_fix_set() -> BTreeSet<String> {
     let mut set = BTreeSet::new();
-    for lint in riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS {
+    for lint in riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS {
         set.insert((*lint).to_string());
     }
-    for lint in riir_clippy::domains::clippy_lints::proposers::VERIFY_LINTS {
+    for lint in riir_refine::domains::clippy_lints::proposers::VERIFY_LINTS {
         set.insert((*lint).to_string());
     }
     set

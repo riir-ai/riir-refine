@@ -15,7 +15,7 @@
 
 #![cfg(feature = "docker")]
 
-use riir_clippy::domains::docker::rules::{
+use riir_refine::domains::docker::rules::{
     scan_into, scan_source_with, DockerScratch, ScanContext,
 };
 

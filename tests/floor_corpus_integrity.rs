@@ -18,7 +18,7 @@
 
 #![cfg(feature = "rustc_errors")]
 
-use riir_clippy::domains::rustc_errors::floor::{
+use riir_refine::domains::rustc_errors::floor::{
     FixVerdict, FloorHarness, NullFixer, MUTANT_CASES,
 };
 

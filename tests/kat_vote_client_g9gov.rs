@@ -26,8 +26,8 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use riir_clippy::kat_lease_client::HttpResponse;
-use riir_clippy::kat_vote_client::{
+use riir_refine::kat_lease_client::HttpResponse;
+use riir_refine::kat_vote_client::{
     render_proposal, sign_vote, vote_confirm_line, vote_flow, vote_message, ProposalView, VoteAck,
     VoteChoice, VoteOutcome, VoteTransport,
 };
@@ -153,7 +153,7 @@ fn read_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
 /// The HTTP transport driving the mock (the vote client's own impl over the
 /// mock's base URL — the SAME code the CLI uses).
 struct MockVoteTransport {
-    inner: riir_clippy::kat_vote_client::HttpVoteTransport,
+    inner: riir_refine::kat_vote_client::HttpVoteTransport,
 }
 
 impl VoteTransport for MockVoteTransport {
@@ -210,7 +210,7 @@ fn hex_fixed<const N: usize>(s: &str) -> [u8; N] {
 #[test]
 fn vote_message_hex_is_the_dapps_pinned_golden() {
     let msg = vote_message(1, &[0x42; 32], VoteChoice::Yes);
-    let hex = riir_clippy::kat_vote_client::hex_encode(&msg);
+    let hex = riir_refine::kat_vote_client::hex_encode(&msg);
     assert_eq!(
         hex,
         "726969722d64617070732e6b61742e676f766f74652e7631\
@@ -228,7 +228,7 @@ fn vote_message_hex_is_the_dapps_pinned_golden() {
 fn service_first_flow_submits_the_signed_vote() {
     let server = spawn_vote_mock(ServeMode::Live, proposal_body());
     let transport = MockVoteTransport {
-        inner: riir_clippy::kat_vote_client::HttpVoteTransport::new(&server.base(), 5),
+        inner: riir_refine::kat_vote_client::HttpVoteTransport::new(&server.base(), 5),
     };
     let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
     let root = temp_root("live");
@@ -301,7 +301,7 @@ fn service_first_flow_submits_the_signed_vote() {
 fn not_live_flow_queues_the_signed_intent() {
     let server = spawn_vote_mock(ServeMode::Down, proposal_body());
     let transport = MockVoteTransport {
-        inner: riir_clippy::kat_vote_client::HttpVoteTransport::new(&server.base(), 5),
+        inner: riir_refine::kat_vote_client::HttpVoteTransport::new(&server.base(), 5),
     };
     let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
     let root = temp_root("down");
@@ -321,7 +321,7 @@ fn not_live_flow_queues_the_signed_intent() {
     match outcome {
         VoteOutcome::LocalQueued { queued_at } => {
             let text = std::fs::read_to_string(&queued_at).expect("the queued file");
-            let intent: riir_clippy::kat_vote_client::VoteIntent =
+            let intent: riir_refine::kat_vote_client::VoteIntent =
                 serde_json::from_str(text.trim()).expect("valid JSON intent");
             assert_eq!(intent.proposal_id, 7);
             assert_eq!(intent.choice, "no");

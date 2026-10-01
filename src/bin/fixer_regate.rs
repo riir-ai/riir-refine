@@ -54,14 +54,14 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
-use riir_clippy::cf_workers_ai::{
+use riir_refine::cf_workers_ai::{
     self, reachable_samples, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass,
     RegateHarness, Sample, SampleSource,
 };
-use riir_clippy::kat_footer::TOKENS_PER_MTOK;
-use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
-use riir_clippy::l4_daemon::DaemonL4;
-use riir_clippy::ClippyVerifier;
+use riir_refine::kat_footer::TOKENS_PER_MTOK;
+use riir_refine::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
+use riir_refine::l4_daemon::DaemonL4;
+use riir_refine::ClippyVerifier;
 
 /// Default per-M USD pricing for the cost column — the Proposal 005 cost
 /// basis (qwen3.8-27b list). Overridable via `--price-in/--price-out`;
@@ -213,7 +213,7 @@ fn gate_samples(samples: Vec<Sample>, args: &Args) -> Vec<Sample> {
         (Some(p), None) => eprintln!(
             "[regate] redaction policy: {} (v{}, origins {:?})",
             p.display(),
-            riir_clippy::kat_redact::REDACT_VERSION,
+            riir_refine::kat_redact::REDACT_VERSION,
             loaded.gate.policy().allow_origins
         ),
         (Some(_), Some(w)) => eprintln!("[regate] redaction policy: {w} — DENY-ALL in force"),
@@ -841,7 +841,7 @@ fn append_cost_ledger(
     model: &str,
     summary: &ArmSummary,
     server: Option<&CfUsageToday>,
-    spend: Option<&riir_clippy::llm_spend::SpendState>,
+    spend: Option<&riir_refine::llm_spend::SpendState>,
 ) {
     use std::io::Write;
     let path = std::env::var("RIIR_LLM_COST_LEDGER")
@@ -1058,10 +1058,10 @@ struct Bt8Pair {
 /// id-adjacent predecessors). Recorded in the bench doc BEFORE the run.
 #[cfg(feature = "score_bench")]
 fn bt8_build_pairs(harness: &mut RegateHarness, few_shots: usize) -> Vec<Bt8Pair> {
-    use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
+    use riir_refine::cf_workers_ai::{ident_mentioned, FixAnchors};
 
     const ANCHOR: &str = "katgpt-rs-bench_ptrm_width_scaling-002";
-    let mut fixtures = riir_clippy::score_bench::fixtures::fixtures();
+    let mut fixtures = riir_refine::score_bench::fixtures::fixtures();
     assert!(
         fixtures.len() >= 12,
         "frozen set smaller than the pre-registered pair count"
@@ -1189,7 +1189,7 @@ fn bt8_grade(
     gen: &str,
     behav: &std::path::Path,
 ) -> Bt8Call {
-    use riir_clippy::cf_workers_ai::ident_mentioned;
+    use riir_refine::cf_workers_ai::ident_mentioned;
 
     let text = cf_workers_ai::extract_code_block(gen);
     let call = Bt8Call {

@@ -16,7 +16,7 @@
 
 use std::time::Instant;
 
-use riir_clippy::draft::{DomainId, LatentMatcher};
+use riir_refine::draft::{DomainId, LatentMatcher};
 
 /// G1 fixture — clippy-domain variants (identifiers renamed vs the corpus).
 /// `(expected_rule, variant_snippet)`. Expanded 12 → 24 items 2026-08-14
@@ -379,14 +379,14 @@ fn threshold_calibration_distribution() {
 /// mode change, not a threshold. Not a gate — the measurement record.
 #[test]
 fn scoring_mode_calibration_whole_vs_deep() {
-    use riir_clippy::domain::{HealDomain, HealEntry};
-    use riir_clippy::draft::RuleIndex;
+    use riir_refine::domain::{HealDomain, HealEntry};
+    use riir_refine::draft::RuleIndex;
 
     // Build one index per enabled domain (same corpus text the matcher uses).
     let mut indexes: Vec<(DomainId, RuleIndex)> = Vec::new();
     #[cfg(feature = "clippy_lints")]
     {
-        let patterns = riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+        let patterns = riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
             .into_iter()
             .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
             .collect::<Vec<_>>();
@@ -397,7 +397,7 @@ fn scoring_mode_calibration_whole_vs_deep() {
     }
     #[cfg(feature = "rust_perf")]
     {
-        let patterns = riir_clippy::domains::rust_perf::RustPerfDomain::build_corpus()
+        let patterns = riir_refine::domains::rust_perf::RustPerfDomain::build_corpus()
             .into_iter()
             .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
             .collect::<Vec<_>>();

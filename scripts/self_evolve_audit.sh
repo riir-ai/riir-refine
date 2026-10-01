@@ -47,7 +47,7 @@ HISTORY="$HEAL_REPO/.benchmarks/score_history.jsonl"
 INTAKE="$HEAL_REPO/.distill/001_mining_queue_snapshot.md"
 INTAKE_HISTORY="$HEAL_REPO/.research/108_mining_queue_snapshot_history.md"
 ADOPTION_DATE="2026-08-24T00:00:00"
-REPOS="katgpt-rs riir-ai riir-train riir-neuron-db riir-chain riir-clippy riir-game-sdk riir-mmorpg-examples riir-viewbridge riir-dapps"
+REPOS="katgpt-rs riir-ai riir-train riir-neuron-db riir-chain riir-refine riir-game-sdk riir-mmorpg-examples riir-viewbridge riir-dapps"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║ cargo-refine adoption + self-evolve audit  (Issue 037)         ║"
@@ -287,7 +287,7 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
     echo "           top-k H = normalized rule-entropy of the retrieved top-k;"
     echo "           mem win% = Memory share of served fixes (citation-rate analog)."
   else
-    echo "  (binary lacks --collapse-report — rebuild with: cargo build --release --features latent_retrieval -p riir-clippy --bin cargo-refine)"
+    echo "  (binary lacks --collapse-report — rebuild with: cargo build --release --features latent_retrieval -p riir-refine --bin cargo-refine)"
   fi
   rm -rf "$CR_PROBE"
 else
@@ -487,7 +487,7 @@ echo "── 5. Cadence (A1 — distinct heal-activity days, >=3 in any 14-day w
 #                 only exists where the tool RAN and recorded — the
 #                 memory-growth half)
 #   commit days — git heal-mentioning commits since adoption (CONSUMER
-#                 repos only: riir-clippy is the tool itself, its dev
+#                 repos only: riir-refine is the tool itself, its dev
 #                 commits are development, not adoption evidence)
 DAYS_TMP="$(mktemp)"
 A1_DUMP="$(mktemp)"
@@ -512,7 +512,7 @@ for line in open(path, encoding='utf-8', errors='replace'):
         print(f"{day}\tstore\t{repo}")
 EOF
   fi
-  if [ -d "$d/.git" ] && [ "$r" != "riir-clippy" ]; then
+  if [ -d "$d/.git" ] && [ "$r" != "riir-refine" ]; then
     git -C "$d" log -E --format="%as" --since="$ADOPTION_DATE" --grep='(^|[^[:alpha:]])heal($|[^[:alpha:]])' 2>/dev/null \
       | while read -r day; do printf '%s\tcommit\t%s\n' "$day" "$r"; done >> "$DAYS_TMP"
   fi

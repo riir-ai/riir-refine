@@ -56,9 +56,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use katgpt_micro_belief::nonergodic::{ComponentModel, NonergodicFilter};
-use riir_clippy::domains::rustc_errors::evolve::traj_key;
-use riir_clippy::domains::rustc_errors::playbooks::FixCandidate;
-use riir_clippy::traj_store::{shape_conditional_order, shape_conditional_score, TrajStore};
+use riir_refine::domains::rustc_errors::evolve::traj_key;
+use riir_refine::domains::rustc_errors::playbooks::FixCandidate;
+use riir_refine::traj_store::{shape_conditional_order, shape_conditional_score, TrajStore};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants — the toy world

@@ -30,8 +30,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use riir_clippy::domain::HealDomain;
-use riir_clippy::domains::sec::SecDomain;
+use riir_refine::domain::HealDomain;
+use riir_refine::domains::sec::SecDomain;
 
 /// The banned list (Proposal 004): clippy restriction/rustc lints whose
 /// territory sec must not duplicate.

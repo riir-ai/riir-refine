@@ -37,17 +37,17 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-use riir_clippy::domains::clippy_lints::lint_level::{
+use riir_refine::domains::clippy_lints::lint_level::{
     gated_lints, LevelResolver, ALLOW_BY_DEFAULT_GROUPS,
 };
-use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
-use riir_clippy::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
-use riir_clippy::draft::span_source::collect_source_files;
-use riir_clippy::draft::{
+use riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS;
+use riir_refine::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
+use riir_refine::draft::span_source::collect_source_files;
+use riir_refine::draft::{
     parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
 };
-use riir_clippy::edit_emitter::RuleEdit;
-use riir_clippy::EvolveRecorder;
+use riir_refine::edit_emitter::RuleEdit;
+use riir_refine::EvolveRecorder;
 
 /// `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 /// ask): account + consents, wallet, staking, this machine's mining queue
@@ -110,7 +110,7 @@ enum KatCommand {
 }
 
 #[cfg(feature = "fix_verify")]
-use riir_clippy::domains::clippy_lints::proposers::VERIFY_LINTS;
+use riir_refine::domains::clippy_lints::proposers::VERIFY_LINTS;
 
 /// Resolve the self-evolve memory file (Issue 018): `RIIR_HEAL_MEMORY`
 /// overrides; otherwise the platform cache dir
@@ -174,9 +174,9 @@ fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
 /// row verbatim, then the envelope is renamed `memory.json.migrated` so the
 /// import can never run twice (or drift into a second repo's store).
 #[cfg(feature = "latent_retrieval")]
-fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj_store::TrajStore> {
+fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_refine::traj_store::TrajStore> {
     let root = resolve_heal_root(paths);
-    match riir_clippy::traj_store::TrajStore::open(&root) {
+    match riir_refine::traj_store::TrajStore::open(&root) {
         Ok((store, bad)) => {
             if bad > 0 {
                 eprintln!("self-evolve: trajectory store: {bad} corrupt row(s) skipped");
@@ -211,17 +211,17 @@ fn kat_billing_disabled() -> bool {
 }
 
 #[cfg(feature = "kat_service")]
-fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_clippy::kat_meter::KatMeter> {
+fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter> {
     if kat_billing_disabled() {
         return None;
     }
     if let Ok(file) = std::env::var("RIIR_HEAL_KAT_METER_FILE") {
-        return Some(riir_clippy::kat_meter::KatMeter::open_at(PathBuf::from(
+        return Some(riir_refine::kat_meter::KatMeter::open_at(PathBuf::from(
             file,
         )));
     }
     let root = resolve_heal_root(paths);
-    Some(riir_clippy::kat_meter::KatMeter::open(&root))
+    Some(riir_refine::kat_meter::KatMeter::open(&root))
 }
 
 /// Proposal 005 Phase 0 T0.6 (Plan 024): open the KAT charge ledger right
@@ -234,17 +234,17 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_clippy::kat_meter::KatMeter>
 #[cfg(feature = "kat_service")]
 fn open_kat_charge(
     paths: &[PathBuf],
-    meter: Option<&riir_clippy::kat_meter::KatMeter>,
-) -> Option<riir_clippy::kat_meter::KatCharge> {
+    meter: Option<&riir_refine::kat_meter::KatMeter>,
+) -> Option<riir_refine::kat_meter::KatCharge> {
     let meter = meter?;
     if let Ok(file) = std::env::var("RIIR_HEAL_KAT_CHARGE_FILE") {
-        return Some(riir_clippy::kat_meter::KatCharge::open_at(
+        return Some(riir_refine::kat_meter::KatCharge::open_at(
             PathBuf::from(file),
             meter.state(),
         ));
     }
     let root = resolve_heal_root(paths);
-    Some(riir_clippy::kat_meter::KatCharge::open(
+    Some(riir_refine::kat_meter::KatCharge::open(
         &root,
         meter.state(),
     ))
@@ -260,10 +260,10 @@ fn open_kat_charge(
 /// response — the ONLY fresh-balance source, so a skipped push adds no
 /// network GET (the no-dial-when-nothing-to-send rule).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
-fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
+fn print_burn_sync(outcome: &riir_refine::kat_burn_client::BurnSync) {
     match outcome {
-        riir_clippy::kat_burn_client::BurnSync::Reported(ack) => {
-            let balance = riir_clippy::kat_payreq_client::render_kat(ack.balance_micro);
+        riir_refine::kat_burn_client::BurnSync::Reported(ack) => {
+            let balance = riir_refine::kat_payreq_client::render_kat(ack.balance_micro);
             println!(
                 "burn sync: {} KAT reported (server balance {balance})",
                 ack.burn_kat_total
@@ -275,12 +275,12 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
                 println!("{note}");
             }
         }
-        riir_clippy::kat_burn_client::BurnSync::Stacked { total, reason } => {
+        riir_refine::kat_burn_client::BurnSync::Stacked { total, reason } => {
             println!(
                 "burn sync: offline — {total} KAT stacked, reports with the next run ({reason})"
             );
         }
-        riir_clippy::kat_burn_client::BurnSync::Skipped => {}
+        riir_refine::kat_burn_client::BurnSync::Skipped => {}
     }
 }
 
@@ -296,7 +296,7 @@ fn print_burn_sync(outcome: &riir_clippy::kat_burn_client::BurnSync) {
 /// corrupt/missing/unparseable ack loads empty → no balance → the gate is
 /// warn-only, never a refusal.)
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
-fn sticky_grace(ack: &riir_clippy::kat_burn_client::KatBurnAck) -> bool {
+fn sticky_grace(ack: &riir_refine::kat_burn_client::KatBurnAck) -> bool {
     ack.contributed == Some(true)
 }
 
@@ -321,15 +321,15 @@ fn enforce_kat_soft_gate(args: &Args) {
     let root = resolve_heal_root(&args.paths);
     let ack_path = root
         .join(".refine")
-        .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
-    let (ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+        .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+    let (ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");
     }
-    let account_dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let verdict = riir_clippy::kat_soft_gate::evaluate(riir_clippy::kat_soft_gate::SoftGateInput {
+    let account_dir = riir_refine::kat_account::KatAccount::default_dir();
+    let verdict = riir_refine::kat_soft_gate::evaluate(riir_refine::kat_soft_gate::SoftGateInput {
         transport_capable: true,
-        account_present: riir_clippy::kat_account::KatAccount::load(&account_dir).is_ok(),
+        account_present: riir_refine::kat_account::KatAccount::load(&account_dir).is_ok(),
         last_synced_balance_micro: ack.last_balance_micro,
         contributed_and_synced: sticky_grace(&ack),
         tuna_balance_micro: ack.tuna_balance_micro,
@@ -350,19 +350,19 @@ fn enforce_kat_soft_gate(args: &Args) {
     let (verdict, offered) = {
         if matches!(
             verdict,
-            riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { .. }
+            riir_refine::kat_soft_gate::SoftGateVerdict::Refuse { .. }
         ) && depleted_mine_offer()
         {
             eprintln!("cargo refine: out of KAT — contributing now (`cargo refine sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)");
             run_kat_sync();
-            let (reloaded, w) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+            let (reloaded, w) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = w {
                 eprintln!("{w}");
             }
             let verdict =
-                riir_clippy::kat_soft_gate::evaluate(riir_clippy::kat_soft_gate::SoftGateInput {
+                riir_refine::kat_soft_gate::evaluate(riir_refine::kat_soft_gate::SoftGateInput {
                     transport_capable: true,
-                    account_present: riir_clippy::kat_account::KatAccount::load(&account_dir)
+                    account_present: riir_refine::kat_account::KatAccount::load(&account_dir)
                         .is_ok(),
                     last_synced_balance_micro: reloaded.last_balance_micro,
                     contributed_and_synced: sticky_grace(&reloaded),
@@ -377,15 +377,15 @@ fn enforce_kat_soft_gate(args: &Args) {
     #[cfg(not(all(feature = "kat_transport", feature = "latent_retrieval")))]
     let offered = false;
 
-    let riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { balance_micro } = verdict else {
+    let riir_refine::kat_soft_gate::SoftGateVerdict::Refuse { balance_micro } = verdict else {
         return;
     };
-    let balance = riir_clippy::kat_payreq_client::render_kat(balance_micro);
-    let account_id = riir_clippy::kat_account::KatAccount::load(&account_dir)
+    let balance = riir_refine::kat_payreq_client::render_kat(balance_micro);
+    let account_id = riir_refine::kat_account::KatAccount::load(&account_dir)
         .map(|a| a.state().account_id.clone())
         .unwrap_or_default();
-    let top_up = riir_clippy::kat_lease_client::payment_url(
-        &riir_clippy::kat_lease_client::service_url_for_command(),
+    let top_up = riir_refine::kat_lease_client::payment_url(
+        &riir_refine::kat_lease_client::service_url_for_command(),
         &account_id,
     );
     eprintln!(
@@ -462,7 +462,7 @@ fn print_depleted_survey(args: &Args) {
     }
     let leaderboard = format!(
         "{}/leaderboard",
-        riir_clippy::kat_lease_client::service_url_for_command().trim_end_matches('/')
+        riir_refine::kat_lease_client::service_url_for_command().trim_end_matches('/')
     );
     eprintln!("  * payouts land within 7 days of a push — exact dates: {leaderboard}");
 }
@@ -553,8 +553,8 @@ fn depleted_mine_offer() -> bool {
     if PROMPT_YES.load(std::sync::atomic::Ordering::Relaxed) {
         return true;
     }
-    let consent_dir = riir_clippy::kat_mining_consent::default_dir();
-    let (consent, _) = riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
+    let consent_dir = riir_refine::kat_mining_consent::default_dir();
+    let (consent, _) = riir_refine::kat_mining_consent::read_with_warning(&consent_dir);
     if !consent.push_allowed() {
         return false; // an explicit opt-out IS the answer
     }
@@ -585,7 +585,7 @@ fn kat_gate_disabled() -> bool {
 /// account loop. Feature halves (account status / outbox) appear only
 /// when their feature compiled in — the explainer itself never needs one.
 /// The default `.refine-sync-policy` `--mine` writes (version 3, the
-/// [`riir_clippy::kat_redact`] schema): own-repo rows sync, the standard
+/// [`riir_refine::kat_redact`] schema): own-repo rows sync, the standard
 /// source globs, findings redacted in place, secrets still blocked by the
 /// gate itself. WITHOUT a policy the gate is deny-by-default and every sync
 /// prints `0 included, N blocked` — the friction this write removes. The
@@ -641,11 +641,11 @@ fn run_mine_intro() {
         if let Some(account) = account {
             println!(
                 "status: logged in as {} (key: {})",
-                riir_clippy::kat_account::short_id(&account.state().account_id),
+                riir_refine::kat_account::short_id(&account.state().account_id),
                 account.key_path().display()
             );
         }
-        let wallet_base = riir_clippy::kat_lease_client::service_url_for_command();
+        let wallet_base = riir_refine::kat_lease_client::service_url_for_command();
         println!(
             "web wallet (same account): {}/wallet   <- GitHub SSH-key match",
             wallet_base.trim_end_matches('/')
@@ -669,13 +669,13 @@ fn run_mine_intro() {
     // can record, and an explainer that records nothing is not a tier.
     // Ungated (kat_mining_consent compiles in every build), so the consent
     // half works even where the status halves above did not compile.
-    let dir = riir_clippy::kat_mining_consent::default_dir();
+    let dir = riir_refine::kat_mining_consent::default_dir();
     println!();
-    match riir_clippy::kat_mining_consent::write(&dir, true) {
+    match riir_refine::kat_mining_consent::write(&dir, true) {
         Ok(()) => {
             println!(
                 "consent: recorded — mining is opted IN for this machine ({})",
-                riir_clippy::kat_mining_consent::consent_path(&dir).display()
+                riir_refine::kat_mining_consent::consent_path(&dir).display()
             );
         }
         Err(e) => {
@@ -686,7 +686,7 @@ fn run_mine_intro() {
             );
         }
     }
-    let (state, warning) = riir_clippy::kat_mining_consent::read_with_warning(&dir);
+    let (state, warning) = riir_refine::kat_mining_consent::read_with_warning(&dir);
     if let Some(w) = warning {
         eprintln!("{w}");
     }
@@ -723,9 +723,9 @@ fn run_mine_intro() {
     // halves simply has no heartbeat line.
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     {
-        let base = riir_clippy::kat_lease_client::service_url_for_command();
+        let base = riir_refine::kat_lease_client::service_url_for_command();
         let trimmed = base.trim_end_matches('/');
-        match riir_clippy::kat_consent_client::send_heartbeat(&base) {
+        match riir_refine::kat_consent_client::send_heartbeat(&base) {
             Ok("recorded") => println!("consent heartbeat: recorded (opted IN) at {trimmed}"),
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted IN)"),
             Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
@@ -744,8 +744,8 @@ fn run_mine_intro() {
     // account, which must never turn a completed --mine into a failure.
     #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
     {
-        let account_ok = riir_clippy::kat_account::KatAccount::load(
-            &riir_clippy::kat_account::KatAccount::default_dir(),
+        let account_ok = riir_refine::kat_account::KatAccount::load(
+            &riir_refine::kat_account::KatAccount::default_dir(),
         )
         .is_ok();
         if account_ok {
@@ -779,14 +779,14 @@ fn run_mine_intro() {
 /// Standalone early-return mode (before `validate_mode_flags`), works in
 /// EVERY feature build, exits 0, and is idempotent.
 fn run_unmine() {
-    let dir = riir_clippy::kat_mining_consent::default_dir();
-    let (before, warning) = riir_clippy::kat_mining_consent::read_with_warning(&dir);
+    let dir = riir_refine::kat_mining_consent::default_dir();
+    let (before, warning) = riir_refine::kat_mining_consent::read_with_warning(&dir);
     if let Some(w) = warning {
         eprintln!("{w}");
     }
-    let already = before == riir_clippy::kat_mining_consent::MiningConsent::OptedOut;
+    let already = before == riir_refine::kat_mining_consent::MiningConsent::OptedOut;
 
-    if let Err(e) = riir_clippy::kat_mining_consent::write(&dir, false) {
+    if let Err(e) = riir_refine::kat_mining_consent::write(&dir, false) {
         eprintln!("unmine: could NOT record the opt-out — {e}");
         eprintln!(
             "unmine: consent is still `{}`, so `cargo refine sync` would still push. Fix the \
@@ -803,7 +803,7 @@ fn run_unmine() {
     }
     println!(
         "record: {}",
-        riir_clippy::kat_mining_consent::consent_path(&dir).display()
+        riir_refine::kat_mining_consent::consent_path(&dir).display()
     );
 
     // The one-shot signed tier note (owner mandate 2026-09-08) — BEFORE the
@@ -812,9 +812,9 @@ fn run_unmine() {
     // data; a failure prints one line and never changes the exit code.
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     {
-        let base = riir_clippy::kat_lease_client::service_url_for_command();
+        let base = riir_refine::kat_lease_client::service_url_for_command();
         let trimmed = base.trim_end_matches('/');
-        match riir_clippy::kat_consent_client::send_heartbeat(&base) {
+        match riir_refine::kat_consent_client::send_heartbeat(&base) {
             Ok("recorded") => println!("consent heartbeat: recorded (opted OUT) at {trimmed}"),
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted OUT)"),
             Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
@@ -873,7 +873,7 @@ fn run_unmine() {
     println!();
     println!(
         "{}",
-        riir_clippy::kat_mining_consent::MiningConsent::OptedOut.status_line()
+        riir_refine::kat_mining_consent::MiningConsent::OptedOut.status_line()
     );
     println!("re-enable any time: cargo refine --mine");
 }
@@ -890,7 +890,7 @@ fn run_unmine() {
 /// Half-2 server route) — recorded consent is inert until then, and the
 /// output says so rather than implying rows are already flowing.
 fn run_stats_consent(on: bool, off: bool) {
-    use riir_clippy::kat_stats_consent::{self, StatsConsent};
+    use riir_refine::kat_stats_consent::{self, StatsConsent};
 
     let dir = kat_stats_consent::default_dir();
     let (before, warning) = kat_stats_consent::read_with_warning(&dir);
@@ -1004,12 +1004,12 @@ fn run_stats_consent(on: bool, off: bool) {
 ///    tax, and this flag must not be the easy one-command path into it.
 ///    Hence: explicit `--purge`, never the default.
 fn run_unmine_purge() {
-    let account_dir = riir_clippy::kat_account::KatAccount::default_dir();
-    match riir_clippy::kat_account::KatAccount::load(&account_dir) {
+    let account_dir = riir_refine::kat_account::KatAccount::default_dir();
+    match riir_refine::kat_account::KatAccount::load(&account_dir) {
         Ok(account) => {
             let key_path = account.key_path().to_path_buf();
-            let pub_path = account_dir.join(riir_clippy::kat_account::KatAccount::PUB_FILE);
-            let record_path = account_dir.join(riir_clippy::kat_account::KatAccount::RECORD_FILE);
+            let pub_path = account_dir.join(riir_refine::kat_account::KatAccount::PUB_FILE);
+            let record_path = account_dir.join(riir_refine::kat_account::KatAccount::RECORD_FILE);
             println!("PURGE: removing the local account identity");
             println!("  key:    {}", key_path.display());
             println!("  record: {}", record_path.display());
@@ -1056,11 +1056,11 @@ fn run_unmine_purge() {
     // (in the old consent-dir account location) survive an adoption (copied,
     // not moved) and `--unmine` is the one command that must remove the
     // identity EVERYWHERE it lives.
-    let legacy_dir = riir_clippy::kat_account::KatAccount::legacy_dir();
+    let legacy_dir = riir_refine::kat_account::KatAccount::legacy_dir();
     let legacy_paths = [
-        legacy_dir.join(riir_clippy::kat_account::KatAccount::LEGACY_KEY_FILE),
-        legacy_dir.join(riir_clippy::kat_account::KatAccount::LEGACY_PUB_FILE),
-        legacy_dir.join(riir_clippy::kat_account::KatAccount::LEGACY_RECORD_FILE),
+        legacy_dir.join(riir_refine::kat_account::KatAccount::LEGACY_KEY_FILE),
+        legacy_dir.join(riir_refine::kat_account::KatAccount::LEGACY_PUB_FILE),
+        legacy_dir.join(riir_refine::kat_account::KatAccount::LEGACY_RECORD_FILE),
     ];
     let mut legacy_removed = false;
     for p in legacy_paths {
@@ -1094,8 +1094,8 @@ fn unmine_outbox_dir() -> PathBuf {
 /// points can never describe the same event differently. `prefix` is the
 /// command label ("kat" for login, "login" for --mine).
 #[cfg(feature = "kat_service")]
-fn print_login_outcome(outcome: &riir_clippy::kat_account::LoginOutcome, prefix: &str) {
-    use riir_clippy::kat_account::LoginOutcome;
+fn print_login_outcome(outcome: &riir_refine::kat_account::LoginOutcome, prefix: &str) {
+    use riir_refine::kat_account::LoginOutcome;
     match outcome {
         LoginOutcome::Generated {
             fallback_note: Some(note),
@@ -1116,8 +1116,8 @@ fn print_login_outcome(outcome: &riir_clippy::kat_account::LoginOutcome, prefix:
 /// lines but keep running. Local key ops only: no network, no prompt (the
 /// fallback chain ends in a generated key with a disclosed note).
 #[cfg(feature = "kat_service")]
-fn ensure_logged_in() -> Option<riir_clippy::kat_account::KatAccount> {
-    use riir_clippy::kat_account::KatAccount;
+fn ensure_logged_in() -> Option<riir_refine::kat_account::KatAccount> {
+    use riir_refine::kat_account::KatAccount;
 
     match KatAccount::load(&KatAccount::default_dir()) {
         Ok(account) => Some(account),
@@ -1149,7 +1149,7 @@ fn ensure_logged_in() -> Option<riir_clippy::kat_account::KatAccount> {
 /// as a distinct step.
 #[cfg(feature = "kat_service")]
 fn run_kat_login(import_key: Option<&Path>) {
-    use riir_clippy::kat_account::KatAccount;
+    use riir_refine::kat_account::KatAccount;
 
     let dir = KatAccount::default_dir();
     let result = match import_key {
@@ -1192,9 +1192,9 @@ fn run_kat_login(import_key: Option<&Path>) {
 /// answer, and to the local projection when the service is unreadable.
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
-    use riir_clippy::kat_account::{history_lines, KatAccount};
-    use riir_clippy::kat_meter::{ChargeState, KAT_WARN_REMAINING};
-    use riir_clippy::kat_units::MicroKat;
+    use riir_refine::kat_account::{history_lines, KatAccount};
+    use riir_refine::kat_meter::{ChargeState, KAT_WARN_REMAINING};
+    use riir_refine::kat_units::MicroKat;
 
     let dir = KatAccount::default_dir();
     let account = match KatAccount::load(&dir) {
@@ -1235,11 +1235,11 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // mutated after first write, so the constant IS the projection).
     // Plan 035 T3: the projection math runs in MicroKat — µ/whole mixing
     // needs an explicit conversion to compile.
-    let grant = riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT;
+    let grant = riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT;
     match &charge {
         Some(charge) => {
             let remaining = grant.saturating_sub(MicroKat::from(charge.charged_kat));
-            let kat = |micro: MicroKat| riir_clippy::kat_payreq_client::render_kat(micro.0);
+            let kat = |micro: MicroKat| riir_refine::kat_payreq_client::render_kat(micro.0);
             println!(
                 "local burn:          {} charged this repo ({} tokens, watermark {})",
                 kat(MicroKat::from(charge.charged_kat)),
@@ -1277,7 +1277,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // view; it never renders as healthy, and never as out-of-sync either.
     #[cfg(feature = "kat_transport")]
     let (served, history_acct) = {
-        use riir_clippy::kat_account_client as svc;
+        use riir_refine::kat_account_client as svc;
         match svc::service_account_hex(&account.state().account_id) {
             // The 64-hex local id truncates to the ledger's 32-hex
             // AccountId; a malformed record cannot query the service.
@@ -1288,7 +1288,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 (None, None)
             }
             Some(acct) => {
-                let url = riir_clippy::kat_lease_client::service_url_for_command();
+                let url = riir_refine::kat_lease_client::service_url_for_command();
                 // 5 s, deliberately short: `account` is offline-capable and
                 // the probe fail-fasts, so an offline run costs one budget.
                 let transport = svc::HttpAccountTransport::new(&url, 5);
@@ -1314,12 +1314,12 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 let balance = match account.signing_key() {
                     Ok(key) => {
                         let payreq =
-                            riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
-                        match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct)
+                            riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
+                        match riir_refine::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct)
                         {
                             Ok(Some(claim)) => {
                                 let kat =
-                                    |micro: i64| riir_clippy::kat_payreq_client::render_kat(micro);
+                                    |micro: i64| riir_refine::kat_payreq_client::render_kat(micro);
                                 if claim.already {
                                     println!(
                                         "grant:  already claimed (balance {})",
@@ -1361,9 +1361,9 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // below, hence the cfg'd allow.)
     #[cfg_attr(not(feature = "kat_transport"), allow(unused_variables))]
     #[cfg(not(feature = "kat_transport"))]
-    let (served, history_acct): (Option<riir_clippy::kat_account_client::ServiceBalance>, Option<String>) = {
+    let (served, history_acct): (Option<riir_refine::kat_account_client::ServiceBalance>, Option<String>) = {
         if spent == 0 {
-            println!("{}", riir_clippy::kat_account::welcome_line());
+            println!("{}", riir_refine::kat_account::welcome_line());
         }
         (None, None)
     };
@@ -1377,15 +1377,15 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
         // is an honest 404), never to a fabricated page.
         #[cfg(feature = "kat_transport")]
         if let Some(acct) = history_acct.as_deref() {
-            use riir_clippy::kat_account_client::AccountTransport;
-            use riir_clippy::kat_lease_client::HttpResponse;
-            let url = riir_clippy::kat_lease_client::service_url_for_command();
-            let transport = riir_clippy::kat_account_client::HttpAccountTransport::new(&url, 5);
+            use riir_refine::kat_account_client::AccountTransport;
+            use riir_refine::kat_lease_client::HttpResponse;
+            let url = riir_refine::kat_lease_client::service_url_for_command();
+            let transport = riir_refine::kat_account_client::HttpAccountTransport::new(&url, 5);
             let lines = match transport.get_history(acct, 20) {
-                HttpResponse::Ok(body) => riir_clippy::kat_account_client::parse_history(&body)
+                HttpResponse::Ok(body) => riir_refine::kat_account_client::parse_history(&body)
                     .ok()
                     .map(|h| {
-                        riir_clippy::kat_account_client::account_history_lines(&h, spent, tokens)
+                        riir_refine::kat_account_client::account_history_lines(&h, spent, tokens)
                     }),
                 _ => None,
             };
@@ -1402,7 +1402,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
         match &served {
             Some(balance) => {
                 for line in
-                    riir_clippy::kat_account_client::service_history_lines(balance, spent, tokens)
+                    riir_refine::kat_account_client::service_history_lines(balance, spent, tokens)
                 {
                     println!("{line}");
                 }
@@ -1425,34 +1425,34 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
 /// phase's ~4s: a user asking for an update is waiting for it.
 #[cfg(feature = "kat_transport")]
 fn run_kat_update() {
-    use riir_clippy::kat_lease_client::{
+    use riir_refine::kat_lease_client::{
         run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
 
     let root = resolve_heal_root(&[]);
     let store = LeaseStore::open(&root);
     let mut charge = LeaseCharge::open(&store);
-    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let url = riir_refine::kat_lease_client::service_url_for_command();
     let transport = HttpLeaseTransport::new(&url, 30);
     let current = store.current_epoch().unwrap_or(0);
     let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
     match outcome.status {
-        riir_clippy::kat_lease_client::UpdateStatus::NotModified => {
+        riir_refine::kat_lease_client::UpdateStatus::NotModified => {
             println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
         }
-        riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
             println!(
                 "{}",
-                riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
             );
             println!(
                 "corpus lease: epoch {epoch} installed atomically — the retrieval index rebuilds on the next run"
             );
         }
-        riir_clippy::kat_lease_client::UpdateStatus::Skipped(reason) => {
+        riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
             println!("corpus lease: skipped — {reason}");
         }
-        riir_clippy::kat_lease_client::UpdateStatus::Failed(e) => {
+        riir_refine::kat_lease_client::UpdateStatus::Failed(e) => {
             eprintln!("corpus lease: {e}");
             eprintln!(
                 "corpus lease: proceeding on the local corpus (offline is a mode, not a failure)"
@@ -1514,11 +1514,11 @@ fn print_mine_push(outcome: &MinePush) {
 fn push_mining_batch(
     quiet: bool,
     url: &str,
-    transport: &riir_clippy::kat_lease_client::HttpLeaseTransport,
+    transport: &riir_refine::kat_lease_client::HttpLeaseTransport,
 ) -> MinePush {
-    use riir_clippy::kat_lease_client::{queue_outbox, LeaseTransport};
-    use riir_clippy::kat_redact::SpanOrigin;
-    use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
+    use riir_refine::kat_lease_client::{queue_outbox, LeaseTransport};
+    use riir_refine::kat_redact::SpanOrigin;
+    use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 
     let sv = !quiet; // verbose mode = the `cargo refine sync` report
     let root = resolve_heal_root(&[]);
@@ -1532,7 +1532,7 @@ fn push_mining_batch(
         }
         return MinePush::Skipped;
     }
-    let (traj, bad) = match riir_clippy::traj_store::TrajStore::open(&root) {
+    let (traj, bad) = match riir_refine::traj_store::TrajStore::open(&root) {
         Ok(t) => t,
         Err(e) => {
             if sv {
@@ -1545,7 +1545,7 @@ fn push_mining_batch(
         eprintln!("sync: {bad} corrupt row(s) skipped");
     }
     let rows = traj.dump();
-    let loaded = riir_clippy::kat_redact::RedactionGate::discover(None);
+    let loaded = riir_refine::kat_redact::RedactionGate::discover(None);
     if loaded.warning.is_some() {
         eprintln!(
             "sync: redaction policy — {}",
@@ -1554,8 +1554,8 @@ fn push_mining_batch(
     }
     // Payload v2 is SIGNED with the account key (Issue 008) — the receiver
     // derives the submitter from it, so an account is required to sync.
-    let account = match riir_clippy::kat_account::KatAccount::load(
-        &riir_clippy::kat_account::KatAccount::default_dir(),
+    let account = match riir_refine::kat_account::KatAccount::load(
+        &riir_refine::kat_account::KatAccount::default_dir(),
     ) {
         Ok(a) => a,
         Err(e) => {
@@ -1586,7 +1586,7 @@ fn push_mining_batch(
             "sync payload: {} row(s) included, {} blocked, signed as {}… (batch {})",
             payload.rows_included,
             payload.rows_blocked,
-            riir_clippy::kat_account::short_id(account.state().account_id.as_str()),
+            riir_refine::kat_account::short_id(account.state().account_id.as_str()),
             &payload.commitment[..12.min(payload.commitment.len())]
         );
     }
@@ -1599,8 +1599,8 @@ fn push_mining_batch(
         && payload.outcomes.iter().any(|o| {
             matches!(
                 o,
-                riir_clippy::kat_sync_payload::RowOutcome::Blocked {
-                    reason: riir_clippy::kat_redact::BlockReason::NoPolicy,
+                riir_refine::kat_sync_payload::RowOutcome::Blocked {
+                    reason: riir_refine::kat_redact::BlockReason::NoPolicy,
                     ..
                 }
             )
@@ -1618,7 +1618,7 @@ fn push_mining_batch(
         );
     }
     match transport.post_sync(&payload.ndjson) {
-        riir_clippy::kat_lease_client::HttpResponse::Ok(body) => {
+        riir_refine::kat_lease_client::HttpResponse::Ok(body) => {
             let mut rows_new = 0u64;
             if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
                 rows_new = v
@@ -1659,16 +1659,16 @@ fn push_mining_batch(
             // `cargo refine account` reports the grant, and a failure is
             // invisible at this layer by design (the push already landed).
             if let Ok(key) = account.signing_key() {
-                if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
+                if let Some(acct) = riir_refine::kat_account_client::service_account_hex(
                     &account.state().account_id,
                 ) {
-                    let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(url, 10);
-                    match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
+                    let payreq = riir_refine::kat_payreq_client::HttpPayreqTransport::new(url, 10);
+                    match riir_refine::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
                         Ok(Some(claim)) if !claim.already => {
                             if sv {
                                 println!(
                                     "sync: free-tier grant claimed ({})",
-                                    riir_clippy::kat_payreq_client::render_kat(claim.claimed_micro)
+                                    riir_refine::kat_payreq_client::render_kat(claim.claimed_micro)
                                 );
                             }
                         }
@@ -1683,11 +1683,11 @@ fn push_mining_batch(
             }
             // Real acceptance → advance the watermark (the pushed rows are
             // no longer "pending-unsynced").
-            let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(&payload);
+            let wm = riir_refine::kat_pending_estimator::SyncWatermark::from_payload(&payload);
             if let Err(e) = wm.save(
                 &root
                     .join(".refine")
-                    .join(riir_clippy::kat_pending_estimator::SyncWatermark::FILE_NAME),
+                    .join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME),
             ) {
                 eprintln!("sync: watermark save failed: {e}");
             }
@@ -1722,7 +1722,7 @@ fn push_mining_batch(
 /// payment links/QRs (g5). The get is the g3 diagnosis: the ACTIVE url AND
 /// its source. Local-only and ungated — works in every feature build.
 fn run_kat_config(set: bool, url: Option<&str>) {
-    use riir_clippy::kat_service_config as svc;
+    use riir_refine::kat_service_config as svc;
     let dir = svc::account_dir();
     if !set {
         // `config get` (bare `config` behaves the same — a pure read).
@@ -1800,14 +1800,14 @@ fn run_kat_config(set: bool, url: Option<&str>) {
 
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
-    use riir_clippy::kat_lease_client::{
+    use riir_refine::kat_lease_client::{
         run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
 
     let root = resolve_heal_root(&[]);
     let store = LeaseStore::open(&root);
     let mut charge = LeaseCharge::open(&store);
-    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let url = riir_refine::kat_lease_client::service_url_for_command();
     let transport = HttpLeaseTransport::new(&url, 30);
 
     // ── consent gate (owner mandate 2026-09-08) ───────────────────────
@@ -1816,9 +1816,9 @@ fn run_kat_sync() {
     // and signs the batch it refuses to send is not an opt-out. `Unset`
     // pushes exactly as this command always did — running `sync` IS the
     // consent — so only an explicit opt-out changes behaviour here.
-    let consent_dir = riir_clippy::kat_mining_consent::default_dir();
+    let consent_dir = riir_refine::kat_mining_consent::default_dir();
     let (consent, consent_warning) =
-        riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
+        riir_refine::kat_mining_consent::read_with_warning(&consent_dir);
     if let Some(w) = consent_warning {
         eprintln!("{w}");
     }
@@ -1841,7 +1841,7 @@ fn run_kat_sync() {
         println!("sync: push SKIPPED — mining is opted out on this machine");
         println!(
             "sync: consent record {} says opted out; nothing was built, signed or sent",
-            riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
+            riir_refine::kat_mining_consent::consent_path(&consent_dir).display()
         );
         println!("sync: re-enable with `cargo refine --mine` (the lease pull below still runs — a read is not a contribution)");
     } else {
@@ -1863,7 +1863,7 @@ fn run_kat_sync() {
         let meter = open_kat_meter(&[]);
         let charge = open_kat_charge(&[], meter.as_ref());
         if let Some(c) = charge.as_ref() {
-            let outcome = riir_clippy::kat_burn_client::run_burn_sync(
+            let outcome = riir_refine::kat_burn_client::run_burn_sync(
                 &root,
                 c.state().charged_kat,
                 c.state().meter_watermark_tokens,
@@ -1876,19 +1876,19 @@ fn run_kat_sync() {
     let current = store.current_epoch().unwrap_or(0);
     let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
     match outcome.status {
-        riir_clippy::kat_lease_client::UpdateStatus::NotModified => {
+        riir_refine::kat_lease_client::UpdateStatus::NotModified => {
             println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
         }
-        riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
             println!(
                 "{}",
-                riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
             );
         }
-        riir_clippy::kat_lease_client::UpdateStatus::Skipped(reason) => {
+        riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
             println!("corpus lease: skipped — {reason}");
         }
-        riir_clippy::kat_lease_client::UpdateStatus::Failed(e) => {
+        riir_refine::kat_lease_client::UpdateStatus::Failed(e) => {
             eprintln!("corpus lease: {e}");
         }
     }
@@ -1904,18 +1904,18 @@ fn run_kat_sync() {
 /// mint (G9d — client counts never mint or spend).
 #[cfg(feature = "kat_service")]
 fn run_kat_claim(sig: Option<&str>) {
-    use riir_clippy::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
+    use riir_refine::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
 
     let Some(sig) = sig else {
         eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
         std::process::exit(2);
     };
-    if !riir_clippy::kat_lease_client::validate_solana_signature(sig) {
+    if !riir_refine::kat_lease_client::validate_solana_signature(sig) {
         eprintln!("claim: --tx does not look like a Solana signature (base58, 64-88 chars)");
         std::process::exit(2);
     }
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("claim: no account ({e}) — run `cargo refine login` first");
@@ -1939,10 +1939,10 @@ fn run_kat_claim(sig: Option<&str>) {
     // honest state. Either way the CLIENT mints nothing.
     #[cfg(feature = "kat_transport")]
     {
-        use riir_clippy::kat_lease_client::LeaseTransport;
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, 10);
-        if let riir_clippy::kat_lease_client::HttpResponse::Ok(_) = transport.post_claim(&json) {
+        use riir_refine::kat_lease_client::LeaseTransport;
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_lease_client::HttpLeaseTransport::new(&url, 10);
+        if let riir_refine::kat_lease_client::HttpResponse::Ok(_) = transport.post_claim(&json) {
             println!("claim: submitted to {url} — the service verifies the five checks + mints at settlement");
             return;
         }
@@ -1956,8 +1956,8 @@ fn run_kat_claim(sig: Option<&str>) {
             );
             println!(
                 "claim: the queued claim submits when the Worker lands; payment page: {}",
-                riir_clippy::kat_lease_client::payment_url(
-                    &riir_clippy::kat_lease_client::service_url_for_command(),
+                riir_refine::kat_lease_client::payment_url(
+                    &riir_refine::kat_lease_client::service_url_for_command(),
                     &req.account_id
                 )
             );
@@ -1987,16 +1987,16 @@ fn run_kat_claim(sig: Option<&str>) {
 /// preserved for malformed records).
 #[cfg(feature = "kat_service")]
 fn service_acct_or_raw(account_id: &str) -> String {
-    riir_clippy::kat_account_client::service_account_hex(account_id)
+    riir_refine::kat_account_client::service_account_hex(account_id)
         .unwrap_or(account_id)
         .to_string()
 }
 
 fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: bool) {
-    use riir_clippy::kat_stake_client as stake;
+    use riir_refine::kat_stake_client as stake;
 
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("stake: no account ({e}) — run `cargo refine login` first");
@@ -2023,16 +2023,16 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
         }
         #[cfg(feature = "kat_transport")]
         {
-            let url = riir_clippy::kat_lease_client::service_url_for_command();
-            let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
+            let url = riir_refine::kat_lease_client::service_url_for_command();
+            let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
             let flow = match account.signing_key() {
                 Ok(key) => {
                     if let Some(posture) = restake {
-                        riir_clippy::kat_stake_client::restake_flow(
+                        riir_refine::kat_stake_client::restake_flow(
                             &transport, &key, posture, &account_id,
                         )
                     } else {
-                        riir_clippy::kat_stake_client::redeem_flow(&transport, &key, &account_id)
+                        riir_refine::kat_stake_client::redeem_flow(&transport, &key, &account_id)
                     }
                 }
                 Err(e) => Err(format!("stake: account key unreadable ({e}) — run `cargo refine login`")),
@@ -2047,7 +2047,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
             return;
         }
         #[cfg(not(feature = "kat_transport"))]
-        riir_clippy::build_stamp::refuse("stake --restake/--redeem", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("stake --restake/--redeem", &["kat_transport"]);
     }
 
     let Some(usd) = usd else {
@@ -2065,10 +2065,10 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
 
     #[cfg(feature = "kat_transport")]
     {
-        use riir_clippy::kat_stake_client::StakeOutcome;
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
-        match riir_clippy::kat_stake_client::stake_request_flow(
+        use riir_refine::kat_stake_client::StakeOutcome;
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
+        match riir_refine::kat_stake_client::stake_request_flow(
             &transport,
             &account_id,
             amount_base,
@@ -2101,7 +2101,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, amount_base, root, now_unix);
-        riir_clippy::build_stamp::refuse("stake", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("stake", &["kat_transport"]);
     }
 }
 
@@ -2109,7 +2109,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
 /// fallback renders the local-queue view (honest: no fake tranches).
 #[cfg(feature = "kat_service")]
 fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
-    use riir_clippy::kat_stake_client as stake;
+    use riir_refine::kat_stake_client as stake;
 
     // `account_id`/`now_unix` are transport-path params (the service-first
     // block below); the local-queue fallback renders from disk state alone.
@@ -2118,13 +2118,13 @@ fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
 
     #[cfg(feature = "kat_transport")]
     {
-        use riir_clippy::kat_stake_client::StakeTransport as _;
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
-        if let riir_clippy::kat_lease_client::HttpResponse::Ok(body) =
+        use riir_refine::kat_stake_client::StakeTransport as _;
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
+        if let riir_refine::kat_lease_client::HttpResponse::Ok(body) =
             transport.get_stake_info(account_id)
         {
-            match serde_json::from_slice::<riir_clippy::kat_stake_client::StakeInfo>(&body) {
+            match serde_json::from_slice::<riir_refine::kat_stake_client::StakeInfo>(&body) {
                 Ok(info) => {
                     // now_tick: the service's clock is authoritative; we
                     // render against unix seconds (the deployment's tick).
@@ -2155,8 +2155,8 @@ fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
 /// the proposal).
 #[cfg(feature = "kat_service")]
 fn run_kat_unstake() {
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("unstake: no account ({e}) — run `cargo refine login` first");
@@ -2171,13 +2171,13 @@ fn run_kat_unstake() {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
         // Issue 096 (riir-dapps): the unstake route is signature-gated —
         // the request signs with the account key (the claim key).
         let flow = match account.signing_key() {
             Ok(key) => {
-                riir_clippy::kat_stake_client::unstake_flow(&transport, &key, &account_id, &root, now_unix)
+                riir_refine::kat_stake_client::unstake_flow(&transport, &key, &account_id, &root, now_unix)
             }
             Err(e) => Err(format!("unstake: account key unreadable ({e}) — run `cargo refine login`")),
         };
@@ -2192,7 +2192,7 @@ fn run_kat_unstake() {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, root, now_unix);
-        riir_clippy::build_stamp::refuse("unstake", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("unstake", &["kat_transport"]);
     }
 }
 
@@ -2204,10 +2204,10 @@ fn run_kat_unstake() {
 /// eligibility or tallies — the ledger computes the weight that counts.
 #[cfg(feature = "kat_service")]
 fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
-    use riir_clippy::kat_vote_client as vote;
+    use riir_refine::kat_vote_client as vote;
 
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("vote: no account ({e}) — run `cargo refine login` first");
@@ -2243,10 +2243,10 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
 
     #[cfg(feature = "kat_transport")]
     {
-        use riir_clippy::kat_vote_client::VoteOutcome;
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_vote_client::HttpVoteTransport::new(&url, 10);
-        match riir_clippy::kat_vote_client::vote_flow(
+        use riir_refine::kat_vote_client::VoteOutcome;
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_vote_client::HttpVoteTransport::new(&url, 10);
+        match riir_refine::kat_vote_client::vote_flow(
             &transport,
             &account_id,
             proposal_id,
@@ -2282,7 +2282,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (account_id, signing_key, proposal_id, choice, root, now_unix);
-        riir_clippy::build_stamp::refuse("vote", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("vote", &["kat_transport"]);
     }
 }
 
@@ -2294,10 +2294,10 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
 /// bar scans, foo watches the credit land).
 #[cfg(feature = "kat_service")]
 fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
-    use riir_clippy::kat_payreq_client as payreq;
+    use riir_refine::kat_payreq_client as payreq;
 
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("pay: no account ({e}) — run `cargo refine login` first");
@@ -2311,7 +2311,7 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
             std::process::exit(1);
         }
     };
-    let short = riir_clippy::kat_account::short_id(&account.state().account_id);
+    let short = riir_refine::kat_account::short_id(&account.state().account_id);
 
     // Blank/absent --amount = ANY amount (ask 3 — the payer composes at
     // settle). A supplied amount parses KAT → micro (positive, ≤6 decimals).
@@ -2344,9 +2344,9 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
-        match riir_clippy::kat_payreq_client::pay_request_flow(
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
+        match riir_refine::kat_payreq_client::pay_request_flow(
             &transport,
             &url,
             &signing_key,
@@ -2367,16 +2367,16 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
                     // bit-exact recheck — a mismatch refuses to render the
                     // body (Proposal 011 §1), and the caveat-#3 fallback
                     // labels itself rather than passing silently.
-                    Some(riir_clippy::kat_payreq_client::SettleOutcome::Invoice(inv)) => {
+                    Some(riir_refine::kat_payreq_client::SettleOutcome::Invoice(inv)) => {
                         let recheck =
-                            riir_clippy::kat_payreq_client::recheck_invoice_qr(&inv, &outcome.url);
+                            riir_refine::kat_payreq_client::recheck_invoice_qr(&inv, &outcome.url);
                         for line in
-                            riir_clippy::kat_payreq_client::invoice_display_lines(&inv, &recheck)
+                            riir_refine::kat_payreq_client::invoice_display_lines(&inv, &recheck)
                         {
                             println!("{line}");
                         }
                     }
-                    Some(riir_clippy::kat_payreq_client::SettleOutcome::Unreadable(why)) => {
+                    Some(riir_refine::kat_payreq_client::SettleOutcome::Unreadable(why)) => {
                         println!(
                             "pay: the request settled, but the invoice row did not read back ({why}) — `account` shows the credit"
                         );
@@ -2398,7 +2398,7 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, qr, wait, short);
-        riir_clippy::build_stamp::refuse("pay", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("pay", &["kat_transport"]);
     }
 }
 
@@ -2416,8 +2416,8 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
 /// hang. The render says where the credit shows up instead.
 #[cfg(feature = "kat_service")]
 fn run_kat_faucet(qr: bool) {
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("faucet: no account ({e}) — run `cargo refine login` first");
@@ -2434,11 +2434,11 @@ fn run_kat_faucet(qr: bool) {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
-        match riir_clippy::kat_payreq_client::faucet_request_flow(&transport, &url, &signing_key) {
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
+        match riir_refine::kat_payreq_client::faucet_request_flow(&transport, &url, &signing_key) {
             Ok(outcome) => {
-                for line in riir_clippy::kat_payreq_client::faucet_display_lines(&outcome) {
+                for line in riir_refine::kat_payreq_client::faucet_display_lines(&outcome) {
                     println!("{line}");
                 }
                 if qr {
@@ -2454,13 +2454,13 @@ fn run_kat_faucet(qr: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, qr);
-        riir_clippy::build_stamp::refuse("faucet", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("faucet", &["kat_transport"]);
     }
 }
 
 /// Plan 117 as amended by riir-dapps Issue 094 D4: `cargo refine --refill` —
 /// the DEVNET-OPS faucet credit (the user daily faucet/drip tier is
-/// retired). The composition lives in [`riir_clippy::kat_refill`], which
+/// retired). The composition lives in [`riir_refine::kat_refill`], which
 /// owns both postures: the client-side D4 gate below, and the wire posture
 /// the faucet/balance legs already had (the `faucet --request` precedent —
 /// the DEPLOYMENT's cap config is the faucet's server-side gate — with the
@@ -2480,7 +2480,7 @@ fn run_kat_faucet(qr: bool) {
 ///    (explicit command — unlike the burn push, the outcome IS the code);
 ///    a posture refusal exits 1.
 fn run_kat_refill(wait_secs: u64) {
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
     // ── riir-dapps Issue 094 D4: the posture gate, FIRST ─────────────────
     // Before the account load below, so a mainnet user meets the retirement
     // sentence rather than "run `cargo refine login` first" — the refusal is
@@ -2493,15 +2493,15 @@ fn run_kat_refill(wait_secs: u64) {
     // posture comparison on this side.
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let url = riir_refine::kat_lease_client::service_url_for_command();
         // Best-effort: the account id only DECORATES the pay link, so a
         // missing/unreadable account still gets the full refusal.
-        let account_id = riir_clippy::kat_account::KatAccount::load(&dir)
+        let account_id = riir_refine::kat_account::KatAccount::load(&dir)
             .map(|a| a.state().account_id.clone())
             .unwrap_or_default();
-        let pay = riir_clippy::kat_lease_client::payment_url(&url, &account_id);
-        let refusal = riir_clippy::kat_refill::refill_refusal_lines(
-            riir_clippy::kat_refill::refill_posture(&url),
+        let pay = riir_refine::kat_lease_client::payment_url(&url, &account_id);
+        let refusal = riir_refine::kat_refill::refill_refusal_lines(
+            riir_refine::kat_refill::refill_posture(&url),
             &url,
             &pay,
         );
@@ -2512,7 +2512,7 @@ fn run_kat_refill(wait_secs: u64) {
             std::process::exit(1);
         }
     }
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("refill: no account ({e}) — run `cargo refine login` first");
@@ -2527,7 +2527,7 @@ fn run_kat_refill(wait_secs: u64) {
         }
     };
     let acct_hex = if let Some(h) =
-        riir_clippy::kat_account_client::service_account_hex(&account.state().account_id)
+        riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
     {
         h.to_string()
     } else {
@@ -2540,7 +2540,7 @@ fn run_kat_refill(wait_secs: u64) {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let url = riir_refine::kat_lease_client::service_url_for_command();
         // The crank bearer is read HERE, never inside `kat_refill` — the
         // module stays environment-free (the wetrun caveat #2 rule), and
         // the operator's token IS the crank authorization (the module doc
@@ -2549,29 +2549,29 @@ fn run_kat_refill(wait_secs: u64) {
             .ok()
             .filter(|t| !t.is_empty());
         let trigger_crank = crank_bearer.is_some();
-        let transport = riir_clippy::kat_refill::HttpRefillTransport::new(
+        let transport = riir_refine::kat_refill::HttpRefillTransport::new(
             &url,
             10,
             signing_key.clone(),
             crank_bearer,
         );
-        let outcome = riir_clippy::kat_refill::refill_flow(
+        let outcome = riir_refine::kat_refill::refill_flow(
             &transport,
             &signing_key,
             &acct_hex,
             trigger_crank,
             wait_secs,
-            std::time::Duration::from_secs(riir_clippy::kat_refill::REFILL_POLL_INTERVAL_SECS),
+            std::time::Duration::from_secs(riir_refine::kat_refill::REFILL_POLL_INTERVAL_SECS),
         );
-        for line in riir_clippy::kat_refill::refill_display_lines(&outcome, &url) {
+        for line in riir_refine::kat_refill::refill_display_lines(&outcome, &url) {
             println!("{line}");
         }
         // dapps Issue 029 Rider 1 (client half): the same service label,
         // read through the account transport AFTER the flow — a dead
         // service fails the flow above with its own honest errors and the
         // label never adds a second timeout ahead of them.
-        let svc_transport = riir_clippy::kat_account_client::HttpAccountTransport::new(&url, 5);
-        if let Some(line) = riir_clippy::kat_account_client::service_line_via(&svc_transport) {
+        let svc_transport = riir_refine::kat_account_client::HttpAccountTransport::new(&url, 5);
+        if let Some(line) = riir_refine::kat_account_client::service_line_via(&svc_transport) {
             println!("{line}");
         }
 
@@ -2585,12 +2585,12 @@ fn run_kat_refill(wait_secs: u64) {
             let root = resolve_heal_root(&[]);
             let ack_path = root
                 .join(".refine")
-                .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
-            let (mut ack, warning) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+                .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+            let (mut ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = warning {
                 eprintln!("{w}");
             }
-            if riir_clippy::kat_refill::record_server_balance(&mut ack, b.balance_micro) {
+            if riir_refine::kat_refill::record_server_balance(&mut ack, b.balance_micro) {
                 match ack.save(&ack_path) {
                     Ok(()) => {
                         println!("refill: soft-gate input refreshed — {}", ack_path.display());
@@ -2599,12 +2599,12 @@ fn run_kat_refill(wait_secs: u64) {
                 }
             }
         }
-        std::process::exit(riir_clippy::kat_refill::refill_exit_code(&outcome));
+        std::process::exit(riir_refine::kat_refill::refill_exit_code(&outcome));
     }
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, acct_hex, wait_secs);
-        riir_clippy::build_stamp::refuse("--refill", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("--refill", &["kat_transport"]);
     }
 }
 
@@ -2640,11 +2640,11 @@ pub fn show(p: &P) -> String {
 "#;
 
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
-impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
+impl riir_refine::kat_wetrun::LocalLegs for CliLocalLegs {
     fn scored_cycle(&mut self) -> Result<(u32, i64), String> {
-        use riir_clippy::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
-        use riir_clippy::edit_emitter::apply_edits;
-        use riir_clippy::kat_meter::{KatCharge, KatMeter};
+        use riir_refine::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
+        use riir_refine::edit_emitter::apply_edits;
+        use riir_refine::kat_meter::{KatCharge, KatMeter};
 
         let parsed = syn::parse_file(WETRUN_FIXTURE)
             .map_err(|e| format!("the seeded fixture did not parse: {e}"))?;
@@ -2680,17 +2680,17 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
 
     #[cfg(feature = "latent_retrieval")]
     fn sync_payload(&mut self) -> Result<(String, usize, u32), String> {
-        use riir_clippy::kat_redact::SpanOrigin;
-        use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
+        use riir_refine::kat_redact::SpanOrigin;
+        use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 
-        let account = riir_clippy::kat_account::KatAccount::load(
-            &riir_clippy::kat_account::KatAccount::default_dir(),
+        let account = riir_refine::kat_account::KatAccount::load(
+            &riir_refine::kat_account::KatAccount::default_dir(),
         )
         .map_err(|e| format!("no account ({e})"))?;
         let key = account
             .signing_key()
             .map_err(|e| format!("account key unusable ({e})"))?;
-        let (traj, _bad) = riir_clippy::traj_store::TrajStore::open(&self.root)
+        let (traj, _bad) = riir_refine::traj_store::TrajStore::open(&self.root)
             .map_err(|e| format!("trajectory store unreadable: {e}"))?;
         let rows = traj.dump();
         if rows.is_empty() {
@@ -2700,12 +2700,12 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
                     .to_string(),
             );
         }
-        let loaded = riir_clippy::kat_redact::RedactionGate::discover(None);
+        let loaded = riir_refine::kat_redact::RedactionGate::discover(None);
         let payload = SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &key).build(&rows);
         Ok((
             payload.ndjson,
             payload.rows_included,
-            riir_clippy::kat_sync_payload::PAYLOAD_VERSION,
+            riir_refine::kat_sync_payload::PAYLOAD_VERSION,
         ))
     }
 
@@ -2727,21 +2727,21 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
 /// Proposal 011 §7 / T4.1+T4.2 (Plan 066): `cargo refine wetrun [--dry-run]`.
 ///
 /// The network is classified from the RESOLVED service URL and the
-/// admission decision is [`riir_clippy::kat_wetrun::admit`] — mainnet is
+/// admission decision is [`riir_refine::kat_wetrun::admit`] — mainnet is
 /// refused with **no override**, and an unclassifiable host is refused the
 /// same way (fail-closed). `--dry-run` runs steps 1+6 only and is admitted
 /// everywhere.
 #[cfg(feature = "kat_service")]
 fn run_kat_wetrun(dry_run: bool) {
-    use riir_clippy::kat_wetrun::RunMode;
+    use riir_refine::kat_wetrun::RunMode;
     // Verdict is consumed only by the transport-gated wetrun leg; importing
     // it unconditionally warns in kat_service-without-kat_transport builds
     // (the shipping release set).
     #[cfg(feature = "kat_transport")]
-    use riir_clippy::kat_wetrun::Verdict;
+    use riir_refine::kat_wetrun::Verdict;
 
-    let url = riir_clippy::kat_lease_client::service_url_for_command();
-    let network = riir_clippy::kat_wetrun::classify_service_url(&url);
+    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let network = riir_refine::kat_wetrun::classify_service_url(&url);
     let mode = if dry_run {
         RunMode::DryRun
     } else {
@@ -2750,13 +2750,13 @@ fn run_kat_wetrun(dry_run: bool) {
 
     // Admission BEFORE anything else — including before the account load,
     // so a refused mainnet run cannot be confused with a missing key.
-    if let Err(why) = riir_clippy::kat_wetrun::admit(network, mode) {
+    if let Err(why) = riir_refine::kat_wetrun::admit(network, mode) {
         eprintln!("{why}");
         std::process::exit(2);
     }
 
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("wetrun: no account ({e}) — run `cargo refine login` first");
@@ -2771,7 +2771,7 @@ fn run_kat_wetrun(dry_run: bool) {
         }
     };
     let Some(acct_hex) =
-        riir_clippy::kat_account_client::service_account_hex(&account.state().account_id)
+        riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
     else {
         eprintln!(
             "wetrun: the local account id is not the ledger's 32-hex shape — refusing to \
@@ -2798,11 +2798,11 @@ fn run_kat_wetrun(dry_run: bool) {
             std::process::exit(2);
         }
         let transport =
-            riir_clippy::kat_wetrun::HttpWetrunTransport::new(&url, 30, signing_key, crank_bearer);
+            riir_refine::kat_wetrun::HttpWetrunTransport::new(&url, 30, signing_key, crank_bearer);
         let mut legs = CliLocalLegs {
             root: resolve_heal_root(&[]),
         };
-        let report = riir_clippy::kat_wetrun::run(&transport, &mut legs, network, mode, &acct_hex);
+        let report = riir_refine::kat_wetrun::run(&transport, &mut legs, network, mode, &acct_hex);
         for step in &report.steps {
             println!("── step {} ──", step.step.label());
             for line in &step.lines {
@@ -2815,7 +2815,7 @@ fn run_kat_wetrun(dry_run: bool) {
             // unlabelled `1400000` next to the word "supply" is the
             // `.issues/081` display class, and this line is the one a human
             // reads when the G-WET gate reds.
-            let kat = riir_clippy::kat_payreq_client::render_kat;
+            let kat = riir_refine::kat_payreq_client::render_kat;
             println!(
                 "G-WET supply: epoch {} mint {} burn {} pool_paid {} pool_avail {} → \
                  mint {} burn {} pool_paid {} pool_avail {}",
@@ -2840,15 +2840,15 @@ fn run_kat_wetrun(dry_run: bool) {
     #[cfg(not(feature = "kat_transport"))]
     {
         let _ = (signing_key, acct_hex, network);
-        riir_clippy::build_stamp::refuse("wetrun", &["kat_transport"]);
+        riir_refine::build_stamp::refuse("wetrun", &["kat_transport"]);
     }
 }
 
 /// P015 Phase 2 (Plan 127): `cargo refine replay` — the Max tier's earn
 /// lane. One command = one lease → local replay of every item → one signed
-/// verdict per item. The judgment half is [`riir_clippy::kat_replay`]
+/// verdict per item. The judgment half is [`riir_refine::kat_replay`]
 /// (step-0 canary hash check + the pinned rate rule over the real clippy
-/// oracle); the byte movers are [`riir_clippy::kat_replay_client`].
+/// oracle); the byte movers are [`riir_refine::kat_replay_client`].
 ///
 /// Gates (in order):
 /// 1. kill switch `RIIR_HEAL_REPLAY=0` — disabled lanes exit 0 quietly;
@@ -2869,10 +2869,10 @@ fn run_kat_wetrun(dry_run: bool) {
     feature = "latent_retrieval"
 ))]
 fn run_kat_replay() {
-    use riir_clippy::kat_replay::{
+    use riir_refine::kat_replay::{
         ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
     };
-    use riir_clippy::kat_replay_client::{
+    use riir_refine::kat_replay_client::{
         HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
     };
     use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
@@ -2886,8 +2886,8 @@ fn run_kat_replay() {
     }
 
     // 2. Login — load-only (the wetrun precedent for signing commands).
-    let dir = riir_clippy::kat_account::KatAccount::default_dir();
-    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("replay: no account ({e}) — run `cargo refine login` first");
@@ -2904,9 +2904,9 @@ fn run_kat_replay() {
 
     // 3. Mining consent — the push-half posture: OptedOut refuses, Unset
     //    proceeds (running the command IS the consent).
-    let consent_dir = riir_clippy::kat_mining_consent::default_dir();
+    let consent_dir = riir_refine::kat_mining_consent::default_dir();
     let (consent, consent_warning) =
-        riir_clippy::kat_mining_consent::read_with_warning(&consent_dir);
+        riir_refine::kat_mining_consent::read_with_warning(&consent_dir);
     if let Some(w) = consent_warning {
         eprintln!("{w}");
     }
@@ -2914,7 +2914,7 @@ fn run_kat_replay() {
         eprintln!(
             "replay: SKIPPED — mining is opted out on this machine ({}); verdicts are \
              contributions to the same economy the sync push feeds",
-            riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
+            riir_refine::kat_mining_consent::consent_path(&consent_dir).display()
         );
         eprintln!("replay: re-enable with `cargo refine --mine`");
         std::process::exit(2);
@@ -2933,10 +2933,10 @@ fn run_kat_replay() {
     println!(
         "replay: toolchain {} — fingerprint {}…",
         toolchain_display(),
-        riir_clippy::kat_replay::hex32_short(&local_fp)
+        riir_refine::kat_replay::hex32_short(&local_fp)
     );
 
-    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let url = riir_refine::kat_lease_client::service_url_for_command();
     let transport = HttpReplayTransport::new(&url, 60);
     let ack = match request_lease(&transport, &signing_key, REPLAY_LEASE_LIMIT) {
         Ok(a) => a,
@@ -2968,7 +2968,7 @@ fn run_kat_replay() {
                  verdicts under a different toolchain are not comparable and are refused \
                  unscored server-side. Nothing was compiled or submitted.",
                 &ack.items[0].toolchain_fingerprint[..16],
-                riir_clippy::kat_replay::hex32_short(&local_fp),
+                riir_refine::kat_replay::hex32_short(&local_fp),
                 toolchain_display()
             );
             std::process::exit(2);
@@ -2981,7 +2981,7 @@ fn run_kat_replay() {
         std::process::exit(2);
     }
 
-    let oracle = riir_clippy::draft::clippy_oracle::ClippyOracle::new();
+    let oracle = riir_refine::draft::clippy_oracle::ClippyOracle::new();
     if !oracle.is_available() {
         eprintln!("replay: cargo is not on PATH — the oracle cannot measure a verdict");
         std::process::exit(1);
@@ -3055,7 +3055,7 @@ fn run_kat_replay() {
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn print_qr(url: &str) {
-    let qr = riir_clippy::kat_lease_client::render_qr_ascii(url);
+    let qr = riir_refine::kat_lease_client::render_qr_ascii(url);
     if !qr.is_empty() {
         println!("{qr}");
     }
@@ -3065,15 +3065,15 @@ fn print_qr(url: &str) {
 /// Idempotent by construction: the `.migrated` rename is the fence — a
 /// second run sees no envelope and does nothing.
 #[cfg(feature = "latent_retrieval")]
-fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
-    use riir_clippy::memory::EvidenceTier;
-    use riir_clippy::traj_store::TrajRowDoc;
+fn migrate_envelope_once(store: &riir_refine::traj_store::TrajStore) {
+    use riir_refine::memory::EvidenceTier;
+    use riir_refine::traj_store::TrajRowDoc;
 
     let envelope = default_memory_path();
     if !envelope.exists() || !store.dump().is_empty() {
         return; // nothing to migrate from, or the store already has history
     }
-    let mut mem = riir_clippy::memory::LatentFixMemory::default();
+    let mut mem = riir_refine::memory::LatentFixMemory::default();
     if let Err(e) = mem.load(&envelope) {
         eprintln!(
             "self-evolve: migration skipped — unreadable envelope ({}): {e}",
@@ -3099,8 +3099,8 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
             },
             last_run_id: "migrated".to_string(),
             last_seen_at: 0,
-            elo: riir_clippy::traj_store::default_elo(),
-            span_elo: riir_clippy::traj_store::default_elo(),
+            elo: riir_refine::traj_store::default_elo(),
+            span_elo: riir_refine::traj_store::default_elo(),
             component: t.component,
             journey_runs: 0,
             journey_taint_sum: 0,
@@ -3149,7 +3149,7 @@ impl ReopenTrigger067 {
     /// Note one queried lint key (the key the store is addressed by at
     /// apply/record time — rule id in the clippy lane, `code:strategy` in
     /// the compile lane). Logs at most once per key per run.
-    fn note(&mut self, store: &riir_clippy::traj_store::TrajStore, lint_key: &str) {
+    fn note(&mut self, store: &riir_refine::traj_store::TrajStore, lint_key: &str) {
         let density = self
             .density
             .get_or_insert_with(|| store.certified_density());
@@ -3171,14 +3171,14 @@ impl ReopenTrigger067 {
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
 #[allow(clippy::too_many_arguments)] // the existing record shape + the one attribution param
 fn record_traj(
-    store: &Option<riir_clippy::traj_store::TrajStore>,
+    store: &Option<riir_refine::traj_store::TrajStore>,
     rule_id: &str,
     restore: &str,
     replacement: &str,
     success: bool,
     verified: bool,
     run_id: &str,
-    component: Option<riir_clippy::component::ComponentClass>,
+    component: Option<riir_refine::component::ComponentClass>,
 ) {
     if let Some(store) = store {
         if let Err(e) = store.record_classified(
@@ -3201,14 +3201,14 @@ fn record_traj(
 /// the drafter produced a defective fix — W-class.
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
 fn record_traj_fail(
-    store: &Option<riir_clippy::traj_store::TrajStore>,
+    store: &Option<riir_refine::traj_store::TrajStore>,
     rule_id: &str,
     restore: &str,
     replacement: &str,
     run_id: &str,
 ) {
-    let class = riir_clippy::component::classify(&riir_clippy::component::FailureSignal::reverted(
-        riir_clippy::component::RevertKind::CompileGate,
+    let class = riir_refine::component::classify(&riir_refine::component::FailureSignal::reverted(
+        riir_refine::component::RevertKind::CompileGate,
     ));
     record_traj(
         store,
@@ -3230,8 +3230,8 @@ fn record_traj_fail(
 /// the full rationale).
 #[cfg(feature = "latent_retrieval")]
 fn pair_fail_streak(
-    store: &Option<riir_clippy::traj_store::TrajStore>,
-    memory: &riir_clippy::memory::LatentFixMemory,
+    store: &Option<riir_refine::traj_store::TrajStore>,
+    memory: &riir_refine::memory::LatentFixMemory,
     rule_id: &str,
     restore: &str,
     replacement: &str,
@@ -3247,7 +3247,7 @@ fn pair_fail_streak(
 /// envelopes written by heavier builds carry the same verdicts.
 #[cfg(not(feature = "latent_retrieval"))]
 fn pair_fail_streak(
-    memory: &riir_clippy::memory::LatentFixMemory,
+    memory: &riir_refine::memory::LatentFixMemory,
     rule_id: &str,
     _restore: &str,
     replacement: &str,
@@ -3324,11 +3324,11 @@ const ORACLE_NOTE: Option<&str> = Some(
 /// `collect_edits` call sites (feature-gated identically).
 fn rule_context_note(rule_id: &str) -> Option<&'static str> {
     #[cfg(feature = "rust_perf")]
-    if let Some(note) = riir_clippy::domains::rust_perf::proposers::context_note(rule_id) {
+    if let Some(note) = riir_refine::domains::rust_perf::proposers::context_note(rule_id) {
         return Some(note);
     }
     #[cfg(feature = "clippy_lints")]
-    if let Some(note) = riir_clippy::domains::clippy_lints::proposers::context_note(rule_id) {
+    if let Some(note) = riir_refine::domains::clippy_lints::proposers::context_note(rule_id) {
         return Some(note);
     }
     let _ = rule_id;
@@ -3342,12 +3342,12 @@ fn rule_context_note(rule_id: &str) -> Option<&'static str> {
 fn write_with_fmt(
     file: &Path,
     current: &str,
-    decision: Option<riir_clippy::fmt::FmtDecision>,
+    decision: Option<riir_refine::fmt::FmtDecision>,
     edition: &str,
     write: bool,
-    fmt_summary: &mut riir_clippy::fmt::FmtSummary,
+    fmt_summary: &mut riir_refine::fmt::FmtSummary,
 ) -> Option<String> {
-    use riir_clippy::fmt::FmtDecision;
+    use riir_refine::fmt::FmtDecision;
     if !write {
         // Dry run: report the plan only (nothing written).
         let decision = decision?;
@@ -3374,7 +3374,7 @@ fn write_with_fmt(
     });
     let decision = decision?;
     match decision {
-        FmtDecision::Format => match riir_clippy::fmt::apply(file, edition) {
+        FmtDecision::Format => match riir_refine::fmt::apply(file, edition) {
             Ok(()) => {
                 fmt_summary.formatted += 1;
                 Some("formatted".to_string())
@@ -4821,8 +4821,8 @@ fn parse_args() -> Args {
     // reject rather than let a scan path double as a missing value. (c)
     // standalone beside the other consent modes: reject a --mine/--unmine
     // combo instead of silently skipping one of them.
-    if riir_clippy::kat_stats_consent::flags_conflict(args.stats_on, args.stats_off) {
-        eprintln!("{}", riir_clippy::kat_stats_consent::CONFLICT_MESSAGE);
+    if riir_refine::kat_stats_consent::flags_conflict(args.stats_on, args.stats_off) {
+        eprintln!("{}", riir_refine::kat_stats_consent::CONFLICT_MESSAGE);
         std::process::exit(2);
     }
     if args.stats_flag && !args.stats_on && !args.stats_off && !args.paths.is_empty() {
@@ -5263,7 +5263,7 @@ fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
     // Section 1 — the rustc_errors per-code queue (Plan 091, unchanged).
     #[cfg(feature = "rustc_errors")]
     {
-        use riir_clippy::domains::rustc_errors::evolve;
+        use riir_refine::domains::rustc_errors::evolve;
         let dir = evolve::misses_dir(&root);
         // rustc trajectory keys are "{code}:{strategy_id}" (the compile
         // domain's documented convention — the only ':'-shaped keys the
@@ -5282,8 +5282,8 @@ fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
     let mut known: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for (domain, rules) in &sections {
         known.extend(rules.iter().map(String::as_str));
-        let rows = riir_clippy::frontier_report::domain_queue(rules, &outcomes);
-        let section = riir_clippy::frontier_report::render_domain_queue(domain, &rows, rules.len());
+        let rows = riir_refine::frontier_report::domain_queue(rules, &outcomes);
+        let section = riir_refine::frontier_report::render_domain_queue(domain, &rows, rules.len());
         print_report_capped(&section, limit);
     }
 
@@ -5357,12 +5357,12 @@ fn print_report_capped(report: &str, limit: Option<usize>) {
 /// in-memory table reads (cold path, no cargo involved).
 #[allow(clippy::vec_init_then_push)] // every arm is feature-gated; a vec![] literal cannot carry cfg'd elements
 fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
-    use riir_clippy::HealEntry;
+    use riir_refine::HealEntry;
     let mut out = Vec::new();
     #[cfg(feature = "clippy_lints")]
     out.push((
         "clippy",
-        riir_clippy::build_seed_corpus()
+        riir_refine::build_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5371,7 +5371,7 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
     #[cfg(feature = "rust_perf")]
     out.push((
         "perf",
-        riir_clippy::build_perf_seed_corpus()
+        riir_refine::build_perf_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5380,7 +5380,7 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
     #[cfg(feature = "kernel_heal")]
     out.push((
         "kernel",
-        riir_clippy::build_kernel_seed_corpus()
+        riir_refine::build_kernel_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5389,7 +5389,7 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
     #[cfg(feature = "sec")]
     out.push((
         "sec",
-        riir_clippy::build_sec_seed_corpus()
+        riir_refine::build_sec_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5398,7 +5398,7 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
     #[cfg(feature = "docker")]
     out.push((
         "docker",
-        riir_clippy::build_docker_seed_corpus()
+        riir_refine::build_docker_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5407,7 +5407,7 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
     #[cfg(feature = "shader_perf")]
     out.push((
         "shader",
-        riir_clippy::build_shader_seed_corpus()
+        riir_refine::build_shader_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -5439,7 +5439,7 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
     }
     #[cfg(feature = "latent_retrieval")]
     if root.join(".refine").join("trajectories.kv").exists() {
-        if let Ok((store, _)) = riir_clippy::traj_store::TrajStore::open(root) {
+        if let Ok((store, _)) = riir_refine::traj_store::TrajStore::open(root) {
             let mut out = std::collections::BTreeMap::new();
             for r in store.dump() {
                 sum_into(
@@ -5452,7 +5452,7 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
             return out;
         }
     }
-    let mut mem = riir_clippy::memory::LatentFixMemory::default();
+    let mut mem = riir_refine::memory::LatentFixMemory::default();
     if mem.load(&default_memory_path()).is_err() {
         return std::collections::BTreeMap::new();
     }
@@ -5484,8 +5484,8 @@ fn load_rule_outcomes(root: &Path) -> std::collections::BTreeMap<String, (usize,
 /// fan-out/fix dispatch, it never deletes the entry.
 fn run_active_set_cmd(args: &Args) {
     let root = resolve_heal_root(&args.paths);
-    let path = root.join(riir_clippy::active_set::ACTIVE_SET_FILE);
-    let mut set = match riir_clippy::active_set::ActiveSet::load(&path) {
+    let path = root.join(riir_refine::active_set::ACTIVE_SET_FILE);
+    let mut set = match riir_refine::active_set::ActiveSet::load(&path) {
         Ok(set) => set,
         Err(e) => {
             eprintln!("active-set: {e}");
@@ -5498,7 +5498,7 @@ fn run_active_set_cmd(args: &Args) {
             println!("  (empty — the default posture; nothing demoted, no cap binds)");
             return;
         }
-        for key in riir_clippy::active_set::KNOWN_DOMAIN_KEYS {
+        for key in riir_refine::active_set::KNOWN_DOMAIN_KEYS {
             let rules = set.demoted_rules(key);
             if rules.is_empty() {
                 continue;
@@ -5577,10 +5577,10 @@ fn run_active_set_cmd(args: &Args) {
             eprintln!("active-set: cap must be `domain:N` (e.g. clippy:40), got {id:?}");
             std::process::exit(2);
         };
-        if !riir_clippy::active_set::KNOWN_DOMAIN_KEYS.contains(&domain) {
+        if !riir_refine::active_set::KNOWN_DOMAIN_KEYS.contains(&domain) {
             eprintln!(
                 "active-set: unknown domain {domain:?} — known keys: {}",
-                riir_clippy::active_set::KNOWN_DOMAIN_KEYS.join(", ")
+                riir_refine::active_set::KNOWN_DOMAIN_KEYS.join(", ")
             );
             std::process::exit(2);
         }
@@ -5611,17 +5611,17 @@ fn run_active_set_cmd(args: &Args) {
 }
 
 /// Parse an operator `domain:rule` id for the active-set commands against
-/// [`riir_clippy::active_set::KNOWN_DOMAIN_KEYS`].
+/// [`riir_refine::active_set::KNOWN_DOMAIN_KEYS`].
 fn parse_active_set_id(id: &str) -> Result<(String, String), String> {
     let Some((domain, rule)) = id.split_once(':') else {
         return Err(format!(
             "id must be `domain:rule` (e.g. clippy:manual_div_ceil), got {id:?}"
         ));
     };
-    if !riir_clippy::active_set::KNOWN_DOMAIN_KEYS.contains(&domain) {
+    if !riir_refine::active_set::KNOWN_DOMAIN_KEYS.contains(&domain) {
         return Err(format!(
             "unknown domain {domain:?} — known keys: {}",
-            riir_clippy::active_set::KNOWN_DOMAIN_KEYS.join(", ")
+            riir_refine::active_set::KNOWN_DOMAIN_KEYS.join(", ")
         ));
     }
     if rule.is_empty() {
@@ -5638,7 +5638,7 @@ fn parse_active_set_id(id: &str) -> Result<(String, String), String> {
 /// admission predicate stays deferred until a recorded re-arm fires (a
 /// nondeterminism source in the heal path or the entropy kernel).
 fn run_gate_calibration() {
-    use riir_clippy::gate_calibration as gc;
+    use riir_refine::gate_calibration as gc;
     let hist = std::path::Path::new(gc::SCORE_HISTORY_JSONL);
     let Ok(text) = std::fs::read_to_string(hist) else {
         eprintln!(
@@ -5699,7 +5699,7 @@ fn run_gate_calibration() {
                 if line.is_empty() {
                     continue;
                 }
-                match serde_json::from_str::<riir_clippy::frontier_report::FrontierSnapshot>(line)
+                match serde_json::from_str::<riir_refine::frontier_report::FrontierSnapshot>(line)
                 {
                     Ok(snap) => snapshots.push(snap),
                     Err(_) => bad_rows += 1,
@@ -5721,7 +5721,7 @@ fn run_necessity_bench(
     smoke: bool,
     forced_rule: Option<String>,
 ) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
 
     let oracle = sb::draft_oracle();
     if !oracle.is_available() {
@@ -5811,7 +5811,7 @@ fn run_necessity_bench(
 /// refused, never appended.
 #[cfg(feature = "score_bench")]
 fn run_score_bench(generation: u8) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
 
     // Generations 4 (Plan 093) and 5 (Plan 094) are the compile-domain and
     // perf-domain runners — neither uses the clippy oracle. Dispatch before
@@ -5836,7 +5836,7 @@ fn run_score_bench(generation: u8) {
         // Issue 137: the CRB corruption ladder — own runner, no clippy
         // oracle, never appended to the heal score history (the gen-4/5
         // dispatch shape).
-        riir_clippy::score_bench::localization::run_generation9_panel();
+        riir_refine::score_bench::localization::run_generation9_panel();
         return;
     }
 
@@ -5961,8 +5961,8 @@ fn run_score_bench(generation: u8) {
 #[cfg(feature = "score_bench")]
 fn admission_gate(
     generation: u8,
-    score: &riir_clippy::score_bench::BenchScore,
-    history_before: &[riir_clippy::score_bench::report::HistoryRecord],
+    score: &riir_refine::score_bench::BenchScore,
+    history_before: &[riir_refine::score_bench::report::HistoryRecord],
 ) -> Result<(), String> {
     if generation < 2 || history_before.iter().any(|r| r.generation == generation) {
         return Ok(());
@@ -5996,7 +5996,7 @@ fn admission_gate(
     else {
         return Err(format!(
             "generation v{generation} admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
-            riir_clippy::score_bench::report::HISTORY_JSONL
+            riir_refine::score_bench::report::HISTORY_JSONL
         ));
     };
     if score.heal_rate >= v1_rate {
@@ -6025,10 +6025,10 @@ fn admission_gate(
 #[cfg(feature = "score_bench")]
 fn finish_score_bench(
     generation: u8,
-    score: &riir_clippy::score_bench::BenchScore,
-    strata: Option<Vec<riir_clippy::score_bench::ProvenanceStratum>>,
+    score: &riir_refine::score_bench::BenchScore,
+    strata: Option<Vec<riir_refine::score_bench::ProvenanceStratum>>,
 ) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
 
     let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
     let mut rec = sb::report::HistoryRecord::from_score(score, sb::report::git_sha())
@@ -6053,11 +6053,11 @@ fn finish_score_bench(
     // printed + appended to the jsonl row (additive; the store mirror drops
     // it — the instrumentation law). Attribution through the compiled
     // rule→domain table. Computed BEFORE the rows are moved into the record.
-    let demo = riir_clippy::demonstrability::from_rule_outcomes(&rule_read.rows);
+    let demo = riir_refine::demonstrability::from_rule_outcomes(&rule_read.rows);
     rec = rec.with_rule_outcomes(rule_read.rows);
     print!(
         "{}",
-        riir_clippy::demonstrability::render_column(&demo)
+        riir_refine::demonstrability::render_column(&demo)
     );
     rec = rec.with_demonstrability(demo);
     // Issue 098 T4 — the cross-OOO axis on the console (the row carries it
@@ -6098,9 +6098,9 @@ fn finish_score_bench(
             .map(PathBuf::from)
             .or_else(|_| std::env::current_dir())
             .unwrap_or_default();
-        match riir_clippy::frontier_report::append_snapshot_at_frontier(
+        match riir_refine::frontier_report::append_snapshot_at_frontier(
             &root,
-            std::path::Path::new(riir_clippy::frontier_report::SNAPSHOTS_JSONL),
+            std::path::Path::new(riir_refine::frontier_report::SNAPSHOTS_JSONL),
         ) {
             Ok(outcome) => println!("frontier snapshot (089 T4 bench tail): {outcome}"),
             Err(e) => {
@@ -6180,9 +6180,9 @@ fn finish_score_bench(
 /// as such in the plan).
 #[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
 fn run_score_bench_compile() {
-    use riir_clippy::domains::rustc_errors::composite;
-    use riir_clippy::domains::rustc_errors::corpus_gen::{territory_of, Territory};
-    use riir_clippy::score_bench as sb;
+    use riir_refine::domains::rustc_errors::composite;
+    use riir_refine::domains::rustc_errors::corpus_gen::{territory_of, Territory};
+    use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
 
     let specs = match sb::generations::v4_freeze_status() {
@@ -6200,7 +6200,7 @@ fn run_score_bench_compile() {
         specs.len()
     );
 
-    let work_root = std::env::temp_dir().join("riir_clippy_score_bench_gen4");
+    let work_root = std::env::temp_dir().join("riir_refine_score_bench_gen4");
     let _ = std::fs::create_dir_all(&work_root);
 
     let mut members_total = 0usize;
@@ -6341,7 +6341,7 @@ fn run_score_bench_compile() {
 /// a cross-domain non-vacuity floor, recorded as such in the plan.
 #[cfg(feature = "score_bench")]
 fn run_score_bench_perf() {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
 
     let specs = match sb::generations::v5_freeze_status() {
@@ -6545,10 +6545,10 @@ fn run_score_bench_perf() {
 /// (resolved vocabulary lints / vocabulary lints before, within each k).
 #[cfg(feature = "score_bench")]
 fn print_per_k_solve_rates(
-    fixtures: &[riir_clippy::score_bench::BenchFixture],
-    score: &riir_clippy::score_bench::BenchScore,
+    fixtures: &[riir_refine::score_bench::BenchFixture],
+    score: &riir_refine::score_bench::BenchScore,
 ) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
     let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
         score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
@@ -6587,10 +6587,10 @@ fn print_per_k_solve_rates(
 /// the measured organic yield, never padded.
 #[cfg(feature = "score_bench")]
 fn print_v6_territory_rates(
-    fixtures: &[riir_clippy::score_bench::BenchFixture],
-    score: &riir_clippy::score_bench::BenchScore,
+    fixtures: &[riir_refine::score_bench::BenchFixture],
+    score: &riir_refine::score_bench::BenchScore,
 ) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
     let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
         score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
@@ -6626,10 +6626,10 @@ fn print_v6_territory_rates(
 /// reported, never asserted — the M5 admission gate carries the decision.
 #[cfg(feature = "score_bench")]
 fn print_v7_chain_tables(
-    fixtures: &[riir_clippy::score_bench::BenchFixture],
-    score: &riir_clippy::score_bench::BenchScore,
+    fixtures: &[riir_refine::score_bench::BenchFixture],
+    score: &riir_refine::score_bench::BenchScore,
 ) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
     let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
         score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
@@ -6680,10 +6680,10 @@ fn print_v7_chain_tables(
 /// measurement: the aggregate axes above price what these rows carry.
 #[cfg(feature = "score_bench")]
 fn print_v8_shaped_table(
-    fixtures: &[riir_clippy::score_bench::BenchFixture],
-    score: &riir_clippy::score_bench::BenchScore,
+    fixtures: &[riir_refine::score_bench::BenchFixture],
+    score: &riir_refine::score_bench::BenchScore,
 ) {
-    use riir_clippy::score_bench as sb;
+    use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
     let by_id: std::collections::HashMap<&str, &sb::FixtureOutcome> =
         score.outcomes.iter().map(|o| (o.id.as_str(), o)).collect();
@@ -6792,33 +6792,33 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
     match domain {
         #[cfg(feature = "clippy_lints")]
         "clippy_lints" => {
-            Some(u32::try_from(riir_clippy::build_seed_corpus().entries.len()).unwrap_or(u32::MAX))
+            Some(u32::try_from(riir_refine::build_seed_corpus().entries.len()).unwrap_or(u32::MAX))
         }
         #[cfg(feature = "rust_perf")]
         "rust_perf" => Some(
-            u32::try_from(riir_clippy::build_perf_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+            u32::try_from(riir_refine::build_perf_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "kernel_heal")]
         "kernel_opt" => Some(
-            u32::try_from(riir_clippy::build_kernel_seed_corpus().entries.len())
+            u32::try_from(riir_refine::build_kernel_seed_corpus().entries.len())
                 .unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "sec")]
         "sec" => Some(
-            u32::try_from(riir_clippy::build_sec_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+            u32::try_from(riir_refine::build_sec_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "docker")]
         "docker" => Some(
-            u32::try_from(riir_clippy::build_docker_seed_corpus().entries.len())
+            u32::try_from(riir_refine::build_docker_seed_corpus().entries.len())
                 .unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "dist")]
         "dist" => Some(
-            u32::try_from(riir_clippy::build_dist_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+            u32::try_from(riir_refine::build_dist_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         #[cfg(feature = "shader_perf")]
         "shader_perf" => Some(
-            u32::try_from(riir_clippy::build_shader_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+            u32::try_from(riir_refine::build_shader_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
         _ => None,
     }
@@ -6876,7 +6876,7 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 /// Issue 119 T1 — the I/O half of the coverage-debt sweep.
 ///
 /// Everything undecidable-without-the-world lives here and the arithmetic
-/// lives in [`riir_clippy::corpus_coverage`], so the rules are unit-testable
+/// lives in [`riir_refine::corpus_coverage`], so the rules are unit-testable
 /// at default features while the spawn + manifest read are not.
 ///
 /// Three reads, each of which can fail INDEPENDENTLY and says so:
@@ -6886,8 +6886,8 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 /// 3. the real-code fired histogram, which is OPTIONAL — its absence costs
 ///    the local half of the frequency axis and nothing else, so it degrades
 ///    to `None` provenance rather than refusing the whole report.
-fn run_coverage_report() -> riir_clippy::corpus_coverage::CoverageReport {
-    use riir_clippy::corpus_coverage as cc;
+fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
+    use riir_refine::corpus_coverage as cc;
 
     let driver = std::env::var("RIIR_HEAL_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
 
@@ -6961,8 +6961,8 @@ fn run_coverage_report() -> riir_clippy::corpus_coverage::CoverageReport {
 fn clippy_corpus_rule_ids() -> Vec<String> {
     #[cfg(feature = "clippy_lints")]
     {
-        use riir_clippy::domain::HealEntry as _;
-        riir_clippy::build_seed_corpus()
+        use riir_refine::domain::HealEntry as _;
+        riir_refine::build_seed_corpus()
             .entries
             .iter()
             .map(|e| e.rule_id().to_string())
@@ -6989,7 +6989,7 @@ fn clippy_corpus_rule_ids() -> Vec<String> {
 fn compiled_fix_set() -> Vec<String> {
     #[cfg(feature = "clippy_lints")]
     {
-        use riir_clippy::domains::clippy_lints::proposers as p;
+        use riir_refine::domains::clippy_lints::proposers as p;
         p::FIXABLE_LINTS
             .iter()
             .chain(p::VERIFY_LINTS.iter())
@@ -7012,7 +7012,7 @@ fn compiled_fix_set() -> Vec<String> {
 fn fix_lane_tiers() -> (Vec<String>, Vec<String>) {
     #[cfg(feature = "clippy_lints")]
     {
-        use riir_clippy::domains::clippy_lints::proposers as p;
+        use riir_refine::domains::clippy_lints::proposers as p;
         let own = |t: &[&str]| t.iter().map(|s| (*s).to_string()).collect();
         (own(p::FIXABLE_LINTS), own(p::VERIFY_LINTS))
     }
@@ -7033,7 +7033,7 @@ fn other_domain_rule_ids() -> std::collections::BTreeMap<String, Vec<String>> {
     let mut out: std::collections::BTreeMap<String, Vec<String>> =
         std::collections::BTreeMap::new();
     #[allow(unused_imports)]
-    use riir_clippy::domain::HealEntry as _;
+    use riir_refine::domain::HealEntry as _;
     macro_rules! domain_rules {
         ($feat:literal, $name:literal, $build:path) => {
             #[cfg(feature = $feat)]
@@ -7045,11 +7045,11 @@ fn other_domain_rule_ids() -> std::collections::BTreeMap<String, Vec<String>> {
             }
         };
     }
-    domain_rules!("rust_perf", "rust_perf", riir_clippy::build_perf_seed_corpus);
-    domain_rules!("kernel_heal", "kernel_opt", riir_clippy::build_kernel_seed_corpus);
-    domain_rules!("sec", "sec", riir_clippy::build_sec_seed_corpus);
-    domain_rules!("docker", "docker", riir_clippy::build_docker_seed_corpus);
-    domain_rules!("dist", "dist", riir_clippy::build_dist_seed_corpus);
+    domain_rules!("rust_perf", "rust_perf", riir_refine::build_perf_seed_corpus);
+    domain_rules!("kernel_heal", "kernel_opt", riir_refine::build_kernel_seed_corpus);
+    domain_rules!("sec", "sec", riir_refine::build_sec_seed_corpus);
+    domain_rules!("docker", "docker", riir_refine::build_docker_seed_corpus);
+    domain_rules!("dist", "dist", riir_refine::build_dist_seed_corpus);
     out
 }
 
@@ -7064,7 +7064,7 @@ fn load_fired_histogram(
     root: &std::path::Path,
 ) -> (
     Vec<(String, u32)>,
-    Option<riir_clippy::corpus_coverage::HistogramProvenance>,
+    Option<riir_refine::corpus_coverage::HistogramProvenance>,
 ) {
     const REL: &str = ".benchmarks/data/049_t01/manifest.json";
     let Ok(bytes) = std::fs::read(root.join(REL)) else {
@@ -7096,7 +7096,7 @@ fn load_fired_histogram(
             .unwrap_or_default()
             .to_string()
     };
-    let provenance = riir_clippy::corpus_coverage::HistogramProvenance {
+    let provenance = riir_refine::corpus_coverage::HistogramProvenance {
         source: format!("Bench 061 fired histogram ({REL})"),
         captured_utc: text("created_utc"),
         toolchain: text("cargo_version"),
@@ -7123,7 +7123,7 @@ fn load_default_fired_histogram(
     root: &std::path::Path,
 ) -> (
     Vec<(String, u32)>,
-    Option<riir_clippy::corpus_coverage::HistogramProvenance>,
+    Option<riir_refine::corpus_coverage::HistogramProvenance>,
 ) {
     const REL: &str = ".benchmarks/data/094_t04/manifest.json";
     let Ok(bytes) = std::fs::read(root.join(REL)) else {
@@ -7155,7 +7155,7 @@ fn load_default_fired_histogram(
             .unwrap_or_default()
             .to_string()
     };
-    let provenance = riir_clippy::corpus_coverage::HistogramProvenance {
+    let provenance = riir_refine::corpus_coverage::HistogramProvenance {
         source: format!("Bench 094 default-level fired histogram ({REL})"),
         captured_utc: text("created_utc"),
         toolchain: text("clippy_version"),
@@ -7202,14 +7202,14 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
 /// compiling to nothing.
 #[cfg(feature = "rustc_errors")]
 fn run_conversion_report() {
-    use riir_clippy::domains::rustc_errors::evolve;
+    use riir_refine::domains::rustc_errors::evolve;
     let root = std::env::current_dir().unwrap_or_default();
     let inventory = evolve::playbook_inventory();
     let mut signals: Vec<evolve::ConversionSignal> = Vec::new();
     let mut store_present = false;
     #[cfg(feature = "latent_retrieval")]
     if root.join(".refine").join("trajectories.kv").exists() {
-        match riir_clippy::traj_store::TrajStore::open(&root) {
+        match riir_refine::traj_store::TrajStore::open(&root) {
             Ok((store, bad)) => {
                 if bad > 0 {
                     eprintln!("misses: {bad} corrupt store row(s) skipped");
@@ -7349,13 +7349,13 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
     // history is the honest "not yet measured" — never a confident zero.
     if with_stats {
         let path = repo.join(".benchmarks").join("score_history.jsonl");
-        match riir_clippy::demonstrability::standing_from_jsonl(&path) {
+        match riir_refine::demonstrability::standing_from_jsonl(&path) {
             Ok(Some((ts, rows))) => {
                 say(&format!(
                     "demonstrability column (134 T1, standing — last bench row {ts}):"
                 ));
                 for line in
-                    riir_clippy::demonstrability::render_column(&rows).lines().skip(1)
+                    riir_refine::demonstrability::render_column(&rows).lines().skip(1)
                 {
                     say(line);
                 }
@@ -7376,7 +7376,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
         if !(with_stats || as_json || do_import) {
             return;
         }
-        let store = match riir_clippy::traj_store::TrajStore::open(&root) {
+        let store = match riir_refine::traj_store::TrajStore::open(&root) {
             Ok((store, bad)) => {
                 if bad > 0 {
                     eprintln!("corpus-stats: {bad} corrupt row(s) skipped");
@@ -7399,7 +7399,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
             }
         };
         if with_stats {
-            let day = riir_clippy::traj_store::today_local_date();
+            let day = riir_refine::traj_store::today_local_date();
             let mut stamped = 0usize;
             for (domain, count, compiled, source) in &table {
                 match store.upsert_corpus_count(&day, domain, *count, *compiled, source) {
@@ -7433,7 +7433,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
             }
         }
         if as_json {
-            let today = riir_clippy::traj_store::today_local_date();
+            let today = riir_refine::traj_store::today_local_date();
             let mut today_obj = serde_json::Map::new();
             today_obj.insert("ts".into(), serde_json::Value::String(today.clone()));
             for (domain, count, compiled, _source) in &table {
@@ -7488,7 +7488,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
 /// rules ever reach the overlay.
 #[cfg(all(feature = "kat_service", feature = "score_bench"))]
 fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
-    use riir_clippy::kat_promotion as kp;
+    use riir_refine::kat_promotion as kp;
 
     let bytes = std::fs::read(path).unwrap_or_else(|e| {
         eprintln!("candidates file unreadable ({}): {e}", path.display());
@@ -7510,7 +7510,7 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 
     // The oracle is ground truth for the gate — refuse to run without it
     // (fail closed: no evidence = no promotion).
-    let oracle = riir_clippy::score_bench::draft_oracle();
+    let oracle = riir_refine::score_bench::draft_oracle();
     if !oracle.is_available() {
         eprintln!("promotion gate: cargo not on PATH — cannot derive ground truth");
         std::process::exit(1);
@@ -7524,7 +7524,7 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
         std::process::exit(1);
     });
 
-    let fixture_list = riir_clippy::score_bench::fixtures::fixtures();
+    let fixture_list = riir_refine::score_bench::fixtures::fixtures();
     println!(
         "frozen fixtures: {} — running post-hoc sweep…",
         fixture_list.len()
@@ -7548,7 +7548,7 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
         );
         std::process::exit(1);
     });
-    let ts = riir_clippy::score_bench::report::local_iso_timestamp();
+    let ts = riir_refine::score_bench::report::local_iso_timestamp();
     let mut audit: Vec<kp::AuditRecord> = Vec::new();
     for id in &sweep.withdrawn {
         // The sweep's registry mutation already happened; record the cause.
@@ -7567,8 +7567,8 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
     }
     for v in &report.verdicts {
         let (kind, reason) = match &v.verdict {
-            riir_clippy::kat_promotion::Verdict::Promoted => ("promote", String::new()),
-            riir_clippy::kat_promotion::Verdict::Rejected(r) => ("reject", r.tag().to_string()),
+            riir_refine::kat_promotion::Verdict::Promoted => ("promote", String::new()),
+            riir_refine::kat_promotion::Verdict::Rejected(r) => ("reject", r.tag().to_string()),
         };
         let trial_totals = report.batch.unwrap_or_default();
         audit.push(kp::AuditRecord {
@@ -7663,7 +7663,7 @@ fn main() {
                 eprintln!(
                     "replay: the verdict is measured by the real clippy oracle (P015 Phase 2)"
                 );
-                riir_clippy::build_stamp::refuse(
+                riir_refine::build_stamp::refuse(
                     "replay",
                     &["kat_transport", "clippy_verify", "latent_retrieval"],
                 );
@@ -7674,7 +7674,7 @@ fn main() {
                 // Issue 117 T2: name the missing feature, this binary's own
                 // set, and the rebuild — the three facts the 00:21 diagnosis
                 // had to reconstruct by hand.
-                riir_clippy::build_stamp::refuse(
+                riir_refine::build_stamp::refuse(
                     if cmd == KatCommand::Update { "update" } else { "sync" },
                     &["kat_transport"],
                 );
@@ -7687,7 +7687,7 @@ fn main() {
     }
     #[cfg(not(feature = "kat_service"))]
     if args.command.is_some() {
-        riir_clippy::build_stamp::refuse(
+        riir_refine::build_stamp::refuse(
             "login/account/update/sync/claim/stake/unstake/vote/pay",
             &["kat_service"],
         );
@@ -7696,8 +7696,8 @@ fn main() {
     // ── Plan 014: clippy-bench modes (standalone — no paths) ─────────────
     #[cfg(feature = "score_bench")]
     if args.score_report {
-        let history = riir_clippy::score_bench::report::load_history(std::path::Path::new(
-            riir_clippy::score_bench::report::HISTORY_JSONL,
+        let history = riir_refine::score_bench::report::load_history(std::path::Path::new(
+            riir_refine::score_bench::report::HISTORY_JSONL,
         ));
         if history.is_empty() {
             eprintln!("no score history yet — run --score-bench first");
@@ -7710,12 +7710,12 @@ fn main() {
             .filter(|r| r.generation == 1)
             .cloned()
             .collect();
-        let svg = riir_clippy::score_bench::report::render_svg(&v1);
-        std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG, &svg)
+        let svg = riir_refine::score_bench::report::render_svg(&v1);
+        std::fs::write(riir_refine::score_bench::report::HISTORY_SVG, &svg)
             .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
         println!(
             "rendered {} ({} gen-1 run(s))",
-            riir_clippy::score_bench::report::HISTORY_SVG,
+            riir_refine::score_bench::report::HISTORY_SVG,
             v1.len()
         );
         let v2: Vec<_> = history
@@ -7724,12 +7724,12 @@ fn main() {
             .cloned()
             .collect();
         if !v2.is_empty() {
-            let svg2 = riir_clippy::score_bench::report::render_svg(&v2);
-            std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG_V2, &svg2)
+            let svg2 = riir_refine::score_bench::report::render_svg(&v2);
+            std::fs::write(riir_refine::score_bench::report::HISTORY_SVG_V2, &svg2)
                 .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
             println!(
                 "rendered {} ({} gen-2 run(s))",
-                riir_clippy::score_bench::report::HISTORY_SVG_V2,
+                riir_refine::score_bench::report::HISTORY_SVG_V2,
                 v2.len()
             );
         }
@@ -7836,7 +7836,7 @@ fn main() {
         // overwrote the symlink target with a default-features build) is
         // identifiable in one command from any terminal. Line 0 is the
         // unchanged `cargo-refine <version>`.
-        for line in riir_clippy::build_stamp::version_lines() {
+        for line in riir_refine::build_stamp::version_lines() {
             println!("{line}");
         }
         return;
@@ -7848,8 +7848,8 @@ fn main() {
         args.yes || prompt_yes_env(),
         std::sync::atomic::Ordering::Relaxed,
     );
-    if riir_clippy::kat_mining_consent::flags_conflict(args.mine, args.unmine) {
-        eprintln!("{}", riir_clippy::kat_mining_consent::CONFLICT_MESSAGE);
+    if riir_refine::kat_mining_consent::flags_conflict(args.mine, args.unmine) {
+        eprintln!("{}", riir_refine::kat_mining_consent::CONFLICT_MESSAGE);
         std::process::exit(2);
     }
     if args.mine {
@@ -7903,7 +7903,7 @@ fn main() {
         kat_info::run_kat_info(&args.paths);
         #[cfg(not(feature = "kat_service"))]
         {
-            riir_clippy::build_stamp::refuse("--info", &["kat_service"]);
+            riir_refine::build_stamp::refuse("--info", &["kat_service"]);
         }
         return;
     }
@@ -7956,7 +7956,7 @@ fn main() {
                 std::process::exit(1);
             }
             Ok(_) => {
-                let mut mem = riir_clippy::memory::LatentFixMemory::default();
+                let mut mem = riir_refine::memory::LatentFixMemory::default();
                 match mem.load_verified(&path) {
                     Ok(status) => {
                         print!("{}", mem.stats_report(&path, status));
@@ -7981,7 +7981,7 @@ fn main() {
                 .unwrap_or_default();
             let kv = root.join(".refine").join("trajectories.kv");
             if kv.exists() {
-                match riir_clippy::traj_store::TrajStore::open(&root) {
+                match riir_refine::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
                         // Full report — feature parity with the envelope
                         // branch (histogram/tiers/loop state; the kv branch
@@ -8023,7 +8023,7 @@ fn main() {
                 );
                 std::process::exit(1);
             }
-            match riir_clippy::traj_store::TrajStore::open(&root) {
+            match riir_refine::traj_store::TrajStore::open(&root) {
                 Ok((store, bad)) => {
                     if bad > 0 {
                         eprintln!(
@@ -8036,7 +8036,7 @@ fn main() {
                         .into_iter()
                         .map(|row| (row.lint_key, row.successes, row.fails))
                         .collect();
-                    let summary = riir_clippy::frontier_report::summarize(&entries);
+                    let summary = riir_refine::frontier_report::summarize(&entries);
                     if summary.population == 0 {
                         // Never a green zero: an empty population is a
                         // refusal, not "measured, all healthy".
@@ -8048,7 +8048,7 @@ fn main() {
                     }
                     let runs = store.score_runs().ok();
                     let score = runs.as_ref().and_then(|r| r.last()).map(|latest| {
-                        riir_clippy::frontier_report::ScoreContext {
+                        riir_refine::frontier_report::ScoreContext {
                             runs: runs.as_ref().map_or(0, Vec::len),
                             latest_generation: latest.generation,
                             latest_heal_rate: latest.heal_rate,
@@ -8056,7 +8056,7 @@ fn main() {
                     });
                     print!(
                         "{}",
-                        riir_clippy::frontier_report::render(&summary, score.as_ref())
+                        riir_refine::frontier_report::render(&summary, score.as_ref())
                     );
                     // Issue 098 T3 — the cross-OOO additive section: one
                     // line per audited frontier rule (min_cross + partner).
@@ -8064,12 +8064,12 @@ fn main() {
                     // print exactly what they printed before.
                     #[cfg(feature = "score_bench")]
                     {
-                        let axis = riir_clippy::score_bench::cross_ooo::cross_ooo_axis();
+                        let axis = riir_refine::score_bench::cross_ooo::cross_ooo_axis();
                         let rules: Vec<String> =
                             summary.rows.iter().map(|r| r.rule.clone()).collect();
                         print!(
                             "{}",
-                            riir_clippy::score_bench::cross_ooo::render_frontier_cross_section(
+                            riir_refine::score_bench::cross_ooo::render_frontier_cross_section(
                                 axis, &rules
                             )
                         );
@@ -8087,15 +8087,15 @@ fn main() {
                     for p in &pair_rows {
                         *pair_counts.entry(p.provenance.clone()).or_insert(0) += 1;
                     }
-                    let prow = riir_clippy::frontier_report::provenance_summary(&pair_counts);
+                    let prow = riir_refine::frontier_report::provenance_summary(&pair_counts);
                     print!(
                         "{}",
-                        riir_clippy::frontier_report::render_provenance_section(&prow)
+                        riir_refine::frontier_report::render_provenance_section(&prow)
                     );
-                    let feed_rows = riir_clippy::frontier_report::provenance_yield_split(&entries);
+                    let feed_rows = riir_refine::frontier_report::provenance_yield_split(&entries);
                     print!(
                         "{}",
-                        riir_clippy::frontier_report::render_provenance_yield(&feed_rows)
+                        riir_refine::frontier_report::render_provenance_yield(&feed_rows)
                     );
                     // Issue 089 T7 — the "Beta (half-count)" feed contract:
                     // the LATEST generation-8 bench row's per-rule shaped
@@ -8123,20 +8123,20 @@ fn main() {
                             })
                             .unwrap_or_default();
                     let shaped_rows =
-                        riir_clippy::frontier_report::shaped_half_rows(&entries, &half_counts);
+                        riir_refine::frontier_report::shaped_half_rows(&entries, &half_counts);
                     print!(
                         "{}",
-                        riir_clippy::frontier_report::render_shaped_half_rows(&shaped_rows)
+                        riir_refine::frontier_report::render_shaped_half_rows(&shaped_rows)
                     );
                     // Issue 105 T4 — the journey integral axis:
                     // instrumentation only (never scored). The store scan
                     // is cheap (traj: prefix) and the section degrades to
                     // an honest absent-note on a journey-free store.
                     let jrows_all = store.journey_rows();
-                    let jrows = riir_clippy::frontier_report::journey_summary(&jrows_all, 12);
+                    let jrows = riir_refine::frontier_report::journey_summary(&jrows_all, 12);
                     print!(
                         "{}",
-                        riir_clippy::frontier_report::render_journey_section(&jrows, jrows_all.len())
+                        riir_refine::frontier_report::render_journey_section(&jrows, jrows_all.len())
                     );
                     // Issue 102 T1 — the contribution-fade section
                     // (report-first; the live state REFUSES until ≥3
@@ -8144,7 +8144,7 @@ fn main() {
                     // the verdict's population floor). Plain serde_json
                     // read of the committed jsonl, the T7 half_counts
                     // precedent: no feature-gated types cross here.
-                    let fade_rows: Vec<riir_clippy::frontier_report::FadeRow> =
+                    let fade_rows: Vec<riir_refine::frontier_report::FadeRow> =
                         std::fs::read_to_string(".benchmarks/score_history.jsonl")
                             .map(|text| {
                                 text.lines()
@@ -8163,7 +8163,7 @@ fn main() {
                                             .as_array()?
                                             .iter()
                                             .filter_map(|o| {
-                                                Some(riir_clippy::frontier_report::FadeOutcome {
+                                                Some(riir_refine::frontier_report::FadeOutcome {
                                                     rule: o.get("rule")?.as_str()?.to_string(),
                                                     resolved:
                                                         u32::try_from(o.get("resolved")?.as_u64()?)
@@ -8178,7 +8178,7 @@ fn main() {
                                                 })
                                             })
                                             .collect();
-                                        Some(riir_clippy::frontier_report::FadeRow {
+                                        Some(riir_refine::frontier_report::FadeRow {
                                             generation,
                                             ts,
                                             outcomes,
@@ -8187,10 +8187,10 @@ fn main() {
                                     .collect()
                             })
                             .unwrap_or_default();
-                    let scan = riir_clippy::frontier_report::fade_scan(&fade_rows);
+                    let scan = riir_refine::frontier_report::fade_scan(&fade_rows);
                     print!(
                         "{}",
-                        riir_clippy::frontier_report::render_fade_section(&scan)
+                        riir_refine::frontier_report::render_fade_section(&scan)
                     );
                     // Issue 089 T4's evidence clock — append the band-mass
                     // snapshot (state-change dedup: an unchanged store at the
@@ -8205,16 +8205,16 @@ fn main() {
                     let generation_frontier = runs
                         .as_ref()
                         .map_or(0, |rs| rs.iter().map(|r| r.generation).max().unwrap_or(0));
-                    let snap = riir_clippy::frontier_report::snapshot_from(
+                    let snap = riir_refine::frontier_report::snapshot_from(
                         &summary,
                         &feed_rows,
                         generation_frontier,
-                        riir_clippy::frontier_report::git_sha(),
-                        riir_clippy::frontier_report::local_iso_timestamp(),
-                        riir_clippy::frontier_report::store_id(&root),
+                        riir_refine::frontier_report::git_sha(),
+                        riir_refine::frontier_report::local_iso_timestamp(),
+                        riir_refine::frontier_report::store_id(&root),
                     );
-                    match riir_clippy::frontier_report::append_snapshot(
-                        std::path::Path::new(riir_clippy::frontier_report::SNAPSHOTS_JSONL),
+                    match riir_refine::frontier_report::append_snapshot(
+                        std::path::Path::new(riir_refine::frontier_report::SNAPSHOTS_JSONL),
                         &snap,
                     ) {
                         Ok(true) => println!(
@@ -8222,7 +8222,7 @@ fn main() {
                             snap.generation,
                             if snap.store.is_empty() { "?" } else { &snap.store },
                             snap.band_mass * 100.0,
-                            riir_clippy::frontier_report::SNAPSHOTS_JSONL
+                            riir_refine::frontier_report::SNAPSHOTS_JSONL
                         ),
                         Ok(false) => println!(
                             "frontier snapshot: unchanged since the last row (generation {}) — not appended",
@@ -8268,15 +8268,15 @@ fn main() {
         let mut files = 0usize;
         let mut scanned: Vec<std::path::PathBuf> = Vec::new();
         for t in &targets {
-            let (r, b, f) = riir_clippy::horizon_report::load_runs(t);
+            let (r, b, f) = riir_refine::horizon_report::load_runs(t);
             runs.extend(r);
             bad += b;
             files += f;
             scanned.push(t.clone());
         }
-        let mut summary = riir_clippy::horizon_report::summarize(&runs);
+        let mut summary = riir_refine::horizon_report::summarize(&runs);
         summary.bad_lines = bad;
-        print!("{}", riir_clippy::horizon_report::render(&summary));
+        print!("{}", riir_refine::horizon_report::render(&summary));
         println!(
             "scanned {} path(s), {} ring file(s), {} run(s)",
             scanned.len(),
@@ -8302,11 +8302,11 @@ fn main() {
         } else {
             args.paths.clone()
         };
-        let mut labeled: Vec<(String, Vec<riir_clippy::horizon_report::RunRing>)> = Vec::new();
+        let mut labeled: Vec<(String, Vec<riir_refine::horizon_report::RunRing>)> = Vec::new();
         let mut bad_total = 0usize;
         let mut files_total = 0usize;
         for t in &targets {
-            let (runs, bad, files) = riir_clippy::horizon_report::load_runs(t);
+            let (runs, bad, files) = riir_refine::horizon_report::load_runs(t);
             bad_total += bad;
             files_total += files;
             println!(
@@ -8320,8 +8320,8 @@ fn main() {
                 labeled.push((t.display().to_string(), runs));
             }
         }
-        let report = riir_clippy::fixseq_stats::summarize(&labeled);
-        print!("{}", riir_clippy::fixseq_stats::render(&report));
+        let report = riir_refine::fixseq_stats::summarize(&labeled);
+        print!("{}", riir_refine::fixseq_stats::render(&report));
         println!(
             "scanned {} path(s), {} ring file(s), {} bad line(s)",
             targets.len(),
@@ -8345,13 +8345,13 @@ fn main() {
         } else {
             args.paths.clone()
         };
-        let report = riir_clippy::config_audit::audit_paths(&targets);
+        let report = riir_refine::config_audit::audit_paths(&targets);
         print!("{}", report.render());
-        let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
+        let hint = riir_refine::scope_hint::unscanned_roots_hint(&targets);
         if !hint.is_empty() {
             println!("{hint}");
         }
-        let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
+        let cross = riir_refine::downstream_hint::downstream_consumers_hint(&targets);
         if !cross.is_empty() {
             println!("{cross}");
         }
@@ -8387,16 +8387,16 @@ fn main() {
         } else {
             args.paths.clone()
         };
-        let report = riir_clippy::orphan_report::report_paths(
+        let report = riir_refine::orphan_report::report_paths(
             &targets,
-            &riir_clippy::orphan_report::DEFAULT_PROBE_DEPTHS,
+            &riir_refine::orphan_report::DEFAULT_PROBE_DEPTHS,
         );
         print!("{}", report.render());
-        let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
+        let hint = riir_refine::scope_hint::unscanned_roots_hint(&targets);
         if !hint.is_empty() {
             println!("{hint}");
         }
-        let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
+        let cross = riir_refine::downstream_hint::downstream_consumers_hint(&targets);
         if !cross.is_empty() {
             println!("{cross}");
         }
@@ -8419,13 +8419,13 @@ fn main() {
         } else {
             args.paths.clone()
         };
-        let report = riir_clippy::platform_audit::audit_paths(&targets);
+        let report = riir_refine::platform_audit::audit_paths(&targets);
         print!("{}", report.render());
-        let hint = riir_clippy::scope_hint::unscanned_roots_hint(&targets);
+        let hint = riir_refine::scope_hint::unscanned_roots_hint(&targets);
         if !hint.is_empty() {
             println!("{hint}");
         }
-        let cross = riir_clippy::downstream_hint::downstream_consumers_hint(&targets);
+        let cross = riir_refine::downstream_hint::downstream_consumers_hint(&targets);
         if !cross.is_empty() {
             println!("{cross}");
         }
@@ -8448,16 +8448,16 @@ fn main() {
             args.paths.clone()
         };
         if let Some(vs) = args.frame_vs.clone() {
-            let (pre, pre_fail) = riir_clippy::frame_time_report::collect_sidecars(&pre_paths);
+            let (pre, pre_fail) = riir_refine::frame_time_report::collect_sidecars(&pre_paths);
             let (post, post_fail) =
-                riir_clippy::frame_time_report::collect_sidecars(std::slice::from_ref(&vs));
+                riir_refine::frame_time_report::collect_sidecars(std::slice::from_ref(&vs));
             let threshold = args
                 .frame_delta_pct
-                .unwrap_or(riir_clippy::frame_time_report::DEFAULT_DELTA_PCT);
-            let pre_rows = riir_clippy::frame_time_report::budget_rows(&pre, args.frame_budget);
+                .unwrap_or(riir_refine::frame_time_report::DEFAULT_DELTA_PCT);
+            let pre_rows = riir_refine::frame_time_report::budget_rows(&pre, args.frame_budget);
             let post_rows =
-                riir_clippy::frame_time_report::budget_rows(&post, args.frame_budget);
-            let report = riir_clippy::frame_time_report::diff_ab(
+                riir_refine::frame_time_report::budget_rows(&post, args.frame_budget);
+            let report = riir_refine::frame_time_report::diff_ab(
                 &pre_rows,
                 &post_rows,
                 threshold,
@@ -8470,9 +8470,9 @@ fn main() {
             }
             return;
         }
-        let (loaded, failures) = riir_clippy::frame_time_report::collect_sidecars(&pre_paths);
-        let rows = riir_clippy::frame_time_report::budget_rows(&loaded, args.frame_budget);
-        let report = riir_clippy::frame_time_report::FrameTimeReport { rows, failures };
+        let (loaded, failures) = riir_refine::frame_time_report::collect_sidecars(&pre_paths);
+        let rows = riir_refine::frame_time_report::budget_rows(&loaded, args.frame_budget);
+        let report = riir_refine::frame_time_report::FrameTimeReport { rows, failures };
         print!("{}", report.render());
         if report.blind() {
             std::process::exit(1);
@@ -8500,7 +8500,7 @@ fn main() {
                 );
                 std::process::exit(1);
             }
-            match riir_clippy::traj_store::TrajStore::open(&root) {
+            match riir_refine::traj_store::TrajStore::open(&root) {
                 Ok((store, bad)) => {
                     if bad > 0 {
                         eprintln!("recompute-elo: {bad} corrupt row(s) skipped");
@@ -8547,13 +8547,13 @@ fn main() {
     if args.collapse_report {
         #[cfg(feature = "latent_retrieval")]
         {
-            use riir_clippy::collapse_monitor::collapse_report_common;
-            let spans = riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
-            let corpus = riir_clippy::build_seed_corpus().entries;
+            use riir_refine::collapse_monitor::collapse_report_common;
+            let spans = riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+            let corpus = riir_refine::build_seed_corpus().entries;
 
             // Fresh baseline (condition b).
-            let fresh = riir_clippy::collapse_monitor::measure(
-                &riir_clippy::memory::LatentFixMemory::default(),
+            let fresh = riir_refine::collapse_monitor::measure(
+                &riir_refine::memory::LatentFixMemory::default(),
                 spans,
                 &corpus,
             );
@@ -8570,14 +8570,14 @@ fn main() {
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
             if root.join(".refine").join("trajectories.kv").exists() {
-                match riir_clippy::traj_store::TrajStore::open(&root) {
+                match riir_refine::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
                         if bad > 0 {
                             eprintln!("collapse-report: {bad} corrupt row(s) skipped");
                         }
                         collapse_report_common(
                             &format!("  store({})", root.display()),
-                            &riir_clippy::collapse_monitor::memory_from_store_rows(&store.dump()),
+                            &riir_refine::collapse_monitor::memory_from_store_rows(&store.dump()),
                             spans,
                             &corpus,
                         );
@@ -8594,7 +8594,7 @@ fn main() {
             }
             let envelope = default_memory_path();
             if envelope.exists() {
-                let mut mem = riir_clippy::memory::LatentFixMemory::default();
+                let mut mem = riir_refine::memory::LatentFixMemory::default();
                 match mem.load(&envelope) {
                     Ok(()) => {
                         collapse_report_common("  envelope", &mem, spans, &corpus);
@@ -8689,7 +8689,7 @@ fn main() {
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
             if root.join(".refine").join("trajectories.kv").exists() {
-                match riir_clippy::traj_store::TrajStore::open(&root) {
+                match riir_refine::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
                         if bad > 0 {
                             eprintln!("dump-trajectories: {bad} corrupt row(s) skipped");
@@ -8729,7 +8729,7 @@ fn main() {
             Ok(_json) => {
                 // Parse through the memory (envelope version check + the
                 // shapes stay canonical), then emit per-trajectory lines.
-                let mut mem = riir_clippy::memory::LatentFixMemory::default();
+                let mut mem = riir_refine::memory::LatentFixMemory::default();
                 if let Err(e) = mem.load(&path) {
                     eprintln!(
                         "dump-trajectories: store at {} is unreadable: {e}",
@@ -8777,9 +8777,9 @@ fn main() {
     // --write applies. No unconditional-write path exists (T1.3).
     #[cfg(feature = "rustc_errors")]
     if args.fix_compile {
-        use riir_clippy::domains::rustc_errors::driver::CompileDriver;
-        use riir_clippy::domains::rustc_errors::evolve;
-        use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
+        use riir_refine::domains::rustc_errors::driver::CompileDriver;
+        use riir_refine::domains::rustc_errors::evolve;
+        use riir_refine::domains::rustc_errors::playbooks::Playbooks;
 
         let extra = args
             .verify_args
@@ -8792,11 +8792,11 @@ fn main() {
         // domain records to memory.json (below) — never both.
         #[cfg(feature = "latent_retrieval")]
         let (traj_store, mut traj_warnings) = args.paths.first().and_then(|p| {
-            riir_clippy::compile_oracle::owning_package_root(p)
-                .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
+            riir_refine::compile_oracle::owning_package_root(p)
+                .and_then(|pkg| riir_refine::compile_oracle::workspace_root(&pkg))
                 .or_else(|| std::env::current_dir().ok())
                 .and_then(|root| {
-                    match riir_clippy::traj_store::TrajStore::open(&root) {
+                    match riir_refine::traj_store::TrajStore::open(&root) {
                         Ok((s, bad)) => Some((
                             std::sync::Arc::new(s),
                             if bad > 0 {
@@ -8828,9 +8828,9 @@ fn main() {
         // arm-D blend with the stale-detection gate. Installed BEFORE the
         // static block so `with_ordering` here wins.
         #[cfg(feature = "nonergodic_driver")]
-        if riir_clippy::domains::rustc_errors::nonergodic_order::armed_by_env() {
+        if riir_refine::domains::rustc_errors::nonergodic_order::armed_by_env() {
             let policy = std::sync::Arc::new(
-                riir_clippy::domains::rustc_errors::nonergodic_order::NonergodicOrdering::new(
+                riir_refine::domains::rustc_errors::nonergodic_order::NonergodicOrdering::new(
                     traj_store.clone(),
                 ),
             );
@@ -8843,7 +8843,7 @@ fn main() {
         #[cfg(feature = "latent_retrieval")]
         if let Some(store) = traj_store.clone() {
             driver = driver.with_ordering(std::sync::Arc::new(move |cands| {
-                riir_clippy::traj_store::shape_conditional_order(cands, &store);
+                riir_refine::traj_store::shape_conditional_order(cands, &store);
             }));
         }
         let driver = driver.with_extra_args(extra);
@@ -8908,7 +8908,7 @@ fn main() {
             if !report.applied.is_empty() || !report.reverted.is_empty() {
                 #[cfg(feature = "latent_retrieval")]
                 if let Some(store) = &traj_store {
-                    use riir_clippy::domains::rustc_errors::evolve::traj_key;
+                    use riir_refine::domains::rustc_errors::evolve::traj_key;
                     // Issue 105: the run's journey credit, computed once —
                     // every kept attempt in this run rode the same journey.
                     // Tainted runs (ended at a masking-stage error) stamp
@@ -8942,11 +8942,11 @@ fn main() {
                         // (W); I/O = the gate rejected without evaluating the
                         // fix (C — unnecessary, gate-side).
                         let component =
-                            riir_clippy::component::classify(
-                                &riir_clippy::component::FailureSignal::reverted(
+                            riir_refine::component::classify(
+                                &riir_refine::component::FailureSignal::reverted(
                                     match r.reason {
-                                        riir_clippy::domains::rustc_errors::driver::RevertReason::NoProgress => riir_clippy::component::RevertKind::CompileGate,
-                                        riir_clippy::domains::rustc_errors::driver::RevertReason::Io => riir_clippy::component::RevertKind::Infrastructure,
+                                        riir_refine::domains::rustc_errors::driver::RevertReason::NoProgress => riir_refine::component::RevertKind::CompileGate,
+                                        riir_refine::domains::rustc_errors::driver::RevertReason::Io => riir_refine::component::RevertKind::Infrastructure,
                                     },
                                 ),
                             );
@@ -9005,8 +9005,8 @@ fn main() {
                 let root = args
                     .paths
                     .first()
-                    .and_then(|p| riir_clippy::compile_oracle::owning_package_root(p.as_path()))
-                    .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
+                    .and_then(|p| riir_refine::compile_oracle::owning_package_root(p.as_path()))
+                    .and_then(|pkg| riir_refine::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                 if !report.misses.is_empty() {
                     let (written, warnings) = evolve::dump_misses(&root, &report.misses);
@@ -9093,7 +9093,7 @@ fn main() {
     // compiled-in seed stands (G3: byte-identical to features-off).
     #[cfg(feature = "kat_service")]
     let lease_store =
-        riir_clippy::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
+        riir_refine::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
     // T2.4: with the promotion surface compiled in, Certified network rules
     // merge into the run overlay (never under a --corpus-epoch pin).
     #[cfg(all(feature = "kat_service", feature = "score_bench"))]
@@ -9129,22 +9129,22 @@ fn main() {
     // automate one. A corrupt marker is LOUD and the run continues with an
     // empty set — an operator marker must never take a heal run down.
     let mut active_set = if args.fix || args.suggest {
-        match riir_clippy::active_set::ActiveSet::load_default(&resolve_heal_root(&args.paths)) {
+        match riir_refine::active_set::ActiveSet::load_default(&resolve_heal_root(&args.paths)) {
             Ok(set) => set,
             Err(e) => {
                 eprintln!("active-set: {e} — continuing with an EMPTY active set this run");
-                riir_clippy::active_set::ActiveSet::empty()
+                riir_refine::active_set::ActiveSet::empty()
             }
         }
     } else {
-        riir_clippy::active_set::ActiveSet::empty()
+        riir_refine::active_set::ActiveSet::empty()
     };
     if !active_set.is_empty() {
         println!(
             "active-set: {} demoted rule(s) loaded from {} (the similarity fan-out and the fix \
              dispatch skip them; oracle anchors pass through, loud)",
             active_set.demoted_total(),
-            riir_clippy::active_set::ACTIVE_SET_FILE
+            riir_refine::active_set::ACTIVE_SET_FILE
         );
     }
 
@@ -9182,11 +9182,11 @@ fn main() {
     {
         if let Some(root) = resolve_corpus_repo_root() {
             if let Some(policy) =
-                riir_clippy::demonstrability_gate::DepthPolicy::standing(&root)
+                riir_refine::demonstrability_gate::DepthPolicy::standing(&root)
             {
                 println!(
                     "demonstrability gate: armed from {} — per-domain depth factors: {}",
-                    riir_clippy::demonstrability_gate::STANDING_RELPATH,
+                    riir_refine::demonstrability_gate::STANDING_RELPATH,
                     policy.render()
                 );
                 matcher = matcher.with_depth_policy(policy);
@@ -9291,7 +9291,7 @@ fn main() {
             // T7.4: the commitment is advisory (the learned state is a hint,
             // not ground truth), so a mismatch warns and continues rather
             // than aborting a heal run.
-            Ok(riir_clippy::CommitmentStatus::Mismatch) => eprintln!(
+            Ok(riir_refine::CommitmentStatus::Mismatch) => eprintln!(
                 "self-evolve: WARNING — memory file ({}) failed its BLAKE3 commitment; \
                  it was edited or corrupted since it was written. Continuing with it.",
                 memory_path.display()
@@ -9328,7 +9328,7 @@ fn main() {
     // --no-update/--update-timeout 0 disabled it. CI never touches the
     // network by construction (no test drives main's network path).
     #[cfg(feature = "kat_transport")]
-    let mut lease_charge = riir_clippy::kat_lease_client::LeaseCharge::open(&lease_store);
+    let mut lease_charge = riir_refine::kat_lease_client::LeaseCharge::open(&lease_store);
     #[cfg(feature = "kat_transport")]
     let mut lease_ctx: Option<ReheatCtx> = None;
     #[cfg(feature = "kat_transport")]
@@ -9336,32 +9336,32 @@ fn main() {
         let phase_live = !args.no_update
             && args.update_timeout > 0
             && args.corpus_epoch.is_none()
-            && !riir_clippy::kat_lease_client::lease_kill_switched();
-        let service_url = riir_clippy::kat_lease_client::service_url_from_env();
+            && !riir_refine::kat_lease_client::lease_kill_switched();
+        let service_url = riir_refine::kat_lease_client::service_url_from_env();
         if phase_live && service_url.is_some() {
             let url = service_url.clone().unwrap_or_default();
             let transport =
-                riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, args.update_timeout);
+                riir_refine::kat_lease_client::HttpLeaseTransport::new(&url, args.update_timeout);
             let deadline =
                 std::time::Instant::now() + std::time::Duration::from_secs(args.update_timeout);
             let out_of_kat = kat_charge
                 .as_ref()
                 .is_some_and(|c| c.balance_projection() == 0);
-            let outcome = riir_clippy::kat_lease_client::run_update_phase(
+            let outcome = riir_refine::kat_lease_client::run_update_phase(
                 &transport,
                 &lease_store,
                 &mut lease_charge,
                 out_of_kat,
                 Some(deadline),
             );
-            if let riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } =
+            if let riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } =
                 outcome.status
             {
                 // The visible charge line + the matcher rebuild onto E+1 for
                 // THIS run (rule 1: proceed on the freshest applied epoch).
                 println!(
                     "{}",
-                    riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                    riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
                 );
                 if let Some((_, overlay)) = lease_overlay_for_run(&lease_store, None) {
                     match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
@@ -9378,7 +9378,7 @@ fn main() {
         // channel is live. A pin (--corpus-epoch) disables it by design.
         let reheat_armed = !args.no_reheat
             && args.corpus_epoch.is_none()
-            && !riir_clippy::kat_lease_client::lease_kill_switched()
+            && !riir_refine::kat_lease_client::lease_kill_switched()
             && service_url.is_some();
         if reheat_armed {
             lease_ctx = Some(ReheatCtx {
@@ -9430,7 +9430,7 @@ fn main() {
     } else if matches!(
         args.domain,
         Some(DomainId::Docker) | Some(DomainId::Dist)
-    ) || !riir_clippy::clippy_oracle::auto_oracle_enabled()
+    ) || !riir_refine::clippy_oracle::auto_oracle_enabled()
     {
         // Non-rust lanes have no spans to anchor; the kill-switch restores
         // the pre-113 never-spawn posture. Both are quiet by design —
@@ -9438,7 +9438,7 @@ fn main() {
         None
     } else {
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        match riir_clippy::clippy_oracle::detect_project_root(&args.paths, &cwd) {
+        match riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd) {
             None => None,
             Some(root) => {
                 let cargo_bin =
@@ -9447,12 +9447,12 @@ fn main() {
                 // set — diagnostics that only fire behind a non-default
                 // feature are invisible at the default posture (the exact
                 // class consumer_residue_sweep.sh's screen exists for).
-                let features = riir_clippy::clippy_oracle::auto_oracle_features();
+                let features = riir_refine::clippy_oracle::auto_oracle_features();
                 // 2026-09-21: --all-targets is the DEFAULT posture (mod
                 // tests spans anchored like any other — the riir-chain/riir-ai
                 // intake pair); the kill-switch restores the fast lib-only
                 // spawn.
-                let all_targets = riir_clippy::clippy_oracle::auto_oracle_all_targets();
+                let all_targets = riir_refine::clippy_oracle::auto_oracle_all_targets();
                 let targets_note = if all_targets {
                     "all targets (tests/benches/examples included)"
                 } else {
@@ -9483,7 +9483,7 @@ fn main() {
                         msg.to_owned()
                     }
                 };
-                match riir_clippy::clippy_oracle::run_clippy(
+                match riir_refine::clippy_oracle::run_clippy(
                     &root,
                     &cargo_bin,
                     features.as_deref(),
@@ -9491,14 +9491,14 @@ fn main() {
                 ) {
                     Ok(run) => {
                         let diags = parse_clippy_feed(&run.text);
-                        match riir_clippy::clippy_oracle::classify(run.exit, diags.len()) {
-                            riir_clippy::clippy_oracle::OracleOutcome::Feed(n) => {
+                        match riir_refine::clippy_oracle::classify(run.exit, diags.len()) {
+                            riir_refine::clippy_oracle::OracleOutcome::Feed(n) => {
                                 eprintln!(
                                     "clippy oracle (auto): {n} real diagnostic(s) anchored ahead of ranking"
                                 );
                                 Some(diags)
                             }
-                            riir_clippy::clippy_oracle::OracleOutcome::Clean => {
+                            riir_refine::clippy_oracle::OracleOutcome::Clean => {
                                 // Word the arm honestly: with the knob active
                                 // this is clean at the REQUESTED features, not
                                 // at default ones.
@@ -9513,7 +9513,7 @@ fn main() {
                                 }
                                 Some(diags)
                             }
-                            riir_clippy::clippy_oracle::OracleOutcome::Failed(msg) => {
+                            riir_refine::clippy_oracle::OracleOutcome::Failed(msg) => {
                                 eprintln!(
                                     "clippy oracle (auto): {} — continuing heuristic-only",
                                     feature_hint(&msg)
@@ -9592,11 +9592,11 @@ fn main() {
     // VERIFY_LINTS (type-blind under parse-only, revertible under rustc).
     #[cfg(feature = "fix_verify")]
     let proposer_opts = if args.verify {
-        riir_clippy::domains::rust_perf::proposers::ProposerOpts {
+        riir_refine::domains::rust_perf::proposers::ProposerOpts {
             untyped_paths: true,
         }
     } else {
-        riir_clippy::domains::rust_perf::proposers::ProposerOpts::default()
+        riir_refine::domains::rust_perf::proposers::ProposerOpts::default()
     };
 
     // Issue 015: cheap Cargo.toml dep gate for fxhashmap — the rewrite
@@ -9611,22 +9611,22 @@ fn main() {
     // under --verify they are written + verified + reported after the
     // loop (reverted edits must not appear as "fixed" in the review).
     #[cfg(feature = "fix_verify")]
-    let mut verify_batches: Vec<riir_clippy::fix_verify::FileEditSet> = Vec::new();
+    let mut verify_batches: Vec<riir_refine::fix_verify::FileEditSet> = Vec::new();
     // Native fmt (src/fmt.rs): per-batch decisions for the verify path —
     // decided against the ORIGINAL file pre-verify, applied post-verify to
     // batches with ≥1 kept edit (a fully-reverted file is back at its
     // already-clean original — nothing to format).
     #[cfg(feature = "fix_verify")]
-    let mut verify_fmt: Vec<(PathBuf, riir_clippy::fmt::FmtDecision, String)> = Vec::new();
+    let mut verify_fmt: Vec<(PathBuf, riir_refine::fmt::FmtDecision, String)> = Vec::new();
 
     // Native fmt pass: default-on with --fix (--no-fmt disables). Decisions
     // only compute when rustfmt is reachable; one warning otherwise.
     let fmt_enabled = args.fix && !args.no_fmt;
-    let fmt_active = fmt_enabled && riir_clippy::fmt::rustfmt_available();
+    let fmt_active = fmt_enabled && riir_refine::fmt::rustfmt_available();
     if fmt_enabled && !fmt_active {
         eprintln!("fmt: rustfmt not found on PATH — automatic formatting disabled (--no-fmt silences this)");
     }
-    let mut fmt_summary = riir_clippy::fmt::FmtSummary::default();
+    let mut fmt_summary = riir_refine::fmt::FmtSummary::default();
 
     for file in &files {
         let Ok(src) = std::fs::read_to_string(file) else {
@@ -9637,7 +9637,7 @@ fn main() {
         // P30: bench-target detection, shared by both lanes — the fix lane
         // declines rust_perf edits on it, the suggest lane stamps perf rows.
         let bench_target =
-            riir_clippy::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
+            riir_refine::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
 
         // KAT meter (T0.5): one bill per source READ — the fix + suggest
         // passes share this read; fixpoint passes re-parse already-billed
@@ -9670,7 +9670,7 @@ fn main() {
         // the Issue 015 span-level revert records.
         let mut all_edits: Vec<(usize, String, usize, usize, String)> = Vec::new();
         // Per-pass applied splices (in that pass's input coordinates).
-        let mut pass_splices: Vec<Vec<riir_clippy::edit_emitter::SourceEdit>> = Vec::new();
+        let mut pass_splices: Vec<Vec<riir_refine::edit_emitter::SourceEdit>> = Vec::new();
         // Per-pass INPUT texts (the span-revert restore source).
         let mut pass_texts: Vec<String> = Vec::new();
         // P21: the (start, end) byte ranges of oracle-anchored edits pushed
@@ -9710,12 +9710,12 @@ fn main() {
                              // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
             let fxhashmap_allowed = {
-                let pkg = riir_clippy::fix_verify::owning_package_root(file);
+                let pkg = riir_refine::fix_verify::owning_package_root(file);
                 match pkg {
                     None => false,
                     Some(pkg) => *pkg_dep_cache.entry(pkg.clone()).or_insert_with(|| {
                         std::fs::read_to_string(pkg.join("Cargo.toml")).is_ok_and(|t| {
-                            riir_clippy::fix_verify::manifest_has_dep(&t, "rustc-hash")
+                            riir_refine::fix_verify::manifest_has_dep(&t, "rustc-hash")
                         })
                     }),
                 }
@@ -9731,7 +9731,7 @@ fn main() {
             let posture_index: Option<std::collections::BTreeMap<String, Vec<(usize, usize)>>> =
                 if args.repo_posture {
                     clippy_feed.as_ref().map(|feed| {
-                        riir_clippy::draft::clippy_feed::posture_spans(feed, &display)
+                        riir_refine::draft::clippy_feed::posture_spans(feed, &display)
                     })
                 } else {
                     None
@@ -9776,7 +9776,7 @@ fn main() {
                         #[cfg(feature = "fix_verify")]
                         {
                             perf_edits.extend(
-                                riir_clippy::domains::rust_perf::proposers::collect_edits_opts(
+                                riir_refine::domains::rust_perf::proposers::collect_edits_opts(
                                     rule,
                                     &current,
                                     &parsed,
@@ -9787,7 +9787,7 @@ fn main() {
                         #[cfg(not(feature = "fix_verify"))]
                         {
                             perf_edits.extend(
-                                riir_clippy::domains::rust_perf::proposers::collect_edits(
+                                riir_refine::domains::rust_perf::proposers::collect_edits(
                                     rule, &current, &parsed,
                                 ),
                             );
@@ -9843,7 +9843,7 @@ fn main() {
                                     .map(|&sp| {
                                         let mut s = sp;
                                         for applied in pass_splices.iter().take(pass) {
-                                            s = riir_clippy::edit_emitter::map_span_through_splices(
+                                            s = riir_refine::edit_emitter::map_span_through_splices(
                                                 s, applied,
                                             );
                                         }
@@ -9866,7 +9866,7 @@ fn main() {
                             continue;
                         }
                         let collected =
-                            riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                            riir_refine::domains::clippy_lints::proposers::collect_edits(
                                 lint, &current, &parsed,
                             );
                         // Issue 135 T2: allow-by-default and not enabled by
@@ -9882,7 +9882,7 @@ fn main() {
                             None => edits.extend(collected),
                             Some(idx) => {
                                 for re in collected {
-                                    if riir_clippy::draft::clippy_feed::posture_allows(
+                                    if riir_refine::draft::clippy_feed::posture_allows(
                                         idx,
                                         lint,
                                         re.edit.start,
@@ -9929,11 +9929,11 @@ fn main() {
                         for d in feed.iter().filter(|d| {
                             d.suggestion.is_some()
                                 && level_gated.contains(&d.lint.as_str())
-                                && riir_clippy::draft::clippy_feed::paths_ref_match(&d.file, &display)
+                                && riir_refine::draft::clippy_feed::paths_ref_match(&d.file, &display)
                         }) {
                             *level_skipped_file.entry(d.lint.clone()).or_default() += 1;
                         }
-                        let lane = riir_clippy::draft::clippy_feed::oracle_edits(
+                        let lane = riir_refine::draft::clippy_feed::oracle_edits(
                             feed,
                             &display,
                             &current,
@@ -9984,7 +9984,7 @@ fn main() {
                         let oracle_forced = args
                             .paths
                             .iter()
-                            .any(|u| riir_clippy::bench_guard::user_path_forces(u, file));
+                            .any(|u| riir_refine::bench_guard::user_path_forces(u, file));
                         if bench_target && !oracle_forced {
                             if !lane.edits.is_empty() {
                                 println!(
@@ -9997,7 +9997,7 @@ fn main() {
                         } else {
                             for oe in lane.edits {
                                 let overlaps = edits.iter().any(|pe| {
-                                    riir_clippy::draft::clippy_feed::spans_overlap(&pe.edit, &oe.edit)
+                                    riir_refine::draft::clippy_feed::spans_overlap(&pe.edit, &oe.edit)
                                 });
                                 if !overlaps {
                                     oracle_keys.insert((oe.edit.start, oe.edit.end));
@@ -10013,8 +10013,8 @@ fn main() {
                     // guards-already-present skips, signature-changing
                     // refusals — every applied fix still rides the
                     // `--fix --verify` compile gate when enabled.
-                    for rule in riir_clippy::domains::sec::proposers::FIXABLE_SEC {
-                        edits.extend(riir_clippy::domains::sec::proposers::collect_edits(
+                    for rule in riir_refine::domains::sec::proposers::FIXABLE_SEC {
+                        edits.extend(riir_refine::domains::sec::proposers::collect_edits(
                             rule, &current, &parsed,
                         ));
                     }
@@ -10077,7 +10077,7 @@ fn main() {
                 if edits.is_empty() {
                     break;
                 }
-                let (next, splices) = riir_clippy::edit_emitter::apply_edits_traced(
+                let (next, splices) = riir_refine::edit_emitter::apply_edits_traced(
                     &current,
                     edits.iter().map(|re| re.edit.clone()).collect(),
                 );
@@ -10163,7 +10163,7 @@ fn main() {
             .map(|(pass, rule_id, start, end, replacement)| {
                 let mut pos = start;
                 for splices in pass_splices.iter().skip(pass) {
-                    pos = riir_clippy::edit_emitter::map_through_splices(pos, splices);
+                    pos = riir_refine::edit_emitter::map_through_splices(pos, splices);
                 }
                 let line = current[..pos].matches('\n').count() + 1;
                 let restore = pass_texts[pass]
@@ -10184,8 +10184,8 @@ fn main() {
         // plan; write/verify mode applies it after the final file state
         // settles. `--no-fmt` or a missing rustfmt disables (one warning).
         let fmt_decision = if args.fix && !all_edits.is_empty() && fmt_active {
-            let edition = riir_clippy::fmt::edition_for(file);
-            Some((riir_clippy::fmt::decide(&src, file, &edition), edition))
+            let edition = riir_refine::fmt::edition_for(file);
+            Some((riir_refine::fmt::decide(&src, file, &edition), edition))
         } else {
             None
         };
@@ -10193,14 +10193,14 @@ fn main() {
         #[cfg(feature = "fix_verify")]
         if args.verify {
             if !all_edits.is_empty() {
-                verify_batches.push(riir_clippy::fix_verify::FileEditSet {
+                verify_batches.push(riir_refine::fix_verify::FileEditSet {
                     path: file.clone(),
                     original: src.clone(),
                     fixed: current.clone(),
                     edits: all_edits
                         .iter()
                         .map(|(rule, line, repl, restore, _note)| {
-                            riir_clippy::fix_verify::EditAtLine {
+                            riir_refine::fix_verify::EditAtLine {
                                 rule_id: rule.clone(),
                                 final_line: *line,
                                 replacement: repl.clone(),
@@ -10379,10 +10379,10 @@ fn main() {
                     .collect();
                 rules.sort();
                 rules.dedup();
-                ctx.pass1_tokens += riir_clippy::kat_meter::count_word_tokens(text.as_bytes());
+                ctx.pass1_tokens += riir_refine::kat_meter::count_word_tokens(text.as_bytes());
                 ctx.spans_seen += 1;
                 ctx.pass1
-                    .entry(riir_clippy::kat_lease_client::span_key(&text))
+                    .entry(riir_refine::kat_lease_client::span_key(&text))
                     .or_insert(rules);
             }
         }
@@ -10424,7 +10424,7 @@ fn main() {
     // runs outside the --fix edit path entirely (pure --suggest mode).
     #[cfg(feature = "kernel_heal")]
     let n_non_syn = if args.suggest && args.domain.is_none_or(|d| d == DomainId::Kernel) {
-        let scanner = riir_clippy::domains::kernel_opt::wgsl_scan::WgslScanner::default();
+        let scanner = riir_refine::domains::kernel_opt::wgsl_scan::WgslScanner::default();
         let mut n = 0usize;
         for path in &wgsl_files {
             let Ok(src) = std::fs::read_to_string(path) else {
@@ -10498,7 +10498,7 @@ fn main() {
             .as_deref()
             .map(|s| s.split_whitespace().map(str::to_string).collect())
             .unwrap_or_default();
-        let verifier = riir_clippy::fix_verify::FixVerifier::new().with_extra_args(extra.clone());
+        let verifier = riir_refine::fix_verify::FixVerifier::new().with_extra_args(extra.clone());
         // Issue 031 H3: the verify baseline is default-features cargo check
         // — code behind non-default features is NOT compile-gated (the
         // katgpt-pruners batch shipped 2 feature-gated breaks past verify:
@@ -10508,7 +10508,7 @@ fn main() {
         if args.verify_args.is_none() {
             let mut warned: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
             for b in &verify_batches {
-                let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
+                let Some(pkg) = riir_refine::fix_verify::owning_package_root(&b.path) else {
                     continue;
                 };
                 if !warned.insert(pkg.clone()) {
@@ -10517,7 +10517,7 @@ fn main() {
                 let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
                     continue;
                 };
-                let n = riir_clippy::fix_verify::manifest_nondefault_feature_count(&text);
+                let n = riir_refine::fix_verify::manifest_nondefault_feature_count(&text);
                 if n > 0 {
                     eprintln!(
                         "verify: WARNING — {} declares {} non-default feature(s); gated modules are NOT compile-gated by this baseline. Pass --verify-args \"--all-features\" to cover them (if the crate's all-features set compiles).",
@@ -10586,14 +10586,14 @@ fn main() {
         // when --verify-args passed a partial set — the case the coarse
         // Issue-031-H3 warning correctly stays silent on.
         {
-            let mut marks: Vec<riir_clippy::fix_verify::CfgUnverified> = Vec::new();
-            let mut sets: std::collections::HashMap<PathBuf, riir_clippy::fix_verify::FeatureSet> =
+            let mut marks: Vec<riir_refine::fix_verify::CfgUnverified> = Vec::new();
+            let mut sets: std::collections::HashMap<PathBuf, riir_refine::fix_verify::FeatureSet> =
                 std::collections::HashMap::new();
             for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
                 if *whole {
                     continue;
                 }
-                let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
+                let Some(pkg) = riir_refine::fix_verify::owning_package_root(&b.path) else {
                     continue;
                 };
                 if !sets.contains_key(&pkg) {
@@ -10602,7 +10602,7 @@ fn main() {
                     };
                     sets.insert(
                         pkg.clone(),
-                        riir_clippy::fix_verify::feature_set_from_args(
+                        riir_refine::fix_verify::feature_set_from_args(
                             &text,
                             args.verify_args.as_deref(),
                         ),
@@ -10612,7 +10612,7 @@ fn main() {
                     continue;
                 };
                 marks.extend(
-                    riir_clippy::fix_verify::cfg_unverified_edits(
+                    riir_refine::fix_verify::cfg_unverified_edits(
                         std::slice::from_ref(b),
                         set,
                     )
@@ -10623,7 +10623,7 @@ fn main() {
             if !marks.is_empty() {
                 eprint!(
                     "{}",
-                    riir_clippy::fix_verify::render_cfg_audit(&marks, args.verify_args.as_deref())
+                    riir_refine::fix_verify::render_cfg_audit(&marks, args.verify_args.as_deref())
                 );
             }
         }
@@ -10659,7 +10659,7 @@ fn main() {
                 if *whole {
                     continue;
                 }
-                let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
+                let Some(pkg) = riir_refine::fix_verify::owning_package_root(&b.path) else {
                     continue;
                 };
                 for e in &b.edits {
@@ -10677,7 +10677,7 @@ fn main() {
             }
             if !by_pkg.is_empty() {
                 let runner =
-                    riir_clippy::fix_verify::CheckRunner::new().with_extra_args(extra.clone());
+                    riir_refine::fix_verify::CheckRunner::new().with_extra_args(extra.clone());
                 let mut canon_cache: std::collections::HashMap<PathBuf, PathBuf> =
                     std::collections::HashMap::new();
                 let mut n_resolved = 0usize;
@@ -10687,7 +10687,7 @@ fn main() {
                     let outcome = runner.run_clippy(pkg, lints);
                     let findings = match outcome {
                         Ok(o) if o.exit_ok => {
-                            riir_clippy::fix_verify::parse_clippy_findings(&o.json)
+                            riir_refine::fix_verify::parse_clippy_findings(&o.json)
                         }
                         Ok(_) => {
                             n_unverifiable += edits.len();
@@ -10699,7 +10699,7 @@ fn main() {
                             continue;
                         }
                     };
-                    let ws = riir_clippy::compile_oracle::workspace_root(pkg);
+                    let ws = riir_refine::compile_oracle::workspace_root(pkg);
                     let ws_ref = ws.as_deref().unwrap_or(pkg.as_path());
                     for (batch_path, line, lint) in edits {
                         let canon = canon_cache
@@ -10712,7 +10712,7 @@ fn main() {
                         let target = format!("clippy::{lint}");
                         let persists = findings.iter().any(|f| {
                             f.code == target
-                                && riir_clippy::fix_verify::resolve_reported_path(
+                                && riir_refine::fix_verify::resolve_reported_path(
                                     &f.file, ws_ref, pkg,
                                 ) == *canon
                                 && *line >= f.line_start
@@ -10759,8 +10759,8 @@ fn main() {
                         &e.rule_id,
                         &e.restore,
                         &e.replacement,
-                        &riir_clippy::component::FailureSignal::reverted(
-                            riir_clippy::component::RevertKind::CompileGate,
+                        &riir_refine::component::FailureSignal::reverted(
+                            riir_refine::component::RevertKind::CompileGate,
                         ),
                     );
                     #[cfg(feature = "latent_retrieval")]
@@ -10774,7 +10774,7 @@ fn main() {
                 }
                 continue;
             }
-            let kept: Vec<&riir_clippy::fix_verify::EditAtLine> = b
+            let kept: Vec<&riir_refine::fix_verify::EditAtLine> = b
                 .edits
                 .iter()
                 .filter(|e| !reverted_lines.contains(&e.final_line))
@@ -10797,7 +10797,7 @@ fn main() {
             // honest verified-fail on a persist. Span-level reverts stay
             // definitive fails.
             for e in &kept {
-                let (success, verified) = riir_clippy::fix_verify::kept_edit_verdict(
+                let (success, verified) = riir_refine::fix_verify::kept_edit_verdict(
                     oracle_resolved
                         .get(&(b.path.clone(), e.final_line))
                         .copied(),
@@ -10806,7 +10806,7 @@ fn main() {
                 // full oracle says the lint persists) is C-class — the gate
                 // was too loose. Successes stay unattributed.
                 let fail_signal =
-                    (!success).then(riir_clippy::component::FailureSignal::gate_passed_ineffective);
+                    (!success).then(riir_refine::component::FailureSignal::gate_passed_ineffective);
                 if let Some(sig) = &fail_signal {
                     evolve_rec.record_failure_signal(&e.rule_id, &e.restore, &e.replacement, sig);
                 } else {
@@ -10827,7 +10827,7 @@ fn main() {
                     success,
                     verified,
                     &heal_run_id,
-                    fail_signal.as_ref().map(riir_clippy::component::classify),
+                    fail_signal.as_ref().map(riir_refine::component::classify),
                 );
             }
             for e in b
@@ -10839,8 +10839,8 @@ fn main() {
                     &e.rule_id,
                     &e.restore,
                     &e.replacement,
-                    &riir_clippy::component::FailureSignal::reverted(
-                        riir_clippy::component::RevertKind::CompileGate,
+                    &riir_refine::component::FailureSignal::reverted(
+                        riir_refine::component::RevertKind::CompileGate,
                     ),
                 );
                 #[cfg(feature = "latent_retrieval")]
@@ -10864,9 +10864,9 @@ fn main() {
             // decided pass now (default-on; decisions were made against the
             // pre-heal originals above).
             if let Some((_, decision, edition)) = verify_fmt.iter().find(|(p, _, _)| *p == b.path) {
-                use riir_clippy::fmt::FmtDecision;
+                use riir_refine::fmt::FmtDecision;
                 match decision {
-                    FmtDecision::Format => match riir_clippy::fmt::apply(&b.path, edition) {
+                    FmtDecision::Format => match riir_refine::fmt::apply(&b.path, edition) {
                         Ok(()) => {
                             fmt_summary.formatted += 1;
                             println!("  fmt: formatted");
@@ -11034,7 +11034,7 @@ fn main() {
                 );
             }
             if let Err(e) = active_set.save(
-                &resolve_heal_root(&args.paths).join(riir_clippy::active_set::ACTIVE_SET_FILE),
+                &resolve_heal_root(&args.paths).join(riir_refine::active_set::ACTIVE_SET_FILE),
             ) {
                 eprintln!("active-set: re-admit save failed: {e}");
             }
@@ -11113,7 +11113,7 @@ fn main() {
     // and the delta is vacuously empty.
     if clippy_feed.is_some() && !missing_by_span.is_empty() {
         let (fixable, verify) = fix_lane_tiers();
-        let delta = riir_clippy::corpus_delta::delta(
+        let delta = riir_refine::corpus_delta::delta(
             missing_by_span.iter().map(Vec::as_slice),
             &fixable,
             &verify,
@@ -11157,7 +11157,7 @@ fn main() {
     // authority); the figures render in the kat_footer block below.
     #[cfg(feature = "kat_service")]
     if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_mut()) {
-        use riir_clippy::kat_units::MicroKat;
+        use riir_refine::kat_units::MicroKat;
 
         c.settle(m.state());
         if let Err(e) = c.save() {
@@ -11170,7 +11170,7 @@ fn main() {
         // passes to the renderer with no conversion, and a whole-KAT count
         // reaching this closure is a compile error.
         let remaining = MicroKat::from(c.balance_projection());
-        let kat = |micro: MicroKat| riir_clippy::kat_payreq_client::render_kat(micro.0);
+        let kat = |micro: MicroKat| riir_refine::kat_payreq_client::render_kat(micro.0);
         if remaining.0 == 0 {
             // §KAT warn-and-pay (T1.6), as amended by the 075 soft gate:
             // at 0 the evolved-corpus hot-push pauses at epoch end + the
@@ -11181,7 +11181,7 @@ fn main() {
             // local projection).
             eprintln!(
                 "kat-charge: 0 KAT remain of the {} grant projection — out-of-KAT",
-                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
+                kat(riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
             );
             eprintln!(
                 "kat-charge: healing continues on the local corpus; the evolved-corpus \\
@@ -11189,19 +11189,19 @@ fn main() {
             );
             #[cfg(feature = "kat_transport")]
             {
-                let dir = riir_clippy::kat_account::KatAccount::default_dir();
-                let acct = riir_clippy::kat_account::KatAccount::load(&dir)
+                let dir = riir_refine::kat_account::KatAccount::default_dir();
+                let acct = riir_refine::kat_account::KatAccount::load(&dir)
                     .ok()
                     .map(|a| a.state().account_id.clone())
                     .unwrap_or_default();
-                let url = riir_clippy::kat_lease_client::payment_url(
-                    &riir_clippy::kat_lease_client::service_url_for_command(),
+                let url = riir_refine::kat_lease_client::payment_url(
+                    &riir_refine::kat_lease_client::service_url_for_command(),
                     &acct,
                 );
                 eprintln!(
                     "kat-charge: top up — {url} (KAT packs), or contribute: cargo refine --mine"
                 );
-                let qr = riir_clippy::kat_lease_client::render_qr_ascii(&url);
+                let qr = riir_refine::kat_lease_client::render_qr_ascii(&url);
                 if !qr.is_empty() {
                     eprintln!("{qr}");
                 }
@@ -11213,7 +11213,7 @@ fn main() {
                 "kat-charge: warning — {} KAT remain of the {} grant projection; \\
                  healing continues offline (the server ledger is the authority)",
                 kat(remaining),
-                kat(riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
+                kat(riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
             );
         }
     }
@@ -11234,14 +11234,14 @@ fn main() {
         feature = "latent_retrieval"
     ))]
     if matches!(
-        riir_clippy::kat_mining_consent::read_with_warning(
-            &riir_clippy::kat_mining_consent::default_dir()
+        riir_refine::kat_mining_consent::read_with_warning(
+            &riir_refine::kat_mining_consent::default_dir()
         )
         .0,
-        riir_clippy::kat_mining_consent::MiningConsent::OptedIn
+        riir_refine::kat_mining_consent::MiningConsent::OptedIn
     ) {
-        let url = riir_clippy::kat_lease_client::service_url_for_command();
-        let transport = riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, 5);
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let transport = riir_refine::kat_lease_client::HttpLeaseTransport::new(&url, 5);
         let outcome = push_mining_batch(true, &url, &transport);
         print_mine_push(&outcome);
     }
@@ -11256,16 +11256,16 @@ fn main() {
         feature = "latent_retrieval"
     )))]
     if matches!(
-        riir_clippy::kat_mining_consent::read_with_warning(
-            &riir_clippy::kat_mining_consent::default_dir()
+        riir_refine::kat_mining_consent::read_with_warning(
+            &riir_refine::kat_mining_consent::default_dir()
         )
         .0,
-        riir_clippy::kat_mining_consent::MiningConsent::OptedIn
+        riir_refine::kat_mining_consent::MiningConsent::OptedIn
     ) {
         eprintln!(
             "kat: mining auto-contribute SKIPPED — this binary lacks the network features \
              (batch stays queued; drain it with a release-set binary); rebuild with: {}",
-            riir_clippy::build_stamp::rebuild_command()
+            riir_refine::build_stamp::rebuild_command()
         );
     }
 
@@ -11280,7 +11280,7 @@ fn main() {
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     if let Some(c) = kat_charge.as_ref() {
         let root = resolve_heal_root(&args.paths);
-        let outcome = riir_clippy::kat_burn_client::run_burn_sync(
+        let outcome = riir_refine::kat_burn_client::run_burn_sync(
             &root,
             c.state().charged_kat,
             c.state().meter_watermark_tokens,
@@ -11295,7 +11295,7 @@ fn main() {
         eprintln!(
             "kat: burn report SKIPPED — this binary lacks the network features (the un-pushed \
              delta stacks locally and reports with the next release-set run); rebuild with: {}",
-            riir_clippy::build_stamp::rebuild_command()
+            riir_refine::build_stamp::rebuild_command()
         );
     }
 
@@ -11313,19 +11313,19 @@ fn main() {
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     if args.fix
         && !fixstat_rules.is_empty()
-        && riir_clippy::kat_stats_consent::read(&riir_clippy::kat_stats_consent::default_dir())
+        && riir_refine::kat_stats_consent::read(&riir_refine::kat_stats_consent::default_dir())
             .push_allowed()
     {
         let account =
-            riir_clippy::kat_account::KatAccount::load(&riir_clippy::kat_account::KatAccount::default_dir());
+            riir_refine::kat_account::KatAccount::load(&riir_refine::kat_account::KatAccount::default_dir());
         let pushed = match account.ok().and_then(|a| a.signing_key().ok()) {
             Some(key) => {
-                let url = riir_clippy::kat_lease_client::service_url_for_command();
-                let transport = riir_clippy::kat_fixstat_client::HttpFixstatTransport::new(
+                let url = riir_refine::kat_lease_client::service_url_for_command();
+                let transport = riir_refine::kat_fixstat_client::HttpFixstatTransport::new(
                     &url,
-                    riir_clippy::kat_fixstat_client::FIXSTAT_TIMEOUT_SECS,
+                    riir_refine::kat_fixstat_client::FIXSTAT_TIMEOUT_SECS,
                 );
-                let machine = riir_clippy::kat_consent_client::machine_label();
+                let machine = riir_refine::kat_consent_client::machine_label();
                 let toolchain = std::process::Command::new("rustc")
                     .arg("--version")
                     .output()
@@ -11335,7 +11335,7 @@ fn main() {
                     .unwrap_or_default();
                 let rules: Vec<_> = fixstat_rules
                     .iter()
-                    .map(|(k, v)| riir_clippy::kat_protocol_fixstat::FixStatCount::new(k, *v))
+                    .map(|(k, v)| riir_refine::kat_protocol_fixstat::FixStatCount::new(k, *v))
                     .collect();
                 // Domain totals: an explicit `--domain` pin wins (the
                 // operator's own attribution); otherwise the COMPILED
@@ -11346,7 +11346,7 @@ fn main() {
                 // than guessed.
                 let total: u32 = rules.iter().map(|e| e.count).sum();
                 let domains = match args.domain {
-                    Some(d) => vec![riir_clippy::kat_protocol_fixstat::FixStatCount::new(
+                    Some(d) => vec![riir_refine::kat_protocol_fixstat::FixStatCount::new(
                         d.label(),
                         total,
                     )],
@@ -11357,11 +11357,11 @@ fn main() {
                                 .iter()
                                 .map(|e| (e.name.clone(), e.count))
                                 .collect();
-                            riir_clippy::kat_sync_payload::RuleDomains::compiled()
+                            riir_refine::kat_sync_payload::RuleDomains::compiled()
                                 .fold_rule_domains(&pairs)
                                 .into_iter()
                                 .map(|(name, count)| {
-                                    riir_clippy::kat_protocol_fixstat::FixStatCount::new(name, count)
+                                    riir_refine::kat_protocol_fixstat::FixStatCount::new(name, count)
                                 })
                                 .collect()
                         }
@@ -11374,15 +11374,15 @@ fn main() {
                         }
                     }
                 };
-                let row = riir_clippy::kat_fixstat_client::FixStatRow {
-                    run_id: riir_clippy::kat_fixstat_client::fresh_run_id(&machine),
+                let row = riir_refine::kat_fixstat_client::FixStatRow {
+                    run_id: riir_refine::kat_fixstat_client::fresh_run_id(&machine),
                     machine,
                     toolchain,
                     files_touched: u32::try_from(n_fixed_files).unwrap_or(u32::MAX),
                     rules,
                     domains,
                 };
-                riir_clippy::kat_fixstat_client::push_fixstat(&transport, &key, &row)
+                riir_refine::kat_fixstat_client::push_fixstat(&transport, &key, &row)
             }
             None => Err("no logged-in account (run `cargo refine --stats on`)".to_string()),
         };
@@ -11403,13 +11403,13 @@ fn main() {
     #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
     if args.fix
         && !fixstat_rules.is_empty()
-        && riir_clippy::kat_stats_consent::read(&riir_clippy::kat_stats_consent::default_dir())
+        && riir_refine::kat_stats_consent::read(&riir_refine::kat_stats_consent::default_dir())
             .push_allowed()
     {
         eprintln!(
             "kat: fix-stats push SKIPPED — this binary lacks the network features (a lost row \
              is a lost stat, not a lost commit); rebuild with: {}",
-            riir_clippy::build_stamp::rebuild_command()
+            riir_refine::build_stamp::rebuild_command()
         );
     }
 
@@ -11422,10 +11422,10 @@ fn main() {
     // crossing — by design, not a stuck delta).
     #[cfg(feature = "kat_service")]
     if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_ref()) {
-        use riir_clippy::kat_units::MicroKat;
+        use riir_refine::kat_units::MicroKat;
 
-        let account = riir_clippy::kat_account::KatAccount::load(
-            &riir_clippy::kat_account::KatAccount::default_dir(),
+        let account = riir_refine::kat_account::KatAccount::load(
+            &riir_refine::kat_account::KatAccount::default_dir(),
         )
         .ok();
         // The leaderboard link needs no account in the URL (the row key is
@@ -11438,7 +11438,7 @@ fn main() {
             .map(|_| {
                 format!(
                     "{}/leaderboard",
-                    riir_clippy::kat_lease_client::service_url_for_command()
+                    riir_refine::kat_lease_client::service_url_for_command()
                         .trim_end_matches('/')
                 )
             })
@@ -11451,25 +11451,25 @@ fn main() {
         // projection is GONE: post-D1 the grant is TUNA, and the server
         // draws TUNA-first, so a local KAT-drain bar was a fiction).
         #[cfg_attr(not(feature = "kat_transport"), allow(unused_mut))]
-        let mut tuna_line: Option<riir_clippy::kat_footer::TunaLine> = None;
+        let mut tuna_line: Option<riir_refine::kat_footer::TunaLine> = None;
         #[cfg_attr(not(feature = "kat_transport"), allow(unused_mut))]
         let mut kat_balance: Option<MicroKat> = None;
         #[cfg(feature = "kat_transport")]
         let sync = if account.is_none() {
-            riir_clippy::kat_footer::SyncState::LoggedOut
+            riir_refine::kat_footer::SyncState::LoggedOut
         } else {
             let root = resolve_heal_root(&args.paths);
             let ack_path = root
                 .join(".refine")
-                .join(riir_clippy::kat_burn_client::KatBurnAck::FILE_NAME);
-            let (ack, _) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
+                .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+            let (ack, _) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             kat_balance = ack.last_balance_micro.map(MicroKat);
             tuna_line = ack.tuna_balance_micro.zip(ack.tuna_expires_unix).map(
-                |(balance, expires)| riir_clippy::kat_footer::TunaLine {
+                |(balance, expires)| riir_refine::kat_footer::TunaLine {
                     balance_micro: MicroKat(balance.max(0)),
                     // The trial scale mirrors the KAT grant projection
                     // until the server reports the real claim size (B2).
-                    grant_micro: riir_clippy::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
+                    grant_micro: riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
                     expires_unix: expires,
                     now_unix: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
@@ -11481,14 +11481,14 @@ fn main() {
             // the next whole-KAT crossing — it is not a stuck delta. Current
             // means: every pushable whole KAT is acked. A real stack (offline
             // pushes) leaves whole-KAT gaps beyond the sliver.
-            let wire = riir_clippy::kat_burn_client::WIRE_PER_CHARGE_UNITS;
+            let wire = riir_refine::kat_burn_client::WIRE_PER_CHARGE_UNITS;
             let pushable_wire = c.state().charged_kat / wire;
             if pushable_wire <= ack.burn_kat_total {
-                riir_clippy::kat_footer::SyncState::Current {
+                riir_refine::kat_footer::SyncState::Current {
                     ledger_url: &ledger_url,
                 }
             } else {
-                riir_clippy::kat_footer::SyncState::Unsynced {
+                riir_refine::kat_footer::SyncState::Unsynced {
                     // The whole-KAT gap → µ at the ONE µ-per-whole-KAT factor
                     // (explicit conversion — Plan 035 T3).
                     micro_kat: MicroKat::from(
@@ -11501,22 +11501,22 @@ fn main() {
         };
         #[cfg(not(feature = "kat_transport"))]
         let sync = if account.is_none() {
-            riir_clippy::kat_footer::SyncState::LoggedOut
+            riir_refine::kat_footer::SyncState::LoggedOut
         } else {
-            riir_clippy::kat_footer::SyncState::Unknown
+            riir_refine::kat_footer::SyncState::Unknown
         };
-        let footer = riir_clippy::kat_footer::KatFooter {
+        let footer = riir_refine::kat_footer::KatFooter {
             run_tokens: m.session_tokens(),
             run_micro_kat: MicroKat::from(c.session_kat()),
             tuna: tuna_line,
             kat_balance_micro: kat_balance,
-            rate_micro_per_mtok: riir_clippy::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
+            rate_micro_per_mtok: riir_refine::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
             account_hex: account.as_ref().map(|a| a.state().account_id.as_str()),
             sync,
         };
         println!(
             "{}",
-            footer.render(riir_clippy::kat_footer::footer_color_enabled())
+            footer.render(riir_refine::kat_footer::footer_color_enabled())
         );
     }
 }
@@ -11552,7 +11552,7 @@ fn main() {
 /// finding is a citation + advice line; nothing is ever written.
 #[cfg(feature = "dist")]
 fn run_dist_lane(paths: &[PathBuf]) -> usize {
-    use riir_clippy::domains::dist::rules::scan_source_with;
+    use riir_refine::domains::dist::rules::scan_source_with;
 
     let mut printed = 0usize;
     for path in paths {
@@ -11562,7 +11562,7 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
         // Caller evidence (workspace root, autodiscovered bins, root profile
         // knobs) — derived once per manifest inside the domain, one bounded
         // ancestor walk, cached in the returned Copy context.
-        let ctx = riir_clippy::domains::dist::DistContext::derive(path);
+        let ctx = riir_refine::domains::dist::DistContext::derive(path);
         for f in scan_source_with(&src, ctx) {
             println!(
                 "{}:{} [dist  ] {:<40} — {}",
@@ -11579,8 +11579,8 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
 }
 
 fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
-    use riir_clippy::domains::docker::proposers::fix_all;
-    use riir_clippy::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
+    use riir_refine::domains::docker::proposers::fix_all;
+    use riir_refine::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
 
     let mut printed = 0usize;
     for path in paths {
@@ -11639,8 +11639,8 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
 /// (degrades to Tier-0 with ONE line — the Issue 018 oracle-split).
 #[cfg(feature = "shader_perf")]
 fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
-    use riir_clippy::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
-    use riir_clippy::domains::shader_perf::ShaderScanner;
+    use riir_refine::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
+    use riir_refine::domains::shader_perf::ShaderScanner;
 
     let mut printed = 0usize;
     for path in paths {
@@ -11649,7 +11649,7 @@ fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
         };
         // Render-stage files only (the routing split: @compute is the
         // kernel lane's territory).
-        if !riir_clippy::domains::shader_perf::entry_stages(&src).has_render() {
+        if !riir_refine::domains::shader_perf::entry_stages(&src).has_render() {
             continue;
         }
         let findings = ShaderScanner.scan(&src);
@@ -11678,13 +11678,13 @@ fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
         if edits.is_empty() {
             continue;
         }
-        let healed = riir_clippy::edit_emitter::apply_edits(
+        let healed = riir_refine::edit_emitter::apply_edits(
             &src,
             edits.iter().map(|re| re.edit.clone()).collect(),
         );
         // Tier-0 invariants on the healed output — a guard insertion that
         // disturbs entry points or bindings is reverted, not shipped.
-        let verdict = riir_clippy::domains::shader_perf::verify::tier0_verdict(&src, &healed);
+        let verdict = riir_refine::domains::shader_perf::verify::tier0_verdict(&src, &healed);
         if !(verdict.parses && verdict.entry_points_intact && verdict.bindings_unchanged) {
             eprintln!(
                 "  REFUSED {} — Tier-0 invariant violated (parses={}, entry_points={}, bindings={})",
@@ -11697,7 +11697,7 @@ fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
         }
         #[cfg(feature = "shader_verify")]
         {
-            match riir_clippy::domains::shader_perf::verify::validate_naga(&healed) {
+            match riir_refine::domains::shader_perf::verify::validate_naga(&healed) {
                 Ok(Some(true)) => {}
                 Ok(Some(false)) => {
                     eprintln!("  REFUSED {} — naga rejected the healed module", path.display());
@@ -11721,8 +11721,8 @@ fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
 /// Derive what the repo around a Dockerfile can prove, for the caller-gated
 /// rules. Anything not derivable stays `None` — never guessed.
 #[cfg(feature = "docker")]
-fn docker_scan_context(path: &Path) -> riir_clippy::domains::docker::rules::ScanContext {
-    use riir_clippy::domains::docker::rules::ScanContext;
+fn docker_scan_context(path: &Path) -> riir_refine::domains::docker::rules::ScanContext {
+    use riir_refine::domains::docker::rules::ScanContext;
 
     // The build context is conventionally the Dockerfile's directory or a
     // parent; walk up to the nearest dir carrying a Cargo.toml and read the
@@ -11777,11 +11777,11 @@ fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
 #[cfg(all(feature = "kat_service", feature = "score_bench"))]
 #[allow(clippy::type_complexity)] // mirrors lease_overlay_for_run's shape one layer up
 fn run_overlay_with_promotion(
-    store: &riir_clippy::kat_lease_client::LeaseStore,
+    store: &riir_refine::kat_lease_client::LeaseStore,
     pin: Option<u64>,
     heal_root: &std::path::Path,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
-    use riir_clippy::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
+    use riir_refine::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
 
     let leased = lease_overlay_for_run(store, pin);
     let registry_path = heal_root.join(REGISTRY_FILE);
@@ -11838,10 +11838,10 @@ fn run_overlay_with_promotion(
 #[cfg(feature = "kat_service")]
 #[allow(clippy::type_complexity)] // mirrors the lease module's DomainTriples shape one layer up
 fn lease_overlay_for_run(
-    store: &riir_clippy::kat_lease_client::LeaseStore,
+    store: &riir_refine::kat_lease_client::LeaseStore,
     pin: Option<u64>,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
-    use riir_clippy::kat_lease_client::{
+    use riir_refine::kat_lease_client::{
         overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER,
         PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF, PACK_DOMAIN_SEC,
     };
@@ -11915,7 +11915,7 @@ fn reheat_fix_pass(
     write: bool,
     verify_mode: bool,
     fmt_active: bool,
-    active_set: &riir_clippy::active_set::ActiveSet,
+    active_set: &riir_refine::active_set::ActiveSet,
     notbench_guard: bool,
     fix_groups: &[String],
 ) -> usize {
@@ -11932,7 +11932,7 @@ fn reheat_fix_pass(
     // edit on a bench target alters what the bench measures; decline
     // loudly (count reported once, pass 0), never silently.
     let bench_guard = run_perf
-        && riir_clippy::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
+        && riir_refine::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
     // P39: the posture lane's NotBenchable decline rides the reheat too —
     // the guard semantic must be uniform across both fix paths.
     let notbench_guard = run_perf && notbench_guard;
@@ -11963,7 +11963,7 @@ fn reheat_fix_pass(
                 if active_set.excludes("perf", rule) {
                     continue;
                 }
-                perf_edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
+                perf_edits.extend(riir_refine::domains::rust_perf::proposers::collect_edits(
                     rule, &current, &parsed,
                 ));
             }
@@ -11999,7 +11999,7 @@ fn reheat_fix_pass(
                 if active_set.excludes("clippy", lint) {
                     continue;
                 }
-                let collected = riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                let collected = riir_refine::domains::clippy_lints::proposers::collect_edits(
                     lint, &current, &parsed,
                 );
                 if level_gated.contains(lint) {
@@ -12021,11 +12021,11 @@ fn reheat_fix_pass(
         }
         #[cfg(feature = "sec")]
         if run_sec {
-            for rule in riir_clippy::domains::sec::proposers::FIXABLE_SEC {
+            for rule in riir_refine::domains::sec::proposers::FIXABLE_SEC {
                 if active_set.excludes("sec", rule) {
                     continue;
                 }
-                edits.extend(riir_clippy::domains::sec::proposers::collect_edits(
+                edits.extend(riir_refine::domains::sec::proposers::collect_edits(
                     rule, &current, &parsed,
                 ));
             }
@@ -12033,7 +12033,7 @@ fn reheat_fix_pass(
         if edits.is_empty() {
             break;
         }
-        let (next, splices) = riir_clippy::edit_emitter::apply_edits_traced(
+        let (next, splices) = riir_refine::edit_emitter::apply_edits_traced(
             &current,
             edits.iter().map(|re| re.edit.clone()).collect(),
         );
@@ -12062,12 +12062,12 @@ fn reheat_fix_pass(
     if (changed && write && !verify_mode && current != src)
         && (std::fs::write(path, &current).is_ok() && fmt_active)
     {
-        let edition = riir_clippy::fmt::edition_for(path);
+        let edition = riir_refine::fmt::edition_for(path);
         if matches!(
-            riir_clippy::fmt::decide(&current, path, &edition),
-            riir_clippy::fmt::FmtDecision::Format
+            riir_refine::fmt::decide(&current, path, &edition),
+            riir_refine::fmt::FmtDecision::Format
         ) {
-            let _ = riir_clippy::fmt::apply(path, &edition);
+            let _ = riir_refine::fmt::apply(path, &edition);
         }
     }
     total_applied
@@ -12087,25 +12087,25 @@ fn run_reheat_pass(
     args: &Args,
     files: &[PathBuf],
     matcher: &mut LatentMatcher,
-    mut meter: Option<&mut riir_clippy::kat_meter::KatMeter>,
-    active_set: &riir_clippy::active_set::ActiveSet,
-) -> Option<(riir_clippy::kat_lease_client::ReheatReport, Option<String>)> {
-    use riir_clippy::kat_lease_client::{
+    mut meter: Option<&mut riir_refine::kat_meter::KatMeter>,
+    active_set: &riir_refine::active_set::ActiveSet,
+) -> Option<(riir_refine::kat_lease_client::ReheatReport, Option<String>)> {
+    use riir_refine::kat_lease_client::{
         run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseTransport, PassSpans,
     };
 
     // One bounded lease check: did a new epoch land?
-    let url = riir_clippy::kat_lease_client::service_url_from_env()?;
+    let url = riir_refine::kat_lease_client::service_url_from_env()?;
     let transport = HttpLeaseTransport::new(&url, args.update_timeout.max(1));
-    let store = riir_clippy::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
-    let mut charge = riir_clippy::kat_lease_client::LeaseCharge::open(&store);
+    let store = riir_refine::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
+    let mut charge = riir_refine::kat_lease_client::LeaseCharge::open(&store);
     let current = store.current();
     let etag = current
         .as_ref()
-        .map(|m| riir_clippy::kat_lease_client::hex32(&m.commitment));
+        .map(|m| riir_refine::kat_lease_client::hex32(&m.commitment));
     let body = match transport.get_lease(etag.as_deref()) {
-        riir_clippy::kat_lease_client::HttpResponse::NotModified => return None,
-        riir_clippy::kat_lease_client::HttpResponse::Ok(b) => b,
+        riir_refine::kat_lease_client::HttpResponse::NotModified => return None,
+        riir_refine::kat_lease_client::HttpResponse::Ok(b) => b,
         _ => return None, // offline/error → no reheat, silently
     };
     let manifest = match LeaseManifest::decode(&body) {
@@ -12122,7 +12122,7 @@ fn run_reheat_pass(
     let out_of_kat = false; // the reheat bill is the delta bill, not a new grant gate
     let outcome = run_update_phase(&transport, &store, &mut charge, out_of_kat, None);
     match outcome.status {
-        riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
             // Rebuild the matcher under E+1 (a failed rebuild aborts the
             // reheat — pass 1's results stand). T2.4: promotions merge into
             // the rebuilt overlay too (same helper as the run-start build).
@@ -12151,7 +12151,7 @@ fn run_reheat_pass(
                 let display = file.display().to_string();
                 for s in matcher.suggest_file(&src, &display, args.top_k) {
                     let text = extract_span_text(&src, s.start_line, s.end_line);
-                    let key = riir_clippy::kat_lease_client::span_key(&text);
+                    let key = riir_refine::kat_lease_client::span_key(&text);
                     let mut rules: Vec<String> = s
                         .by_domain
                         .iter()
@@ -12161,13 +12161,13 @@ fn run_reheat_pass(
                     rules.dedup();
                     pass2.push(PassSpans {
                         key,
-                        tokens: riir_clippy::kat_meter::count_word_tokens(text.as_bytes()),
+                        tokens: riir_refine::kat_meter::count_word_tokens(text.as_bytes()),
                         rules,
                     });
                     span_texts.insert(key, text);
                 }
             }
-            let plan = riir_clippy::kat_lease_client::plan_reheat(&ctx.pass1, &pass2);
+            let plan = riir_refine::kat_lease_client::plan_reheat(&ctx.pass1, &pass2);
             // Which FILES carry changed spans (the proposer granularity).
             for file in files {
                 let Ok(src) = std::fs::read_to_string(file) else {
@@ -12182,7 +12182,7 @@ fn run_reheat_pass(
                             let text = extract_span_text(&src, s.start_line, s.end_line);
                             plan.changed
                                 .iter()
-                                .any(|(k, _)| *k == riir_clippy::kat_lease_client::span_key(&text))
+                                .any(|(k, _)| *k == riir_refine::kat_lease_client::span_key(&text))
                         });
                 if any_changed {
                     file_changed.insert(file.clone());
@@ -12213,7 +12213,7 @@ fn run_reheat_pass(
                     );
                 }
             }
-            let report = riir_clippy::kat_lease_client::ReheatReport {
+            let report = riir_refine::kat_lease_client::ReheatReport {
                 pass1_epoch: ctx.start_epoch,
                 pass2_epoch: epoch,
                 pass1_tokens: ctx.pass1_tokens,
@@ -12222,7 +12222,7 @@ fn run_reheat_pass(
                 new_fixes,
             };
             let _ = charge.save();
-            let line = riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat);
+            let line = riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat);
             Some((report, Some(line)))
         }
         _ => None,
@@ -12305,13 +12305,13 @@ mod fix_review_note_tests {
             "unnecessary_lazy_evaluations",
         ] {
             assert!(
-                riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS.contains(&rule),
+                riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS.contains(&rule),
                 "{rule} annotated but not FIXABLE"
             );
         }
         for rule in ["static-str", "bool-to-bitpack"] {
             assert!(
-                riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES.contains(&rule),
+                riir_refine::domains::rust_perf::proposers::FIXABLE_RULES.contains(&rule),
                 "{rule} annotated but not FIXABLE"
             );
         }

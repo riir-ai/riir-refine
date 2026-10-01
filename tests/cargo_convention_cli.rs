@@ -47,7 +47,7 @@ const A_RS: &str = "pub fn add(a: u32, b: u32) -> u32 { a.wrapping_add(b) }\n";
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "riir_clippy_convention_{tag}_{}_{}",
+        "riir_refine_convention_{tag}_{}_{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

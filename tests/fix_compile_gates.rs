@@ -24,11 +24,11 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use riir_clippy::domains::rustc_errors::diag::{
+use riir_refine::domains::rustc_errors::diag::{
     Applicability, LabeledSpan, RustcErrorDiag, SuggestionSpan,
 };
-use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
-use riir_clippy::recorder::EvolveRecorder;
+use riir_refine::domains::rustc_errors::playbooks::Playbooks;
+use riir_refine::recorder::EvolveRecorder;
 
 // ── T6.5: allocation stability of the propose path ────────────────────
 
@@ -220,7 +220,7 @@ fn garbage_candidate_never_survives_the_report() {
     // and everything else reverts byte-exact. Pin the criterion itself by
     // construction: an applied record's errors tuple must be a strict
     // decrease.
-    let report = riir_clippy::domains::rustc_errors::driver::FixCompileReport::default();
+    let report = riir_refine::domains::rustc_errors::driver::FixCompileReport::default();
     assert!(report.applied.is_empty());
     // The live oracle check is driver_reverts_no_progress_candidate
     // (fix_compile.rs) — cited here so the T6.6 record names both pins.

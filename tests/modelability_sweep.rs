@@ -58,20 +58,20 @@
 
 use std::collections::HashSet;
 
-use riir_clippy::domain::{HealDomain, HealEntry};
-use riir_clippy::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::domain::{HealDomain, HealEntry};
+use riir_refine::domains::clippy_lints::ClippyLintDomain;
 #[cfg(feature = "kernel_heal")]
-use riir_clippy::domains::kernel_opt::corpus::build_kernel_seed_corpus;
+use riir_refine::domains::kernel_opt::corpus::build_kernel_seed_corpus;
 #[cfg(feature = "kernel_heal")]
-use riir_clippy::domains::kernel_opt::KernelOptDomain;
-use riir_clippy::domains::rust_perf::RustPerfDomain;
-use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
-use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
+use riir_refine::domains::kernel_opt::KernelOptDomain;
+use riir_refine::domains::rust_perf::RustPerfDomain;
+use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
 #[cfg(feature = "kernel_heal")]
-use riir_clippy::draft::retrieval_eval::mutate_shape;
-use riir_clippy::draft::retrieval_eval::{canonical_rank, run_eval_with};
-use riir_clippy::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
-use riir_clippy::modelability::{
+use riir_refine::draft::retrieval_eval::mutate_shape;
+use riir_refine::draft::retrieval_eval::{canonical_rank, run_eval_with};
+use riir_refine::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
+use riir_refine::modelability::{
     rank_correlation, scaffold_value, ModelabilityConfig, ModelabilityReport,
 };
 use riir_rag::{Embedder, ModellessEmbedder};

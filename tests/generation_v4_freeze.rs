@@ -23,8 +23,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use riir_clippy::domains::rustc_errors::composite;
-use riir_clippy::score_bench::generations as gens;
+use riir_refine::domains::rustc_errors::composite;
+use riir_refine::score_bench::generations as gens;
 
 /// The landed freeze record drift check: fresh labels for a landed spec must
 /// equal the frozen table exactly (set AND count).
@@ -86,12 +86,12 @@ fn freeze_and_verify_generation_v4_labels() {
         labeled.push((spec.id.clone(), spec.k, want.clone()));
         for code in &want {
             *family_specs.entry(code.clone()).or_insert(0) += 1;
-            let terr = riir_clippy::domains::rustc_errors::corpus_gen::territory_of(code);
+            let terr = riir_refine::domains::rustc_errors::corpus_gen::territory_of(code);
             let terr_name = match terr {
-                riir_clippy::domains::rustc_errors::corpus_gen::Territory::Uncontested => {
+                riir_refine::domains::rustc_errors::corpus_gen::Territory::Uncontested => {
                     "uncontested"
                 }
-                riir_clippy::domains::rustc_errors::corpus_gen::Territory::Contested => "contested",
+                riir_refine::domains::rustc_errors::corpus_gen::Territory::Contested => "contested",
             };
             terr_by_k.entry(spec.k).or_default().insert(terr_name);
         }

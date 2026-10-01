@@ -29,12 +29,12 @@
 
 use std::sync::Mutex;
 
-use riir_clippy::kat_promotion::{
+use riir_refine::kat_promotion::{
     parse_candidates, run_posthoc_sweep, run_promotion_gate, CandidateRow, PromotionRegistry,
     RejectReason, Verdict, CANDIDATE_SCHEMA_VERSION, DOMAIN_CLIPPY,
 };
-use riir_clippy::score_bench::fixtures::fixtures;
-use riir_clippy::score_bench::{draft_oracle, report::HISTORY_JSONL};
+use riir_refine::score_bench::fixtures::fixtures;
+use riir_refine::score_bench::{draft_oracle, report::HISTORY_JSONL};
 
 /// Serialize every oracle-using test in this binary (the oracle's shared
 /// work root + cargo target dir race under parallel invocation).
@@ -44,7 +44,7 @@ static ORACLE_LOCK: Mutex<()> = Mutex::new(());
 /// `composite-return_plus_identity_op` —
 /// `pub fn scale_ticks(ticks: u32) -> u32 { return ticks * 1; }`
 /// (vocabulary lints at freeze: identity_op + needless_return).
-fn subset() -> Vec<riir_clippy::score_bench::BenchFixture> {
+fn subset() -> Vec<riir_refine::score_bench::BenchFixture> {
     fixtures()
         .into_iter()
         .filter(|f| f.id == "composite-return_plus_identity_op")
@@ -83,9 +83,9 @@ fn snapshot_history() -> Option<Vec<u8>> {
 /// one file may shadow each other's match keys; each rejection path gets
 /// its OWN trial so the bar it trips is unambiguous).
 fn gate_one(
-    oracle: &riir_clippy::draft::clippy_oracle::ClippyOracle,
+    oracle: &riir_refine::draft::clippy_oracle::ClippyOracle,
     candidate: CandidateRow,
-) -> (riir_clippy::kat_promotion::GateReport, PromotionRegistry) {
+) -> (riir_refine::kat_promotion::GateReport, PromotionRegistry) {
     let mut registry = PromotionRegistry::default();
     let report = run_promotion_gate(
         oracle,
@@ -118,7 +118,7 @@ fn promote_pass_then_both_regression_bars_with_history_isolation() {
     assert_eq!(registry.promoted.len(), 1);
     assert_eq!(
         registry.promoted["net-benign"].tier,
-        riir_clippy::memory::EvidenceTier::Certified
+        riir_refine::memory::EvidenceTier::Certified
     );
     assert!(registry
         .overlay_triples()

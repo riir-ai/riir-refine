@@ -89,7 +89,7 @@ fn p12_suppresses_a_twice_reverted_pair_across_runs() {
     // Seed what two failed verify runs would have recorded for the exact
     // pair: two compile-gate fails (streak 2 = the suppression threshold).
     {
-        let (store, bad) = riir_clippy::traj_store::TrajStore::open(&dir).unwrap();
+        let (store, bad) = riir_refine::traj_store::TrajStore::open(&dir).unwrap();
         assert_eq!(bad, 0);
         store
             .record(RULE, RESTORE, FIX, false, false, "run-verify-1")

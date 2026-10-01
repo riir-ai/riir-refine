@@ -59,7 +59,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use riir_clippy::kat_burn_client::KatBurnAck;
+use riir_refine::kat_burn_client::KatBurnAck;
 
 /// The closed loopback port — connection REFUSED, instantly, no network.
 const CLOSED_PORT: &str = "http://127.0.0.1:1";
@@ -69,7 +69,7 @@ const A_RS: &str = "pub fn add(a: u32, b: u32) -> u32 { a.wrapping_add(b) }\n";
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "riir_clippy_soft_gate_{tag}_{}_{}",
+        "riir_refine_soft_gate_{tag}_{}_{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -122,7 +122,7 @@ fn login(dir: &Path) {
 /// a v2 file) — since the dated removal that is simply NOT contributed.
 fn seed_ack(dir: &Path, balance_micro: i64) {
     let ack = KatBurnAck {
-        version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
+        version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
         meter_watermark_tokens: 500,
         acked_unix: 1_700_000_000,
@@ -143,7 +143,7 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
 /// v3 shape.
 fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option<bool>) {
     let ack = KatBurnAck {
-        version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
+        version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
         meter_watermark_tokens: 500,
         acked_unix: 1_700_000_000,
@@ -613,7 +613,7 @@ fn issue_080_never_synced_stays_warn_only_even_with_a_leftover_marker() {
     login(&dir);
     // A v3 ack that has synced NOTHING usable: no balance, no contributed
     // — `empty()` is exactly the never-synced shape at the current version.
-    let ack = riir_clippy::kat_burn_client::KatBurnAck::empty();
+    let ack = riir_refine::kat_burn_client::KatBurnAck::empty();
     assert_eq!(ack.last_balance_micro, None);
     assert_eq!(ack.contributed, None);
     let heal_dir = dir.join(".refine");

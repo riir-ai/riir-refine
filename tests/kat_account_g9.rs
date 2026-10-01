@@ -23,10 +23,10 @@
 
 #![cfg(feature = "kat_service")]
 
-use riir_clippy::kat_account::{
+use riir_refine::kat_account::{
     account_id_for, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
 };
-use riir_clippy::kat_meter::{ChargeState, KatCharge, KatMeter, FREE_TIER_GRANT_MICRO_KAT};
+use riir_refine::kat_meter::{ChargeState, KatCharge, KatMeter, FREE_TIER_GRANT_MICRO_KAT};
 
 fn temp_dir(tag: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("kat_acct_g9_{tag}_{}", std::process::id()));
@@ -84,7 +84,7 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     // at the meter constant), never raw micro.
     assert!(first.summary_lines().iter().any(|l| {
         l.contains("grant projection")
-            && l.contains(&riir_clippy::kat_payreq_client::render_kat(
+            && l.contains(&riir_refine::kat_payreq_client::render_kat(
                 FREE_TIER_GRANT_MICRO_KAT.0,
             ))
     }));
@@ -134,7 +134,7 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     let text = std::fs::read_to_string(
         repo_dir
             .join(".refine")
-            .join(riir_clippy::kat_meter::KatCharge::FILE_NAME),
+            .join(riir_refine::kat_meter::KatCharge::FILE_NAME),
     )
     .unwrap();
     let persisted: ChargeState = serde_json::from_str(&text).unwrap();
@@ -144,12 +144,12 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     // composition math runs in MicroKat — µ/whole mixing needs an explicit
     // conversion to compile (riir-dapps Plan 035 T3).
     let grant = FREE_TIER_GRANT_MICRO_KAT;
-    let remaining = grant.saturating_sub(riir_clippy::kat_units::MicroKat::from(
+    let remaining = grant.saturating_sub(riir_refine::kat_units::MicroKat::from(
         persisted.charged_kat,
     ));
     assert_eq!(
         remaining,
-        grant - riir_clippy::kat_units::MicroKat::from(tokens)
+        grant - riir_refine::kat_units::MicroKat::from(tokens)
     );
     // And the ledger files are distinct roots by design: the account is
     // machine-global, the charge is repo-local.
@@ -182,7 +182,7 @@ fn parse_kat_micro(rendered: &str) -> Option<i64> {
     }
     let whole: i64 = whole.parse().ok()?;
     let frac_micro: i64 = if frac.is_empty() { 0 } else { frac.parse().ok()? };
-    let per_kat = i64::try_from(riir_clippy::kat_units::MICRO_PER_KAT).ok()?;
+    let per_kat = i64::try_from(riir_refine::kat_units::MICRO_PER_KAT).ok()?;
     whole
         .checked_mul(per_kat)?
         .checked_add(frac_micro)
@@ -198,7 +198,7 @@ fn parse_kat_micro(rendered: &str) -> Option<i64> {
 /// cannot survive string equality AND value equality together.
 #[test]
 fn l4_free_tier_grant_display_pins_string_and_value() {
-    let rendered = riir_clippy::kat_payreq_client::render_kat(FREE_TIER_GRANT_MICRO_KAT.0);
+    let rendered = riir_refine::kat_payreq_client::render_kat(FREE_TIER_GRANT_MICRO_KAT.0);
     assert_eq!(
         rendered, "100.000000 KAT",
         "the free-tier grant display drifted from the committed cross-repo string"
@@ -211,7 +211,7 @@ fn l4_free_tier_grant_display_pins_string_and_value() {
     // The footer's trimmed reading of the SAME constant agrees ("100" — the
     // other client display of the grant, the fuel-gauge caption).
     assert_eq!(
-        riir_clippy::kat_footer::fmt_kat_display(FREE_TIER_GRANT_MICRO_KAT),
+        riir_refine::kat_footer::fmt_kat_display(FREE_TIER_GRANT_MICRO_KAT),
         "100"
     );
 }

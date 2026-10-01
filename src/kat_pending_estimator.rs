@@ -69,8 +69,8 @@
 //!
 //! ```
 //! # #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))] {
-//! # use riir_clippy::kat_redact::{RedactionGate, SpanOrigin};
-//! # use riir_clippy::kat_pending_estimator::{estimate_pending, SyncWatermark};
+//! # use riir_refine::kat_redact::{RedactionGate, SpanOrigin};
+//! # use riir_refine::kat_pending_estimator::{estimate_pending, SyncWatermark};
 //! let gate = RedactionGate::deny_all();
 //! let est = estimate_pending(&[], &gate, SpanOrigin::OwnRepo, &SyncWatermark::empty());
 //! assert_eq!(est.records_pending_proof(), 0);

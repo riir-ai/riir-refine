@@ -51,7 +51,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use riir_clippy::draft::{IndexTokenizer, RetrievalConfig, RuleIndex};
+use riir_refine::draft::{IndexTokenizer, RetrievalConfig, RuleIndex};
 
 /// Weight sweep for the dense term. The modelless sweep showed the 8-D latent
 /// term is inert at any weight, so the dense term is given real authority —
@@ -135,9 +135,9 @@ fn dense_rerank_precision() {
     }
 
     // ── The matched modelless arm: clippy corpus, whole-span scale. ──
-    use riir_clippy::domain::{HealDomain, HealEntry};
+    use riir_refine::domain::{HealDomain, HealEntry};
     let corpus: Vec<(String, String)> =
-        riir_clippy::domains::clippy_lints::ClippyLintDomain::build_corpus()
+        riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()
             .into_iter()
             .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
             .collect();
@@ -155,7 +155,7 @@ fn dense_rerank_precision() {
     )
     .expect("build clippy index");
 
-    let spans = riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+    let spans = riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
     println!("\n=== T3.5 option 3 — 768-D dense rerank vs the matched modelless floor ===");
     println!(
         "  scope: clippy only, whole-span scale on BOTH arms, {n_rules} rules, {} spans",

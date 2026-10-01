@@ -244,7 +244,7 @@ pub mod scope_model;
 // ── issue 088: the kat service plane moved to the riir-kat repo ──────────
 // The whole plane (protocol tier + client plane + transports) now lives in
 // the sibling leaf crate; these re-exports preserve EVERY historical path
-// (`riir_clippy::kat_meter`, `crate::kat_redact`, `bin/heal.rs`'s ~40 refs,
+// (`riir_refine::kat_meter`, `crate::kat_redact`, `bin/heal.rs`'s ~40 refs,
 // the integration tests) bit-identically. Gate-match = the historical root
 // availability, mapped onto the member's tier features (root kat_service →
 // member client tier; root kat_transport → member kat_transport tier;

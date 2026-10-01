@@ -95,7 +95,7 @@ pub fn vocabulary() -> BTreeSet<String> {
 /// Issue 832 T5).
 #[must_use]
 pub fn draft_oracle() -> ClippyOracle {
-    ClippyOracle::new().with_work_root(std::env::temp_dir().join("riir_clippy_score_bench"))
+    ClippyOracle::new().with_work_root(std::env::temp_dir().join("riir_refine_score_bench"))
 }
 
 /// Wrap fixture code as the oracle stub crate's `lib.rs`.

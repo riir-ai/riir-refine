@@ -30,7 +30,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use riir_clippy::kat_lease_client::{
+use riir_refine::kat_lease_client::{
     self, run_update_phase, HttpLeaseTransport, HttpResponse, LeaseCharge, LeaseManifest,
     LeaseSegmentDesc, LeaseStage, LeaseStore, LeaseTransport, UpdateStatus,
 };
@@ -236,19 +236,19 @@ fn temp_dir(tag: &str) -> PathBuf {
 
 /// Build a corpus-pack segment (one domain's evolved corpus).
 fn pack_segment(domain: &str, rule_ids: &[&str]) -> Vec<u8> {
-    let pack = riir_clippy::kat_lease_client::CorpusPack {
-        pack_version: riir_clippy::kat_lease_client::CORPUS_PACK_VERSION,
+    let pack = riir_refine::kat_lease_client::CorpusPack {
+        pack_version: riir_refine::kat_lease_client::CORPUS_PACK_VERSION,
         domain: domain.to_string(),
         entries: rule_ids
             .iter()
-            .map(|r| riir_clippy::kat_lease_client::PatternEntry {
+            .map(|r| riir_refine::kat_lease_client::PatternEntry {
                 rule_id: r.to_string(),
                 buggy_code: format!("fn {r}_buggy() {{}}"),
                 fixed_code: format!("fn {r}_fixed() {{}}"),
             })
             .collect(),
     };
-    riir_clippy::kat_lease_client::render_pack(&pack)
+    riir_refine::kat_lease_client::render_pack(&pack)
 }
 
 fn manifest_for(epoch: u64, segments: &[Vec<u8>]) -> (LeaseManifest, HashMap<[u8; 32], Vec<u8>>) {
@@ -283,7 +283,7 @@ fn g10a_304_fast_path_no_body_no_charge() {
             out.status,
             UpdateStatus::Applied {
                 epoch: 9,
-                charge_kat: riir_clippy::kat_lease_client::LEASE_FEE_KAT
+                charge_kat: riir_refine::kat_lease_client::LEASE_FEE_KAT
             }
         ),
         "first fetch applies + charges: {:?}",
@@ -372,7 +372,7 @@ fn g10b_happy_path_fetches_verifies_and_swaps_atomically() {
         .count();
     assert_eq!(fetched, 2, "content-addressed diff fetched both segments");
     // The overlay resolves (the install feeds the matcher).
-    let overlay = riir_clippy::kat_lease_client::overlay_from_epoch(&store, None);
+    let overlay = riir_refine::kat_lease_client::overlay_from_epoch(&store, None);
     assert!(overlay.is_some());
     let (epoch, domains) = overlay.unwrap();
     assert_eq!(epoch, 12);
@@ -415,7 +415,7 @@ fn g10b_interrupt_before_swap_leaves_the_old_epoch_intact() {
                                               // The next run sees E1 — the segments are inert without the pointer.
     assert_eq!(store.current_epoch(), Some(1));
     let overlay_epoch =
-        riir_clippy::kat_lease_client::overlay_from_epoch(&store, None).map(|(e, _)| e);
+        riir_refine::kat_lease_client::overlay_from_epoch(&store, None).map(|(e, _)| e);
     assert_eq!(overlay_epoch, Some(1));
     // Completing the swap (the retry) lands E2 atomically.
     store.publish_pointer(&m2).unwrap();
@@ -462,12 +462,12 @@ fn g10c_tampered_manifest_is_rejected_with_fallback_to_local() {
 
 // ── G10d: reheat delta-billing (deterministic) ─────────────────────────────
 
-fn spans(items: &[(&str, u64, &[&str])]) -> Vec<riir_clippy::kat_lease_client::PassSpans> {
+fn spans(items: &[(&str, u64, &[&str])]) -> Vec<riir_refine::kat_lease_client::PassSpans> {
     items
         .iter()
         .map(
-            |(text, tokens, rules)| riir_clippy::kat_lease_client::PassSpans {
-                key: riir_clippy::kat_lease_client::span_key(text),
+            |(text, tokens, rules)| riir_refine::kat_lease_client::PassSpans {
+                key: riir_refine::kat_lease_client::span_key(text),
                 tokens: *tokens,
                 rules: {
                     let mut v: Vec<String> = rules.iter().map(|r| r.to_string()).collect();
@@ -490,14 +490,14 @@ fn g10d_no_changed_candidate_sets_bills_approximately_zero() {
     ] {
         let mut v: Vec<String> = rules.iter().map(|r| r.to_string()).collect();
         v.sort();
-        pass1.insert(riir_clippy::kat_lease_client::span_key(text), v);
+        pass1.insert(riir_refine::kat_lease_client::span_key(text), v);
     }
     let pass2 = spans(&[
         ("fn a() {}", 50, &["needless_return"]),
         ("fn b() {}", 60, &["vec-with-capacity"]),
         ("fn c() {}", 70, &["manual_map"]),
     ]);
-    let plan = riir_clippy::kat_lease_client::plan_reheat(&pass1, &pass2);
+    let plan = riir_refine::kat_lease_client::plan_reheat(&pass1, &pass2);
     assert_eq!(plan.reheat_tokens, 0, "≈0 KAT re-bill");
     assert_eq!(plan.changed.len(), 0);
     assert_eq!(plan.unchanged, 3);
@@ -513,7 +513,7 @@ fn g10d_n_changed_spans_rebill_exactly_their_tokens_deterministically() {
     ] {
         let mut v: Vec<String> = rules.iter().map(|r| r.to_string()).collect();
         v.sort();
-        pass1.insert(riir_clippy::kat_lease_client::span_key(text), v);
+        pass1.insert(riir_refine::kat_lease_client::span_key(text), v);
     }
     // Pass 2 (post-fix tree): `same` identical; `changed` has a NEW top-k
     // set under E+1; `edited_away` was rewritten (new chunk text); + one
@@ -524,7 +524,7 @@ fn g10d_n_changed_spans_rebill_exactly_their_tokens_deterministically() {
         ("fn edited_v2() {}", 30, &["c"]),
         ("fn fresh() {}", 40, &["z"]),
     ]);
-    let plan = riir_clippy::kat_lease_client::plan_reheat(&pass1, &pass2);
+    let plan = riir_refine::kat_lease_client::plan_reheat(&pass1, &pass2);
     assert_eq!(plan.changed.len(), 3, "changed + edited + fresh");
     assert_eq!(
         plan.reheat_tokens,
@@ -535,7 +535,7 @@ fn g10d_n_changed_spans_rebill_exactly_their_tokens_deterministically() {
     // G9 determinism: identical replays → identical plan.
     assert_eq!(
         plan,
-        riir_clippy::kat_lease_client::plan_reheat(&pass1, &pass2)
+        riir_refine::kat_lease_client::plan_reheat(&pass1, &pass2)
     );
 }
 
@@ -543,7 +543,7 @@ fn g10d_n_changed_spans_rebill_exactly_their_tokens_deterministically() {
 
 #[test]
 fn g10e_itemized_output_separates_passes_and_charge() {
-    let report = riir_clippy::kat_lease_client::ReheatReport {
+    let report = riir_refine::kat_lease_client::ReheatReport {
         pass1_epoch: 4,
         pass2_epoch: 5,
         pass1_tokens: 12_500,

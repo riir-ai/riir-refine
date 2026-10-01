@@ -16,8 +16,8 @@
 
 #![cfg(feature = "clippy_lints")]
 
-use riir_clippy::selection_tether::TetherFit;
-use riir_clippy::{
+use riir_refine::selection_tether::TetherFit;
+use riir_refine::{
     build_seed_corpus, HealPipeline, RustAnalyzerPruner, SelectionMode, TernaryDrafter,
 };
 
@@ -150,7 +150,7 @@ fn t33_g4_tether_mode_adds_zero_steady_state_allocs() {
 fn t33_pipeline_rho_is_deterministic() {
     let corpus = build_seed_corpus();
 
-    let run = || -> riir_clippy::TetherStats {
+    let run = || -> riir_refine::TetherStats {
         let mut p = HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())
             .with_selection_mode(SelectionMode::TetherBlend);
         p.seed_from_corpus(&corpus.entries);

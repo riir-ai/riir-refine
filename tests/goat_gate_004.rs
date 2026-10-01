@@ -10,7 +10,7 @@
 
 #![cfg(feature = "self_evolve")]
 
-use riir_clippy::{
+use riir_refine::{
     memory::{LatentFixMemory, LatentQuery},
     ClippyFixEntry, ClippyTernaryDrafter, FixTrajectory, HealPipeline, RustAnalyzerPruner,
 };
@@ -148,7 +148,7 @@ fn g3_no_regression_self_evolve_compiles_and_runs() {
     // --features self_evolve, AND all existing tests pass (which they do —
     // they run in the same cargo test invocation). This test is a smoke
     // check that the self_evolve modules don't break the crate's basic API.
-    let corpus = riir_clippy::build_seed_corpus();
+    let corpus = riir_refine::build_seed_corpus();
     assert!(corpus.verify(), "seed corpus must still verify");
 
     let mut pipeline =
@@ -171,7 +171,7 @@ fn g4_alloc_free_steady_state() {
     // We verify by checking that the scratch buffer capacities don't grow
     // after warm-up. (A true counting-allocator test would be more rigorous
     // but requires a global allocator wrapper — deferred for the POC.)
-    let corpus = riir_clippy::build_seed_corpus();
+    let corpus = riir_refine::build_seed_corpus();
     let mut pipeline =
         HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new());
     pipeline.seed_from_corpus(&corpus.entries);

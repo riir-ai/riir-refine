@@ -12,9 +12,9 @@
 //! run's test count is checked in the bench write-up.
 #![cfg(feature = "l4_lora")]
 
-use riir_clippy::build_seed_corpus;
-use riir_clippy::l4_fallback::{L4Fallback, NullL4};
-use riir_clippy::{HealPipeline, HealSource, RustAnalyzerPruner, TernaryDrafter};
+use riir_refine::build_seed_corpus;
+use riir_refine::l4_fallback::{L4Fallback, NullL4};
+use riir_refine::{HealPipeline, HealSource, RustAnalyzerPruner, TernaryDrafter};
 
 /// Counting test double. Records every call so invariant 1 ("never consulted
 /// on a modelless hit") is checked by call COUNT, not by inspecting the

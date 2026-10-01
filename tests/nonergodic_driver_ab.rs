@@ -23,11 +23,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use riir_clippy::domains::rustc_errors::driver::{
+use riir_refine::domains::rustc_errors::driver::{
     AttemptOutcome, AttemptRecord, CompileDriver,
 };
-use riir_clippy::domains::rustc_errors::nonergodic_order::NonergodicOrdering;
-use riir_clippy::domains::rustc_errors::playbooks::{FixCandidate, Playbooks};
+use riir_refine::domains::rustc_errors::nonergodic_order::NonergodicOrdering;
+use riir_refine::domains::rustc_errors::playbooks::{FixCandidate, Playbooks};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -80,7 +80,7 @@ fn attempt(file: &str, line: usize, code: &str, strategy_id: &str, outcome: Atte
     AttemptRecord {
         seq: 0,
         code: code.to_string(),
-        span_hash: riir_clippy::domains::rustc_errors::driver::span_hash(path, line),
+        span_hash: riir_refine::domains::rustc_errors::driver::span_hash(path, line),
         strategy_id: strategy_id.to_string(),
         outcome,
         errors: (2, if outcome == AttemptOutcome::Kept { 1 } else { 2 }),
@@ -291,11 +291,11 @@ fn stale_store_gate_fires_on_contradicted_base_ranking() {
         line!()
     ));
     let _ = std::fs::remove_dir_all(&root);
-    let (store, _bad) = riir_clippy::traj_store::TrajStore::open(&root).unwrap();
+    let (store, _bad) = riir_refine::traj_store::TrajStore::open(&root).unwrap();
     for _ in 0..10 {
         store
             .record(
-                &riir_clippy::domains::rustc_errors::evolve::traj_key("E0502", "strat-b"),
+                &riir_refine::domains::rustc_errors::evolve::traj_key("E0502", "strat-b"),
                 "b shape",
                 "x",
                 true,

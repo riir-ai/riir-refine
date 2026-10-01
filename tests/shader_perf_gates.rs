@@ -25,12 +25,12 @@
 
 #![cfg(feature = "shader_perf")]
 
-use riir_clippy::domains::shader_perf::proposers::{
+use riir_refine::domains::shader_perf::proposers::{
     collect_all_edits, FIXABLE_SHADER, DEFAULT_GUARD_BOUND,
 };
-use riir_clippy::domains::shader_perf::{refuses, ShaderPerfDomain, ShaderScanner};
-use riir_clippy::edit_emitter::apply_edits;
-use riir_clippy::HealDomain;
+use riir_refine::domains::shader_perf::{refuses, ShaderPerfDomain, ShaderScanner};
+use riir_refine::edit_emitter::apply_edits;
+use riir_refine::HealDomain;
 
 fn rule_ids(src: &str) -> Vec<&'static str> {
     ShaderScanner.scan(src).into_iter().map(|f| f.rule_id).collect()
@@ -195,7 +195,7 @@ fn negative_control_zero_findings_on_vgpu_port_corpus() {
             continue;
         };
         // Render-stage files only — @compute files are the kernel lane's.
-        if !riir_clippy::domains::shader_perf::entry_stages(&src).has_render() {
+        if !riir_refine::domains::shader_perf::entry_stages(&src).has_render() {
             continue;
         }
         scanned += 1;

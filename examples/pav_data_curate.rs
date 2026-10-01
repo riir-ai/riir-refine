@@ -29,7 +29,7 @@
 
 #![cfg(feature = "pav_data")]
 
-use riir_clippy::pav_data::{
+use riir_refine::pav_data::{
     curate, extra_spans, fixture_spans, ground_truth, store_spans, write_jsonl,
     DaemonEditGenerator, EditGenerator, FnGenerator, PavDataConfig, PavDataset, PavManifest,
     PavSpan, RolloutCtx, VocabularyJudge,
@@ -180,8 +180,8 @@ fn finish(
     started: std::time::Instant,
 ) {
     let manifest = PavManifest {
-        schema_version: riir_clippy::pav_data::pav_schema_version(),
-        bok_k: riir_clippy::pav_data::BOK_K,
+        schema_version: riir_refine::pav_data::pav_schema_version(),
+        bok_k: riir_refine::pav_data::BOK_K,
         generator: generator_name.to_string(),
         judge: "vocabulary".to_string(),
         n_cov: cfg.n_cov,

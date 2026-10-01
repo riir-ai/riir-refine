@@ -23,11 +23,11 @@
 
 #![cfg(all(feature = "rustc_errors", feature = "latent_retrieval"))]
 
-use riir_clippy::domains::rustc_errors::driver::{
+use riir_refine::domains::rustc_errors::driver::{
     AttemptOutcome, AttemptRecord, JourneyCredit, JOURNEY_ALPHA, JOURNEY_RHO,
 };
-use riir_clippy::journey::journey_factor;
-use riir_clippy::traj_store::TrajStore;
+use riir_refine::journey::journey_factor;
+use riir_refine::traj_store::TrajStore;
 
 fn rec(seq: usize, code: &str, strat: &str, outcome: AttemptOutcome, errors: (usize, usize), masking: (usize, usize)) -> AttemptRecord {
     AttemptRecord {
@@ -114,7 +114,7 @@ fn store_replay_tainted_key_scores_strictly_lower() {
                     .expect("journey record");
             }
         }
-        let score = riir_clippy::traj_store::shape_conditional_score(&store, "E0502", "e0502-clone-out", shape);
+        let score = riir_refine::traj_store::shape_conditional_score(&store, "E0502", "e0502-clone-out", shape);
         let _ = std::fs::remove_dir_all(&root);
         score
     };
@@ -142,7 +142,7 @@ fn store_replay_tainted_key_scores_strictly_lower() {
 #[test]
 fn pre105_rows_decode_neutral() {
     let legacy = r#"{"lint_key":"E0502:e0502-deref-removal","shape":"s","fix":"f","direction":[0.1,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"success_count":7,"fail_count":2,"consecutive_fails":0,"tier":2,"last_run_id":"r","last_seen_at":1,"elo":1200.0,"span_elo":1200.0}"#;
-    let row: riir_clippy::traj_store::TrajRowDoc = serde_json::from_str(legacy).expect("decodes");
+    let row: riir_refine::traj_store::TrajRowDoc = serde_json::from_str(legacy).expect("decodes");
     assert_eq!((row.journey_runs, row.journey_taint_sum), (0, 0));
     assert_eq!(journey_factor(row.journey_runs, row.journey_taint_sum), 1.0);
 }

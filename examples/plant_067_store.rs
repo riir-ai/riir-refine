@@ -27,7 +27,7 @@
 //!     --bin fixer_regate -- --arm DRY   # channels2 must read "live" for the 4 lints
 //! ```
 
-use riir_clippy::traj_store::TrajStore;
+use riir_refine::traj_store::TrajStore;
 
 /// (`lint`, [(`shape`, `fix`); 3]) — the covered lints, each with 3 distinct
 /// representative shapes (distinct shapes are load-bearing: the row key is
