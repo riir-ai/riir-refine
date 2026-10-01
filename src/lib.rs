@@ -421,6 +421,18 @@ pub mod fixseq_stats;
 // (rustc_errors, write) and mirrored by horizon_report's RingLine (read).
 pub mod span_embed;
 
+// Issue 140 T1+T2 (RLTL;DR, arXiv:2609.37633 — .research/228): the modelless
+// insight distiller (deterministic template over the structured verifier
+// diagnostic — the paper's generator-identity ablation licenses this: verifier
+// access is the signal, not who writes the sentence) + the abstraction-level
+// admission predicate (L1: one-sentence GENERIC insights transfer cross-task;
+// episode-bound literals are label noise). Pure text functions, std-only,
+// ungated so lib tests cover it at default features. T3 (CompileDriver wiring
+// + the ordering control arm) consumes this; the riir-train tuple miner
+// (Plan 432 T0.4) re-implements the ~50-line predicate locally — boundary-
+// forced copy, cross-referenced here.
+pub mod insight;
+
 // Plan 124: the config-hygiene audit — intake classes A + B as a report
 // lane (`--config-audit` in bin/heal.rs). Pure syn analysis over the scanned
 // file set, zero new deps, ungated so lib tests cover it at default
