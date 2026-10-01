@@ -44,9 +44,14 @@ fn scratch_root(tag: &str) -> PathBuf {
     // a minimal manifest so the gate's baseline + apply cargo checks run.
     // (The test predates the flip and passed while verify was opt-in —
     // latent until the first full layer-5c sweep after the UX change.)
+    // Issue 135's level gate (c1c6cf21, 09-26) then made the bare manifest
+    // insufficient too: match_bool is allow-by-default (pedantic), and the
+    // healer heals only what the TARGET crate enables — so the fixture must
+    // declare the lint it teaches. Red since 09-26; surfaced by the first
+    // full-integration repro (issue 141 Class D).
     std::fs::write(
         d.join("Cargo.toml"),
-        "[package]\nname = \"riir_p12_scratch\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"riir_p12_scratch\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lints.clippy]\nmatch_bool = \"warn\"\n",
     )
     .unwrap();
     d

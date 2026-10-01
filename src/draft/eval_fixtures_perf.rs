@@ -262,16 +262,23 @@ pub fn zone_owner(zones: &HashMap<u32, u32>, zone: u32) -> Option<u32> {
     ),
     (
         "avoid-clone",
-        r#"pub fn audit_payload(payload: Vec<u8>) -> u64 {
+        r#"pub fn audit_payload(payload: Vec<u8>) -> u32 {
     payload
         .iter()
-        .map(|&b| u64::from(b))
+        .map(|&b| b.count_ones())
         .sum()
 }
-"#, // Issue 141 Class B: `b as u64` (u8→u64, lossless) co-fired `cast_lossless`
-            // beside the labeled `manual_map` in the merged-span oracle test —
-            // the lossless-explicit `u64::from` spelling keeps the span's
-            // clippy vocabulary exactly {manual_map}.
+"#, // Issue 141 Class B + the retrieval half: real clippy co-fired
+            // `cast_lossless` on the earlier `b as u64` cast (the merged-span
+            // oracle pins the vocabulary to exactly {manual_map}), and the
+            // first repair (`u64::from(b)`) then flipped this span's
+            // retrieval top-1 to `runtime-feature-detect-per-chunk` — that
+            // rule's own fixtures carry the identical `.map(|&b|
+            // u64::from(b)).sum()` body, so the `from` token outranked the
+            // shared Vec-by-value shape (blended 125/141 vs the 126/141
+            // floor). The `count_ones` spelling keeps the avoid-clone shape
+            // (Vec<u8> by value + iter/map/sum), compiles standalone, and
+            // fires no corpus lint; measured top-1 margin 88.7 vs 60.2.
     ),
     (
         "box-str-immutable",

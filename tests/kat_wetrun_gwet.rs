@@ -245,7 +245,19 @@ impl ScriptedLegs {
     fn healthy() -> Self {
         Self {
             cycle: Ok((3, 1_000)),
-            payload: Ok(("{\"row\":1}\n{\"row\":2}\n".to_string(), 2, 2)),
+            // The healthy posture attests AT the floor: the real composer
+            // emits the compiled REDACT_VERSION (3 since the Bench-053
+            // declaration-scope bump, the dapps Issue-103 v3 era) and the
+            // service floor mirrors it — a literal here went stale at the
+            // bump and refused every healthy run (issue 141 Class A).
+            // MIN keeps this fixture and the below-floor arm exact
+            // complements at the boundary, so a future bump cannot
+            // re-break this file.
+            payload: Ok((
+                "{\"row\":1}\n{\"row\":2}\n".to_string(),
+                2,
+                kat_wetrun::MIN_REDACT_VERSION,
+            )),
             cycles_run: 0,
         }
     }
