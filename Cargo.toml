@@ -228,6 +228,14 @@ set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 # pending the A/B verdict (tests/differential_anchor_ab.rs).
 differential_anchor = ["katgpt-core/differential_anchor", "latent_retrieval"]
 
+# Issue 139 T3 (katgpt-rs Issue 913 consumer): the censoring disclosure on the
+# `--frontier-report` band mass. band-mass is conditioned on a verdict having
+# landed (n>=1); the line adds the decomposition population-mass =
+# P(seen) x E[band | seen], katgpt-core's `filter_bias_bound` budget (Gamma =
+# 1/2 for a centred band indicator => the budget is P(unseen)) and the exact
+# count hull. Report-only, gates nothing; off = byte-identical report.
+noise_weighted_evidence = ["katgpt-core/grouped_evidence_weighting"]
+
 # Issue 134 T2 — the pool-depth allocation gate: scale the suggest lane's
 # per-domain retrieval pool + truncation K by the measured demonstrability
 # constant (Research 585 / SAT arXiv:2609.22682 — depth pays where selection

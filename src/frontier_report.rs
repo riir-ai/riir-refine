@@ -188,6 +188,56 @@ pub fn summarize(entries: &[(String, u32, u32)]) -> FrontierSummary {
     }
 }
 
+/// Issue 139 T3 — the censoring disclosure on [`FrontierSummary::band_mass`].
+///
+/// `band_mass` is a FILTERED readout: it is conditioned on `C` = "a verdict
+/// landed" (`n ≥ 1`), and the unseen rows are `¬C`. Three quantities, from
+/// the same counts:
+///
+/// - the censoring decomposition `population_mass = P(C) · E[band | C]` —
+///   the band mass over the whole scanned population;
+/// - `bias_bound = filter_bias_bound(½, P(¬C)) = P(¬C)` — the distribution-
+///   free budget (katgpt-rs Issue 913 T2) on how far `E[band | C]` can sit
+///   from the population's band rate, the band indicator centred on `[0, 1]`
+///   so `|R| ≤ Γ = ½`;
+/// - the exact count `hull` `[band, band + unseen] / population` — the
+///   tight interval for THIS population if every unseen row resolved either
+///   way. It is never wider than the budget (`max(b, 1−b) · P(¬C) ≤ P(¬C)`).
+#[cfg(feature = "noise_weighted_evidence")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FilterDisclosure {
+    /// `P(¬C)` — the unseen fraction of the scanned population.
+    pub p_not_c: f32,
+    /// `P(C) · E[band | C]` — band mass over the whole population.
+    pub population_mass: f32,
+    /// `filter_bias_bound(½, P(¬C))`.
+    pub bias_bound: f32,
+    /// `[band / population, (band + unseen) / population]`.
+    pub hull: (f32, f32),
+}
+
+/// Compute the [`FilterDisclosure`] for a summary. `None` for an empty
+/// population (the green-zero law: nothing was measured, so nothing is
+/// disclosed either).
+#[cfg(feature = "noise_weighted_evidence")]
+#[must_use]
+pub fn filter_disclosure(summary: &FrontierSummary) -> Option<FilterDisclosure> {
+    let population = summary.population;
+    if population == 0 {
+        return None;
+    }
+    let unseen = population - summary.seen;
+    #[allow(clippy::cast_precision_loss)] // fractions over usize counts
+    let (pop, unseen_f, band) = (population as f32, unseen as f32, summary.band_count as f32);
+    let p_not_c = unseen_f / pop;
+    Some(FilterDisclosure {
+        p_not_c,
+        population_mass: (1.0 - p_not_c) * summary.band_mass,
+        bias_bound: katgpt_core::grouped_evidence::filter_bias_bound(0.5, p_not_c),
+        hull: (band / pop, (band + unseen_f) / pop),
+    })
+}
+
 /// Render the summary as the `--frontier-report` text (house style:
 /// `String` + `fmt::Write`, inline args, deterministic sections).
 ///
@@ -244,6 +294,18 @@ pub fn render(summary: &FrontierSummary, score: Option<&ScoreContext>) -> String
         sat = saturated.len(),
         unseen = unseen,
     );
+    #[cfg(feature = "noise_weighted_evidence")]
+    if let Some(d) = filter_disclosure(summary) {
+        let _ = writeln!(
+            out,
+            "filter disclosure (Issue 139 T3): band-mass is conditioned on seen — P(unseen) {pnc:.3} | population band-mass = P(seen)·band-mass = {pm:.1}% | bias budget 2Γ·P(unseen) (Γ=½) ±{bb:.1}pp | exact hull [{lo:.1}%, {hi:.1}%]",
+            pnc = d.p_not_c,
+            pm = d.population_mass * 100.0,
+            bb = d.bias_bound * 100.0,
+            lo = d.hull.0 * 100.0,
+            hi = d.hull.1 * 100.0,
+        );
+    }
     if let Some(ctx) = score {
         let _ = writeln!(
             out,
@@ -1549,6 +1611,28 @@ mod tests {
         // 4 band of 11 seen (12 rows minus the 1 unseen).
         assert!((s.band_mass - 4.0 / 11.0).abs() < 1e-6, "got {m}", m = s.band_mass);
         assert_eq!(s.band_count, 4);
+    }
+
+    /// Issue 139 T3 — the disclosure arithmetic on the shared fixture
+    /// (12 rows, 11 seen, 4 band): P(¬C) = 1/12, population mass = 4/12,
+    /// budget = 1/12, hull = [4/12, 5/12]; the hull's distance from the
+    /// seen-only figure never exceeds the budget; an empty population
+    /// discloses nothing.
+    #[cfg(feature = "noise_weighted_evidence")]
+    #[test]
+    fn filter_disclosure_arithmetic() {
+        let s = summarize(&fixtures());
+        let d = filter_disclosure(&s).expect("non-empty population");
+        assert!((d.p_not_c - 1.0 / 12.0).abs() < 1e-6);
+        assert!((d.population_mass - 4.0 / 12.0).abs() < 1e-6);
+        assert!((d.bias_bound - 1.0 / 12.0).abs() < 1e-6);
+        assert!((d.hull.0 - 4.0 / 12.0).abs() < 1e-6 && (d.hull.1 - 5.0 / 12.0).abs() < 1e-6);
+        let far = (s.band_mass - d.hull.0).abs().max((s.band_mass - d.hull.1).abs());
+        assert!(far <= d.bias_bound + 1e-6, "hull must sit inside the budget: {far}");
+        assert!(filter_disclosure(&summarize(&[])).is_none());
+        let text = render(&s, None);
+        assert!(text.contains("filter disclosure (Issue 139 T3)"), "{text}");
+        assert!(text.contains("exact hull [33.3%, 41.7%]"), "{text}");
     }
 
     #[test]
