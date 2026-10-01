@@ -1,5 +1,51 @@
 # HISTORY.md — riir-clippy
 
+## 2026-10-01 — Issue 141: the `cargo refine` cargo-convention argv leak (the rename's one real regression, found from the owner's brew question)
+
+The owner asked why the site still says `brew install cargo-heal`. Answering it
+surfaced a live regression from Plan 192 T1.2 (`ac4b3d16`, the binary rename,
+"no alias"): cargo's subcommand convention passes the BINARY'S OWN NAME as
+argv[1] (measured: `cargo echotest foo bar` → the binary receives `echotest foo
+bar`), and the argv strip at `heal.rs` still removed only the OLD `heal`
+spelling — so every cargo-convention invocation of the renamed binary leaked
+`refine` into the scan-path arm. Live symptoms at HEAD: `cargo refine login`
+DEMOTED to a dry scan over `['refine', 'login']` (the exact failure class the
+strip's own comment documents for `heal`); bare `cargo refine` reviewed path
+`refine` instead of `.`; `cargo refine --suggest` (no paths) exited 1 on the
+nonexistent `refine/` dir. Explicit-path forms survived — which is why T1.2d's
+post-rename smoke and every direct-spawn CLI test stayed green: no test
+exercised the convention path (they all spawn `CARGO_BIN_EXE_cargo-refine`
+directly, which carries no subcommand word).
+
+- **Fix**: the strip now removes BOTH own-name spellings (`refine` — the
+  binary's name since T1.2; `heal` — the dist-era spelling, kept so a
+  cargo-heal-named binary running this code keeps working through the T1.2f
+dist-flip window). Comment updated with the measured convention + the miss
+  mechanism.
+- **Regression coverage**: `tests/cargo_convention_cli.rs` (4 arms at the
+  process boundary, hermetic — closed port, lease off, own account/traj
+  roots): bare-with-own-name scans the CURRENT DIRECTORY (the leak said
+  `reviewing 1 path(s)`), KAT subcommand not demoted, the legacy `heal`
+  spelling strips identically, and an explicit `refine/` dir is still
+  scannable when named explicitly (the strip only ever removes argv[1]).
+  `[[test]]` required-features row added (the green-zero law).
+- **Validated**: the 4 new arms green; `build_stamp_cli` 5/5 +
+  `kat_soft_gate_cli` 17/17 (the direct-spawn batteries unaffected);
+  `cargo clippy --bin cargo-refine` clean; global binary REBUILT at the
+  release set (16:25 — also discharges the deferred bin-age repair from the
+  10-01 idle passes, `75c244b0` + this fix now both in the shipped binary);
+  live re-verified through the PATH binary (bare/login/version all correct).
+- **The brew question's answer (recorded here because it is the OTHER half,
+  owner-gated T1.2f)**: the tap still serves `Formula/cargo-heal.rb`
+(`bin.install 'cargo-heal'`), the dist repo is still `gist-rs/cargo-heal`
+(live: `gist-rs/refine` does not exist; latest release v0.1.4 ships
+  `cargo-heal-*` assets), so `brew install cargo-heal` is the only WORKING
+  brew command today — flipping the site copy first would advertise a formula
+  that does not exist. The flip order stands as planned: owner renames the
+  dist repo + formula + scoop, cuts the first `cargo-refine` release, then
+  the kept URLs/formula lines in copy flip (dapps front_page/routes +
+  `install_copy_parity`'s CANONICAL_BASE + the tap/scoop repos).
+
 ## 2026-10-01 — `repo_posture_cli` red CLOSED + the mid-posture clippy red + three owed `[[test]]` rows (the rename's flagged remainder)
 
 The rename session flagged `repo_posture_cli` 3 arms RED at HEAD (stash-verified,

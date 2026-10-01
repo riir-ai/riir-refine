@@ -1210,6 +1210,13 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 name = "kat_soft_gate_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# Issue 140 — the cargo-convention invocation path (argv[1] = the binary's
+# own name, the exact bytes cargo passes). The bin's own required-features
+# gate the target; the arms are offline (closed port, lease off, no oracle).
+[[test]]
+name = "cargo_convention_cli"
+required-features = ["kat_service", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 # Plan 117: the `--refill` dev/test faucet refill through the REAL binary
 # (no-account refusal; live mock → faucet opened + bearer crank + balance
 # confirmed + the 075 gate's ack input REFRESHED; the gate refusal names

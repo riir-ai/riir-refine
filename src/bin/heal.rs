@@ -4342,15 +4342,23 @@ fn parse_args() -> Args {
         corpus_delta: false,
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
-    // argv[1] — cargo passes `heal` through (direct `cargo-refine <args>` does
-    // not carry it). Without the strip, `heal` landed in the scan-path arm
-    // and the KAT subcommands' `args.paths.is_empty()` guard demoted every
-    // one of them (`cargo refine login` → "no mode given" + usage dump) while
-    // every flag-mode invocation (`cargo refine --suggest …`) kept working —
-    // which is how the G1 gates and the repo-side KAT tests all missed it.
-    // A leading `heal` is this tool's own name, never a scan path.
+    // argv[1] — cargo passes the binary's own name-spelling through (direct
+    // `cargo-refine <args>` does not carry it; measured: `cargo echotest foo`
+    // hands the binary `echotest foo`). BOTH spellings must strip: `refine`
+    // (the binary's name since Plan 192 T1.2) and `heal` (the dist-era
+    // spelling, kept so a cargo-heal-named binary running this code keeps
+    // working through the dist-flip window). Without the strip the word
+    // landed in the scan-path arm and the KAT subcommands'
+    // `args.paths.is_empty()` guard demoted every one of them
+    // (`cargo refine login` → dry-run over paths ["refine", "login"]) while
+    // every flag-mode invocation with explicit paths kept working — which is
+    // how T1.2d's smoke and the direct-spawn CLI tests all missed it.
+    // A leading own-name is never a scan path.
     let mut raw: Vec<String> = std::env::args().skip(1).collect();
-    if raw.first().is_some_and(|first| first == "heal") {
+    if raw
+        .first()
+        .is_some_and(|first| first == "refine" || first == "heal")
+    {
         raw.remove(0);
     }
     let mut it = raw.into_iter().peekable();
