@@ -52,7 +52,7 @@ cannot promote past devnet; nobody can prove the network works.
 | 6 | Post-deploy: 3-node availability + sync percent | **Ship** | `chain-height` probe (must advance), `/node-info`, catchup substrate | `node-sync` probe (reachability + height + sync% table) |
 | 7 | Wet-run e2e (scan→fix→rewards→record→self-evolve→mesh 100%); real pay + equal refund on testnet; mainnet = dry-run only, no state | **Ship — faucet-funded refund, mainnet-refused** | kat_drain `--dry-run` precedent, lease/sync/meter plumbing, /balance route | `cargo heal wetrun` + G-WET gate |
 | 8 | Onboarding: install via sh; run with default SSH; welcome + balance; bar pre-does genesis; earned/spent history | **Ship — with one owner correction** | 003 binary-only distribution; `login`/`account`; `/balance`; kat_charge.json | install.sh copy tweak; login default-SSH; `account --history` |
-| 8.1 correction | "releases at gist-rs/riir-clippy" | **CORRECTED** | 003 hard rule: private-repo release assets are not publicly downloadable; the sanctioned surface is **gist-rs/cargo-heal** releases + install.sh (zero .rs files) | none — align to 003, do not open riir-clippy releases |
+| 8.1 correction | "releases at gist-rs/riir-clippy" | **CORRECTED** | 003 hard rule: private-repo release assets are not publicly downloadable; the sanctioned surface is **gist-rs/cargo-refine** releases + install.sh (zero .rs files) | none — align to 003, do not open riir-clippy releases |
 | 9 | Fixer tier "baz" (local LLM earns KAT) — my call | **DEFER to its own plan** | l4_lora seam + l4_daemon (`bonsai_clippy_l4_eval --serve`) + fixer_regate harness all ship | nothing now — see §Baz |
 | 10 | Free-tier daily crank: CF schedule credits every synced account daily | **Ship — a GRANT crank, not a mint faucet** | 010 M2 treasury-first grant + floor, the kat-service DO alarm (10-min sweep/settle/anchor), housekeeping cron/cursor precedent, the exactly-once `(date, x)` key pattern, 008's never-lever free-grant family | daily pass in the alarm + `FREE_TIER_DAILY_KAT` (genesis yaml) + activity gate + budget cap |
 | 11 | Faucet request by QR (owner scans; Discord bot long-run) | **Ship v1 = a `faucet` preset on the ask-1 web wallet; Discord bot DEFERRED** | the ask-1 web wallet (GitHub-SSH + hold-SEND + G-WEB), payreq labels/caps, the wet-run faucet leg | `faucet --request` preset + daily cap; bot later |
@@ -272,8 +272,8 @@ also closes the "dryrun dirties state / enables attack" concern.
   scans the QR → web wallet → GitHub sign-in (the key-match finds the genesis
   root wallet, since the ceremony derived it from bar's SSH key) → **hold
   SEND 3 s** → foo sees the credit.
-- **foo (8.1):** `curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh`
-  → mac-arm binary from the **gist-rs/cargo-heal releases** (the 003 public
+- **foo (8.1):** `curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-refine/main/install.sh | sh`
+  → mac-arm binary from the **gist-rs/cargo-refine releases** (the 003 public
   surface — NOT riir-clippy releases, see the corrected row in the verdict
   table; local uploads via `gh release create` are exactly what the runbook
   sanctions while CI budget is tight).
@@ -706,7 +706,7 @@ hold-SEND) with Stripe/USDC mock-tested until the loop lands; genesis by
 ceremony (never by editing devnet), deploy behind the existing ack discipline
 plus a selector, health proven by a sync-percentage probe, and the whole loop
 certified by a faucet-funded wet-run that mainnet structurally cannot run.**
-The install surface stays gist-rs/cargo-heal per 003 — the owner's
+The install surface stays gist-rs/cargo-refine per 003 — the owner's
 riir-clippy-releases URL is corrected, not adopted. Baz waits for its own
 measured plan. The one hard rule to carry out of this document: the web
 wallet's hold-to-send is UX, the session is an OAuth-bound identity, and the

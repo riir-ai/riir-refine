@@ -1,6 +1,6 @@
 # Proposal 003 — Binary-only distribution (source stays secret)
 
-**Status:** **DONE 2026-09-07** — executed via [Plan 105](../.plans/105_binary_release_pipeline.md) (COMPLETE: the three public source-free repos + the tag-triggered `release.yml` pipeline + `strip = true`) with gate evidence in [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md) (G1–G4 all measured; G1 on all five assets). Releases **v0.1.0 + v0.1.1 live** on `gist-rs/cargo-heal` (5 archives + SHA256SUMS + THIRD_PARTY_LICENSES.md each; homebrew-tap#1 + scoop-bucket#1 merged). Canonical one-liners: Issue 061 T4.3. (Earlier: UNBLOCKED 2026-08-26 — `Issue 037` CLOSED, all gates green incl. A1 cadence; record: [HISTORY.md](../HISTORY.md) §Issue 037 + git history.)
+**Status:** **DONE 2026-09-07** — executed via [Plan 105](../.plans/105_binary_release_pipeline.md) (COMPLETE: the three public source-free repos + the tag-triggered `release.yml` pipeline + `strip = true`) with gate evidence in [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md) (G1–G4 all measured; G1 on all five assets). Releases **v0.1.0 + v0.1.1 live** on `gist-rs/cargo-refine` (5 archives + SHA256SUMS + THIRD_PARTY_LICENSES.md each; homebrew-tap#1 + scoop-bucket#1 merged). Canonical one-liners: Issue 061 T4.3. (Earlier: UNBLOCKED 2026-08-26 — `Issue 037` CLOSED, all gates green incl. A1 cadence; record: [HISTORY.md](../HISTORY.md) §Issue 037 + git history.)
 **Branch:** `develop` (per global rule — no feature branches)
 **Owner:** unassigned
 **Fusion of:** [Research 003](../../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md) (the boundary verdict) × the rustup installer pattern (curl|sh + install.ps1) × cargo-dist prior art (installer UX + tap automation)
@@ -44,7 +44,7 @@ This proposal is the record + the rules.
 ```
 PRIVATE (source, forever)                 PUBLIC (distribution, tiny)
 ──────────────────────────                ──────────────────────────────
-gist-rs/riir-clippy  (PRIVATE)            gist-rs/cargo-heal  (PUBLIC)
+gist-rs/riir-clippy  (PRIVATE)            gist-rs/cargo-refine  (PUBLIC)
   src/**                                    README.md        (capabilities, NOT how)
   .plans/.proposals/...                     install.sh       (curl | sh)
   CI: tag push → build matrix →             install.ps1      (iwr | iex)
@@ -72,8 +72,8 @@ markdown, shell, PowerShell, a Ruby formula, and JSON manifests.
 two lines verbatim; none of them invents a URL. The single source of truth:
 
 ```text
-macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh
-Windows:      iwr -useb https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.ps1 | iex
+macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-refine/main/install.sh | sh
+Windows:      iwr -useb https://raw.githubusercontent.com/gist-rs/cargo-refine/main/install.ps1 | iex
 ```
 
 Enforced by `tests/install_copy_parity.rs`: any URL in any tracked `*.md`
@@ -93,7 +93,7 @@ canonical form — promote it here (and re-run the audit) if and when it is
 actually served.
 
 **Neither line is runnable yet, and that is a repo-creation gap, not a copy
-gap.** `gh repo view gist-rs/cargo-heal` on 2026-09-02 answered *"Could not
+gap.** `gh repo view gist-rs/cargo-refine` on 2026-09-02 answered *"Could not
 resolve to a Repository"* — T1.1 below has never been executed. The audit
 pins what the copy WILL point at; publishing binaries built from private
 source is an owner act.
@@ -120,7 +120,7 @@ universal2), `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
 `x86_64-pc-windows-msvc` → `strip` → tar.gz (unix) / zip (windows) → generate
 `SHA256SUMS` + `THIRD_PARTY_LICENSES.md` (cargo-about; MIT/Apache-2.0 deps
 require license-text inclusion for **binary** distribution) → `gh release create
--R gist-rs/cargo-heal` with a fine-grained robot PAT (contents:write on
+-R gist-rs/cargo-refine` with a fine-grained robot PAT (contents:write on
 `cargo-heal` ONLY) → tap + bucket manifest bumps (PR from the same job).
 
 ### Binary leak-surface checklist (what the shipped binary reveals)
@@ -140,7 +140,7 @@ require license-text inclusion for **binary** distribution) → `gh release crea
    `ternary_inference` (needs GGUF at runtime, pulls the inference stack —
    wrong product surface) and never dev/debug profiles.
 5. **`env!()`/`option_env!()` audit** at release time — nothing secret baked in.
-6. **Dist-repo guard**: CI in `gist-rs/cargo-heal` fails if any `*.rs` file is
+6. **Dist-repo guard**: CI in `gist-rs/cargo-refine` fails if any `*.rs` file is
    ever committed there. The tap/bucket repos contain only `.rb`/`.json`.
 
 ## Honest caveats — READ BEFORE IMPLEMENTING (MANDATORY)
@@ -222,7 +222,7 @@ require license-text inclusion for **binary** distribution) → `gh release crea
 ## Phased rollout (sketch — a plan would expand this)
 
 ### Phase 1 — Scaffolding (when first release is wanted)
-- [x] T1.1 Create `gist-rs/cargo-heal` (public): README (capabilities-not-how), install.sh, install.ps1, `*.rs` CI guard. — DONE 2026-09-07 (Plan 105).
+- [x] T1.1 Create `gist-rs/cargo-refine` (public): README (capabilities-not-how), install.sh, install.ps1, `*.rs` CI guard. — DONE 2026-09-07 (Plan 105).
 - [x] T1.2 Create `gist-rs/homebrew-tap` + `gist-rs/scoop-bucket` (public, manifest-only). — DONE 2026-09-07 (Plan 105).
 - [x] T1.3 Fine-grained robot PAT (contents:write on `cargo-heal` only) as an org secret in the private repo. — DONE (en-route fix: repo-level `RELEASE_PAT` — the free-plan org-secret trap; Plan 105 T3.2).
 
@@ -230,7 +230,7 @@ require license-text inclusion for **binary** distribution) → `gh release crea
 - [x] T2.1 Tag-triggered matrix workflow (5 targets; musl static for linux; universal2 or per-arch for mac). — DONE (`release.yml`; musl statics via cargo-zigbuild).
 - [x] T2.2 `[profile.release] strip = true` + optional `--remap-path-prefix`. — DONE (Bench 078: scan clean ×5).
 - [x] T2.3 Package: tar.gz/zip + SHA256SUMS + THIRD_PARTY_LICENSES.md (cargo-about). — DONE (9 release assets; SHA256SUMS verifies ×5).
-- [x] T2.4 `gh release create -R gist-rs/cargo-heal` + tap/bucket manifest bump PRs. — DONE (v0.1.0 run 34085254189 → homebrew-tap#1 + scoop-bucket#1 merged).
+- [x] T2.4 `gh release create -R gist-rs/cargo-refine` + tap/bucket manifest bump PRs. — DONE (v0.1.0 run 34085254189 → homebrew-tap#1 + scoop-bucket#1 merged).
 - [x] T2.5 `env!()`/secret-bake audit step. — DONE (Bench 078: 0 secret-shaped strings).
 
 ### Phase 3 — GOAT gate
@@ -267,4 +267,4 @@ require license-text inclusion for **binary** distribution) → `gh release crea
 
 ## TL;DR
 
-**Adopt: source stays secret forever; users get prebuilt `cargo-heal` binaries from a small public dist repo (`gist-rs/cargo-heal`) via brew tap / curl|sh / install.ps1 / scoop; winget + signing later.** **DONE 2026-09-07** — executed by [Plan 105](../.plans/105_binary_release_pipeline.md); v0.1.0 + v0.1.1 live on `gist-rs/cargo-heal`, G1–G4 in [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md). Remaining later-items (each with its own trigger): winget (after code signing), artifact signing, self-update.
+**Adopt: source stays secret forever; users get prebuilt `cargo-heal` binaries from a small public dist repo (`gist-rs/cargo-refine`) via brew tap / curl|sh / install.ps1 / scoop; winget + signing later.** **DONE 2026-09-07** — executed by [Plan 105](../.plans/105_binary_release_pipeline.md); v0.1.0 + v0.1.1 live on `gist-rs/cargo-refine`, G1–G4 in [Bench 078](../.benchmarks/078_binary_dist_pipeline_dryrun.md). Remaining later-items (each with its own trigger): winget (after code signing), artifact signing, self-update.

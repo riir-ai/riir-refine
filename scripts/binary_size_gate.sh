@@ -25,7 +25,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
 
-limit="${MAX_BINARY_BYTES:-6815744}"
+# Ceiling history (the provisionality is DISCHARGED — all five matrix targets
+# measured at the v0.2.0 release, 2026-10-01, from the tree at fdc74823):
+#   aarch64-apple-darwin        6,897,024 B  (6.58 MiB)
+#   x86_64-apple-darwin         7,900,304 B  (7.53 MiB)
+#   x86_64-unknown-linux-musl   8,599,232 B  (8.20 MiB)  ← max
+#   aarch64-unknown-linux-musl  7,522,576 B  (7.18 MiB)
+#   x86_64-pc-windows-gnu       8,081,408 B  (7.71 MiB)
+# The growth from v0.1.4's 4.3 MiB is a month of legitimate content
+# (kernel_opt 684→717 rules + the whole kat staking/decstat/TUNA plane).
+# 9.0 MiB = max + ~10% corpus-growth headroom, still far under the
+# ~11.3 MiB dist-profile-loss signature the gate exists to catch.
+limit="${MAX_BINARY_BYTES:-9437184}"
 
 file_size() {
     # BSD stat (macOS) first, GNU stat (Linux/CI) second; empty on failure —

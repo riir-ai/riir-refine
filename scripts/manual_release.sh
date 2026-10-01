@@ -70,7 +70,7 @@ cp /tmp/manual_release_licenses.md "$DIST/THIRD_PARTY_LICENSES.md"
 (cd "$DIST" && { if command -v sha256sum > /dev/null; then sha256sum -- *; else shasum -a 256 -- *; fi; } > SHA256SUMS)
 
 echo "== publish"
-gh release create "$TAG" -R gist-rs/cargo-heal \
+gh release create "$TAG" -R gist-rs/cargo-refine \
     --title "cargo-refine $TAG" \
     --notes "Prebuilt cargo-refine binaries for $TAG. Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README." \
     "$DIST"/*
@@ -80,4 +80,4 @@ echo "   NOTE: bump gist-rs/homebrew-tap Formula/cargo-refine.rb (version + 4 sh
 echo "   $DIST/SHA256SUMS) and gist-rs/scoop-bucket bucket/cargo-refine.json (version +"
 echo "   windows-gnu url + hash), commit + push each — or merge the CI PRs when billing"
 echo "   is fixed and CI ran instead."
-echo "DONE: https://github.com/gist-rs/cargo-heal/releases/tag/$TAG"
+echo "DONE: https://github.com/gist-rs/cargo-refine/releases/tag/$TAG"

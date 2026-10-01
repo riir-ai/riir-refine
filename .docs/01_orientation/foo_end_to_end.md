@@ -27,12 +27,12 @@
 ## 1. Install (§8.1) — the one blocked step
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-refine/main/install.sh | sh
 # or: brew tap gist-rs/tap && brew trust gist-rs/tap && brew install cargo-refine
 ```
 
 **This does not work yet, and the reason is not a copy problem.**
-`gh repo view gist-rs/cargo-heal` answered *"Could not resolve to a
+`gh repo view gist-rs/cargo-refine` answered *"Could not resolve to a
 Repository"* on 2026-09-02: the public dist repo has never been created
 (Proposal 003 T1.1). Publishing binaries built from private source is an
 owner act, so the repo creation is not an agent move.
