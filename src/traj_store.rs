@@ -1705,8 +1705,13 @@ pub fn shape_conditional_score(
         if !n.lint_key.ends_with(&format!(":{strategy_id}")) {
             continue;
         }
-        // Relevance weight: the fused score normalized by the best hit —
-        // nearer shapes carry more of the outcome evidence.
+        // Relevance weight: nearer shapes carry more of the outcome
+        // evidence. ⚠ `n.bm25` is the RAW BM25 score — `retrieve`
+        // normalizes by the max hit only for its sort key and returns the
+        // raw value — so the pseudo-count TOTAL scales with BM25 magnitude,
+        // not with observations (Issue 139 T1). Left as-is on measurement:
+        // 0 compile-lane rows across 8 live stores, and Bench 045 found no
+        // ordering headroom for any policy. Re-gate before changing it.
         let w = n.bm25 + n.latent + 1e-6;
         w_sum += w;
         #[allow(clippy::cast_precision_loss)] // trajectory counts are ~10^2
