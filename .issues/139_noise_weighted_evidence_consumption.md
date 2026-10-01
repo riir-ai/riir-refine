@@ -1,6 +1,6 @@
 # Issue 139 — Consume grouped-evidence noise-weighting primitives (EasyPPO estimation-side extraction)
 
-**Status:** OPEN — gated on katgpt-rs Issue 913 landing (the `grouped_evidence_weighting` primitives). Source: [riir-train Research 463](../../riir-train/.research/463_EasyPPO_Critic_Stabilization.md) ← arXiv:2609.36802 (EasyPPO).
+**Status:** OPEN — UNBLOCKED 2026-10-01: katgpt-rs Issue 913 landed at katgpt-rs `9ad5e21ce` (feature `grouped_evidence_weighting`, katgpt-rs Bench 905 — T3 GOAT (b) PASS, so the WONT-FIX clause below does not fire; the T3 readout is a RANKING score, coverage 0.883 at nominal 0.95, so a consumer here must not read it as a calibrated interval). ⚠ T1 needs a data-model step first: `Candidate.counts` is one aggregate `(u32, u32)`, so per-rule span-outcome GROUPS and a prior-epoch σ̂ per group must be recorded before `best_belief_score_weighted` has anything to weight. Source: [riir-train Research 463](../../riir-train/.research/463_EasyPPO_Critic_Stabilization.md) ← arXiv:2609.36802 (EasyPPO).
 
 ## Why
 
