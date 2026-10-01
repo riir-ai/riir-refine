@@ -99,7 +99,7 @@ enum KatCommand {
     /// Proposal 015 Phase 2 (Plan 127): `replay` — the Max tier's earn
     /// lane. Login-gated lease → local `fix_verify` + clippy-oracle replay
     /// (scratch project) → signed verdict submit. Toolchain-fingerprint
-    /// gated; kill switch `RIIR_HEAL_REPLAY=0`. Needs `kat_service` +
+    /// gated; kill switch `RIIR_REFINE_REPLAY=0`. Needs `kat_service` +
     /// `kat_transport` + `clippy_verify` (the oracle instrument).
     Replay,
     /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
@@ -112,11 +112,14 @@ enum KatCommand {
 #[cfg(feature = "fix_verify")]
 use riir_refine::domains::clippy_lints::proposers::VERIFY_LINTS;
 
-/// Resolve the self-evolve memory file (Issue 018): `RIIR_HEAL_MEMORY`
+/// Resolve the self-evolve memory file (Issue 018): `RIIR_REFINE_MEMORY`
 /// overrides; otherwise the platform cache dir
 /// (`$XDG_CACHE_HOME` / `~/.cache` / `%LOCALAPPDATA%` / temp fallback).
+/// One-time disk migration (plan 192 P3): the pre-rename cache dir
+/// `riir-clippy/` is renamed to `riir-refine/` when only the old one exists —
+/// best-effort; a locked or vanished dir falls back to the empty new state.
 fn default_memory_path() -> PathBuf {
-    if let Ok(p) = std::env::var("RIIR_HEAL_MEMORY") {
+    if let Ok(p) = std::env::var("RIIR_REFINE_MEMORY") {
         return PathBuf::from(p);
     }
     let base = std::env::var_os("XDG_CACHE_HOME")
@@ -124,16 +127,21 @@ fn default_memory_path() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
         .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
         .unwrap_or_else(std::env::temp_dir);
-    base.join("riir-clippy").join("memory.json")
+    let new_dir = base.join("riir-refine");
+    let old_dir = base.join("riir-clippy");
+    if !new_dir.exists() && old_dir.exists() {
+        let _ = std::fs::rename(&old_dir, &new_dir);
+    }
+    new_dir.join("memory.json")
 }
 
 /// Resolve the repo-local `.refine` root shared by the trajectory store and the
-/// KAT meter: `RIIR_HEAL_TRAJ_ROOT` → else the first path arg's nearest
+/// KAT meter: `RIIR_REFINE_TRAJ_ROOT` → else the first path arg's nearest
 /// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
 /// per-repo adoption audit) → else cwd.
 #[cfg(any(feature = "latent_retrieval", feature = "kat_service"))]
 fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
-    std::env::var("RIIR_HEAL_TRAJ_ROOT")
+    std::env::var("RIIR_REFINE_TRAJ_ROOT")
         .ok()
         .map(PathBuf::from)
         .or_else(|| {
@@ -194,18 +202,18 @@ fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_refine::traj
 }
 
 /// Proposal 005 Phase 0 T0.5 (Plan 023): open the KAT code-token meter for
-/// this run. `None` when disabled — `RIIR_HEAL_KAT_METER=0|off|false|no`
-/// (the `RIIR_HEAL_SELF_EVOLVE=0` kill-switch pattern) or an unreachable
-/// meter location (never fatal to a heal). `RIIR_HEAL_KAT_METER_FILE`
+/// this run. `None` when disabled — `RIIR_REFINE_KAT_METER=0|off|false|no`
+/// (the `RIIR_REFINE_SELF_EVOLVE=0` kill-switch pattern) or an unreachable
+/// meter location (never fatal to a heal). `RIIR_REFINE_KAT_METER_FILE`
 /// overrides the exact file; otherwise `<resolve_heal_root>/.refine/kat_meter.json`
 /// (beside the trajectory store).
 /// The shared billing kill-switch (Plan 024 — ONE switch for the whole KAT
-/// billing plane): `RIIR_HEAL_KAT_METER=0|off|false|no` disables the meter,
+/// billing plane): `RIIR_REFINE_KAT_METER=0|off|false|no` disables the meter,
 /// the charge ledger, AND the 075 soft gate (a user who turned billing off
-/// must not keep a stale-ack gate). The `RIIR_HEAL_SELF_EVOLVE=0` pattern.
+/// must not keep a stale-ack gate). The `RIIR_REFINE_SELF_EVOLVE=0` pattern.
 #[cfg(feature = "kat_service")]
 fn kat_billing_disabled() -> bool {
-    std::env::var("RIIR_HEAL_KAT_METER")
+    std::env::var("RIIR_REFINE_KAT_METER")
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
 }
@@ -215,7 +223,7 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter>
     if kat_billing_disabled() {
         return None;
     }
-    if let Ok(file) = std::env::var("RIIR_HEAL_KAT_METER_FILE") {
+    if let Ok(file) = std::env::var("RIIR_REFINE_KAT_METER_FILE") {
         return Some(riir_refine::kat_meter::KatMeter::open_at(PathBuf::from(
             file,
         )));
@@ -226,8 +234,8 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter>
 
 /// Proposal 005 Phase 0 T0.6 (Plan 024): open the KAT charge ledger right
 /// after the meter — the per-unit-burn consumer of the meter's events.
-/// Shares the meter's kill-switch (`RIIR_HEAL_KAT_METER=0` disables BOTH —
-/// one billing switch, per the Plan 024 decision); `RIIR_HEAL_KAT_CHARGE_FILE`
+/// Shares the meter's kill-switch (`RIIR_REFINE_KAT_METER=0` disables BOTH —
+/// one billing switch, per the Plan 024 decision); `RIIR_REFINE_KAT_CHARGE_FILE`
 /// overrides the exact file. `meter` is the just-opened meter's PRE-session
 /// state — the recovery path (missing/corrupt charge ledger → watermark = the
 /// meter cumulative at open) is only correct against a pre-session reading.
@@ -237,7 +245,7 @@ fn open_kat_charge(
     meter: Option<&riir_refine::kat_meter::KatMeter>,
 ) -> Option<riir_refine::kat_meter::KatCharge> {
     let meter = meter?;
-    if let Ok(file) = std::env::var("RIIR_HEAL_KAT_CHARGE_FILE") {
+    if let Ok(file) = std::env::var("RIIR_REFINE_KAT_CHARGE_FILE") {
         return Some(riir_refine::kat_meter::KatCharge::open_at(
             PathBuf::from(file),
             meter.state(),
@@ -307,8 +315,8 @@ fn sticky_grace(ack: &riir_refine::kat_burn_client::KatBurnAck) -> bool {
 /// `validate_mode_flags` (the mode is known) and before the meter opens
 /// (nothing heavy has run), and only in a transport build — the gate's
 /// input is the last SYNCED server balance, which only that build can
-/// obtain. Disarmed by the gate kill-switch (`RIIR_HEAL_KAT_GATE=0`) and by
-/// the shared billing switch (`RIIR_HEAL_KAT_METER=0` — one billing plane,
+/// obtain. Disarmed by the gate kill-switch (`RIIR_REFINE_KAT_GATE=0`) and by
+/// the shared billing switch (`RIIR_REFINE_KAT_METER=0` — one billing plane,
 /// the Plan 024 decision); otherwise defers to the pure predicate.
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn enforce_kat_soft_gate(args: &Args) {
@@ -410,7 +418,7 @@ fn enforce_kat_soft_gate(args: &Args) {
     print_depleted_survey(args);
     eprintln!(
         "(logged-out / offline / never-synced machines are never gated — this reads the last \
-         SYNCED server balance; RIIR_HEAL_KAT_GATE=0 disables the gate)"
+         SYNCED server balance; RIIR_REFINE_KAT_GATE=0 disables the gate)"
     );
     if offered {
         eprintln!(
@@ -519,21 +527,21 @@ fn mining_queued_batches() -> u32 {
     .unwrap_or(u32::MAX)
 }
 
-/// The `--yes` run-global (the flag form of `RIIR_HEAL_YES`): every y/N
+/// The `--yes` run-global (the flag form of `RIIR_REFINE_YES`): every y/N
 /// prompt answers yes without a TTY — the agents/CI contract. A static
 /// rather than plumbed `Args`: the prompt sites sit deep in flows that do
 /// not otherwise carry it, and one store site in `main` covers the run.
 static PROMPT_YES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// The env half of the `--yes` contract (`RIIR_HEAL_YES=1|true|yes|on`).
+/// The env half of the `--yes` contract (`RIIR_REFINE_YES=1|true|yes|on`).
 fn prompt_yes_env() -> bool {
-    std::env::var("RIIR_HEAL_YES")
+    std::env::var("RIIR_REFINE_YES")
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
 }
 
 /// Issue 079 — the depleted-run contribute-now offer's consent surface.
-/// `RIIR_HEAL_KAT_PROMPT_YES=1|true|yes` is the automation hook (agents and
+/// `RIIR_REFINE_KAT_PROMPT_YES=1|true|yes` is the automation hook (agents and
 /// CI run without a TTY); an explicit `--unmine` opt-out is never re-asked
 /// (it already answered this question); otherwise ONE y/N question on an
 /// interactive stdin. No env and no TTY → false (the plain 075 refusal,
@@ -543,13 +551,13 @@ fn depleted_mine_offer() -> bool {
     use std::io::IsTerminal;
     use std::io::Write;
 
-    if std::env::var("RIIR_HEAL_KAT_PROMPT_YES")
+    if std::env::var("RIIR_REFINE_KAT_PROMPT_YES")
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes"))
     {
         return true;
     }
-    // `--yes` (or `RIIR_HEAL_YES=1`) — the run-global non-interactive consent.
+    // `--yes` (or `RIIR_REFINE_YES=1`) — the run-global non-interactive consent.
     if PROMPT_YES.load(std::sync::atomic::Ordering::Relaxed) {
         return true;
     }
@@ -570,11 +578,11 @@ fn depleted_mine_offer() -> bool {
     matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
-/// The `RIIR_HEAL_KAT_GATE` kill-switch (the `RIIR_HEAL_KAT_METER` pattern):
+/// The `RIIR_REFINE_KAT_GATE` kill-switch (the `RIIR_REFINE_KAT_METER` pattern):
 /// `0|off|false|no` disarms the 075 soft gate for this run.
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn kat_gate_disabled() -> bool {
-    std::env::var("RIIR_HEAL_KAT_GATE")
+    std::env::var("RIIR_REFINE_KAT_GATE")
         .ok()
         .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
 }
@@ -2545,7 +2553,7 @@ fn run_kat_refill(wait_secs: u64) {
         // module stays environment-free (the wetrun caveat #2 rule), and
         // the operator's token IS the crank authorization (the module doc
         // owns the reasoning).
-        let crank_bearer = std::env::var("RIIR_HEAL_KAT_CRANK_TOKEN")
+        let crank_bearer = std::env::var("RIIR_REFINE_KAT_CRANK_TOKEN")
             .ok()
             .filter(|t| !t.is_empty());
         let trigger_crank = crank_bearer.is_some();
@@ -2786,12 +2794,12 @@ fn run_kat_wetrun(dry_run: bool) {
         // The crank bearer is read HERE, never inside `kat_wetrun` — that
         // module is pinned environment-free so no env read there can grow
         // into a mainnet-admission override (caveat #2).
-        let crank_bearer = std::env::var("RIIR_HEAL_KAT_CRANK_TOKEN")
+        let crank_bearer = std::env::var("RIIR_REFINE_KAT_CRANK_TOKEN")
             .ok()
             .filter(|t| !t.is_empty());
         if matches!(mode, RunMode::Full) && crank_bearer.is_none() {
             eprintln!(
-                "wetrun: RIIR_HEAL_KAT_CRANK_TOKEN is unset. `POST /admin/crank/daily` is \
+                "wetrun: RIIR_REFINE_KAT_CRANK_TOKEN is unset. `POST /admin/crank/daily` is \
                  bearer-gated fail-closed service-side, and it is what SETTLES a faucet row — \
                  without it steps 2 and 5 cannot complete. Set it, or use --dry-run."
             );
@@ -2851,7 +2859,7 @@ fn run_kat_wetrun(dry_run: bool) {
 /// oracle); the byte movers are [`riir_refine::kat_replay_client`].
 ///
 /// Gates (in order):
-/// 1. kill switch `RIIR_HEAL_REPLAY=0` — disabled lanes exit 0 quietly;
+/// 1. kill switch `RIIR_REFINE_REPLAY=0` — disabled lanes exit 0 quietly;
 /// 2. login (load-only, the wetrun precedent: a SIGNING command never
 ///    silently mints an identity);
 /// 3. mining consent — `OptedOut` refuses (verdicts are contributions to
@@ -2877,11 +2885,11 @@ fn run_kat_replay() {
     };
     use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
 
-    // 1. Kill switch (the RIIR_HEAL_KAT_METER idiom: exactly "0" disables).
+    // 1. Kill switch (the RIIR_REFINE_KAT_METER idiom: exactly "0" disables).
     const REPLAY_LEASE_LIMIT: u32 = 16;
 
-    if std::env::var("RIIR_HEAL_REPLAY").is_ok_and(|v| v == "0") {
-        println!("replay: disabled by RIIR_HEAL_REPLAY=0");
+    if std::env::var("RIIR_REFINE_REPLAY").is_ok_and(|v| v == "0") {
+        println!("replay: disabled by RIIR_REFINE_REPLAY=0");
         return;
     }
 
@@ -3255,12 +3263,12 @@ fn pair_fail_streak(
     memory.pair_consecutive_fails(rule_id, replacement)
 }
 
-/// P12 kill-switch parse: suppression is default-on; `RIIR_HEAL_SUPPRESS_
+/// P12 kill-switch parse: suppression is default-on; `RIIR_REFINE_SUPPRESS_
 /// REVERTED=0|off|false|no` re-enables unconditional re-proposal (force
 /// retry of previously-reverted edits). Mirrors the recorder's opt-out
 /// value set.
 fn suppression_disabled() -> bool {
-    match std::env::var("RIIR_HEAL_SUPPRESS_REVERTED") {
+    match std::env::var("RIIR_REFINE_SUPPRESS_REVERTED") {
         Ok(v) => matches!(
             v.to_ascii_lowercase().as_str(),
             "0" | "off" | "false" | "no"
@@ -3651,7 +3659,7 @@ USAGE:
     --collapse-report Self-collapse monitor (Issue 042; needs --features
                     latent_retrieval): run the REAL heal retrieval loop over
                     the fixed clippy fixture set against the store at
-                    RIIR_HEAL_TRAJ_ROOT (or the envelope fallback) and print
+                    RIIR_REFINE_TRAJ_ROOT (or the envelope fallback) and print
                     pool memory-fraction + memory win-rate + top-k rule
                     entropy, with a fresh-store baseline column. Read-only.
     --corpus-stats  Count the corpus domains (compiled builders where the
@@ -3675,7 +3683,7 @@ USAGE:
                     --refill/burn-push out while this usage page still
                     lists them).
     --yes           Non-interactive consent: every y/N prompt answers yes
-                    (the flag form of RIIR_HEAL_YES=1 — agents/CI). Currently
+                    (the flag form of RIIR_REFINE_YES=1 — agents/CI). Currently
                     arms the depleted-run contribute-now offer (Issue 079).
     --write         With --fix-compile: write the edits in place. (--fix already
                     writes — the explicit flag is the consent; rustfmt AUTOMATICALLY
@@ -3718,7 +3726,7 @@ USAGE:
                     (each new key gets a fresh once-per-key welcome grant).
     --refill        DEVNET-OPS ONLY (riir-dapps Issue 094 D4): credit a TEST
                     account on devnet — open a faucet request, force a crank
-                    settle pass when RIIR_HEAL_KAT_CRANK_TOKEN is set, then
+                    settle pass when RIIR_REFINE_KAT_CRANK_TOKEN is set, then
                     read the server balance and refresh the 075 gate's input
                     from that server truth. Exit 0 iff the final synced
                     balance is positive. It REFUSES on mainnet (and on any
@@ -3734,7 +3742,7 @@ USAGE:
                     default-on; see src/fmt.rs for the discipline it encodes).
     login           KAT account identity (Proposal 005 T0.1): generate an
                     Ed25519 keypair in OpenSSH format under the account dir
-                    (RIIR_HEAL_KAT_ACCOUNT_DIR / ~/.config/riir-heal), or
+                    (RIIR_REFINE_KAT_ACCOUNT_DIR / ~/.config/riir-heal), or
                     import one with --key <path>. Idempotent — an existing
                     key is loaded, never regenerated. Records the free-tier
                     grant as a LOCAL projection (accounting-only, G9d).
@@ -3787,8 +3795,8 @@ USAGE:
                     receivers); lints outside the lane's corpus set are
                     never consumed. AUTO: with no feed given, a scan over a
                     cargo project runs the oracle itself (default features,
-                    loud, compiles the project — RIIR_HEAL_AUTO_ORACLE=0
-                    disables; RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv> re-aims
+                    loud, compiles the project — RIIR_REFINE_AUTO_ORACLE=0
+                    disables; RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv> re-aims
                     the auto run at a feature set, for diagnostics that
                     only fire behind a non-default feature; a manual
                     --clippy-json wins outright).
@@ -3848,7 +3856,7 @@ struct Args {
     /// `--version` / `-V` — print the version and exit (standalone).
     version: bool,
     /// `--yes` — non-interactive consent: every y/N prompt answers yes
-    /// (the flag form of `RIIR_HEAL_YES=1`; agents and CI). Currently arms
+    /// (the flag form of `RIIR_REFINE_YES=1`; agents and CI). Currently arms
     /// the depleted-run contribute-now offer (Issue 079).
     yes: bool,
     /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
@@ -3930,8 +3938,8 @@ struct Args {
     /// no diagnostic are marked `[heuristic]`. Augments `--suggest` /
     /// the bare dry run / the `--fix` review pass. Since Issue 113 the
     /// AUTO-ORACLE runs this stream for you on cargo projects (default
-    /// features, loud, `RIIR_HEAL_AUTO_ORACLE=0` opts out;
-    /// `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` re-aims the spawn at a
+    /// features, loud, `RIIR_REFINE_AUTO_ORACLE=0` opts out;
+    /// `RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv>` re-aims the spawn at a
     /// feature set — Issue 115) — this flag remains the explicit/curated
     /// override and wins outright.
     clippy_json: Option<String>,
@@ -4065,7 +4073,7 @@ struct Args {
     /// `--collapse-report` (Issue 042): the self-collapse monitor — runs the
     /// real retrieval loop (`HealPipeline::heal` Step 1/3 + selection) over
     /// the fixed clippy fixture set against the store at
-    /// `RIIR_HEAL_TRAJ_ROOT` (or the envelope fallback) + a fresh baseline.
+    /// `RIIR_REFINE_TRAJ_ROOT` (or the envelope fallback) + a fresh baseline.
     /// Read-only standalone mode (R346's monitor; feeds the audit script).
     collapse_report: bool,
     /// Proposal 005 T0.1: the identity subcommand (`login` / `account` /
@@ -6094,7 +6102,7 @@ fn finish_score_bench(
     // report path; best-effort — one console line, never a bench failure.
     #[cfg(feature = "latent_retrieval")]
     {
-        let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+        let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
             .map(PathBuf::from)
             .or_else(|_| std::env::current_dir())
             .unwrap_or_default();
@@ -6857,7 +6865,7 @@ fn count_corpus_domain(repo: &Path, rel: &str, needle: &str) -> u32 {
     u32::try_from(n).unwrap_or(u32::MAX)
 }
 
-/// Locate the riir-clippy repo root for the corpus source-walk: the nearest
+/// Locate the riir-refine repo root for the corpus source-walk: the nearest
 /// ancestor of the CWD owning the corpus paths, else the binary's own
 /// build-machine manifest dir (makes the flag work from any CWD on the
 /// build machine), else None (the caller errors clearly).
@@ -6889,7 +6897,7 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
     use riir_refine::corpus_coverage as cc;
 
-    let driver = std::env::var("RIIR_HEAL_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
+    let driver = std::env::var("RIIR_REFINE_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
 
     // The lint surface. `-W help` prints to stdout and exits 0 with no
     // input; stdin is nulled so a driver that DOES want one fails fast
@@ -6913,7 +6921,7 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
         Err(e) => cc::LintSurface {
             blind: Some(format!(
                 "cannot spawn `{driver}` ({e}) — install the clippy component \
-                 (`rustup component add clippy`) or set RIIR_HEAL_CLIPPY_DRIVER"
+                 (`rustup component add clippy`) or set RIIR_REFINE_CLIPPY_DRIVER"
             )),
             ..cc::LintSurface::default()
         },
@@ -7308,7 +7316,7 @@ fn run_conversion_report() {
 fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
     let Some(repo) = resolve_corpus_repo_root() else {
         eprintln!(
-            "corpus-stats: cannot locate the riir-clippy corpus paths \
+            "corpus-stats: cannot locate the riir-refine corpus paths \
              (src/domains/...) from {:?} — run inside the repo",
             std::env::current_dir().unwrap_or_default()
         );
@@ -7369,7 +7377,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
 
     #[cfg(feature = "latent_retrieval")]
     {
-        let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+        let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
             .map(PathBuf::from)
             .or_else(|_| std::env::current_dir())
             .unwrap_or_default();
@@ -7605,6 +7613,7 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 }
 
 fn main() {
+    riir_refine::install_env_rename_compat();
     let args = parse_args();
 
     // ── riir-dapps Plan 023: `config` — the LOCAL service-url surface ────
@@ -7841,7 +7850,7 @@ fn main() {
         }
         return;
     }
-    // `--yes` arms every y/N prompt (the flag form of `RIIR_HEAL_YES`) — set
+    // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) — set
     // the run-global here so the deep prompt sites read it without plumbing
     // Args through every flow.
     PROMPT_YES.store(
@@ -7887,7 +7896,7 @@ fn main() {
     // exists to repair). It is no longer a user refuel path: D4 retired the
     // daily faucet/drip tier, and `run_kat_refill` refuses loudly off
     // devnet. The money consent is the explicit flag itself; the crank
-    // leg's consent is the operator-set RIIR_HEAL_KAT_CRANK_TOKEN.
+    // leg's consent is the operator-set RIIR_REFINE_KAT_CRANK_TOKEN.
     if args.refill {
         run_kat_refill(args.refill_wait);
         return;
@@ -7975,7 +7984,7 @@ fn main() {
         // `.refine/trajectories.kv` — same root resolution as --dump-trajectories.
         #[cfg(feature = "latent_retrieval")]
         {
-            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
@@ -8011,7 +8020,7 @@ fn main() {
     if args.frontier_report {
         #[cfg(feature = "latent_retrieval")]
         {
-            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
@@ -8488,7 +8497,7 @@ fn main() {
     if args.recompute_elo {
         #[cfg(feature = "latent_retrieval")]
         {
-            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
@@ -8541,7 +8550,7 @@ fn main() {
     // REAL retrieval loop (HealPipeline::heal Step 1 retrieval + Step 3 pool
     // + selection) over the fixed clippy fixture set (Issue 017's
     // real-clippy-verified spans) under two conditions: the store at
-    // RIIR_HEAL_TRAJ_ROOT (no migration — this mode never writes), falling
+    // RIIR_REFINE_TRAJ_ROOT (no migration — this mode never writes), falling
     // back to the memory.json envelope, plus a fresh-empty baseline for the
     // elevation delta. Feeds self_evolve_audit.sh §1c.
     if args.collapse_report {
@@ -8565,7 +8574,7 @@ fn main() {
             println!("{}", fresh.report("  fresh(empty)"));
 
             // Production condition (a): the store, or the envelope fallback.
-            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
@@ -8681,10 +8690,10 @@ fn main() {
     if args.dump_trajectories {
         // The neuron-db backend (`latent_retrieval` builds): the repo-local
         // durable store. Requires a path (the repo root to resolve
-        // `.refine/trajectories.kv`) — `RIIR_HEAL_TRAJ_ROOT` overrides.
+        // `.refine/trajectories.kv`) — `RIIR_REFINE_TRAJ_ROOT` overrides.
         #[cfg(feature = "latent_retrieval")]
         {
-            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
                 .map(PathBuf::from)
                 .or_else(|_| std::env::current_dir())
                 .unwrap_or_default();
@@ -8823,7 +8832,7 @@ fn main() {
         let mut driver = CompileDriver::isolated().with_max_iters(args.max_iters);
         // Issue 093 T2 (opt-in `nonergodic_driver` builds): the per-run
         // strategy-posterior ordering REPLACES the static shape-conditional
-        // one when armed (feature on + `RIIR_HEAL_NONERGODIC` not killed) —
+        // one when armed (feature on + `RIIR_REFINE_NONERGODIC` not killed) —
         // the store, when present, seeds the base ranking and composes the
         // arm-D blend with the stale-detection gate. Installed BEFORE the
         // static block so `with_ordering` here wins.
@@ -9173,7 +9182,7 @@ fn main() {
     // repo's score history (resolve_corpus_repo_root, the corpus-stats
     // precedent: the constants are a property of the healer's corpus, not
     // of the scanned target) and install the policy when it is
-    // non-identity. The kill-switch (RIIR_HEAL_DEMONSTRABILITY=0), an
+    // non-identity. The kill-switch (RIIR_REFINE_DEMONSTRABILITY=0), an
     // absent history, and an identity policy all leave the run at the
     // default posture — standing() returns None and says nothing (the
     // absent-history case is the ordinary one on installed binaries, where
@@ -9265,7 +9274,7 @@ fn main() {
 
     // Issue 018/038: self-evolve recording — the memory half runs in every
     // build; the EMA learning half degrades gracefully without an oracle
-    // (one log line). `RIIR_HEAL_SELF_EVOLVE=0` makes this fully inert.
+    // (one log line). `RIIR_REFINE_SELF_EVOLVE=0` makes this fully inert.
     //
     // 038-T2/T3: under `latent_retrieval` the repo-local neuron store is the
     // ONE backend — opened up front (with the one-time envelope migration
@@ -9311,7 +9320,7 @@ fn main() {
 
     // T0.6 (Plan 024): the charge ledger opens right after the meter, against
     // its PRE-session state (see open_kat_charge). Shares the meter's
-    // kill-switch — `RIIR_HEAL_KAT_METER=0` disables the whole billing path.
+    // kill-switch — `RIIR_REFINE_KAT_METER=0` disables the whole billing path.
     // No immediate save needed: recovery is idempotent from the meter at open
     // time, and the exit block persists the settled state.
     #[cfg(feature = "kat_service")]
@@ -9406,7 +9415,7 @@ fn main() {
     // Issue 113 (the auto-oracle): with no manual feed, a scan over a cargo
     // project RUNS the oracle itself — the anchored spans (the ones that
     // reproduce under the proof oracle and can credit) become the default
-    // instead of a flag nobody discovers. RIIR_HEAL_AUTO_ORACLE=0 restores
+    // instead of a flag nobody discovers. RIIR_REFINE_AUTO_ORACLE=0 restores
     // the old never-spawn posture; docker/dist lanes have no rust spans.
     let clippy_feed: Option<Vec<ClippyDiagnostic>> = if let Some(path) = args.clippy_json.as_ref() {
         match std::fs::read_to_string(path) {
@@ -9456,17 +9465,17 @@ fn main() {
                 let targets_note = if all_targets {
                     "all targets (tests/benches/examples included)"
                 } else {
-                    "lib targets only (RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS is set)"
+                    "lib targets only (RIIR_REFINE_AUTO_ORACLE_NO_ALL_TARGETS is set)"
                 };
                 match features.as_deref() {
                     Some(set) => eprintln!(
-                        "clippy oracle (auto): linting {} with features [{}], {} — a feature-superset clippy run is materially slower than default features; first run can take a while (RIIR_HEAL_AUTO_ORACLE_FEATURES; unset for default features; RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                        "clippy oracle (auto): linting {} with features [{}], {} — a feature-superset clippy run is materially slower than default features; first run can take a while (RIIR_REFINE_AUTO_ORACLE_FEATURES; unset for default features; RIIR_REFINE_AUTO_ORACLE=0 disables)",
                         root.display(),
                         set.join(","),
                         targets_note
                     ),
                     None => eprintln!(
-                        "clippy oracle (auto): linting {} at default features, {} — this compiles the project, first run can take a while (RIIR_HEAL_AUTO_ORACLE=0 disables)",
+                        "clippy oracle (auto): linting {} at default features, {} — this compiles the project, first run can take a while (RIIR_REFINE_AUTO_ORACLE=0 disables)",
                         root.display(),
                         targets_note
                     ),
@@ -9477,7 +9486,7 @@ fn main() {
                 let feature_hint = |msg: &str| {
                     if features.is_some() {
                         format!(
-                            "{msg} — RIIR_HEAL_AUTO_ORACLE_FEATURES is set; check the feature names against the project's manifests, or unset the knob"
+                            "{msg} — RIIR_REFINE_AUTO_ORACLE_FEATURES is set; check the feature names against the project's manifests, or unset the knob"
                         )
                     } else {
                         msg.to_owned()
@@ -10038,7 +10047,7 @@ fn main() {
                 // the problem. Any text change auto-unlocks: the span
                 // edited → different restore; the proposer fixed →
                 // different replacement (the 6038e59 manual_let_else
-                // recovery path). `RIIR_HEAL_SUPPRESS_REVERTED=0` forces
+                // recovery path). `RIIR_REFINE_SUPPRESS_REVERTED=0` forces
                 // retry.
                 if suppress_reverted && !edits.is_empty() {
                     edits.retain(|re| {
@@ -10987,12 +10996,12 @@ fn main() {
     }
     // P12: report the suppressed re-proposals — the operator must see what
     // was skipped and why (a suppressed edit keeps its lint firing; the
-    // escape hatch is RIIR_HEAL_SUPPRESS_REVERTED=0 for one run).
+    // escape hatch is RIIR_REFINE_SUPPRESS_REVERTED=0 for one run).
     if !suppressed_pairs.is_empty() {
         const MAX_SUPPRESSED_SHOWN: usize = 20;
 
         println!(
-            "suppressed {} previously-reverted edit(s) (2+ consecutive compile-gate fails; RIIR_HEAL_SUPPRESS_REVERTED=0 forces retry):",
+            "suppressed {} previously-reverted edit(s) (2+ consecutive compile-gate fails; RIIR_REFINE_SUPPRESS_REVERTED=0 forces retry):",
             suppressed_pairs.len()
         );
         for ((rule, restore, _fix), (file, line)) in

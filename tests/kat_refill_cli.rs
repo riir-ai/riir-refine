@@ -17,8 +17,8 @@
 //! in `riir-kat`'s `kat_refill::tests` rather than dialed from here — this
 //! file reaches no network by construction.
 //!
-//! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
-//! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`) + service URL; the lease/reheat lanes
+//! Every run gets its own scratch root (`RIIR_REFINE_TRAJ_ROOT`) + account
+//! dir (`RIIR_REFINE_KAT_ACCOUNT_DIR`) + service URL; the lease/reheat lanes
 //! are kill-switched so the refill is the only dial under test. The real
 //! `~/.config/riir-heal` is never read or written.
 //!
@@ -188,13 +188,13 @@ fn scratch(tag: &str) -> PathBuf {
 fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
-        .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
+        .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
         // it too (the consent plane still rides the old var above).
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
-        .env("RIIR_HEAL_TRAJ_ROOT", dir)
-        .env("RIIR_HEAL_KAT_SERVICE_URL", url)
-        .env("RIIR_HEAL_KAT_LEASE", "0")
+        .env("RIIR_REFINE_TRAJ_ROOT", dir)
+        .env("RIIR_REFINE_KAT_SERVICE_URL", url)
+        .env("RIIR_REFINE_KAT_LEASE", "0")
         .args(args);
     for (k, v) in extra_env {
         cmd.env(k, v);
@@ -267,7 +267,7 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
     let (code, text) = heal(
         &dir,
         &mock.base(),
-        &[("RIIR_HEAL_KAT_CRANK_TOKEN", token)],
+        &[("RIIR_REFINE_KAT_CRANK_TOKEN", token)],
         &["--refill"],
     );
 
@@ -387,7 +387,7 @@ fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
     let (code, text) = heal(
         &dir,
         riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
-        &[("RIIR_HEAL_KAT_CRANK_TOKEN", "ops-token")],
+        &[("RIIR_REFINE_KAT_CRANK_TOKEN", "ops-token")],
         &["--refill"],
     );
     assert_eq!(code, Some(1), "mainnet refill must refuse. output:\n{text}");

@@ -4,7 +4,7 @@
 #
 # ## Why this exists
 #
-# `riir-clippy` is not standalone-buildable: `katgpt-core` is a NON-optional
+# `riir-refine` is not standalone-buildable: `katgpt-core` is a NON-optional
 # `path = "../katgpt-rs…"` dependency, and cargo reads every path dependency's
 # manifest when it loads the workspace graph — `optional = true` governs
 # *linking*, not *resolution* — so with the siblings absent, no cargo command

@@ -182,8 +182,8 @@ feature build (**one active backend per run — never both**, Issue 038):
 
 | Build | Backend | Location | Why |
 |---|---|---|---|
-| `latent_retrieval` | **neuron-db store (`TrajStore`)** — the ONE backend | repo-local `.refine/trajectories.kv` (encrypted WAL; root = `RIIR_HEAL_TRAJ_ROOT` → first path's repo root → cwd) | per-key Pod rows, incremental puts via `CommitBatch`, WAL encryption at rest, run-attributed timestamps |
-| default (light) | JSON envelope (Issue 018) | `~/.cache/riir-clippy/memory.json` (`RIIR_HEAL_MEMORY` override) | zero heavy deps for light builds |
+| `latent_retrieval` | **neuron-db store (`TrajStore`)** — the ONE backend | repo-local `.refine/trajectories.kv` (encrypted WAL; root = `RIIR_REFINE_TRAJ_ROOT` → first path's repo root → cwd) | per-key Pod rows, incremental puts via `CommitBatch`, WAL encryption at rest, run-attributed timestamps |
+| default (light) | JSON envelope (Issue 018) | `~/.cache/riir-refine/memory.json` (`RIIR_REFINE_MEMORY` override) | zero heavy deps for light builds |
 
 ### The store backend (Issue 038 — commit `e4ce8ba`)
 
@@ -233,8 +233,8 @@ losslessly:
   warns + continues fresh).
 - Retrieval weights are config, not state — never serialized.
 
-The `cargo refine` bin resolves the path: `RIIR_HEAL_MEMORY` override, else
-`$XDG_CACHE_HOME`/`~/.cache`/`%LOCALAPPDATA%`/temp → `riir-clippy/memory.json`.
+The `cargo refine` bin resolves the path: `RIIR_REFINE_MEMORY` override, else
+`$XDG_CACHE_HOME`/`~/.cache`/`%LOCALAPPDATA%`/temp → `riir-refine/memory.json`.
 
 ## See also
 

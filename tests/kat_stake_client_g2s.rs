@@ -175,14 +175,14 @@ fn read_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
 
 // ── fixtures ───────────────────────────────────────────────────────────────
 
-/// The env-mutating tests serialize on this lock — `RIIR_HEAL_KAT_STAKE_PAYEE`
+/// The env-mutating tests serialize on this lock — `RIIR_REFINE_KAT_STAKE_PAYEE`
 /// is process-global and the default test runner is parallel (the
 /// `tests/hero_fusion_ab.rs` AB_LOCK precedent for process-global config).
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn temp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "riir-clippy-stake-{tag}-{}-{}",
+        "riir-refine-stake-{tag}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -311,7 +311,7 @@ fn stake_not_live_composes_locally_and_queues_the_intent() {
     let root = temp_dir("stake-local");
     // The local composition needs the custody payee env.
     let env_payee = kat_stake_client::b58_encode(&[0x55; 32]);
-    std::env::set_var("RIIR_HEAL_KAT_STAKE_PAYEE", &env_payee);
+    std::env::set_var("RIIR_REFINE_KAT_STAKE_PAYEE", &env_payee);
     let out = kat_stake_client::stake_request_flow(&transport, "acct42", 250_000_000, &root, 1)
         .expect("local fallback");
     match out {
@@ -339,7 +339,7 @@ fn stake_not_live_composes_locally_and_queues_the_intent() {
     let _ = kat_stake_client::stake_request_flow(&transport, "acct42", 100_000_000, &root, 2)
         .expect("second local fallback");
     assert_eq!(kat_stake_client::queued_stake_count(&root), Some(2));
-    std::env::remove_var("RIIR_HEAL_KAT_STAKE_PAYEE");
+    std::env::remove_var("RIIR_REFINE_KAT_STAKE_PAYEE");
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -349,10 +349,10 @@ fn stake_not_live_without_payee_config_is_an_honest_error() {
     let server = spawn_stake_mock(ServeMode::Down, String::new());
     let transport = MockStakeTransport { server };
     let root = temp_dir("stake-nopayee");
-    std::env::remove_var("RIIR_HEAL_KAT_STAKE_PAYEE");
+    std::env::remove_var("RIIR_REFINE_KAT_STAKE_PAYEE");
     let err = kat_stake_client::stake_request_flow(&transport, "a", 100, &root, 1)
         .expect_err("no payee → honest error");
-    assert!(err.contains("RIIR_HEAL_KAT_STAKE_PAYEE"), "{err}");
+    assert!(err.contains("RIIR_REFINE_KAT_STAKE_PAYEE"), "{err}");
     std::fs::remove_dir_all(&root).ok();
 }
 

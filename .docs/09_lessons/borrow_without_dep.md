@@ -1,6 +1,6 @@
 # Borrow the pattern, not the code-level dependency
 
-riir-clippy borrows **architectural patterns** from sibling repos but
+riir-refine borrows **architectural patterns** from sibling repos but
 reimplements them locally (~30–200 LOC each) because it cannot depend on
 those repos (boundary rule: developer tool ≠ game runtime ≠ training ≠
 chain ≠ storage).
@@ -80,7 +80,7 @@ not just the boundary rule.
 **(2026-08-10):** the clippy-healing pipeline (Proposal 034) borrows the
 `TernaryDraftModel` + `SealQuestCorpus` + `ConstraintPruner` pattern from
 `quest_grammar` but has zero game-domain coupling. It ships in
-`/git/riir-clippy` (new repo), NOT in `crates/riir-games-quest/src/clippy_healing/`.
+`/git/riir-refine` (new repo), NOT in `crates/riir-games-quest/src/clippy_healing/`.
 
 ## See also
 

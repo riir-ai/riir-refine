@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ops_nightly.sh — Issue 044 T7 (riir-clippy): nightly ops-dashboard refresh.
+# ops_nightly.sh — Issue 044 T7 (riir-refine): nightly ops-dashboard refresh.
 #
 # Runs ON THE M3, not in CI. Rationale (see .github/workflows/ops_dashboard.yml
 # header for the full decision): locally the 11 sibling repos are already
@@ -19,7 +19,7 @@
 #
 # DEPLOY POLICY (2026-08-29): production deploys ship from `main` ONLY —
 # `develop` is the working branch. §3b resolves a dedicated `main` worktree
-# (default ../.riir-clippy-main, override RIIR_OPS_MAIN_WT), fast-forwards it
+# (default ../.riir-refine-main, override RIIR_OPS_MAIN_WT), fast-forwards it
 # to origin/develop, and the wrangler deploy runs from THERE — never from
 # whatever branch this checkout happens to sit on. A diverged main skips the
 # deploy loudly instead of shipping a tree main did not vet.
@@ -298,7 +298,7 @@ fi
 DEPLOY_FAILED=0
 DEPLOY_DIR=""
 if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
-  MAIN_WT="${RIIR_OPS_MAIN_WT:-${REPO}/../.riir-clippy-main}"
+  MAIN_WT="${RIIR_OPS_MAIN_WT:-${REPO}/../.riir-refine-main}"
   # Canonicalize BEFORE comparing against `worktree list` output: porcelain
   # prints the resolved path, and the raw "${REPO}/.." spelling would never
   # string-match it (the worktree would then be re-created every run and the
@@ -504,7 +504,7 @@ fi
 # hatch). The sync's unauthorized line lands in the log above — that is
 # the 401/403-LOUD surface (key rotation or an allowlist drop must
 # surface here, never warn-and-continue into a silently stale card).
-# Companion (T4.3, riir-clippy Proposal 016): the OPPORTUNISTIC push runs
+# Companion (T4.3, riir-refine Proposal 016): the OPPORTUNISTIC push runs
 # on its own launchd interval — com.riir.healqual-sync.plist, 4h,
 # `healqual_sync.sh --if-changed` (digest-gated). THIS leg stays the
 # always-POST liveness probe; never point it at --if-changed.

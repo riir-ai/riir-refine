@@ -60,7 +60,7 @@ fn run_heal(bin: &str, dir: &PathBuf) -> String {
     let out = Command::new(bin)
         .args(["--fix", "--write", "--no-fmt"])
         .arg(dir)
-        .env("RIIR_HEAL_SUPPRESS_REVERTED", "") // default: suppression ON
+        .env("RIIR_REFINE_SUPPRESS_REVERTED", "") // default: suppression ON
         .output()
         .expect("spawn cargo-refine");
     format!(
@@ -114,11 +114,11 @@ fn p12_suppresses_a_twice_reverted_pair_across_runs() {
         "the suppression report must name the skip; output:\n{out2}"
     );
 
-    // The escape hatch: RIIR_HEAL_SUPPRESS_REVERTED=0 forces the retry.
+    // The escape hatch: RIIR_REFINE_SUPPRESS_REVERTED=0 forces the retry.
     let out3 = Command::new(bin)
         .args(["--fix", "--write", "--no-fmt"])
         .arg(&dir)
-        .env("RIIR_HEAL_SUPPRESS_REVERTED", "0")
+        .env("RIIR_REFINE_SUPPRESS_REVERTED", "0")
         .output()
         .expect("spawn cargo-refine (kill-switch run)");
     let retried = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();

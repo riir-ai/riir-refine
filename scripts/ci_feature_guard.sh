@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# riir-clippy feature isolation guard.
+# riir-refine feature isolation guard.
 #
 # Runs five cargo layers to catch feature-combo regressions:
 #   1. --no-default-features  → zero-dep baseline (only katgpt-core cross-repo)

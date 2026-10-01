@@ -52,7 +52,7 @@
 //!
 //! ## Kill-switch
 //!
-//! `RIIR_HEAL_DEMONSTRABILITY=0` guards the AUTO-arm path ([`standing`])
+//! `RIIR_REFINE_DEMONSTRABILITY=0` guards the AUTO-arm path ([`standing`])
 //! — the loader returns `None` and the run stays at identity. Explicit
 //! injection ([`crate::draft::LatentMatcher::with_depth_policy`]) is the
 //! A/B override and is deliberately not env-guarded: the operator who
@@ -93,7 +93,7 @@ use crate::demonstrability::{canonical_domain, Row};
 /// The runtime kill-switch (guards [`standing`], the auto-arm path).
 /// Deliberately exact: only the literal `"0"` disarms — a typo must not
 /// silently disarm the gate (the auto-oracle's truthy-spelling law).
-pub const KILL_SWITCH_ENV: &str = "RIIR_HEAL_DEMONSTRABILITY";
+pub const KILL_SWITCH_ENV: &str = "RIIR_REFINE_DEMONSTRABILITY";
 
 /// The raw-multiplier floor (a low-demonstrability domain still retrieves
 /// HALF depth — it keeps a pool, just not a deep one).

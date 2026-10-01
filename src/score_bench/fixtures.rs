@@ -11,7 +11,7 @@
 //!
 //! v2 extension (P9, 2026-08-25): `riir-ai-ruliology-player-001` — the
 //! production verify-revert span that motivated the `map_unwrap_or`
-//! trait-object-cast guard (riir-clippy post-mining P9). Added as a
+//! trait-object-cast guard (riir-refine post-mining P9). Added as a
 //! deliberate bench-version step: it pins the guard on the `parse_safety`
 //! axis (pre-guard, the healed output E0308s; post-guard it compiles and
 //! the lint persists as the documented we-stay-silent divergence).

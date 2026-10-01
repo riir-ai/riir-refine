@@ -41,7 +41,7 @@ from datetime import datetime, timezone
 
 API = "https://crates.io/api/v1/crates"
 STATIC = "https://static.crates.io/crates/{name}/{name}-{ver}.crate"
-UA = "riir-clippy-bench094-extend (gist.rs workspace instrumentation)"
+UA = "riir-refine-bench094-extend (gist.rs workspace instrumentation)"
 PFX = "clippy::"
 
 
@@ -440,7 +440,7 @@ def cmd_merge(a: argparse.Namespace) -> None:
         "schema_version": 1,
         "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00"),
         "generator": (
-            f"riir-clippy scripts/sample_default_fired_histogram.py (tracked driver, "
+            f"riir-refine scripts/sample_default_fired_histogram.py (tracked driver, "
             f"methodology + Extend protocol in .benchmarks/094_default_level_fired_histogram.md); "
             f"merged from {a.base_manifest} (all prior waves, carried byte-identical) + this "
             f"script's wave-{a.wave} sample; dataset_blake3 = blake3 over the canonical JSON "

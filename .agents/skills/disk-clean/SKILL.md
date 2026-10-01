@@ -122,7 +122,7 @@ here.
 ```bash
 df -h / ; df -h /Volumes/SDXC1TB
 du -sh <each touched repo>/target          # spot-check after sizes
-~/.cargo/bin/cargo-refine --version 2>/dev/null || ls -la ~/.cargo/bin/cargo-refine  # if riir-clippy target touched
+~/.cargo/bin/cargo-refine --version 2>/dev/null || ls -la ~/.cargo/bin/cargo-refine  # if riir-refine target touched
 ```
 
 Report a before/after table (disk free before → after; per-path before →

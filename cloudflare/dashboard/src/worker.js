@@ -1,4 +1,4 @@
-// riir-ops-dashboard — Issue 044 T2/T13 (riir-clippy): auth gate in front of
+// riir-ops-dashboard — Issue 044 T2/T13 (riir-refine): auth gate in front of
 // the generated ops HTML. Deliberately dependency-free (no build step;
 // wrangler deploys this file).
 //

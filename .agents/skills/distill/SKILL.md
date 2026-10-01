@@ -1,16 +1,16 @@
 ---
 name: distill
-description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-clippy's rule corpora — kernel_opt, rust_perf, clippy_lints, and proposed future domains (sec, wasm). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification (two failure classes — domain-unbenchable is an annotation, pattern weakness is MARGINAL), the product-coverage axis for famous-lib families, and honest WIP/provenance caveats.
+description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-refine's rule corpora — kernel_opt, rust_perf, clippy_lints, and proposed future domains (sec, wasm). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification (two failure classes — domain-unbenchable is an annotation, pattern weakness is MARGINAL), the product-coverage axis for famous-lib families, and honest WIP/provenance caveats.
 ---
 
-# Distillation-Source Verdict Workflow — riir-clippy Mining
+# Distillation-Source Verdict Workflow — riir-refine Mining
 
 This skill does for CODE SOURCES what the `research` skill does for papers: a disciplined verdict on whether an external source is worth mining, which domain it feeds, what the rule candidates are, and what will falsify. The unit of value is a **corpus rule** — a named pattern with a bounded fix-space — not a summary of the source.
 
 ## When to use
 
 - The user asks "is `<repo/crate>` a good distill source / mining candidate?" (canonical case: raygon-renderer/thermite, 2026-08-18).
-- Before opening any mining batch on a NEW external source (already-approved in-repo mining is the `riir-clippy` skill's workflow, not this one).
+- Before opening any mining batch on a NEW external source (already-approved in-repo mining is the `riir-refine` skill's workflow, not this one).
 - Deciding which domain a source routes to (the CPU-SIMD-vs-kernel_opt trap).
 - Grading individual rule candidates + estimating realistic batch yield.
 - A new domain is being proposed (sec, wasm, ...) and the source would be its seed.
@@ -32,7 +32,7 @@ Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug 
 
 ## Pre-flight — MANDATORY before any verdict
 
-1. Read the mining queue snapshot in `riir-clippy/.distill/001_mining_queue_snapshot.md` (corpus counts, sibling-blocked files, active frontier).
+1. Read the mining queue snapshot in `riir-refine/.distill/001_mining_queue_snapshot.md` (corpus counts, sibling-blocked files, active frontier).
 2. Grep the target domain's corpus file (`src/domains/<domain>/corpus.rs`) to know the category taxonomy + current rule count.
 3. Internalize the falsification history: coordinator verification kills ~50% of seeds (ambient structure, dedup, wrong regime, unreachable code). Recent batches land 1-3 rules. Yield claims above ~5 rules need extraordinary evidence.
 
@@ -59,16 +59,16 @@ git -C .raw/<repo> rev-parse HEAD                                     # PIN this
 
 Rules (all mandatory):
 
-1. **Location:** `riir-clippy/.raw/<repo>/` (gitignored — a vendored upstream tree would be swept into sibling bulk adds and bloats the repo). Ephemeral scratch, never committed, never a sibling repo, never a Cargo/path dep target.
+1. **Location:** `riir-refine/.raw/<repo>/` (gitignored — a vendored upstream tree would be swept into sibling bulk adds and bloats the repo). Ephemeral scratch, never committed, never a sibling repo, never a Cargo/path dep target.
 2. **Pin before verdict:** the verdict/note records `@ <full-sha>` + license BEFORE the clone is deleted — the sha is the provenance; the clone is throwaway (precedent: Batches 96–98 cite `antirez/ds4 @ 110afdd8…` / `PrismML/llama.cpp @ e311ed38f` with quotes "re-verified at mine time"). A beta-quality fast-moving repo makes the pin load-bearing — quotes against an unpinned checkout are worthless.
 3. **Read-only.** Never modify files inside `.raw`; copy out for patch experiments.
-4. **Grep scope hygiene:** `.raw` is NOT shipped substrate — it stays OUT of dedup-gate/pre-flight grep scopes over `riir-clippy/src/` (a hit inside the clone is the source's own code, not coverage).
+4. **Grep scope hygiene:** `.raw` is NOT shipped substrate — it stays OUT of dedup-gate/pre-flight grep scopes over `riir-refine/src/` (a hit inside the clone is the source's own code, not coverage).
 5. **Cleanup is part of the batch:** when the verdict/note/plan/queue line is committed, `rm -rf .raw/<repo>`. A landed batch with a live `.raw/` entry is an unfinished batch. On session resume, any stale `.raw/` entry is UNTRUSTED — delete and re-clone at the pinned sha; never verdict against a checkout whose commit you did not pin yourself.
 6. **Shallow unless history-mining:** `--depth 1` default; full clone only when the task needs `git log`/diff archaeology — say so in the note. `--filter=blob:none` for very large repos with few read files.
 
 ## Dedup gate — MANDATORY before claiming any candidate is new
 
-For EACH candidate pattern, grep `riir-clippy/src/` under BOTH vocabularies:
+For EACH candidate pattern, grep `riir-refine/src/` under BOTH vocabularies:
 
 - The source's own term (`divider`, `libdivide`, `double pump`, `target_feature`).
 - The corpus's operator-name variant (`invariant multiplication`, `register pairing`, `cpu feature tier`).
@@ -102,7 +102,7 @@ If no candidate passes all four, record WHICH criterion failed and WHY before gr
 
 ## The lane-intel axis — MANDATORY second output (added 2026-09-05, the qwen38-recipe miss)
 
-The corpus grade answers ONE question: "how many rules does this source feed riir-clippy?" It does NOT answer "does this source move one of the workspace's OPEN perf lanes?" — and a source can be corpus-MARGINAL while its lane intelligence is the single most valuable thing in it. The qwen38-flash-6bit-m3-ultra-recipe verdict (2026-09-05) was graded C+/MARGINAL correctly on the corpus axis and simultaneously filed the owner-challenged finding — a production-qualified instance of the ANE-GDN configuration our own Bench 775/779 named as the sign-flip path for the open Issue 769 lane — as a conversation footnote. That was the miss this section exists to prevent.
+The corpus grade answers ONE question: "how many rules does this source feed riir-refine?" It does NOT answer "does this source move one of the workspace's OPEN perf lanes?" — and a source can be corpus-MARGINAL while its lane intelligence is the single most valuable thing in it. The qwen38-flash-6bit-m3-ultra-recipe verdict (2026-09-05) was graded C+/MARGINAL correctly on the corpus axis and simultaneously filed the owner-challenged finding — a production-qualified instance of the ANE-GDN configuration our own Bench 775/779 named as the sign-flip path for the open Issue 769 lane — as a conversation footnote. That was the miss this section exists to prevent.
 
 **For EVERY verdict on a perf-relevant source, BEFORE recording, map the source's techniques against the workspace's open lanes:**
 
@@ -149,9 +149,9 @@ Do not let a lane-intel zero suppress a product-coverage YES; do not let product
 - **NO / MARGINAL, no lane mapping** → conversation only. No files, no queue entry.
 - **NO / MARGINAL, WITH lane mapping** → the lane-intel line in the queue snapshot (committed, `docs:` prefix) + the issue-filing recommendation recorded in that line. No research note, no plan, no corpus batch.
 - **YES** (any B-band grade — B+/B/B−; a C-band YES records the same artifacts plus an explicit weak-grade caveat; the letter is informational, the STATUS drives recording) → three artifacts, same commit:
-  1. One line in the mining queue snapshot at `riir-clippy/.distill/001_mining_queue_snapshot.md`.
-  2. A `.research/` note in riir-clippy following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
-  3. **The batch plan** — `riir-clippy/.plans/NNN_*.md` (next number per `.plans/.highwater`, re-scan the folder at write time), created BEFORE any corpus edit when the verdict proceeds to a mining batch. `- [ ]` checkbox tasks for: dedup re-verification, entry authoring, standing gates, count pins, GOAT (G1/G2/G3 + retrieval floors), research note, docs/AGENTS/queue-snapshot updates, commit+push. Mark `[x]` on completion, `- [-]` for defers with a reason. The verdict note + queue line cite the plan number. (Adopted 2026-08-18, owner call — the canonical retroactive plan is 006/Batch 60; every batch after it is plan-FIRST.)
+  1. One line in the mining queue snapshot at `riir-refine/.distill/001_mining_queue_snapshot.md`.
+  2. A `.research/` note in riir-refine following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
+  3. **The batch plan** — `riir-refine/.plans/NNN_*.md` (next number per `.plans/.highwater`, re-scan the folder at write time), created BEFORE any corpus edit when the verdict proceeds to a mining batch. `- [ ]` checkbox tasks for: dedup re-verification, entry authoring, standing gates, count pins, GOAT (G1/G2/G3 + retrieval floors), research note, docs/AGENTS/queue-snapshot updates, commit+push. Mark `[x]` on completion, `- [-]` for defers with a reason. The verdict note + queue line cite the plan number. (Adopted 2026-08-18, owner call — the canonical retroactive plan is 006/Batch 60; every batch after it is plan-FIRST.)
 
 ## Canonical worked example (thermite, 2026-08-18)
 

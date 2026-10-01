@@ -1,4 +1,4 @@
-//! The replay-endorsement ENGINE (riir-clippy Proposal 015 Phase 2 — the
+//! The replay-endorsement ENGINE (riir-refine Proposal 015 Phase 2 — the
 //! `cargo refine replay` command's judgment half; the byte movers live in
 //! `riir_kat::kat_replay_client`, the server in riir-dapps Plan 029).
 //!

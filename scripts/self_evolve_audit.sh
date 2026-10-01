@@ -42,7 +42,7 @@ bin_age_fmt() {
   if [ -n "$_bf_d" ]; then echo "$_bf_d"; return 0; fi
   echo "$1"
 }
-MEMORY="${RIIR_HEAL_MEMORY:-$HOME/.cache/riir-clippy/memory.json}"
+MEMORY="${RIIR_REFINE_MEMORY:-$HOME/.cache/riir-refine/memory.json}"
 HISTORY="$HEAL_REPO/.benchmarks/score_history.jsonl"
 INTAKE="$HEAL_REPO/.distill/001_mining_queue_snapshot.md"
 INTAKE_HISTORY="$HEAL_REPO/.research/108_mining_queue_snapshot_history.md"
@@ -145,7 +145,7 @@ for r in $REPOS; do
   [ -d "$d/.refine/trajectories.kv" ] || continue
   STORE_REPOS="$STORE_REPOS $r"
   if [ -x "$HEAL_BIN" ]; then
-    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$DUMP_TMP" 2>/dev/null
+    RIIR_REFINE_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$DUMP_TMP" 2>/dev/null
     run_py - "$r" "$DUMP_TMP" <<'EOF'
 import json, sys
 repo, path = sys.argv[1], sys.argv[2]
@@ -209,7 +209,7 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   ELO_TMP="$(mktemp)"
   for r in $STORE_REPOS; do
     d="$GIT_ROOT/$r"
-    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$ELO_TMP" 2>/dev/null
+    RIIR_REFINE_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$ELO_TMP" 2>/dev/null
     run_py - "$r" "$ELO_TMP" <<'EOF'
 import json, sys
 repo, path = sys.argv[1], sys.argv[2]
@@ -278,10 +278,10 @@ echo "── 1c. Self-collapse monitor (Issue 042 — retrieval-loop source dive
 # bridge); a stale binary is detected once and noted.
 if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   CR_PROBE="$(mktemp -d)"
-  if RIIR_HEAL_TRAJ_ROOT="$CR_PROBE" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -q 'collapse-report:'; then
+  if RIIR_REFINE_TRAJ_ROOT="$CR_PROBE" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -q 'collapse-report:'; then
     for r in $STORE_REPOS; do
       d="$GIT_ROOT/$r"
-      RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -E 'fresh\(empty\)|store\('
+      RIIR_REFINE_TRAJ_ROOT="$d" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -E 'fresh\(empty\)|store\('
     done
     echo "  reading: pool mem% = Memory share of the heal candidate pool;"
     echo "           top-k H = normalized rule-entropy of the retrieved top-k;"
@@ -306,7 +306,7 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   COMP_TMP="$(mktemp)"
   for r in $STORE_REPOS; do
     d="$GIT_ROOT/$r"
-    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$COMP_TMP" 2>/dev/null
+    RIIR_REFINE_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$COMP_TMP" 2>/dev/null
     run_py - "$r" "$COMP_TMP" <<'EOF'
 import json, sys, collections
 repo, path = sys.argv[1], sys.argv[2]
@@ -494,7 +494,7 @@ A1_DUMP="$(mktemp)"
 for r in $REPOS; do
   d="$GIT_ROOT/$r"
   if [ -d "$d/.refine/trajectories.kv" ] && [ -x "$HEAL_BIN" ]; then
-    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$A1_DUMP" 2>/dev/null
+    RIIR_REFINE_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$A1_DUMP" 2>/dev/null
     run_py - "$r" "$A1_DUMP" >> "$DAYS_TMP" <<'EOF'
 import json, sys, datetime
 repo, path = sys.argv[1], sys.argv[2]

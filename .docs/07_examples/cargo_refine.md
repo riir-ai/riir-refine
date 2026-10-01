@@ -189,7 +189,7 @@ e2e); this repo's half is the CLI + the signed-intent queue.
 account identity when it parses as an unencrypted Ed25519 OpenSSH key —
 the BLAKE3(pubkey) id then matches what the GitHub `.keys` key-match
 derives, so zero configuration. The chain is legacy-aware (in order):
-existing canonical account → `RIIR_HEAL_KAT_KEY` (DEPRECATED — still
+existing canonical account → `RIIR_REFINE_KAT_KEY` (DEPRECATED — still
 honored with a loud deprecation line so scripted setups keep working;
 the canonical override is `RIIR_AUTH_ACCOUNT_KEY`) → a pre-081 legacy
 kat account (adopted LOUDLY into the canonical dir, copied not moved —

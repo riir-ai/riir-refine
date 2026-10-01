@@ -27,7 +27,7 @@ scope    = "src/bin"
 # needs latent_retrieval; fix_verify + clippy_verify arm the compile gate +
 # the lint oracle). Empty string = default features.
 features = "--features latent_retrieval,clippy_verify,fix_verify"
-branch   = "heal/riir-clippy"
+branch   = "heal/riir-refine"
 cadence  = "hourly"
 
 [[target]]

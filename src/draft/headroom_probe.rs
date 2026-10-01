@@ -40,7 +40,7 @@
 //!
 //! ```bash
 //! cargo test --release --features latent_retrieval \
-//!   -p riir-clippy --lib draft::headroom_probe -- --nocapture
+//!   -p riir-refine --lib draft::headroom_probe -- --nocapture
 //! ```
 
 use super::domain_router::DomainId;

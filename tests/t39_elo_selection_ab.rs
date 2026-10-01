@@ -11,7 +11,7 @@
 //! ## Grounding — the REAL evidence regime (measured 2026-08-25, 4 stores)
 //!
 //! t26/t33 drew pre-observations uniform 0..=3 — ~40× denser than reality.
-//! The real stores (riir-ai 101 rows / riir-game-sdk 8117 / riir-clippy 8 /
+//! The real stores (riir-ai 101 rows / riir-game-sdk 8117 / riir-refine 8 /
 //! riir-dapps 2 = 8228 rows) hold `{0: 8106, 1: 110, 2: 9, 3: 2, 4: 1}`
 //! outcomes per (rule, fix) row: 98.5% of candidates are UNSEEN and 1.3%
 //! carry exactly one observation. The harness draws pre-observations from

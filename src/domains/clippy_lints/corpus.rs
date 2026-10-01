@@ -315,7 +315,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             lint_group: "pedantic".to_string(),
             // Batch 183 (P41 fix half): WIDENED to a two-fn file — the
             // original bare-receiver fn plus the method-chain fn-path
-            // mapper fn (the Elo-1222 toughest-span class, the riir-clippy
+            // mapper fn (the Elo-1222 toughest-span class, the riir-refine
             // store's own top-1). PROBE (2026-09-28, box clippy 1.98.1,
             // temp crate removed after): upstream `map_unwrap_or` is
             // SILENT on the recorded store spelling
@@ -435,7 +435,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             // Batch 183 (P40 fix half): WIDENED to a two-fn file — the
             // original literal-divisor fn plus the variable-divisor fn,
             // because the apply leg had no template for `n % d == 0`
-            // (riir-clippy store L=2, riir-ai L=4 recorded misses; upstream
+            // (riir-refine store L=2, riir-ai L=4 recorded misses; upstream
             // FIRES all three recorded spellings — probe 2026-09-27,
             // verdict in the snapshot's P40 row). The proposer splices
             // variable divisors verbatim

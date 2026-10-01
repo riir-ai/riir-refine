@@ -1,6 +1,6 @@
 # Crate role
 
-**riir-clippy** is a modelless-first developer tool that heals
+**riir-refine** is a modelless-first developer tool that heals
 `cargo clippy` warnings. It is NOT a game concern, NOT a training repo,
 NOT a chain repo.
 
@@ -9,7 +9,7 @@ NOT a chain repo.
 > Does this code serve a **developer tooling** concern (clippy lint
 > detection, automated fix proposal, syntax validation)?
 >
-> - **YES** → it belongs in riir-clippy.
+> - **YES** → it belongs in riir-refine.
 > - **NO** → it belongs in a different repo.
 
 ## What belongs here
@@ -26,7 +26,7 @@ NOT a chain repo.
 
 ## What does NOT belong here
 
-| Concern | Correct repo | Why not riir-clippy |
+| Concern | Correct repo | Why not riir-refine |
 |---|---|---|
 | **Game runtime** (NPC cognition, perception, combat) | `riir-ai` | Developer tooling ≠ game runtime |
 | **Training research** (LoRA SFT, GRPO, distillation) | `riir-train` | Inference tool ≠ training experiment |

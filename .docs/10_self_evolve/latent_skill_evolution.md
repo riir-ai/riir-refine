@@ -100,7 +100,7 @@ Borrows the modelless EMA direction-update pattern from:
 - `PersonalityWeightedComposition` (Plan 297) — the per-key direction
   overlay shape
 
-Reimplemented locally (~310 LOC) because riir-clippy cannot depend on
+Reimplemented locally (~310 LOC) because riir-refine cannot depend on
 katgpt-rs beyond `katgpt-core` (the evolution pattern isn't in
 `katgpt-core`).
 

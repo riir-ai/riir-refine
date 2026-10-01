@@ -45,7 +45,7 @@ different one. It used to: Proposal 005 served both installers from
 §8.1 used the `raw.githubusercontent.com` form. Two documents, two
 one-liners, one unrunnable.
 
-**Never** point this at `gist-rs/riir-clippy`'s own releases. That repo is
+**Never** point this at `gist-rs/riir-refine`'s own releases. That repo is
 PRIVATE, so its assets need authentication and cannot be curl'd — and
 flipping it public to make them work would leak the entire source. Pinned by
 the same test.
@@ -59,7 +59,7 @@ cargo refine login              # or: cargo refine login --key ~/.ssh/id_ed25519
 ```
 
 Adopts the machine's default SSH key unless `RIIR_AUTH_ACCOUNT_KEY`
-overrides (the deprecated `RIIR_HEAL_KAT_KEY` is still honored with a
+overrides (the deprecated `RIIR_REFINE_KAT_KEY` is still honored with a
 loud warning through the Issue-081 window, and a pre-081 legacy kat
 account is adopted loudly before any SSH adoption — identity preserved).
 Idempotent: an existing key is loaded, never regenerated. The account id is
@@ -179,7 +179,7 @@ The differences from `faucet --request`, and why:
   poll) — `--refill-wait` bounds an OPT-IN poll that breaks the moment the
   balance moves. The credit normally lands at the hourly crank alarm, not
   synchronously.
-- **It can force the settle pass.** With `RIIR_HEAL_KAT_CRANK_TOKEN` set it
+- **It can force the settle pass.** With `RIIR_REFINE_KAT_CRANK_TOKEN` set it
   POSTs `/admin/crank/daily` (bearer; the token IS the authorization) and
   renders the counters — including `skipped_treasury`, the Issue-010/025
   signal. Without it the crank leg is a named skip, never a failure.
@@ -232,7 +232,7 @@ The harness does not hide this. It reads the crank report, sees
 constants, "NOT retryable", and the fact that the fix is an owner supply
 decision. It never retries, never waits it out, and never reports a pass.
 
-You also need `RIIR_HEAL_KAT_CRANK_TOKEN`: `POST /admin/crank/daily` is
+You also need `RIIR_REFINE_KAT_CRANK_TOKEN`: `POST /admin/crank/daily` is
 bearer-gated fail-closed service-side. Without it the CLI says so up front
 rather than letting a 401 look like a service fault.
 

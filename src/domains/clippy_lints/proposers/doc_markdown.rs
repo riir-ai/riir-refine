@@ -732,9 +732,9 @@ mod tests {
     fn drive_letter_and_single_slash_paths_fire() {
         // The url crate treats a `/`-absolute remainder as host/path-based
         // for any legal scheme — including the single-letter drive scheme.
-        let src = "/// Lives at E:/git/riir-clippy via file:///usr/bin.\nfn go() {}";
+        let src = "/// Lives at E:/git/riir-refine via file:///usr/bin.\nfn go() {}";
         let out = propose_fix("doc_markdown", src).expect("fires");
-        assert!(out.contains("<E:/git/riir-clippy>"), "{out}");
+        assert!(out.contains("<E:/git/riir-refine>"), "{out}");
         assert!(out.contains("<file:///usr/bin>"), "{out}");
     }
 

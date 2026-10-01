@@ -21,7 +21,7 @@ their own sound verdict path can still drive
 
 ```rust
 EvolveRecorder::new()                 // learning = cfg!(feature = "clippy_verify")
-EvolveRecorder::from_env()            // + RIIR_HEAL_SELF_EVOLVE opt-out
+EvolveRecorder::from_env()            // + RIIR_REFINE_SELF_EVOLVE opt-out
 EvolveRecorder::with_opt_out(bool)    // explicit (test-friendly)
 rec.record_applied(rule, buggy, fixed)          // memory only
 rec.record_reviewed(&[(rule, line, repl, restore)])  // the --fix review shape
@@ -45,11 +45,11 @@ rec.load(&path) / rec.save(&path)               // persistence (see latent_fix_m
   non-compiling crate reports "lint absent" = false success. Span-level
   learning therefore rides the compile gate (sound verdicts only).
 - **Persist once per run** when anything was recorded; the path resolves
-  via `RIIR_HEAL_MEMORY` or the platform cache dir.
+  via `RIIR_REFINE_MEMORY` or the platform cache dir.
 
 ## Opt-out
 
-`RIIR_HEAL_SELF_EVOLVE=0` (or `off`/`false`/`no`) — fully inert: no
+`RIIR_REFINE_SELF_EVOLVE=0` (or `off`/`false`/`no`) — fully inert: no
 recording, no persistence, no log lines. The pure heal loop.
 
 ## GOAT

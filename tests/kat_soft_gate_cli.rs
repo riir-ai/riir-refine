@@ -14,11 +14,11 @@
 //! | all four held | account + ack(balance ≤ 0), no server truth | **1** + `REFUSED` + both refuel paths named + no `scanned` line (the refusal precedes the scan) |
 //! | contributed | ack `contributed: Some(true)` | 0 (the sticky OptedIn grace) |
 //! | balance > 0 | ack(balance 5_000_000), no truth | 0 |
-//! | kill switch | depleted ack + `RIIR_HEAL_KAT_GATE=0` | 0 |
-//! | billing switch | depleted ack + `RIIR_HEAL_KAT_METER=0` | 0 |
+//! | kill switch | depleted ack + `RIIR_REFINE_KAT_GATE=0` | 0 |
+//! | billing switch | depleted ack + `RIIR_REFINE_KAT_METER=0` | 0 |
 //! | no account | depleted ack, NO login | 0 (anonymous runs are never gated) |
 //! | never synced | account, NO ack | 0 (no server truth → warn-only) |
-//! | 079 offer (auto-yes) | depleted ack + `RIIR_HEAL_KAT_PROMPT_YES=1` | 1 + `contributing now` + the sync output, then still `REFUSED` (closed port / no store → nothing accepted) |
+//! | 079 offer (auto-yes) | depleted ack + `RIIR_REFINE_KAT_PROMPT_YES=1` | 1 + `contributing now` + the sync output, then still `REFUSED` (closed port / no store → nothing accepted) |
 //! | 079 offer (TTY ask) | depleted ack, no env, piped stdin | 1 + plain refusal, NO `contributing now` (no TTY → the 075 shape) |
 //!
 //! Issue 080 rows — the sticky grace is SERVER TRUTH, and since the DATED
@@ -37,8 +37,8 @@
 //! | a v2 ack FILE (no new fields), balance 0 | none | 1 (read-back compat: old files still gate) |
 //! | a v2 ack FILE (no new fields), balance 0 | planted | **1** (the removal: the transition arm is gone) |
 //!
-//! Every run gets its own scratch root (`RIIR_HEAL_TRAJ_ROOT`) + account
-//! dir (`RIIR_HEAL_KAT_ACCOUNT_DIR`); the service URL points at a closed
+//! Every run gets its own scratch root (`RIIR_REFINE_TRAJ_ROOT`) + account
+//! dir (`RIIR_REFINE_KAT_ACCOUNT_DIR`); the service URL points at a closed
 //! loopback port so an allowed run's post-run burn push fails fast (stacked)
 //! without reaching anything. The real `~/.config/riir-heal` is never read
 //! or written.
@@ -86,13 +86,13 @@ fn scratch(tag: &str) -> PathBuf {
 fn heal(dir: &Path, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
-        .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
+        .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
         // it too (the consent plane still rides the old var above).
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
-        .env("RIIR_HEAL_TRAJ_ROOT", dir)
-        .env("RIIR_HEAL_KAT_SERVICE_URL", CLOSED_PORT)
-        .env("RIIR_HEAL_KAT_LEASE", "0")
+        .env("RIIR_REFINE_TRAJ_ROOT", dir)
+        .env("RIIR_REFINE_KAT_SERVICE_URL", CLOSED_PORT)
+        .env("RIIR_REFINE_KAT_LEASE", "0")
         .args(args);
     for (k, v) in extra_env {
         cmd.env(k, v);
@@ -215,7 +215,7 @@ fn depleted_never_contributed_refuses_at_run_start() {
         "must name the top-up path. output:\n{text}"
     );
     assert!(
-        text.contains("RIIR_HEAL_KAT_GATE"),
+        text.contains("RIIR_REFINE_KAT_GATE"),
         "must name the kill switch. output:\n{text}"
     );
     // Issue 079: no env and no TTY (Command::output pipes stdin) → the
@@ -316,7 +316,7 @@ fn the_refusal_surveys_what_it_would_have_fixed() {
 /// The survey's mining arm has TWO branches, and only `none queued` was
 /// exercised above (scratch dirs have no outbox). Seed one batch file into
 /// the sync outbox (the SAME root `cargo refine sync` drains —
-/// `RIIR_HEAL_TRAJ_ROOT`) and the refusal must name it queued — never
+/// `RIIR_REFINE_TRAJ_ROOT`) and the refusal must name it queued — never
 /// "none queued".
 #[test]
 fn the_survey_mining_arm_counts_the_queued_outbox() {
@@ -418,7 +418,7 @@ fn prompt_yes_offers_contribute_now_then_still_refuses_offline() {
     login(&dir);
     seed_ack(&dir, 0);
 
-    let (code, text) = heal(&dir, &[("RIIR_HEAL_KAT_PROMPT_YES", "1")], &["--fix"]);
+    let (code, text) = heal(&dir, &[("RIIR_REFINE_KAT_PROMPT_YES", "1")], &["--fix"]);
     assert_eq!(
         code,
         Some(1),
@@ -492,8 +492,8 @@ fn a_positive_synced_balance_allows_the_run() {
 #[test]
 fn the_kill_switches_disarm_the_gate() {
     for (tag, env) in [
-        ("gate_switch", ("RIIR_HEAL_KAT_GATE", "0")),
-        ("billing_switch", ("RIIR_HEAL_KAT_METER", "0")),
+        ("gate_switch", ("RIIR_REFINE_KAT_GATE", "0")),
+        ("billing_switch", ("RIIR_REFINE_KAT_METER", "0")),
     ] {
         let dir = scratch(tag);
         write_a_rs(&dir);

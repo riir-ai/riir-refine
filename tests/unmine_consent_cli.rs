@@ -17,7 +17,7 @@
 //! | `--mine --unmine` | **2** | UNCHANGED — the conflict is rejected before either write |
 //! | `sync` while opted out | 0 | opted out, push SKIPPED, pull still attempted |
 //!
-//! Every run gets its own `RIIR_HEAL_KAT_ACCOUNT_DIR` under the temp dir —
+//! Every run gets its own `RIIR_REFINE_KAT_ACCOUNT_DIR` under the temp dir —
 //! the real `~/.config/riir-heal` is never read or written, and no test
 //! mutates the shared process env (each child gets its own).
 //!
@@ -54,14 +54,14 @@ fn scratch(tag: &str) -> PathBuf {
 /// the CI convention uses.
 fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
-        .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
+        .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the purge sweep targets the canonical account dir too —
         // isolate it (the consent plane still rides the old var above).
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
-        .env("RIIR_HEAL_TRAJ_ROOT", dir)
+        .env("RIIR_REFINE_TRAJ_ROOT", dir)
         // 127.0.0.1:1 is closed: the lease pull fails fast instead of
         // reaching the real service from a test.
-        .env("RIIR_HEAL_KAT_SERVICE_URL", "http://127.0.0.1:1")
+        .env("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:1")
         .args(args)
         .output()
         .expect("spawn cargo-refine");

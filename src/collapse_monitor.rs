@@ -621,7 +621,7 @@ mod tests {
                 for repo in [
                     "riir-ai",
                     "riir-chain",
-                    "riir-clippy",
+                    "riir-refine",
                     "riir-dapps",
                     "riir-game-sdk",
                     "riir-mmorpg-examples",

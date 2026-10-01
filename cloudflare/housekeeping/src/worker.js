@@ -1,4 +1,4 @@
-// riir-kat-housekeeping — Issue 045 (riir-clippy).
+// riir-kat-housekeeping — Issue 045 (riir-refine).
 // Hourly cron: container cost snapshot + KAT mint anchor → KV.
 // Deliberately build-free: wrangler bundles the ESM import of ./bill.js (the
 // Issue 065 T7 bill model) with no build step of its own.

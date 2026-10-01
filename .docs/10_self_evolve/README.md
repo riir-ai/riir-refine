@@ -47,12 +47,12 @@ degenerates to the existing static-corpus path.
 - **Memory half — no oracle needed**: every applied fix is a trajectory
   worth storing; reverted fixes carry a definitive fail verdict. Runs in
   EVERY build + persists across `cargo refine` runs (v1 JSON at
-  `RIIR_HEAL_MEMORY` or the platform cache dir).
+  `RIIR_REFINE_MEMORY` or the platform cache dir).
 - **Learning half — oracle-gated**: the EMA direction update needs
   trustworthy verdicts. Without the `clippy_verify` oracle it no-ops with
   ONE log line (`self-evolve: memory-only (learning disabled: …)`);
   runtime oracle failure flips it off the same way (memory unaffected).
-- **Opt-out**: `RIIR_HEAL_SELF_EVOLVE=0` (`off`/`false`/`no`) — fully
+- **Opt-out**: `RIIR_REFINE_SELF_EVOLVE=0` (`off`/`false`/`no`) — fully
   inert (no recording, no persistence, no log).
 
 See [Bench 023](../../.benchmarks/023_self_evolve_promotion_goat.md) for

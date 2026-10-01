@@ -32,7 +32,7 @@ use riir_refine::kat_redact::{
     RedactionLog, SpanOrigin, SyncPolicy, POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
 };
 
-/// The shipped-repo policy shape (mirrors `riir-clippy/.refine-sync-policy`
+/// The shipped-repo policy shape (mirrors `riir-refine/.refine-sync-policy`
 /// without reading the file — the test pins the SHAPE, the repo pins the
 /// instance).
 fn shipped_policy() -> SyncPolicy {

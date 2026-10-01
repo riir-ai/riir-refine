@@ -32,12 +32,12 @@
 //! A CLI process is short-lived — an in-memory store would be permanently
 //! starved (the exact problem the promotion fixes). The recorder persists
 //! via [`LatentFixMemory::save`]/[`load`](LatentFixMemory::load): the
-//! `cargo refine` bin resolves the platform cache path (`RIIR_HEAL_MEMORY`
+//! `cargo refine` bin resolves the platform cache path (`RIIR_REFINE_MEMORY`
 //! overrides) + merges on load, so trajectories accumulate across runs.
 //!
 //! ## Opt-out
 //!
-//! `RIIR_HEAL_SELF_EVOLVE=0` (or `off`/`false`/`no`) makes the recorder
+//! `RIIR_REFINE_SELF_EVOLVE=0` (or `off`/`false`/`no`) makes the recorder
 //! fully inert — no recording, no persistence, no log lines — for consumers
 //! who want the pure heal loop.
 
@@ -46,7 +46,7 @@ use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory};
 
 /// Env var disabling the self-evolve layer entirely (pure-loop opt-out).
-pub const ENV_SELF_EVOLVE: &str = "RIIR_HEAL_SELF_EVOLVE";
+pub const ENV_SELF_EVOLVE: &str = "RIIR_REFINE_SELF_EVOLVE";
 
 /// Reason recorded when learning is unavailable in a build without the
 /// `clippy_verify` oracle.
@@ -114,7 +114,7 @@ impl EvolveRecorder {
         if opt_out {
             r.opted_out = true;
             r.learning = false;
-            r.disabled_reason = Some("disabled via RIIR_HEAL_SELF_EVOLVE");
+            r.disabled_reason = Some("disabled via RIIR_REFINE_SELF_EVOLVE");
         }
         r
     }
@@ -489,7 +489,7 @@ mod tests {
     #[test]
     fn persistence_accumulates_across_recorder_lifetimes() {
         let dir = std::env::temp_dir().join(format!(
-            "riir-clippy-recorder-{}-persist",
+            "riir-refine-recorder-{}-persist",
             std::process::id()
         ));
         let _ = std::fs::create_dir_all(&dir);

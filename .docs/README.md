@@ -1,4 +1,4 @@
-# riir-clippy `.docs/` book
+# riir-refine `.docs/` book
 
 > **Purpose:** architectural narrative reference for the multi-domain
 > modelless code healer. Numbered folders for sort order, unnumbered

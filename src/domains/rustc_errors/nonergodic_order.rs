@@ -312,11 +312,11 @@ pub struct NonergodicOrdering {
 }
 
 /// Whether the env kill-switch left the ordering armed (the feature is the
-/// opt-in; `RIIR_HEAL_NONERGODIC=0|false|off` disarms at runtime — the
+/// opt-in; `RIIR_REFINE_NONERGODIC=0|false|off` disarms at runtime — the
 /// workspace's kill-switch polarity).
 #[must_use]
 pub fn armed_by_env() -> bool {
-    match std::env::var("RIIR_HEAL_NONERGODIC") {
+    match std::env::var("RIIR_REFINE_NONERGODIC") {
         Ok(v) => !matches!(v.as_str(), "0" | "false" | "off"),
         Err(_) => true,
     }

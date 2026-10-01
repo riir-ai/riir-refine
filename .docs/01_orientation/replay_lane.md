@@ -49,8 +49,8 @@ activation.
 
 ## The gates, in order
 
-1. **Kill switch** — `RIIR_HEAL_REPLAY=0` disables the lane (exit 0, one
-   line; the `RIIR_HEAL_KAT_METER` idiom).
+1. **Kill switch** — `RIIR_REFINE_REPLAY=0` disables the lane (exit 0, one
+   line; the `RIIR_REFINE_KAT_METER` idiom).
 2. **Login** — load-only (the wetrun precedent: a SIGNING command never
    silently mints an identity; run `cargo refine login` first).
 3. **Mining consent** — `OptedOut` refuses with the `--mine` remedy

@@ -29,7 +29,7 @@ use std::process::Command;
 /// One binary invocation with the env a real heal session carries.
 fn heal(envs: &[(&str, &str)], args: &[&str]) -> (bool, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
-    cmd.env_remove("RIIR_HEAL_TRAJ_ROOT");
+    cmd.env_remove("RIIR_REFINE_TRAJ_ROOT");
     for (k, v) in envs {
         cmd.env(k, v);
     }
@@ -98,7 +98,7 @@ fn store_backend_replaces_envelope_end_to_end() {
     // ── The run: --fix --verify on the fixture crate. Persistence must go
     // to the store; the envelope must migrate (import + rename), never
     // save. Envelope location is env-pinned to the fixture copy.
-    let envs: &[(&str, &str)] = &[("RIIR_HEAL_MEMORY", envelope.to_str().unwrap())];
+    let envs: &[(&str, &str)] = &[("RIIR_REFINE_MEMORY", envelope.to_str().unwrap())];
     let lib = tmp.join("src/lib.rs");
     let (ok, output) = heal(envs, &["--fix", "--verify", lib.to_str().unwrap()]);
     assert!(ok, "heal run failed:\n{output}");
@@ -137,7 +137,7 @@ fn store_backend_replaces_envelope_end_to_end() {
     //    and assert the migration rows + a CERTIFIED verdict row for the
     //    oracle-confirmed edit (037-E2 on the new backend).
     let (ok, dump) = heal(
-        &[("RIIR_HEAL_TRAJ_ROOT", tmp.to_str().unwrap())],
+        &[("RIIR_REFINE_TRAJ_ROOT", tmp.to_str().unwrap())],
         &["--dump-trajectories"],
     );
     assert!(ok, "dump failed:\n{dump}");
@@ -206,7 +206,7 @@ fn migration_is_once_only() {
         r#"{"version":1,"trajectories":[{"lint_name":"m","lint_name_hash":1,"buggy_code":"b","fixed_code":"f","direction":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"success_count":0,"fail_count":0}]}"#,
     )
     .unwrap();
-    let envs: &[(&str, &str)] = &[("RIIR_HEAL_MEMORY", envelope.to_str().unwrap())];
+    let envs: &[(&str, &str)] = &[("RIIR_REFINE_MEMORY", envelope.to_str().unwrap())];
     let lib = tmp.join("src/lib.rs");
     let (ok, out1) = heal(envs, &["--fix", "--verify", lib.to_str().unwrap()]);
     assert!(ok, "run 1 failed:\n{out1}");

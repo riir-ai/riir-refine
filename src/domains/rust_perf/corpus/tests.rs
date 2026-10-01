@@ -3392,7 +3392,7 @@ fn batch135_fixtures_g1_parity() {
 
 /// Batch 135 — the measured Pareto verdicts for the three new rules.
 /// SLOW (spawns a cargo build + run per rule in a temp crate): run
-/// explicitly with `cargo test -p riir-clippy --lib --features
+/// explicitly with `cargo test -p riir-refine --lib --features
 /// rust_perf_bench batch135_pareto -- --ignored --nocapture`.
 #[cfg(feature = "rust_perf_bench")]
 #[test]
@@ -3442,7 +3442,7 @@ fn batch135_pareto_benches() {
 /// family): the two new rules are present, parse, and carry the concept
 /// needles, and the Pareto verdicts are re-runnable on demand. SLOW
 /// (spawns a cargo build + run per rule in a temp crate): run explicitly
-/// with `cargo test -p riir-clippy --lib --features rust_perf_bench
+/// with `cargo test -p riir-refine --lib --features rust_perf_bench
 /// batch173_pareto -- --ignored --nocapture`.
 #[test]
 fn batch173_rules_present_and_parse() {

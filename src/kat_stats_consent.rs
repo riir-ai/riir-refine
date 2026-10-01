@@ -129,7 +129,7 @@ struct StatsDoc {
 }
 
 /// The account dir this record lives in — DELEGATES to the mining consent
-/// module's resolution (`RIIR_HEAL_KAT_ACCOUNT_DIR`, else
+/// module's resolution (`RIIR_REFINE_KAT_ACCOUNT_DIR`, else
 /// `XDG_CONFIG_HOME/riir-heal`, else `$HOME/.config/riir-heal`, else
 /// `%APPDATA%/riir-heal`, else a temp dir), so both consent planes share
 /// one home and the resolution cannot drift between them.

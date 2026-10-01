@@ -311,7 +311,7 @@ fn g5_prediction_holds_on_the_pre_adoption_content() {
     }
 }
 
-/// The T1.6 adoption gate, from riir-clippy's side: the consumer file the
+/// The T1.6 adoption gate, from riir-refine's side: the consumer file the
 /// healer was built for must STAY healed. A regression here means somebody
 /// re-introduced a defect the healer already fixed in `riir-chain`
 /// (`cloudflare/edge-wallet-container/Dockerfile`), and the consumer repo's

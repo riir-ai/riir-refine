@@ -23,7 +23,7 @@
 //! T11.5 asserts "the imagination gate is µs-scale; the L2 pruner is ms-scale;
 //! net throughput rises if imagination rejects ≥20% of bad fixes" (T11.6 then
 //! gates at ≥30% rejection and ≥1.5× latency). The premise is that L2 dominates.
-//! But riir-clippy's default L2 is [`RustAnalyzerPruner`], whose fast path is an
+//! But riir-refine's default L2 is [`RustAnalyzerPruner`], whose fast path is an
 //! **in-process `syn` parse**, not a `cargo` subprocess. This POC measures the
 //! real per-fix L2 cost, the real imagination-gate cost, and then computes the
 //! Amdahl ceiling on the achievable speedup.

@@ -15,7 +15,7 @@
 //! The feed is clippy's own `--message-format=json` stream (JSON lines).
 //! Since Issue 113 (the auto-oracle, 2026-09-16) the healer SPAWNS clippy
 //! itself when a scanning run targets a cargo project and no manual feed
-//! was given — default features, loud status lines, `RIIR_HEAL_AUTO_ORACLE=0`
+//! was given — default features, loud status lines, `RIIR_REFINE_AUTO_ORACLE=0`
 //! restores the old never-spawn posture (see [`crate::clippy_oracle`]).
 //! Toolchain and target-dir discipline stay the caller's environment; a
 //! manual `--clippy-json` still wins outright. Before that the oracle was

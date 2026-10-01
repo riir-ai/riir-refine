@@ -1,9 +1,9 @@
 ---
-name: riir-clippy
-description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo refine --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. EVERY activation starts with Protocol H housekeeping — sync git both boxes, kill orphaned git/ssh zombies, prune leftover worktrees, disk check — before the queue. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
+name: riir-refine
+description: Auto-continue idle loop + riir-refine batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-refine batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo refine --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. EVERY activation starts with Protocol H housekeeping — sync git both boxes, kill orphaned git/ssh zombies, prune leftover worktrees, disk check — before the queue. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
 ---
 
-# riir-clippy — the auto-continue idle loop
+# riir-refine — the auto-continue idle loop
 
 You are the idle-time worker for the workspace. When activated without a
 specific task, run **Protocol H — housekeeping** below FIRST (sync, zombies,
@@ -88,7 +88,7 @@ after the safety checks named per step.
    items). Healthy disk → report the two numbers, delete nothing. The
    incremental-dir slice (`*/target/debug/incremental`, ~30G when dirty) is
    the standing zero-risk pick. LOAD-BEARING, never delete:
-   `riir-clippy/target/release` (the `~/.cargo/bin/cargo-refine` symlink
+   `riir-refine/target/release` (the `~/.cargo/bin/cargo-refine` symlink
    target) and every repo's `target/release`.
 
 Housekeeping findings (hung processes killed, worktrees removed, repos
@@ -141,7 +141,7 @@ until the claims clear.
 
 ## Protocol A — batch mining (queue item 5) — PRE-mining (external sources)
 
-0. **Create the batch plan FIRST** — `riir-clippy/.plans/NNN_*.md` (next
+0. **Create the batch plan FIRST** — `riir-refine/.plans/NNN_*.md` (next
    number per `.plans/.highwater`, re-scan the folder at write time) with
    `- [ ]` checkbox tasks for: dedup, entry authoring, standing gates,
    count pins, GOAT (G1/G2/G3 + retrieval), research note, docs/AGENTS/
@@ -175,7 +175,7 @@ until the claims clear.
      gates red on develop by design until then. Record paragraphs:
      `src/score_bench/generations.rs`.
    - **retrieval-precision re-measure (Issue 017, kernel batches):** run
-     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN cargo test --features
+     `CARGO_TARGET_DIR=/tmp/riir-refine-bNN cargo test --features
      kernel_heal,latent_retrieval --lib retrieval -- --nocapture` (~1 min) —
      the gate floors (re-pinned by Issue 022/Bench 024: kernel self-variants
      100%, blended 3-domain 77.1/86.4/92.4) must hold; a decay FAILS the
@@ -193,7 +193,7 @@ until the claims clear.
 ## Protocol B — heal dry-run on workspace repos (queue items 3 + 5)
 
 ```bash
-cd /Users/katopz/git/riir-clippy
+cd /Users/katopz/git/riir-refine
 cargo run --features latent_retrieval --bin cargo-refine -- --suggest <target-repo>/src/
 cargo run --features latent_retrieval --bin cargo-refine -- --fix <target-repo>/src/          # preview
 cargo run --features latent_retrieval --bin cargo-refine -- --fix --write <target-repo>/src/  # apply
@@ -217,7 +217,7 @@ cargo run --features latent_retrieval --bin cargo-refine -- --fix --write <targe
   NEVER suppress the lint, NEVER hand-edit past it without a fixture —
   the healer must adapt each iteration, not accumulate suppressed lints.
 - Commit separately: `fix: heal <repo> ...` (target repo) and
-  `fix: proposer ...` (riir-clippy).
+  `fix: proposer ...` (riir-refine).
 
 ## Protocol C — post-mining sweep (queue item 14 — usage artifacts)
 
@@ -228,7 +228,7 @@ exist AFTER usage. Intake lives in `.distill/001_mining_queue_snapshot.md`
 skill points agents there). Per sweep:
 
 1. Gather (one command: `scripts/self_evolve_audit.sh` — Issue 037's
-   instrument): `~/.cache/riir-clippy/memory.json` (trajectory counts by lint,
+   instrument): `~/.cache/riir-refine/memory.json` (trajectory counts by lint,
   tier/outcome distribution), `.benchmarks/score_history.jsonl` delta,
   `.refine/misses/`, verify-gate revert reports, grep target-repo session
   records for `divergence|backlog|miss`.
@@ -243,7 +243,7 @@ skill points agents there). Per sweep:
 ## Discipline (non-negotiable)
 
 - **Routing restriction (owner, 2026-09-04): do NOT trigger riir-train for
-  other tasks — only `riir-clippy`-related units are allowed.** Read-only
+  other tasks — only `riir-refine`-related units are allowed.** Read-only
   citations of riir-train records stay fine; never initiate fixes, gates,
   benches, or doc edits there. Sibling-owned riir-train lanes belong to
   their owning sessions.
@@ -264,7 +264,7 @@ skill points agents there). Per sweep:
   manifest for both sessions).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
-  use `riir-clippy/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
+  use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
   fetches origin, resolves the default branch from the remote (`develop`
   everywhere since the 2026-09-04 riir-train flip),
   reads `git show origin/<default>:...`, logs the commit hash (cite it when
@@ -274,7 +274,7 @@ skill points agents there). Per sweep:
   closed there. Guard: `--self-test` (dirty non-default-branch checkout must
   still yield origin contents).
 - **Sibling safety**: never `git stash` sibling WIP; commit only your own
-  hunks; isolate builds under `/tmp`; before blaming CI on riir-clippy,
+  hunks; isolate builds under `/tmp`; before blaming CI on riir-refine,
   check whether `src/domains/*/bench.rs` WIP is the sibling's.
 - **Stale `rebase-merge` blocks rebases (2026-08-15, Batch 42)**: a
   previous session's leftover `.git/rebase-merge/autostash` (the marker
@@ -317,7 +317,7 @@ skill points agents there). Per sweep:
 
 | Skill | Canonical home | Global |
 |---|---|---|
-| `riir-clippy` (this) | `riir-clippy/.agents/skills/riir-clippy/` | symlink ✓ |
+| `riir-refine` (this) | `riir-refine/.agents/skills/riir-refine/` | symlink ✓ |
 | `boundary-guard` | `katgpt-rs/.agents/skills/boundary-guard/` | symlink ✓ |
 | `substrate-first` | `katgpt-rs/.agents/skills/substrate-first/` | symlink ✓ |
 | `doc-sync`, `rust-optimize` | global-only real dirs (no repo home yet — pending) | — |
@@ -340,6 +340,6 @@ repo — read it at session start, update it in the same commit as each batch.
 
 ## Manual invocation
 
-In Zed: `/riir-clippy` in the agent panel, or ask "run the riir-clippy
+In Zed: `/riir-refine` in the agent panel, or ask "run the riir-refine
 skill". From a terminal, the underlying healer is `cargo-refine`
 (see Protocol B).

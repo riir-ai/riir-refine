@@ -18,7 +18,7 @@
 | [`rust_bridge_negative_result.md`](rust_bridge_negative_result.md) | The pure-Rust `objc_msgSend` bridge negative result + the working ObjC-bridge substrate pattern (build.rs + dlopen) |
 | [`ecosystem.md`](ecosystem.md) | The external ecosystem map (maderix/ANE, rane, omlx, Orion paper) + the debugging methodology that cracked the failure |
 
-## Why this lives in riir-clippy
+## Why this lives in riir-refine
 
 The `kernel_opt` domain mines GPU-kernel optimization rules; the ANE is the
 third accelerator in the stack's Metal/CUDA/ANE matrix, and any future

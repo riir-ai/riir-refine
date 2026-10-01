@@ -38,7 +38,7 @@ SIMD matvec path without requiring trained weights.
 
 ```text
 ╔══════════════════════════════════════════════════════════════╗
-║     riir-clippy — End-to-End Clippy Healing Pipeline Demo   ║
+║     riir-refine — End-to-End Clippy Healing Pipeline Demo   ║
 ╚══════════════════════════════════════════════════════════════╝
 
 📦 L0 Corpus: 10 lint entries (BLAKE3 verified: ✅)

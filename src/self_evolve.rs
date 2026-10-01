@@ -242,7 +242,7 @@ fn warn_entropic_degraded_once() {
     static DEGRADE_NOTICE: Once = Once::new();
     DEGRADE_NOTICE.call_once(|| {
         eprintln!(
-            "riir-clippy: SelectionMode::Entropic scored without a candidate pool — \
+            "riir-refine: SelectionMode::Entropic scored without a candidate pool — \
              degrading to BetaPosterior (per-candidate history score)"
         );
     });

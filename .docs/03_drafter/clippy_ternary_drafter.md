@@ -91,7 +91,7 @@ pub enum DraftSource {
 Mirrors the `TernaryDraftModel` pattern from
 `riir-games-quest/quest_grammar/plasma_draft.rs` but specialized for
 clippy lint fixes. Uses `katgpt_core::TernaryWeights` for the matvec.
-Reimplemented locally (~200 LOC) because riir-clippy cannot depend on
+Reimplemented locally (~200 LOC) because riir-refine cannot depend on
 riir-ai (boundary rule).
 
 ## GOAT gate results

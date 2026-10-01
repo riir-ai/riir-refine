@@ -75,7 +75,7 @@ let names: Vec<&str> = corpus.lint_names();
 
 Mirrors the `SealQuestCorpus` pattern from
 `riir-games-quest/quest_grammar` but specialized for clippy lint fixes.
-Reimplemented locally (~120 LOC) because riir-clippy cannot depend on
+Reimplemented locally (~120 LOC) because riir-refine cannot depend on
 riir-ai (boundary rule).
 
 ## See also

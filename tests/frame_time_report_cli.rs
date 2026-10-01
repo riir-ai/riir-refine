@@ -32,8 +32,8 @@ static TMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 fn heal(args: &[&str]) -> (Option<i32>, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .args(args)
-        .env("RIIR_HEAL_KAT_METER", "0")
-        .env("RIIR_HEAL_KAT_GATE", "0")
+        .env("RIIR_REFINE_KAT_METER", "0")
+        .env("RIIR_REFINE_KAT_GATE", "0")
         .output()
         .expect("spawn cargo-refine");
     (

@@ -518,7 +518,7 @@ impl LatentMatcher {
     /// (byte-identical posture, the A/B control); an armed policy is built
     /// either explicitly here (the A/B override — NOT env-guarded) or through
     /// [`DepthPolicy::standing`](crate::demonstrability_gate::DepthPolicy::standing)
-    /// (the auto-arm path, guarded by `RIIR_HEAL_DEMONSTRABILITY=0`).
+    /// (the auto-arm path, guarded by `RIIR_REFINE_DEMONSTRABILITY=0`).
     #[cfg(feature = "demonstrability_gate")]
     #[must_use]
     pub fn with_depth_policy(

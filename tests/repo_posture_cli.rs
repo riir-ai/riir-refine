@@ -17,11 +17,11 @@
 //! | P39 the override | `--apply-notbenchable` re-enables the declined edit; the benchable edit still applies |
 //! | P39 the misuse | `--apply-notbenchable` without `--repo-posture` exits **2** — the flag overrides nothing there |
 //!
-//! Hermetic: `RIIR_HEAL_KAT_LEASE=0` (the lease phase's own CI knob —
-//! never touches the network), `RIIR_HEAL_KAT_METER=0` + `RIIR_HEAL_KAT_GATE=0`
-//! (the billing plane + soft gate), `RIIR_HEAL_SELF_EVOLVE=0` (no store
-//! writes), `RIIR_HEAL_AUTO_ORACLE=0` (no cargo spawn), and an unreachable
-//! loopback `RIIR_HEAL_KAT_SERVICE_URL` so any best-effort tail transport
+//! Hermetic: `RIIR_REFINE_KAT_LEASE=0` (the lease phase's own CI knob —
+//! never touches the network), `RIIR_REFINE_KAT_METER=0` + `RIIR_REFINE_KAT_GATE=0`
+//! (the billing plane + soft gate), `RIIR_REFINE_SELF_EVOLVE=0` (no store
+//! writes), `RIIR_REFINE_AUTO_ORACLE=0` (no cargo spawn), and an unreachable
+//! loopback `RIIR_REFINE_KAT_SERVICE_URL` so any best-effort tail transport
 //! fails in milliseconds without an exit-code change (the tails' contract).
 //! Every applying arm also passes `--no-verify`: the temp fixture is
 //! deliberately NOT a cargo project (no manifest above `src/lib.rs`), so
@@ -60,15 +60,15 @@ pub fn in_band_late(x: u8) -> bool {
 
 fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     let mut envs: HashMap<&str, String> = HashMap::new();
-    envs.insert("RIIR_HEAL_KAT_LEASE", "0".to_string());
-    envs.insert("RIIR_HEAL_KAT_METER", "0".to_string());
-    envs.insert("RIIR_HEAL_KAT_GATE", "0".to_string());
-    envs.insert("RIIR_HEAL_SELF_EVOLVE", "0".to_string());
-    envs.insert("RIIR_HEAL_AUTO_ORACLE", "0".to_string());
+    envs.insert("RIIR_REFINE_KAT_LEASE", "0".to_string());
+    envs.insert("RIIR_REFINE_KAT_METER", "0".to_string());
+    envs.insert("RIIR_REFINE_KAT_GATE", "0".to_string());
+    envs.insert("RIIR_REFINE_SELF_EVOLVE", "0".to_string());
+    envs.insert("RIIR_REFINE_AUTO_ORACLE", "0".to_string());
     // Any best-effort tail transport (fix-stats, burn) fails in
     // milliseconds here and — by the tails' own contract — can never
     // change the exit code.
-    envs.insert("RIIR_HEAL_KAT_SERVICE_URL", "http://127.0.0.1:9/".to_string());
+    envs.insert("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:9/".to_string());
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .args(args)
         .envs(envs)

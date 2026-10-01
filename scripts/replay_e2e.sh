@@ -97,7 +97,7 @@ echo "replay-e2e: target $URL"
 # ── verifier A: the default account dir (the fleet identity) ────────────
 echo "replay-e2e: [A] one replay cycle, default identity"
 rc_a=0
-RIIR_HEAL_KAT_SERVICE_URL="$URL" "$BIN" heal replay >"$LOG_A" 2>&1 || rc_a=$?
+RIIR_REFINE_KAT_SERVICE_URL="$URL" "$BIN" heal replay >"$LOG_A" 2>&1 || rc_a=$?
 sed 's/^/  A| /' "$LOG_A"
 
 # ── verifier B: fresh throwaway identity (the second-identity helper) ───
@@ -105,8 +105,8 @@ echo "replay-e2e: [B] generating a throwaway identity (never the SSH chain)"
 ssh-keygen -q -t ed25519 -N "" -C "replay-e2e" -f "$WORK/id_ed25519"
 rc_b=0
 RIIR_AUTH_ACCOUNT_DIR="$WORK/acct" \
-RIIR_HEAL_KAT_ACCOUNT_DIR="$WORK/acct" \
-RIIR_HEAL_KAT_SERVICE_URL="$URL" \
+RIIR_REFINE_KAT_ACCOUNT_DIR="$WORK/acct" \
+RIIR_REFINE_KAT_SERVICE_URL="$URL" \
   "$BIN" heal login --key "$WORK/id_ed25519" >"$LOG_B" 2>&1 || rc_b=$?
 if [ $rc_b -ne 0 ]; then
   sed 's/^/  B| /' "$LOG_B"
@@ -119,8 +119,8 @@ grep -q "account key imported" "$LOG_B" || {
   exit 1
 }
 RIIR_AUTH_ACCOUNT_DIR="$WORK/acct" \
-RIIR_HEAL_KAT_ACCOUNT_DIR="$WORK/acct" \
-RIIR_HEAL_KAT_SERVICE_URL="$URL" \
+RIIR_REFINE_KAT_ACCOUNT_DIR="$WORK/acct" \
+RIIR_REFINE_KAT_SERVICE_URL="$URL" \
   "$BIN" heal replay >>"$LOG_B" 2>&1 || rc_b=$?
 sed 's/^/  B| /' "$LOG_B"
 

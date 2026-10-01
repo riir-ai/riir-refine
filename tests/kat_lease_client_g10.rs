@@ -223,7 +223,7 @@ fn read_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
 
 fn temp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "riir-clippy-g10-{tag}-{}-{}",
+        "riir-refine-g10-{tag}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

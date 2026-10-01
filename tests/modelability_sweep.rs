@@ -1,5 +1,5 @@
 //! Issue 64 Phase 2 — the pre-registered modelability ↔ downstream top-1
-//! Spearman sweep (`riir-clippy/.issues/64_modelability_oracle_scaffold_value.md`).
+//! Spearman sweep (`riir-refine/.issues/64_modelability_oracle_scaffold_value.md`).
 //!
 //! **The protocol (pre-registered in the issue — executed here, not restated):**
 //! sweep ≥ 4 corpus/embedder variants on the retrieval surface; metric =

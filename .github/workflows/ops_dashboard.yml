@@ -133,7 +133,7 @@ jobs:
           # 30d of history: the generator greps `git log --since=30.days`
           fetch-depth: 2000
 
-      # ── Sibling checkouts (the generator's REPOS list minus riir-clippy) ──
+      # ── Sibling checkouts (the generator's REPOS list minus riir-refine) ──
       # continue-on-error: a missing/paused repo must not kill the run — the
       # generator degrades per-source and the sweep skips absent dirs.
       # EXCEPTION: the cargo build hard-requires katgpt-rs + riir-ai
@@ -237,10 +237,10 @@ jobs:
           GITROOT="${RUNNER_TEMP}/git"
           WS_PARENT="$(dirname "${GITHUB_WORKSPACE}")"
 
-          # riir-clippy itself is part of the generator's REPOS list.
+          # riir-refine itself is part of the generator's REPOS list.
           ln -sfn "${GITHUB_WORKSPACE}" "${GITROOT}/riir-refine"
 
-          # Make the sibling-beside-workspace layout that riir-clippy's own
+          # Make the sibling-beside-workspace layout that riir-refine's own
           # `../<name>` cargo path deps expect.
           for name in katgpt-rs riir-ai riir-train riir-neuron-db riir-chain \
                       riir-game-sdk riir-mmorpg-examples \

@@ -1423,7 +1423,7 @@ impl std::fmt::Display for SnapshotOutcome {
 ///
 /// Same semantics as the report path: the caller passes the cwd-relative
 /// [`SNAPSHOTS_JSONL`] (deliberately NOT `root`-relative, so both writers
-/// share one file when `RIIR_HEAL_TRAJ_ROOT` points elsewhere),
+/// share one file when `RIIR_REFINE_TRAJ_ROOT` points elsewhere),
 /// state-change dedup, the FRONTIER generation (max ever run, not the
 /// latest lane). Zero learn rows and a missing store are skips, never
 /// fabricated rows. The file still gates nothing (report-first law).

@@ -7,7 +7,7 @@
 //! which is worse than the CPU baseline that already failed G2).
 //!
 //! This module is the client half: it owns the child process and speaks the
-//! protocol. std-only — no model dependency reaches riir-clippy.
+//! protocol. std-only — no model dependency reaches riir-refine.
 //!
 //! ## Protocol (must match `bonsai_clippy_l4_eval --serve`)
 //!

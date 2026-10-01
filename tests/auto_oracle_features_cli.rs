@@ -5,7 +5,7 @@
 //! 1. WITHOUT the knob, the auto-oracle lints at default features → the
 //!    gated fn compiles to nothing → the span falls back to `[heuristic]`
 //!    (the exact blindness class the issue files).
-//! 2. WITH `RIIR_HEAL_AUTO_ORACLE_FEATURES=gated`, the spawn carries
+//! 2. WITH `RIIR_REFINE_AUTO_ORACLE_FEATURES=gated`, the spawn carries
 //!    `--features gated` → `needless_return` fires → the span is
 //!    `[oracle]`-anchored ahead of ranking.
 //!
@@ -52,19 +52,19 @@ fn run_suggest(bin: &str, dir: &Path, features: Option<&str>) -> String {
     let mut cmd = Command::new(bin);
     cmd.args(["--suggest", "--no-fmt"])
         .arg(dir)
-        .env_remove("RIIR_HEAL_AUTO_ORACLE") // default posture, explicitly
-        .env("RIIR_HEAL_KAT_METER", "0")
-        .env("RIIR_HEAL_KAT_GATE", "0")
+        .env_remove("RIIR_REFINE_AUTO_ORACLE") // default posture, explicitly
+        .env("RIIR_REFINE_KAT_METER", "0")
+        .env("RIIR_REFINE_KAT_GATE", "0")
         // The oracle's clippy spawn builds THIS scratch crate; keep its
         // target dir inside the scratch regardless of how the test harness
         // was invoked (a harness-level CARGO_TARGET_DIR is inherited).
         .env("CARGO_TARGET_DIR", dir.join("target"));
     match features {
         Some(csv) => {
-            cmd.env("RIIR_HEAL_AUTO_ORACLE_FEATURES", csv);
+            cmd.env("RIIR_REFINE_AUTO_ORACLE_FEATURES", csv);
         }
         None => {
-            cmd.env_remove("RIIR_HEAL_AUTO_ORACLE_FEATURES");
+            cmd.env_remove("RIIR_REFINE_AUTO_ORACLE_FEATURES");
         }
     }
     let out = cmd.output().expect("spawn cargo-refine");

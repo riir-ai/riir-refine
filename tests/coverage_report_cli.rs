@@ -14,7 +14,7 @@
 //!    nonzero compiled-fix count (a zero would mean the diff itself went
 //!    blind). NO live numbers are pinned — the report is
 //!    toolchain-derived by design; only structure is contractual.
-//! 2. `RIIR_HEAL_CLIPPY_DRIVER` naming a nonexistent binary: exit 1 + the
+//! 2. `RIIR_REFINE_CLIPPY_DRIVER` naming a nonexistent binary: exit 1 + the
 //!    BLIND line naming the remedy knob (the frontier-report law — never
 //!    a green zero over a blind derivation).
 #![cfg(all(
@@ -34,9 +34,9 @@ fn heal_bin() -> &'static str {
 fn coverage_report_runs_against_the_installed_toolchain() {
     let out = Command::new(heal_bin())
         .arg("--coverage-report")
-        .env_remove("RIIR_HEAL_CLIPPY_DRIVER")
-        .env("RIIR_HEAL_KAT_METER", "0")
-        .env("RIIR_HEAL_KAT_GATE", "0")
+        .env_remove("RIIR_REFINE_CLIPPY_DRIVER")
+        .env("RIIR_REFINE_KAT_METER", "0")
+        .env("RIIR_REFINE_KAT_GATE", "0")
         .output()
         .expect("spawn cargo-refine");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -82,9 +82,9 @@ fn coverage_report_runs_against_the_installed_toolchain() {
 fn coverage_report_refuses_loudly_without_a_driver() {
     let out = Command::new(heal_bin())
         .arg("--coverage-report")
-        .env("RIIR_HEAL_CLIPPY_DRIVER", "definitely-not-a-clippy-driver-119")
-        .env("RIIR_HEAL_KAT_METER", "0")
-        .env("RIIR_HEAL_KAT_GATE", "0")
+        .env("RIIR_REFINE_CLIPPY_DRIVER", "definitely-not-a-clippy-driver-119")
+        .env("RIIR_REFINE_KAT_METER", "0")
+        .env("RIIR_REFINE_KAT_GATE", "0")
         .output()
         .expect("spawn cargo-refine");
     assert_eq!(
@@ -98,7 +98,7 @@ fn coverage_report_refuses_loudly_without_a_driver() {
         "the refusal is the BLIND posture, in-band on the report:\n{stdout}"
     );
     assert!(
-        stdout.contains("RIIR_HEAL_CLIPPY_DRIVER"),
+        stdout.contains("RIIR_REFINE_CLIPPY_DRIVER"),
         "the refusal names the remedy knob:\n{stdout}"
     );
 }

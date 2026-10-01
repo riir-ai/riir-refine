@@ -1,4 +1,4 @@
-//! # riir-clippy — Multi-Domain Modelless Code Healer
+//! # riir-refine — Multi-Domain Modelless Code Healer
 //!
 //! A modelless-first pipeline that heals code (clippy lints, perf issues,
 //! kernel opt) using a drafter+pruner+corpus pattern. The framework is
@@ -53,6 +53,28 @@
 //! later."
 
 #![warn(clippy::all, clippy::pedantic)]
+
+/// One-time environment-variable rename compatibility (plan 192 P3,
+/// 2026-10-01): every `RIIR_HEAL_*` variable the user still exports is
+/// installed under its new `RIIR_REFINE_*` name when that new name is unset
+/// — the new spelling always wins. Call once at bin-main entry, BEFORE any
+/// env-reading code (this crate's and `riir-kat`'s config modules read
+/// through the same process env). Idempotent; zero-op when no legacy name is
+/// present. Ungated: the rename touches every feature build.
+///
+/// `std::env::set_var` is safe on edition 2021 (this crate's edition); a
+/// later edition bump must re-audit this one call site.
+pub fn install_env_rename_compat() {
+    let legacy: Vec<(String, String)> = std::env::vars()
+        .filter(|(k, _)| k.starts_with("RIIR_HEAL_"))
+        .collect();
+    for (old_key, value) in legacy {
+        let new_key = format!("RIIR_REFINE_{}", &old_key["RIIR_HEAL_".len()..]);
+        if std::env::var(&new_key).is_err() {
+            std::env::set_var(&new_key, &value);
+        }
+    }
+}
 
 // ── Domain-agnostic core (always compiled) ─────────────────────────────────
 pub mod adaptive_drafter;
@@ -266,7 +288,7 @@ pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
 // re-export is ungated too (the machine-local trio's posture).
 pub use riir_kat::kat_units;
 // The ungated machine-local trio + the free-tier protocol plumbing: the
-// member keeps them behind `client`, but riir-clippy's contract is
+// member keeps them behind `client`, but riir-refine's contract is
 // UNGATED (--unmine must work in every feature build; the consent-module
 // rule) — the member compiles them for us at default features, and root
 // consumers reach them through these ungated re-exports.

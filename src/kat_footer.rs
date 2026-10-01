@@ -324,12 +324,12 @@ pub fn ymd_from_unix(unix: u64) -> (i64, u32, u32) {
     )
 }
 
-/// Whether the footer should colorize: `RIIR_HEAL_FOOTER_COLOR` forces on
+/// Whether the footer should colorize: `RIIR_REFINE_FOOTER_COLOR` forces on
 /// (`1`/`true`) or off (`0`/`false`); else `NO_COLOR` (set + non-empty)
 /// disables; else stdout being a TTY decides.
 #[must_use]
 pub fn footer_color_enabled() -> bool {
-    if let Ok(v) = std::env::var("RIIR_HEAL_FOOTER_COLOR") {
+    if let Ok(v) = std::env::var("RIIR_REFINE_FOOTER_COLOR") {
         if v == "1" || v.eq_ignore_ascii_case("true") {
             return true;
         }

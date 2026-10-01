@@ -1,7 +1,19 @@
 # Plan 192 — The refine rename, Phase 1 (binary + surface sweep)
 
-**Status:** PHASE 1 LANDED 2026-10-01 + PHASE 2 LANDED 2026-10-01 (owner ask, same day: "why you still call riir-clippy? it's riir-refine now" — the crate/package name renamed `926fd4d2`→HEAD: package+lib `riir-refine`/`riir_refine`, the 138-file `riir_clippy::` sweep, the live script/workflow refs, AGENTS+BOUNDARY titles) + the T1.2f rider's test-fixture stragglers REPAIRED (`926fd4d2`, 24 red tests). Original phase-1 record below unchanged.
+**Status:** PHASE 1 + 2 LANDED 2026-10-01 · **PHASE 3 LANDED 2026-10-01** (owner follow-up, same day: "rename it all remain" — the deliberately-kept internal-vocabulary axis called in: the env prefix, the cache dir, the skill dir, the sweeper branch, the ops worktree). Original phase-1/2 record below unchanged.
 Parent: [Proposal 018](../.proposals/018_refine_rename_stake_domain_tiers.md) (owner calls 2026-09-30: Refine picked, NO alias, Reflex stays free).
+
+## Phase 3 — the kept axis, called in (2026-10-01, "rename it all remain")
+
+- [x] P3.1 `RIIR_HEAL_*` → `RIIR_REFINE_*`: every live read/doc/test/script/workflow in this repo renamed; compat `install_env_rename_compat()` (ungated, edition-2021-safe `set_var`) installed at the top of all three bin mains — legacy `RIIR_HEAL_*` still honored, new spelling always wins. LIVE-verified both spellings (TTY color probe). Cross-repo consumers dual-read via the legacy fallback (riir-kat) or doc renames (fleet).
+- [x] P3.2 Cache: `~/.cache/riir-clippy` → `~/.cache/riir-refine` (disk moved; `default_memory_path()` gained the one-time best-effort dir rename for the fleet's other machines).
+- [x] P3.3 Skill dir `.agents/skills/riir-clippy/` → `riir-refine/` (git mv + content); `~/.agents/skills/riir-clippy` symlink replaced by `riir-refine`; the cargo-refine/disk-clean/distill skills' live paths follow.
+- [x] P3.4 The ops worktree `.riir-clippy-main` → `.riir-refine-main` (`git worktree move`) + ops_nightly's default literal; both tracked launchd plists synced to the live ~/Library copies (they already pointed at riir-refine since T1.1 — the tracked sources were the drift).
+- [x] P3.5 kat_sweeper work branch `heal/riir-clippy` → `heal/riir-refine` (no local branch existed; config-only); `swept_repos.txt` stale path fixed; `consumer_residue_sweep.sh` default root; dashboard footer/UA strings; `.env.example` header; the 3 workflows.
+- [x] P3.6 Cross-repo live sweep (3 parallel subagents, 19 commits pushed): riir-kat `96f0eeb` (BROKEN CI sibling loops + failing unit_registry test repointed), riir-dapps `47cc826` (36 files), riir-dao `a36c3d9` (direction-gate fixture import), riir-deployer `9fb0a18`; riir-chain `0d1d6f20`, riir-neuron-db `b19f19f`, riir-game-sdk `f1958c8`, riir-shader `5e8d35f` (deploy-token .env path), riir-auth `7c4e7b4`, riir-instinct `9aa0fa3`, riir-reflex `5b37eff`+`5587bda`, seal-remake `66a3bb6`, seal-game-editor `e999feb1`; riir-infer `59e8a73`, riir-train `2c0b10d4`+`2bd8054d`, riir-ai `b5f61f802`+`6b69bd06d` (boundary-gate repo lists + broken cross-repo test corpus paths). Dated citations KEEP everywhere (the katgpt-rs `DISK_SPELLING_ALIASES` leniency resolves them).
+- [x] P3.7 Gates: lib default 2423/0 (floor held); clippy `-D` clean at the release set; soft-gate 17/17 + unmine 9/9 + refill 5/5 + build-stamp 4/4 + cargo-convention 4/4 + repo-posture 6/6; the global binary rebuilt at the release set (0.2.0, stamp complete) + corpus-stats live + the legacy-env compat probe live-green.
+- [-] P3.8 4090 half — same treatment there rides the next 4090 pass (the plan's standing "4090 binary rebuild" item): the new binary carries the compat shim + the one-time cache-dir migration, so an old env/dir keeps working there until the rebuild lands.
+- [x] P3.9 Dated records (HISTORY/.benchmarks/.plans/.proposals/.research/.distill rows/archived .issues) KEEP the old spelling by design — provenance, and the spelling-alias resolves the citations. The user-global `~/.agents/AGENTS.md` mention ("riir-clippy batch" trigger wording) is the owner's file — flagged for the owner.
 
 ## What landed (2026-10-01)
 

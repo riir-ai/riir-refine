@@ -6,7 +6,7 @@
 > Consumes `katgpt_core::regime_probe` (katgpt-rs Issue 740 / Bench 702);
 > zero entropy arithmetic lives in this repo.
 
-**Status:** RECORD — T1 + T4 landed 2026-09-09, riir-clippy `1994a8a`; provenance surface landed same day at `80e8667` (see §Provenance families); T2 + T3 landed 2026-09-09 (`2e3ce9a` / `095686a`) — T3 as a recorded DEMOTE (`.benchmarks/080_margin_mining_ab.md`).
+**Status:** RECORD — T1 + T4 landed 2026-09-09, riir-refine `1994a8a`; provenance surface landed same day at `80e8667` (see §Provenance families); T2 + T3 landed 2026-09-09 (`2e3ce9a` / `095686a`) — T3 as a recorded DEMOTE (`.benchmarks/080_margin_mining_ab.md`).
 
 ## Where it runs
 

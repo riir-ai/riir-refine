@@ -116,7 +116,7 @@ for n in a b c; do
   ssh-keygen -q -t ed25519 -N "" -C "kat-burn-e2e-$n" -f "$WORK/id_$n.ed25519"
 done
 acct_env() { # acct_env <a|b|c> — the account-scoped env (the replay_e2e pattern)
-  echo "RIIR_AUTH_ACCOUNT_DIR=$WORK/acct_$1 RIIR_HEAL_KAT_ACCOUNT_DIR=$WORK/acct_$1 RIIR_HEAL_KAT_SERVICE_URL=$URL"
+  echo "RIIR_AUTH_ACCOUNT_DIR=$WORK/acct_$1 RIIR_REFINE_KAT_ACCOUNT_DIR=$WORK/acct_$1 RIIR_REFINE_KAT_SERVICE_URL=$URL"
 }
 login() { # login <a|b|c>
   env $(acct_env "$1") "$BIN" login --key "$WORK/id_$1.ed25519" >/dev/null 2>&1
@@ -277,7 +277,7 @@ git -C "$WORK/scratch_b" -c user.email=e2e@test -c user.name=e2e commit -qm "fix
 # the drain skips while wire_total <= ack — so a NEW metered delta must be
 # burned AFTER the batch lands for the ack to learn the grace; (4) then the
 # ungated rerun runs (rc=0).
-env $(acct_env b) RIIR_HEAL_KAT_PROMPT_YES=1 RIIR_HEAL_KAT_GATE=0 \
+env $(acct_env b) RIIR_REFINE_KAT_PROMPT_YES=1 RIIR_REFINE_KAT_GATE=0 \
   sh -c "cd '$WORK/scratch_b' && '$BIN' --mine >/dev/null 2>&1; '$BIN' --fix src/fixture_points.rs >/dev/null 2>&1; '$BIN' sync >/dev/null 2>&1"
 # burn a fresh metered delta so the burn drain carries the v3 flag into the ack
 python3 -c "

@@ -8,7 +8,7 @@
 //!
 //! Borrows the `ModellessEmbedder` pattern from riir-rag (riir-ai): BLAKE3 +
 //! deterministic projection + bounded output. Reimplemented locally (~30 LOC)
-//! because riir-clippy cannot depend on riir-ai (boundary rule).
+//! because riir-refine cannot depend on riir-ai (boundary rule).
 //!
 //! ## Properties
 //!

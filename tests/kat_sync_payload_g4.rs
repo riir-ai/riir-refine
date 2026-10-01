@@ -31,7 +31,7 @@ use riir_refine::kat_redact::{
 use riir_refine::kat_sync_payload::{parse_rows, verify_payload, RowOutcome, SyncPayloadBuilder};
 use riir_refine::traj_store::TrajRowDoc;
 
-/// The shipped-policy shape (mirrors `riir-clippy/.refine-sync-policy`).
+/// The shipped-policy shape (mirrors `riir-refine/.refine-sync-policy`).
 fn shipped_policy() -> SyncPolicy {
     SyncPolicy {
         version: REDACT_VERSION,

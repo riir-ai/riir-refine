@@ -66,7 +66,7 @@ quote = "1"
 ureq = { version = "2.9", optional = true, features = ["json"] }
 
 # (issue 088: the ssh-key row moved to riir-kat with the account + stake
-# clients — riir-clippy no longer names ssh_key anywhere.)
+# clients — riir-refine no longer names ssh_key anywhere.)
 
 # Proposal 008 T2.4 legacy comment — REMOVED with the vote client (issue
 # 088): the kat service plane moved to the sibling leaf crate `riir-kat`
@@ -241,7 +241,7 @@ noise_weighted_evidence = ["katgpt-core/grouped_evidence_weighting"]
 # constant (Research 585 / SAT arXiv:2609.22682 — depth pays where selection
 # discriminates). Budget-conserving across the MEASURED domains; unmeasured
 # stay at exactly 1.0. Default-off through T3 (the issue's kill-switch
-# discipline); runtime override RIIR_HEAL_DEMONSTRABILITY=0 guards the
+# discipline); runtime override RIIR_REFINE_DEMONSTRABILITY=0 guards the
 # auto-arm path. Byte-identical when off OR unarmed. Implies
 # latent_retrieval (the matcher seam).
 demonstrability_gate = ["latent_retrieval"]
@@ -607,7 +607,7 @@ ternary_inference = ["dep:riir-infer-core", "dep:riir-infer-gpu"]
 # with --no-default-features still gets the full layer.
 # Validated: G1-G5 PASS (Issue 004) + G6/G7 real cargo clippy PASS (Issue 008):
 # G6 10/10 corpus truthfulness, G7 50.0pp improvement (50% → 100%).
-# Opt-out (pure loop): RIIR_HEAL_SELF_EVOLVE=0.
+# Opt-out (pure loop): RIIR_REFINE_SELF_EVOLVE=0.
 self_evolve = []
 # Issue 136 (reef P1+P3+P5): the structural self-mutation lane's persistent
 # surface — the content-addressed artifact store + the two-head CAS chain
@@ -917,7 +917,7 @@ required-features = ["cf_workers_ai", "groq_first"]
 # Local patches — mirror the riir-infer workspace's [patch.crates-io] so the
 # metal_tensor_gemm + cubecl_runtime features compile from THIS workspace.
 # Cargo's patch-inheritance does NOT cross workspace boundaries, so when we
-# invoke cargo from riir-clippy we have to redeclare them here. Since the
+# invoke cargo from riir-refine we have to redeclare them here. Since the
 # T2.3 retarget (reflex Issue 008) the ternary lane's inference crates come
 # from ../riir-infer, so the vendor rows point at THAT repo's copies — the
 # same byte-identical forks its own CI builds against. Remove once upstream
@@ -986,7 +986,7 @@ strip = true
 # et al). Measured 2026-09-09 (arm64, the v0.1.4 shipping feature set
 # latent_retrieval,kat_service,kat_transport,fix_verify, /tmp isolated target):
 # plain release (strip only) = 11.0 MB → dist (this block) = 4.3 MB (-61%).
-# cargo bloat breakdown first: 70% of .text is riir_clippy's own code (corpus
+# cargo bloat breakdown first: 70% of .text is riir_refine's own code (corpus
 # tables inlined as giant static functions), 13% syn — so the win comes from
 # codegen knobs, not dep removal. Perf trade (opt-level "s" vs 3) is dev-time
 # only — the LOCAL dev global binary stays on plain `--release` for drafter
@@ -1095,7 +1095,7 @@ required-features = ["score_bench"]
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us
-# when riir-clippy is the build root. Without the table below, a
+# when riir-refine is the build root. Without the table below, a
 # `latent_retrieval` build resolves SEVEN katgpt crates twice (local path +
 # git `14116501`, four commits before `roll_die v2` and the device-verify
 # fixture rewrite): same name, same version, non-unifying types, compiled

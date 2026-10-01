@@ -58,7 +58,7 @@ kernel_opt's `pad-uniform-pod` family (not re-shipped);
 |---|---|---|
 | 0 | text round-trip invariants — brace balance + `@stage` entry-point multiset + `@group/@binding` multiset byte-identical | always (plain `shader_perf`) |
 | 1 | `naga` parse+validate in-process (`shader_verify` → `dep:naga`; already in the lock via the riir-gpu arm — zero new packages) | `--fix --verify`-shaped checks; degrades to Tier 0 with ONE line (the Issue 018 oracle-split) |
-| 2 | capture-fidelity (byte-identical pre/post at pinned frame+seed) | the CONSUMER repo's harness (riir-shader / the editor gate) — never a riir-clippy dep |
+| 2 | capture-fidelity (byte-identical pre/post at pinned frame+seed) | the CONSUMER repo's harness (riir-shader / the editor gate) — never a riir-refine dep |
 
 The naga-vs-Tint divergence (`ptr<workgroup>` params: Tint-legal,
 naga-rejected — riir-shader Plan 001) is recorded in the domain: naga

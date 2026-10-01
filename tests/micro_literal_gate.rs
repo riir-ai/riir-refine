@@ -1,4 +1,4 @@
-//! T10 (riir-dapps Plan 035) — the ×1_000_000 grep gate, riir-clippy half.
+//! T10 (riir-dapps Plan 035) — the ×1_000_000 grep gate, riir-refine half.
 //!
 //! The lamport law's third rule: **`MICRO_PER_KAT` is the only µ↔KAT
 //! conversion** — the bare `1_000_000` literal appears nowhere in money

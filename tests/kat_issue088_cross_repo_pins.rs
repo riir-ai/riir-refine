@@ -1,6 +1,6 @@
 //! Issue 088 spin-out cross-repo pins — the assertions that became
 //! cross-crate when the kat service plane split into `riir-kat` (protocol +
-//! client plane) and riir-clippy (the healer-coupled remainder). Both sides
+//! client plane) and riir-refine (the healer-coupled remainder). Both sides
 //! of each pin are only visible HERE, so this file is where they live.
 //!
 //! The sync-payload redact floor: `§7 step 4`'s `MIN_REDACT_VERSION` (now

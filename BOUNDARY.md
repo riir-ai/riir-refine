@@ -18,7 +18,7 @@ from game crates but has zero game-domain coupling.
 **Issue 088 (2026-09-10):** the KAT service plane (protocol tier, client
 plane, transports — 25 modules) moved to the sibling leaf crate
 `../riir-kat`; root re-exports every moved module at its historical path
-(`riir_clippy::kat_meter` etc. resolve bit-identically). Root KEEPS the
+(`riir_refine::kat_meter` etc. resolve bit-identically). Root KEEPS the
 healer-coupled `kat_sync_payload` + `kat_pending_estimator` (traj_store)
 and `kat_promotion` (score_bench/domain).
 

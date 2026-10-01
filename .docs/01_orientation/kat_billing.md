@@ -100,7 +100,7 @@ this tokenomics will die"*):
 2. **Top up** — the payment page.
 
 The refusal also OFFERS the contribute-now path (one y/N on a TTY,
-`RIIR_HEAL_KAT_PROMPT_YES=1` / `--yes` for agents) and SURVEYS what the
+`RIIR_REFINE_KAT_PROMPT_YES=1` / `--yes` for agents) and SURVEYS what the
 run would have done, count-only:
 
 ```text
@@ -124,8 +124,8 @@ settle — within 7 days of an accepted push; the leaderboard names the
 exact dates. Contributed accounts are never re-gated while depleted,
 because the settle pays them.
 
-**Kill switches:** `RIIR_HEAL_KAT_GATE=0` (the gate) and
-`RIIR_HEAL_KAT_METER=0` (the shared billing plane).
+**Kill switches:** `RIIR_REFINE_KAT_GATE=0` (the gate) and
+`RIIR_REFINE_KAT_METER=0` (the shared billing plane).
 
 ## Where the truth lives
 

@@ -3,7 +3,7 @@
 //!
 //! # Why this exists
 //!
-//! riir-clippy's L4-vs-decline gate ([`tests/t51_l4_vs_decline.rs`], Bench 039)
+//! riir-refine's L4-vs-decline gate ([`tests/t51_l4_vs_decline.rs`], Bench 039)
 //! scored a candidate fix as a **WIN** when `cargo clippy` stopped firing AND the
 //! *contract identifiers* were preserved. At n=9 that produced 5 wins — and 2 of
 //! the 5 were **silently wrong**:

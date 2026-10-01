@@ -1,4 +1,4 @@
-# CI enforcement for scripts/ci_feature_guard.sh — the riir-clippy half of
+# CI enforcement for scripts/ci_feature_guard.sh — the riir-refine half of
 # katgpt-rs Issue 701 R2 (the full-gate-workflow fan-out; this repo was in the
 # missing set surveyed 2026-09-01: 1 workflow, no full gate).
 #
@@ -154,7 +154,7 @@ jobs:
         env:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
 
-      # $GITHUB_WORKSPACE is .../riir-clippy; the manifest's `../katgpt-rs`,
+      # $GITHUB_WORKSPACE is .../riir-refine; the manifest's `../katgpt-rs`,
       # `../riir-ai`, `../riir-neuron-db`, `../riir-auth` (riir-kat's
       # transitive), `../riir-kat`, `../riir-llm` (issue 124) and — since the
       # riir-infer carve (riir-ai Issue 998, 2026-09-22) — riir-ai's own
@@ -191,7 +191,7 @@ jobs:
       - name: Report the gap when siblings are unavailable
         if: steps.siblings.outputs.available != 'true'
         run: |
-          MSG="riir-clippy cannot load its workspace without katopz/katgpt-rs \
+          MSG="riir-refine cannot load its workspace without katopz/katgpt-rs \
           (public, checked out above) and gist-rs/riir-ai + \
           gist-rs/riir-neuron-db, gist-rs/riir-auth (riir-kat's transitive), \
           gist-rs/riir-kat (issue 088), gist-rs/riir-llm (issue 124, the \
@@ -210,7 +210,7 @@ jobs:
       # line) for the daemon+registry-dependent agreement gates, keeping the
       # weekly gate flake-free. Local runs own the live-oracle coverage.
       - name: Point docker at a dead socket
-        run: echo "DOCKER_HOST=unix:///nonexistent-riir-clippy-ci.sock" >> "$GITHUB_ENV"
+        run: echo "DOCKER_HOST=unix:///nonexistent-riir-refine-ci.sock" >> "$GITHUB_ENV"
 
       # The wedge-detector budget inside the guard is a 16-core-laptop number;
       # a 4-core runner needs more before "wedged" is the right diagnosis.

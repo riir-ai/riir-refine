@@ -3,7 +3,7 @@
 //! `PrismML/llama.cpp` @ `e311ed38f` (`Apache-2.0`; the league-repinned
 //! opponent tip, clone at `../vendor/prismml-llama.cpp` -- `M3` twin
 //! `<E:/git/vendor>`). The batch was armed by the league opponent-watch
-//! intake (riir-clippy `a749024` / riir-ai Issue 843 `T5`): the 1.4x
+//! intake (riir-refine `a749024` / riir-ai Issue 843 `T5`): the 1.4x
 //! prefill jump root-caused REAL -- ZERO `PQ2_0` mentions in
 //! `ggml-metal` at the old pin `9ca265a` (the type-142 Bonsai `GGUF`
 //! ran the generic dequant fallback there), while `e311ed38f` ships

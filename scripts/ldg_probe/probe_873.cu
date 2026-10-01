@@ -1,6 +1,6 @@
 // probe.cu — Plan 073 T0a: Ada (4090, sm_89) LDG offered-load-knee probe
 //
-// Question (pre-registered in riir-clippy .plans/073_offered_load_knee_ldg_probe.md):
+// Question (pre-registered in riir-refine .plans/073_offered_load_knee_ldg_probe.md):
 //   does the Ada bandwidth-vs-outstanding-plain-load-count knee sit near K~2,
 //   as measured on H100 by arXiv:2608.15764 (peak at K~2, -35% by K=8)?
 //   Verdict mapping -> T1 landing shape is in the plan; do not re-derive here.

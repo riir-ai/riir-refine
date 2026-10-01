@@ -8,7 +8,7 @@
 
 | File | Scope |
 |---|---|
-| [`crate_role.md`](crate_role.md) | What riir-clippy is + what it is NOT (the domain test) |
+| [`crate_role.md`](crate_role.md) | What riir-refine is + what it is NOT (the domain test) |
 | [`sibling_layout.md`](sibling_layout.md) | The 7-repo sibling layout + path-dep assumptions |
 | [`boundary_rationale.md`](boundary_rationale.md) | Why this is a separate repo, not a module in riir-ai |
 | [`build_commands.md`](build_commands.md) | CI guard + GOAT benches + feature combos |

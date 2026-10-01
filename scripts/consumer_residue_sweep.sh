@@ -118,7 +118,7 @@ fi
 # so a concurrent session in that repo is neither slowed nor invalidated. It
 # persists between sweeps (dependency builds stay warm); only the workspace's
 # own crates are invalidated, which is what forces the lint pass to re-run.
-SWEEP_TARGET_ROOT="${SWEEP_TARGET_ROOT:-/tmp/riir-clippy-residue-sweep}"
+SWEEP_TARGET_ROOT="${SWEEP_TARGET_ROOT:-/tmp/riir-refine-residue-sweep}"
 mkdir -p "$SWEEP_TARGET_ROOT"
 
 TOTAL=0

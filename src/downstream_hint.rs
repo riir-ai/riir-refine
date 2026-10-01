@@ -532,7 +532,7 @@ mod tests {
     #[test]
     fn live_shape_relative_src_leaf_is_silent() {
         // The exact live invocation shape (`cargo refine --config-audit
-        // src`, CWD = this repo root) against the REAL tree: riir-clippy
+        // src`, CWD = this repo root) against the REAL tree: riir-refine
         // is a measured LEAF (no sibling path-deps into it) — the hint
         // must be silent through the real sibling enumeration.
         assert_eq!(downstream_consumers_hint(&[PathBuf::from("src")]), "");

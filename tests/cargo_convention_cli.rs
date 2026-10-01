@@ -63,12 +63,12 @@ fn scratch(tag: &str) -> PathBuf {
 fn refine(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
-        .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
+        .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
-        .env("RIIR_HEAL_TRAJ_ROOT", dir)
-        .env("RIIR_HEAL_KAT_SERVICE_URL", CLOSED_PORT)
-        .env("RIIR_HEAL_KAT_LEASE", "0")
-        .env("RIIR_HEAL_AUTO_ORACLE", "0")
+        .env("RIIR_REFINE_TRAJ_ROOT", dir)
+        .env("RIIR_REFINE_KAT_SERVICE_URL", CLOSED_PORT)
+        .env("RIIR_REFINE_KAT_LEASE", "0")
+        .env("RIIR_REFINE_AUTO_ORACLE", "0")
         .args(args);
     let out = cmd.output().expect("spawn cargo-refine");
     let text = format!(

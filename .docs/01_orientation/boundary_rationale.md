@@ -45,7 +45,7 @@ with any game crate.
 **(2026-08-10):** the clippy-healing pipeline (Proposal 034) borrows the
 `TernaryDraftModel` + `SealQuestCorpus` + `ConstraintPruner` pattern from
 `quest_grammar` but has zero game-domain coupling. It ships in
-`/git/riir-clippy` (new repo), NOT in `crates/riir-games-quest/src/clippy_healing/`.
+`/git/riir-refine` (new repo), NOT in `crates/riir-games-quest/src/clippy_healing/`.
 The prior draft of Proposal 034 that proposed
 `crates/riir-games-quest/src/clippy_healing/` was a boundary violation —
 corrected before implementation.

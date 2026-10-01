@@ -4,7 +4,7 @@
 //! |---|---|---|---|
 //! | 0 | [`tier0_verdict`] — text round-trip invariants: balanced braces, entry-point multiset intact, `@group/@binding` multiset byte-identical | free | always |
 //! | 1 | `naga` validation (feature-gated `dep:naga`, pure Rust, in-process) — the module parses + validates post-fix | ~10 ms class | `shader_verify` builds, both fix classes |
-//! | 2 | capture-fidelity protocol — lives in the CONSUMER repo (riir-shader's harness / the shader-toy editor gate), never a riir-clippy dep | seconds | G5-real, the mint gate |
+//! | 2 | capture-fidelity protocol — lives in the CONSUMER repo (riir-shader's harness / the shader-toy editor gate), never a riir-refine dep | seconds | G5-real, the mint gate |
 //!
 //! Tier 1 off → degrade to Tier 0 with ONE log line (the Issue 018
 //! oracle-split): "we could not check" and "the check failed" are different

@@ -221,7 +221,7 @@ learns from, not verified trigger/fix pairs in the fast path.
 Add entries by constructing your own `ClippyCorpus`:
 
 ```rust
-use riir_clippy::{ClippyCorpus, ClippyFixEntry};
+use riir_refine::{ClippyCorpus, ClippyFixEntry};
 
 let corpus = ClippyCorpus::new(vec![
     ClippyFixEntry {
@@ -236,7 +236,7 @@ let corpus = ClippyCorpus::new(vec![
 Or start from the seed corpus and append:
 
 ```rust
-use riir_clippy::{build_seed_corpus, ClippyCorpus, ClippyFixEntry};
+use riir_refine::{build_seed_corpus, ClippyCorpus, ClippyFixEntry};
 
 let seed = build_seed_corpus();
 let mut entries = seed.entries;

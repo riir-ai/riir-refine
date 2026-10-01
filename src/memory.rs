@@ -1,7 +1,7 @@
 //! Latent fix-trajectory memory with 3-axis retrieval.
 //!
 //! Borrows the 3-axis retrieval shape from riir-rag (riir-ai): latent KNN +
-//! BM25 lexical + optional graph. Reimplemented locally because riir-clippy
+//! BM25 lexical + optional graph. Reimplemented locally because riir-refine
 //! cannot depend on riir-ai (boundary rule).
 //!
 //! ## Axes
@@ -1278,7 +1278,7 @@ mod tests {
     #[test]
     fn file_save_load_missing_and_merge() {
         let dir =
-            std::env::temp_dir().join(format!("riir-clippy-mem-{}-save-load", std::process::id()));
+            std::env::temp_dir().join(format!("riir-refine-mem-{}-save-load", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("memory.json");
         let _ = std::fs::remove_file(&path);
@@ -1314,7 +1314,7 @@ mod tests {
     #[test]
     fn corrupt_file_is_invalid_data() {
         let dir =
-            std::env::temp_dir().join(format!("riir-clippy-mem-{}-corrupt", std::process::id()));
+            std::env::temp_dir().join(format!("riir-refine-mem-{}-corrupt", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("memory.json");
         std::fs::write(&path, "{ not json").expect("write corrupt file");

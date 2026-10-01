@@ -518,6 +518,7 @@ fn run_preflight(args: &Args) -> ! {
 }
 
 fn main() {
+    riir_refine::install_env_rename_compat();
     let args = Args::parse();
     if args.preflight {
         run_preflight(&args);

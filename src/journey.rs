@@ -1,5 +1,5 @@
 //! Issue 105 — the journey-credit factor (PC-ALM's dual accumulator,
-//! katgpt-rs Research 554 / [riir-clippy Issue 105](.issues/105_strand_keep_integral_credit.md)).
+//! katgpt-rs Research 554 / [riir-refine Issue 105](.issues/105_strand_keep_integral_credit.md)).
 //!
 //! Credit for a kept fix is the **integral of its run's residual history
 //! plus the terminal residual** — never the terminal verdict alone. A keep

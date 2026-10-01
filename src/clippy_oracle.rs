@@ -14,7 +14,7 @@
 //! at DEFAULT features in the detected project root, `$CARGO`-resolved),
 //! falls back LOUD to heuristic-only whenever it cannot run (no cargo,
 //! spawn failure, compile error with zero parseable diagnostics), and the
-//! explicit kill switch `RIIR_HEAL_AUTO_ORACLE=0` restores the old
+//! explicit kill switch `RIIR_REFINE_AUTO_ORACLE=0` restores the old
 //! never-spawn posture. A manual `--clippy-json` still wins outright.
 //!
 //! Precedent: `--fix-compile` already spawns cargo through
@@ -28,7 +28,7 @@
 //! to nothing under it (the workspace's own blindness class —
 //! `consumer_residue_sweep.sh` runs `--all-features` for exactly this
 //! reason). Issue 115 added the operator re-aim:
-//! `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` spawns with `--features <csv>`
+//! `RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv>` spawns with `--features <csv>`
 //! (a loud status line when active — a feature-superset clippy run is
 //! materially slower; unknown feature names fail the clippy spawn, which
 //! degrades LOUD to heuristic-only naming the knob). `--all-features`
@@ -41,14 +41,14 @@
 //! invisible to the anchor lane (a `manual_range_contains` in `mod tests`
 //! was hand-applied while the oracle ran blind beside it). A knob nobody
 //! passes is not a repair, so the WIDE posture is the default and
-//! `RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS=1` restores the fast lib-only one
+//! `RIIR_REFINE_AUTO_ORACLE_NO_ALL_TARGETS=1` restores the fast lib-only one
 //! (only explicit truthy spellings disable; a typo must not silently
 //! restore the blind posture).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Kill-switch predicate over the raw `RIIR_HEAL_AUTO_ORACLE` value.
+/// Kill-switch predicate over the raw `RIIR_REFINE_AUTO_ORACLE` value.
 /// Only explicit falsy spellings disable; unknown values default ON (a typo
 /// must not silently restore the low-yield posture this module exists to fix).
 #[must_use]
@@ -59,10 +59,10 @@ pub fn enabled_from(v: Option<&str>) -> bool {
 /// The live env read.
 #[must_use]
 pub fn auto_oracle_enabled() -> bool {
-    enabled_from(std::env::var("RIIR_HEAL_AUTO_ORACLE").ok().as_deref())
+    enabled_from(std::env::var("RIIR_REFINE_AUTO_ORACLE").ok().as_deref())
 }
 
-/// Parsed `RIIR_HEAL_AUTO_ORACLE_FEATURES` value (Issue 115): `None` = the
+/// Parsed `RIIR_REFINE_AUTO_ORACLE_FEATURES` value (Issue 115): `None` = the
 /// default-features posture (unset, blank, or nothing but empty segments);
 /// `Some(non-empty)` = spawn clippy with `--features <csv>`. The oracle can
 /// only name features the TARGET project's manifests carry — unknown names
@@ -86,11 +86,11 @@ pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
 /// The live env read.
 #[must_use]
 pub fn auto_oracle_features() -> Option<Vec<String>> {
-    features_from(std::env::var("RIIR_HEAL_AUTO_ORACLE_FEATURES").ok().as_deref())
+    features_from(std::env::var("RIIR_REFINE_AUTO_ORACLE_FEATURES").ok().as_deref())
 }
 
 /// Kill-switch predicate over the raw
-/// `RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS` value (2026-09-21): the
+/// `RIIR_REFINE_AUTO_ORACLE_NO_ALL_TARGETS` value (2026-09-21): the
 /// `--all-targets` posture is the DEFAULT (test modules are half the
 /// healing surface); only explicit truthy spellings disable it. Unknown
 /// values keep it ON — a typo must not silently restore the blind posture.
@@ -103,7 +103,7 @@ pub fn all_targets_from(v: Option<&str>) -> bool {
 #[must_use]
 pub fn auto_oracle_all_targets() -> bool {
     all_targets_from(
-        std::env::var("RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS")
+        std::env::var("RIIR_REFINE_AUTO_ORACLE_NO_ALL_TARGETS")
             .ok()
             .as_deref(),
     )

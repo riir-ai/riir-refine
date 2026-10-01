@@ -1,6 +1,6 @@
 ---
 name: cargo-refine
-description: Dev-time lint healing with the riir-clippy `cargo refine` binary. Activate when about to fix clippy warnings manually, when clippy reports mechanical findings before a commit, or when asked to auto-fix lints across files. Covers dry run, compile-gated write, feature-gated code, the documented divergence classes the healer refuses by design, and post-mining logging (feeding misses and divergences back to the healer's improvement queue).
+description: Dev-time lint healing with the riir-refine `cargo refine` binary. Activate when about to fix clippy warnings manually, when clippy reports mechanical findings before a commit, or when asked to auto-fix lints across files. Covers dry run, compile-gated write, feature-gated code, the documented divergence classes the healer refuses by design, and post-mining logging (feeding misses and divergences back to the healer's improvement queue).
 ---
 
 # cargo-refine — dev-time lint healing
@@ -22,7 +22,7 @@ self-evolve trajectories on every apply.
   (the symlink keeps pointing at the rebuilt binary).
 - Fresh box without the sibling repo → fall back to manual fixes +
   `cargo clippy --fix`; do not block on the healer.
-- ⛔ **A bare `cargo build --release` of riir-clippy silently re-stales the
+- ⛔ **A bare `cargo build --release` of riir-refine silently re-stales the
   global binary** (Issue 117, the 00:21 class): it overwrites the symlink
   target with a DEFAULT-FEATURES build, so `sync` / `update` / `--refill` /
   the burn push / the consent heartbeat are compiled out while the usage
@@ -77,10 +77,10 @@ cargo refine --fix --groups pedantic <paths>                # also fix allow-by-
   (`[oracle]`-anchored spans replace similarity ranking; `[heuristic]` =
   feed-covered span with no diagnostic). Diagnostics that only fire behind a
   non-default feature are INVISIBLE at that posture — re-aim the spawn with
-  `RIIR_HEAL_AUTO_ORACLE_FEATURES=<csv>` (loud status line; a
+  `RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv>` (loud status line; a
   feature-superset clippy run is materially slower — pay it when the
   project's diagnostics of interest live behind cfg gates, e.g. after a
-  heal touched `#[cfg(feature)]` code; `RIIR_HEAL_AUTO_ORACLE=0` disables
+  heal touched `#[cfg(feature)]` code; `RIIR_REFINE_AUTO_ORACLE=0` disables
   the auto-run entirely; a manual `--clippy-json` still wins over both).
   Unknown feature names fail the spawn → LOUD heuristic-only fallback
   naming the knob.
@@ -127,25 +127,25 @@ Semantic lints (`if_same_then_else`, …) are not heal class — owner call.
 - NEVER heal files with sibling WIP mid-flight — `git status` first; commit
   only your own hunks; a heal diff is mechanical and must stay separable.
 - One-off single finding → manual is fine. Heal shines on batches.
-- Wrong suggestion or miss? Fix the PROPOSER at root cause in riir-clippy
+- Wrong suggestion or miss? Fix the PROPOSER at root cause in riir-refine
   (`src/domains/*/proposers/`) + add a fixture regression test — never
   suppress, never hand-edit past it silently.
 
 ## Post-mining (the self-evolve feedback loop)
 
-Every run records trajectories to `~/.cache/riir-clippy/memory.json`
+Every run records trajectories to `~/.cache/riir-refine/memory.json`
 (applied counts by lint; `--verify` reverts + the clippy_verify oracle feed
 outcome verdicts). Usage artifacts are the healer's improvement queue —
 **post-mining** (mined from usage) vs **pre-mining** (mined from external
-sources — papers, crates, articles; Protocol A of the riir-clippy skill):
+sources — papers, crates, articles; Protocol A of the riir-refine skill):
 
 - **miss** — real clippy fires, healer silent → proposer extension candidate
 - **created** — the healer's output trips a NEW lint → terminal-state emission bug
 - **revert** — an edit the compile gate caught → proposer guard bug
 
 After healing sessions, append observed misses/divergences to the post-mining
-intake in `riir-clippy/.distill/001_mining_queue_snapshot.md` (one line each:
-class, site, evidence type). The idle loop (riir-clippy skill queue item 14)
+intake in `riir-refine/.distill/001_mining_queue_snapshot.md` (one line each:
+class, site, evidence type). The idle loop (riir-refine skill queue item 14)
 consumes it: probe each class against real clippy FIRST, then extend the
 proposer + fixtures + score-bench.
 
@@ -172,7 +172,7 @@ tiers/outcomes, score-bench history, intake progress, heal-commit trail.
 - Real dry run: `riir-ai/crates/riir-games/src` → 222 edits / 54 files available.
 - Score bench (run #3): 98.1% heal rate, 1.9% created, 100% parse safety.
 - Campaign record: full katgpt-rs sweep + riir-train/ndb/chain/engine/games-civ
-  landed with count-identical test validation (see riir-clippy AGENTS.md).
+  landed with count-identical test validation (see riir-refine AGENTS.md).
 
-**Source secrecy:** binary-only distribution (riir-clippy Proposal 003) —
-never publish riir-clippy source; internal agents build from the sibling repo.
+**Source secrecy:** binary-only distribution (riir-refine Proposal 003) —
+never publish riir-refine source; internal agents build from the sibling repo.

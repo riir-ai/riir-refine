@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""E2E tokens/sec head-to-head: Bonsai-27B (llama.cpp) vs riir-clippy self_evolve.
+"""E2E tokens/sec head-to-head: Bonsai-27B (llama.cpp) vs riir-refine self_evolve.
 
 Both arms are given the SAME task: `(lint_name, buggy_code)` -> emit fixed Rust.
 The metric is end-to-end tokens/sec on the emitted fix:

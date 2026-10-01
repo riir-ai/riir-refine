@@ -73,7 +73,7 @@
 - reef `harness/tree/nodes.py` + `artifact/release_chain.py` @
   `ecec4e20b29e7dcbd96150d4b4f1a80b146e120d` (Apache-2.0), quotes
   verbatim-verified at distill time — Research 213.
-- Landed by Plan 175 (`riir-clippy/.plans/175_issue136_structural_admission_lane.md`).
+- Landed by Plan 175 (`riir-refine/.plans/175_issue136_structural_admission_lane.md`).
 
 ## See also
 

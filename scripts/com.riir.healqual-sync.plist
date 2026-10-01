@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- riir-dapps Plan 037 T4.3 / riir-clippy Proposal 016 — the opportunistic
+<!-- riir-dapps Plan 037 T4.3 / riir-refine Proposal 016 — the opportunistic
      healqual push. A SECOND launchd interval beside com.riir.ops-nightly
      (NOT a hook: every --score-bench invocation site is documentation, and
      a wrapper around the documented command is bypassed silently). The
@@ -54,8 +54,8 @@
   <!-- The script echoes its own progress lines; these catch launchd-level
        failures (interpreter errors, spartan-PATH misses). -->
   <key>StandardOutPath</key>
-  <string>/Users/katopz/git/riir-clippy/.benchmarks/healqual_sync.launchd.log</string>
+  <string>/Users/katopz/git/riir-refine/.benchmarks/healqual_sync.launchd.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/katopz/git/riir-clippy/.benchmarks/healqual_sync.launchd.log</string>
+  <string>/Users/katopz/git/riir-refine/.benchmarks/healqual_sync.launchd.log</string>
 </dict>
 </plist>

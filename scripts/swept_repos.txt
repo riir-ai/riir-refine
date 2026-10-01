@@ -5,7 +5,7 @@
 /Users/katopz/git/riir-auth
 /Users/katopz/git/riir-burner
 /Users/katopz/git/riir-chain
-/Users/katopz/git/riir-clippy
+/Users/katopz/git/riir-refine
 /Users/katopz/git/riir-dao
 /Users/katopz/git/riir-dapps
 /Users/katopz/git/riir-deployer

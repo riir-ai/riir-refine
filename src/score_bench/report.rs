@@ -219,13 +219,13 @@ pub use crate::frontier_report::local_iso_timestamp;
 /// projection; the store is the queryable source of truth). Best-effort by
 /// contract: ANY failure prints one stderr line and must NEVER fail the
 /// bench run. Store-root resolution mirrors the CLI's other standalone
-/// modes (`RIIR_HEAL_TRAJ_ROOT` → cwd).
+/// modes (`RIIR_REFINE_TRAJ_ROOT` → cwd).
 ///
 /// Always compiled when this module is (`score_bench` implies
 /// `latent_retrieval`); the cfg attribute documents the dependency.
 #[cfg(feature = "latent_retrieval")]
 pub fn record_store_best_effort(rec: &HistoryRecord) {
-    let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+    let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
         .map(std::path::PathBuf::from)
         .or_else(|_| std::env::current_dir())
         .unwrap_or_default();

@@ -7,7 +7,7 @@
 //! no `doc_markdown` finding at all, and "fixing" it rewrites code the
 //! crate's own clippy says is clean (the reflex-site `466e331` artifact —
 //! a doc-comment shell command gained a backticked argv token). The old
-//! justification was riir-clippy's own `#![warn(clippy::pedantic)]` root —
+//! justification was riir-refine's own `#![warn(clippy::pedantic)]` root —
 //! a property of THIS crate, applied to every crate the global binary is
 //! pointed at.
 //!
