@@ -35,9 +35,22 @@ not the rename's). This session root-caused and closed it.
 - **4090 exe refresh** (Plan 192 T1.3d): repos were already at target (a prior
   same-day session had pulled); rebuilt at the release set (12m15s), swapped
   `cargo-refine.exe` into the global bin, REMOVED `cargo-heal.exe`, stamp
-  `release set: complete`. ⚠ Disclosed: GitHub SSH from the 4090 hangs
-  post-TCP (dozens of orphaned git+ssh pairs from other sessions dating to
-  09-29, left untouched) — owner attention; freshness could not be re-fetched.
+  `release set: complete`.
+- **4090 git-over-SSH — root-caused + fixed same session** (the subagent's
+  "hangs post-TCP, owner attention" disclosure): TWO defects. (1) The box's
+  IPv6 route to github.com is black-holed (router-reboot aftermath; LAN IP
+  also moved) — plain ssh stalled at connect on AAAA. FIXED durably:
+  `C:\Users\katop\.ssh\config` on the box pins `github.com ssh.github.com`
+  → `AddressFamily inet` (verified: verbose trace authenticates over v4
+  in 0.5 s with the exact `core.sshCommand` options). (2) A Windows OpenSSH
+  client teardown quirk: git-over-ssh run INSIDE an sshd session never exits
+  (auth + greeting arrive; git refs never update) — works fine from a clean
+  process context. MITIGATION: the registered `gitsync` Task Scheduler task
+  runs `E:\git\sync-repos.cmd` (fetch + `pull --ff-only`, full 26-repo
+  contract set, log `E:\git\sync-repos.log`) — first run: 26/26 repos,
+  zero errors, box at this commit. En route: 54 orphaned git/ssh zombies
+  (09-29 → 10-01) reaped. Documented in the global AGENTS.md 4090 section
+  (the `Start-Process`-from-ssh-dies-with-the-session trap included).
 - Gates: `repo_posture_cli` 6/6 at the armed set AND `--all-features`;
   `auto_oracle_features_cli` 1/1 + `coverage_report_cli` 2/2 at both;
   clippy `-D warnings` clean at the mid posture and `--all-features`.
