@@ -300,7 +300,7 @@ fn blocked_line_carries_policy_hint_not_value() {
     );
     let line = e.blocked_line();
     assert!(line.contains("2"), "{line}");
-    assert!(line.contains(".heal-sync-policy"), "{line}");
+    assert!(line.contains(".refine-sync-policy"), "{line}");
     assert!(!line.contains("KAT"), "{line}");
     assert!(!line.contains('$'), "{line}");
 }

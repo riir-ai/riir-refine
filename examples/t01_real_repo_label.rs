@@ -621,7 +621,7 @@ fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
                 .unwrap_or_default();
             if matches!(
                 name.as_str(),
-                ".git" | "target" | "vendor" | "node_modules" | ".heal" | "dist" | "out"
+                ".git" | "target" | "vendor" | "node_modules" | ".heal" | ".refine" | "dist" | "out"
             ) {
                 continue;
             }

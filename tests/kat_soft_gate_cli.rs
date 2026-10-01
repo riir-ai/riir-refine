@@ -80,7 +80,7 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// One binary invocation, hermetic: its own account dir, its own `.heal`
+/// One binary invocation, hermetic: its own account dir, its own `.refine`
 /// root, the closed-port service URL, and the lease kill switch so nothing
 /// but the gate under test decides the run's fate.
 fn heal(dir: &Path, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
@@ -132,7 +132,7 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
         tuna_balance_micro: None,
         tuna_expires_unix: None,
     };
-    let heal_dir = dir.join(".heal");
+    let heal_dir = dir.join(".refine");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
@@ -153,7 +153,7 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
         tuna_balance_micro: None,
         tuna_expires_unix: None,
     };
-    let heal_dir = dir.join(".heal");
+    let heal_dir = dir.join(".refine");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
@@ -163,7 +163,7 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
 /// existing machine has on disk before the upgrade (issue 080 read-back
 /// compat).
 fn seed_v2_ack_file(dir: &Path, balance_micro: i64) {
-    let heal_dir = dir.join(".heal");
+    let heal_dir = dir.join(".refine");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
     std::fs::write(
         heal_dir.join(KatBurnAck::FILE_NAME),
@@ -249,7 +249,7 @@ fn depleted_never_contributed_refuses_at_run_start() {
     );
     // The gate reads, never writes: no charge ledger may appear.
     assert!(
-        !dir.join(".heal").join("kat_charge.json").exists(),
+        !dir.join(".refine").join("kat_charge.json").exists(),
         "a refused run must not open the billing path"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -307,7 +307,7 @@ fn the_refusal_surveys_what_it_would_have_fixed() {
         "fix content must not leak from the count-only survey. output:\n{text}"
     );
     assert!(
-        !dir.join(".heal").join("kat_charge.json").exists(),
+        !dir.join(".refine").join("kat_charge.json").exists(),
         "the survey must not open the billing path"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -324,7 +324,7 @@ fn the_survey_mining_arm_counts_the_queued_outbox() {
     write_a_rs(&dir);
     login(&dir);
     seed_ack(&dir, 0);
-    let outbox = dir.join(".heal").join("outbox");
+    let outbox = dir.join(".refine").join("outbox");
     std::fs::create_dir_all(&outbox).expect("outbox dir");
     std::fs::write(outbox.join("batch-0001.ndjson"), "{}\n").expect("seed batch");
 
@@ -616,7 +616,7 @@ fn issue_080_never_synced_stays_warn_only_even_with_a_leftover_marker() {
     let ack = riir_clippy::kat_burn_client::KatBurnAck::empty();
     assert_eq!(ack.last_balance_micro, None);
     assert_eq!(ack.contributed, None);
-    let heal_dir = dir.join(".heal");
+    let heal_dir = dir.join(".refine");
     std::fs::create_dir_all(&heal_dir).expect(".heal dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");

@@ -202,7 +202,7 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// One binary invocation, hermetic: its own account dir, its own `.heal`
+/// One binary invocation, hermetic: its own account dir, its own `.refine`
 /// root, the given service URL, and the lease/reheat kill switches so the
 /// burn push is the ONLY dial under test.
 fn heal(dir: &Path, url: &str, args: &[&str]) -> (Option<i32>, String) {
@@ -238,7 +238,7 @@ fn login(dir: &Path) {
 /// The settled cumulative burn, read off the charge ledger the run saved.
 fn charged_kat(dir: &Path) -> u64 {
     let text =
-        std::fs::read_to_string(dir.join(".heal").join("kat_charge.json")).expect("charge file");
+        std::fs::read_to_string(dir.join(".refine").join("kat_charge.json")).expect("charge file");
     serde_json::from_str::<serde_json::Value>(&text)
         .expect("charge json")
         .get("charged_kat")
@@ -247,7 +247,7 @@ fn charged_kat(dir: &Path) -> u64 {
 }
 
 fn ack_path(dir: &Path) -> PathBuf {
-    dir.join(".heal").join(KatBurnAck::FILE_NAME)
+    dir.join(".refine").join(KatBurnAck::FILE_NAME)
 }
 
 fn ack_of(dir: &Path) -> Option<KatBurnAck> {

@@ -133,7 +133,7 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     // Read back through the persisted JSON — the same file the CLI reads.
     let text = std::fs::read_to_string(
         repo_dir
-            .join(".heal")
+            .join(".refine")
             .join(riir_clippy::kat_meter::KatCharge::FILE_NAME),
     )
     .unwrap();
@@ -155,7 +155,7 @@ fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
     // machine-global, the charge is repo-local.
     assert_ne!(
         account.dir(),
-        repo_dir.join(".heal"),
+        repo_dir.join(".refine"),
         "account (identity) and charge (per-repo burn) live in different roots"
     );
 }

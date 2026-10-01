@@ -35,12 +35,12 @@
 //!
 //! `--only driver --dump-fixseq <dir>` runs the production driver arm over
 //! the full corpus and dumps each case's attempt ring to
-//! `<dir>/.heal/fixseq/run-<ts>.jsonl` — the hindsight-label corpus
+//! `<dir>/.refine/fixseq/run-<ts>.jsonl` — the hindsight-label corpus
 //! (`span_embed` × `strategy_id` × `outcome`) for the sigmoid-NCE
 //! rule-embedding trainer (kept = positive, reverted = hard negative).
 //! Early-returns before the G1/G2 measurement passes. Pass a DEDICATED root
 //! (e.g. `.benchmarks/data/126_t0/rings`), never the repo root — dumping
-//! into `<repo>/.heal/fixseq` would pollute the organic-ring readings the
+//! into `<repo>/.refine/fixseq` would pollute the organic-ring readings the
 //! `--horizon-report` consumer owns.
 //!
 //! # Issue 128 T5 — `--dump-fixseq-cfg <chunked|strided>` (the mint configs)
@@ -424,7 +424,7 @@ fn driver_section(
             }
         }
         println!(
-            "\n  fixseq dump: {runs} run file(s) -> {}/.heal/fixseq/ ; attempts {attempts_total} \
+            "\n  fixseq dump: {runs} run file(s) -> {}/.refine/fixseq/ ; attempts {attempts_total} \
              (kept {kept} POSITIVES, reverted {reverted} HARD-NEGATIVES); span_embed stamped \
              {with_embed}/{attempts_total}; {c} error code(s), {s} strategy(ies)",
             root.display(),
@@ -1327,7 +1327,7 @@ fn composed_case_list(cfg: &str) -> Option<Vec<riir_clippy::domains::rustc_error
 /// config stamp, written beside the rings at `<root>/manifest.json` (the
 /// house data discipline — `.benchmarks/data/049_t01/manifest.json`).
 fn write_ring_manifest(root: &std::path::Path, cfg: &str) -> std::io::Result<std::path::PathBuf> {
-    let dir = root.join(".heal").join("fixseq");
+    let dir = root.join(".refine").join("fixseq");
     let mut files = Vec::new();
     let mut total_attempts = 0usize;
     for entry in std::fs::read_dir(&dir)?.flatten() {

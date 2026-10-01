@@ -453,7 +453,7 @@ fn unstake_not_live_queues_and_still_discloses() {
     );
     // The queue file exists (the unstake intent, distinct from stake intents).
     assert!(root
-        .join(".heal")
+        .join(".refine")
         .join("stake")
         .join("unstake_pending.jsonl")
         .exists());

@@ -12,7 +12,7 @@
 //!   service-served proposal (weight + evidence lead), signs with the
 //!   account key, and submits; the service-echoed ack renders.
 //! - **The not-live fallback** — the SIGNED intent queues locally
-//!   (`.heal/vote/pending.jsonl`), honestly rendered.
+//!   (`.refine/vote/pending.jsonl`), honestly rendered.
 //! - **The cross-repo golden** — `vote_message` hex IDENTICAL to the
 //!   dapps-side pin (the mirror's drift defense).
 //! - **The copy gates** — no `$`, membership-only framing, the
@@ -291,7 +291,7 @@ fn service_first_flow_submits_the_signed_vote() {
         .expect("the submitted signature verifies against the ledger's message");
 
     // No queue file when the service answered.
-    assert!(!root.join(".heal/vote/pending.jsonl").exists());
+    assert!(!root.join(".refine/vote/pending.jsonl").exists());
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -361,7 +361,7 @@ fn service_refusal_is_an_error_not_a_queue() {
     let err = vote_flow(&Refusing, "a1b2c3d4", 7, VoteChoice::Yes, &key, &root, 1).unwrap_err();
     assert!(err.contains("vote window closed"), "{err}");
     assert!(
-        !root.join(".heal/vote/pending.jsonl").exists(),
+        !root.join(".refine/vote/pending.jsonl").exists(),
         "a refusal is never queued"
     );
     let _ = std::fs::remove_dir_all(&root);

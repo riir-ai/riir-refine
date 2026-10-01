@@ -846,13 +846,13 @@ fn t39_promotion_gate_logic() {
 fn t39_store_grounding_report() {
     println!("\n=== Issue 039 T5 — live store grounding (load, never recompute) ===");
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let repos = ["riir-ai", "riir-game-sdk", "riir-clippy", "riir-dapps"];
+    let repos = ["riir-ai", "riir-game-sdk", "riir-refine", "riir-dapps"];
     for repo in repos {
         let root = std::path::Path::new(manifest_dir)
             .parent()
             .map(|p| p.join(repo))
             .unwrap_or_else(|| std::path::PathBuf::from(repo));
-        let store_dir = root.join(".heal").join("trajectories.kv");
+        let store_dir = root.join(".refine").join("trajectories.kv");
         if !store_dir.is_dir() {
             continue; // never create — the read path only
         }

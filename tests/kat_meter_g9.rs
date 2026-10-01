@@ -110,7 +110,7 @@ fn g9b_version_is_changelog_covered_and_rides_the_file() {
     std::fs::create_dir_all(&dir).unwrap();
     let m = KatMeter::open(&dir);
     m.save().unwrap();
-    let text = std::fs::read_to_string(dir.join(".heal").join(KatMeter::FILE_NAME)).unwrap();
+    let text = std::fs::read_to_string(dir.join(".refine").join(KatMeter::FILE_NAME)).unwrap();
     let state: MeterState = serde_json::from_str(&text).unwrap();
     assert_eq!(state.version, METER_VERSION);
     let _ = std::fs::remove_dir_all(&dir);
@@ -198,7 +198,7 @@ fn g9_charge_version_is_changelog_covered_and_rides_the_file() {
     let mut c = KatCharge::open(&dir, &meter_state(10));
     c.settle(&meter_state(15));
     c.save().unwrap();
-    let text = std::fs::read_to_string(dir.join(".heal").join(KatCharge::FILE_NAME)).unwrap();
+    let text = std::fs::read_to_string(dir.join(".refine").join(KatCharge::FILE_NAME)).unwrap();
     let state: ChargeState = serde_json::from_str(&text).unwrap();
     assert_eq!(state.charge_version, CHARGE_VERSION);
     assert_eq!(

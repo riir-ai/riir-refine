@@ -24,7 +24,7 @@
 //! The `heal` spelling stays covered by the same strip (the dist-era binaries
 //! keep that name until the owner's T1.2f flip), so it gets an arm too.
 //!
-//! Hermetic (the kat_soft_gate_cli precedent): own account dir, own `.heal`
+//! Hermetic (the kat_soft_gate_cli precedent): own account dir, own `.refine`
 //! root, closed-port service URL, lease kill switch — nothing reaches the
 //! network, the real account is never read.
 

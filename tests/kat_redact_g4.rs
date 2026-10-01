@@ -32,7 +32,7 @@ use riir_clippy::kat_redact::{
     RedactionLog, SpanOrigin, SyncPolicy, POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
 };
 
-/// The shipped-repo policy shape (mirrors `riir-clippy/.heal-sync-policy`
+/// The shipped-repo policy shape (mirrors `riir-clippy/.refine-sync-policy`
 /// without reading the file — the test pins the SHAPE, the repo pins the
 /// instance).
 fn shipped_policy() -> SyncPolicy {
@@ -288,7 +288,7 @@ fn g4_no_policy_file_denies_all() {
 /// `REDACT_VERSION` mismatch is fail-closed by design: a policy written for
 /// another gate version yields `deny_all()` + a warning. That is the correct
 /// safety behavior and also a silent-breakage trap — bumping
-/// `REDACT_VERSION` without migrating `.heal-sync-policy` in the same commit
+/// `REDACT_VERSION` without migrating `.refine-sync-policy` in the same commit
 /// turns every sync into a deny-all, and nothing else in the suite notices,
 /// because every other test constructs its policy from `REDACT_VERSION`
 /// (so they follow the bump automatically) or writes a temp fixture.
@@ -310,7 +310,7 @@ fn g4_shipped_policy_file_loads_at_the_current_gate_version() {
     let loaded = RedactionGate::load(&path);
     assert!(
         loaded.warning.is_none(),
-        "the shipped .heal-sync-policy failed to load cleanly — a          REDACT_VERSION bump almost certainly landed without migrating the          file, which silently deny-alls every sync: {:?}",
+        "the shipped .refine-sync-policy failed to load cleanly — a          REDACT_VERSION bump almost certainly landed without migrating the          file, which silently deny-alls every sync: {:?}",
         loaded.warning
     );
 

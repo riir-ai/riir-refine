@@ -13,7 +13,7 @@
 //!
 //! **The corpus is SYNTHETIC and the number must be labelled as such.**
 //! `--fix-compile` fires only on *compile errors*, and every repo in the
-//! workspace compiles clean (`.heal/fixseq/` exists in none of them — an
+//! workspace compiles clean (`.refine/fixseq/` exists in none of them — an
 //! organic corpus does not exist and cannot be produced without injecting
 //! errors, which is what this harness does). What is REAL here is the
 //! driver: the production `CompileDriver` loop runs unmodified, so the
@@ -538,7 +538,7 @@ fn main() {
         println!("invalid mutants: {}", report.invalid_mutants.len());
     }
     if let Some(root) = &store {
-        println!("\nfixseq rings written: {dumped} -> {root}/.heal/fixseq/");
+        println!("\nfixseq rings written: {dumped} -> {root}/.refine/fixseq/");
     }
     println!("\nwall: {wall:.1}s");
 }

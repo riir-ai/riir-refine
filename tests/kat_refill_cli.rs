@@ -182,7 +182,7 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// One binary invocation, hermetic: its own account dir, its own `.heal`
+/// One binary invocation, hermetic: its own account dir, its own `.refine`
 /// root, the given service URL, and the lease/reheat kill switches so the
 /// refill is the ONLY dial under test.
 fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
@@ -218,7 +218,7 @@ fn login(dir: &Path) {
 }
 
 fn ack_of(dir: &Path) -> Option<KatBurnAck> {
-    let text = std::fs::read_to_string(dir.join(".heal").join(KatBurnAck::FILE_NAME)).ok()?;
+    let text = std::fs::read_to_string(dir.join(".refine").join(KatBurnAck::FILE_NAME)).ok()?;
     Some(serde_json::from_str(&text).expect("ack json"))
 }
 
@@ -247,8 +247,8 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
     let dir = scratch("happy");
     login(&dir);
     // The gate input starts DEPLETED (the state --refill exists to fix).
-    let ack_path = dir.join(".heal").join(KatBurnAck::FILE_NAME);
-    std::fs::create_dir_all(dir.join(".heal")).expect(".heal dir");
+    let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
+    std::fs::create_dir_all(dir.join(".refine")).expect(".heal dir");
     let depleted = KatBurnAck {
         version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
@@ -340,8 +340,8 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
 fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     let dir = scratch("gatename");
     login(&dir);
-    let ack_path = dir.join(".heal").join(KatBurnAck::FILE_NAME);
-    std::fs::create_dir_all(dir.join(".heal")).expect(".heal dir");
+    let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
+    std::fs::create_dir_all(dir.join(".refine")).expect(".heal dir");
     let ack = KatBurnAck {
         version: riir_clippy::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,

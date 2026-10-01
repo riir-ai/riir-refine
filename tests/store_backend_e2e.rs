@@ -9,7 +9,7 @@
 //! Proves, in ONE run on a scratch git repo with a planted fixable lint:
 //!
 //! 1. **Store-only persistence (038-T2/T3)** — a `--fix --verify` run
-//!    persists verdicts to the repo-local `.heal/trajectories.kv` and
+//!    persists verdicts to the repo-local `.refine/trajectories.kv` and
 //!    NEVER (re)writes the legacy envelope.
 //! 2. **The one-time migration** — a pre-existing envelope is imported
 //!    (rows verbatim) and renamed `memory.json.migrated`.
@@ -110,7 +110,7 @@ fn store_backend_replaces_envelope_end_to_end() {
     // 1. Store-only persistence: the store exists, the envelope was
     //    renamed, and NO fresh envelope was written back.
     assert!(
-        tmp.join(".heal/trajectories.kv").exists(),
+        tmp.join(".refine/trajectories.kv").exists(),
         "store not created"
     );
     assert!(
@@ -173,7 +173,7 @@ fn store_backend_replaces_envelope_end_to_end() {
     let (ok, stats) = heal(envs, &["--memory-stats"]);
     assert!(ok, "memory-stats failed:\n{stats}");
     assert!(
-        stats.contains("MIGRATED — the active backend is the repo-local .heal/trajectories.kv"),
+        stats.contains("MIGRATED — the active backend is the repo-local .refine/trajectories.kv"),
         "stats must name the migrated backend:\n{stats}"
     );
 

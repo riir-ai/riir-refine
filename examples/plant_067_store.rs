@@ -106,7 +106,7 @@ const PLANTS: &[(&str, &[(&str, &str); 3])] = &[
 
 fn main() {
     let arg = std::env::args().nth(1).unwrap_or_else(|| {
-        eprintln!("usage: plant_067_store <target-dir>  (the dir gets .heal/trajectories.kv)");
+        eprintln!("usage: plant_067_store <target-dir>  (the dir gets .refine/trajectories.kv)");
         std::process::exit(2);
     });
     let root = std::path::PathBuf::from(arg);

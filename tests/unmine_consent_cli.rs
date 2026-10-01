@@ -49,7 +49,7 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// One binary invocation, hermetic: its own account dir, its own `.heal`
+/// One binary invocation, hermetic: its own account dir, its own `.refine`
 /// root, a dead service URL (no network), and the meter/lease kill switches
 /// the CI convention uses.
 fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
@@ -111,7 +111,7 @@ fn unmine_records_the_opt_out_and_names_what_still_works() {
     );
     // The queued batches: named, and declared the user's to delete.
     assert!(
-        text.contains(".heal/outbox"),
+        text.contains(".refine/outbox"),
         "--unmine must name the outbox path. output:\n{text}"
     );
     assert!(
@@ -125,7 +125,7 @@ fn unmine_records_the_opt_out_and_names_what_still_works() {
 #[test]
 fn unmine_deletes_no_queued_batch() {
     let dir = scratch("nodelete");
-    let outbox = dir.join(".heal").join("outbox");
+    let outbox = dir.join(".refine").join("outbox");
     std::fs::create_dir_all(&outbox).expect("outbox");
     let queued = outbox.join("deadbeefcafe.ndjson");
     std::fs::write(&queued, "{\"row\":1}\n").expect("plant a queued batch");
@@ -268,8 +268,8 @@ fn sync_refuses_the_push_half_while_opted_out() {
     let dir = scratch("syncrefuse");
     // A trajectory store must EXIST, or "no trajectory store" would be the
     // reason nothing pushed and the test would pass for the wrong reason.
-    let heal_dir = dir.join(".heal");
-    std::fs::create_dir_all(&heal_dir).expect(".heal");
+    let heal_dir = dir.join(".refine");
+    std::fs::create_dir_all(&heal_dir).expect(".refine");
     std::fs::write(heal_dir.join("trajectories.kv"), "").expect("plant a store");
 
     assert_eq!(heal(&dir, &["--unmine"]).0, Some(0));
@@ -302,8 +302,8 @@ fn sync_refuses_the_push_half_while_opted_out() {
 fn sync_with_unset_consent_still_reaches_the_push_half() {
     use riir_clippy::kat_mining_consent::MiningConsent;
     let dir = scratch("syncunset");
-    let heal_dir = dir.join(".heal");
-    std::fs::create_dir_all(&heal_dir).expect(".heal");
+    let heal_dir = dir.join(".refine");
+    std::fs::create_dir_all(&heal_dir).expect(".refine");
     std::fs::write(heal_dir.join("trajectories.kv"), "").expect("plant a store");
 
     assert_eq!(state(&dir), MiningConsent::Unset, "no --mine, no --unmine");

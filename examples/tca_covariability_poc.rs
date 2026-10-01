@@ -47,8 +47,8 @@
 //! issue, close (the gw_corpus PoC precedent: a measured negative is a
 //! result). Print-only, always exit 0 — this is a report, not a gate.
 //!
-//! Stores are read via a `/tmp` MIRROR (copy of `.heal/trajectories.kv` +
-//! `.heal/key`) — sibling repos' `.heal/` trees are read-only to this
+//! Stores are read via a `/tmp` MIRROR (copy of `.refine/trajectories.kv` +
+//! `.refine/key`) — sibling repos' `.refine/` trees are read-only to this
 //! session; opening the mirrored copy guarantees zero writes upstream.
 //! Roots: `RIIR_TCA094_ROOTS` (colon-separated) or the standard sibling
 //! layout relative to this crate's parent directory.
@@ -73,7 +73,7 @@ const R_PRIMARY: usize = 4;
 /// Minimum labeled rules with mass for the verdict to claim anything.
 const MIN_LABELED_WITH_MASS: usize = 20;
 
-/// Sibling repos whose `.heal/trajectories.kv` stores feed the tensor
+/// Sibling repos whose `.refine/trajectories.kv` stores feed the tensor
 /// (the Issue-037 audit's store-bearing set).
 const STORE_REPOS: &[&str] = &[
     "katgpt-rs",
@@ -185,18 +185,18 @@ fn fnv1a64(s: &str) -> u64 {
     h
 }
 
-/// Mirror one repo's `.heal/trajectories.kv` + `.heal/key` into a temp
-/// dir and open the MIRROR (never the original — sibling `.heal` trees are
+/// Mirror one repo's `.refine/trajectories.kv` + `.refine/key` into a temp
+/// dir and open the MIRROR (never the original — sibling `.refine` trees are
 /// read-only to this session; opening a LocalKvStore may replay/compact).
 fn open_mirrored(repo_root: &std::path::Path, mirror_base: &std::path::Path) -> Option<(TrajStore, String)> {
-    let heal = repo_root.join(".heal");
+    let heal = repo_root.join(".refine");
     let kv_dir = heal.join("trajectories.kv");
     if !kv_dir.is_dir() {
         return None;
     }
     let name = repo_root.file_name()?.to_string_lossy().to_string();
     let mirror = mirror_base.join(&name);
-    let mirror_heal = mirror.join(".heal");
+    let mirror_heal = mirror.join(".refine");
     std::fs::create_dir_all(&mirror_heal).ok()?;
     // Recursive copy of the store dir (WAL segments + manifests).
     copy_dir_recursive(&kv_dir, &mirror_heal.join("trajectories.kv"))?;
@@ -316,7 +316,7 @@ fn main() {
                 all_cells.extend(cells);
                 stores_read += 1;
             }
-            None => println!("[store] {}: no .heal/trajectories.kv — skipped", root.display()),
+            None => println!("[store] {}: no .refine/trajectories.kv — skipped", root.display()),
         }
     }
     println!(
