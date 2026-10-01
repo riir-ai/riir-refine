@@ -18,7 +18,7 @@ appended `score_history.jsonl` row. The measurement is
 are the same measurement by construction.
 
 ```sh
-cargo run --features score_bench,kat_service --bin cargo-heal -- --score-bench
+cargo run --features score_bench,kat_service --bin cargo-refine -- --score-bench
 ```
 
 ## What is measured

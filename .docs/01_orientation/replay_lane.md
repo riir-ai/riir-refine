@@ -1,4 +1,4 @@
-# The Replay Lane — `cargo heal replay` (Max tier's earn class)
+# The Replay Lane — `cargo refine replay` (Max tier's earn class)
 
 > **Purpose:** the operator + contributor doc for the replay-endorsement
 > lane — what the command does, what it earns (honestly: nothing yet),
@@ -29,7 +29,7 @@ riir-kat protocol leaf — the Issue-082 law).
 ## The command
 
 ```sh
-cargo heal replay
+cargo refine replay
 ```
 
 One command = one lease (≤ 16 items, server-assigned) → local replay of
@@ -52,7 +52,7 @@ activation.
 1. **Kill switch** — `RIIR_HEAL_REPLAY=0` disables the lane (exit 0, one
    line; the `RIIR_HEAL_KAT_METER` idiom).
 2. **Login** — load-only (the wetrun precedent: a SIGNING command never
-   silently mints an identity; run `cargo heal login` first).
+   silently mints an identity; run `cargo refine login` first).
 3. **Mining consent** — `OptedOut` refuses with the `--mine` remedy
    (verdicts are contributions to the same economy the sync push feeds);
    `Unset` proceeds — running the command IS the consent (the sync
@@ -136,7 +136,7 @@ The 2026-09-15 manual two-verifier run, productized (riir-dapps Issue 091's
 ./scripts/replay_e2e.sh
 ```
 
-Two identities × one `cargo heal replay` cycle each against devnet:
+Two identities × one `cargo refine replay` cycle each against devnet:
 verifier A = the default account dir (the fleet rig's identity), verifier
 B = a FRESH throwaway identity (ssh-keygen + `login --key` into a temp
 account dir — never the machine-SSH chain, which would derive the fleet

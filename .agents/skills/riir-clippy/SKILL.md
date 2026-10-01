@@ -1,6 +1,6 @@
 ---
 name: riir-clippy
-description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo heal --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. EVERY activation starts with Protocol H housekeeping — sync git both boxes, kill orphaned git/ssh zombies, prune leftover worktrees, disk check — before the queue. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
+description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo refine --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. EVERY activation starts with Protocol H housekeeping — sync git both boxes, kill orphaned git/ssh zombies, prune leftover worktrees, disk check — before the queue. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
 ---
 
 # riir-clippy — the auto-continue idle loop
@@ -88,7 +88,7 @@ after the safety checks named per step.
    items). Healthy disk → report the two numbers, delete nothing. The
    incremental-dir slice (`*/target/debug/incremental`, ~30G when dirty) is
    the standing zero-risk pick. LOAD-BEARING, never delete:
-   `riir-clippy/target/release` (the `~/.cargo/bin/cargo-heal` symlink
+   `riir-clippy/target/release` (the `~/.cargo/bin/cargo-refine` symlink
    target) and every repo's `target/release`.
 
 Housekeeping findings (hung processes killed, worktrees removed, repos
@@ -194,9 +194,9 @@ until the claims clear.
 
 ```bash
 cd /Users/katopz/git/riir-clippy
-cargo run --features latent_retrieval --bin cargo-heal -- --suggest <target-repo>/src/
-cargo run --features latent_retrieval --bin cargo-heal -- --fix <target-repo>/src/          # preview
-cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-repo>/src/  # apply
+cargo run --features latent_retrieval --bin cargo-refine -- --suggest <target-repo>/src/
+cargo run --features latent_retrieval --bin cargo-refine -- --fix <target-repo>/src/          # preview
+cargo run --features latent_retrieval --bin cargo-refine -- --fix --write <target-repo>/src/  # apply
 ```
 
 - Validate in the TARGET repo: `cargo clippy --all-targets` +
@@ -224,7 +224,7 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-
 Pre-mining (Protocol A) distills rules from external sources BEFORE usage.
 Post-mining distills proposer extensions + new rules from artifacts that only
 exist AFTER usage. Intake lives in `.distill/001_mining_queue_snapshot.md`
-§"Post-mining intake" — appended by dev-time heal sessions (the `cargo-heal`
+§"Post-mining intake" — appended by dev-time heal sessions (the `cargo-refine`
 skill points agents there). Per sweep:
 
 1. Gather (one command: `scripts/self_evolve_audit.sh` — Issue 037's
@@ -341,5 +341,5 @@ repo — read it at session start, update it in the same commit as each batch.
 ## Manual invocation
 
 In Zed: `/riir-clippy` in the agent panel, or ask "run the riir-clippy
-skill". From a terminal, the underlying healer is `cargo-heal`
+skill". From a terminal, the underlying healer is `cargo-refine`
 (see Protocol B).

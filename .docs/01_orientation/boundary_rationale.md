@@ -24,7 +24,7 @@ coupling, it belongs in a **new repo**, not as a new module in riir-ai.
   non-game sibling crates where reimplementation would duplicate whole
   substrates: `ternary_inference` → `riir-engine` + `riir-gpu` (Bench 010
   inference arm), `latent_retrieval` → `riir-rag` (Plan 005 retrieval
-  substrate, `cargo heal --suggest`)
+  substrate, `cargo refine --suggest`)
 - The `TernaryDraftModel` pattern is reimplemented locally (~200 LOC),
   not imported cross-workspace
 

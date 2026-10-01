@@ -33,7 +33,7 @@ the machinery knows; the tiers are what a human picks.
 
 | | **Lite** | **Pro** | **Max** | **Ultra** |
 |---|---|---|---|---|
-| **What you run** | the `cargo heal` binary, anonymous | `cargo heal login` (account + miner mode) | + `kat_drain` contributor + quorum-replay participant | + full trainer window host (own Container/VPS cron) + vessel corpus host |
+| **What you run** | the `cargo refine` binary, anonymous | `cargo refine login` (account + miner mode) | + `kat_drain` contributor + quorum-replay participant | + full trainer window host (own Container/VPS cron) + vessel corpus host |
 | **Chain identity** | none (no account) | `Player(1)`, stake 0, vote 0 | replay endorsement class *(designed — [Proposal 015](../../.proposals/015_replay_endorsement_reward_class.md); NOT YET SETTLEABLE)* | `Trainer(2)`, stake 1K |
 | **LLM lane** | none — modelless only | API pay-per-fix *(gated — leak sign-off)* | API: groq → infron free legs → CF cap-guarded | API-first (groq → infron → CF); local Bonsai **optional + UNARMED** (reopen bar) |
 | **Hardware floor** | anything that runs the binary (native desktop + musl Linux) | any desktop | CPU box that fits rustc compile windows (~2–4 vCPU / 4–8 GB; **no GPU**) | GPU rig OR container-capable VPS (`standard-1`-class; R2 cache tier) |
@@ -46,7 +46,7 @@ the machinery knows; the tiers are what a human picks.
 
 ### Lite — the anonymous binary
 
-Today's bare `cargo heal`. Modelless healing (L0–L3), offline, no account,
+Today's bare `cargo refine`. Modelless healing (L0–L3), offline, no account,
 frozen corpus, free forever — the honesty dividend. Outside the economy: no
 KAT, no earnings, no hot-push. The planned witness upgrade (client-side
 verification of chain-anchored ledger roots — a light-client read path, vote
@@ -54,7 +54,7 @@ weight 0) is the Satellite pattern; it adds verification, **not consensus**.
 
 ### Pro — account + miner (+ fixer when unblocked)
 
-`cargo heal login` + sync-as-mining: heal locally → sync redacted trajectory
+`cargo refine login` + sync-as-mining: heal locally → sync redacted trajectory
 batches → quorum-proven novelty mints KAT from the epoch pool. Burns KAT per
 code word token; the 100 KAT login grant ≈ 100M tokens of buying power.
 The **fixer half** (consumer pays KAT → live span → fixed via API at LLM-token
@@ -70,7 +70,7 @@ Two halves:
    free-first `LlmRouter` drain (groq → infron → CF) over the unproven
    queue, redaction-gated, USD-capped. Anyone with API keys can run
    windows; free-tier absorption measured at $0.0000 metered.
-2. **Quorum-replay participant** — 🟡 **client shipped 2026-09-15 (P015 Phase 2 / [Plan 127](../../.plans/127_p015_phase2_replay_client.md), [`replay_lane.md`](replay_lane.md))**: `cargo heal replay` — leased third-party replays (step-0 canary hash check + the real clippy oracle on the verifier's own rig, the pinned single-item rate rule), K=2 verdict-commitment agreement (`verify_no_verdict_split` reuse), a conservative per-row reward split (`replay_cut_bp`, genesis 0 = inert), and a TrueBit-adapted canary discipline against rubber-stamping — the C1→C5 escalation P005 §Mining named, with economics. The client needs a `--features kat_transport,clippy_verify` build (the release set carries no oracle — the verdict is measured, never guessed). **Still cannot settle** until P015 Phase 3 (econ-sim arm + owner ratification + a live devnet replay-settled reward): **do not advertise replay earnings until it can settle** stands.
+2. **Quorum-replay participant** — 🟡 **client shipped 2026-09-15 (P015 Phase 2 / [Plan 127](../../.plans/127_p015_phase2_replay_client.md), [`replay_lane.md`](replay_lane.md))**: `cargo refine replay` — leased third-party replays (step-0 canary hash check + the real clippy oracle on the verifier's own rig, the pinned single-item rate rule), K=2 verdict-commitment agreement (`verify_no_verdict_split` reuse), a conservative per-row reward split (`replay_cut_bp`, genesis 0 = inert), and a TrueBit-adapted canary discipline against rubber-stamping — the C1→C5 escalation P005 §Mining named, with economics. The client needs a `--features kat_transport,clippy_verify` build (the release set carries no oracle — the verdict is measured, never guessed). **Still cannot settle** until P015 Phase 3 (econ-sim arm + owner ratification + a live devnet replay-settled reward): **do not advertise replay earnings until it can settle** stands.
 3. **Decision-server contributor (decstat receipts)** — 🟡 **lane landed 2026-10-01 (riir-ai Proposal 051 Phase 3 / the decstat receipt plan, [`riir-dapps/.plans/043`](../../../riir-dapps/.plans/043_decstat_receipt_reward_class.md))**: a consenting decision server (the riir-instinct / reflex decision lanes) submits per-decision RECEIPTS — `input_blake3` + `decision_blake3` + the build/manifest fingerprints, HASHES ONLY (the decstat redaction law holds: no state, option or pick text ever crosses the wire) — and corpus-referenced verifiers re-run the SAME frozen public corpus through the SAME release, K=2 agreement confirms, TrueBit-adapted canaries catch rubber-stamping. `decstat_cut_bp` genesis 0 + `decstat_reward_micro` genesis 0 = **two-key inert**; the devnet VERIFIER FLOOR (the same-release reproduction rate, measured by the `decstat_floor` runner) is the recorded arming gate — the owner arms, never the agent. **Does not settle yet: do not advertise decision earnings until armed** (the replay law, the same posture).
 
 ### Ultra — the trainer node
@@ -113,7 +113,7 @@ no earnings promise beyond what settles (the matrix's only earn cell is
 miner × pro; Max's replay lane says "designed (P015) — does not settle
 yet"; Ultra names "ours only at launch"), no consumer-fixer advertising.
 The public dist README (`gist-rs/cargo-heal`) carries the same roles ×
-tiers table, source-free per Proposal 003 — shipped 2026-09-15 (cargo-heal
+tiers table, source-free per Proposal 003 — shipped 2026-09-15 (cargo-refine
 `62a435f`), which also repaired the README's per-token burn-unit figure
 (the shipped meter charges `CHARGE_MICRO_KAT_PER_MILLION_TOKENS` = 1 KAT per
 MILLION code-word tokens) and its next-release mining staleness (`--mine`

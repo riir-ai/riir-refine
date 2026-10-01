@@ -2,7 +2,7 @@
 
 `src/recorder.rs`. The standalone consumer shape of the self-evolve layer:
 tools that apply fixes through a path OTHER than the `HealPipeline` (the
-`cargo heal --fix` proposers + edit emitter) still feed the same memory +
+`cargo refine --fix` proposers + edit emitter) still feed the same memory +
 learning — with a **graceful oracle degradation** instead of a hard feature
 dependency.
 
@@ -30,7 +30,7 @@ rec.disable_learning(reason)                    // runtime oracle failure
 rec.load(&path) / rec.save(&path)               // persistence (see latent_fix_memory.md)
 ```
 
-## The `cargo heal --fix` wiring
+## The `cargo refine --fix` wiring
 
 - **Non-verify mode**: only WRITTEN edits are recorded
   (`record_reviewed`) — review-only runs record nothing.

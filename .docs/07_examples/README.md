@@ -1,6 +1,6 @@
 # 07 — Examples
 
-> **Purpose:** the 8 in-tree examples + the `cargo-heal` bin. Each
+> **Purpose:** the 8 in-tree examples + the `cargo-refine` bin. Each
 > demonstrates one layer of the pipeline, one domain, or one GOAT gate.
 
 ## Files
@@ -15,7 +15,7 @@
 | [`ruliology_search_demo.md`](ruliology_search_demo.md) | `examples/ruliology_search_demo.rs` — L3 Pareto-front GOAT gate |
 | [`self_evolve_real_world_demo.md`](self_evolve_real_world_demo.md) | `examples/self_evolve_real_world_demo.rs` — self_evolve G6/G7 GOAT gate |
 | `stage2_tuning_demo.rs` | `examples/stage2_tuning_demo.rs` — Stage 2 adaptive drafter GOAT gate (Issue 010) |
-| [`cargo_heal.md`](cargo_heal.md) | `src/bin/heal.rs` — the `cargo-heal` bin: `cargo heal --suggest` over real files (Plan 005 Phase 2) |
+| [`cargo_heal.md`](cargo_heal.md) | `src/bin/heal.rs` — the `cargo-refine` bin: `cargo refine --suggest` over real files (Plan 005 Phase 2) |
 
 ## Source
 
@@ -27,7 +27,7 @@
 - [`examples/ruliology_search_demo.rs`](../../examples/ruliology_search_demo.rs)
 - [`examples/self_evolve_real_world_demo.rs`](../../examples/self_evolve_real_world_demo.rs)
 - [`examples/stage2_tuning_demo.rs`](../../examples/stage2_tuning_demo.rs)
-- [`src/bin/heal.rs`](../../src/bin/heal.rs) — the `cargo-heal` bin (not an example;
+- [`src/bin/heal.rs`](../../src/bin/heal.rs) — the `cargo-refine` bin (not an example;
   listed here because it is the user-facing demo of the Plan 005 latent path)
 
 ## Why GOAT gates live in `examples/` (not `benches/`)

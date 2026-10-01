@@ -6,7 +6,7 @@ clippy_lints seed corpus living in
 [`src/domains/clippy_lints/corpus.rs`](../../src/domains/clippy_lints/corpus.rs).
 
 **The entry set and its count are properties of the compiled code — take
-them from a run (`cargo heal --corpus-stats`), never from this page.**
+them from a run (`cargo refine --corpus-stats`), never from this page.**
 This page is the proof: its header said "53 entries" while the corpus
 reached 90, because the per-batch narrative below stopped at the P12 /
 Issue-120 wave (2026-09-14) while the frontier-mining batches (the

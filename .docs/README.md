@@ -22,7 +22,7 @@ co-equal path.
 | 04 | [`04_pruner/`](04_pruner/README.md) | L2 `syn`-based syntax validator (domain-agnostic) |
 | 05 | [`05_clippy_verify/`](05_clippy_verify/README.md) | clippy lint resolution via real `cargo clippy` (opt-in) |
 | 06 | [`06_ruliology/`](06_ruliology/README.md) | L3 Pareto-front candidate search (opt-in) |
-| 07 | [`07_examples/`](07_examples/README.md) | The 8 in-tree examples + the `cargo-heal` bin (`cargo heal --suggest`) |
+| 07 | [`07_examples/`](07_examples/README.md) | The 8 in-tree examples + the `cargo-refine` bin (`cargo refine --suggest`) |
 | 08 | [`08_benchmarks/`](08_benchmarks/README.md) | GOAT gate methodology + measured results |
 | 09 | [`09_lessons/`](09_lessons/README.md) | Canonical patterns + honest POC caveats |
 | 10 | [`10_self_evolve/`](10_self_evolve/README.md) | Issue 004 + Issue 008: latent-first self-evolution loop (G1–G7 ALL PASS) |
@@ -67,7 +67,7 @@ L3 — RULIOLOGY SEARCH (opt-in)                      ← L3 (06_ruliology)
 
 The Plan 005 latent path is **suggest + fix** at the CLI — the Phase 4
 rust_perf `propose_fix` proposers + the T6.4 clippy emitter migration are
-wired into `cargo heal --fix` (span-preserving edits; the proposer visitor
+wired into `cargo refine --fix` (span-preserving edits; the proposer visitor
 is the gate). See [`07_examples/cargo_heal.md`](07_examples/cargo_heal.md).
 
 ## Resolved validation

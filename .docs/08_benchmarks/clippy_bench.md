@@ -102,9 +102,9 @@ construction). Records: `HISTORY.md` per generation.
 ## Run
 
 ```sh
-cargo run --features score_bench --bin cargo-heal -- --score-bench   # run + append + render (gen 1)
-cargo run --features score_bench --bin cargo-heal -- --score-bench --generation 8   # the shaped-verdict ladder
-cargo run --features score_bench --bin cargo-heal -- --score-report  # re-render SVG only
+cargo run --features score_bench --bin cargo-refine -- --score-bench   # run + append + render (gen 1)
+cargo run --features score_bench --bin cargo-refine -- --score-bench --generation 8   # the shaped-verdict ladder
+cargo run --features score_bench --bin cargo-refine -- --score-report  # re-render SVG only
 ```
 
 History: `.benchmarks/score_history.jsonl` (append-only) · curve:

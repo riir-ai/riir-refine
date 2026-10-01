@@ -41,7 +41,7 @@ cargo run --example clippy_verify_demo --features clippy_verify --release
 cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
 
 # clippy-bench — the frozen healing score (Plan 014; run + append + render SVG)
-cargo run --features score_bench --bin cargo-heal -- --score-bench
+cargo run --features score_bench --bin cargo-refine -- --score-bench
 
 # Plan 005 latent suggest GOAT (opt-in; G2 gate is release-only)
 cargo test --features latent_retrieval --test latent_suggest_goat -- --nocapture

@@ -122,7 +122,7 @@ The corpus grade answers ONE question: "how many rules does this source feed rii
 
 ## The product-coverage axis — MANDATORY third output (added 2026-09-17, the dial9 tokio miss)
 
-The lane-intel axis greps OUR workspace issue ledger — it answers "does this move OUR open lanes?" and nothing else. But `cargo heal` ships publicly (gist-rs releases + tap/bucket + the KAT mining network); its consumers are the world's Rust repos. **"Famous lib" coverage is a first-class corpus goal**: tokio, rayon, serde, regex, bevy — the ecosystem's top-tier infrastructure. A 3-rule tokio family against tokio's real surface (hyper/axum/reqwest/sqlx/tonic/aws-sdk) is a PRODUCT GAP, not a niche interest. The corpus carries bevy/wasm/rayon families for exactly this reason; ecosystem coverage is why the corpus exists.
+The lane-intel axis greps OUR workspace issue ledger — it answers "does this move OUR open lanes?" and nothing else. But `cargo refine` ships publicly (gist-rs releases + tap/bucket + the KAT mining network); its consumers are the world's Rust repos. **"Famous lib" coverage is a first-class corpus goal**: tokio, rayon, serde, regex, bevy — the ecosystem's top-tier infrastructure. A 3-rule tokio family against tokio's real surface (hyper/axum/reqwest/sqlx/tonic/aws-sdk) is a PRODUCT GAP, not a niche interest. The corpus carries bevy/wasm/rayon families for exactly this reason; ecosystem coverage is why the corpus exists.
 
 **For EVERY verdict, BEFORE recording:**
 

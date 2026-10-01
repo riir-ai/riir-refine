@@ -58,5 +58,5 @@ fn main() {
             "repaired {day}: docker = {expected} (verified against {rev}, provenance repair-066)"
         );
     }
-    println!("done — re-run `cargo heal --corpus-stats --json` to confirm the series");
+    println!("done — re-run `cargo refine --corpus-stats --json` to confirm the series");
 }

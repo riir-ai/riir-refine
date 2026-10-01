@@ -18,14 +18,14 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | **shader_perf** (opt-in) | `shader_perf` | ✅ Phase 0+1 (Plan 134 / Proposal 014) | 8 WGSL render-pipeline rules (`@vertex`/`@fragment`; `@compute` stays `kernel_opt`) — 1 bounded (the `unbounded-render-loop-guard` proposer, Tier-0-invariant-checked) + explicit-LOD two-regime + branch-divergent decision + const-fold + 3 Class B annotations + 1 corpus-only. Third no-`syn` scanner (no regex); `shader_verify` = in-process naga (already in the lock — zero new packages); negative control pins ZERO findings on the 190-file riir-shader vgpu port corpus. Consumers: the upcoming shader-toy editor's submit/save gate + the riir-dapps Proposal 002 Stage-2 mint gate |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path. Plan 005
-(2026-08-14) added the **latent suggest layer** — `cargo heal --suggest`
+(2026-08-14) added the **latent suggest layer** — `cargo refine --suggest`
 retrieves ranked corpus rules for real code spans (GOAT G1–G4 PASS, Bench 018;
 `--fix` CLI wiring is Phase 6 — the Phase 4 rust_perf proposers landed as
 library code).
 
 > **Distribution (binding, [Proposal 003](.proposals/003_binary_only_distribution.md)):**
 > this source is **private forever** (Research 003: anything `riir-*` is
-> internal). The public gets prebuilt `cargo-heal` binaries only, via GitHub
+> internal). The public gets prebuilt `cargo-refine` binaries only, via GitHub
 > Releases on a small source-free dist repo (`brew tap`, `curl | sh`,
 > `install.ps1`, scoop). No crates.io, no source mirrors — `publish = false`
 > is enforced in `Cargo.toml`.
@@ -51,7 +51,7 @@ domain-pluggable behind the `HealDomain` trait.
 | L2 — Compile check (kernel_opt) | ✅ Stub (Plan 001 Phase 3, `kernel_verify` feature, delegates to shared `RustAnalyzerPruner`; full CubeCL compile + numeric compare deferred per Proposal 012 §Phase 0) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
 | SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` DEFAULT-ON since Issue 018 with `RIIR_HEAL_SELF_EVOLVE=0` opt-out; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback; Plan 005 T9.3 selection is `SelectionMode::BetaPosterior` — −8.4% selection regret vs the raw-rate blend, Bench 028) |
-| Latent — span retrieval + suggest/fix CLI (Plan 005) | ✅ Phases 1–4 + 6 T6.1/T6.4 Done (`latent_retrieval` feature, opt-in; `cargo heal --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018. Phase 4: top-5 rust_perf `propose_fix` proposers. Phase 6 T6.1: `cargo heal --fix [--write]` — **span-preserving** edit splice, visitor-gated; GOAT G1–G5 PASS, Bench 019 — G5 landed in katgpt-rs `katgpt-pruners` (commit `8c331cd9`, 12 files / 20 edits, 1233 tests green). T6.4: clippy proposers migrated to the shared emitter (`src/edit_emitter.rs`); `--fix` covers 5 perf rules + 33 structural clippy lints with fixpoint composition (Issue 016 expanded 7->33 + a 4-lint --verify tier, Bench 021); 3 type-blind clippy lints stay suggest-only). Phase 5 kernel proposers DEFERRED (concept-grade corpus — see Plan 005 §Phase 5). **Phase 3 REOPENED then partially recovered**: G1 is dead at scale (Bench 022), T3.5 lifted clippy top-1 54.2%→70.8% + perf→97.9% via the operator-aware tokenizer (Bench 027), still under the 80% bar; **Phase 3 CLOSED 2026-08-16**: T3.5.5's real-`cargo clippy` oracle + authored multi-lint spans gave the first uncontaminated measurement (+12.0pp, off 84.0%→96.0%), promoting `RerankMode::Structural`; clippy top-1 now 87.5% on the committed eval and 96.0% uncontaminated — both over the 80% bar  **Plan 005 COMPLETE as a document 2026-08-16**: Phase 7 closed as a negative result (T7.4 BLAKE3 commitment shipped), Phase 9 closed (T9.3 BetaPosterior default, Bench 028; T9.4 refuted, Bench 029), Phases 10/11/12/14 deferred on measured blockers (Bench 030), Phase 13 research half met (Research 058) |
+| Latent — span retrieval + suggest/fix CLI (Plan 005) | ✅ Phases 1–4 + 6 T6.1/T6.4 Done (`latent_retrieval` feature, opt-in; `cargo refine --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018. Phase 4: top-5 rust_perf `propose_fix` proposers. Phase 6 T6.1: `cargo refine --fix [--write]` — **span-preserving** edit splice, visitor-gated; GOAT G1–G5 PASS, Bench 019 — G5 landed in katgpt-rs `katgpt-pruners` (commit `8c331cd9`, 12 files / 20 edits, 1233 tests green). T6.4: clippy proposers migrated to the shared emitter (`src/edit_emitter.rs`); `--fix` covers 5 perf rules + 33 structural clippy lints with fixpoint composition (Issue 016 expanded 7->33 + a 4-lint --verify tier, Bench 021); 3 type-blind clippy lints stay suggest-only). Phase 5 kernel proposers DEFERRED (concept-grade corpus — see Plan 005 §Phase 5). **Phase 3 REOPENED then partially recovered**: G1 is dead at scale (Bench 022), T3.5 lifted clippy top-1 54.2%→70.8% + perf→97.9% via the operator-aware tokenizer (Bench 027), still under the 80% bar; **Phase 3 CLOSED 2026-08-16**: T3.5.5's real-`cargo clippy` oracle + authored multi-lint spans gave the first uncontaminated measurement (+12.0pp, off 84.0%→96.0%), promoting `RerankMode::Structural`; clippy top-1 now 87.5% on the committed eval and 96.0% uncontaminated — both over the 80% bar  **Plan 005 COMPLETE as a document 2026-08-16**: Phase 7 closed as a negative result (T7.4 BLAKE3 commitment shipped), Phase 9 closed (T9.3 BetaPosterior default, Bench 028; T9.4 refuted, Bench 029), Phases 10/11/12/14 deferred on measured blockers (Bench 030), Phase 13 research half met (Research 058) |
 | Router — kernel_opt expert routing | ✅ Corpus-wired (Plan 003, `KernelExpertRouter` wraps `pick_domain<15,5>` from Plan 558; 15 category centroids wired to 68-rule corpus; 13/15 reachable, 2 documented unreachable) |
 | Thermal — kernel_opt tier dispatch | ✅ Stub (Plan 001 Phase 3, `KernelThermalRouter` + `ThermalTier` enum; Plasma→Hot→Warm→Cold→Freeze; returns Plasma for all calls) |
 | L4 — LoRA fallback (all domains) | ⏳ Deferred to riir-train |
@@ -112,7 +112,7 @@ src/
 ```
 
 **Cross-domain auto-routing — shipped as fan-out (Plan 005, 2026-08-14).**
-The unified `cargo heal --suggest` CLI runs with `--domain auto`: it **fans
+The unified `cargo refine --suggest` CLI runs with `--domain auto`: it **fans
 out across all feature-enabled domains**, with the router verdict as a
 per-span annotation (NOT a gate — the 8-D structural centroids mis-routed
 fixtures, so gating starved the correct domain). Each domain is still
@@ -137,21 +137,21 @@ code; `--fix` CLI wiring is Phase 6.
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` (BuildKit's own linter) agreement oracle for the 4 rules whose incumbent is a check NAME, not a `DL` code. Stays opt-in on purpose: it needs a running daemon and a registry round-trip per non-`scratch` fixture (~1.3-2.2 s each), a strictly heavier dependency class than hadolint |
 | `dist` | **on** | — | Issue 085: shipped-artifact build-config advice over name-matched `Cargo.toml` manifests (suggest-only, never a manifest write). **DEFAULT-ON since 2026-09-13** — all four GOAT promotion conditions PASS (Bench 082 + §6 addendum: precision fixtures, score-bench #92 FLAT, router floor 74/101 measured at default+dist, real consumer cites; B1/B2 scanner extensions `759e209d`) and the owner pull arrived (the Issue-085 fix directive). Zero new deps (the second hand-written no-`syn` scanner after docker) |
 | `ruliology_search` | off | `clippy_lints` | L3 Pareto-front candidate search |
-| `latent_retrieval` | off | `dep:riir-rag`, `dep:riir-neuron-db` | Plan 005: span-level latent retrieval + `cargo heal --suggest`/`--fix` CLI (Bench 018 G1–G4 + Bench 019; T3.5 operator-aware BM25 tokenizer, Bench 027) |
+| `latent_retrieval` | off | `dep:riir-rag`, `dep:riir-neuron-db` | Plan 005: span-level latent retrieval + `cargo refine --suggest`/`--fix` CLI (Bench 018 G1–G4 + Bench 019; T3.5 operator-aware BM25 tokenizer, Bench 027) |
 | `clippy_verify` + `latent_retrieval` | off | — | T3.5.5 real-`cargo clippy` labeling oracle (`ClippyOracle`) + the uncontaminated G1 harness (`tests/uncontaminated_g1.rs`) |
 | `bonsai_retrieval` | off | `latent_retrieval`, `riir-rag/bonsai_embedder` | Plan 005 T3.5 option 3: 768-D Bonsai dense rerank. **HEAVY** — 6.7 GB GGUF, ~48 s/embed on CPU. Measurement-only (Bench 027) |
 | `self_evolve` | on | — | additive self-evolution loop (memory + EMA + `EvolveRecorder`; DEFAULT-ON since Issue 018, opt-out `RIIR_HEAL_SELF_EVOLVE=0`; BLAKE3-committed memory since T7.4; Beta-posterior selection since T9.3) |
-| `rustc_errors` | **ON** | — | **Plan 019**: `cargo heal --fix-compile` — oracle-driven compile-error repair (E0597/E0499/E0502 uncontested + the E0505 contested opening; delegated codes ship no template by the measured floor). GOAT at N=212: **105/105 uncontested fixed where `cargo fix` scores 0/105; 126/126 repaired cases behavior-green post-fix** (Bench 045). **PROMOTED DEFAULT-ON 2026-08-29 (owner call): driver-shaped (inert until invoked — zero runtime overhead), floor gate stands, dep-tree unchanged (`compile_oracle = []`)** |
+| `rustc_errors` | **ON** | — | **Plan 019**: `cargo refine --fix-compile` — oracle-driven compile-error repair (E0597/E0499/E0502 uncontested + the E0505 contested opening; delegated codes ship no template by the measured floor). GOAT at N=212: **105/105 uncontested fixed where `cargo fix` scores 0/105; 126/126 repaired cases behavior-green post-fix** (Bench 045). **PROMOTED DEFAULT-ON 2026-08-29 (owner call): driver-shaped (inert until invoked — zero runtime overhead), floor gate stands, dep-tree unchanged (`compile_oracle = []`)** |
 | `ternary_inference` | off | `riir-engine`, `riir-gpu` | Bench 010: katgpt ternary generation on clippy prompts |
 | `groq_first` | off | `dep:ureq` | Issue 051: groq-first free-tier LLM routing (`src/groq.rs`) — the Groq chat client + the groq→CF provider ladder (`router`, also needs `cf_workers_ai`). The daily drain reasons on the free tier FIRST and falls back to metered CF on limit; either leg may be absent (`GROQ_API_KEY` absent → pure CF, byte-identical; CF creds absent → a groq-only window whose exhausted free tier ends it cleanly), both absent → refused. Hardened: split connect/call timeouts, single-allocation auth header, token scrubbed from server-controlled error strings. `kat_drain --preflight` checks the ladder on an empty backlog at zero metered cost. Usage lands on the cost ledger's `providers.groq` block → the ops dashboard's absorption card |
 | `compile_oracle` | off | — | Plan 019 T0.3: the real-`cargo` error-JSON capture plumbing for the `rustc_errors` domain (deliberately NOT implying `latent_retrieval` — a compile fixer must not grow a retrieval dep) |
 | `fix_verify` | off | `compile_oracle`, `latent_retrieval` | Issue 015: `--fix --verify` — the compile gate as tooling (apply → cargo-check → revert only offending edits; real-repo GOAT Bench 031) |
-| `score_bench` | off | `clippy_verify`, `latent_retrieval`, `clippy_lints`, `rust_perf` | Plan 014: `cargo heal --score-bench` — the frozen real-code healing bench + the committed score curve (`.benchmarks/score_history.jsonl`) |
+| `score_bench` | off | `clippy_verify`, `latent_retrieval`, `clippy_lints`, `rust_perf` | Plan 014: `cargo refine --score-bench` — the frozen real-code healing bench + the committed score curve (`.benchmarks/score_history.jsonl`) |
 | `margin_mining` | off | `score_bench`, `latent_retrieval` | Issue 077 T3: `e^{−2M}` margin-weighted carve-mining order (`score_bench_mine_v6 --order margin` / `--ab`) — RECORDED DEMOTE (Bench 080: tie at every budget; retrieval-similarity margins don't select lint-bearing raw spans), stays opt-in, miner default stays count-desc |
 | `l4_lora` | off | — | Plan 336 T4.4/T5.3: the L4 generative-fallback SEAM (`L4Fallback` trait + `DaemonL4` transport) — inert unless a fallback is installed; Plan 336 G1 measured 0/60, stays UNARMED (see [`.docs/10_self_evolve/l4_fallback.md`](.docs/10_self_evolve/l4_fallback.md)) |
 | `pav_data` | off | `l4_lora`, `score_bench` | Plan 356 A1: PAV (process-advantage) dataset curation for the L4 fixer campaign (real-daemon or seeded-mock source; opt-in — the campaign is a deliberate 30-40h exclusive-4090 budget) |
 | `contrastive_scope` | off | `katgpt-core/contrastive_scope` | Bench 040 / Plan 016: the input-scope gate at the heal seam — non-Rust garbage is declined whole before it can burn an LLM call (G1 8/8 OOS declined, bit-identical in-distribution) |
-| `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | Proposal 005 Phase 0 (Plans 023/024/025): the KAT service client substrate — meter/charge/account/store + `kat_redact` (the leak-posture gate) + the `cargo heal vote` governance CLI (Proposal 008 T2.4, G9-GOV) + the onboarding CLI (kat-011 T0.2, [Plan 059](.plans/059_kat011_t02_and_corpus_runtime_counts.md): `login` adopts the default SSH key as the account identity, `account --history` renders the local earned/spent view; `--corpus-stats` counts at runtime with provenance stamps) |
+| `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | Proposal 005 Phase 0 (Plans 023/024/025): the KAT service client substrate — meter/charge/account/store + `kat_redact` (the leak-posture gate) + the `cargo refine vote` governance CLI (Proposal 008 T2.4, G9-GOV) + the onboarding CLI (kat-011 T0.2, [Plan 059](.plans/059_kat011_t02_and_corpus_runtime_counts.md): `login` adopts the default SSH key as the account identity, `account --history` renders the local earned/spent view; `--corpus-stats` counts at runtime with provenance stamps) |
 | `kat_transport` | off | `dep:ureq`, `dep:qrcode`, `kat_service` | Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease HTTP transport + the out-of-KAT top-up QR |
 | `cf_workers_ai` | off | `dep:ureq`, `latent_retrieval`, `clippy_verify`, `l4_lora`, `kat_service` | Issue 040/046: the CF Workers AI REST client (`src/cf_workers_ai.rs`) — the fixer arms, the USD daily-cap ledger (reserve-then-reconcile), and the fixer model: DEFAULT `@cf/zai-org/glm-5.3-flash` (owner pivot 2026-08-28, second call — the prior default 4.7 FAILED the Issue 043 re-designation gate 3/9 and stays priced + selectable via `RIIR_CF_MODEL`; [Bench 057](.benchmarks/057_glm53_flash_fixer_regate.md) re-gated 5.3 at 7/9 strict-keep on BOTH arms, beating the earlier CF bar of [Bench 049](.benchmarks/049_fixer_regate_poc.md)) |
 | `wasm_pruner` | off | — | WASM rust-analyzer pruner (L2 sandboxed variant — deferred on rubrc maturity) |
@@ -262,11 +262,11 @@ cargo run --example ruliology_search_demo --features ruliology_search --release 
 cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
 
 # Latent suggest over real files (Plan 005; opt-in — pulls riir-rag)
-cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
+cargo run --features latent_retrieval --bin cargo-refine -- --suggest src/
 
 # Span-preserving fix (review mode, then write)
-cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet src/
-cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet --write src/
+cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet src/
+cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet --write src/
 ```
 
 ## KAT network — the KAT service (mining + balance)
@@ -282,20 +282,20 @@ export RIIR_HEAL_KAT_SERVICE_URL=http://127.0.0.1:8811   # a localnet from riir-
 The loop (every step is honest about what is local vs server):
 
 ```sh
-cargo heal login      # account key (Ed25519, OpenSSH format) + once-per-key welcome grant
-cargo heal --fix      # heal — metered locally (accounting-only projection)
-cargo heal sync       # PUSH the redacted signed batch (mining) + PULL the corpus lease
-cargo heal account    # burn / balance / grant / network state
-cargo heal --refill   # out of KAT? dev/test faucet refill (see below)
+cargo refine login      # account key (Ed25519, OpenSSH format) + once-per-key welcome grant
+cargo refine --fix      # heal — metered locally (accounting-only projection)
+cargo refine sync       # PUSH the redacted signed batch (mining) + PULL the corpus lease
+cargo refine account    # burn / balance / grant / network state
+cargo refine --refill   # out of KAT? dev/test faucet refill (see below)
 ```
 
-### `cargo heal --refill` — the dev/test faucet refill (Plan 117)
+### `cargo refine --refill` — the dev/test faucet refill (Plan 117)
 
 When the balance runs dry, one command refuels from the service's faucet:
 
 ```sh
-cargo heal --refill                   # faucet request → balance read → gate input refreshed
-cargo heal --refill --refill-wait 120 # + a bounded settle poll (default: one read, no poll)
+cargo refine --refill                   # faucet request → balance read → gate input refreshed
+cargo refine --refill --refill-wait 120 # + a bounded settle poll (default: one read, no poll)
 ```
 
 It composes three shipped surfaces — the faucet request (`faucet --request`'s
@@ -313,8 +313,8 @@ credits until it is funded (riir-dapps Issues 010/025).
 Leave at any time:
 
 ```sh
-cargo heal --unmine          # opt OUT of contributing — key + balance UNTOUCHED, reversible
-cargo heal --unmine --purge  # DESTRUCTIVE: also remove the local identity (orphans the
+cargo refine --unmine          # opt OUT of contributing — key + balance UNTOUCHED, reversible
+cargo refine --unmine --purge  # DESTRUCTIVE: also remove the local identity (orphans the
                              # server-side balance forever — no recovery path)
 ```
 
@@ -339,7 +339,7 @@ contribution).
 
 Offline runs **stack like local commits**: the ack watermark
 (`.heal/kat_burn_ack.json`) advances only on a 200-accepted response, so a
-push that fails is a local commit — the next run (or `cargo heal sync`)
+push that fails is a local commit — the next run (or `cargo refine sync`)
 reports the FULL stacked total in one signed report, and the server's
 monotone watermark makes a replayed report a no-op. The service debits the
 100M KAT free grant **warn-and-pay** and commits burn to the mining pool on
@@ -352,8 +352,8 @@ the transport compiles it to nothing.
 Prepaid fuel, not an interactive gate: when the account's **last synced
 server balance** is ≤ 0 and the machine has never contributed-and-synced,
 scanning runs REFUSE at start (exit 1) until the user refuels by any of
-three paths: `cargo heal --refill` (the dev/test faucet refill — Plan 117),
-contributing (`cargo heal --mine`, then one accepted `cargo heal sync` — the
+three paths: `cargo refine --refill` (the dev/test faucet refill — Plan 117),
+contributing (`cargo refine --mine`, then one accepted `cargo refine sync` — the
 burn-push ack records the server's `contributed` truth, which lifts the gate
 for good), or paying (the web payment page). Since Issue 080 the sticky
 grace is **server truth only** (dated removal 2026-09-10,
@@ -395,7 +395,7 @@ Dry runs (`--fix` without `--write`) report the **fmt plan** per file
 run summary:
 
 ```text
-$ cargo-heal --fix src/crate/
+$ cargo-refine --fix src/crate/
 fix src/crate/foo.rs (12 edit(s)):
   [uninlined_format_args   ] line 41
   fmt: would-format
@@ -428,7 +428,7 @@ Run it after any proposer/corpus change; each run appends one point to
 `.benchmarks/score_history.jsonl` and re-renders the SVG:
 
 ```text
-cargo run --features score_bench --bin cargo-heal -- --score-bench
+cargo run --features score_bench --bin cargo-refine -- --score-bench
 ```
 
 Run #1 (2026-08-19): heal 84.6% · created 3 · safety 92.9% · decline 100% —
@@ -451,7 +451,7 @@ engineering-iterative and the curve makes it honest.
 
 ## Watch mode (real use) — Plan 019 Phase 5
 
-`scripts/watch_heal.sh` wraps `cargo heal --fix-compile --write` in a watch
+`scripts/watch_heal.sh` wraps `cargo refine --fix-compile --write` in a watch
 loop for real session use: your editor saves, the oracle repairs what it
 can, the miss queue collects what it can't.
 
@@ -459,7 +459,7 @@ can, the miss queue collects what it can't.
 ./scripts/watch_heal.sh                    # session-touched .rs files only
 ./scripts/watch_heal.sh src/foo.rs ...     # an explicit scope
 HEAL_FEATURES="--features my-gate" ./scripts/watch_heal.sh   # the repo's real feature set
-HEAL_BIN="cargo run --features rustc_errors --bin cargo-heal --" ./scripts/watch_heal.sh  # dev build
+HEAL_BIN="cargo run --features rustc_errors --bin cargo-refine --" ./scripts/watch_heal.sh  # dev build
 ```
 
 Three recorded caveats are REQUIREMENTS of any wrapper — the script
@@ -485,7 +485,7 @@ durable neuron-db store, `latent_retrieval` builds — encrypted WAL + BM25
 authoring request with the rendered diagnostic). Export either backend:
 
 ```bash
-cargo heal --dump-trajectories > trajectories.jsonl
+cargo refine --dump-trajectories > trajectories.jsonl
 ```
 
 Debug-query the loop state (Issue 037 observability — one command, no jq,
@@ -494,7 +494,7 @@ always + the repo-local kv store when present, incl. the E1 record / E2
 verdict / E3 learn loop-state verdict):
 
 ```bash
-cargo heal --memory-stats
+cargo refine --memory-stats
 ```
 
 Concurrent sibling builds: export a private `CARGO_TARGET_DIR` before
@@ -543,7 +543,7 @@ narratives live in git history (`git log -- .issues/044_*` /
 Over the N=212 known-inverse mutation corpus (12 committed anchors + 200
 generated; every seed carries a ground-truth behavior test):
 
-| error family | `cargo fix --broken-code` | `cargo heal --fix-compile` | verdict |
+| error family | `cargo fix --broken-code` | `cargo refine --fix-compile` | verdict |
 |---|---|---|---|
 | E0597 (borrow outlives owner) | **0%** | **100%** | net-new (uncontested) |
 | E0499 (two `&mut` alive) | **0%** | **100%** | net-new (uncontested) |

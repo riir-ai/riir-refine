@@ -1,6 +1,6 @@
 # Self-evolve flow — the e2e flywheel (local loop + fleet loop)
 
-> **Purpose:** the one diagram that shows the WHOLE `cargo heal`
+> **Purpose:** the one diagram that shows the WHOLE `cargo refine`
 > self-evolve loop end to end — the local per-run loop (modelless
 > L0–L2 + memory + learning) and the consent-gated fleet loop (mining →
 > proof → KAT → corpus growth → lease-back) that closes the flywheel
@@ -41,7 +41,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph LOCAL["local — every cargo heal run (modelless · no LLM · your crate)"]
+    subgraph LOCAL["local — every cargo refine run (modelless · no LLM · your crate)"]
         direction LR
         SCAN["scan<br/>span pool over crate"] --> RET["retrieve<br/>corpus rules + past fixes<br/>(LatentFixMemory top-K)"]
         RET --> DRAFT["L1 draft<br/>ternary SIMD matvec"]

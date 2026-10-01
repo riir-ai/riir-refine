@@ -1,5 +1,37 @@
 # HISTORY.md — riir-clippy
 
+## 2026-10-01 — The refine rename, Phase 1 landed (`ac4b3d16` + docs; Proposal 018 / Plan 192): binary `cargo heal` → `cargo refine`
+
+Owner ask ("see `cargo heal` a lot, it should changed to `cargo refine`? grep more").
+
+- **The binary renamed, no alias** (the 2026-09-30 owner call): `[[bin]] cargo-refine`
+  (path `src/bin/heal.rs` unchanged), every CLI/display string + test pin
+  (`CARGO_BIN_EXE_cargo-refine`) + build-stamp hints in lockstep. Global
+  binary rebuilt at the release set; `~/.cargo/bin/cargo-heal` REMOVED —
+  `cargo heal` now fails loudly, catching stragglers by design.
+- **The riir-kat leaf was the missed surface**: `kat_refill_cli`'s refusal arm
+  red on renamed expectations while the binary still printed `cargo heal --mine`
+  — the strings live in `../riir-kat`'s client modules (display strings OF this
+  product). Swept there too (18 files / 71 replacements; wire separators
+  untouched); riir-kat lib 236/236.
+- **Internal vocabulary unchanged** (move-don't-rewrite): `heal.rs`,
+  `HealDomain`, `.heal/`, `RIIR_HEAL_*`, `~/.heal`, `kat:healqual:v1:`,
+  `heal_skill.rs` identifiers.
+- **Kept on purpose**: `gist-rs/cargo-heal` dist URLs + brew/scoop formula
+  lines (coupled to the live dist repo; redirect after the owner-side flip),
+  archive records, sibling provenance comments.
+- **En route**: `install_copy_parity` now skips `.worktrees/` — a sibling
+  session's ndb worktree under this repo reded the markdown walk with
+  `gist-rs/ndb` install URLs (pre-existing at HEAD, verified by stash).
+- Gates: lib 2398/0; clippy `-D` clean at the release feature set; CLI battery
+  green (build_stamp 4/4, unmine 17/17, soft-gate 9/9, refill 5/5, parity 3/3).
+  ⚠ `repo_posture_cli` 3 arms RED pre-existing at HEAD (stash-verified) — not
+  this rename; needs its own session.
+- **Owner-side remainders**: the GitHub repo renames (riir-clippy →
+  riir-refine; gist-rs/cargo-heal → gist-rs/refine + tap/scoop flip), local
+  dir renames on both boxes, the 22-file registration, the first
+  4090 exe refresh — see Plan 192.
+
 ## 2026-09-28 — Owner-gate pickup E3/E4/E5/C7/E8 (master riir-ai `.issues/1016`; plan 181 / issue 138)
 
 - **E3 DONE — the dead `gist-rs/riir-unity` checkout is gone from `ops_dashboard.yml`**

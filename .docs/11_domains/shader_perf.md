@@ -75,7 +75,7 @@ sidecars are riir-shader's** (issue 018 there — commits `34ff053` +
 `frame_budget_ms` echo, n/mean/p50/p90/min/max/fps + the per-frame sample
 ring, bounded 8192 frames, reset on effect switch).
 
-`cargo heal --frame-time-report [PATHS…]` consumes them:
+`cargo refine --frame-time-report [PATHS…]` consumes them:
 
 - **Budget report**: per-effect p50/p90/mean vs the carried budget
   (`--frame-budget <MS>` overrides), `OK`/`OVER` per row, and the heal

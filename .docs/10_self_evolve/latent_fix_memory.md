@@ -233,7 +233,7 @@ losslessly:
   warns + continues fresh).
 - Retrieval weights are config, not state — never serialized.
 
-The `cargo heal` bin resolves the path: `RIIR_HEAL_MEMORY` override, else
+The `cargo refine` bin resolves the path: `RIIR_HEAL_MEMORY` override, else
 `$XDG_CACHE_HOME`/`~/.cache`/`%LOCALAPPDATA%`/temp → `riir-clippy/memory.json`.
 
 ## See also

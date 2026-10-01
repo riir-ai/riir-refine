@@ -28,4 +28,4 @@
 
 - [`../02_corpus/`](../02_corpus/README.md) — L0 provides the fix candidates
 - [`../04_pruner/`](../04_pruner/README.md) — L2 validates the drafted fix
-- [`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md) — the `cargo-heal` bin wrapping the latent layer
+- [`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md) — the `cargo-refine` bin wrapping the latent layer

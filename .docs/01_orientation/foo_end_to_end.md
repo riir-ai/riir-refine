@@ -15,20 +15,20 @@
 | Step | Command | State |
 |---|---|---|
 | 8.1 install | `curl … install.sh \| sh` | **BLOCKED** — the dist repo does not exist yet (Proposal 003 T1.1) |
-| 8.2 login | `cargo heal login` | ships |
-| 8.3 welcome | `cargo heal account` | ships (service-plane gate, T0.2b) |
-| 8.5 history | `cargo heal account --history` | ships, with a stated limit |
-| — heal | `cargo heal --fix --write --verify <paths>` | ships |
-| — sync | `cargo heal sync` | ships |
-| T1.3 get paid | `cargo heal pay --request` | ships |
-| T1.8 faucet | `cargo heal faucet --request` | ships (CLI); the credit needs a crank pass |
-| T4.1 wet-run | `cargo heal wetrun [--dry-run]` | ships; the money legs are blocked by riir-dapps Issue 010 |
+| 8.2 login | `cargo refine login` | ships |
+| 8.3 welcome | `cargo refine account` | ships (service-plane gate, T0.2b) |
+| 8.5 history | `cargo refine account --history` | ships, with a stated limit |
+| — heal | `cargo refine --fix --write --verify <paths>` | ships |
+| — sync | `cargo refine sync` | ships |
+| T1.3 get paid | `cargo refine pay --request` | ships |
+| T1.8 faucet | `cargo refine faucet --request` | ships (CLI); the credit needs a crank pass |
+| T4.1 wet-run | `cargo refine wetrun [--dry-run]` | ships; the money legs are blocked by riir-dapps Issue 010 |
 
 ## 1. Install (§8.1) — the one blocked step
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh
-# or: brew tap gist-rs/tap && brew trust gist-rs/tap && brew install cargo-heal
+# or: brew tap gist-rs/tap && brew trust gist-rs/tap && brew install cargo-refine
 ```
 
 **This does not work yet, and the reason is not a copy problem.**
@@ -41,7 +41,7 @@ The URL above IS canonical — [Proposal 003](../../.proposals/003_binary_only_d
 §The canonical install one-liners owns it, and
 `tests/install_copy_parity.rs` fails on any document that invents a
 different one. It used to: Proposal 005 served both installers from
-`cargo-heal.gist.rs`, a vanity host that does not exist, while Proposal 011
+`cargo-refine.gist.rs`, a vanity host that does not exist, while Proposal 011
 §8.1 used the `raw.githubusercontent.com` form. Two documents, two
 one-liners, one unrunnable.
 
@@ -52,10 +52,10 @@ the same test.
 
 Until then: `cargo install --path . --features latent_retrieval`.
 
-## 2. `cargo heal login` (§8.2) — zero configuration
+## 2. `cargo refine login` (§8.2) — zero configuration
 
 ```sh
-cargo heal login              # or: cargo heal login --key ~/.ssh/id_ed25519
+cargo refine login              # or: cargo refine login --key ~/.ssh/id_ed25519
 ```
 
 Adopts the machine's default SSH key unless `RIIR_AUTH_ACCOUNT_KEY`
@@ -70,11 +70,11 @@ would mean querying an account no route can settle from.
 The free-tier grant is recorded as a **local projection** at this point
 (accounting only). The authoritative row appears after the first `sync`.
 
-## 3. `cargo heal account` (§8.3) — and why it can say "I don't know"
+## 3. `cargo refine account` (§8.3) — and why it can say "I don't know"
 
 ```sh
-cargo heal account
-cargo heal account --history
+cargo refine account
+cargo refine account --history
 ```
 
 The welcome gate is **three-state**, evaluated from three real service reads
@@ -99,7 +99,7 @@ exact violation T0.2 avoided.
 ## 4. Heal something, and watch it cost KAT
 
 ```sh
-cargo heal --fix --write --verify src/
+cargo refine --fix --write --verify src/
 ```
 
 The meter records word tokens over the healed spans; the charge ledger
@@ -108,18 +108,18 @@ applies → re-checks → auto-reverts breaking edits. Feature-gated code needs
 `--verify-args "--features <set>"` — a default-features check compiles gated
 files to nothing, and a green check then proves nothing about them.
 
-## 5. `cargo heal sync` — the data flywheel
+## 5. `cargo refine sync` — the data flywheel
 
 Pushes redacted trajectory rows (signed, v2 envelope) and pulls the corpus
 lease. This is also what makes the service ledger see the account, which is
 what flips the welcome gate to Open.
 
-## 6. `cargo heal pay --request` (T1.3) — getting paid
+## 6. `cargo refine pay --request` (T1.3) — getting paid
 
 ```sh
-cargo heal pay --request                       # ANY amount — the payer chooses
-cargo heal pay --request --amount 2.5 --qr     # a pinned amount, with an ASCII QR
-cargo heal pay --request --wait 0              # don't poll; `account` shows the credit
+cargo refine pay --request                       # ANY amount — the payer chooses
+cargo refine pay --request --amount 2.5 --qr     # a pinned amount, with an ASCII QR
+cargo refine pay --request --wait 0              # don't poll; `account` shows the credit
 ```
 
 **Link-first** (ask 13): the shareable URL is printed first and is the
@@ -139,11 +139,11 @@ reads as `Unavailable` and labels itself rather than passing silently.
 
 No `$` ever appears beside a KAT figure (caveat #15, test-enforced).
 
-## 7. `cargo heal faucet --request` (T1.8) — and what it deliberately won't do
+## 7. `cargo refine faucet --request` (T1.8) — and what it deliberately won't do
 
 ```sh
-cargo heal faucet --request
-cargo heal faucet --request --qr
+cargo refine faucet --request
+cargo refine faucet --request --qr
 ```
 
 **There is no `--amount`.** The wire carries the pubkey and the signature and
@@ -162,14 +162,14 @@ Four refusals reach you in the ledger's own words — faucet disabled at this
 deployment, service accounts cannot request, daily cap already used, one
 request already open. None of them is reworded into a timeout.
 
-## 7b. `cargo heal --refill` (Plan 117) — the faucet leg, driven
+## 7b. `cargo refine --refill` (Plan 117) — the faucet leg, driven
 
 `faucet --request` opens the row; `--refill` drives the whole refuel and
 finishes the job:
 
 ```sh
-cargo heal --refill                   # faucet request → crank trigger → balance → gate refresh
-cargo heal --refill --refill-wait 120 # + a bounded settle poll (default: one after-read)
+cargo refine --refill                   # faucet request → crank trigger → balance → gate refresh
+cargo refine --refill --refill-wait 120 # + a bounded settle poll (default: one after-read)
 ```
 
 The differences from `faucet --request`, and why:
@@ -191,11 +191,11 @@ The differences from `faucet --request`, and why:
 Exit 0 iff the final synced balance is positive — an explicit command's
 outcome IS its code (the burn push's never-blocks contract does not apply).
 
-## 8. `cargo heal wetrun` (T4.1/T4.2) — the full-loop proof
+## 8. `cargo refine wetrun` (T4.1/T4.2) — the full-loop proof
 
 ```sh
-cargo heal wetrun --dry-run    # steps 1+6, read-only, allowed on EVERY network
-cargo heal wetrun              # all six steps; devnet/testnet only
+cargo refine wetrun --dry-run    # steps 1+6, read-only, allowed on EVERY network
+cargo refine wetrun              # all six steps; devnet/testnet only
 ```
 
 Six steps: preflight → faucet top-up → one scored scan→fix cycle (metered)

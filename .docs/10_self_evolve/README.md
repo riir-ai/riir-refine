@@ -16,7 +16,7 @@
 | [`scope_model.md`](scope_model.md) | `ScopeModel` — the input-scope gate at the heal seam (Bench 040 / Plan 016; the Bench 669 consumer adoption) |
 | [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + `EvidenceTier` (Issue 021) + 4-axis retrieval + dual-backend persistence (store-first Issue 038; JSON envelope Issue 018 fallback) |
 | [`latent_skill_evolution.md`](latent_skill_evolution.md) | `LatentSkillEvolution` + `EvolveConfig` + EMA rule |
-| [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo heal --fix` wiring (Issue 018) |
+| [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo refine --fix` wiring (Issue 018) |
 | [`self_evolve_flow.md`](self_evolve_flow.md) | The e2e self-evolve flywheel diagram (local loop + fleet loop) + the canonical static SVG for the KAT network pages' hero (Issue 131) |
 | [`l4_fallback.md`](l4_fallback.md) | The L4 generative fallback seam (`l4_lora`): trait + `DaemonL4` transport + the local Bonsai-27B story + measured verdicts + the serving-lane decision (UNARMED) |
 | [`structural_admission.md`](structural_admission.md) | Issue 136 / reef P1+P3+P5: per-kind shape gates + kind-keyed review classes + the two-head CAS commit chain over content-addressed artifacts (`.heal/structural/`) — vocabulary only, no auto-serve activated |
@@ -46,7 +46,7 @@ degenerates to the existing static-corpus path.
 
 - **Memory half — no oracle needed**: every applied fix is a trajectory
   worth storing; reverted fixes carry a definitive fail verdict. Runs in
-  EVERY build + persists across `cargo heal` runs (v1 JSON at
+  EVERY build + persists across `cargo refine` runs (v1 JSON at
   `RIIR_HEAL_MEMORY` or the platform cache dir).
 - **Learning half — oracle-gated**: the EMA direction update needs
   trustworthy verdicts. Without the `clippy_verify` oracle it no-ops with

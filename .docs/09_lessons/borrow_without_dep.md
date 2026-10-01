@@ -28,7 +28,7 @@ load-bearing boundary rule). The default build's only code-level dep is
 > feature-gated arms consume specific **non-game** sibling crates where
 > reimplementation would duplicate whole substrates:
 > `ternary_inference` → `riir-engine` + `riir-gpu` (Bench 010), and
-> `latent_retrieval` → `riir-rag` (Plan 005, `cargo heal --suggest`).
+> `latent_retrieval` → `riir-rag` (Plan 005, `cargo refine --suggest`).
 > The "reimplement locally" default still holds for patterns that fit
 > in ~200 LOC.
 

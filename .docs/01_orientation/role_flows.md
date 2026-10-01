@@ -25,8 +25,8 @@ earnings promise.
 
 ```mermaid
 flowchart LR
-    INST["install cargo-heal"] --> DRY["cargo heal — dry run<br/>private · nothing sent"]
-    DRY --> FIX["cargo heal --fix<br/>compile-gated writes"]
+    INST["install cargo-refine"] --> DRY["cargo refine — dry run<br/>private · nothing sent"]
+    DRY --> FIX["cargo refine --fix<br/>compile-gated writes"]
     FIX --> GET["GET — healed code<br/>warnings · errors · perf · sec<br/>docker · compile errors"]
     FIX -.-> COST["COST — the burn meter<br/>1 KAT-equiv / 1M code-word tokens<br/>TUNA trial credit pays first"]
     INST -.-> LITE["no login = lite tier<br/>free forever · anonymous<br/>earns nothing"]
@@ -35,7 +35,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **Does** | install (prebuilt binary → `~/.cargo/bin`) · `cargo heal` dry run (private review, writes and sends nothing) · `cargo heal --fix` (compile-gated writes; divergence classes stay manual). Optional: login — creates the account + the TUNA trial grant. |
+| **Does** | install (prebuilt binary → `~/.cargo/bin`) · `cargo refine` dry run (private review, writes and sends nothing) · `cargo refine --fix` (compile-gated writes; divergence classes stay manual). Optional: login — creates the account + the TUNA trial grant. |
 | **Gets** | healed code across the domains: clippy lints + compile errors, perf, security, Dockerfiles, kernel/rust-perf rules, dist advice. Plus the local self-evolve loop (memory always; learning when the oracle is present). |
 | **Pays** | **lite: nothing** — anonymous, free forever, outside the economy (nothing is uploaded, nothing is billed). **Logged in:** the burn meter — 1 KAT-equivalent per million code-word tokens, TUNA trial credit first. Depleted + never contributed → the 075 soft gate refuses scanning until you contribute or top up. |
 
@@ -46,7 +46,7 @@ binary, two postures.
 
 ```mermaid
 flowchart LR
-    JOIN["cargo heal --mine — join once<br/>consent · login · sync"] --> RUN["every heal run<br/>auto-syncs the redacted batch"]
+    JOIN["cargo refine --mine — join once<br/>consent · login · sync"] --> RUN["every heal run<br/>auto-syncs the redacted batch"]
     RUN --> PUSH["sync — rule verdicts + counters<br/>never source · never paths · signed"]
     PUSH --> PROOF["proof queue<br/>credited at a real clippy re-run"]
     PROOF --> SETTLE["GET — KAT at the epoch settle<br/>70% of every KAT the network burns<br/>≤ 7 days from a push"]
@@ -58,7 +58,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **Does** | `cargo heal --mine` once (opts in, auto-logs-in, syncs). After that, every heal run auto-syncs the redacted batch; the burn reports automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
+| **Does** | `cargo refine --mine` once (opts in, auto-logs-in, syncs). After that, every heal run auto-syncs the redacted batch; the burn reports automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
 | **Gets** | mining KAT — the only earn class that settles today: rows enter the proof queue on push, are credited at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a miner. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
 | **Pays** | your own heal burn (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. `--unmine` stops the push half (the lease pull half still runs — a read is not a contribution); healing was always local. |
 
@@ -106,7 +106,7 @@ is the full spec):
   in the same order: TUNA trial credit first (heals only, expires), then
   KAT. A depleted TUNA tank hands off mid-report automatically.
 - **Offline: nothing is debited anywhere.** The burn is a local commit;
-  the next run (or `cargo heal sync`) pushes the full cumulative total,
+  the next run (or `cargo refine sync`) pushes the full cumulative total,
   and the server decides the plane then. The monotone watermark makes
   replays no-ops.
 - **No debt exists.** The server clamps warn-and-pay — it debits what

@@ -33,7 +33,7 @@ tile / fuse / vectorize). It is NOT used across domains. The distinction:
 
 ## When to revisit
 
-A unified `cargo heal` CLI that auto-detects domain from code shape is a
+A unified `cargo refine` CLI that auto-detects domain from code shape is a
 future design sketch (Proposal 001 §Product vision), not shipped. It would
 make sense when:
 

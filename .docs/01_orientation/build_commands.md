@@ -20,9 +20,9 @@ cargo check --features ruliology_search
 # Issue 004 + Issue 008: latent-first self-evolution loop (opt-in, G1–G7 PASS)
 cargo check --features self_evolve
 
-# Plan 005: latent retrieval + the cargo-heal CLI (opt-in; pulls riir-rag)
+# Plan 005: latent retrieval + the cargo-refine CLI (opt-in; pulls riir-rag)
 cargo check --features latent_retrieval
-cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
+cargo run --features latent_retrieval --bin cargo-refine -- --suggest src/
 
 # Every feature at once — catches combo-only regressions
 cargo check --all-features

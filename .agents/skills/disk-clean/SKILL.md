@@ -63,10 +63,10 @@ repo's debug dir**. Measured precedent (2026-09-13): that freed ~480G internal
 
 ### LOAD-BEARING — do not break these
 
-- **`riir-clippy/target/release/cargo-heal`** — `~/.cargo/bin/cargo-heal`
+- **`riir-clippy/target/release/cargo-refine`** — `~/.cargo/bin/cargo-refine`
   symlinks here. NEVER `rm -rf` that repo's whole `target/`. Delete
   `target/debug` only. After touching that repo's target at all, verify
-  `~/.cargo/bin/cargo-heal` still resolves and runs.
+  `~/.cargo/bin/cargo-refine` still resolves and runs.
 - **`target/release` dirs in every repo** — keep; they hold warm release
   builds, benches, and installed binaries.
 - **Running processes** — before deleting, run
@@ -122,7 +122,7 @@ here.
 ```bash
 df -h / ; df -h /Volumes/SDXC1TB
 du -sh <each touched repo>/target          # spot-check after sizes
-~/.cargo/bin/cargo-heal --version 2>/dev/null || ls -la ~/.cargo/bin/cargo-heal  # if riir-clippy target touched
+~/.cargo/bin/cargo-refine --version 2>/dev/null || ls -la ~/.cargo/bin/cargo-refine  # if riir-clippy target touched
 ```
 
 Report a before/after table (disk free before → after; per-path before →

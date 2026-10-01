@@ -44,7 +44,7 @@ burn-sync tail names the exact split
   overfills), `expires today` under a day (never `in 0d`), and
   `(expired — the sweep reclaims the rest)` after expiry. Renders only
   when the burn ack carries server-reported TUNA truth; absent = no
-  line, never an invented zero. Exact µ numbers live in `cargo heal
+  line, never an invented zero. Exact µ numbers live in `cargo refine
   --info` / `account`.
 - **KAT line** — the server-reported balance at the last accepted push.
   A PLAIN balance (grant + mining + legacy remainder are
@@ -64,7 +64,7 @@ The TUNA/KAT draw is SERVER-side, at the burn report. Offline:
   delta).
 - The meter keeps its local projection; nothing waits for a connection.
 
-Back online, the next run (or `cargo heal sync`) pushes the FULL
+Back online, the next run (or `cargo refine sync`) pushes the FULL
 cumulative total in one report — the server decides the plane THEN,
 against the balances at that moment (TUNA may have expired while
 offline; KAT may have been spent by another machine). The server's
@@ -94,7 +94,7 @@ The refusal names exactly TWO refuel paths (the faucet/drip tier is
 retired — riir-dapps Issue 094 D4: *"in the long run they have to pay or
 this tokenomics will die"*):
 
-1. **Contribute** — `cargo heal --mine` (what mining is) → `cargo heal
+1. **Contribute** — `cargo refine --mine` (what mining is) → `cargo refine
    sync`. One accepted push records the server's `contributed` truth and
    lifts the gate for good.
 2. **Top up** — the payment page.
@@ -106,7 +106,7 @@ run would have done, count-only:
 ```text
 What this run would have done (count-only survey — nothing was fixed, nothing was billed):
   * survey: 3 fixable finding(s) found — NOT applied (account depleted; the fixes stay gated)
-  * mining: 2 batch(es) queued — `cargo heal sync` pushes them (payouts land at the 7-day epoch settle)
+  * mining: 2 batch(es) queued — `cargo refine sync` pushes them (payouts land at the 7-day epoch settle)
   * payouts land within 7 days of a push — exact dates: <service>/leaderboard
 ```
 
@@ -134,7 +134,7 @@ because the settle pays them.
 | Footer tanks | the burn ack v4 (`tuna_balance_micro`/`tuna_expires_unix`, `last_balance_micro`) — server truth, defensive parse, absent = `None` renders nothing |
 | Per-report plane split | the burn response's `charged_tuna_micro`/`charged_kat_micro` — named by the tail, deliberately NOT persisted into the ack (a per-report fact, not position) |
 | Depleted predicate | riir-kat `src/kat_soft_gate.rs` (pure; the CLI consumes it) |
-| Exact position | `cargo heal --info` / `account` / the leaderboard |
+| Exact position | `cargo refine --info` / `account` / the leaderboard |
 
 ## Tests
 
