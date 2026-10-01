@@ -7,7 +7,7 @@
 //! one of them.
 //!
 //! **Filed from a real defect, not from tidiness.** Proposal 005's TL;DR
-//! advertised `https://cargo-heal.gist.rs/install.sh` — a vanity host that
+//! advertised `https://cargo-refine.gist.rs/install.sh` — a vanity host that
 //! does not exist — while Proposal 011 §8.1 advertised the
 //! `raw.githubusercontent.com` form. Two documents, two one-liners, one of
 //! them unrunnable, and nothing could catch it: install copy is a string
@@ -38,8 +38,10 @@ fn canonical() -> [String; 2] {
 ///
 /// `.raw/` is vendored third-party source (upstream READMEs carry their own
 /// installers, and rewriting them would be a lie about what upstream says);
-/// `target/` is build output.
-const SKIP: &[&str] = &[".raw", "target", ".git"];
+/// `target/` is build output; `.worktrees/` holds sibling-repo checkouts
+/// (ndb's dist README advertises `gist-rs/ndb` — foreign copy, not ours to
+/// audit; the walk is filesystem-based, so gitignore alone hides nothing).
+const SKIP: &[&str] = &[".raw", "target", ".git", ".worktrees"];
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -112,8 +114,8 @@ fn the_audit_can_see_what_it_audits() {
         "the canonical macOS/Linux line must be recognised inside backticks"
     );
     assert_eq!(
-        installer_urls("- Windows: `iwr -useb https://cargo-heal.gist.rs/install.ps1 | iex`"),
-        vec!["https://cargo-heal.gist.rs/install.ps1".to_string()],
+        installer_urls("- Windows: `iwr -useb https://cargo-refine.gist.rs/install.ps1 | iex`"),
+        vec!["https://cargo-refine.gist.rs/install.ps1".to_string()],
         "the DRIFTED form must be recognised — otherwise the audit cannot fail"
     );
     // Two on one line.
@@ -171,7 +173,7 @@ fn every_install_url_is_the_canonical_one() {
         offenders.is_empty(),
         "install copy drifted from Proposal 003 §The canonical install one-liners \
          ({CANONICAL_BASE}install.{{sh,ps1}}):\n  {}\n\nProposal 003 OWNS this copy — fix the \
-         document, do not widen this test. (`cargo-heal.gist.rs` is a DEFERRED alias: promote \
+         document, do not widen this test. (`cargo-refine.gist.rs` is a DEFERRED alias: promote \
          it in 003 first if it is ever actually served.)",
         offenders.join("\n  ")
     );

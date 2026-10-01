@@ -22,12 +22,12 @@
     feature = "rust_perf",
     feature = "clippy_lints",
     feature = "kat_service"
-))] // the bin's required-features — CARGO_BIN_EXE_cargo-heal exists only under them
+))] // the bin's required-features — CARGO_BIN_EXE_cargo-refine exists only under them
 
 use std::process::Command;
 
 fn heal_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_cargo-heal")
+    env!("CARGO_BIN_EXE_cargo-refine")
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn coverage_report_runs_against_the_installed_toolchain() {
         .env("RIIR_HEAL_KAT_METER", "0")
         .env("RIIR_HEAL_KAT_GATE", "0")
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         out.status.success(),
@@ -86,7 +86,7 @@ fn coverage_report_refuses_loudly_without_a_driver() {
         .env("RIIR_HEAL_KAT_METER", "0")
         .env("RIIR_HEAL_KAT_GATE", "0")
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     assert_eq!(
         out.status.code(),
         Some(1),

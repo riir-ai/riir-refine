@@ -160,7 +160,7 @@ pub mod draft;
 
 // Issue 113: the auto-oracle — a scanning run over a cargo project lints it
 // with REAL clippy itself. std-only (Path + Command), so it is UNGATED: the
-// `cargo-heal` bin calls it from the scan path without a cfg, and its
+// `cargo-refine` bin calls it from the scan path without a cfg, and its
 // required-features do NOT include `compile_oracle`.
 //
 // ⛔ It was gated on `compile_oracle` from Issue 113's landing (3f0eecb9)
@@ -184,7 +184,7 @@ pub mod compile_oracle;
 // Issue 015: `--fix --verify` — the compile gate as tooling for the edit
 // path (apply → cargo check → rustc-JSON error attribution → span-level
 // revert → re-check → report). Opt-in; implies latent_retrieval (extends
-// the cargo-heal bin surface).
+// the cargo-refine bin surface).
 #[cfg(feature = "fix_verify")]
 pub mod fix_verify;
 
@@ -313,7 +313,7 @@ pub mod kat_pending_estimator;
 // for the instrument + latent_retrieval for the `draft` tree it lives in);
 // the wire types come from the riir-kat protocol tier (always compiled —
 // the root dep has no default features). The command orchestration
-// (`cargo heal replay`) lives in the bin and adds the kat_service +
+// (`cargo refine replay`) lives in the bin and adds the kat_service +
 // kat_transport gates.
 #[cfg(all(feature = "clippy_verify", feature = "latent_retrieval"))]
 pub mod kat_replay;
@@ -474,7 +474,7 @@ pub mod kat_footer;
 // against real-`cargo clippy` ground truth on frozen fixtures mined from
 // pre-sweep sibling commits; appends to `.benchmarks/score_history.jsonl`
 // and renders `.benchmarks/score_history.svg`. Opt-in: needs the oracle
-// (clippy_verify) and the cargo-heal fix-path surface (latent_retrieval).
+// (clippy_verify) and the cargo-refine fix-path surface (latent_retrieval).
 #[cfg(feature = "score_bench")]
 pub mod score_bench;
 

@@ -90,7 +90,7 @@ pub const DEFAULT_EMA_DECAY: f32 = 0.95;
 /// Default observations per window.
 ///
 /// The window is the fit's sample size, so it trades tracking speed against
-/// fit variance. 16 is chosen for THIS consumer: a `cargo heal --fix` run
+/// fit variance. 16 is chosen for THIS consumer: a `cargo refine --fix` run
 /// applies fixes in the tens-to-hundreds, so 16 gives several windows per run
 /// (ρ can move within a run) while keeping `ΣΔ²` far enough from the
 /// degenerate guard to fit anything at all. Per-run windows were the
@@ -222,7 +222,7 @@ impl TetherFit {
     /// accumulators.
     ///
     /// Called automatically by [`Self::observe`] at the window boundary;
-    /// public for consumers that want to flush a short tail (a `cargo heal`
+    /// public for consumers that want to flush a short tail (a `cargo refine`
     /// run ending mid-window).
     pub fn close_window(&mut self) {
         self.windows_closed += 1;

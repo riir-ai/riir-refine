@@ -3,7 +3,7 @@
 #
 # Runs ON THE M3, not in CI. Rationale (see .github/workflows/ops_dashboard.yml
 # header for the full decision): locally the 11 sibling repos are already
-# checked out, cargo-heal is already installed and wrangler OAuth already
+# checked out, cargo-refine is already installed and wrangler OAuth already
 # authenticates — so this needs ZERO provisioned secrets, finishes in ~5 min
 # instead of ~30-50, and can populate the self-evolve adoption card that a
 # fresh CI checkout structurally cannot (`.heal/trajectories.kv` is gitignored
@@ -242,7 +242,7 @@ fi
 # --settle first appends settlement rows for completed account days whose
 # ledger attribution drifts from CF GraphQL (issue 057), so the regenerated
 # dashboard reflects the settled state in the same run. --sweep shells out to
-# cargo-heal per repo. Issue 065 T6: the sweep phase is internally bounded to
+# cargo-refine per repo. Issue 065 T6: the sweep phase is internally bounded to
 # COVERAGE_BUDGET_S (600s here = half this run budget, dynamic per-repo
 # timeouts drawn from the remainder) — the other half always stays available
 # for settle + CF collections + render. (The unbounded 600s-per-repo form

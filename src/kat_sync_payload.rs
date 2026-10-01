@@ -390,7 +390,7 @@ fn decode_hex_n<const N: usize>(s: &str) -> Option<[u8; N]> {
 
 impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
     /// A builder gating every row under `origin` through `gate`, signing the
-    /// envelope with the KAT account key (v2 — Issue 008; `cargo heal login`
+    /// envelope with the KAT account key (v2 — Issue 008; `cargo refine login`
     /// provisions the key, [`crate::kat_account::KatAccount::signing_key`]).
     /// Rows are domain-attributed from the COMPILED table.
     #[must_use]

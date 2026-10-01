@@ -1,11 +1,11 @@
-//! Plan 117 — `cargo heal --refill`, the dev/test faucet refill, driven
-//! through the REAL `cargo-heal` binary against a local std-TCP mock HTTP
+//! Plan 117 — `cargo refine --refill`, the dev/test faucet refill, driven
+//! through the REAL `cargo-refine` binary against a local std-TCP mock HTTP
 //! server (the `tests/kat_burn_stack.rs` harness shape — no network, no new
 //! deps).
 //!
 //! | phase | service | expected |
 //! |---|---|---|
-//! | 1. refill, not logged in | (no account) | exit 1 + `no account` + `cargo heal login` named — nothing dials |
+//! | 1. refill, not logged in | (no account) | exit 1 + `no account` + `cargo refine login` named — nothing dials |
 //! | 2. refill, live mock | faucet 200 + crank 200 + balance 200 (0 → 10 KAT) | exit 0, `kat-fuel:` line carries the server truth, the ack's `last_balance_micro` is REFRESHED (the 075 gate's input — the whole point of the command), the crank POST carried the bearer token |
 //! | 3. the gate's refuel menu | closed port, depleted ack | the refusal lists contribute + pay and NEVER `--refill` (riir-dapps Issue 094 D4) |
 //! | 4. mainnet posture | mainnet URL, live mock, logged in | exit 1, `REFUSED`, both refuel paths named verbatim, ZERO requests captured (Issue 094 D4) |
@@ -22,7 +22,7 @@
 //! are kill-switched so the refill is the only dial under test. The real
 //! `~/.config/riir-heal` is never read or written.
 //!
-//! Gated on the cargo-heal bin's own `required-features` plus
+//! Gated on the cargo-refine bin's own `required-features` plus
 //! `kat_transport` (the refill flow's transport half). Without them the
 //! file compiles to an empty binary that prints a green `0 passed`, which
 //! is why the `required-features` row in Cargo.toml is not optional (the
@@ -186,7 +186,7 @@ fn scratch(tag: &str) -> PathBuf {
 /// root, the given service URL, and the lease/reheat kill switches so the
 /// refill is the ONLY dial under test.
 fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-heal"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
         .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
@@ -199,7 +199,7 @@ fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Op
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    let out = cmd.output().expect("spawn cargo-heal");
+    let out = cmd.output().expect("spawn cargo-refine");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -233,7 +233,7 @@ fn refill_without_an_account_refuses_before_dialing() {
         "the reason must be named. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal login"),
+        text.contains("cargo refine login"),
         "the onboarding step must be named. output:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -358,11 +358,11 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     let (code, text) = heal(&dir, CLOSED_PORT, &[], &[]);
     assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
     assert!(
-        !text.contains("cargo heal --refill"),
+        !text.contains("cargo refine --refill"),
         "D4: a retired user path must not be advertised. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal --mine"),
+        text.contains("cargo refine --mine"),
         "contribute must be named. output:\n{text}"
     );
     assert!(
@@ -394,7 +394,7 @@ fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
     assert!(text.contains("REFUSED"), "loudly. output:\n{text}");
     assert!(text.contains("MAINNET"), "by posture. output:\n{text}");
     assert!(
-        text.contains("cargo heal --mine"),
+        text.contains("cargo refine --mine"),
         "contribute must be named verbatim. output:\n{text}"
     );
     assert!(

@@ -8,7 +8,7 @@
 //!
 //! ## Why this domain exists (the measured delta, Issue 085)
 //!
-//! The shipped cargo-heal binary rode plain `--release` through v0.1.4:
+//! The shipped cargo-refine binary rode plain `--release` through v0.1.4:
 //! 11,903,168 bytes stripped where the knob set measures 4,546,448 (-61%) —
 //! and nobody noticed until the owner asked. `binary_size_gate.sh` watches
 //! THIS repo's release lane at PACKAGE time; this domain watches EVERY

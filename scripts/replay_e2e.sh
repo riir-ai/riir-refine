@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # replay_e2e.sh — the repeatable K=2 replay-lane e2e (riir-dapps Issue 091's
-# "setup a mode"): two identities × one `cargo heal replay` cycle each,
+# "setup a mode"): two identities × one `cargo refine replay` cycle each,
 # against devnet, with honest verdicts.
 #
 # What it does (the 2026-09-15 manual run, productized):
@@ -75,14 +75,14 @@ done
 if [ -n "${REPLAY_E2E_TARGET_DIR:-}" ]; then
   export CARGO_TARGET_DIR="$REPLAY_E2E_TARGET_DIR"
 fi
-BIN="$ROOT/target/debug/cargo-heal"
+BIN="$ROOT/target/debug/cargo-refine"
 if [ "${CARGO_TARGET_DIR:-}" != "" ]; then
-  BIN="$CARGO_TARGET_DIR/debug/cargo-heal"
+  BIN="$CARGO_TARGET_DIR/debug/cargo-refine"
 fi
 
 if [ "${REPLAY_E2E_SKIP_BUILD:-0}" != "1" ]; then
   echo "replay-e2e: building the oracle client ($FEATURES) → ${BIN}"
-  (cd "$ROOT" && cargo build --features "$FEATURES" --bin cargo-heal)
+  (cd "$ROOT" && cargo build --features "$FEATURES" --bin cargo-refine)
 elif [ ! -x "$BIN" ]; then
   echo "replay-e2e: REFUSED — REPLAY_E2E_SKIP_BUILD=1 but no binary at $BIN" >&2
   exit 2

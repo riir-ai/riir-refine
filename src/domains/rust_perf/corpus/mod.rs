@@ -15,7 +15,7 @@
 //! said 25 while the gated test said 14; the Batch 118–129 ds4 io
 //! annotations were never counted) and again by the 09-24 housekeeping pass
 //! (the header prose had gone stale at 145/92/53 through B172–B174; the
-//! gated count tests + `cargo heal --corpus-stats` are the live ledgers)
+//! gated count tests + `cargo refine --corpus-stats` are the live ledgers)
 //! (8 external-runtime/size-class + 2
 //! metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size

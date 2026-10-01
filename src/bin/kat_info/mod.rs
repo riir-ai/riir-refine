@@ -1,4 +1,4 @@
-//! `cargo heal --info` — the one-command stats view (the 2026-09-17 owner
+//! `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 //! ask): wallet + account + mining + local work. READ-ONLY composition of
 //! SHIPPED surfaces — no new wire, no writes:
 //!
@@ -31,7 +31,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     let account = match KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("info: no account ({e}) — run `cargo heal --mine` (or `cargo heal login`) first");
+            eprintln!("info: no account ({e}) — run `cargo refine --mine` (or `cargo refine login`) first");
             std::process::exit(1);
         }
     };
@@ -305,7 +305,7 @@ fn local_section(paths: &[PathBuf]) {
         .map(|rd| rd.filter_map(|e| e.ok()).count())
         .unwrap_or(0);
     if queued > 0 {
-        println!("  unsynced:    {queued} outbox batch(es) queued — push with `cargo heal sync`");
+        println!("  unsynced:    {queued} outbox batch(es) queued — push with `cargo refine sync`");
     } else {
         println!("  unsynced:    0 pending outbox batches");
     }
@@ -374,7 +374,7 @@ fn local_section(paths: &[PathBuf]) {
             println!("  soft gate:   warn-only — {why} (no server truth to gate on)");
         }
         SoftGateVerdict::Refuse { balance_micro } => println!(
-            "  soft gate:   REFUSED — depleted balance {} (refuel: `cargo heal --refill`, `--mine` + sync, or the payment page)",
+            "  soft gate:   REFUSED — depleted balance {} (refuel: `cargo refine --refill`, `--mine` + sync, or the payment page)",
             kat(balance_micro)
         ),
     }

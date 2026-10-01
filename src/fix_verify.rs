@@ -1472,7 +1472,7 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
         };
         let _ = writeln!(
             out,
-            "  re-run for full coverage: cargo heal --fix --write --verify --verify-args \"{suggested}\""
+            "  re-run for full coverage: cargo refine --fix --write --verify --verify-args \"{suggested}\""
         );
     }
     out

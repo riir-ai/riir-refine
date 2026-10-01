@@ -107,7 +107,7 @@ HOUSEKEEPING_BASE = "https://riir-kat-housekeeping.foxfox.workers.dev"
 NEURON_USD = 0.011 / 1000.0  # $0.011 per 1k neurons (pinned 2026-08-18)
 DAILY_FREE_CAP = 10_000.0
 
-HEAL_BIN = Path.home() / ".cargo" / "bin" / "cargo-heal"
+HEAL_BIN = Path.home() / ".cargo" / "bin" / "cargo-refine"
 WRANGLER_TOKEN_FILE = Path.home() / "Library/Preferences/.wrangler/config/default.toml"
 
 
@@ -272,7 +272,7 @@ _STORE_SERIES_CACHE: object = _STORE_SERIES_UNSET
 
 
 def store_series() -> dict | None:
-    """The Warm-tier series via `cargo-heal --corpus-stats --json`.
+    """The Warm-tier series via `cargo-refine --corpus-stats --json`.
 
     Runs the healer binary with RIIR_HEAL_TRAJ_ROOT=REPO_ROOT and parses
     ONLY the last JSON object on stdout (with --json the Rust side prints

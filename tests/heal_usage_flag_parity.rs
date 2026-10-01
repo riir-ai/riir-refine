@@ -1,4 +1,4 @@
-//! Every long flag the `cargo heal` usage text advertises must have a
+//! Every long flag the `cargo refine` usage text advertises must have a
 //! parser arm — Plan 064, filed from a real defect.
 //!
 //! `pay --request` was in the usage block from T1.3 (Plan 062) and was

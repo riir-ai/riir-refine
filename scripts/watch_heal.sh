@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Plan 019 T5.1 — the real-use watch loop over `cargo heal --fix-compile`.
+# Plan 019 T5.1 — the real-use watch loop over `cargo refine --fix-compile`.
 #
 # USAGE:
 #   ./scripts/watch_heal.sh                    # watch session-touched .rs files
@@ -41,17 +41,17 @@
 #   memory.json       — the JSON-envelope fallback (default builds)
 #   misses/           — the template-authoring queue (T4.4)
 # There is NO fix_log.jsonl append — the store is the one source of truth;
-# `cargo heal --dump-trajectories` is the export surface (T4.3b).
+# `cargo refine --dump-trajectories` is the export surface (T4.3b).
 
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-# The heal command. Default: the installed `cargo-heal` binary (the
+# The heal command. Default: the installed `cargo-refine` binary (the
 # distribution surface). Override for a dev build, e.g.:
-#   HEAL_BIN="cargo run --features rustc_errors --bin cargo-heal --"
+#   HEAL_BIN="cargo run --features rustc_errors --bin cargo-refine --"
 # (split on words deliberately — it is invoked unquoted below.)
-HEAL_BIN="${HEAL_BIN:-cargo-heal}"
+HEAL_BIN="${HEAL_BIN:-cargo-refine}"
 # --verify-args carries CARGO args (appended to `cargo check --all-targets
 # --message-format=json`), not a command — the feature set only.
 HEAL_FEATURES="${HEAL_FEATURES-}"

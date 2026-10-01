@@ -1,5 +1,5 @@
 //! Issue 076 (owner mandate) — the burn auto-sync STACKING test: the git
-//! analogy driven through the REAL `cargo-heal` binary against a local
+//! analogy driven through the REAL `cargo-refine` binary against a local
 //! std-TCP mock HTTP server (the `tests/kat_lease_client_g10.rs` harness
 //! shape — no network, no new deps).
 //!
@@ -19,7 +19,7 @@
 //! are kill-switched so the burn push is the only dial under test. The real
 //! `~/.config/riir-heal` is never read or written.
 //!
-//! Gated on the cargo-heal bin's own `required-features` plus
+//! Gated on the cargo-refine bin's own `required-features` plus
 //! `kat_transport` (the burn client's transport half). Without them the
 //! file compiles to an empty binary that prints a green `0 passed`, which
 //! is why the `required-features` row in Cargo.toml is not optional (the
@@ -206,7 +206,7 @@ fn scratch(tag: &str) -> PathBuf {
 /// root, the given service URL, and the lease/reheat kill switches so the
 /// burn push is the ONLY dial under test.
 fn heal(dir: &Path, url: &str, args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_cargo-heal"))
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .current_dir(dir)
         .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
@@ -217,7 +217,7 @@ fn heal(dir: &Path, url: &str, args: &[&str]) -> (Option<i32>, String) {
         .env("RIIR_HEAL_KAT_LEASE", "0")
         .args(args)
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

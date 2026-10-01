@@ -67,7 +67,7 @@ pub fn apply_edits(source: &str, edits: Vec<SourceEdit>) -> String {
 /// [`apply_edits`](fn.apply_edits.html) that also returns the splices it
 /// actually applied (in INPUT-source coordinates, sorted ascending by
 /// start). The caller uses these to remap positions recorded against this
-/// pass's input through later passes — e.g. `cargo heal --fix` review line
+/// pass's input through later passes — e.g. `cargo refine --fix` review line
 /// numbers against the FINAL written source, not per-pass intermediates
 /// (some fixes change line counts: `manual_map` collapses multi-line matches,
 /// fxhashmap's use-append inserts a line).

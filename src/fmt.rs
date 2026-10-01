@@ -1,4 +1,4 @@
-//! Native rustfmt integration for `cargo heal --fix --write` — default-on,
+//! Native rustfmt integration for `cargo refine --fix --write` — default-on,
 //! `--no-fmt` opt-out. Encodes the heal-slice formatting discipline as tool
 //! behavior so every consumer gets it without a SKILL:
 //!

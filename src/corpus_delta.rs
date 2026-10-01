@@ -21,7 +21,7 @@
 //!
 //! - **[`FixTier::Fixable`] / [`FixTier::Verify`]** — the fix lane HAS a
 //!   proposer. The suggest output is stale, not authoritative:
-//!   `cargo heal --fix` would rewrite this today. This is the freshness
+//!   `cargo refine --fix` would rewrite this today. This is the freshness
 //!   delta, and the tier is kept because the two are not interchangeable
 //!   advice — a `Verify` row only fires under `--fix --verify`, so telling
 //!   a reader "just run --fix" would be wrong for half the set.
@@ -65,8 +65,8 @@ impl FixTier {
     #[must_use]
     pub const fn remedy(self) -> &'static str {
         match self {
-            Self::Fixable => "cargo heal --fix",
-            Self::Verify => "cargo heal --fix --verify",
+            Self::Fixable => "cargo refine --fix",
+            Self::Verify => "cargo refine --fix --verify",
         }
     }
 }

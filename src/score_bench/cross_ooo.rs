@@ -8,7 +8,7 @@
 //! is the SAE-latent absorption/splitting pathology (Chanin et al. 2024)
 //! transplanted to rule space: a redundant rule pair silently splits credit,
 //! double-counts coverage, and corrupts the per-rule frontier feed the
-//! admission gate will consume. `cargo heal --score-bench` measures each rule
+//! admission gate will consume. `cargo refine --score-bench` measures each rule
 //! IN isolation; nothing measures rules AGAINST each other.
 //!
 //! ## The mapping (all substrate ships)

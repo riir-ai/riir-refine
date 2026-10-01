@@ -285,13 +285,13 @@ impl KatFooter<'_> {
                 };
                 format!(
                     "{gutter}⚠ {} KAT unsynced (burn){queued}\n               pushing again next \
-                     run · or `cargo heal sync` · {}",
+                     run · or `cargo refine sync` · {}",
                     fmt_kat_display(*micro_kat),
                     link("leaderboard ↗", ledger_url, color) + &you
                 )
             }
             SyncState::LoggedOut => {
-                format!("{gutter}local only — not logged in · nothing pushed (`cargo heal login`)")
+                format!("{gutter}local only — not logged in · nothing pushed (`cargo refine login`)")
             }
             SyncState::Unknown => {
                 format!("{gutter}local accounting only — the server ledger reconciles at sync")
@@ -720,7 +720,7 @@ mod tests {
         }
         .render(false);
         assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 mining batch(es) queued"));
-        assert!(unsynced.contains("or `cargo heal sync`"));
+        assert!(unsynced.contains("or `cargo refine sync`"));
 
         let logged_out = KatFooter {
             sync: SyncState::LoggedOut,

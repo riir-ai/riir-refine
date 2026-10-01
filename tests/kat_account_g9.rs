@@ -114,7 +114,7 @@ fn g9d_grant_projection_never_moves_across_relogins() {
 
 #[test]
 fn g9_composition_account_grant_minus_repo_charge_is_the_balance_projection() {
-    // The exact composition `cargo heal account` prints: the machine-global
+    // The exact composition `cargo refine account` prints: the machine-global
     // grant projection against THIS repo's local charge ledger.
     let account_dir = temp_dir("comp_acct");
     let (account, _) = KatAccount::login(&account_dir).unwrap();

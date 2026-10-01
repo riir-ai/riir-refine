@@ -7,7 +7,7 @@
 //! ran clippy and piped the stream in, because a guessed invocation is
 //! silently blind (wrong feature set → cfg-gated code compiles to nothing;
 //! toolchain pins; target-dir locks). The owner call (2026-09-16, the
-//! "agave 6951 rows → +1 credit" session): `cargo heal --mine` must do every
+//! "agave 6951 rows → +1 credit" session): `cargo refine --mine` must do every
 //! good for the user — the manual feed kept that promise only for
 //! AGENTS.md readers. The resolution keeps BOTH: the auto-run is the default
 //! (spawn `cargo clippy --workspace --no-deps --message-format=json --quiet`
@@ -125,7 +125,7 @@ pub fn detect_project_root(paths: &[PathBuf], cwd: &Path) -> Option<PathBuf> {
         start.parent()?.to_path_buf()
     };
     // Anchor to the caller's cwd BEFORE walking up: a RELATIVE 1-component
-    // target (`cargo heal --suggest src/` — the documented invocation form)
+    // target (`cargo refine --suggest src/` — the documented invocation form)
     // parents to the EMPTY path, and `"".join("Cargo.toml")` then resolves
     // against the process cwd — returning `Some("")` as the "root", whose
     // `Command::current_dir("")` spawn fails with os error 123 on Windows /
@@ -243,7 +243,7 @@ mod tests {
 
     fn tmp_dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir()
-            .join("cargo-heal-clippy-oracle-tests")
+            .join("cargo-refine-clippy-oracle-tests")
             .join(format!("{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn one_component_relative_target_resolves_against_cwd_never_empty() {
-        // The documented invocation shape: `cargo heal --suggest src/` run
+        // The documented invocation shape: `cargo refine --suggest src/` run
         // from the repo root. Before the cwd-anchor fix the walk went
         // `src` → `""` → `"".join("Cargo.toml")` resolves against the
         // process cwd → `Some("")` — an empty "root" whose spawn failed
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn relative_file_target_resolves_via_cwd_not_the_empty_parent() {
-        // `cargo heal --suggest src/lib.rs` from the repo root: the file's
+        // `cargo refine --suggest src/lib.rs` from the repo root: the file's
         // parent ("src") is relative; the empty-path walk used to fire only
         // for 1-component DIRS, but the anchor must hold for files too.
         let d = tmp_dir("relative-file");
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn bare_dot_target_is_the_cwd_project() {
-        // `cargo heal --suggest .` — the dir "." is relative; anchored to
+        // `cargo refine --suggest .` — the dir "." is relative; anchored to
         // cwd it IS the project. Must never walk through "" to find it.
         let d = tmp_dir("dot");
         fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();

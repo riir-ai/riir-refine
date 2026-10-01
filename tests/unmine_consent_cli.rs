@@ -6,7 +6,7 @@
 //! they cannot cover is the part that actually shipped broken before in this
 //! CLI (Plan 064's `pay --request`): a flag that parses in the source and
 //! does the wrong thing at the process boundary. So this suite spawns
-//! `cargo-heal` and asserts the three tiers by their EXIT CODE and their
+//! `cargo-refine` and asserts the three tiers by their EXIT CODE and their
 //! printed wording:
 //!
 //! | invocation | exit | consent after |
@@ -53,7 +53,7 @@ fn scratch(tag: &str) -> PathBuf {
 /// root, a dead service URL (no network), and the meter/lease kill switches
 /// the CI convention uses.
 fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_cargo-heal"))
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the purge sweep targets the canonical account dir too —
         // isolate it (the consent plane still rides the old var above).
@@ -64,7 +64,7 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
         .env("RIIR_HEAL_KAT_SERVICE_URL", "http://127.0.0.1:1")
         .args(args)
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -101,12 +101,12 @@ fn unmine_records_the_opt_out_and_names_what_still_works() {
     // What it turned OFF.
     assert!(text.contains("opted OUT"), "output:\n{text}");
     assert!(
-        text.contains("push half of `cargo heal sync`"),
+        text.contains("push half of `cargo refine sync`"),
         "--unmine must name the push half as the thing that stopped. output:\n{text}"
     );
     // What it did NOT turn off — the honest half.
     assert!(
-        text.contains("UNCHANGED") && text.contains("cargo heal --fix"),
+        text.contains("UNCHANGED") && text.contains("cargo refine --fix"),
         "--unmine must say healing is unchanged. output:\n{text}"
     );
     // The queued batches: named, and declared the user's to delete.
@@ -115,7 +115,7 @@ fn unmine_records_the_opt_out_and_names_what_still_works() {
         "--unmine must name the outbox path. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal --mine"),
+        text.contains("cargo refine --mine"),
         "--unmine must name the re-enable command. output:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -176,19 +176,19 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
 
     // The pinned explainer blocks — added to, never removed. (72b65676
     // collapsed the 4-step START to 3 — login is now automatic inside
-    // --mine, the explicit `cargo heal login` line stays as the repair
+    // --mine, the explicit `cargo refine login` line stays as the repair
     // path — and the pin follows the product.)
     for needle in [
         "KAT mining — turn your healing work into network credit",
-        "WHAT: every cargo heal run records HOW the healer behaved",
+        "WHAT: every cargo refine run records HOW the healer behaved",
         "POLICY (read before contributing):",
         "Devnet: KAT carries NO cash value and NO redemption right.",
         "START (3 steps):",
         "https://ai.gist.rs",
-        "cargo heal login",
-        "cargo heal --fix",
-        "cargo heal sync",
-        "WATCH: cargo heal account",
+        "cargo refine login",
+        "cargo refine --fix",
+        "cargo refine sync",
+        "WATCH: cargo refine account",
     ] {
         assert!(
             text.contains(needle),
@@ -210,7 +210,7 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
         "--mine must print the current consent state. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal --unmine"),
+        text.contains("cargo refine --unmine"),
         "--mine must name the opt-out. output:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -261,7 +261,7 @@ fn mine_and_unmine_together_are_rejected_without_writing() {
     let _ = std::fs::remove_dir_all(&dir2);
 }
 
-/// Tier 3's teeth: `cargo heal sync` refuses its PUSH half while opted out,
+/// Tier 3's teeth: `cargo refine sync` refuses its PUSH half while opted out,
 /// still runs the lease PULL half, and exits 0 (an opt-out is not an error).
 #[test]
 fn sync_refuses_the_push_half_while_opted_out() {
@@ -280,7 +280,7 @@ fn sync_refuses_the_push_half_while_opted_out() {
         "sync must say the push was skipped. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal --mine"),
+        text.contains("cargo refine --mine"),
         "the refusal must name the re-enable. output:\n{text}"
     );
     assert!(
@@ -333,7 +333,7 @@ fn usage_advertises_unmine() {
     let (code, text) = heal(&dir, &["--definitely-not-a-flag"]);
     assert_eq!(code, Some(2));
     assert!(
-        text.contains("cargo heal --unmine"),
+        text.contains("cargo refine --unmine"),
         "the USAGE block must show --unmine. output:\n{text}"
     );
     assert!(

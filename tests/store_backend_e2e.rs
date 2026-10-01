@@ -28,13 +28,13 @@ use std::process::Command;
 
 /// One binary invocation with the env a real heal session carries.
 fn heal(envs: &[(&str, &str)], args: &[&str]) -> (bool, String) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-heal"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.env_remove("RIIR_HEAL_TRAJ_ROOT");
     for (k, v) in envs {
         cmd.env(k, v);
     }
     cmd.args(args);
-    let out = cmd.output().expect("spawn cargo-heal");
+    let out = cmd.output().expect("spawn cargo-refine");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

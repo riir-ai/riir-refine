@@ -1,4 +1,4 @@
-//! `cargo heal --orphan-report` — post-mining intake class C1: the config
+//! `cargo refine --orphan-report` — post-mining intake class C1: the config
 //! knob ORPHANED BY OPTIMIZATION (Plan 126).
 //!
 //! The measured shape (riir-ai Issue 888 T17 watch, riir-games-civ

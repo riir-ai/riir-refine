@@ -24,9 +24,9 @@
 //! loopback `RIIR_HEAL_KAT_SERVICE_URL` so any best-effort tail transport
 //! fails in milliseconds without an exit-code change (the tails' contract).
 //!
-//! File-level cfg = the cargo-heal bin's own `required-features` (the
+//! File-level cfg = the cargo-refine bin's own `required-features` (the
 //! `build_stamp_cli.rs` law): with less there is no binary to invoke and
-//! `CARGO_BIN_EXE_cargo-heal` does not resolve.
+//! `CARGO_BIN_EXE_cargo-refine` does not resolve.
 
 #![cfg(all(
     feature = "latent_retrieval",
@@ -64,12 +64,12 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     // milliseconds here and — by the tails' own contract — can never
     // change the exit code.
     envs.insert("RIIR_HEAL_KAT_SERVICE_URL", "http://127.0.0.1:9/".to_string());
-    let out = Command::new(env!("CARGO_BIN_EXE_cargo-heal"))
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .args(args)
         .envs(envs)
         .current_dir(dir)
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     (
         out.status.code(),
         format!(

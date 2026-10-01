@@ -1,7 +1,7 @@
 //! P12 e2e: re-proposal suppression across runs.
 //!
 //! Proves the full loop on a real scratch crate + the real binary:
-//! 1. `cargo-heal --fix --write` heals a `match_bool` shape (the pair
+//! 1. `cargo-refine --fix --write` heals a `match_bool` shape (the pair
 //!    (rule, restore, fix) lands in the crate-local store as an apply).
 //! 2. The test seeds two consecutive compile-gate fails for that exact pair
 //!    (what a `--verify` run records when the edit breaks the build twice).
@@ -62,7 +62,7 @@ fn run_heal(bin: &str, dir: &PathBuf) -> String {
         .arg(dir)
         .env("RIIR_HEAL_SUPPRESS_REVERTED", "") // default: suppression ON
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     format!(
         "exit: {}\n--- stdout ---\n{}--- stderr ---\n{}",
         out.status,
@@ -73,7 +73,7 @@ fn run_heal(bin: &str, dir: &PathBuf) -> String {
 
 #[test]
 fn p12_suppresses_a_twice_reverted_pair_across_runs() {
-    let bin = env!("CARGO_BIN_EXE_cargo-heal");
+    let bin = env!("CARGO_BIN_EXE_cargo-refine");
     let dir = scratch_root("main");
     write_lib(&dir, ORIGINAL);
 
@@ -120,7 +120,7 @@ fn p12_suppresses_a_twice_reverted_pair_across_runs() {
         .arg(&dir)
         .env("RIIR_HEAL_SUPPRESS_REVERTED", "0")
         .output()
-        .expect("spawn cargo-heal (kill-switch run)");
+        .expect("spawn cargo-refine (kill-switch run)");
     let retried = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();
     assert!(
         retried.contains(FIX),

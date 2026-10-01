@@ -4,7 +4,7 @@
 //! The [`HealPipeline`](crate::self_evolve::HealPipeline) composes the
 //! memory + evolution layers with the L1 drafter for snippet-level healing.
 //! This module is the OTHER consumer shape: tools that apply fixes through
-//! a different path (the `cargo heal --fix` proposers + edit emitter) still
+//! a different path (the `cargo refine --fix` proposers + edit emitter) still
 //! want their applied/reverted fixes to feed the same memory + learning —
 //! without dragging the whole pipeline along.
 //!
@@ -32,7 +32,7 @@
 //! A CLI process is short-lived — an in-memory store would be permanently
 //! starved (the exact problem the promotion fixes). The recorder persists
 //! via [`LatentFixMemory::save`]/[`load`](LatentFixMemory::load): the
-//! `cargo heal` bin resolves the platform cache path (`RIIR_HEAL_MEMORY`
+//! `cargo refine` bin resolves the platform cache path (`RIIR_HEAL_MEMORY`
 //! overrides) + merges on load, so trajectories accumulate across runs.
 //!
 //! ## Opt-out
@@ -572,7 +572,7 @@ mod tests {
     }
 
     // ── The "--fix run accumulates" acceptance (production path) ────────
-    // Exercises the exact API the cargo-heal bin calls after a --fix --write
+    // Exercises the exact API the cargo-refine bin calls after a --fix --write
     // pass: proposers → edit emitter → record_reviewed. No feature flags
     // beyond the domains the fix path itself needs.
     #[cfg(feature = "clippy_lints")]

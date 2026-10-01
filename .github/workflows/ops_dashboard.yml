@@ -44,14 +44,14 @@
 # ── ⚠ THIS CI PATH IS THE FALLBACK, NOT THE PRIMARY (decision, T13) ─────────
 # The M3 is the correct home for the nightly refresh; see
 # `scripts/ops_nightly.sh`. Measured/structural reasons:
-#   * ZERO secrets. Locally the 11 repos are already checked out, cargo-heal is
+#   * ZERO secrets. Locally the 11 repos are already checked out, cargo-refine is
 #     already installed, and wrangler OAuth already authenticates — so
 #     GH_PAT / CF_API_TOKEN / CLOUDFLARE_API_TOKEN are all unnecessary. This
 #     CI path cannot run at all until an owner provisions three credentials.
 #   * ~5 min vs ~30-50. The local sweep is ~30-60 s per large repo (from the
 #     coverage cache's own measured_at deltas: riir-ai 57 s, riir-train 35 s).
 #     CI additionally pays 11 × fetch-depth-2000 clones + a release build of
-#     cargo-heal.
+#     cargo-refine.
 #   * CI STRUCTURALLY produces a degraded dashboard: `.heal/trajectories.kv`
 #     is gitignored local state, so the self-evolve adoption section is always
 #     empty on a fresh checkout (admitted in the note below). That is a whole
@@ -264,15 +264,15 @@ jobs:
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cargo-heal-nightly
+          shared-key: cargo-refine-nightly
 
-      - name: Build cargo-heal
+      - name: Build cargo-refine
         run: |
           set -euo pipefail
-          cargo build --release --features latent_retrieval,rust_perf --bin cargo-heal
+          cargo build --release --features latent_retrieval,rust_perf --bin cargo-refine
           mkdir -p "${HOME}/.cargo/bin"
-          cp target/release/cargo-heal "${HOME}/.cargo/bin/cargo-heal"
-          ls -l "${HOME}/.cargo/bin/cargo-heal"
+          cp target/release/cargo-refine "${HOME}/.cargo/bin/cargo-refine"
+          ls -l "${HOME}/.cargo/bin/cargo-refine"
 
       - name: Regenerate dashboard (--sweep)
         env:

@@ -22,7 +22,7 @@ fn seed_corpus_total_and_category_count_pinned() {
     // arithmetic 8, caching 7, dispatch 5, bevy 2, wasm 1 — asserted via the
     // distinct-category pin below plus the benchable/NotBenchable pins in
     // this file. Never read a typed figure from prose: run
-    // `cargo heal --corpus-stats` (or this test) for the live numbers, and
+    // `cargo refine --corpus-stats` (or this test) for the live numbers, and
     // read the per-batch history in `.docs/11_domains/rust_perf.md` — the
     // narrative copy here had gone stale (98 → 145 → 153 across three
     // landings that updated the assert but not the prose).

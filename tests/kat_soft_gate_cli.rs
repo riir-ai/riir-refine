@@ -1,5 +1,5 @@
 //! Issue 075 (owner soft gate, 2026-09-08) — the depleted-account refusal,
-//! driven through the REAL `cargo-heal` binary (the `kat_burn_stack.rs`
+//! driven through the REAL `cargo-refine` binary (the `kat_burn_stack.rs`
 //! harness shape — closed port, scratch roots, no network).
 //!
 //! The gate's input is the last SYNCED server balance carried on the burn
@@ -43,7 +43,7 @@
 //! without reaching anything. The real `~/.config/riir-heal` is never read
 //! or written.
 //!
-//! Gated on the cargo-heal bin's own `required-features` plus
+//! Gated on the cargo-refine bin's own `required-features` plus
 //! `kat_transport` (the ack's balance half). Without them the file compiles
 //! to an empty binary that prints a green `0 passed` — the Issue-713
 //! green-zero trap — which is why the `required-features` row in Cargo.toml
@@ -84,7 +84,7 @@ fn scratch(tag: &str) -> PathBuf {
 /// root, the closed-port service URL, and the lease kill switch so nothing
 /// but the gate under test decides the run's fate.
 fn heal(dir: &Path, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-heal"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
         .env("RIIR_HEAL_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
@@ -97,7 +97,7 @@ fn heal(dir: &Path, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, 
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    let out = cmd.output().expect("spawn cargo-heal");
+    let out = cmd.output().expect("spawn cargo-refine");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -203,11 +203,11 @@ fn depleted_never_contributed_refuses_at_run_start() {
         "the refusal must be loud. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal --mine"),
+        text.contains("cargo refine --mine"),
         "must name the contribute path. output:\n{text}"
     );
     assert!(
-        text.contains("cargo heal sync"),
+        text.contains("cargo refine sync"),
         "must name the sync step. output:\n{text}"
     );
     assert!(
@@ -315,7 +315,7 @@ fn the_refusal_surveys_what_it_would_have_fixed() {
 
 /// The survey's mining arm has TWO branches, and only `none queued` was
 /// exercised above (scratch dirs have no outbox). Seed one batch file into
-/// the sync outbox (the SAME root `cargo heal sync` drains —
+/// the sync outbox (the SAME root `cargo refine sync` drains —
 /// `RIIR_HEAL_TRAJ_ROOT`) and the refusal must name it queued — never
 /// "none queued".
 #[test]

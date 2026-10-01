@@ -97,7 +97,7 @@ echo "=== Layer 5c: every integration test + bin (all-features, no allowlist) ==
 #
 # `--tests` is not just `tests/*.rs`: cargo selects EVERY target with
 # `test = true`, so this one invocation also covers the lib unittests and the
-# bin unit-test modules (`cargo-heal`, `fixer_regate`, `kat_drain`) that Layer
+# bin unit-test modules (`cargo-refine`, `fixer_regate`, `kat_drain`) that Layer
 # 5b's `--lib` scope never reached. No `--bins` needed.
 #
 # Deliberately NOT stating per-bin test counts here: they drift with every

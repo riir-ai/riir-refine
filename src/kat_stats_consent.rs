@@ -1,6 +1,6 @@
 //! Machine-global work-stats sharing consent — the persisted state behind
-//! `cargo heal --stats on` (opt IN), `cargo heal --stats off` (opt OUT), and
-//! bare `cargo heal --stats` (the status readout). riir-dapps Proposal 004
+//! `cargo refine --stats on` (opt IN), `cargo refine --stats off` (opt OUT), and
+//! bare `cargo refine --stats` (the status readout). riir-dapps Proposal 004
 //! Half 1.
 //!
 //! A THIRD consent state beside mining — and the deliberate INVERSE of
@@ -9,8 +9,8 @@
 //! | state | how it is reached | what a future `--fix` push does |
 //! |---|---|---|
 //! | [`StatsConsent::Unset`] | the default — no file on disk | **nothing** |
-//! | [`StatsConsent::OptedIn`] | `cargo heal --stats on` | one tiny signed `{lane, rule_id, count}` row per run |
-//! | [`StatsConsent::OptedOut`] | `cargo heal --stats off` | nothing, and onboarding never re-asks |
+//! | [`StatsConsent::OptedIn`] | `cargo refine --stats on` | one tiny signed `{lane, rule_id, count}` row per run |
+//! | [`StatsConsent::OptedOut`] | `cargo refine --stats off` | nothing, and onboarding never re-asks |
 //!
 //! Mining's [`crate::kat_mining_consent`] reads `Unset` as "running `sync`
 //! IS the consent" because `sync` is an opt-in act. THIS lane's trigger
@@ -60,10 +60,10 @@ pub enum StatsConsent {
     /// No record on disk (or one we could not honour) — the deny-by-default
     /// state: NO work-stat row leaves this machine.
     Unset,
-    /// `cargo heal --stats on` was run — the push half is explicitly
+    /// `cargo refine --stats on` was run — the push half is explicitly
     /// authorised for the lanes in the record.
     OptedIn,
-    /// `cargo heal --stats off` was run — a recorded NO: the push half
+    /// `cargo refine --stats off` was run — a recorded NO: the push half
     /// refuses AND onboarding never re-asks (that is what separates this
     /// from [`StatsConsent::Unset`]).
     OptedOut,
@@ -171,7 +171,7 @@ pub fn read_with_warning(dir: &Path) -> (StatsConsent, Option<String>) {
                 StatsConsent::Unset,
                 Some(format!(
                     "stats consent: {} is unreadable ({e}) — treating consent as unset; \
-                     `cargo heal --stats off` rewrites it",
+                     `cargo refine --stats off` rewrites it",
                     path.display()
                 )),
             );
@@ -191,7 +191,7 @@ pub fn read_with_warning(dir: &Path) -> (StatsConsent, Option<String>) {
             Some(format!(
                 "stats consent: {} is version {} (this build understands \
                  {STATS_CONSENT_VERSION}) — treating consent as unset; re-run \
-                 `cargo heal --stats on` or `--stats off`",
+                 `cargo refine --stats on` or `--stats off`",
                 path.display(),
                 doc.version
             )),
@@ -200,7 +200,7 @@ pub fn read_with_warning(dir: &Path) -> (StatsConsent, Option<String>) {
             StatsConsent::Unset,
             Some(format!(
                 "stats consent: {} is malformed ({e}) — treating consent as unset; \
-                 `cargo heal --stats off` rewrites it",
+                 `cargo refine --stats off` rewrites it",
                 path.display()
             )),
         ),

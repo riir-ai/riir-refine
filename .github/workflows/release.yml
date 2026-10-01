@@ -20,7 +20,7 @@
 #                         already uses; the workspace cannot resolve without
 #                         those siblings — path deps + [patch] sections).
 #   RELEASE_PAT         — fine-grained PAT, repository access = the three
-#                         PUBLIC source-free dist repos ONLY (cargo-heal,
+#                         PUBLIC source-free dist repos ONLY (cargo-refine,
 #                         homebrew-tap, scoop-bucket), contents + pull_requests
 #                         read/write (pull_requests is required by `gh pr create`
 #                         on the formula/manifest bump steps). Publishes the
@@ -52,7 +52,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BIN: cargo-heal
+  BIN: cargo-refine
   DIST_REPO: gist-rs/cargo-heal
   TAP_REPO: gist-rs/homebrew-tap
   BUCKET_REPO: gist-rs/scoop-bucket
@@ -209,14 +209,14 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --profile dist --target ${{ matrix.target }} \
-            --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-heal
+            --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-refine
 
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/dist/cargo-heal
-            target/${{ matrix.target }}/dist/cargo-heal.exe
+            target/${{ matrix.target }}/dist/cargo-refine
+            target/${{ matrix.target }}/dist/cargo-refine.exe
           if-no-files-found: error
 
   # ── Package + the G2 gate ───────────────────────────────────────────────────
@@ -247,19 +247,19 @@ jobs:
             target="${target#bin-}"
             stage="stage/$target"
             mkdir -p "$stage"
-            if [ -f "$d/cargo-heal" ]; then
-              cp "$d/cargo-heal" "$stage/cargo-heal"
-            elif [ -f "$d/cargo-heal.exe" ]; then
-              cp "$d/cargo-heal.exe" "$stage/cargo-heal.exe"
+            if [ -f "$d/cargo-refine" ]; then
+              cp "$d/cargo-refine" "$stage/cargo-refine"
+            elif [ -f "$d/cargo-refine.exe" ]; then
+              cp "$d/cargo-refine.exe" "$stage/cargo-refine.exe"
             else
-              echo "::error::no cargo-heal binary in $d"
+              echo "::error::no cargo-refine binary in $d"
               exit 1
             fi
             cp THIRD_PARTY_LICENSES.md "$stage/THIRD_PARTY_LICENSES.md"
-            if [ -f "$stage/cargo-heal.exe" ]; then
-              (cd "$stage" && zip -q "../../dist/cargo-heal-${TAG}-${target}.zip" cargo-heal.exe THIRD_PARTY_LICENSES.md)
+            if [ -f "$stage/cargo-refine.exe" ]; then
+              (cd "$stage" && zip -q "../../dist/cargo-refine-${TAG}-${target}.zip" cargo-refine.exe THIRD_PARTY_LICENSES.md)
             else
-              tar -czf "dist/cargo-heal-${TAG}-${target}.tar.gz" -C "$stage" cargo-heal THIRD_PARTY_LICENSES.md
+              tar -czf "dist/cargo-refine-${TAG}-${target}.tar.gz" -C "$stage" cargo-refine THIRD_PARTY_LICENSES.md
             fi
           done
           (cd dist && sha256sum -- * > SHA256SUMS)
@@ -272,7 +272,7 @@ jobs:
           set -euo pipefail
           bins=""
           for d in artifacts/bin-*/; do
-            for b in "$d/cargo-heal" "$d/cargo-heal.exe"; do
+            for b in "$d/cargo-refine" "$d/cargo-refine.exe"; do
               [ -f "$b" ] && bins="$bins $b"
             done
           done
@@ -284,7 +284,7 @@ jobs:
           set -euo pipefail
           bins=""
           for d in artifacts/bin-*/; do
-            for b in "$d/cargo-heal" "$d/cargo-heal.exe"; do
+            for b in "$d/cargo-refine" "$d/cargo-refine.exe"; do
               [ -f "$b" ] && bins="$bins $b"
             done
           done
@@ -319,11 +319,11 @@ jobs:
             exit 1
           fi
           TAG="${GITHUB_REF_NAME}"
-          notes="Prebuilt cargo-heal binaries for ${TAG}. Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README."
+          notes="Prebuilt cargo-refine binaries for ${TAG}. Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README."
           if gh release view "$TAG" -R "$DIST_REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" -R "$DIST_REPO" --clobber dist/*
           else
-            gh release create "$TAG" -R "$DIST_REPO" --title "cargo-heal ${TAG}" --notes "$notes" dist/*
+            gh release create "$TAG" -R "$DIST_REPO" --title "cargo-refine ${TAG}" --notes "$notes" dist/*
           fi
 
       # Manifest bumps go out as PRs — a human merges after eyeballing the
@@ -337,10 +337,10 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           BASE="https://github.com/${DIST_REPO}/releases/download/${TAG}"
-          arm_sha=$(awk -v f="cargo-heal-${TAG}-aarch64-apple-darwin.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
-          intel_sha=$(awk -v f="cargo-heal-${TAG}-x86_64-apple-darwin.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
-          linux_arm_sha=$(awk -v f="cargo-heal-${TAG}-aarch64-unknown-linux-musl.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
-          linux_sha=$(awk -v f="cargo-heal-${TAG}-x86_64-unknown-linux-musl.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          arm_sha=$(awk -v f="cargo-refine-${TAG}-aarch64-apple-darwin.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          intel_sha=$(awk -v f="cargo-refine-${TAG}-x86_64-apple-darwin.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          linux_arm_sha=$(awk -v f="cargo-refine-${TAG}-aarch64-unknown-linux-musl.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
+          linux_sha=$(awk -v f="cargo-refine-${TAG}-x86_64-unknown-linux-musl.tar.gz" '$2==f{print $1}' dist/SHA256SUMS)
           for sha in "$arm_sha" "$intel_sha" "$linux_arm_sha" "$linux_sha"; do
             if [ -z "$sha" ]; then
               echo "::error::a macOS/Linux hash is missing from SHA256SUMS — refusing to write a broken formula"
@@ -348,8 +348,8 @@ jobs:
             fi
           done
           mkdir -p Formula
-          cat > Formula/cargo-heal.rb <<EOF
-          # Manifest-only formula for the binary-only cargo-heal distribution
+          cat > Formula/cargo-refine.rb <<EOF
+          # Manifest-only formula for the binary-only cargo-refine distribution
           # (Proposal 003). Generated by the release pipeline — do not edit by hand.
           class CargoHeal < Formula
             desc "Modelless code healer: clippy, rust perf, kernel, docker, rustc-error fixes"
@@ -358,25 +358,25 @@ jobs:
 
             on_macos do
               if Hardware::CPU.arm?
-                url "${BASE}/cargo-heal-${TAG}-aarch64-apple-darwin.tar.gz"
+                url "${BASE}/cargo-refine-${TAG}-aarch64-apple-darwin.tar.gz"
                 sha256 "${arm_sha}"
               else
-                url "${BASE}/cargo-heal-${TAG}-x86_64-apple-darwin.tar.gz"
+                url "${BASE}/cargo-refine-${TAG}-x86_64-apple-darwin.tar.gz"
                 sha256 "${intel_sha}"
               end
             end
             on_linux do
               if Hardware::CPU.arm?
-                url "${BASE}/cargo-heal-${TAG}-aarch64-unknown-linux-musl.tar.gz"
+                url "${BASE}/cargo-refine-${TAG}-aarch64-unknown-linux-musl.tar.gz"
                 sha256 "${linux_arm_sha}"
               else
-                url "${BASE}/cargo-heal-${TAG}-x86_64-unknown-linux-musl.tar.gz"
+                url "${BASE}/cargo-refine-${TAG}-x86_64-unknown-linux-musl.tar.gz"
                 sha256 "${linux_sha}"
               end
             end
 
             def install
-              bin.install "cargo-heal"
+              bin.install "cargo-refine"
             end
           end
           EOF
@@ -385,16 +385,16 @@ jobs:
           # "no history in common" (measured, run 34081938353).
           git clone -q --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
           mkdir -p tap/Formula
-          cp Formula/cargo-heal.rb tap/Formula/cargo-heal.rb
+          cp Formula/cargo-refine.rb tap/Formula/cargo-refine.rb
           cd tap
-          git config user.name "cargo-heal-release-bot"
+          git config user.name "cargo-refine-release-bot"
           git config user.email "bot@users.noreply.github.com"
           git checkout -q -b "release/${TAG}"
-          git add Formula/cargo-heal.rb
-          git commit -qm "cargo-heal ${TAG}"
+          git add Formula/cargo-refine.rb
+          git commit -qm "cargo-refine ${TAG}"
           git push -q -f origin "HEAD:refs/heads/release/${TAG}"
           gh pr create -R "$TAP_REPO" --head "release/${TAG}" --base main \
-            --title "cargo-heal ${TAG}" \
+            --title "cargo-refine ${TAG}" \
             --body "Automated formula bump from the release pipeline (Plan 105 T2.4). Verify the sha256 lines against the release's SHA256SUMS, then merge."
 
       - name: Bump the Scoop manifest (PR)
@@ -405,35 +405,35 @@ jobs:
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
-          win_sha=$(awk -v f="cargo-heal-${TAG}-x86_64-pc-windows-msvc.zip" '$2==f{print $1}' dist/SHA256SUMS)
+          win_sha=$(awk -v f="cargo-refine-${TAG}-x86_64-pc-windows-msvc.zip" '$2==f{print $1}' dist/SHA256SUMS)
           if [ -z "$win_sha" ]; then
             echo "::error::the windows hash is missing from SHA256SUMS — refusing to write a broken manifest"
             exit 1
           fi
           mkdir -p bucket
-          cat > "bucket/cargo-heal.json" <<EOF
+          cat > "bucket/cargo-refine.json" <<EOF
           {
               "version": "${VERSION}",
               "architecture": {
                   "64bit": {
-                      "url": "https://github.com/${DIST_REPO}/releases/download/${TAG}/cargo-heal-${TAG}-x86_64-pc-windows-msvc.zip",
+                      "url": "https://github.com/${DIST_REPO}/releases/download/${TAG}/cargo-refine-${TAG}-x86_64-pc-windows-msvc.zip",
                       "hash": "${win_sha}"
                   }
               },
-              "bin": ["cargo-heal.exe"],
+              "bin": ["cargo-refine.exe"],
               "checkver": "github"
           }
           EOF
           git clone -q --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${BUCKET_REPO}.git" bucket_repo
           mkdir -p bucket_repo/bucket
-          cp "bucket/cargo-heal.json" "bucket_repo/bucket/cargo-heal.json"
+          cp "bucket/cargo-refine.json" "bucket_repo/bucket/cargo-refine.json"
           cd bucket_repo
-          git config user.name "cargo-heal-release-bot"
+          git config user.name "cargo-refine-release-bot"
           git config user.email "bot@users.noreply.github.com"
           git checkout -q -b "release/${TAG}"
-          git add "bucket/cargo-heal.json"
-          git commit -qm "cargo-heal ${TAG}"
+          git add "bucket/cargo-refine.json"
+          git commit -qm "cargo-refine ${TAG}"
           git push -q -f origin "HEAD:refs/heads/release/${TAG}"
           gh pr create -R "$BUCKET_REPO" --head "release/${TAG}" --base main \
-            --title "cargo-heal ${TAG}" \
+            --title "cargo-refine ${TAG}" \
             --body "Automated manifest bump from the release pipeline (Plan 105 T2.4). Verify the hash against the release's SHA256SUMS, then merge."

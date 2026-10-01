@@ -9,7 +9,7 @@
 //! construction, and Bench 009's 0/10 held-out measures the L1 verbatim
 //! cache tier, not the proposer path production runs. This bench freezes a
 //! REAL-CODE fixture set (mined from pre-sweep sibling commits, provenance
-//! recorded), heals it with the SAME bounded-fixpoint loop as `cargo heal
+//! recorded), heals it with the SAME bounded-fixpoint loop as `cargo refine
 //! --fix`, and scores the result against real `cargo clippy` verdicts — an
 //! oracle with zero relationship to our corpus or proposers (T3.5.5).
 //!

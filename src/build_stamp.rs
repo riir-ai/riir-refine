@@ -3,7 +3,7 @@
 //! ## The class
 //!
 //! Any bare `cargo build --release` of this crate overwrites the symlink
-//! target (`~/.cargo/bin/cargo-heal`) with a DEFAULT-FEATURES binary. That
+//! target (`~/.cargo/bin/cargo-refine`) with a DEFAULT-FEATURES binary. That
 //! binary exists, runs, and still advertises `sync` / `--refill` / the
 //! burn-push tail in `--help` — while every one of them is `cfg`'d out. The
 //! 00:21 incident (AGENTS.md "Standing caveat") is exactly that: a healer
@@ -37,7 +37,7 @@
 pub const COMPILED_FEATURES: &str = env!("RIIR_CLIPPY_COMPILED_FEATURES");
 
 /// The feature set `.github/workflows/release.yml` builds the shipped
-/// `cargo-heal` with, in the workflow's own order (the order is part of the
+/// `cargo-refine` with, in the workflow's own order (the order is part of the
 /// claim — the rebuild command below is meant to be copy-pasteable).
 pub const RELEASE_FEATURES: &[&str] = &[
     "latent_retrieval",
@@ -47,7 +47,7 @@ pub const RELEASE_FEATURES: &[&str] = &[
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names
-/// `--bin cargo-heal`: a workspace-wide release build is what produced the
+/// `--bin cargo-refine`: a workspace-wide release build is what produced the
 /// stale binary in the first place.
 #[must_use]
 pub fn rebuild_command() -> String {
@@ -71,7 +71,7 @@ pub fn rebuild_command_for(needed: &[&str]) -> String {
         }
     }
     format!(
-        "cargo build --release --features {} --bin cargo-heal",
+        "cargo build --release --features {} --bin cargo-refine",
         set.join(",")
     )
 }
@@ -103,12 +103,12 @@ pub fn missing_release_features() -> Vec<&'static str> {
 }
 
 /// The `--version` block (Issue 117 T1). Line 0 is the unchanged
-/// `cargo-heal <version>` — anything parsing the old single-line output keeps
+/// `cargo-refine <version>` — anything parsing the old single-line output keeps
 /// working; the stamp rides after it.
 #[must_use]
 pub fn version_lines() -> Vec<String> {
     let mut out = vec![
-        format!("cargo-heal {}", env!("CARGO_PKG_VERSION")),
+        format!("cargo-refine {}", env!("CARGO_PKG_VERSION")),
         format!("features: {COMPILED_FEATURES}"),
     ];
     let missing = missing_release_features();
@@ -165,16 +165,16 @@ pub fn refuse(command: &str, needed: &[&str]) -> ! {
 /// # Errors
 ///
 /// The workflow is unreadable, or carries no `--features` line beside
-/// `--bin cargo-heal`. Both are "the instrument cannot see", never "matches".
+/// `--bin cargo-refine`. Both are "the instrument cannot see", never "matches".
 pub fn release_set_from_workflow(workflow: &str) -> Result<Vec<String>, String> {
-    // The release build line is `--features <set> --bin cargo-heal`, wrapped
+    // The release build line is `--features <set> --bin cargo-refine`, wrapped
     // across a shell continuation in the real file. Read the token AFTER
-    // `--features` on whichever line also mentions `--bin cargo-heal`.
+    // `--features` on whichever line also mentions `--bin cargo-refine`.
     let line = workflow
         .lines()
-        .find(|l| l.contains("--bin cargo-heal") && l.contains("--features"))
+        .find(|l| l.contains("--bin cargo-refine") && l.contains("--features"))
         .ok_or_else(|| {
-            "no line carrying both `--features` and `--bin cargo-heal`".to_string()
+            "no line carrying both `--features` and `--bin cargo-refine`".to_string()
         })?;
     let mut it = line.split_whitespace();
     while let Some(tok) = it.next() {
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn version_block_shape_follows_the_verdict() {
         let lines = version_lines();
-        assert!(lines[0].starts_with("cargo-heal "));
+        assert!(lines[0].starts_with("cargo-refine "));
         assert!(lines[1].starts_with("features: "));
         let joined = lines.join("\n");
         if missing_release_features().is_empty() {
@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn rebuild_command_names_the_bin_and_the_whole_release_set() {
         let cmd = rebuild_command();
-        assert!(cmd.contains("--bin cargo-heal"), "{cmd}");
+        assert!(cmd.contains("--bin cargo-refine"), "{cmd}");
         assert!(cmd.contains("--release"), "{cmd}");
         for f in RELEASE_FEATURES {
             assert!(cmd.contains(f), "{cmd} is missing {f}");
@@ -354,9 +354,9 @@ mod tests {
     #[test]
     fn workflow_parser_refuses_rather_than_guessing() {
         assert!(release_set_from_workflow("nothing relevant here\n").is_err());
-        assert!(release_set_from_workflow("  --bin cargo-heal\n").is_err());
-        assert!(release_set_from_workflow("  --features --bin cargo-heal\n").is_err());
-        let ok = release_set_from_workflow("  cargo build --features a,b --bin cargo-heal \\\n")
+        assert!(release_set_from_workflow("  --bin cargo-refine\n").is_err());
+        assert!(release_set_from_workflow("  --features --bin cargo-refine\n").is_err());
+        let ok = release_set_from_workflow("  cargo build --features a,b --bin cargo-refine \\\n")
             .expect("a well-formed line parses");
         assert_eq!(ok, vec!["a".to_string(), "b".to_string()]);
     }

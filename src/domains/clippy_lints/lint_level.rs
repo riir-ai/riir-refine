@@ -1,4 +1,4 @@
-//! Issue 135 — the effective-lint-level gate for `cargo heal --fix`.
+//! Issue 135 — the effective-lint-level gate for `cargo refine --fix`.
 //!
 //! The healer's proposers fire on source SHAPE, not on the target crate's
 //! lint configuration. For a default-on lint that is the same thing; for an

@@ -1,4 +1,4 @@
-//! `cargo heal` — the unified healing CLI (Plan 005 Phase 2 + Phase 6).
+//! `cargo refine` — the unified healing CLI (Plan 005 Phase 2 + Phase 6).
 //!
 //! `--suggest` mode: walk real `.rs` files, chunk them at fn/impl/struct
 //! boundaries, retrieve matching corpus rules via the latent substrate
@@ -25,13 +25,13 @@
 //! Run (in-repo):
 //!
 //! ```text
-//! cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
-//! cargo run --features latent_retrieval --bin cargo-heal -- --fix src/          # review
-//! cargo run --features latent_retrieval --bin cargo-heal -- --fix --write src/  # apply
+//! cargo run --features latent_retrieval --bin cargo-refine -- --suggest src/
+//! cargo run --features latent_retrieval --bin cargo-refine -- --fix src/          # review
+//! cargo run --features latent_retrieval --bin cargo-refine -- --fix --write src/  # apply
 //! ```
 //!
-//! Installed as `cargo-heal` (via `cargo install --path . --features
-//! `latent_retrieval``), cargo's subcommand convention makes it `cargo heal
+//! Installed as `cargo-refine` (via `cargo install --path . --features
+//! `latent_retrieval``), cargo's subcommand convention makes it `cargo refine
 //! --suggest src/`.
 
 use std::collections::VecDeque;
@@ -49,7 +49,7 @@ use riir_clippy::draft::{
 use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::EvolveRecorder;
 
-/// `cargo heal --info` — the one-command stats view (the 2026-09-17 owner
+/// `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 /// ask): account + consents, wallet, staking, this machine's mining queue
 /// outcomes, and the repo-local work state. Bin-local module (the
 /// composition is CLI surface, not lib API); read-only by contract.
@@ -353,7 +353,7 @@ fn enforce_kat_soft_gate(args: &Args) {
             riir_clippy::kat_soft_gate::SoftGateVerdict::Refuse { .. }
         ) && depleted_mine_offer()
         {
-            eprintln!("cargo heal: out of KAT — contributing now (`cargo heal sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)");
+            eprintln!("cargo refine: out of KAT — contributing now (`cargo refine sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)");
             run_kat_sync();
             let (reloaded, w) = riir_clippy::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = w {
@@ -389,7 +389,7 @@ fn enforce_kat_soft_gate(args: &Args) {
         &account_id,
     );
     eprintln!(
-        "cargo heal: REFUSED — the account's last synced KAT balance is {balance} \
+        "cargo refine: REFUSED — the account's last synced KAT balance is {balance} \
          (depleted) and this machine has not yet contributed (Issue 075 soft gate)."
     );
     // Proposal 006: name the trial-credit leg when the server has said it
@@ -402,7 +402,7 @@ fn enforce_kat_soft_gate(args: &Args) {
     // and `--refill` retired with it (devnet-ops only). The refuel paths a
     // user is offered are exactly two — contribute or pay.
     eprintln!("Refuel with exactly one of:");
-    eprintln!("  * contribute:  cargo heal --mine   (what mining is)  →  cargo heal sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
+    eprintln!("  * contribute:  cargo refine --mine   (what mining is)  →  cargo refine sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
     eprintln!("  * top up:      {top_up}");
     // The owner's 2026-09-18 amendment: the refusal also SHOWS what the
     // run would have done — count-only. Still no meter, no charge ledger,
@@ -448,16 +448,16 @@ fn print_depleted_survey(args: &Args) {
         }
     }
     // What mining can do about it, and when it pays. The count is the
-    // SYNC-time outbox (the same root `cargo heal sync` drains), so it is
+    // SYNC-time outbox (the same root `cargo refine sync` drains), so it is
     // honest right after the contribute-now attempt above.
     let queued = mining_queued_batches();
     if queued > 0 {
         eprintln!(
-            "  * mining: {queued} batch(es) queued — `cargo heal sync` pushes them (payouts land at the 7-day epoch settle)"
+            "  * mining: {queued} batch(es) queued — `cargo refine sync` pushes them (payouts land at the 7-day epoch settle)"
         );
     } else {
         eprintln!(
-            "  * mining: none queued — `cargo heal --mine` contributes (payouts land at the 7-day epoch settle)"
+            "  * mining: none queued — `cargo refine --mine` contributes (payouts land at the 7-day epoch settle)"
         );
     }
     let leaderboard = format!(
@@ -505,7 +505,7 @@ fn survey_fixable_count(paths: &[PathBuf]) -> Option<usize> {
 }
 
 /// The mining half: batches queued in the sync outbox (the same root
-/// `cargo heal sync` drains), 0 when the dir does not exist yet.
+/// `cargo refine sync` drains), 0 when the dir does not exist yet.
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn mining_queued_batches() -> u32 {
     let outbox = resolve_heal_root(&[]).join(".heal").join("outbox");
@@ -561,7 +561,7 @@ fn depleted_mine_offer() -> bool {
     if !std::io::stdin().is_terminal() {
         return false;
     }
-    eprint!("cargo heal: out of KAT — contribute mining data now to lift the gate? [y/N] ");
+    eprint!("cargo refine: out of KAT — contribute mining data now to lift the gate? [y/N] ");
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     if std::io::stdin().read_line(&mut line).is_err() {
@@ -579,7 +579,7 @@ fn kat_gate_disabled() -> bool {
         .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
 }
 
-/// Proposal 008 (the owner's just-works UX, 2026-09-08): `cargo heal
+/// Proposal 008 (the owner's just-works UX, 2026-09-08): `cargo refine
 /// --mine` — the contribution onboarding. One screen: what mining is,
 /// the policy warning, the web link, and the login → heal → sync →
 /// account loop. Feature halves (account status / outbox) appear only
@@ -602,7 +602,7 @@ const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
 fn run_mine_intro() {
     println!("KAT mining — turn your healing work into network credit");
     println!();
-    println!("WHAT: every cargo heal run records HOW the healer behaved (which rules");
+    println!("WHAT: every cargo refine run records HOW the healer behaved (which rules");
     println!("fired, which were declined, what merged). Redacted batches of those");
     println!("records — no source, no paths, rule verdicts only — are the network's");
     println!("training data. Miners who contribute them are paid from 70% of every");
@@ -615,16 +615,16 @@ fn run_mine_intro() {
     println!("  * Contributing is opt-in per MACHINE: after --mine, every heal run (the");
     println!("    dry run and --fix) auto-syncs the redacted batch — one line, fail-soft.");
     println!("    Before --mine, nothing leaves this machine (one exception: --mine/--unmine");
-    println!("    send a signed tier note); --unmine stops the auto-push; `cargo heal sync`");
+    println!("    send a signed tier note); --unmine stops the auto-push; `cargo refine sync`");
     println!("    stays the manual push.");
     println!();
     println!("START (3 steps):");
     println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
-    println!("  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo heal login)");
-    println!("  3. heal:       cargo heal --fix        <- real fixes, metered locally");
-    println!("  sync:          --mine just ran it; re-run --mine or `cargo heal sync` to push newer batches");
+    println!("  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo refine login)");
+    println!("  3. heal:       cargo refine --fix        <- real fixes, metered locally");
+    println!("  sync:          --mine just ran it; re-run --mine or `cargo refine sync` to push newer batches");
     println!();
-    println!("WATCH: cargo heal account              <- burn, balance, grant, network state");
+    println!("WATCH: cargo refine account              <- burn, balance, grant, network state");
     println!();
 
     // Feature halves: the status the build can actually see.
@@ -635,7 +635,7 @@ fn run_mine_intro() {
         // first"). Run the zero-config login chain right here: LOCAL key ops
         // only (no network, no prompt — the fallback chain ends in a
         // generated key with a disclosed note), outcome printed via the same
-        // printer `cargo heal login` uses. The account dir is re-resolved
+        // printer `cargo refine login` uses. The account dir is re-resolved
         // after login so an adoption/generate on this run is what reports.
         let account = ensure_logged_in();
         if let Some(account) = account {
@@ -657,7 +657,7 @@ fn run_mine_intro() {
     }
     #[cfg(feature = "kat_transport")]
     {
-        println!("transport: available — `cargo heal sync` pushes the queued batch");
+        println!("transport: available — `cargo refine sync` pushes the queued batch");
     }
     #[cfg(not(feature = "kat_transport"))]
     {
@@ -681,7 +681,7 @@ fn run_mine_intro() {
         Err(e) => {
             eprintln!("consent: NOT recorded — {e}");
             eprintln!(
-                "consent: the explainer above still stands; `cargo heal sync` behaves as before \
+                "consent: the explainer above still stands; `cargo refine sync` behaves as before \
                  (running sync IS the consent)"
             );
         }
@@ -691,7 +691,7 @@ fn run_mine_intro() {
         eprintln!("{w}");
     }
     println!("{}", state.status_line());
-    println!("opt out any time: cargo heal --unmine");
+    println!("opt out any time: cargo refine --unmine");
 
     // The policy moment rides the consent moment: opting IN here while the
     // repo has no `.heal-sync-policy` would make the very next `sync` print
@@ -711,7 +711,7 @@ fn run_mine_intro() {
                 policy_path.display()
             ),
             Err(e) => eprintln!(
-                "policy: could not write .heal-sync-policy ({e}) — `cargo heal sync` will block \
+                "policy: could not write .heal-sync-policy ({e}) — `cargo refine sync` will block \
                  rows until one exists"
             ),
         }
@@ -735,10 +735,10 @@ fn run_mine_intro() {
 
     // The join completes with a SYNC (owner mandate 2026-09-10, the same
     // call that killed the "step 2 first" dead-end): opting in and then
-    // telling the user to find `cargo heal sync` is exactly the confusing
+    // telling the user to find `cargo refine sync` is exactly the confusing
     // extra step the tier exists to remove. The full sync runs here — push
     // half (the grant claim rides an accepted batch), burn drain, lease
-    // pull — the SAME command output `cargo heal sync` prints. Guards: the
+    // pull — the SAME command output `cargo refine sync` prints. Guards: the
     // transport halves (a build without them has no sync, stated above),
     // and a SUCCESSFUL login — run_kat_sync exits the process on a missing
     // account, which must never turn a completed --mine into a failure.
@@ -750,19 +750,19 @@ fn run_mine_intro() {
         .is_ok();
         if account_ok {
             println!();
-            println!("sync: pushing what's queued (the same as running `cargo heal sync`):");
+            println!("sync: pushing what's queued (the same as running `cargo refine sync`):");
             run_kat_sync();
         }
     }
 }
 
-/// Owner mandate 2026-09-08: `cargo heal --unmine` — the opt-OUT
+/// Owner mandate 2026-09-08: `cargo refine --unmine` — the opt-OUT
 /// counterpart to `--mine`. Records machine-global consent = OPTED OUT and
 /// prints, honestly, what that did and did NOT turn off:
 ///
 /// - **Unchanged**: healing itself. `--fix` / `--suggest` / the bare dry run
 ///   were always local and stay local; this flag does not touch them.
-/// - **Stopped**: the outbound push half of `cargo heal sync`. The lease
+/// - **Stopped**: the outbound push half of `cargo refine sync`. The lease
 ///   PULL half still runs — a read is not a contribution.
 /// - **Not deleted**: whatever is already queued in `.heal/outbox/`. The
 ///   path is named and the files are the user's to remove; a tool that
@@ -789,7 +789,7 @@ fn run_unmine() {
     if let Err(e) = riir_clippy::kat_mining_consent::write(&dir, false) {
         eprintln!("unmine: could NOT record the opt-out — {e}");
         eprintln!(
-            "unmine: consent is still `{}`, so `cargo heal sync` would still push. Fix the \
+            "unmine: consent is still `{}`, so `cargo refine sync` would still push. Fix the \
              account dir and re-run.",
             before.label()
         );
@@ -822,16 +822,16 @@ fn run_unmine() {
         }
     }
     println!();
-    println!("STOPPED: the outbound push half of `cargo heal sync`. No redacted batch,");
+    println!("STOPPED: the outbound push half of `cargo refine sync`. No redacted batch,");
     println!("no signed payload, nothing else leaves this machine (the one exception:");
     println!("the attempted tier note above — tier + machine label, never heal data).");
     println!("The lease PULL half still runs — downloading a corpus epoch is a read,");
     println!("not a contribution.");
     println!();
     println!("UNCHANGED (and always was local): healing itself.");
-    println!("  cargo heal              <- dry run, zero edits, local");
-    println!("  cargo heal --fix        <- real fixes, written locally, compile-gated");
-    println!("  cargo heal --suggest    <- review, local");
+    println!("  cargo refine              <- dry run, zero edits, local");
+    println!("  cargo refine --fix        <- real fixes, written locally, compile-gated");
+    println!("  cargo refine --suggest    <- review, local");
     println!("Trajectories still record locally — that is how the healer learns on YOUR");
     println!("machine. Opting out stops the upload, not the local memory.");
     println!();
@@ -855,7 +855,7 @@ fn run_unmine() {
         Err(e) => eprintln!("unmine: could not clear the watermark: {e}"),
     }
     println!(
-        "ACCOUNT: untouched — your key, balance and rewards stay exactly as they are.\n         This is fully reversible: `cargo heal --mine` re-enables contributing\n         with the SAME account. (To abandon the identity entirely — which\n         ORPHANS the server-side balance forever and starts fresh-grant\n         territory — use `cargo heal --unmine --purge`.)"
+        "ACCOUNT: untouched — your key, balance and rewards stay exactly as they are.\n         This is fully reversible: `cargo refine --mine` re-enables contributing\n         with the SAME account. (To abandon the identity entirely — which\n         ORPHANS the server-side balance forever and starts fresh-grant\n         territory — use `cargo refine --unmine --purge`.)"
     );
     println!();
 
@@ -866,7 +866,7 @@ fn run_unmine() {
     match queued {
         0 => println!("  (nothing queued — no batch was ever held for submission)"),
         n => println!(
-            "  {n} queued batch file(s). These are YOURS to delete — `cargo heal` will not \
+            "  {n} queued batch file(s). These are YOURS to delete — `cargo refine` will not \
              submit them while you are opted out, and it will not delete them either."
         ),
     }
@@ -875,11 +875,11 @@ fn run_unmine() {
         "{}",
         riir_clippy::kat_mining_consent::MiningConsent::OptedOut.status_line()
     );
-    println!("re-enable any time: cargo heal --mine");
+    println!("re-enable any time: cargo refine --mine");
 }
 
 /// riir-dapps Proposal 004 Half 1: the work-stats sharing consent —
-/// `cargo heal --stats [on|off]`, bare = the status readout.
+/// `cargo refine --stats [on|off]`, bare = the status readout.
 ///
 /// A THIRD consent state beside mining, deny-by-default: unlike mining's
 /// `Unset` ("running sync IS consent"), an Unset stats record pushes
@@ -914,7 +914,7 @@ fn run_stats_consent(on: bool, off: bool) {
             "mining consent: separate — `--mine`/`--unmine` govern batch contributions; \
              this record governs work-STATS sharing only"
         );
-        println!("share: `cargo heal --stats on`    stop: `cargo heal --stats off`");
+        println!("share: `cargo refine --stats on`    stop: `cargo refine --stats off`");
         return;
     };
 
@@ -944,7 +944,7 @@ fn run_stats_consent(on: bool, off: bool) {
             "NOTHING is pushed for this lane while opted out, and nothing was ever deleted — \
              already-shared epoch aggregates stay public (forward-only)."
         );
-        println!("re-enable any time: cargo heal --stats on");
+        println!("re-enable any time: cargo refine --stats on");
         return;
     }
 
@@ -956,12 +956,12 @@ fn run_stats_consent(on: bool, off: bool) {
     #[cfg(feature = "kat_service")]
     if ensure_logged_in().is_none() {
         eprintln!(
-            "stats: no account — consent recorded, but pushes need `cargo heal login` first"
+            "stats: no account — consent recorded, but pushes need `cargo refine login` first"
         );
     }
     #[cfg(not(feature = "kat_service"))]
     eprintln!(
-        "stats: built without kat_service — consent recorded; `cargo heal login` (a \
+        "stats: built without kat_service — consent recorded; `cargo refine login` (a \
          kat_service build) is needed before any push"
     );
 
@@ -989,7 +989,7 @@ fn run_stats_consent(on: bool, off: bool) {
         "INERT until the Proposal 004 Half-2 server route lands — consent is recorded \
          now; no row leaves this machine before then."
     );
-    println!("stop any time: cargo heal --stats off");
+    println!("stop any time: cargo refine --stats off");
 }
 
 /// The destructive half of `--unmine --purge`: remove the local account
@@ -1018,7 +1018,7 @@ fn run_unmine_purge() {
             println!("  1. The identity IS the key. The server ledger keeps your records,");
             println!("     rewards and balance, but NOTHING can ever claim them again —");
             println!("     there is no recovery path. The balance is orphaned forever.");
-            println!("  2. `cargo heal login` afterwards generates a NEW key = a NEW account");
+            println!("  2. `cargo refine login` afterwards generates a NEW key = a NEW account");
             println!("     with a FRESH once-per-key welcome grant. The old balance does not");
             println!("     transfer. Repeatedly purging + re-logging is grant-farming — do");
             println!("     not build a habit on it.");
@@ -1083,13 +1083,13 @@ fn run_unmine_purge() {
 /// `--unmine` names is the path a queued batch actually sits at. No cfg
 /// fallback: `resolve_heal_root` compiles behind
 /// `latent_retrieval`/`kat_service` and this binary's `required-features`
-/// include BOTH, so a build of `cargo-heal` without it cannot exist — an
+/// include BOTH, so a build of `cargo-refine` without it cannot exist — an
 /// unreachable cfg arm would be an untested claim, not extra safety.
 fn unmine_outbox_dir() -> PathBuf {
     resolve_heal_root(&[]).join(".heal").join("outbox")
 }
 
-/// The login-outcome lines, shared by `cargo heal login` and `--mine`'s
+/// The login-outcome lines, shared by `cargo refine login` and `--mine`'s
 /// auto-login (owner mandate 2026-09-10) — one printer, so the two entry
 /// points can never describe the same event differently. `prefix` is the
 /// command label ("kat" for login, "login" for --mine).
@@ -1132,7 +1132,7 @@ fn ensure_logged_in() -> Option<riir_clippy::kat_account::KatAccount> {
             Err(e) => {
                 eprintln!("login:   FAILED — {e}");
                 eprintln!(
-                    "login:   run `cargo heal login` to set the account up, then --mine again"
+                    "login:   run `cargo refine login` to set the account up, then --mine again"
                 );
                 None
             }
@@ -1140,7 +1140,7 @@ fn ensure_logged_in() -> Option<riir_clippy::kat_account::KatAccount> {
     }
 }
 
-/// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal login` — generate/import
+/// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo refine login` — generate/import
 /// the account key + record the grant projection. Prints one outcome line,
 /// the account id, the key path, and the Phase-0 honesty note. No `$`
 /// figures (caveats #12/#15). The EXPLICIT login: `--mine` runs the same
@@ -1171,7 +1171,7 @@ fn run_kat_login(import_key: Option<&Path>) {
     }
 }
 
-/// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal account` — the local
+/// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo refine account` — the local
 /// view. Verifies key↔record agreement first (tamper evidence — identity is
 /// load-bearing for future sync, so a mismatch exits 1), then prints the
 /// identity block + (when a repo-local charge ledger exists) this repo's
@@ -1420,7 +1420,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     }
 }
 
-/// Proposal 005 T1.6 (Plan 040): `cargo heal update` — the pull-only lease
+/// Proposal 005 T1.6 (Plan 040): `cargo refine update` — the pull-only lease
 /// refresh. The explicit-command budget is generous (30s) vs the run-start
 /// phase's ~4s: a user asking for an update is waiting for it.
 #[cfg(feature = "kat_transport")]
@@ -1464,7 +1464,7 @@ fn run_kat_update() {
     }
 }
 
-/// Proposal 005 T1.6 (Plan 040): `cargo heal sync` — bidirectional. Push:
+/// Proposal 005 T1.6 (Plan 040): `cargo refine sync` — bidirectional. Push:
 /// build the redacted payload from the repo trajectory store (the
 /// sanctioned egress path — every row gated) + POST /sync; with the service
 /// plane deferred the payload is validated + queued locally
@@ -1502,7 +1502,7 @@ fn print_mine_push(outcome: &MinePush) {
     }
 }
 
-/// The mining-batch push half, SHARED by `cargo heal sync` (verbose — the
+/// The mining-batch push half, SHARED by `cargo refine sync` (verbose — the
 /// caller has already gated on consent and prints its opted-out report)
 /// and the opted-in run tails (quiet: one line via [`print_mine_push`],
 /// never fatal, short budget). The watermark advances ONLY on a real push
@@ -1520,7 +1520,7 @@ fn push_mining_batch(
     use riir_clippy::kat_redact::SpanOrigin;
     use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
 
-    let sv = !quiet; // verbose mode = the `cargo heal sync` report
+    let sv = !quiet; // verbose mode = the `cargo refine sync` report
     let root = resolve_heal_root(&[]);
     let kv = root.join(".heal").join("trajectories.kv");
     if !kv.exists() {
@@ -1562,7 +1562,7 @@ fn push_mining_batch(
             if sv {
                 eprintln!(
                     "sync: no account ({e}) — payload v2 is signed with the account \
-                         key; run `cargo heal login` first"
+                         key; run `cargo refine login` first"
                 );
                 std::process::exit(1);
             }
@@ -1613,7 +1613,7 @@ fn push_mining_batch(
             policy_path.display()
         );
         eprintln!(
-            "sync: run `cargo heal --mine` in this repo to write the default policy, \
+            "sync: run `cargo refine --mine` in this repo to write the default policy, \
              then sync again (queued batches stay queued)"
         );
     }
@@ -1656,7 +1656,7 @@ fn push_mining_batch(
             // T079: the ledger-plane half of "the service sees the key" —
             // claim the once-per-key free-tier grant (read-first; a no-op
             // when already in place). Quiet mode prints nothing here —
-            // `cargo heal account` reports the grant, and a failure is
+            // `cargo refine account` reports the grant, and a failure is
             // invisible at this layer by design (the push already landed).
             if let Ok(key) = account.signing_key() {
                 if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
@@ -1715,7 +1715,7 @@ fn push_mining_batch(
     }
 }
 
-/// riir-dapps Plan 023: `cargo heal config get` / `config set --url
+/// riir-dapps Plan 023: `cargo refine config get` / `config set --url
 /// <alias|url>` — the persisted service-url surface. The set is LOUD (g2):
 /// the resolved URL, whether it is a pinned network host, the env-override
 /// trap, and (for a custom/loopback host) the local-artifact caveat for
@@ -1746,7 +1746,7 @@ fn run_kat_config(set: bool, url: Option<&str>) {
             ),
             svc::ServiceUrlSource::Config => {}
             svc::ServiceUrlSource::Default => println!(
-                "             (the baked default never moves — opt in: cargo heal config set \
+                "             (the baked default never moves — opt in: cargo refine config set \
                  --url devnet|testnet|mainnet)"
             ),
         }
@@ -1795,7 +1795,7 @@ fn run_kat_config(set: bool, url: Option<&str>) {
             var = svc::SERVICE_URL_ENV_VAR
         );
     }
-    println!("config: inspect anytime — cargo heal config get");
+    println!("config: inspect anytime — cargo refine config get");
 }
 
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
@@ -1811,7 +1811,7 @@ fn run_kat_sync() {
     let transport = HttpLeaseTransport::new(&url, 30);
 
     // ── consent gate (owner mandate 2026-09-08) ───────────────────────
-    // Checked BEFORE the payload is built or signed: `cargo heal --unmine`
+    // Checked BEFORE the payload is built or signed: `cargo refine --unmine`
     // records a machine-global opt-out, and an opt-out that still assembles
     // and signs the batch it refuses to send is not an opt-out. `Unset`
     // pushes exactly as this command always did — running `sync` IS the
@@ -1834,7 +1834,7 @@ fn run_kat_sync() {
     // machines are unaffected: the push half skips itself and the drain
     // still runs.
     // ── push half (extracted — shared with the opted-in run tails) ────
-    // The consent gate stays verbose HERE: `cargo heal sync` is the place
+    // The consent gate stays verbose HERE: `cargo refine sync` is the place
     // an opted-out holder reads WHY nothing was built or signed. The tails
     // gate on explicit OptedIn instead and run the same helper quiet.
     if !consent.push_allowed() {
@@ -1843,7 +1843,7 @@ fn run_kat_sync() {
             "sync: consent record {} says opted out; nothing was built, signed or sent",
             riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
         );
-        println!("sync: re-enable with `cargo heal --mine` (the lease pull below still runs — a read is not a contribution)");
+        println!("sync: re-enable with `cargo refine --mine` (the lease pull below still runs — a read is not a contribution)");
     } else {
         let _ = push_mining_batch(false, &url, &transport);
     }
@@ -1897,7 +1897,7 @@ fn run_kat_sync() {
     }
 }
 
-/// Proposal 005 T1.6 (Plan 040): `cargo heal claim --tx <sig>` — compose +
+/// Proposal 005 T1.6 (Plan 040): `cargo refine claim --tx <sig>` — compose +
 /// submit the payment-claim request. The five-check verification is
 /// service-side (deferred with the Worker shell); the client validates the
 /// format, queues locally when the service is not live, and NEVER fakes a
@@ -1918,7 +1918,7 @@ fn run_kat_claim(sig: Option<&str>) {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("claim: no account ({e}) — run `cargo heal login` first");
+            eprintln!("claim: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -1970,7 +1970,7 @@ fn run_kat_claim(sig: Option<&str>) {
     }
 }
 
-/// Proposal 007 T2.1 (Plan 041): `cargo heal stake --usd <N>` / `stake
+/// Proposal 007 T2.1 (Plan 041): `cargo refine stake --usd <N>` / `stake
 /// --info` — the render-only + QR staking surface. Service-first (the
 /// service composes the transfer request it must track the reference for);
 /// when the plane is not live, the local fallback composes from the
@@ -1999,7 +1999,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("stake: no account ({e}) — run `cargo heal login` first");
+            eprintln!("stake: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2035,7 +2035,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
                         riir_clippy::kat_stake_client::redeem_flow(&transport, &key, &account_id)
                     }
                 }
-                Err(e) => Err(format!("stake: account key unreadable ({e}) — run `cargo heal login`")),
+                Err(e) => Err(format!("stake: account key unreadable ({e}) — run `cargo refine login`")),
             };
             match flow {
                 Ok(line) => println!("{line}"),
@@ -2148,7 +2148,7 @@ fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
     }
 }
 
-/// Proposal 007 T2.1: `cargo heal unstake` — the drain-all-unlocked refund
+/// Proposal 007 T2.1: `cargo refine unstake` — the drain-all-unlocked refund
 /// request. Service-first; the not-live path queues the intent and still
 /// prints the full escrow/venting disclosure (the mechanics copy is true
 /// regardless of transport — disclosed at BOTH stake and unstake time per
@@ -2159,7 +2159,7 @@ fn run_kat_unstake() {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("unstake: no account ({e}) — run `cargo heal login` first");
+            eprintln!("unstake: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2179,7 +2179,7 @@ fn run_kat_unstake() {
             Ok(key) => {
                 riir_clippy::kat_stake_client::unstake_flow(&transport, &key, &account_id, &root, now_unix)
             }
-            Err(e) => Err(format!("unstake: account key unreadable ({e}) — run `cargo heal login`")),
+            Err(e) => Err(format!("unstake: account key unreadable ({e}) — run `cargo refine login`")),
         };
         match flow {
             Ok(line) => println!("{line}"),
@@ -2196,7 +2196,7 @@ fn run_kat_unstake() {
     }
 }
 
-/// Proposal 008 T2.4 (Plan 012): `cargo heal vote --proposal <id>
+/// Proposal 008 T2.4 (Plan 012): `cargo refine vote --proposal <id>
 /// --yes|--no` — the governance voting surface. Renders the proposal
 /// (weight + evidence lead — the service serves the view when live), signs
 /// the vote with the LOGIN key, and submits (service-first; the honest
@@ -2210,7 +2210,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("vote: no account ({e}) — run `cargo heal login` first");
+            eprintln!("vote: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2300,7 +2300,7 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("pay: no account ({e}) — run `cargo heal login` first");
+            eprintln!("pay: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2420,7 +2420,7 @@ fn run_kat_faucet(qr: bool) {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("faucet: no account ({e}) — run `cargo heal login` first");
+            eprintln!("faucet: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2458,7 +2458,7 @@ fn run_kat_faucet(qr: bool) {
     }
 }
 
-/// Plan 117 as amended by riir-dapps Issue 094 D4: `cargo heal --refill` —
+/// Plan 117 as amended by riir-dapps Issue 094 D4: `cargo refine --refill` —
 /// the DEVNET-OPS faucet credit (the user daily faucet/drip tier is
 /// retired). The composition lives in [`riir_clippy::kat_refill`], which
 /// owns both postures: the client-side D4 gate below, and the wire posture
@@ -2483,10 +2483,10 @@ fn run_kat_refill(wait_secs: u64) {
     let dir = riir_clippy::kat_account::KatAccount::default_dir();
     // ── riir-dapps Issue 094 D4: the posture gate, FIRST ─────────────────
     // Before the account load below, so a mainnet user meets the retirement
-    // sentence rather than "run `cargo heal login` first" — the refusal is
+    // sentence rather than "run `cargo refine login` first" — the refusal is
     // about the LEDGER and is true whether or not this box holds a key. The
     // posture signal is the one the client ALREADY has (the Plan 023
-    // service-URL resolution: env > `cargo heal config set` > the mainnet
+    // service-URL resolution: env > `cargo refine config set` > the mainnet
     // default); no second posture mechanism is invented here. An EMPTY
     // refusal is the permission, so the rule lives in one place
     // (`kat_refill::refill_refusal_lines`) rather than being restated as a
@@ -2515,7 +2515,7 @@ fn run_kat_refill(wait_secs: u64) {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("refill: no account ({e}) — run `cargo heal login` first");
+            eprintln!("refill: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2533,7 +2533,7 @@ fn run_kat_refill(wait_secs: u64) {
     } else {
         eprintln!(
             "refill: the local account id does not carry a valid service account prefix — \
-                 re-run `cargo heal login`"
+                 re-run `cargo refine login`"
         );
         std::process::exit(1);
     };
@@ -2724,7 +2724,7 @@ impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
     }
 }
 
-/// Proposal 011 §7 / T4.1+T4.2 (Plan 066): `cargo heal wetrun [--dry-run]`.
+/// Proposal 011 §7 / T4.1+T4.2 (Plan 066): `cargo refine wetrun [--dry-run]`.
 ///
 /// The network is classified from the RESOLVED service URL and the
 /// admission decision is [`riir_clippy::kat_wetrun::admit`] — mainnet is
@@ -2759,7 +2759,7 @@ fn run_kat_wetrun(dry_run: bool) {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("wetrun: no account ({e}) — run `cargo heal login` first");
+            eprintln!("wetrun: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2844,7 +2844,7 @@ fn run_kat_wetrun(dry_run: bool) {
     }
 }
 
-/// P015 Phase 2 (Plan 127): `cargo heal replay` — the Max tier's earn
+/// P015 Phase 2 (Plan 127): `cargo refine replay` — the Max tier's earn
 /// lane. One command = one lease → local replay of every item → one signed
 /// verdict per item. The judgment half is [`riir_clippy::kat_replay`]
 /// (step-0 canary hash check + the pinned rate rule over the real clippy
@@ -2890,7 +2890,7 @@ fn run_kat_replay() {
     let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("replay: no account ({e}) — run `cargo heal login` first");
+            eprintln!("replay: no account ({e}) — run `cargo refine login` first");
             std::process::exit(1);
         }
     };
@@ -2916,7 +2916,7 @@ fn run_kat_replay() {
              contributions to the same economy the sync push feeds",
             riir_clippy::kat_mining_consent::consent_path(&consent_dir).display()
         );
-        eprintln!("replay: re-enable with `cargo heal --mine`");
+        eprintln!("replay: re-enable with `cargo refine --mine`");
         std::process::exit(2);
     }
 
@@ -3414,50 +3414,50 @@ fn usage() -> ! {
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     eprintln!(
-        "cargo-heal (Plan 005) — modelless code healing via latent corpus retrieval
+        "cargo-refine (Plan 005) — modelless code healing via latent corpus retrieval
 
 USAGE:
-    cargo heal                                        <- DRY RUN: review what would be fixed (no edits)
-    cargo heal --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
-    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker|dist>] [--top-k <N>] [--clippy-json <path>] <path>...
-    cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
-    cargo heal --mine                                 <- what mining is + policy + how to earn KAT
-    cargo heal --unmine                               <- opt OUT of contributing (healing keeps working)
-    cargo heal --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
-    cargo heal --refill [--refill-wait <s>]           <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
-    cargo heal --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service)
-    cargo heal --dump-trajectories > trajectories.jsonl
-    cargo heal --memory-stats                         (loop debug query, no paths)
-    cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
-    cargo heal --collapse-report                      (self-collapse monitor, 042)
-    cargo heal --corpus-stats [--json] [--import-series]  (corpus/score series, 050 T2)
-    cargo heal --frontier-report                       (learnability band report, 089 T1+2)
-    cargo heal --coverage-report                       (corpus coverage debt, 119)
-    cargo heal --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
-    cargo heal --fixseq-stats [PATHS]                  (cascade law + derailment index, 128)
-    cargo heal --gate-calibration                      (Issue 130 T1+T3+OOD report — strata δ calibration + OOD-axis readout + corpus-stall flag; ungated, report-only)
-    cargo heal --active-set                            (Issue 102 marker — print demotions + caps)
-    cargo heal --active-set-demote <domain:rule>       (demote a rule out of the fan-out + fix dispatch; e.g. clippy:manual_div_ceil)
-    cargo heal --active-set-readmit <domain:rule>      (remove a demotion — the manual re-admit)
-    cargo heal --active-set-cap <domain:N>             (per-domain active ceiling; 0 removes — OFF by default)
-    cargo heal --active-set-clear                      (drop every demotion + cap; the corpus is never touched)
-    cargo heal --score-bench | --score-report        (needs --features score_bench)
-    cargo heal --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke --necessity-rule RULE]  (Issue 108 + the 102-T4 per-decision paired lane, score_bench)
-    cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
-    cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
-    cargo heal account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
-    cargo heal update                                 (corpus lease refresh, kat_transport)
-    cargo heal sync                                   (push redacted batches + pull lease, kat_transport)
-    cargo heal claim --tx <sig>                       (queue/submit a payment claim, kat_service)
-    cargo heal stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
-    cargo heal vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
-    cargo heal unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
-    cargo heal pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
-    cargo heal faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
-    cargo heal wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
-    cargo heal replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
-    cargo heal config get                            (the ACTIVE service url + its source: env > config > default)
-    cargo heal config set --url <devnet|testnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
+    cargo refine                                        <- DRY RUN: review what would be fixed (no edits)
+    cargo refine --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
+    cargo refine --suggest [--domain <auto|clippy|perf|kernel|sec|docker|dist>] [--top-k <N>] [--clippy-json <path>] <path>...
+    cargo refine --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
+    cargo refine --mine                                 <- what mining is + policy + how to earn KAT
+    cargo refine --unmine                               <- opt OUT of contributing (healing keeps working)
+    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
+    cargo refine --refill [--refill-wait <s>]           <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
+    cargo refine --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service)
+    cargo refine --dump-trajectories > trajectories.jsonl
+    cargo refine --memory-stats                         (loop debug query, no paths)
+    cargo refine --recompute-elo                        (batch rating backfill, 039 T2)
+    cargo refine --collapse-report                      (self-collapse monitor, 042)
+    cargo refine --corpus-stats [--json] [--import-series]  (corpus/score series, 050 T2)
+    cargo refine --frontier-report                       (learnability band report, 089 T1+2)
+    cargo refine --coverage-report                       (corpus coverage debt, 119)
+    cargo refine --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
+    cargo refine --fixseq-stats [PATHS]                  (cascade law + derailment index, 128)
+    cargo refine --gate-calibration                      (Issue 130 T1+T3+OOD report — strata δ calibration + OOD-axis readout + corpus-stall flag; ungated, report-only)
+    cargo refine --active-set                            (Issue 102 marker — print demotions + caps)
+    cargo refine --active-set-demote <domain:rule>       (demote a rule out of the fan-out + fix dispatch; e.g. clippy:manual_div_ceil)
+    cargo refine --active-set-readmit <domain:rule>      (remove a demotion — the manual re-admit)
+    cargo refine --active-set-cap <domain:N>             (per-domain active ceiling; 0 removes — OFF by default)
+    cargo refine --active-set-clear                      (drop every demotion + cap; the corpus is never touched)
+    cargo refine --score-bench | --score-report        (needs --features score_bench)
+    cargo refine --necessity-bench [--necessity-top N --necessity-random K --necessity-smoke --necessity-rule RULE]  (Issue 108 + the 102-T4 per-decision paired lane, score_bench)
+    cargo refine --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
+    cargo refine login [--key <path>]                   (KAT account, needs --features kat_service)
+    cargo refine account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
+    cargo refine update                                 (corpus lease refresh, kat_transport)
+    cargo refine sync                                   (push redacted batches + pull lease, kat_transport)
+    cargo refine claim --tx <sig>                       (queue/submit a payment claim, kat_service)
+    cargo refine stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
+    cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
+    cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
+    cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
+    cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
+    cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
+    cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
+    cargo refine config get                            (the ACTIVE service url + its source: env > config > default)
+    cargo refine config set --url <devnet|testnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
 
     (no mode)       DRY RUN (the just-works default): review what WOULD be
                     fixed — suggest output over the paths (default: `.`),
@@ -3466,7 +3466,7 @@ USAGE:
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
                     ({} perf rules + {} clippy lints: {} | {}). WRITES by default (the
                     explicit flag is the consent) and compile-gates on --verify builds
-                    (opt out: --no-verify). Bare `cargo heal` is the dry run. The proposer's
+                    (opt out: --no-verify). Bare `cargo refine` is the dry run. The proposer's
                     visitor is the gate — latent suggestions never auto-apply.
     --fix-compile   Compile-error repair (Plan 019, needs --features rustc_errors):
                     cargo-check the owning packages, parse coded errors (E0597...),
@@ -3686,11 +3686,11 @@ USAGE:
                     the login → heal → sync loop (Proposal 008); LOGS YOU IN
                     when no account exists and RUNS THE SYNC at the end (owner
                     mandate 2026-09-10 — the join completes in one command;
-                    re-run --mine, or use `cargo heal sync`, to push newer
+                    re-run --mine, or use `cargo refine sync`, to push newer
                     batches). Works in every build; the status halves need
                     their features.
     --unmine        Opt OUT of contributing (keeps your account): records
-                    machine-global consent = opted out, so `cargo heal sync`
+                    machine-global consent = opted out, so `cargo refine sync`
                     refuses its PUSH half (the lease pull still runs), and
                     clears the local sync bookkeeping (watermark; the queued
                     .heal/outbox/ batches are named, never deleted). Your key,
@@ -3724,7 +3724,7 @@ USAGE:
                     balance is positive. It REFUSES on mainnet (and on any
                     ledger this client cannot name as devnet): the free daily
                     faucet/drip tier is retired, and the user refuel paths
-                    are exactly two — contribute (cargo heal --mine) or pay
+                    are exactly two — contribute (cargo refine --mine) or pay
                     (KAT packs).
     --refill-wait <s>  With --refill ONLY: bound the settle poll (default 0 =
                     one after-read, no poll — the credit normally lands at the
@@ -3853,7 +3853,7 @@ struct Args {
     yes: bool,
     /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
     /// 2026-09-08, the ai.gist.rs three-tier engagement story). Records
-    /// machine-global consent = OPTED OUT, which makes `cargo heal sync`
+    /// machine-global consent = OPTED OUT, which makes `cargo refine sync`
     /// refuse its PUSH half (the lease pull still runs). Standalone — early
     /// return, works in every feature build. Mutually exclusive with
     /// `--mine`.
@@ -4129,7 +4129,7 @@ struct Args {
     pay_wait: u64,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
-    /// have no --dry-run flag: bare `cargo heal` IS the dry run.
+    /// have no --dry-run flag: bare `cargo refine` IS the dry run.
     wetrun_dry_run: bool,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
@@ -4341,12 +4341,12 @@ fn parse_args() -> Args {
         coverage_report: false,
         corpus_delta: false,
     };
-    // `cargo heal <args>` executes this binary with the SUBCOMMAND NAME as
-    // argv[1] — cargo passes `heal` through (direct `cargo-heal <args>` does
+    // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
+    // argv[1] — cargo passes `heal` through (direct `cargo-refine <args>` does
     // not carry it). Without the strip, `heal` landed in the scan-path arm
     // and the KAT subcommands' `args.paths.is_empty()` guard demoted every
-    // one of them (`cargo heal login` → "no mode given" + usage dump) while
-    // every flag-mode invocation (`cargo heal --suggest …`) kept working —
+    // one of them (`cargo refine login` → "no mode given" + usage dump) while
+    // every flag-mode invocation (`cargo refine --suggest …`) kept working —
     // which is how the G1 gates and the repo-side KAT tests all missed it.
     // A leading `heal` is this tool's own name, never a scan path.
     let mut raw: Vec<String> = std::env::args().skip(1).collect();
@@ -4361,7 +4361,7 @@ fn parse_args() -> Args {
             // it writes (and verify-gates when the build carries
             // `fix_verify`), because the explicit flag IS the consent. The
             // old review-only behavior needs one explicit word: `--dry-run`
-            // (also the bare `cargo heal` default — see validate_mode_flags).
+            // (also the bare `cargo refine` default — see validate_mode_flags).
             "--fix" => args.fix = true,
             "--fix-compile" => args.fix_compile = true,
             "--dump-trajectories" => args.dump_trajectories = true,
@@ -4651,7 +4651,7 @@ fn parse_args() -> Args {
             "--redeem" => args.stake_redeem = true,
             // `--info` is TWO surfaces: `stake --info` (the position) and
             // the standalone stats view. The subcommand word parses FIRST
-            // when it leads (`cargo heal stake --info`), so this arm sees
+            // when it leads (`cargo refine stake --info`), so this arm sees
             // the command; a `--info` that LEADS before `stake` is caught
             // by the post-parse combo guard (never a silent mode flip).
             "--info" => {
@@ -4781,7 +4781,7 @@ fn parse_args() -> Args {
     if args.info {
         if args.command.is_some() {
             eprintln!(
-                "--info is the standalone stats view — the stake position is `cargo heal stake --info`"
+                "--info is the standalone stats view — the stake position is `cargo refine stake --info`"
             );
             usage();
         }
@@ -4860,7 +4860,7 @@ fn parse_args() -> Args {
     // ── The owner's just-works defaults (2026-09-08) ─────────────────────
     // Applied HERE (inside parse_args) so every downstream check — the
     // paths guard below included — sees the final posture:
-    //   * bare `cargo heal` (no mode, no KAT command) = DRY RUN: suggest
+    //   * bare `cargo refine` (no mode, no KAT command) = DRY RUN: suggest
     //     over `.` (or the given paths), zero edits;
     //   * `--fix` = REAL fix: writes (the explicit flag is the consent)
     //     and compile-gates on fix_verify builds (opt out --no-verify);
@@ -4868,7 +4868,7 @@ fn parse_args() -> Args {
     //
     // EVERY standalone early-return mode is excluded (`is_bare_posture`):
     // the original 4-flag check set `suggest=true` under `--misses` too,
-    // and the --misses standalone guard then refused it — `cargo heal
+    // and the --misses standalone guard then refused it — `cargo refine
     // --misses` was exit-2 broken from the 09-08 default until this list
     // was completed (the same regression class would hit any future
     // standalone mode added here without a row).
@@ -4954,7 +4954,7 @@ fn is_bare_posture(args: &Args) -> bool {
 /// the bare posture and the paths guard: before this predicate the two
 /// hand-mirrored lists drifted — the 2026-09-12 --misses fix completed
 /// `is_bare_posture` with `!args.version` while the paths guard kept its
-/// missing row, and `cargo heal --version` went exit-2 ("no paths given")
+/// missing row, and `cargo refine --version` went exit-2 ("no paths given")
 /// from that day until the shared predicate landed (it had worked before
 /// only because the pre-09-12 bare default accidentally armed `suggest` +
 /// `paths=["."]` under it, which the --misses fix correctly removed).
@@ -4998,7 +4998,7 @@ fn standalone_mode(args: &Args) -> bool {
 /// accepted/rejected combination is pinnable by test. The owner's
 /// just-works UX (2026-09-08) folded the DEFAULTS in: a caller with NO
 /// mode and NO standalone command gets a DRY-RUN suggest over `.` — bare
-/// `cargo heal` must just work — and `--fix` without `--dry-run` writes
+/// `cargo refine` must just work — and `--fix` without `--dry-run` writes
 /// (the explicit flag is the consent); `--dry-run` pins the review
 /// posture regardless of flag order.
 ///
@@ -7827,7 +7827,7 @@ fn main() {
         // stale binary (the 00:21 class — a bare `cargo build --release`
         // overwrote the symlink target with a default-features build) is
         // identifiable in one command from any terminal. Line 0 is the
-        // unchanged `cargo-heal <version>`.
+        // unchanged `cargo-refine <version>`.
         for line in riir_clippy::build_stamp::version_lines() {
             println!("{line}");
         }
@@ -7851,7 +7851,7 @@ fn main() {
     // ── Owner mandate 2026-09-08: --unmine — the opt-OUT counterpart. ────
     // Standalone, same shape as --mine (early return before
     // validate_mode_flags), works in EVERY build. Records consent = opted
-    // out so `cargo heal sync` refuses its push half; deletes nothing.
+    // out so `cargo refine sync` refuses its push half; deletes nothing.
     if args.unmine {
         run_unmine();
         if args.purge {
@@ -8622,7 +8622,7 @@ fn main() {
     // parse_args; the banner here is the only bare-mode surface.
     if args.bare_default {
         println!(
-            "cargo heal: dry run — reviewing {} (no edits). Real fixes: cargo heal --fix",
+            "cargo refine: dry run — reviewing {} (no edits). Real fixes: cargo refine --fix",
             if args.paths.len() == 1 && args.paths[0] == std::path::Path::new(".") {
                 "the current directory".to_string()
             } else {
@@ -8668,7 +8668,7 @@ fn main() {
     // ── Plan 019 T4.3b: --dump-trajectories — the human grep surface ────
     // On-demand export of the trajectory store (one JSONL line per
     // trajectory) instead of a shadow log. ONE source of truth: the
-    // backend's own file. Redirectable: `cargo heal --dump-trajectories
+    // backend's own file. Redirectable: `cargo refine --dump-trajectories
     // > traj.jsonl`.
     if args.dump_trajectories {
         // The neuron-db backend (`latent_retrieval` builds): the repo-local
@@ -11191,7 +11191,7 @@ fn main() {
                     &acct,
                 );
                 eprintln!(
-                    "kat-charge: top up — {url} (KAT packs), or contribute: cargo heal --mine"
+                    "kat-charge: top up — {url} (KAT packs), or contribute: cargo refine --mine"
                 );
                 let qr = riir_clippy::kat_lease_client::render_qr_ascii(&url);
                 if !qr.is_empty() {
@@ -11215,7 +11215,7 @@ fn main() {
     // --fix alike) drains the mining batch here, exactly like the burn
     // report below. CONSENT IS THE DIFFERENCE: `Unset` never auto-pushes
     // (nothing silently leaves a machine that never joined — running
-    // `cargo heal sync` IS the consent), `OptedOut` never pushes, and the
+    // `cargo refine sync` IS the consent), `OptedOut` never pushes, and the
     // quiet push is one line, ~5 s, never an exit-code change. It runs
     // BEFORE the burn drain (the run_kat_sync ORDER note: the accepted
     // batch is what makes the drain's v3 response carry `contributed:
@@ -11267,7 +11267,7 @@ fn main() {
     // logged in, and the cumulative burn exceeds the last ACCEPTED report.
     // GIT-STYLE STACKING: a failed push leaves the ack untouched, so the
     // un-pushed delta is a local commit — it reports (cumulative) with the
-    // next run or `cargo heal sync`. One status line, ~5 s budget, never an
+    // next run or `cargo refine sync`. One status line, ~5 s budget, never an
     // exit-code change.
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     if let Some(c) = kat_charge.as_ref() {
@@ -11376,7 +11376,7 @@ fn main() {
                 };
                 riir_clippy::kat_fixstat_client::push_fixstat(&transport, &key, &row)
             }
-            None => Err("no logged-in account (run `cargo heal --stats on`)".to_string()),
+            None => Err("no logged-in account (run `cargo refine --stats on`)".to_string()),
         };
         match pushed {
             Ok(ack) => println!(
@@ -12452,11 +12452,11 @@ mod mode_flag_tests {
     /// The --misses regression pin: the 2026-09-08 just-works bare default
     /// fired under EVERY standalone mode (only the four primary modes were
     /// excluded), setting `suggest=true` — and `--misses`'s strict standalone
-    /// guard then refused it, so `cargo heal --misses` exited 2 from 09-08
+    /// guard then refused it, so `cargo refine --misses` exited 2 from 09-08
     /// until the exclusion list was completed. Every standalone mode must
     /// stay out of the bare posture AND count as standalone for the paths
     /// guard — the 2026-09-12 --misses fix completed `is_bare_posture`
-    /// (adding `!version`) but not the paths guard, so `cargo heal
+    /// (adding `!version`) but not the paths guard, so `cargo refine
     /// --version` went exit-2 ("no paths given") from 09-12 until the two
     /// lists were merged into the shared `standalone_mode` predicate; every
     /// new standalone mode adds a row here in the same commit.

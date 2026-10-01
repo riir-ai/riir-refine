@@ -1,6 +1,6 @@
 #!/bin/sh
 # self_evolve_audit.sh — one command to judge heal ADOPTION + E2E self-evolve state.
-# Answers: "did agents actually use cargo heal?" and "is the self-evolve loop closing?"
+# Answers: "did agents actually use cargo refine?" and "is the self-evolve loop closing?"
 # Issue 037 gates read directly from this output. Stateless: run anytime, compare runs.
 # Issue 039 T4: §1b renders the ELO leaderboard (rule-vs-shape ratings) from
 # --dump-trajectories — the human-readable rating surface (ratings stay in
@@ -50,15 +50,15 @@ ADOPTION_DATE="2026-08-24T00:00:00"
 REPOS="katgpt-rs riir-ai riir-train riir-neuron-db riir-chain riir-clippy riir-game-sdk riir-mmorpg-examples riir-viewbridge riir-dapps"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║ cargo-heal adoption + self-evolve audit  (Issue 037)         ║"
+echo "║ cargo-refine adoption + self-evolve audit  (Issue 037)         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 echo ""
 echo "── 0. Setup health (preconditions for 'agent will use it') ──"
-if [ -x "$HOME/.cargo/bin/cargo-heal" ] || [ -L "$HOME/.cargo/bin/cargo-heal" ]; then
-  echo "  binary:    OK  (~/.cargo/bin/cargo-heal)"
+if [ -x "$HOME/.cargo/bin/cargo-refine" ] || [ -L "$HOME/.cargo/bin/cargo-refine" ]; then
+  echo "  binary:    OK  (~/.cargo/bin/cargo-refine)"
 else
-  echo "  binary:    MISSING (~/.cargo/bin/cargo-heal)"
+  echo "  binary:    MISSING (~/.cargo/bin/cargo-refine)"
 fi
 # P3 discipline mechanized (2026-09-02): a stale installed binary silently serves a
 # stale corpus/proposer set — measured TWICE (the 08-31 incident sat through five
@@ -67,7 +67,7 @@ fi
 # commit touching src/ or Cargo.toml. Sibling path-dep state is deliberately NOT
 # tracked here (a dirty sibling tree has no "current" to compare against); gates
 # grep `bin-age:.*STALE`.
-BIN_AGE_PATH="$HOME/.cargo/bin/cargo-heal"
+BIN_AGE_PATH="$HOME/.cargo/bin/cargo-refine"
 BIN_AGE_MTIME=""
 if [ -e "$BIN_AGE_PATH" ] || [ -L "$BIN_AGE_PATH" ]; then
   # FOLLOW the symlink: macOS/BSD stat does NOT dereference by default (-L
@@ -97,7 +97,7 @@ if [ -n "$BIN_AGE_MTIME" ] && [ -n "$BIN_AGE_LAST_CT" ]; then
     echo "  bin-age:   OK  (binary $(bin_age_fmt "$BIN_AGE_MTIME") >= last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"))"
   else
     echo "  bin-age:   STALE — binary $(bin_age_fmt "$BIN_AGE_MTIME") predates last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"); adoption runs serve a stale corpus"
-    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-heal (the release set — latent_retrieval alone compiles the refill/sync/burn-push surfaces to nothing)"
+    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-refine (the release set — latent_retrieval alone compiles the refill/sync/burn-push surfaces to nothing)"
   fi
 else
   echo "  bin-age:   UNKNOWN (mtime/git comparison unavailable on this box — broken symlink? no git?)"
@@ -107,16 +107,16 @@ fi
 #  - Windows: native symlinks need admin/Developer Mode (Operation not
 #    permitted, measured 2026-08-31) — a CONTENT-VERIFIED copy is accepted;
 #    a drifted copy is named loudly
-if [ -L "$HOME/.agents/skills/cargo-heal" ]; then
+if [ -L "$HOME/.agents/skills/cargo-refine" ]; then
   echo "  skill:     OK  (symlink)"
-elif [ -f "$HOME/.agents/skills/cargo-heal/SKILL.md" ]; then
-  if diff -q "$HEAL_REPO/.agents/skills/cargo-heal/SKILL.md" "$HOME/.agents/skills/cargo-heal/SKILL.md" >/dev/null 2>&1; then
+elif [ -f "$HOME/.agents/skills/cargo-refine/SKILL.md" ]; then
+  if diff -q "$HEAL_REPO/.agents/skills/cargo-refine/SKILL.md" "$HOME/.agents/skills/cargo-refine/SKILL.md" >/dev/null 2>&1; then
     echo "  skill:     OK  (content-verified copy — no native symlink on this box)"
   else
-    echo "  skill:     STALE COPY — SKILL.md differs from canonical $HEAL_REPO/.agents/skills/cargo-heal; refresh it"
+    echo "  skill:     STALE COPY — SKILL.md differs from canonical $HEAL_REPO/.agents/skills/cargo-refine; refresh it"
   fi
 else
-  echo "  skill:     MISSING (~/.agents/skills/cargo-heal)"
+  echo "  skill:     MISSING (~/.agents/skills/cargo-refine)"
 fi
 # Zed's global AGENTS.md lives at ~/.config/zed/ on macOS/Linux but at
 # %APPDATA%\\Zed on Windows (measured 2026-08-31) — check both.
@@ -124,7 +124,7 @@ ZED_AGENTS=""
 for cand in "$HOME/.config/zed/AGENTS.md" "${APPDATA:-$HOME/AppData/Roaming}/Zed/AGENTS.md"; do
   [ -f "$cand" ] && ZED_AGENTS="$cand" && break
 done
-if [ -n "$ZED_AGENTS" ] && grep -q 'cargo heal --fix --write --verify' "$ZED_AGENTS" 2>/dev/null; then
+if [ -n "$ZED_AGENTS" ] && grep -q 'cargo refine --fix --write --verify' "$ZED_AGENTS" 2>/dev/null; then
   echo "  global rule: OK  ($ZED_AGENTS)"
 else
   echo "  global rule: MISSING (checked ~/.config/zed/AGENTS.md + %APPDATA%/Zed/AGENTS.md)"
@@ -136,8 +136,8 @@ echo "── 1. Memory (loop state — verdicts & tiers; 038: store-first) ─�
 # (latent_retrieval builds); the envelope is legacy/fallback. Read BOTH:
 # per-repo store rows via the binary's backend-agnostic dump, then the
 # envelope if it still exists (or its .migrated tombstone).
-HEAL_BIN="${HEAL_REPO}/target/release/cargo-heal"
-[ -x "$HEAL_BIN" ] || HEAL_BIN="$HOME/.cargo/bin/cargo-heal"
+HEAL_BIN="${HEAL_REPO}/target/release/cargo-refine"
+[ -x "$HEAL_BIN" ] || HEAL_BIN="$HOME/.cargo/bin/cargo-refine"
 DUMP_TMP="$(mktemp)"
 STORE_REPOS=""
 for r in $REPOS; do
@@ -204,7 +204,7 @@ echo "── 1b. ELO leaderboard (Issue 039 T4 — rule-vs-shape ratings) ──
 # review-only sighting = draw → stays unrated). Withdrawn rows (tier=2) are
 # EXCLUDED from the standings (Issue 021's trust model — ratings themselves
 # include every match; this is a render filter). Ratings are as fresh as
-# the last `cargo heal --recompute-elo` in that repo.
+# the last `cargo refine --recompute-elo` in that repo.
 if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   ELO_TMP="$(mktemp)"
   for r in $STORE_REPOS; do
@@ -252,7 +252,7 @@ if draws:
     tail = " …" if len(draws) > 6 else ""
     print(f"    draws (review-only, unrated): {shown}{tail}")
 if pending:
-    print(f"    NOTE: {len(pending)} rule(s) with verdicts but no rating — run: cargo heal --recompute-elo")
+    print(f"    NOTE: {len(pending)} rule(s) with verdicts but no rating — run: cargo refine --recompute-elo")
 if tough:
     def clip(s):
         s = s.replace("\n", " ")
@@ -287,7 +287,7 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
     echo "           top-k H = normalized rule-entropy of the retrieved top-k;"
     echo "           mem win% = Memory share of served fixes (citation-rate analog)."
   else
-    echo "  (binary lacks --collapse-report — rebuild with: cargo build --release --features latent_retrieval -p riir-clippy --bin cargo-heal)"
+    echo "  (binary lacks --collapse-report — rebuild with: cargo build --release --features latent_retrieval -p riir-clippy --bin cargo-refine)"
   fi
   rm -rf "$CR_PROBE"
 else
@@ -387,13 +387,13 @@ cr = float(last.get('created_rate', 0)) * 100
 # state; a drop BELOW it (or created above) is decay.
 E4_HEAL_FLOOR = 96.1   # 96.2 stable − tie slack
 E4_CREATED_CEIL = 2.0  # 1 created = 1.9%
-verdict = 'PASS' if (hr >= E4_HEAL_FLOOR and cr <= E4_CREATED_CEIL) else 'FAIL — DECAY (investigate the miss map: cargo heal --score-bench)'
+verdict = 'PASS' if (hr >= E4_HEAL_FLOOR and cr <= E4_CREATED_CEIL) else 'FAIL — DECAY (investigate the miss map: cargo refine --score-bench)'
 adj_ts = (last.get('ts') or last.get('timestamp') or '?')[:19]
 print(f"  E4 (no decay vs post-P9 floor 96.2/<=1.9): {verdict} — latest heal={hr:.1f}% created={cr:.1f}%")
 print(f"    adjudicated on the gen-1 row {adj_ts} (n_ran={last.get('n_ran','?')}, edits={last.get('edits_total','?')}); non-gen-1 sweep/regen rows do not gate this floor")
 EOF
 else
-  echo "  score_history.jsonl ABSENT — run: cargo heal --score-bench"
+  echo "  score_history.jsonl ABSENT — run: cargo refine --score-bench"
 fi
 
 echo ""

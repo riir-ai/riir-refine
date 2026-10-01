@@ -105,7 +105,7 @@ fn norm_components(p: &std::path::Path) -> Vec<String> {
 /// guard? (Issue 118 T3 — the override posture.)
 ///
 /// Two shapes count as consent, and nothing else:
-/// - `user` NAMES the exact file (`cargo heal --fix-compile --write
+/// - `user` NAMES the exact file (`cargo refine --fix-compile --write
 ///   benches/bench_x.rs`);
 /// - `user` IS a `benches` directory above the file (`--fix-compile
 ///   benches/`) — the component must equal `benches`, so a crate root or

@@ -427,7 +427,7 @@ impl DriverFixer {
 
 impl CompileFixer for DriverFixer {
     fn name(&self) -> &'static str {
-        "cargo heal --fix-compile"
+        "cargo refine --fix-compile"
     }
 
     fn fix(&self, dir: &Path) -> Result<(), String> {

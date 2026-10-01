@@ -342,7 +342,7 @@ compile_oracle = []
 # Under --verify the vec-with-capacity usize gate loosens (plain-path
 # bounds attempted; E0308 backs the revert) + redundant_closure returns
 # as an attempted lint (VERIFY_LINTS). Implies latent_retrieval (extends
-# the cargo-heal bin surface).
+# the cargo-refine bin surface).
 fix_verify = ["compile_oracle", "latent_retrieval"]
 
 # Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
@@ -351,7 +351,7 @@ fix_verify = ["compile_oracle", "latent_retrieval"]
 # decline against real-`cargo clippy` verdicts (the T3.5.5 oracle), appends
 # to .benchmarks/score_history.jsonl + renders .benchmarks/score_history.svg.
 # Opt-in: needs the oracle (clippy_verify) + the fix-path surface
-# (latent_retrieval; the cargo-heal bin hosts the --score-bench flag) +
+# (latent_retrieval; the cargo-refine bin hosts the --score-bench flag) +
 # BOTH proposer domains (the bench scores clippy_lints AND rust_perf
 # fixtures through their respective FIXABLE_* proposer tables). The
 # entropy-gap OOD axis (issue 077 T1/T4) rides this feature via the
@@ -884,12 +884,12 @@ name = "bench_clippy_ternary_tps"
 harness = false
 required-features = ["ternary_inference"]
 
-# Plan 005 Phase 2: the unified `cargo heal` CLI (suggest mode). Named
-# `cargo-heal` so an installed copy gets the `cargo heal` subcommand UX.
+# Plan 005 Phase 2: the unified `cargo refine` CLI (suggest mode). Named
+# `cargo-refine` so an installed copy gets the `cargo refine` subcommand UX.
 # Gated on latent_retrieval (the matcher + indexes live behind it) AND
 # rust_perf (the --fix proposers live behind it — Phase 6 T6.1).
 [[bin]]
-name = "cargo-heal"
+name = "cargo-refine"
 path = "src/bin/heal.rs"
 required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
 
@@ -979,7 +979,7 @@ debug = false
 [profile.release]
 strip = true
 
-# Size-optimized DIST profile for the SHIPPED cargo-heal binary (Proposal 003
+# Size-optimized DIST profile for the SHIPPED cargo-refine binary (Proposal 003
 # release lane) — invoked via `cargo build --profile dist`. Deliberately NOT
 # [profile.release]: profile.bench inherits release, and opt-level="s" +
 # codegen-units=1 would poison the GOAT criterion benches (bench_001_l1_matvec
@@ -990,7 +990,7 @@ strip = true
 # tables inlined as giant static functions), 13% syn — so the win comes from
 # codegen knobs, not dep removal. Perf trade (opt-level "s" vs 3) is dev-time
 # only — the LOCAL dev global binary stays on plain `--release` for drafter
-# speed; re-measure with `cargo heal --score-bench` before ever switching the
+# speed; re-measure with `cargo refine --score-bench` before ever switching the
 # dev binary to dist.
 [profile.dist]
 inherits = "release"
@@ -1183,8 +1183,8 @@ required-features = ["kat_service", "latent_retrieval"]
 
 # Owner mandate 2026-09-08: the --mine / --unmine consent tiers, driven
 # through the real binary. `kat_transport` (the `sync` command's gate)
-# subsumes `kat_service`; the other three are the cargo-heal bin's own
-# required-features, without which CARGO_BIN_EXE_cargo-heal does not exist.
+# subsumes `kat_service`; the other three are the cargo-refine bin's own
+# required-features, without which CARGO_BIN_EXE_cargo-refine does not exist.
 [[test]]
 name = "unmine_consent_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
@@ -1194,7 +1194,7 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 # live mock → ONE report carrying the FULL cumulative total + ack advance +
 # signature verify; no new burn → zero requests). Same feature set as
 # unmine_consent_cli: `kat_transport` for the burn client's transport half
-# + the cargo-heal bin's own required-features so CARGO_BIN_EXE_cargo-heal
+# + the cargo-refine bin's own required-features so CARGO_BIN_EXE_cargo-refine
 # exists.
 [[test]]
 name = "kat_burn_stack"
@@ -1204,8 +1204,8 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 # binary — all four predicate legs driven at the process boundary (exit 1 +
 # both refuel paths on the refuse leg; the server truth / positive balance /
 # kill-switches on the allow legs). Same feature set as kat_burn_stack:
-# `kat_transport` for the ack's balance half + the cargo-heal bin's own
-# required-features so CARGO_BIN_EXE_cargo-heal exists.
+# `kat_transport` for the ack's balance half + the cargo-refine bin's own
+# required-features so CARGO_BIN_EXE_cargo-refine exists.
 [[test]]
 name = "kat_soft_gate_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
@@ -1214,8 +1214,8 @@ required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_l
 # (no-account refusal; live mock → faucet opened + bearer crank + balance
 # confirmed + the 075 gate's ack input REFRESHED; the gate refusal names
 # the refill path). Same feature set as kat_soft_gate_cli: `kat_transport`
-# for the refill flow's transport half + the cargo-heal bin's own
-# required-features so CARGO_BIN_EXE_cargo-heal exists.
+# for the refill flow's transport half + the cargo-refine bin's own
+# required-features so CARGO_BIN_EXE_cargo-refine exists.
 [[test]]
 name = "kat_refill_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
@@ -1232,7 +1232,7 @@ required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_servi
 
 # Plan 134 T2.1 — the frame-time budget tier's process-boundary exit
 # contracts (empty scan / unparsable sidecar / A/B mismatch refuse). The
-# bin's required-features gate the target (CARGO_BIN_EXE_cargo-heal exists
+# bin's required-features gate the target (CARGO_BIN_EXE_cargo-refine exists
 # only under them); the report module itself is UNGATED — every feature
 # build compiles it, only this CLI test needs the shipping set.
 [[test]]

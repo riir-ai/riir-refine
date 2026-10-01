@@ -12,7 +12,7 @@
 //! 1. **Budget report** (`--frame-time-report`): per-effect p50/p90/mean vs
 //!    the sidecar-carried `frame_budget_ms` (`--frame-budget <MS>`
 //!    overrides), an `OK`/`OVER` verdict per row, and the heal hint — the
-//!    over-budget effects are exactly where `cargo heal --domain
+//!    over-budget effects are exactly where `cargo refine --domain
 //!    shader_perf` (the sample-budget / loop-boundedness corpus) should run
 //!    next. The budget tier PRIORITIZES the source-scan rules; it does not
 //!    replace them.
@@ -581,7 +581,7 @@ impl FrameTimeReport {
         if self.over_budget() > 0 {
             let _ = writeln!(
                 s,
-                "hint: {} effect(s) over budget — run `cargo heal --domain shader_perf` on their WGSL (the sample-budget / loop-boundedness corpus)",
+                "hint: {} effect(s) over budget — run `cargo refine --domain shader_perf` on their WGSL (the sample-budget / loop-boundedness corpus)",
                 self.over_budget()
             );
         }

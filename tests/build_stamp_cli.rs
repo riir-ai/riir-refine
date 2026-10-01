@@ -17,9 +17,9 @@
 //! green-zero trap. With the split, every feature set runs the stamp arms
 //! and exactly one of them additionally runs the refusal arm.
 //!
-//! The file-level gate is the cargo-heal bin's own `required-features`: with
+//! The file-level gate is the cargo-refine bin's own `required-features`: with
 //! less than that there is no binary to invoke at all, and
-//! `CARGO_BIN_EXE_cargo-heal` does not resolve.
+//! `CARGO_BIN_EXE_cargo-refine` does not resolve.
 
 #![cfg(all(
     feature = "latent_retrieval",
@@ -34,10 +34,10 @@ use std::process::Command;
 /// the user's real config — `--version` and a refusal both answer before any
 /// account/service read.
 fn heal(args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_cargo-heal"))
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .args(args)
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     (
         out.status.code(),
         format!(
@@ -58,8 +58,8 @@ fn version_prints_the_compiled_feature_stamp() {
     let mut lines = text.lines();
     let first = lines.next().unwrap_or_default();
     assert!(
-        first.starts_with("cargo-heal "),
-        "line 0 must stay `cargo-heal <version>`, got {first:?}"
+        first.starts_with("cargo-refine "),
+        "line 0 must stay `cargo-refine <version>`, got {first:?}"
     );
     assert!(
         text.contains("features: "),

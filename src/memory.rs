@@ -122,7 +122,7 @@ impl EvidenceTier {
 /// scoring.
 ///
 /// `Serialize`/`Deserialize` (Issue 018): trajectories persist to a local
-/// JSON file so the memory accumulates across `cargo heal` invocations —
+/// JSON file so the memory accumulates across `cargo refine` invocations —
 /// an in-process-only memory would be permanently starved in a CLI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FixTrajectory {
@@ -660,7 +660,7 @@ impl LatentFixMemory {
     }
 
     /// One-command debug summary of the store (Issue 037 observability —
-    /// the `cargo heal --memory-stats` query surface).
+    /// the `cargo refine --memory-stats` query surface).
     ///
     /// Answers "is the self-evolve loop actually closed?" from the data:
     /// the E1/E2/E3 verdicts at the bottom mirror Issue 037's gates —
@@ -755,7 +755,7 @@ impl LatentFixMemory {
     /// (Plan 005 T7.4).
     ///
     /// The trajectories are loaded either way — see [`CommitmentStatus`] for
-    /// why a mismatch is advisory. Callers that care (the `cargo heal` CLI)
+    /// why a mismatch is advisory. Callers that care (the `cargo refine` CLI)
     /// warn on [`CommitmentStatus::Mismatch`].
     ///
     /// # Errors

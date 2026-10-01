@@ -20,7 +20,7 @@
     feature = "rust_perf",
     feature = "clippy_lints",
     feature = "kat_service"
-))] // the bin's required-features — CARGO_BIN_EXE_cargo-heal exists only under them
+))] // the bin's required-features — CARGO_BIN_EXE_cargo-refine exists only under them
 
 use std::fs;
 use std::path::PathBuf;
@@ -30,12 +30,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 static TMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 fn heal(args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_cargo-heal"))
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .args(args)
         .env("RIIR_HEAL_KAT_METER", "0")
         .env("RIIR_HEAL_KAT_GATE", "0")
         .output()
-        .expect("spawn cargo-heal");
+        .expect("spawn cargo-refine");
     (
         out.status.code(),
         format!(

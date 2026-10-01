@@ -592,7 +592,7 @@ impl HealPipeline {
     }
 
     /// Close the TETHER window early — for a process ending mid-window
-    /// (`cargo heal` is short-lived) or a benchmark that wants the tail folded
+    /// (`cargo refine` is short-lived) or a benchmark that wants the tail folded
     /// in. A no-op-safe flush: a degenerate tail holds the previous ρ.
     pub fn flush_tether_window(&mut self) {
         self.tether.close_window();

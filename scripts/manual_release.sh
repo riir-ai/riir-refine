@@ -41,11 +41,11 @@ echo "   ok: $(grep -c '^### ' /tmp/manual_release_licenses.md) license section(
 
 echo "== build 5 targets (remap-path-prefix per host; strip comes from profile.release)"
 export RUSTFLAGS="--remap-path-prefix $HOME=/build"
-cargo build --release --target aarch64-apple-darwin --features "$FEATURES" --bin cargo-heal
-cargo build --release --target x86_64-apple-darwin --features "$FEATURES" --bin cargo-heal
-cargo zigbuild --release --target aarch64-unknown-linux-musl --features "$FEATURES" --bin cargo-heal
-cargo zigbuild --release --target x86_64-unknown-linux-musl --features "$FEATURES" --bin cargo-heal
-cargo zigbuild --release --target x86_64-pc-windows-gnu --features "$FEATURES" --bin cargo-heal
+cargo build --release --target aarch64-apple-darwin --features "$FEATURES" --bin cargo-refine
+cargo build --release --target x86_64-apple-darwin --features "$FEATURES" --bin cargo-refine
+cargo zigbuild --release --target aarch64-unknown-linux-musl --features "$FEATURES" --bin cargo-refine
+cargo zigbuild --release --target x86_64-unknown-linux-musl --features "$FEATURES" --bin cargo-refine
+cargo zigbuild --release --target x86_64-pc-windows-gnu --features "$FEATURES" --bin cargo-refine
 
 echo "== package + G2 leak scan"
 DIST="/tmp/manual_release_dist"
@@ -53,16 +53,16 @@ rm -rf "$DIST" /tmp/manual_release_stage
 mkdir -p "$DIST"
 for t in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl x86_64-pc-windows-gnu; do
     stage="/tmp/manual_release_stage/$t"; mkdir -p "$stage"
-    if [ -f "target/$t/release/cargo-heal.exe" ]; then
-        bin="target/$t/release/cargo-heal.exe"
-        cp "$bin" "$stage/cargo-heal.exe"
+    if [ -f "target/$t/release/cargo-refine.exe" ]; then
+        bin="target/$t/release/cargo-refine.exe"
+        cp "$bin" "$stage/cargo-refine.exe"
         cp /tmp/manual_release_licenses.md "$stage/THIRD_PARTY_LICENSES.md"
-        (cd "$stage" && zip -q "$DIST/cargo-heal-${TAG}-${t}.zip" cargo-heal.exe THIRD_PARTY_LICENSES.md)
+        (cd "$stage" && zip -q "$DIST/cargo-refine-${TAG}-${t}.zip" cargo-refine.exe THIRD_PARTY_LICENSES.md)
     else
-        bin="target/$t/release/cargo-heal"
-        cp "$bin" "$stage/cargo-heal"
+        bin="target/$t/release/cargo-refine"
+        cp "$bin" "$stage/cargo-refine"
         cp /tmp/manual_release_licenses.md "$stage/THIRD_PARTY_LICENSES.md"
-        tar -czf "$DIST/cargo-heal-${TAG}-${t}.tar.gz" -C "$stage" cargo-heal THIRD_PARTY_LICENSES.md
+        tar -czf "$DIST/cargo-refine-${TAG}-${t}.tar.gz" -C "$stage" cargo-refine THIRD_PARTY_LICENSES.md
     fi
     ./scripts/binary_leak_scan.sh "$bin"
 done
@@ -71,13 +71,13 @@ cp /tmp/manual_release_licenses.md "$DIST/THIRD_PARTY_LICENSES.md"
 
 echo "== publish"
 gh release create "$TAG" -R gist-rs/cargo-heal \
-    --title "cargo-heal $TAG" \
-    --notes "Prebuilt cargo-heal binaries for $TAG. Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README." \
+    --title "cargo-refine $TAG" \
+    --notes "Prebuilt cargo-refine binaries for $TAG. Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README." \
     "$DIST"/*
 
 echo "== tap/scoop manifest bumps (the CI pipeline opened PRs; manual mode edits main directly)"
-echo "   NOTE: bump gist-rs/homebrew-tap Formula/cargo-heal.rb (version + 4 sha256 from"
-echo "   $DIST/SHA256SUMS) and gist-rs/scoop-bucket bucket/cargo-heal.json (version +"
+echo "   NOTE: bump gist-rs/homebrew-tap Formula/cargo-refine.rb (version + 4 sha256 from"
+echo "   $DIST/SHA256SUMS) and gist-rs/scoop-bucket bucket/cargo-refine.json (version +"
 echo "   windows-gnu url + hash), commit + push each — or merge the CI PRs when billing"
 echo "   is fixed and CI ran instead."
 echo "DONE: https://github.com/gist-rs/cargo-heal/releases/tag/$TAG"

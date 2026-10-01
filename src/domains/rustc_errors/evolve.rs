@@ -113,7 +113,7 @@ pub fn write_miss(dir: &Path, miss: &MissRecord) -> std::io::Result<PathBuf> {
          - **file:** {file}:{line}\n\
          - **message:** {msg}\n\
          - **component:** {component} — no candidate answered this error (corpus gap; author the next template here)\n\
-         - **captured:** by `cargo heal --fix-compile --write` (no candidate kept)\n\n \
+         - **captured:** by `cargo refine --fix-compile --write` (no candidate kept)\n\n \
          ## Rendered diagnostic\n\n```text\n{rendered}\n```\n",
         code = miss.code,
         file = miss.file.display(),
@@ -200,7 +200,7 @@ pub fn write_fixseq_readme(dir: &Path) -> std::io::Result<()> {
     std::fs::write(
         readme,
         "# The fix-compile attempt ring (fixseq)\n\n\
-         One `run-<ts>.jsonl` per `cargo heal --fix-compile --write` run: the\n\
+         One `run-<ts>.jsonl` per `cargo refine --fix-compile --write` run: the\n\
          ORDERED per-attempt sequence (seq, error code, span_hash, strategy,\n\
          outcome, errors before→after) as jsonl lines. The trajectory store\n\
          holds per-FAMILY counters — attempt ORDER lives only here.\n\n\

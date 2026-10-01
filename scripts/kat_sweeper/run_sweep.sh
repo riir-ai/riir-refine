@@ -22,7 +22,7 @@
 #   <sweeper-home>/.heal/kat_sweeper_runs.jsonl   (version-stamped)
 #
 # Environment:
-#   KAT_SWEEPER_HEAL_BIN   healer binary (default ~/.cargo/bin/cargo-heal,
+#   KAT_SWEEPER_HEAL_BIN   healer binary (default ~/.cargo/bin/cargo-refine,
 #                           must be built with fix_verify+clippy_verify)
 #   KAT_SWEEPER_CONFIG     config path (default beside this script)
 #   KAT_SWEEPER_DRY        1 = parse + print targets, no heal/commit
@@ -33,7 +33,7 @@ SWEEPER_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG="${KAT_SWEEPER_CONFIG:-$SCRIPT_DIR/kat_sweeper.toml}"
 RUNS_FILE="$SWEEPER_HOME/.heal/kat_sweeper_runs.jsonl"
 RUNS_VERSION=1
-HEAL_BIN="${KAT_SWEEPER_HEAL_BIN:-$HOME/.cargo/bin/cargo-heal}"
+HEAL_BIN="${KAT_SWEEPER_HEAL_BIN:-$HOME/.cargo/bin/cargo-refine}"
 LOG_DIR="$SWEEPER_HOME/.heal/kat_sweeper_logs"
 DRAIN_TARGET_DIR="${KAT_SWEEPER_DRAIN_TARGET:-/tmp/kat_clippy_p31a}"
 mkdir -p "$SWEEPER_HOME/.heal" "$LOG_DIR"

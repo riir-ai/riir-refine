@@ -61,7 +61,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="${BURN_E2E_WORK:-/tmp/kat-burn-e2e}"
 FUEL_SRC="${BURN_E2E_FUEL:-$ROOT/src}"
 FEATURES="latent_retrieval,kat_service,kat_transport,fix_verify"
-BIN="$ROOT/target/release/cargo-heal"
+BIN="$ROOT/target/release/cargo-refine"
 PASS=0; FAIL=0; DEFER=0
 
 # ── G4: refuse any non-devnet target (fail-closed; the apex IS mainnet) ──
@@ -99,7 +99,7 @@ api_balance() { # api_balance <32-hex> -> prints micro balance + burn_total
 # ── 0. binary freshness (the P2 gate — run NOTHING on a stale build) ────
 if [ "${BURN_E2E_SKIP_BUILD:-0}" != "1" ]; then
   say "building the release client ($FEATURES)"
-  (cd "$ROOT" && cargo build --release --features "$FEATURES" --bin cargo-heal)
+  (cd "$ROOT" && cargo build --release --features "$FEATURES" --bin cargo-refine)
 fi
 [ -x "$BIN" ] || { echo "burn-e2e: REFUSED — no binary at $BIN" >&2; exit 2; }
 VOUT="$("$BIN" --version 2>&1)"
@@ -228,7 +228,7 @@ say "T3: the 075 soft gate (account B is depleted + never-contributed)"
 T3_OUT=$(env $(acct_env b) sh -c "cd '$WORK/scratch_b' && '$BIN'" 2>&1) && T3_RC=0 || T3_RC=$?
 T3_PATHS=0
 echo "$T3_OUT" | grep -q "REFUSED" && T3_PATHS=$((T3_PATHS+1))
-echo "$T3_OUT" | grep -q "cargo heal --mine" && T3_PATHS=$((T3_PATHS+1))
+echo "$T3_OUT" | grep -q "cargo refine --mine" && T3_PATHS=$((T3_PATHS+1))
 echo "$T3_OUT" | grep -qE "top up|pay" && T3_PATHS=$((T3_PATHS+1))
 if [ "$T3_RC" -eq 1 ] && [ "$T3_PATHS" -ge 3 ]; then
   verdict PASS "T3 soft gate — exit 1, refusal + contribute + pay paths named (D4: --refill is retired, the refusal names exactly the two REAL paths)"
@@ -329,7 +329,7 @@ for host in 192.168.1.33 100.85.179.44; do
   if timeout 8 ssh -o ConnectTimeout=5 -o BatchMode=yes "katop@$host" hostname >/dev/null 2>&1; then K4090=$host; break; fi
 done
 if [ -n "$K4090" ]; then
-  KOUT=$(ssh -o ConnectTimeout=8 "katop@$K4090" 'powershell -NoProfile -Command "& C:\Users\katop\.cargo\bin\cargo-heal.exe --version | Select-Object -Last 1"' 2>/dev/null || true)
+  KOUT=$(ssh -o ConnectTimeout=8 "katop@$K4090" 'powershell -NoProfile -Command "& C:\Users\katop\.cargo\bin\cargo-refine.exe --version | Select-Object -Last 1"' 2>/dev/null || true)
   if echo "$KOUT" | grep -q "release set: complete"; then
     verdict PASS "T6 4090 leg — release-set binary live at $K4090 (its own cycle drives its own test account)"
   else

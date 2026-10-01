@@ -33,7 +33,7 @@
 //! declines (identity guard fails). The proposer's output is verified by
 //! `cargo clippy` (~130 ms, tuning-phase only). Verified fixes join the
 //! `ClippyAdaptiveDrafter` pool; subsequent hot-path calls serve them in O(1).
-//! Since T6.4 the structurally-safe subset is also `cargo heal --fix`
+//! Since T6.4 the structurally-safe subset is also `cargo refine --fix`
 //! eligible (see [`FIXABLE_LINTS`]).
 //!
 //! ## `--fix` eligibility ([`FIXABLE_LINTS`])
@@ -299,7 +299,7 @@ pub use crate::edit_emitter::{
     SourceEdit,
 };
 
-/// Lints whose proposers are `cargo heal --fix` eligible — detection is
+/// Lints whose proposers are `cargo refine --fix` eligible — detection is
 /// purely structural (see module docs). The seed six + the 27 Issue 016
 /// structural expansion rows. The four type-blind lints
 /// (`redundant_closure`, `needless_borrow`, `useless_conversion`,
@@ -894,7 +894,7 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
     }
 }
 
-/// Lints attempted ONLY under `cargo heal --fix --verify` (Issue 015) —
+/// Lints attempted ONLY under `cargo refine --fix --verify` (Issue 015) —
 /// type-blind rewrites whose failure mode (E0631/E0599) the
 /// [`crate::fix_verify`] loop auto-reverts. `redundant_closure` was demoted
 /// from `FIXABLE_LINTS` by the Bench 019 G5 run (the deref-coercion

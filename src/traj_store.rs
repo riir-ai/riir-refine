@@ -54,7 +54,7 @@
 //! layer), durable + observable via `--memory-stats`.
 //!
 //! The `elo`/`span_elo` row fields (Issue 039 T2) are written ONLY by the
-//! batch pass [`TrajStore::recompute_elo`] (`cargo heal --recompute-elo`)
+//! batch pass [`TrajStore::recompute_elo`] (`cargo refine --recompute-elo`)
 //! — ratings are a derived view over the verdict counts, never updated
 //! online (the issue's non-goal; G4).
 //!

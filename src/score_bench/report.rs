@@ -592,7 +592,7 @@ pub fn render_svg(records: &[HistoryRecord]) -> String {
     render_grid(w, &layout);
     if records.is_empty() {
         writeln!(w,
-            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"13\" fill=\"#9e9e9e\" text-anchor=\"middle\">no runs yet — cargo heal --score-bench</text>",
+            "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"13\" fill=\"#9e9e9e\" text-anchor=\"middle\">no runs yet — cargo refine --score-bench</text>",
             layout.ml + layout.plot_w() / 2.0,
             layout.mt + layout.plot_h() / 2.0).unwrap();
         w.push_str("</svg>\n");

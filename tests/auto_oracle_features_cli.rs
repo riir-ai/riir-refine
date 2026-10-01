@@ -17,7 +17,7 @@
     feature = "rust_perf",
     feature = "clippy_lints",
     feature = "kat_service"
-))] // the bin's required-features — CARGO_BIN_EXE_cargo-heal exists only under them
+))] // the bin's required-features — CARGO_BIN_EXE_cargo-refine exists only under them
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -67,7 +67,7 @@ fn run_suggest(bin: &str, dir: &Path, features: Option<&str>) -> String {
             cmd.env_remove("RIIR_HEAL_AUTO_ORACLE_FEATURES");
         }
     }
-    let out = cmd.output().expect("spawn cargo-heal");
+    let out = cmd.output().expect("spawn cargo-refine");
     format!(
         "exit: {}\n--- stdout ---\n{}--- stderr ---\n{}",
         out.status,
@@ -78,7 +78,7 @@ fn run_suggest(bin: &str, dir: &Path, features: Option<&str>) -> String {
 
 #[test]
 fn auto_oracle_features_knob_anchors_gated_diagnostics() {
-    let bin = env!("CARGO_BIN_EXE_cargo-heal");
+    let bin = env!("CARGO_BIN_EXE_cargo-refine");
 
     // Run A — default posture: the gated diagnostic is INVISIBLE.
     let dir_a = scratch_root();

@@ -4,7 +4,7 @@
 //! headroom span source that accepts sets other than the hardcoded fixtures
 //! (the `*_with_spans` twins on the probe — see `headroom_probe`), and a
 //! repo walk the oracle's batch labeler can consume. This module is the
-//! walk half, hoisted VERBATIM from the `cargo heal` bin
+//! walk half, hoisted VERBATIM from the `cargo refine` bin
 //! (`src/bin/heal.rs`, which now delegates here) so the bin, the
 //! [`crate::draft::clippy_oracle`] batch labeler, and the Plan 049 T0.1
 //! dataset builder share ONE walker instead of drifting copies.

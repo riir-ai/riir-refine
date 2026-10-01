@@ -182,7 +182,7 @@ mod tests {
     fn live_shape_relative_src_from_this_repo_root() {
         // The exact live-probe shape: this test process runs with CWD =
         // the REAL repo root, so `src` resolves against it — the same
-        // invocation shape as `cargo heal --orphan-report src`.
+        // invocation shape as `cargo refine --orphan-report src`.
         let hint = unscanned_roots_hint(&[PathBuf::from("src")]);
         assert!(
             hint.contains("examples") && hint.contains("benches"),

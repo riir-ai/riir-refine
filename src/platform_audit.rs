@@ -1,4 +1,4 @@
-//! `cargo heal --platform-audit` — post-mining intake class P22: the
+//! `cargo refine --platform-audit` — post-mining intake class P22: the
 //! platform-dead_code decl-vs-use cfg lattice.
 //!
 //! The measured shape (5 specimens across 2 repos in 2 days, all caught by

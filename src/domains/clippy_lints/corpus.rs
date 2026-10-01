@@ -20,7 +20,7 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 ///
 /// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] — the seed
 /// corpus. The entry count is DERIVED (it moves with every mining
-/// batch): run `cargo heal --corpus-stats`, never read a typed figure
+/// batch): run `cargo refine --corpus-stats`, never read a typed figure
 /// here — the hand-typed one rotted ("72 entries" against an
 /// enumeration that had already reached Batch 164). The enumeration
 /// below is the per-batch landing index: the 10 seed lints (style,

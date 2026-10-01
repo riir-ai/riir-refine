@@ -1,5 +1,5 @@
 //! The replay-endorsement ENGINE (riir-clippy Proposal 015 Phase 2 — the
-//! `cargo heal replay` command's judgment half; the byte movers live in
+//! `cargo refine replay` command's judgment half; the byte movers live in
 //! `riir_kat::kat_replay_client`, the server in riir-dapps Plan 029).
 //!
 //! # What this module owns
@@ -57,7 +57,7 @@
 //! # What is deliberately NOT here
 //!
 //! No transport, no account, no consent — the command orchestration lives
-//! in the `cargo-heal` bin (`run_kat_replay`), which gates on
+//! in the `cargo-refine` bin (`run_kat_replay`), which gates on
 //! `kat_service` + `kat_transport` + `clippy_verify`. This module needs
 //! only the oracle (`clippy_verify`) + the protocol wire types (the
 //! riir-kat protocol tier, always compiled).

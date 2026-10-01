@@ -6,7 +6,7 @@
 //!
 //! ## Why a separate feature
 //!
-//! `fix_verify` implies `latent_retrieval` because it extends the cargo-heal
+//! `fix_verify` implies `latent_retrieval` because it extends the cargo-refine
 //! bin surface — but its CODE imports only `std` + `serde`. The
 //! `rustc_errors` domain is exact-keyed by rustc error code and must not
 //! drag riir-rag + riir-neuron-db into a compile fixer. Extracting the
