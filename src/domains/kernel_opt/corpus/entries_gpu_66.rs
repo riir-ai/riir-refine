@@ -1,7 +1,7 @@
-//! Entries slice — Batch 198 (Plan 196) — the PrismML fork distill: the
+//! Entries slice — Batch 198 (Plan 196) — the `PrismML` fork distill: the
 //! staged leads from the +19 fast-forward (`0324c66521..88c4bc60b9`)
 //! watch pass converted per `.distill/001_mining_queue_snapshot.md`.
-//! Five rules: the fewrow cooperative-tensor tile that decodes PQ2_0
+//! Five rules: the fewrow cooperative-tensor tile that decodes `PQ2_0`
 //! weights STRAIGHT INTO the right-hand operand (the A− lead), the
 //! weight-decode amortized across output columns (the B lead), the
 //! ids-path stride-meaning rebind (the B− correctness hazard — the
@@ -9,9 +9,9 @@
 //! fold-at-load contract (the model-loading decision content), and the
 //! single-sequence contiguity copy elision (a C+ lead kept for its clean
 //! decision content). Three instance riders ship BESIDE them (not in
-//! this file): the GDN four-rows-per-simdgroup instance on gpu_09's
+//! this file): the GDN four-rows-per-simdgroup instance on `gpu_09`'s
 //! packing rule (445fa82098 #292), and the two AVX-512 CPU twins on
-//! gpu_53's tiled-staging + maddubs-selector rules (78e16408f2 #254,
+//! `gpu_53`'s tiled-staging + maddubs-selector rules (78e16408f2 #254,
 //! bda59eaa03 #256).
 //!
 //! Source: `PrismML-Eng/llama.cpp` — pins `3285e757a6` (#284 + #286),
@@ -26,13 +26,13 @@
 //! brief's `quantized-stored-bytes-not-widened-patterns B196` does not
 //! exist in the corpus — the load-time-transform precedent actually used
 //! is B176's `dtype-native-source-read-with-shared-admission-predicate`
-//! (gpu_51, category N), which carries the same at-load placement law.
+//! (`gpu_51`, category N), which carries the same at-load placement law.
 //!
 //! Category adjudications (coordinator-rebucketable, stated per the
 //! brief): rule 2 carried lead-grade B in staging; category set to A
 //! (memory access) because the corpus A family owns the
 //! amortize-decode-over-reuse shape (`dequant-once-per-k-tile-into-
-//! shared-memory` gpu_01, `dequant-once-macrotile-stage-reuse-across-
+//! shared-memory` `gpu_01`, `dequant-once-macrotile-stage-reuse-across-
 //! microtiles` B186) and the axis here is read-once-reuse-across-columns
 //! in registers. Rule 4 set to N (dtype + alignment specialization) over
 //! D — the fold is a STORED-REPRESENTATION decision with a metadata
@@ -45,7 +45,7 @@
 //! Honesty flags: every M5-Pro-measured figure (the fewrow table, the
 //! 0.73x → 1.57x/1.64x end-to-end speculation flip, the nc kernel's
 //! band) is source-reported PROVENANCE, never an adoption bar (the B189
-//! B300 law); #258 is a correctness rule and NotBenchable by class (the
+//! B300 law); #258 is a correctness rule and `NotBenchable` by class (the
 //! B186 `unified-admission-dead-tail` precedent); the AVX-512 content is
 //! instance-only (riders, no new CPU rules); the tied-Hadamard KLD/top-1
 //! figures are the commit's own exactness evidence for a mathematically

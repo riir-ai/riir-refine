@@ -107,8 +107,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 197 (6): the ml-explore/mlx VJP kernel distill (Research 227 / Plan 193; PRs #4563+#4565, merges 83b976ea438466418dea20c89709601201851fe1 + 9295197533d586dc26d6814b92899fa088320ab3, MIT, merged 2026-09-29; every quote verified at the pins — .research/230, 22/22) -- sdpa-backward-as-tiled-matmul-bounded-materialization (E +1, the A− GOAT lead: the attention VJP COMPOSED from tiled library GEMMs through ONE bounded score tile (1024² default, MLX_SDPA_VJP_BLOCK) beats the full-matrix fallback AND the fused flash-style kernel on unified memory — the fused attempt CLOSED UNMERGED as PR #3241, its own text conceding 0.36–0.70× dense; riders folded: save_lse forward output (function_constant 303), the NaN dead-row guard (exp(-inf − −inf)), the causal tile skip with diag_off = kL − qL, the HasTail compile-time segment tag, the dummy-binding fc-gated outputs), segmented-checkpoint-cheap-replay-backward (G +1, A−: checkpoint the ENTRY state every Ckpt-th step (dense cache at T=4096/B=4/Hv=32 = 34 GB in-source) and replay the state recurrence in the backward — delta cached per chunk so the replay is ~a tenth of a chunk's work; the entry-state-not-exit clause pinned by test; lead 6's register seg[Ckpt][n_per_t] arm FOLDED as the second posture), gqa-zero-stride-batch-broadcast (A +1, B+: k_bs innermost stride 0 broadcasts one kv head over its query group through the batched GEMM — no expanded tensor; the GQA-operand family's stride-0 member beside B182's row-fold), threadgroup-scope-reduction-single-writer (E +1, B: reduce_tile_tg folds the kNSG simdgroup partials in threadgroup memory and commits with a single non-atomic store — the atomic paid only on the GQA axis that genuinely crosses threadgroups), cache-symmetric-intermediates-per-chunk (G +1, B: the forward-save pass caches the expensive chunk-local set (KKt, the 15-step Neumann T-inv, QKt_raw, delta) with the dv_idx == 0 single-writer guard — the cache-what's-expensive half of the hierarchy beside #2's recompute-what's-cheap), chain-rule-postprocess-kernel (G +1, C+: the kernel differentiates the TRANSFORMED variable (dgamma, 'computes the gradient with respect to the log') and gated_delta_dgamma_to_dg applies the Jacobian in an O(T) reverse suffix cumsum with the max(g, 1e-6) floor) + 1 rider (dot-macro-family-widens-at-load-f32-accumulate (B192) += the OPERAND-TYPED MACRO instance — the macro-side pole: 'Operand and accumulator types are taken from the tiles rather than pinned to float' + the C-stays-float accumulator clause, gated_delta_nax_ops.h:399-404,576-579); source ml-explore/mlx @ the two merge shas (MIT; T0 re-clone at full shas, 22/22 quotes verified — the 34 GB comment + entry-state clause live in the FORWARD file, a provenance sharpening over the research draft).
     assert_eq!(
         corpus.entries.len(),
-        734,
-        "kernel batches through Batch 197 should have 734 rules",
+        739,
+        "kernel batches through Batch 198 should have 739 rules",
     );
 }
 
@@ -5438,11 +5438,15 @@ fn kernel_categories_counts_match_plan_003_table() {
     // composed-backward lead + the threadgroup-scope single-writer,
     // G +3 the entry-state checkpoint + the forward-save cache + the
     // chain-rule postprocess; the mlx VJP distill).
+    // Batch 198 before that: A +1 the weight-decode column amortization,
+    // B +1 the fewrow tensor tile with the decode fused into the RHS
+    // operand, D +2 the ids-path stride rebind + the single-seq contiguity
+    // copy elision, N +1 the tied-Hadamard fold at load; the PrismML pack.
     let expected = [
-        (KernelCategory::MemoryAccess, 156),
-        (KernelCategory::Compute, 77),
+        (KernelCategory::MemoryAccess, 157),
+        (KernelCategory::Compute, 78),
         (KernelCategory::Fusion, 51),
-        (KernelCategory::Dispatch, 163),
+        (KernelCategory::Dispatch, 165),
         (KernelCategory::Parallelism, 70),
         (KernelCategory::FlashAttnTiling, 18),
         (KernelCategory::LinearAttnRecurrence, 34),
@@ -5452,7 +5456,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 14),
         (KernelCategory::ConvGemmLayout, 19),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 56),
+        (KernelCategory::DtypeAlignment, 57),
         (KernelCategory::IrStrengthReduction, 7),
     ];
     for (cat, count) in expected {
@@ -5467,9 +5471,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 734.
+    // Sum must equal 739.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 734, "Plan 003: category totals must sum to 734 (Batch 197 +6: E +2 the composed-backward lead + the threadgroup-scope single-writer, G +3 the entry-state checkpoint + the forward-save cache + the chain-rule postprocess, A +1 the GQA zero-stride broadcast; re-pinned 734 with the honest label)");
+    assert_eq!(total, 739, "Plan 003: category totals must sum to 739 (Batch 198 +5: A +1 the weight-decode column amortization, B +1 the fewrow tensor tile with the decode fused into the RHS operand, D +2 the ids-path stride rebind + the single-seq contiguity copy elision, N +1 the tied-Hadamard fold at load; the PrismML pack; re-pinned 739 with the honest label)");
 }
 
 #[test]
@@ -5480,8 +5484,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 734,
-        "Plan 003: grouped corpus has {total} rules, expected 734"
+        total, 739,
+        "Plan 003: grouped corpus has {total} rules, expected 739"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9588,8 +9592,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        734,
-        "corpus count re-pinned at Batch 197 (the mlx VJP distill: 6 rules — the composed-backward A− GOAT lead, the segmented entry-state checkpoint + cheap replay with the register arm folded, the GQA zero-stride batch broadcast, the threadgroup-scope reduction single-writer, the forward-save chunk-intermediate cache, and the chain-rule postprocess kernel; was 728 at Batch 196)",
+        739,
+        "corpus count re-pinned at Batch 198 (the PrismML fork pack: 5 rules — the fewrow tensor tile with the PQ2_0 decode fused into the RHS cooperative tensor, the weight-decode amortized across output columns, the ids-path stride rebind correctness law, the tied-Hadamard fold at load with the versioned metadata contract, and the single-seq contiguity copy elision; was 734 at Batch 197)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -13905,6 +13909,116 @@ fn batch197_riders_landed_on_their_hosts() {
         assert!(
             rule.gpu_concept.contains(marker),
             "Batch-197 rider marker '{marker}' missing on host '{host}'"
+        );
+    }
+}
+
+#[test]
+fn batch198_pseudocode_parses() {
+    // G1 for Batch 198: syn-parse gate (the PrismML fork pack of 5 -- Plan
+    // 196: the fewrow tensor tile with the decode fused into the RHS
+    // operand, the weight-decode amortized across output columns, the
+    // ids-path stride rebind correctness law, the tied-Hadamard fold at
+    // load, and the single-seq contiguity copy elision).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "fewrow-tensor-tile-decode-into-rhs-operand",
+        "weight-decode-amortized-across-output-columns",
+        "ids-path-rebinds-stride-meaning",
+        "tied-hadamard-output-fold-at-load",
+        "single-seq-slice-contiguity-copy-elision",
+    ];
+    assert_eq!(ids.len(), 5, "batch-198 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-198 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-198 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-198 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch198_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-198 decision-content contracts (the batch196/197 precedent):
+    // each rule's load-bearing caveat must ride the rule text.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "fewrow-tensor-tile-decode-into-rhs-operand",
+            "no threadgroup staging and no barriers",
+        ),
+        (
+            "weight-decode-amortized-across-output-columns",
+            "computed once and reused for all nr1 columns",
+        ),
+        (
+            "ids-path-rebinds-stride-meaning",
+            "failed in 8 of 10 runs on an RTX 4090",
+        ),
+        (
+            "tied-hadamard-output-fold-at-load",
+            "double-fold hazard",
+        ),
+        (
+            "single-seq-slice-contiguity-copy-elision",
+            "retain packing for interleaved multi-sequence views",
+        ),
+    ];
+    for (id, marker) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-198 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-198 contract marker '{marker}' missing on '{id}'"
+        );
+    }
+}
+
+#[test]
+fn batch198_riders_landed_on_their_hosts() {
+    // The Batch-198 riders (the batch196/197 membership precedent -- a
+    // rider that never landed is a staging note, not corpus): the ggml-Metal
+    // GDN 4-rows instance on gpu_09's host, and the AVX-512 CPU twins on
+    // the B186 tiled family.
+    let corpus = build_kernel_seed_corpus();
+    let hosts = [
+        (
+            "simdgroup-row-packing-reduction-amortization",
+            "RIDER (Batch 198 / Plan 196",
+        ),
+        (
+            "dequant-once-macrotile-stage-reuse-across-microtiles",
+            "RIDER (Batch 198 / Plan 196",
+        ),
+        (
+            "maddubs-overflow-two-exact-mac-selector",
+            "RIDER (Batch 198 / Plan 196",
+        ),
+    ];
+    for (host, marker) in hosts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == host)
+            .unwrap_or_else(|| panic!("rider host '{host}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "Batch-198 rider marker '{marker}' missing on host '{host}'"
         );
     }
 }

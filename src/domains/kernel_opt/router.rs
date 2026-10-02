@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 734, "Plan 003: experts cover all 734 corpus rules (Batch 197 +6, the mlx VJP distill — E +2 the composed-backward lead + the threadgroup-scope single-writer, G +3 the entry-state checkpoint + the forward-save cache + the chain-rule postprocess, A +1 the GQA zero-stride broadcast; plus the operand-typed-mma rider on B192; re-pinned 734 with the honest label)");
+        assert_eq!(total, 739, "Plan 003: experts cover all 739 corpus rules (Batch 198 +5, the PrismML fork pack — A +1 the weight-decode column amortization, B +1 the fewrow tensor tile with the decode fused into the RHS operand, D +2 the ids-path stride rebind + the single-seq contiguity copy elision, N +1 the tied-Hadamard fold at load; re-pinned 739 with the honest label)");
     }
 
     #[test]

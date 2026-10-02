@@ -1951,6 +1951,7 @@ mod entries_gpu_62;
 mod entries_gpu_63;
 mod entries_gpu_64;
 mod entries_gpu_65;
+mod entries_gpu_66;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1992,6 +1993,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_63::entries());
     entries.extend(entries_gpu_64::entries());
     entries.extend(entries_gpu_65::entries());
+    entries.extend(entries_gpu_66::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2041,8 +2043,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 734-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 734 at Batch
+/// - **Exhaustive:** every `rule_id` in the 739-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 739 at Batch
 ///   197 — the mlx VJP distill; was 728 at Batch 196).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2050,7 +2052,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (156 rules; Batch 197 +1: the GQA zero-stride batch broadcast (the family's stride-0 member beside B182's row-fold); Batch 194 +4: the decode sidecar ring write, the l1-resident address-identity rewind, the SF sidecar own-granularity, the in-order credit collapse; was 148; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
+    // A: Memory access patterns (157 rules; Batch 198 +1: the weight-decode
+    // amortized across output columns (the column-axis register amortization
+    // beside the staging amortizations); Batch 197 +1: the GQA zero-stride batch broadcast (the family's stride-0 member beside B182's row-fold); Batch 194 +4: the decode sidecar ring write, the l1-resident address-identity rewind, the SF sidecar own-granularity, the in-order credit collapse; was 148; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
     // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
@@ -2218,10 +2222,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "decode-sidecar-coroutine-writes-consumer-stage-ring",
             "l1-resident-operand-reuse-address-identity-rewind",
             "decoupled-sf-sidecar-pipeline-own-granularity",
-            "in-order-pipe-credit-release-completion-collapse"
+            "in-order-pipe-credit-release-completion-collapse",
+            "weight-decode-amortized-across-output-columns"
         ],
     ),
-    // B: Compute patterns (77 rules) -- was 64 in the comment while the
+    // B: Compute patterns (78 rules; Batch 198 +1: the fewrow tensor tile
+    // with the PQ2_0 decode fused into the RHS operand -- the A− lead of the
+    // PrismML pack) -- was 64 in the comment while the
     // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
     // Batch 166, 67 at Batch 170 (scale-identity-elide); 68 at Batch 178
     // (warp-bitonic-topk-merge-shuffle); 69 at Batch 181
@@ -2313,6 +2320,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "exact-bf16-domain-activation-lut",
             "branch-free-top2-insert-order-invariant-guard",
             "last-query-rect-projection",
+            "fewrow-tensor-tile-decode-into-rhs-operand"
         ],
     ),
     // C: Fusion patterns (51 rules; Batch 195 +1:
@@ -2377,7 +2385,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "roundfuse-packed-embedding-gather",
         ],
     ),
-    // D: Dispatch patterns (163 rules; Batch 196 +1: the register-width topk tiled-radix fallback; Batch 195 +3: the write-only touch side queue + the atexit registration-order shutdown law + the lazy-admission reservation TOCTOU fix; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
+    // D: Dispatch patterns (165 rules; Batch 198 +2: the ids-path stride
+    // rebind correctness law (the #258 per-slot bound) + the single-seq
+    // contiguity copy elision; Batch 196 +1: the register-width topk tiled-radix fallback; Batch 195 +3: the write-only touch side queue + the atexit registration-order shutdown law + the lazy-admission reservation TOCTOU fix; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
     // shape-truth + the descriptor-set binding memo with destroy-epoch +
     // the vendor-keyed reduction lane-partition; Batch 189 +2: the shape-bucketed
     // graph-cache LRU + the fused-serving measured-negative ledger;
@@ -2557,6 +2567,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "atexit-registration-order-shutdown",
             "lazy-admission-reservation-atomic-register",
             "register-width-topk-falls-back-to-tiled-radix-select",
+            "ids-path-rebinds-stride-meaning",
+            "single-seq-slice-contiguity-copy-elision"
         ],
     ),
     // E: Parallelism patterns (70 rules; Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
@@ -2855,7 +2867,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (56 rules; Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
+    // N: dtype + alignment specialization (57 rules; Batch 198 +1: the tied-Hadamard output fold at load (the versioned metadata contract); Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
     // macro family that widens at load + f32 accumulation — the CPU refusal
     // pole of the accumulator-dtype family; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
@@ -2922,6 +2934,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "construction-identity-row-classes-replace-probe",
             "fp4-nibble-gather-lut-replicated-index-width",
             "enumerable-domain-bit-identity-admission-gate",
+            "tied-hadamard-output-fold-at-load"
         ],
     ),
     // O: IR strength reduction (7 rules; Batch 195 +2: the io32

@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 167); // Batch 196 (+2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
+    assert_eq!(corpus.entries.len(), 168); // Batch 198 (+1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
     // Per-category standing counts (repaired to the LIVE numbers at Batch
     // 196, the TensorFold pair +1 complexity +1 allocation — complexity 25,
     // caching 7 and dispatch 5 in the prior prose had gone stale before this
@@ -1765,7 +1765,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 68); // 167 total − 99 benchable — Batch 196 added BOTH its rules as NotBenchable (rows-not-paid-for in a serving verify forward + host accounting); Batch 182 added all THREE its rules as NotBenchable (dispatch/framework-shaped + acceptance-rate + measurement-methodology); Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
+    assert_eq!(without_spec.len(), 69); // 168 total − 99 benchable — Batch 198 added its rule as NotBenchable (host-behavior-shaped; the NOT-ISOLATED caveat rides context_notes); Batch 196 added BOTH its rules as NotBenchable (rows-not-paid-for in a serving verify forward + host accounting); Batch 182 added all THREE its rules as NotBenchable (dispatch/framework-shaped + acceptance-rate + measurement-methodology); Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1882,7 +1882,8 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 113, "expected 113 context-annotated rules (Batch 196: 111 → 113 — the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
+    assert_eq!(annotated.len(), 114, "expected 114 context-annotated rules (Batch 198: 113 → 114 — the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 — the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
+    assert!(annotated.contains(&"selector-lattice-beam-over-greedy-walk")); // Batch 198 — the NOT-ISOLATED caveat (the commit's e2e number is the fewrow kernel's)
     assert!(annotated.contains(&"grammar-window-draft-prune-path-local-mask")); // Batch 196 — the exactness-law + refusal-surface annotation
     assert!(annotated.contains(&"startup-estimate-derived-from-allocation-shapes")); // Batch 196 — the reconciliation + sub-arm annotation
     assert!(annotated.contains(&"mask-memo-hoist-to-owner-lifetime")); // Batch 181 — the owner-lifetime/graph-reuse annotation
@@ -1965,7 +1966,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 54, "expected 54 unannotated rules (167 total - 113 annotated; unchanged by Batch 196 — both its rules are annotated, so the two +2s cancel; Batch 186 added both its rules annotated: the toggle-oracle + cold-LLC members)");
+    assert_eq!(unannotated, 54, "expected 54 unannotated rules (168 total - 114 annotated; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat in context_notes, so the unannotated count is unchanged; Batch 186 added both its rules annotated: the toggle-oracle + cold-LLC members)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1977,7 +1978,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 113); // Batch 196: 111 -> 113 (the TensorFold grammar-window + startup-estimate pair); Batch 186: 109 -> 111 (the ggml-cpu tiled measurement pair); Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider); Batch 181: 104 → 106 (the mlxfast mask-memo + seed-warm annotations); Batch 182: 106 → 109 (the mlxfast-delta trio)
+    assert_eq!(annotated, 114); // Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113 (the TensorFold grammar-window + startup-estimate pair); Batch 186: 109 -> 111 (the ggml-cpu tiled measurement pair); Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider); Batch 181: 104 → 106 (the mlxfast mask-memo + seed-warm annotations); Batch 182: 106 → 109 (the mlxfast-delta trio)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2018,7 +2019,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 113, "expected 113 annotated rules (Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta trio)");
+    assert_eq!(annotated.len(), 114, "expected 114 annotated rules (Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta trio)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2057,7 +2058,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (167 total − 113 annotated; unchanged by Batch 196 — both its rules are annotated, so the two +2s cancel)");
+    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (168 total − 114 annotated; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat, unannotated unchanged)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),

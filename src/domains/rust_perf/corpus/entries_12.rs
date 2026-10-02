@@ -1,8 +1,8 @@
-//! Entries slice 12 — Batch 198 (2026-10-02, Plan 196): the PrismML-Eng
+//! Entries slice 12 — Batch 198 (2026-10-02, Plan 196): the `PrismML-Eng`
 //! llama.cpp fork distill's single `rust_perf` member, distilled from
 //! `PrismML-Eng/llama.cpp` @ `3285e757a623251eec6e04b8a4e6d89efca089f0`
-//! (MIT), PR #284 "dflash: add beam selection and optimize small PQ2_0
-//! verify batches" — the DFlash2 selector-lattice BEAM walk: an env-gated
+//! (MIT), PR #284 "dflash: add beam selection and optimize small `PQ2_0`
+//! verify batches" — the `DFlash2` selector-lattice BEAM walk: an env-gated
 //! width 2..4 beam over the same scored lattice the greedy per-step
 //! argmax walks, per-step log-softmax scoring, NaN→−inf + lexicographic
 //! slots tie-break (deterministic). Quotes re-verified VERBATIM at the

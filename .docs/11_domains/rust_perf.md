@@ -25,7 +25,19 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 167 rules — Batch 196 (2026-10-02,
+profiling guide, Research 032; **now 168 rules — Batch 198 (2026-10-02,
+Plan 196 — the PrismML fork #284 pack, source `PrismML-Eng/llama.cpp` @
+`3285e757a6`, MIT): `selector-lattice-beam-over-greedy-walk`
+(complexity, NotBenchable annotated — the NOT-ISOLATED caveat rides
+context_notes, the commit's end-to-end number is the fewrow kernel's):
+a per-step greedy walk over a small scored selector lattice throws away
+paths that lose locally but win over the full block; a WIDTH-2..4 beam
+(env `LLAMA_DFLASH2_BEAM_WIDTH`, band-validated else fail-open to
+greedy) expands each beam path over the top_k slots per step, scores by
+per-step log-softmax, keeps the best paths via partial_sort, NaN→−inf +
+lexicographic slots tie-break (both verified at the pin), deterministic;
+the winning beam replays the SAME p_min/n_min acceptance contract greedy
+used — only the walk changed, never the acceptance); Batch 196 (2026-10-02,
 Plan 195 — the TensorFold v0.6.0 A− serving/host distill, source
 `ashhart/tensorfold` @ `c4646171`, Apache-2.0 — license flipped
 MIT→Apache-2.0 at 0.6.0): two NotBenchable annotated rules —
