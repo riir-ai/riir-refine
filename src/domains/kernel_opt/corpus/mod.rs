@@ -1950,6 +1950,7 @@ mod entries_gpu_61;
 mod entries_gpu_62;
 mod entries_gpu_63;
 mod entries_gpu_64;
+mod entries_gpu_65;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1990,6 +1991,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_62::entries());
     entries.extend(entries_gpu_63::entries());
     entries.extend(entries_gpu_64::entries());
+    entries.extend(entries_gpu_65::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2039,16 +2041,16 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 728-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 728 at Batch
-///   196 — the comment read 675 through B195, stale since ~B188, repaired here).
+/// - **Exhaustive:** every `rule_id` in the 734-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 734 at Batch
+///   197 — the mlx VJP distill; was 728 at Batch 196).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
 ///
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (155 rules; Batch 194 +4: the decode sidecar ring write, the l1-resident address-identity rewind, the SF sidecar own-granularity, the in-order credit collapse; was 148; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
+    // A: Memory access patterns (156 rules; Batch 197 +1: the GQA zero-stride batch broadcast (the family's stride-0 member beside B182's row-fold); Batch 194 +4: the decode sidecar ring write, the l1-resident address-identity rewind, the SF sidecar own-granularity, the in-order credit collapse; was 148; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
     // pair -- evict-last producer stores + dead-line discard;
     // Batch 180 +1: the planar-transposed activation plane layout;
     // Batch 181 +0; Batch 182 +2: the GQA repeat-fold tile-fill + the
@@ -2199,6 +2201,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dead-line-l2-discard-after-last-consumer",
             "planar-transposed-activation-multi-column-quant-matvec",
             "verify-fold-gqa-repeats-into-row-axis-tile-fill",
+            "gqa-zero-stride-batch-broadcast",
             "verify-window-prework-loads-before-stores",
             "dequant-once-macrotile-stage-reuse-across-microtiles",
             "stage-operand-mac-layout-inplace-transpose-at-repack",
@@ -2556,7 +2559,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "register-width-topk-falls-back-to-tiled-radix-select",
         ],
     ),
-    // E: Parallelism patterns (68 rules; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (70 rules; Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2634,6 +2637,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "redundant-row-reduction-per-width-block-grid-split",
             "dual-consumer-alternating-stage-ownership-scale-lane",
             "cross-queue-output-retention-until-completion",
+            "sdpa-backward-as-tiled-matmul-bounded-materialization",
+            "threadgroup-scope-reduction-single-writer",
         ],
     ),
     // F: Flash-attention tiling (18 rules; Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
@@ -2663,7 +2668,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "paged-page-pair-deferred-permutation-bitmask"
         ],
     ),
-    // G: Linear-attention recurrence (30 rules; Batch 189 +1: the
+    // G: Linear-attention recurrence (34 rules; Batch 197 +3: the segmented entry-state checkpoint with the cheap-replay backward (the register-posture arm folded), the forward-save cache of the expensive chunk-local intermediates, and the chain-rule postprocess kernel; the comment read 30 while the table held 31 since B189's two-chunk overlap — the stale-comment miss repaired here; Batch 189 +1: the
     // two-chunk state-independent overlap scheduling rule)
     (
         KernelCategory::LinearAttnRecurrence,
@@ -2699,6 +2704,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "recurrence-prefill-exact-restructure-before-reformulation",
             "chunk-transition-consumed-by-mma",
             "two-chunk-state-independent-overlap-serial-chunk-recurrence",
+            "segmented-checkpoint-cheap-replay-backward",
+            "cache-symmetric-intermediates-per-chunk",
+            "chain-rule-postprocess-kernel",
             "full-accept-state-store-host-observable-predictor",
         ],
     ),

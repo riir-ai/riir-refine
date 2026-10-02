@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 728, "Plan 003: experts cover all 728 corpus rules (Batch 196 +2, the TensorFold v0.6.0 A− pack — the affine block address pipeliner lead + the register-width topk tiled-radix fallback, plus the lane_fuse g32 admission rider on B176; re-pinned 728 with the honest label)");
+        assert_eq!(total, 734, "Plan 003: experts cover all 734 corpus rules (Batch 197 +6, the mlx VJP distill — E +2 the composed-backward lead + the threadgroup-scope single-writer, G +3 the entry-state checkpoint + the forward-save cache + the chain-rule postprocess, A +1 the GQA zero-stride broadcast; plus the operand-typed-mma rider on B192; re-pinned 734 with the honest label)");
     }
 
     #[test]

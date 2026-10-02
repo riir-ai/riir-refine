@@ -104,10 +104,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 194 (14): DeepGEMM-Ascend distill (Research 226 / Plan 191) -- fp4-nibble-gather-lut-replicated-index-width (N +1: FP4->FP8 via ONE gather against a 16-entry LUT replicated x16 across the byte-index width so the low-nibble gather takes the RAW byte with no pre-mask; magnitude remap + the sign-bit move baked into the table build; fp8_dequant_gemm.hpp:24-25,73-76), decode-sidecar-coroutine-writes-consumer-stage-ring (A +1: a decode coroutine converts packed FP4 in unified-buffer scratch and writes DECODED bytes into the consumer's own L1 stage ring — per-stage cross-coroutine-class events, no separate decoded buffer; dual-decoder widening gated on the direct-store epilogue; fp8_dequant_gemm.hpp:111,406-412,209-210), ring-overwrite-gated-k-back-readiness (H +1: GM ring slots recycled at fixed distance K — overwrite slot i only after the consumer of slot i-K published readiness; the ring depth IS the safety margin; mega_moe.hpp:606-610,778-783), empty-participant-progress-credit (H +1: fixed-arity readiness counters require every participant to publish completion even with ZERO work — skew cannot deadlock the wait; mega_moe.hpp:770-772, comm/mega_moe.hpp:266-268), issue-latency-priced-mad-cost-model (K +1: an analytical tile cost model must price ISSUE latency per MAD — BF16 64 / FP4 40 / FP8 116 cycles measured — plus the L0-ring turnover term and post-pipeline K-tile re-selection; heuristics.hpp:566-577,653-677), multiwave-dual-decode-admission-gate (D +1: enabling a two-decoder worker-split is gated by a 10-conjunct admission — multiwave only, decode rate <= half MAD rate, sector alignment, amortization bound; heuristics.hpp:691-702), work-size-gated-overlap-reduce-mode (H +1: overlap-drain vs final-drain plans switch at a MEASURED 32 MiB combine-work threshold; the overlap machinery is pure overhead below it; mega_moe.hpp:1137-1140,1082-1088,1171-1172), l1-resident-operand-reuse-address-identity-rewind (A +1, the Research-226 A- GOAT lead: skip the GM->L1 load when a.addr == last_a under two-conjunct admission + ring-residency; rewind the stage ring and replay the resident stages; fp8_gemm.hpp:123-125,139-149), decoupled-sf-sidecar-pipeline-own-granularity (A +1: the scale-factor stream rides its OWN ring at its OWN granularity — chunked loads, own event base, wait deferred to the first consumer tile; reused chunks rewind one back-step mod the SF ring; fp8_dequant_gemm.hpp:266-281, fp8_gemm.hpp:246-249), coprime-stride-cross-rank-source-interleave (H +1: N consumers drain one concatenated multi-segment queue with a stride co-prime to the segment total — sync-free segment spread, assignment recorded to metadata; mega_moe.hpp:756-757,801-807), paged-page-pair-deferred-permutation-bitmask (F +1: paged-KV pages gathered in PHYSICAL order, logical-order restore deferred to store time as a precomputed per-pair bitmask — page 128 XORs the dst vector, page 64 half-swaps; mqa_logits.hpp:82-84,593-599,91-96), dual-consumer-alternating-stage-ownership-scale-lane (E +1: a sidecar stream split across two coroutines by STAGE PARITY — both run the cursor, only the parity-owner transfers; mqa_logits.hpp:318-322,488-492,249), dependency-wave-task-picker-one-wave-lookahead (H +1: a persistent-core picker over dependent GEMM stages interleaves waves with a closed-form one-wave lookahead bound; scheduler/mega_moe.hpp:93-105), in-order-pipe-credit-release-completion-collapse (A +1: on in-order pipes, credits publish on the pipe that both produced and consumed the buffer, and one completion covers all earlier same-queue copies — events scale with pipes touched, not copies; mqa_logits.hpp:617-620, mega_moe.hpp:559-561,594-596) + 4 riders (l1-resident admission-gate text folded at authoring; sf-sidecar rewind facet folded at authoring; weight-stream-non-temporal-loads += the reuse-count-keyed hint instances on a third backend; ue8m0-pow2-scale += the branchless significand-carry ceil arm); source deepseek-ai/DeepGEMM-Ascend @ 8491bbb4b8c02a094a2318965f50c70438a3e73c (MIT; heuristics.hpp read in full by the coordinator, slices A+B by 2 read subagents, coordinator re-verified the Tier-1 quote sites at the pin).
     // Batch 195 (9): the mlxfast-bonsai2 POST-REORG wave-2 distill (Plan 194, vendor delta 0c61273..0c7c392) -- io32-count-pinned-text-narrowing (O +1: swap size_t index math to uint at the kernel-source-text level, count-pinned per kernel + launch-time bounds guards, stock-64-bit fallback on drift), strided-view-offset-fit32-launch-proof (O +1: the general member — prove every element offset of an arbitrary strided view below 2^31 by the 64-bit span sum, dispatch 32-bit only then), write-only-touch-side-queue (D +1: provably write-only touches commit on a dedicated second queue + serial side thread — never interleaved between prompt CBs, never stalling the engine thread on first-touch wiring; bounded drain at the emit boundary), last-query-rect-projection (B +1: when the last-query prework provably consumes only the chunk's newest rows, the q|gate projection computes those rows only via a rect-partitioned packed matmul — every element the full product's, bit-checked at prepare), roundfuse-packed-embedding-gather (C +1: three packed-table row gathers fuse to ONE launch under a pure-copy contract, per-geometry verdict cache + bitwise self-test incl. negative-id wrap), enumerable-domain-bit-identity-admission-gate (N +1: admit-or-refuse a rewrite by exhaustive enumeration of its whole 16-bit input domain — never sampling, load-time, binary verdict), cross-queue-output-retention-until-completion (E +1: side-queue write outputs retained until their CB's completion event — allocator hazard tracking does not span unordered queues), atexit-registration-order-shutdown (D +1: teardown by registration order — the cleanup hook registered AFTER the resources whose destructors must run after it, shared-lock handoff refusal, bounded final wait), lazy-admission-reservation-atomic-register (D +1: lazy-allocation admission = per-row reservations at max(actual, estimate) + capacity check and registration in one critical section — the TOCTOU fix; adoption reserves the exact-or-maximal span before the staging reservation drops) + 3 riders (kv-first-append += the adopt/install contract + ready gate; dtype-native-source-read += the Metal BF16 head-rotation pad-in-read instance; rust_perf prompt-continuation += the draft-vocab-cutoff honesty law); source Layr-Labs/mlxfast-bonsai2-27b-engine @ 0c7c392 (MIT; delta 0c61273..0c7c392 = 25 commits, 22 files, +9150/-777; the standing vendor clone; 2 staging subagents over disjoint slices, every load-bearing quote delta-freshness-checked — the GPUWake staging lead was killed as a B193 duplicate by exactly that check).
     // Batch 196 (2): the TensorFold v0.6.0 A− pack (Plan 195, pin c4646171, Apache-2.0 — license flipped MIT→Apache-2.0 at 0.6.0) -- affine-block-address-lets-pipeliner-fly (L +1: the stored nvfp4 macro-block address `(b // 4) * 32 * SBN + ((b % 4) * 16) // 2 * SBN` is a STAIRCASE in the loop step and the same address is `b * (8 * SBN)` — make the ADVANCING loop address affine so the hardware pipeliner puts the weight traffic in flight, the step's actual wait; nvfp4.py:312 VERBATIM + commit 443ad4a at-sha), register-width-topk-falls-back-to-tiled-radix-select (D +1: _select holds next_pow2(blocks) scores in registers up to SELECT_REGS = 32768 and SPILLS past — dispatch _select_tiles past the cliff, THE SAME LISTS (radix select one byte a pass from the top, ties by lowest block id, in block order); attention.py:13/:353/:357 VERBATIM + commit a2dba9c; every timing figure commit-message-only) + 1 rider (dtype-native-source-read (B176) += the lane_fuse g32 admission instance — the admission hardcoded `!= 64` while the kernels took (32, 64), g32 checkpoints silently lost fused projections; 50588fbb).
+    // Batch 197 (6): the ml-explore/mlx VJP kernel distill (Research 227 / Plan 193; PRs #4563+#4565, merges 83b976ea438466418dea20c89709601201851fe1 + 9295197533d586dc26d6814b92899fa088320ab3, MIT, merged 2026-09-29; every quote verified at the pins — .research/230, 22/22) -- sdpa-backward-as-tiled-matmul-bounded-materialization (E +1, the A− GOAT lead: the attention VJP COMPOSED from tiled library GEMMs through ONE bounded score tile (1024² default, MLX_SDPA_VJP_BLOCK) beats the full-matrix fallback AND the fused flash-style kernel on unified memory — the fused attempt CLOSED UNMERGED as PR #3241, its own text conceding 0.36–0.70× dense; riders folded: save_lse forward output (function_constant 303), the NaN dead-row guard (exp(-inf − −inf)), the causal tile skip with diag_off = kL − qL, the HasTail compile-time segment tag, the dummy-binding fc-gated outputs), segmented-checkpoint-cheap-replay-backward (G +1, A−: checkpoint the ENTRY state every Ckpt-th step (dense cache at T=4096/B=4/Hv=32 = 34 GB in-source) and replay the state recurrence in the backward — delta cached per chunk so the replay is ~a tenth of a chunk's work; the entry-state-not-exit clause pinned by test; lead 6's register seg[Ckpt][n_per_t] arm FOLDED as the second posture), gqa-zero-stride-batch-broadcast (A +1, B+: k_bs innermost stride 0 broadcasts one kv head over its query group through the batched GEMM — no expanded tensor; the GQA-operand family's stride-0 member beside B182's row-fold), threadgroup-scope-reduction-single-writer (E +1, B: reduce_tile_tg folds the kNSG simdgroup partials in threadgroup memory and commits with a single non-atomic store — the atomic paid only on the GQA axis that genuinely crosses threadgroups), cache-symmetric-intermediates-per-chunk (G +1, B: the forward-save pass caches the expensive chunk-local set (KKt, the 15-step Neumann T-inv, QKt_raw, delta) with the dv_idx == 0 single-writer guard — the cache-what's-expensive half of the hierarchy beside #2's recompute-what's-cheap), chain-rule-postprocess-kernel (G +1, C+: the kernel differentiates the TRANSFORMED variable (dgamma, 'computes the gradient with respect to the log') and gated_delta_dgamma_to_dg applies the Jacobian in an O(T) reverse suffix cumsum with the max(g, 1e-6) floor) + 1 rider (dot-macro-family-widens-at-load-f32-accumulate (B192) += the OPERAND-TYPED MACRO instance — the macro-side pole: 'Operand and accumulator types are taken from the tiles rather than pinned to float' + the C-stays-float accumulator clause, gated_delta_nax_ops.h:399-404,576-579); source ml-explore/mlx @ the two merge shas (MIT; T0 re-clone at full shas, 22/22 quotes verified — the 34 GB comment + entry-state clause live in the FORWARD file, a provenance sharpening over the research draft).
     assert_eq!(
         corpus.entries.len(),
-        728,
-        "kernel batches through Batch 196 should have 728 rules",
+        734,
+        "kernel batches through Batch 197 should have 734 rules",
     );
 }
 
@@ -5358,8 +5359,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 728-rule corpus must appear in exactly one category
-    // (re-pinned 728 at Batch 196; the comment read 627, stale — repaired here).
+    // Every rule_id in the 734-rule corpus must appear in exactly one category
+    // (re-pinned 734 at Batch 197; the comment read 728 through B196).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5433,14 +5434,18 @@ fn kernel_categories_counts_match_plan_003_table() {
     // work-stealing microtile floor; Batch 186 before that: A +6 the
     // ggml-cpu tiled staging family, B +2, C +1, D +3, H +1, M +1,
     // N +1).
+    // Batch 197 before that: A +1 the GQA zero-stride broadcast, E +2 the
+    // composed-backward lead + the threadgroup-scope single-writer,
+    // G +3 the entry-state checkpoint + the forward-save cache + the
+    // chain-rule postprocess; the mlx VJP distill).
     let expected = [
-        (KernelCategory::MemoryAccess, 155),
+        (KernelCategory::MemoryAccess, 156),
         (KernelCategory::Compute, 77),
         (KernelCategory::Fusion, 51),
         (KernelCategory::Dispatch, 163),
-        (KernelCategory::Parallelism, 68),
+        (KernelCategory::Parallelism, 70),
         (KernelCategory::FlashAttnTiling, 18),
-        (KernelCategory::LinearAttnRecurrence, 31),
+        (KernelCategory::LinearAttnRecurrence, 34),
         (KernelCategory::MoeDispatchBackward, 36),
         (KernelCategory::NsaBlockSparse, 7),
         (KernelCategory::VarlenChunkedReduction, 5),
@@ -5462,9 +5467,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 728.
+    // Sum must equal 734.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 728, "Plan 003: category totals must sum to 728 (Batch 196 +2: D +1 the register-width topk tiled-radix fallback, L +1 the affine block address pipeliner lead; re-pinned 728 with the honest label)");
+    assert_eq!(total, 734, "Plan 003: category totals must sum to 734 (Batch 197 +6: E +2 the composed-backward lead + the threadgroup-scope single-writer, G +3 the entry-state checkpoint + the forward-save cache + the chain-rule postprocess, A +1 the GQA zero-stride broadcast; re-pinned 734 with the honest label)");
 }
 
 #[test]
@@ -5475,8 +5480,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 728,
-        "Plan 003: grouped corpus has {total} rules, expected 728"
+        total, 734,
+        "Plan 003: grouped corpus has {total} rules, expected 734"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9583,8 +9588,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        728,
-        "corpus count re-pinned at Batch 196 (the message read 'Batch 194' through B195 — a stale re-pin label, repaired here)",
+        734,
+        "corpus count re-pinned at Batch 197 (the mlx VJP distill: 6 rules — the composed-backward A− GOAT lead, the segmented entry-state checkpoint + cheap replay with the register arm folded, the GQA zero-stride batch broadcast, the threadgroup-scope reduction single-writer, the forward-save chunk-intermediate cache, and the chain-rule postprocess kernel; was 728 at Batch 196)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10227,7 +10232,7 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
     // spreads (~0.1, the |q| <= 0.12 input class) the uniform weights sit
     // INSIDE the source's 5e-3 + 3e-2|ref| tolerance of the true weights
     // (max weight deviation ~ spread/(2n) ~ 6e-3 < ~8.7e-3 here).
-    let tiny: [f32; 8] = [-0.05, -0.0375, -0.025, -0.0125, 0.0, 0.0125, 0.025, 0.0375];
+    let tiny: [f32; 8] = [-0.05, -0.037_5, -0.025, -0.012_5, 0.0, 0.012_5, 0.025, 0.037_5];
     let w_true = softmax(&tiny);
     let w_uniform = vec![1.0 / 8.0; 8];
     for (t, u) in w_true.iter().zip(&w_uniform) {
@@ -13799,6 +13804,107 @@ fn batch196_riders_landed_on_their_hosts() {
         assert!(
             rule.gpu_concept.contains(marker),
             "Batch-196 rider marker '{marker}' missing on host '{host}'"
+        );
+    }
+}
+
+#[test]
+fn batch197_pseudocode_parses() {
+    // G1 for Batch 197: syn-parse gate (the mlx VJP distill of 6 — Plan
+    // 193: the composed-backward A− GOAT lead, the segmented entry-state
+    // checkpoint + cheap replay, the GQA zero-stride batch broadcast, the
+    // threadgroup-scope reduction single-writer, the forward-save chunk
+    // cache, and the chain-rule postprocess kernel).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "sdpa-backward-as-tiled-matmul-bounded-materialization",
+        "segmented-checkpoint-cheap-replay-backward",
+        "gqa-zero-stride-batch-broadcast",
+        "threadgroup-scope-reduction-single-writer",
+        "cache-symmetric-intermediates-per-chunk",
+        "chain-rule-postprocess-kernel",
+    ];
+    assert_eq!(ids.len(), 6, "batch-197 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-197 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-197 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-197 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch197_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-197 decision-content contracts (the batch196 precedent):
+    // each rule's load-bearing caveat must ride the rule text.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "sdpa-backward-as-tiled-matmul-bounded-materialization",
+            "PR #3241",
+        ),
+        (
+            "segmented-checkpoint-cheap-replay-backward",
+            "it must be the entry state and not the exit state",
+        ),
+        ("gqa-zero-stride-batch-broadcast", "zero innermost batch stride"),
+        (
+            "threadgroup-scope-reduction-single-writer",
+            "never leaves threadgroup memory",
+        ),
+        (
+            "cache-symmetric-intermediates-per-chunk",
+            "only the first tile needs to write it out",
+        ),
+        (
+            "chain-rule-postprocess-kernel",
+            "computes the gradient with respect to the log",
+        ),
+    ];
+    for (id, marker) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-197 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-197 contract marker '{marker}' missing on '{id}'"
+        );
+    }
+}
+
+#[test]
+fn batch197_riders_landed_on_their_hosts() {
+    // The Batch-197 rider (the batch196 membership precedent — a rider
+    // that never landed is a staging note, not corpus): the operand-typed
+    // macro instance rides B192's host rule.
+    let corpus = build_kernel_seed_corpus();
+    let hosts = [(
+        "dot-macro-family-widens-at-load-f32-accumulate",
+        "RIDER (Batch 197",
+    )];
+    for (host, marker) in hosts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == host)
+            .unwrap_or_else(|| panic!("rider host '{host}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "Batch-197 rider marker '{marker}' missing on host '{host}'"
         );
     }
 }
