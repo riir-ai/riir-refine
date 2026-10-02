@@ -23,9 +23,10 @@ Rename `riir-clippy` → **`riir-refine`** (binary `cargo heal` → `cargo refin
 | Repo | `riir-clippy` | **`riir-refine`** (the 22-file registration: repo_set + pins + sweeps + skill symlinks — the fleet's LARGEST; own commit family) |
 | Binary | `cargo heal` | **`cargo refine`** — NO alias binary (owner call 2026-09-30; revisit at the first external install) |
 | Public dist repo | `gist-rs/cargo-heal` | `gist-rs/refine` (tap formula + scoop manifest renamed in the same pass; no dual-name transition needed at a 2-machine fleet) |
-| Internal vocabulary | `heal.rs`, `HealDomain`, `.heal/`, `cargo heal --fix` semantics | **UNCHANGED** — move-don't-rewrite; the healer's own verbs stay |
+| Internal vocabulary | `heal.rs`, `HealDomain`, `heal()` verbs, `cargo heal --fix` semantics | **UNCHANGED** — move-don't-rewrite; the healer's own verbs stay (`.heal/` state dirs left this tier — migrated with user state, below) |
 | Wire constants | `kat:healqual:v1:`, `kat:corpusdays:v1:`, fixstats/decstat domain separators | **UNCHANGED, IMMUTABLE** — codes are stable forever once shipped; display strings change freely |
-| User state | `~/.heal` account dir, outbox, fixseq rings | **UNCHANGED** |
+| User state | `~/.heal` account dir, outbox, fixseq rings; per-repo `.heal/` state dirs | **MIGRATED `→ .refine`** — owner amendment 2026-10-01 (the 2-machine no-alias call; code constants + disk moved together, 24 repos + home) |
+| Cargo feature flags | `kernel_heal`, `kernel_verify`, `clippy_lints`, `rust_perf`, … (+ every `required-features` name) | **UNCHANGED** — internal tier, same standing as `RIIR_HEAL_*`; users never type them (the domain id is `--domain kernel_opt`). Verdict 2026-10-02: renaming the flag alone leaves `HealDomain`/`heal()` mixed and worsens `refine` grep noise (caveat 4); ~22 files of churn, zero behavior gain |
 
 **Why Refine (the pick history, disclosed):** `Repair` was the earlier candidate — passed over because the product's value is fix + improve + optimize, and only ONE domain (rustc_errors) is literally repair; rust_perf improves, kernel_opt optimizes, clippy_lints refines style, sec hardens. `Reforge` was rejected pre-grep (MMO item-stat vocabulary; Seal IP lives in this workspace — a future sage-class collision). **Collisions, honestly:** `refine` is prose-noisy (ODE-refined, trajectory-refined — noise, never vocabulary); two aligned identifiers exist (`partition_refine` in katgpt-core bisimulation — state-minimization, a different concept, one disambiguation row; the `trd_refined_draft` feature); external: **refine.dev** (React admin framework, unrelated domain — nominative care in public copy, no adjacency). `cargo refine` occupies a free cargo-subcommand slot (`cargo fix` is taken; refine is not).
 
@@ -91,7 +92,7 @@ P013's tier presets × P007's live staking × 051's sixth axis (designed for ret
 
 ## Out of scope
 
-- No internal vocabulary rename (heal stays heal in code/state/wire).
+- No internal vocabulary rename (heal stays heal in code/wire; the user state + per-repo state dirs migrated per the amendment above).
 - No new chain tier (P013 law); no dao lever (constants owner-gated, never-lever class).
 - No change to reflex/reflexer/rethink surfaces beyond Plan 042's cross-refs.
 - No mainnet arming of anything.
