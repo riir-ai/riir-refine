@@ -52,14 +52,14 @@ TTT-Discover's regime is dense reward batches (512 rollouts/step) where the with
 |---|---|
 | G1 correctness | 9 solver unit tests + 3 harness tests (incl. budget-protects-against-lucky-1/1, single-candidate degrade) — PASS |
 | G2 perf | Selection O(pool) + ~60 streaming bisection iters, zero steady-state alloc (capacity-stability test) — PASS |
-| G3 no-regression | 428 default lib / 448 full default suite / 663 `kernel_heal,latent_retrieval` (Issue 017 retrieval floors HELD — corpus untouched) / clippy 0 `--all-targets` — PASS |
+| G3 no-regression | 428 default lib / 448 full default suite / 663 `kernel_opt,latent_retrieval` (Issue 017 retrieval floors HELD — corpus untouched) / clippy 0 `--all-targets` — PASS |
 | G4 discovery | **NEGATIVE** (§2) — the honest gate outcome; no promotion |
 
 `t93_selection_regret` gate unchanged: BetaPosterior −23.8 %/−8.4 %/+2.9 % at 1/5/30 attempts — the promotion stands.
 
 ## 5. Fix in passing
 
-`examples/wgsl_mine.rs` (Issue 025 T6, commit `589b0c9`) was missing its `[[example]] required-features = ["kernel_heal"]` declaration — `cargo clippy --all-targets` (default features) failed E0433 on `domains::kernel_opt`. Declared alongside `wgsl_scan_smoke`. A latent CI break from the previous session, caught by this session's clippy gate.
+`examples/wgsl_mine.rs` (Issue 025 T6, commit `589b0c9`) was missing its `[[example]] required-features = ["kernel_opt"]` declaration — `cargo clippy --all-targets` (default features) failed E0433 on `domains::kernel_opt`. Declared alongside `wgsl_scan_smoke`. A latent CI break from the previous session, caught by this session's clippy gate.
 
 ## 6. Reproduce
 

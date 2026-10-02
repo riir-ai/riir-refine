@@ -22,11 +22,11 @@ LOW-MEDIUM (the queue's honest estimate): B58 already took the shared mechanisms
 
 ### Phase 2 — standing gates
 - [x] batch63_rules_present + batch63_concepts_covered + batch63_pseudocode_parses — all green. (pseudocode_parses / rules_present / concepts_covered — the standing trio).
-- [x] Existing tests green — 811/0/1i kernel_heal, 607/0 default. (counts, dedup, retrieval).
+- [x] Existing tests green — 811/0/1i kernel_opt, 607/0 default. (counts, dedup, retrieval).
 
 ### Phase 3 — GOAT
 - [x] G1 — DONE (syn-parse + coordinator-verified quotes). `buggy_code`/`fixed_code` + pseudocode parse + reflect REAL file content (coordinator-verified quotes).
-- [x] G3 — DONE (811 kernel_heal + 607 default + clippy 0 all-targets both states — 3 doc-backtick fixes in the header line). — the Batch-62 lesson: lint the TEST target too).
+- [x] G3 — DONE (811 kernel_opt + 607 default + clippy 0 all-targets both states — 3 doc-backtick fixes in the header line). — the Batch-62 lesson: lint the TEST target too).
 - [x] G4 — no new deps (corpus + tests only).
 - [x] Retrieval floors — HELD (gate green, no re-pin). re-pin only if legitimately re-ranked (floors = baseline − 1).
 

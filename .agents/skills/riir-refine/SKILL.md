@@ -176,7 +176,7 @@ until the claims clear.
      `src/score_bench/generations.rs`.
    - **retrieval-precision re-measure (Issue 017, kernel batches):** run
      `CARGO_TARGET_DIR=/tmp/riir-refine-bNN cargo test --features
-     kernel_heal,latent_retrieval --lib retrieval -- --nocapture` (~1 min) —
+     kernel_opt,latent_retrieval --lib retrieval -- --nocapture` (~1 min) —
      the gate floors (re-pinned by Issue 022/Bench 024: kernel self-variants
      100%, blended 3-domain 77.1/86.4/92.4) must hold; a decay FAILS the
      batch → fix retrieval

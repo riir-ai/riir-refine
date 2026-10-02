@@ -35,9 +35,9 @@
       `batch94_rules_present` + count pins walked (tests.rs, router.rs,
       mod.rs comments + expected-array gates + the corpus header + the stale
       count comments Batch 95 flagged).
-- [x] T6 GOAT: G1 syn-parse all new rules; G2 lib tests (kernel_heal + default
+- [x] T6 GOAT: G1 syn-parse all new rules; G2 lib tests (kernel_opt + default
       + all-features); G3 clippy 0 both states + CI guard layers (or recorded
-      honest skip); retrieval floors 14/14 (`kernel_heal,latent_retrieval`
+      honest skip); retrieval floors 14/14 (`kernel_opt,latent_retrieval`
       retrieval test — kernel self-variants 100/100/100, no re-pins);
       score-bench flat (`--fix` path untouched).
 - [x] T7 Docs: Research note 112 (batch record; Research 110 status → LANDED),

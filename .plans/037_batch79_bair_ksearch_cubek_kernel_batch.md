@@ -82,7 +82,7 @@ in this batch's commits).
   Plan-003 category table (G row + whichever of A/E/D move), router experts-cover pin,
   module-doc headers; grep-verify every touched category count after the corpus edit (the
   B73 lesson 19).
-- [x] T9 GOAT: G1 parse/syn (all new rules) + G2 lib tests (default + kernel_heal +
+- [x] T9 GOAT: G1 parse/syn (all new rules) + G2 lib tests (default + kernel_opt +
   all-features states, `CARGO_TARGET_DIR=/tmp/riir-clippy-b79`) + G3 clippy 0 both states
   `--all-targets` + full CI guard + retrieval-precision re-measure (Protocol A: floors
   re-pinned honestly if corpus growth moves prose — never silently) + G4 the rel-error

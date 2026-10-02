@@ -53,8 +53,8 @@ Category deltas: A 35→39, B 37→39, C 24→25, D 33→35, E 13→14. Total **
 ## GOAT gate
 
 - **G1 (parses):** `batch32b_pseudocode_parses` — 10/10 rules' ref_shape + opt_pattern syn-parse. PASS.
-- **G2 (tests):** kernel_heal lib suite **309 tests PASS** (was 306; +3: `batch32b_rules_present`, `batch32b_concepts_covered`, `batch32b_pseudocode_parses`); default suite 201 PASS.
-- **G3 (no-regression):** clippy clean in BOTH compiled feature states (default + kernel_heal; fixed 41 doc warnings in the new batch narrative before commit — 40 `doc list item without indentation` caused by continuation lines starting with `+ ` (a CommonMark list marker!) + 1 missing-backticks). `--all-features` still broken by the SIBLING's uncommitted WIP (`rust_perf/bench.rs:335` `alloc_axis`) — pre-existing, verified at 32a, not this batch's failure.
+- **G2 (tests):** kernel_opt lib suite **309 tests PASS** (was 306; +3: `batch32b_rules_present`, `batch32b_concepts_covered`, `batch32b_pseudocode_parses`); default suite 201 PASS.
+- **G3 (no-regression):** clippy clean in BOTH compiled feature states (default + kernel_opt; fixed 41 doc warnings in the new batch narrative before commit — 40 `doc list item without indentation` caused by continuation lines starting with `+ ` (a CommonMark list marker!) + 1 missing-backticks). `--all-features` still broken by the SIBLING's uncommitted WIP (`rust_perf/bench.rs:335` `alloc_axis`) — pre-existing, verified at 32a, not this batch's failure.
 - **G4:** unchanged (no hot-path additions — corpus is static data).
 - **G5 (corpus):** 238 flat → G5-drafter reduction maintained.
 

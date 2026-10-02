@@ -1,6 +1,6 @@
 # Research 209 — cinference (satellitedown) DFlash2 verify-kernel distill verdict
 
-**Status:** RECORD (landed as **Batch 178** — Plan [171](../.plans/171_batch178_cinference_dflash2_verify_distill.md), 2026-09-25 ~19:5x +07 cadence slot: **7 rules + 4 riders landed, kernel_opt 631 → 638** (the verdict's 3-4-rule estimate exceeded because BOTH MAYBEs survived coordinator grading — the slice sweep's non-monotone optimum + the butterfly-merge mechanism were decision-content-complete at mine time); every quote re-verified VERBATIM at the pin; the post-pin +9 trio read + merged into the LEAD-5 regime clause; bench/ harness read (the honest-caveat discharge); gates ×4 + lib 2289/0 + kernel_heal 2651/0 + +latent 2824/0 + retrieval 21/21 + clippy ×2 + score #167 FLAT)
+**Status:** RECORD (landed as **Batch 178** — Plan [171](../.plans/171_batch178_cinference_dflash2_verify_distill.md), 2026-09-25 ~19:5x +07 cadence slot: **7 rules + 4 riders landed, kernel_opt 631 → 638** (the verdict's 3-4-rule estimate exceeded because BOTH MAYBEs survived coordinator grading — the slice sweep's non-monotone optimum + the butterfly-merge mechanism were decision-content-complete at mine time); every quote re-verified VERBATIM at the pin; the post-pin +9 trio read + merged into the LEAD-5 regime clause; bench/ harness read (the honest-caveat discharge); gates ×4 + lib 2289/0 + kernel_opt 2651/0 + +latent 2824/0 + retrieval 21/21 + clippy ×2 + score #167 FLAT)
 
 ## Source
 

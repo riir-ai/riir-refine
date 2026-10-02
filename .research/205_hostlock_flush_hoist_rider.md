@@ -45,7 +45,7 @@ Lane-intel also recorded, not a rule: our own hand-rolled `riir-gpu` autotune be
 
 - G1 parse/count: 102 rust_perf corpus tests green (pins 151→153 / 95→96 / 56→57 / 96→98 ×2 sites / 55×2 sites + the `context_notes_backward_compatible_serde` third annotated site + `batch174_rules_present_and_parse` needles + syn-parse).
 - G2 full lib: 2220/0 at default features.
-- G3 clippy `-D warnings`: default ✓ / `rust_perf,rust_perf_bench` ✓ / `kernel_heal` ✓ (the rider's quote-escaping compile break caught + fixed at gate time — inner `"` needed `\"` in the Rust literal).
+- G3 clippy `-D warnings`: default ✓ / `rust_perf,rust_perf_bench` ✓ / `kernel_opt` ✓ (the rider's quote-escaping compile break caught + fixed at gate time — inner `"` needed `\"` in the Rust literal).
 - Pareto: ParetoDominant 3/0/0 verdict-stable ×2 (numbers above); the `batch174_pareto_benches` #[ignore]d gate ran green.
 - Kernel retrieval re-measure (Issue 017, kernel corpus touched): 18/18 green, floors hold.
 - Score-bench row #162: heal 96.36% / created 1.82% — FLAT vs the 96.2/≤1.9 floors (no decay).

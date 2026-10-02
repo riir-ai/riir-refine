@@ -71,12 +71,12 @@ Distinct from `upcast-before-reduction` (raising input precision) — this chang
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 (correctness) | All 5 rules valid pseudocode; 0 duplicates (11 substrate-first checks, each with explicit distinct-from or drop note) | ✅ PASS |
-| G2 (perf) | Corpus build O(n); router O(1); 116 kernel_heal-scoped lib tests in 0.07s; full default+kernel_heal run 228 tests green (pre-sibling-WIP-breakage) | ✅ PASS |
+| G2 (perf) | Corpus build O(n); router O(1); 116 kernel_opt-scoped lib tests in 0.07s; full default+kernel_opt run 228 tests green (pre-sibling-WIP-breakage) | ✅ PASS |
 | G3 (no-regression) | All existing tests pass; +2 new (`batch25_rules_present`, `batch25_gemma_cluster_concepts_covered`); clippy clean under `-D warnings` (fixed 2 `doc_markdown` lints on `RMSNorm`/`LoRA`) | ✅ PASS |
 | G4 (alloc-free) | Static `KernelRule` entries, zero hot-path alloc (unchanged) | ✅ PASS |
 | G5 (routed demo) | 169 flat → 11.3 avg per category = **15.0× reduction maintained** | ✅ PASS |
 
-**Sibling-agent note:** the sibling's Plan 005 Phase 4/5 WIP (`src/domains/rust_perf/proposers/mod.rs` mid-edit) broke default-feature compilation mid-session; validations were run scoped (`--no-default-features --features kernel_heal`) + one full default run earlier while their tree was green. The committed develop state (their `4960da3` + `af8b391` + this batch) compiles clean.
+**Sibling-agent note:** the sibling's Plan 005 Phase 4/5 WIP (`src/domains/rust_perf/proposers/mod.rs` mid-edit) broke default-feature compilation mid-session; validations were run scoped (`--no-default-features --features kernel_opt`) + one full default run earlier while their tree was green. The committed develop state (their `4960da3` + `af8b391` + this batch) compiles clean.
 
 ## 5. Next steps
 

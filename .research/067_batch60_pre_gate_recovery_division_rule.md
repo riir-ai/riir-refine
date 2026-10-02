@@ -76,7 +76,7 @@ backward-numerics home beside B34 `exact-op-parity`, B35
 
 - **G1**: syn-parse gate (batch60_pseudocode_parses) + awk orphan-rule_id
   scan clean + first compile clean.
-- **G2/G3**: kernel_heal lib **778/0/1** (baseline 775 + 3 new gates),
+- **G2/G3**: kernel_opt lib **778/0/1** (baseline 775 + 3 new gates),
   default lib **577/0/0**, clippy **0** in both feature states.
 - **Retrieval**: kernel self-variants **100/100/100**, blended
   **94.7/97.7/97.7** of 131 — floors HELD (94.6/97.7/97.7 of 130; +1

@@ -77,15 +77,15 @@ split from use_fast_math).
 ## GOAT (all green)
 
 - batch130 gates 3/3 FIRST-SHOT (rules_present / concepts_covered / pseudocode_parses)
-- lib default 1168/0; kernel_heal 1496/0/1i (floor 1493 + 3, zero re-pins);
-  kernel_heal+latent 1613/0/2i (floor 1610 + 3)
+- lib default 1168/0; kernel_opt 1496/0/1i (floor 1493 + 3, zero re-pins);
+  kernel_opt+latent 1613/0/2i (floor 1610 + 3)
 - retrieval kernel 100/100/100, blended 94.7/96.9/97.7 — byte-identical to
   B118-B129
 - Router annotation re-pinned per the Issue 020 contract: re-measured **93/131
   (71.0%)**, was 88/131 at B129 — the rich TMA/dispatch concept text SHARPENED
   the TF-cosine centroids (first measured IMPROVEMENT since the B128-era 94);
   floor 83 → 88 per measured−5
-- clippy 0 ×3 states (default / kernel_heal / kernel_heal+latent)
+- clippy 0 ×3 states (default / kernel_opt / kernel_opt+latent)
 - score-bench #79 FLAT 96.2/1.9/100/100
 
 ## Count pins walked
@@ -111,9 +111,9 @@ with riders appended + 3 terse-concept exact pins converted to prefix+rider form
 2. **A wrong doc-lint guess costs a clippy round:** the doc_markdown offender in
    the new headers was "CloudRift" (mixed-case), not cuBLAS — read the caret
    span before fixing.
-3. The kernel_opt corpus tests are `kernel_heal`-gated: a default-features
+3. The kernel_opt corpus tests are `kernel_opt`-gated: a default-features
    `cargo test batch130` reports a green ZERO (1168 filtered) — the count floor
-   and the batch gates live at `--features kernel_heal` (the cfg-gated
+   and the batch gates live at `--features kernel_opt` (the cfg-gated
    green-zero trap, per the AGENTS.md cfg-gated rule).
 
 ## Pins now current

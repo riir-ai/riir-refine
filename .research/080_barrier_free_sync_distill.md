@@ -104,7 +104,7 @@ content beyond the corpus → PASS.
 - **G1** `batch70_pseudocode_parses` green (fixtures from the paper's §5
   closed forms; Eq 2/4/5 + the three §5.2 cases, host-orchestration
   pseudocode). Presence + concepts gates (5 needles each) green.
-- **G2** lib tests: kernel_heal 864/0/1i · default 657/0 · all-features
+- **G2** lib tests: kernel_opt 864/0/1i · default 657/0 · all-features
   1115/0/13i.
 - **G3** `ci_feature_guard.sh` ALL LAYERS PASS (24 single-feature combos,
   both extremes clippy-clean).
@@ -116,12 +116,12 @@ content beyond the corpus → PASS.
 
 Layer 5a (all-features clippy, `-D warnings`) was RED at clean HEAD
 `0839fe0`: `floors::ROUTER_ANNOTATION_3D` is declared
-`#[cfg(feature = "kernel_heal")]` but its only use-arm requires
-`not(sec)` — under all-features (sec + kernel_heal) the const exists
+`#[cfg(feature = "kernel_opt")]` but its only use-arm requires
+`not(sec)` — under all-features (sec + kernel_opt) the const exists
 unused → dead_code. The sec session's GOAT validated default + sec +
 sec/kernel/latent test states but not the no-default/all-features clippy
 extremes with `-D warnings`. Fix (separate `fix:` commit): narrow the
-declaration cfg to `all(feature = "kernel_heal", not(feature = "sec"))`
+declaration cfg to `all(feature = "kernel_opt", not(feature = "sec"))`
 — the only mismatched cfg of the four annotation-floor consts (the
 other three match their use-arms exactly). Also caught by the same
 layer: the new `batch70_pseudocode_parses` initially lacked the

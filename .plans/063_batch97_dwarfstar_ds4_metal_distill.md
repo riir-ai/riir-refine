@@ -40,11 +40,11 @@ in the research note addendum before quoting (beta-quality, fast-moving).
   the source's own `kernel_test_mxfp4_down_half_lut` oracle (CPU Rust twin). DONE:
   `batch97_mxfp4_half_band_exhaustive_oracle` — band proof 640/640 + non-vacuity +
   boundary rows + 0xff policy; caught its own first-implementation implicit-bit bug.
-- [x] T7 GOAT: G1 parse/fixture gates; G2 lib tests (kernel_heal + default); G3 clippy 0
+- [x] T7 GOAT: G1 parse/fixture gates; G2 lib tests (kernel_opt + default); G3 clippy 0
   both states + retrieval floors 14/14 HELD; G-det alloc-stable; score-bench flat
   (never weaken floors silently). Full CI guard only if the affected states don't
   cover a change (the B95/B96 honest-skip shape, recorded either way). DONE:
-  kernel_heal 1252/0, default 1008/0, floors 14/14 (~304 s), clippy 0 x3 states,
+  kernel_opt 1252/0, default 1008/0, floors 14/14 (~304 s), clippy 0 x3 states,
   score-bench 96.2/1.9/100/100 FLAT; full guard skipped (affected states cover the
   corpus-only change; recorded).
 - [x] T8 research note addendum: Research 117 gains a RECORD addendum (verdict →

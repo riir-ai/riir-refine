@@ -19,7 +19,7 @@
 //!
 //! The available domain set since the Issue-134 T3 re-arm (2026-09-24):
 //! clippy + rust_perf + docker + dist at default features (the thin-domain
-//! fixture sets), kernel with `kernel_heal`, sec with `sec`, shader_perf
+//! fixture sets), kernel with `kernel_opt`, sec with `sec`, shader_perf
 //! with `shader_perf` — n=7 at the full state, ABOVE the power floor.
 //! The re-arm run's verdict was REFUSED on the DEGENERATE-AXIS guard (see
 //! below), which is the honest reading: every depth curve was flat, so the
@@ -29,7 +29,7 @@
 //! cargo run --release --features latent_retrieval,clippy_lints,rust_perf \
 //!   --example demonstrability_t3_sweep
 //! # the full seven-domain state (n=7):
-//! cargo run --release --features latent_retrieval,kernel_heal,sec,shader_perf \
+//! cargo run --release --features latent_retrieval,kernel_opt,sec,shader_perf \
 //!   --example demonstrability_t3_sweep
 //! ```
 
@@ -180,7 +180,7 @@ fn main() {
             "\nVERDICT: REFUSED — power floor: n={n} < {POWER_FLOOR} qualifying domains.\n\
              At n=3 Spearman cannot reject; at n=4 it cannot reach the paper's p. Neither\n\
              passed nor failed: the promotion question stays open until more domains carry\n\
-             labeled sets (kernel_heal adds one; sec/docker/dist/shader need fixture sets).\n\
+             labeled sets (kernel_opt adds one; sec/docker/dist/shader need fixture sets).\n\
              The per-domain sweep above is the accumulating measurement, not the verdict."
         );
         return;

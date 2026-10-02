@@ -113,9 +113,9 @@ CPU alloc churn → rust_perf; 8-workgroup dispatch → ambient decode shape.
 ## 5. GOAT
 
 - **G1**: `batch51_pseudocode_parses` PASS (3 rules × ref+opt syn-parse).
-- **G2**: **577 kernel_heal + 415 default** lib tests, 0 failures (+3 gates
+- **G2**: **577 kernel_opt + 415 default** lib tests, 0 failures (+3 gates
   vs B49's 574).
-- **G3**: clippy **0** in default + kernel_heal states (2 doc_markdown
+- **G3**: clippy **0** in default + kernel_opt states (2 doc_markdown
   backtick fixes pre-commit — the `.rs`-filenames-in-`//!`-prose gotcha, 5th
   recurrence); all-but-ternary combo check clean (9.46s); CI guard layers
   1/2 green (3/4/5 remain Windows-blocked by the pre-existing Issue 707).

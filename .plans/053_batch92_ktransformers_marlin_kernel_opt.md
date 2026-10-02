@@ -48,9 +48,9 @@
 - [x] T6 Count pins walked: tests.rs 69 (400→411), 5362/5364/5375,
       router.rs 9/461, mod.rs header doc, AGENTS.md,
       .docs/11_domains/kernel_opt.md, per-category count test.
-- [x] T7 GOAT (measured): G1 parse gate PASS; G2 kernel_heal lib 1234/0;
+- [x] T7 GOAT (measured): G1 parse gate PASS; G2 kernel_opt lib 1234/0;
       default 1001/0; triple-state 1370/0/8i; clippy 0 self-crate in
-      kernel_heal / kernel+latent / all-features; retrieval floors 14/14
+      kernel_opt / kernel+latent / all-features; retrieval floors 14/14
       HELD (no re-pins). FULL ci_feature_guard: Layers 1-5b ALL GREEN;
       Layer 5c 47 targets green + 8 tail targets green + ONE failure:
       `t48_gp_acquisition_ab::ordering_ab` — PRE-EXISTING FLAKE, proven

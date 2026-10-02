@@ -54,6 +54,6 @@ QMMA a1/a2 + TMA-absent probe facts). Non-duplicate delta:
 ## GOAT
 
 - [x] G1: batch149_pseudocode_parses 3/3
-- [x] G2: lib tests green — default + kernel_heal (+ kernel_heal,latent_retrieval retrieval floors)
+- [x] G2: lib tests green — default + kernel_opt (+ kernel_opt,latent_retrieval retrieval floors)
 - [x] G3: clippy 0 on write-set; score-bench FLAT
 - [x] Count pins walked; commit + push (delete `b148-yielded` after)

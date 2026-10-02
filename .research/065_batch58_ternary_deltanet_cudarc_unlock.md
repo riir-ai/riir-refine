@@ -121,7 +121,7 @@ measured-UNcapped default 30 lines above).
 ## 6. GOAT
 
 - **G1**: 3/3 batch58 gates; 16 ref/opt pseudocode pairs syn-parse.
-- **G2**: kernel_heal **769/0/1** (B57's 766 + exactly 3 new gates); default
+- **G2**: kernel_opt **769/0/1** (B57's 766 + exactly 3 new gates); default
   **571/0/0** (unchanged).
 - **G3**: clippy **0** both states. One post-write fix round: the B37
   line-initial `+ `/`- ` lesson struck a 5TH time (3 trigger lines in the

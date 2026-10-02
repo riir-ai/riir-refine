@@ -72,9 +72,9 @@ two-phase note. No existing rule covers cross-phase per-position data liveness.
 ## GOAT for this batch
 
 - G1 syn-parse: `batch52_pseudocode_parses` PASS (ref_shape + opt_pattern).
-- G2 lib tests: 600 passed under `kernel_heal` (135 corpus tests incl. the 3
+- G2 lib tests: 600 passed under `kernel_opt` (135 corpus tests incl. the 3
   new batch52 gates + all count pins).
-- G3 no-regression: clippy 0 new warnings in default + kernel_heal states (2
+- G3 no-regression: clippy 0 new warnings in default + kernel_opt states (2
   doc_markdown fixes pre-commit — `[seq_len × dim]` needs backticks in `//!`
   prose; the `[x × y]` bracket family joins the gotcha list alongside O()
   expressions).

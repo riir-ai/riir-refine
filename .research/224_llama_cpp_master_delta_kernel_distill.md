@@ -34,7 +34,7 @@ at the pins by TWO independent authoring subagents + the staging pass before the
 ## Gates (all green, 2026-09-30, M3, isolated `CARGO_TARGET_DIR=/tmp/riir-clippy-b192`)
 
 - G1 parse/syn: `batch192_pseudocode_parses` (4 rules) + `batch192_concepts_carry_their_load_bearing_contracts` (the batch190_unsigned_only precedent — each rule's load-bearing caveat pinned in-text) + `batch192_riders_landed_on_their_hosts` (5 hosts) — 3/3.
-- Kernel slice: 386/0 (`--features kernel_heal,latent_retrieval --lib kernel_opt`).
+- Kernel slice: 386/0 (`--features kernel_opt,latent_retrieval --lib kernel_opt`).
 - G2 lib default: 2398/0.
 - G3 clippy `-D warnings`: default 0 / no-default 0 / all-features 0 (4 doc-lint mechanicals in the new file's module header fixed en-route — the MoE backtick + a `+ `-leading doc line clippy's parser reads as a list bullet, the doc_lazy_continuation class).
 - G4 retrieval floors: 21/21 pass (`retrieval -- --nocapture`, 252s) — kernel self-variants 100% (blend@3 90.6-94.7%, op-bigram@1 96.4% — no decay from +4 entries).

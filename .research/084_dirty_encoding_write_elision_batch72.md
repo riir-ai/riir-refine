@@ -97,9 +97,9 @@ the entry's doc comment:
 - **G1** syn-parse: `batch72_pseudocode_parses` ✓ (with the B70 lesson's
   `#[cfg(not(feature = "kernel_verify"))]` guard — re-hit once during the
   run, fixed in-WIP).
-- **G2** lib tests: default **677/0**, kernel_heal **890/0/1i**, all-features
+- **G2** lib tests: default **677/0**, kernel_opt **890/0/1i**, all-features
   **1221/0/13i**.
-- **G3** clippy 0 both feature states (default + kernel_heal +
+- **G3** clippy 0 both feature states (default + kernel_opt +
   all-features `-D warnings` via the guard); **ci_feature_guard.sh ALL
   LAYERS PASS**; retrieval floors **HELD zero decay** (13/13; blend@1 94.7,
   clippy@1 89.6, perf@1 96.2 — the B53/B55/B56/B57/B58/B71 pins).

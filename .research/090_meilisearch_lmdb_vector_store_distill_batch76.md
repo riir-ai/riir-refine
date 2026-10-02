@@ -84,7 +84,7 @@ Both suggestion-only (type-blind/architectural — the soa-hot-field class).
 - G3: clippy 0 in both states `--all-targets`.
 - G-det: alloc determinism stable across 3 runs (both rules).
 - G5: 2/2 benchable ParetoDominant, verdict-stable ×2 invocations.
-- Retrieval floors: 14/14 HELD (`kernel_heal,latent_retrieval` — no
+- Retrieval floors: 14/14 HELD (`kernel_opt,latent_retrieval` — no
   re-pins; corpus growth did not shift any floor).
 
 ## Generator lessons (this batch)

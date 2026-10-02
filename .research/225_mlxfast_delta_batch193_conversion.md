@@ -74,10 +74,10 @@ Drops: `staged-fp32-splitk-float4-runs` (thin composite — the double-buffered 
 ## Gates (all GREEN, 2026-09-30, isolated `/tmp/b193tgt`)
 
 - batch193_pseudocode_parses + concepts_carry_contracts + riders_landed: 3/3.
-- Kernel slice (`--features kernel_heal kernel`): 389 passed / 0 failed.
+- Kernel slice (`--features kernel_opt kernel`): 389 passed / 0 failed.
 - lib default: 2398 passed / 0 failed.
 - clippy `-D warnings` ×3 postures (default / no-default / all-features): CLEAN (1 doc_markback backtick fix in the new header en route — the B192 class).
-- Retrieval floors (`--features kernel_heal,latent_retrieval`): 21/21 HELD, kernel 30/30 self-variants 100.0% ×3 columns (235.41s).
+- Retrieval floors (`--features kernel_opt,latent_retrieval`): 21/21 HELD, kernel 30/30 self-variants 100.0% ×3 columns (235.41s).
 - Score-bench + freeze regen NOT owed (kernel_opt + one rust_perf AMEND — zero clippy-corpus delta, P30).
 - Corpus pins: 689 → 703 (A 148→151, B 75→76, D 152→158, E 65→66, G 30→31, L 17→18, N 53→54); router expert-coverage pin re-pinned 703 with the honest label.
 

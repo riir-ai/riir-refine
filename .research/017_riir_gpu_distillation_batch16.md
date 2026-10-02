@@ -223,7 +223,7 @@ candidate reduction** maintained.
 |---|---|---|
 | G1 (correctness) | All 4 rules valid Rust pseudocode; 0 duplicates (4 substrate-first checks passed) | ✅ PASS |
 | G2 (perf) | Corpus build O(n); router `rules_for_expert()` O(1); 265 lib tests in 0.07s | ✅ PASS |
-| G3 (no-regression) | All existing tests pass (265 all-features, 161 kernel_heal-only, 0 failed) | ✅ PASS |
+| G3 (no-regression) | All existing tests pass (265 all-features, 161 kernel_opt-only, 0 failed) | ✅ PASS |
 | G4 (alloc-free) | New rules are static `KernelRule` entries, zero hot-path alloc | ✅ PASS |
 
 Clippy clean for riir-clippy (0 warnings; 6 pre-existing warnings are in the

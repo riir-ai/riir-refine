@@ -118,9 +118,9 @@ katgpt-rs `212ed7942`).
 ## Domain gating (T2.4)
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
-`--features kernel_heal`. Requesting a domain whose feature is off is a
+`--features kernel_opt`. Requesting a domain whose feature is off is a
 **hard error** listing the enabled set (verified on `--domain kernel`
-without `kernel_heal`).
+without `kernel_opt`).
 
 ## Smoke + GOAT
 

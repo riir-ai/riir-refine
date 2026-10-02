@@ -41,7 +41,7 @@ sibling cargo build active; RAM 82% — avoid --all-features).
       batch102_concepts_covered + batch102_pseudocode_parses (cfg(not(kernel_verify))
       per B70). 6 rules, corpus 453 → 459 (A +2, C +2, H +1, N +1).
 - [x] T5 GOAT (targeted, B95 shape): G1 batch102 gates 3/3 first-shot PASS; G2
-      kernel_heal lib 1282/0/1i + default lib 1029/0 + kernel_heal+latent
+      kernel_opt lib 1282/0/1i + default lib 1029/0 + kernel_opt+latent
       1389/0/2i; G3 clippy 0 both states (one doc_markdown round: ternary/Q4_K
       backticks); retrieval floors kernel 100/100/100 at 30 labeled — HELD zero
       re-pins. Full CI guard NOT run (the B95 honest-skip shape; the 504 matrix

@@ -4,7 +4,7 @@
 //! - `clippy_lints` (default) — `clippy::*` lint healing (the original domain)
 //! - `rust_perf` (default since 2026-08-13, Phase 2) — `rust-optimize` perf
 //!   healing (promoted after Bench 013 GOAT G1+G5 PASS)
-//! - `kernel_heal` (opt-in, Phase 3) — GPU kernel optimization healing
+//! - `kernel_opt` (opt-in, Phase 3) — GPU kernel optimization healing
 //! - `docker` (default since 2026-08-28, Plan 030) — Dockerfile bounded-fix
 //!   healing + retrieval; the only domain with no `syn` (a hand-written
 //!   stanza scanner) and the only one whose oracle is an external binary
@@ -42,7 +42,7 @@ pub mod clippy_lints;
 #[cfg(feature = "rust_perf")]
 pub mod rust_perf;
 
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 pub mod kernel_opt;
 
 #[cfg(feature = "rustc_errors")]

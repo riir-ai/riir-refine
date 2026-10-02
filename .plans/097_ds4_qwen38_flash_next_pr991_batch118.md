@@ -62,8 +62,8 @@
 ### T6 — GOAT + validation
 
 - [x] All new gates green (batch118_* 3–4 gates + rule-#1 numeric gate), deterministic ×2. (5/5 incl. the shuffle-ladder gate.)
-- [x] kernel_heal lib + default lib + kernel_heal+latent combined: floors HELD zero re-pins; retrieval_precision_regression_gate PASS. (1450/0, 1142/0, 1567/0/2i; retrieval re-run kernel 100/100/100 + blended 94.7/96.9/97.7.)
-- [x] clippy 0 in default / kernel_heal / kernel_heal+latent states + `--all-targets` clean in touched files. (All green; the 5a no-default state ALSO repaired — sibling d4aad87's ungated frontier_pairs + 0b1e9c9's verify-map E0308 + 0c167b2's manual_checked_division, mechanical drive-bys per the B59/batch98 precedent.)
+- [x] kernel_opt lib + default lib + kernel_opt+latent combined: floors HELD zero re-pins; retrieval_precision_regression_gate PASS. (1450/0, 1142/0, 1567/0/2i; retrieval re-run kernel 100/100/100 + blended 94.7/96.9/97.7.)
+- [x] clippy 0 in default / kernel_opt / kernel_opt+latent states + `--all-targets` clean in touched files. (All green; the 5a no-default state ALSO repaired — sibling d4aad87's ungated frontier_pairs + 0b1e9c9's verify-map E0308 + 0c167b2's manual_checked_division, mechanical drive-bys per the B59/batch98 precedent.)
 - [x] Count pins green everywhere.
 
 ### T7 — records + closeout

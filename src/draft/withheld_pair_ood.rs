@@ -586,7 +586,7 @@ pub fn rustc_errors_population() -> Vec<Binding> {
 /// structure verdict on this arm is not exposed to that objection.
 ///
 /// [`KernelCategory`]: `crate::domains::kernel_opt::KernelCategory`
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 #[must_use]
 pub fn kernel_opt_population() -> Vec<Binding> {
     let cats = crate::domains::kernel_opt::corpus::build_corpus_categorized();

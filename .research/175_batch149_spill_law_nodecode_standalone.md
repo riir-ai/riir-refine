@@ -77,7 +77,7 @@ batch may silently drop:
 ## GOAT
 
 - G1: `batch149_pseudocode_parses` 3/3 ✓
-- G2: lib default + kernel_heal green (counts in the LANDED block below)
+- G2: lib default + kernel_opt green (counts in the LANDED block below)
 - Retrieval floors: `retrieval_precision_regression_gate` green
 - G3: clippy `-D warnings` clean on the write-set; score-bench FLAT
 - Count pins walked ×7 (tests.rs ×5 incl. the per-category Plan-003 table

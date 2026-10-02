@@ -133,9 +133,9 @@ their verdicts are the task set below.
   the stale 464 figure], router.rs expert total) + mod.rs header + category headers
 - [x] T5 Gates: batch108_rules_present + batch108_concepts_covered +
   batch108_pseudocode_parses (cfg(not(kernel_verify)) per the B70 convention) — 3/3 FIRST-SHOT
-- [x] T6 GOAT: kernel_heal lib 1349/0/1i (baseline 1346 +3); default lib 1078/0 unchanged;
-  kernel_heal+latent 1457/0/2i; retrieval floors HELD (kernel self-variants 100/100/100, no re-pins); clippy 0
-  in three states + all-targets kernel_heal (7 doc_markdown backtick fixes pre-landed)
+- [x] T6 GOAT: kernel_opt lib 1349/0/1i (baseline 1346 +3); default lib 1078/0 unchanged;
+  kernel_opt+latent 1457/0/2i; retrieval floors HELD (kernel self-variants 100/100/100, no re-pins); clippy 0
+  in three states + all-targets kernel_opt (7 doc_markdown backtick fixes pre-landed)
 - [x] T7 AGENTS.md batch-108 paragraph + snapshot cycle update + corpus docs (`.docs/11_domains/kernel_opt.md`
   Batch 108 entry + the stale Batch-1-97 header row repaired) + Research 131 + `.research/.highwater` 130→131
 - [x] T8 Commit + push (staged-set audit; re-scan highwaters at write)

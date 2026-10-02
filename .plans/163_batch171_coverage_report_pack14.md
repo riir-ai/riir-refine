@@ -54,7 +54,7 @@ The two leads that survived:
       BY NATURE on `|x| x.clone()`; the corpus atom switched to the DEREF
       shape; run 2 clean). Tables: 93/18 v2 + 93/22 v3; e2es v2 93/0/18
       M4 PASS (20.3s) + v3 93/0/22 stratification PASS (19.2s).
-- [x] T8 G2: lib default 2137/0 + kernel_heal 2493/0
+- [x] T8 G2: lib default 2137/0 + kernel_opt 2493/0
 - [x] T9 retrieval gate: 18/18 floors held
 - [x] T10 G3: clippy -D clean BOTH states (healer took 2 doc_markdown;
       4 structural one-liners manual — if_same_then_else/manual_strip ×2/

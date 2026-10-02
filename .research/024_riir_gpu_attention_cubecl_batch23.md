@@ -218,7 +218,7 @@ JIT-specializable hardcoded variant and a flexible parametric one.
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 (correctness) | All 5 rules valid Rust pseudocode; 0 duplicates (5 substrate-first checks passed) | ✅ PASS |
-| G2 (perf) | Corpus build O(n); router `rules_for_expert()` O(1); 175 lib tests with `kernel_heal` in 0.09s; 292 with all features in 0.35s | ✅ PASS |
+| G2 (perf) | Corpus build O(n); router `rules_for_expert()` O(1); 175 lib tests with `kernel_opt` in 0.09s; 292 with all features in 0.35s | ✅ PASS |
 | G3 (no-regression) | All existing tests pass; +2 new Batch 23 tests (`batch23_rules_present` + `batch23_attention_cubecl_concepts_covered`) | ✅ PASS |
 | G4 (alloc-free) | New rules are static `KernelRule` entries, zero hot-path alloc | ✅ PASS |
 

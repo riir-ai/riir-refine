@@ -51,7 +51,7 @@
       `rules_for_expert_total_matches_corpus`, category table walk
 - [x] T6 GOAT: G1 syn-parse all new rules; G2 lib tests both states; G3 clippy 0
       `--all-targets` both states + full `ci_feature_guard.sh`; retrieval
-      floors HELD (`kernel_heal,latent_retrieval` sweep, no re-pins without
+      floors HELD (`kernel_opt,latent_retrieval` sweep, no re-pins without
       record); Pareto verdicts honest (any Tie/Dominated → annotate, never
       promote); alloc-count bit-stable ×2
 - [x] T7 Research note `.research/089_greptime_prom_read_distill_batch75.md`

@@ -76,7 +76,7 @@ landing (the Q3 cadence, adopted).
 ## Gates
 
 corpus 92→94, FIXABLE 73→75, atoms 91→93; clippy_lints module 1183/0;
-lib default **2137/0** + kernel_heal **2493/0**; retrieval 18/18 floors
+lib default **2137/0** + kernel_opt **2493/0**; retrieval 18/18 floors
 HELD; clippy -D clean ×2 states (the healer took the 2 doc_markdown
 mechanicals; 4 structural one-liners manual — if_same_then_else ×1,
 manual_strip ×2, while_let_loop ×1, all outside the compiled fix set

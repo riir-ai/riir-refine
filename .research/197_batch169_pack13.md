@@ -53,7 +53,7 @@ authored (the probe-first law).
 ## GOAT
 
 - G1: clippy_lints module 1161/0 (was 1154 + the new 25 tests).
-- G2: lib default **2115/0** (B168: 2083) + kernel_heal **2468/0** (2436).
+- G2: lib default **2115/0** (B168: 2083) + kernel_opt **2468/0** (2436).
 - G3: clippy `-D` clean BOTH states (default --all-targets + all-features
   --all-targets).
 - Retrieval: latent_retrieval suite 17/17 (floors held) + full

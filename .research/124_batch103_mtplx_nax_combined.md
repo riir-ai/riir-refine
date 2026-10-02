@@ -118,10 +118,10 @@ M4-class silicon + a finer-quant MoE pack — a mining source, not an opponent r
   (cfg(not(kernel_verify)) per the B70 convention): 3/3 PASS (one gate-catch: the
   wavefront concepts needle "stages - 1 pairs" did not match the concept text — the concept
   carries "exactly S-1 overlappable producer/consumer pairs"; needle re-pointed, no text change).
-- kernel_heal lib **1285/0/1i** (was 1282/0/1i + 3 new gates); default lib **1029/0**;
-  kernel_heal+latent **1392/0/2i** with `retrieval_precision_regression_gate` PASS (floors HELD,
+- kernel_opt lib **1285/0/1i** (was 1282/0/1i + 3 new gates); default lib **1029/0**;
+  kernel_opt+latent **1392/0/2i** with `retrieval_precision_regression_gate` PASS (floors HELD,
   no re-pins).
-- Clippy 0 in all three states (kernel_heal / default / kernel_heal+latent), `--lib`.
+- Clippy 0 in all three states (kernel_opt / default / kernel_opt+latent), `--lib`.
 - Count pins walked: tests.rs corpus total 459→463 (+ message) + batch-list comment + expected-
   array D 98→102 + comment "updated for Batch 103" + sums ×2 + cover-all comment 459→463 +
   router.rs expert total + mod.rs 463-rule doc + D category header comment 98→102 + 4 list
@@ -176,6 +176,6 @@ predicate fix, zero kernel changes); `origin/main` moved `90846ad` → `b636898`
 (allocator-query API, no kernel) — anchors unaffected.
 
 Landed as the Batch 103 addendum: corpus 463 → 464, D 102 → 103, gates
-extended in place (rules_present + concepts + parses), GOAT green (kernel_heal
+extended in place (rules_present + concepts + parses), GOAT green (kernel_opt
 lib 1291/0/1i, default 1035/0, retrieval floors HELD kernel 100/100/100,
 clippy 0). AGENTS.md carries the addendum rider on the Batch 103 line.

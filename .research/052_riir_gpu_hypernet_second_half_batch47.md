@@ -59,7 +59,7 @@ Counts: A 79, **B 51**, C 33, **D 61**, **E 20**, F 10, G 19, H 14, I 4, J 5, K 
 ## GOAT
 
 - **G1** parse/syn: `batch47_pseudocode_parses` — 3/3 rules' ref_shape + opt_pattern parse ✓ (inside the suite).
-- **G2** lib tests: **357 kernel_heal** (354 + 3 new) + **201 default** — all pass ✓.
+- **G2** lib tests: **357 kernel_opt** (354 + 3 new) + **201 default** — all pass ✓.
 - **G3** no-regression: clippy **0 warnings in both feature states** (10 doc warnings fixed pre-commit: my line-initial `+` RECURRED — the B37 class, 4th occurrence — + `head_dim` backtick + 7 pre-existing `KERNEL_CATEGORIES` slice-header backticks left by the B46 split).
 - **G4** n/a (corpus data batch).
 

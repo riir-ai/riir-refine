@@ -99,9 +99,9 @@ findings remain citations only. The t5_control fixture counts are unchanged
 
 | gate | result |
 |---|---|
-| lib tests | 419 default / 602 `kernel_heal` / 727 all-features — all pass |
+| lib tests | 419 default / 602 `kernel_opt` / 727 all-features — all pass |
 | integration | `wgsl_t5_control` 4/4 + `wgsl_mine_pairs` 6/6 |
-| clippy | 0 warnings in this crate (`--features kernel_heal --all-targets`); the `post_prev` katgpt-core warning is the sibling's |
+| clippy | 0 warnings in this crate (`--features kernel_opt --all-targets`); the `post_prev` katgpt-core warning is the sibling's |
 | Issue 017 retrieval gate | PASS (corpus unchanged; floors held) |
 | pattern-set citation contract | `every_pattern_cites_a_corpus_rule` — the 4 default + 2 experimental ids all exist in the 348-rule corpus |
 
@@ -120,10 +120,10 @@ findings remain citations only. The t5_control fixture counts are unchanged
 ## Reproduce
 
 ```bash
-cargo run --features kernel_heal --example wgsl_mine -- ../riir-ai
-cargo run --features kernel_heal --example wgsl_mine -- ../riir-ai --rs --extra-path crates/riir-gpu/src/weaver_gpu.rs
-cargo test --features kernel_heal --test wgsl_mine_pairs
-cargo test --features kernel_heal --test wgsl_t5_control
-cargo test --features latent_retrieval,kernel_heal --lib retrieval_precision_regression_gate -- --nocapture
-cargo run --features kernel_heal --example wgsl_scan_smoke -- ../riir-ai/crates/riir-gpu/src/kernels
+cargo run --features kernel_opt --example wgsl_mine -- ../riir-ai
+cargo run --features kernel_opt --example wgsl_mine -- ../riir-ai --rs --extra-path crates/riir-gpu/src/weaver_gpu.rs
+cargo test --features kernel_opt --test wgsl_mine_pairs
+cargo test --features kernel_opt --test wgsl_t5_control
+cargo test --features latent_retrieval,kernel_opt --lib retrieval_precision_regression_gate -- --nocapture
+cargo run --features kernel_opt --example wgsl_scan_smoke -- ../riir-ai/crates/riir-gpu/src/kernels
 ```

@@ -84,7 +84,7 @@ blank probed) — one deletion collapses it.
 ## Gates
 
 G1 module + corpus tests green (23 new: 12 eld + 11 nwd). G2 lib default
-2083/0 (floor 2060) + kernel_heal 2436/0 (floor 2413). Retrieval gate
+2083/0 (floor 2060) + kernel_opt 2436/0 (floor 2413). Retrieval gate
 green (17 tests) + the full latent_retrieval,score_bench lib suite 2396/0.
 G3 clippy `-D` clean ×2 states. Score-bench #148: heal_rate 96.4% FLAT
 (byte-identical to #147's 0.96363634), parse_safety 100%, frontier

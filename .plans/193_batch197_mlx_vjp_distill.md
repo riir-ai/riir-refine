@@ -10,7 +10,7 @@
 - [ ] T3: author entries (target `entries_gpu_63.rs` or next free slice): leads 1–7 per the Research-227 table — decide #6 fold-into-#2 vs standalone at authoring (coin-flip reason written in-batch); riders → B192 (operand-typed mma) + lead-1 (save-lse, dead-row guard, diag_off, tail tag, dummy-binding)
 - [ ] T4: disambiguate `gated_delta_vjp_fused_nax1`/`nax0` vs the dispatched Ckpt variant at the pin; the Ckpt variant is the rule source, the others are the evolution record (annotation only)
 - [ ] T5: ORIGINAL minimal fixtures (no verbatim source); tolerance strategy for lead 1 stated in-rule (reduction-order class, source atol 5e-3); bit-exactness argument for lead 2's replay in-rule
-- [ ] T6: standing gates — batch197 parse gate (rules count) + contracts gate (distinct-from markers present) + riders gate; kernel_heal slice; lib default; clippy `-D` ×3 postures (healer first for mechanicals)
+- [ ] T6: standing gates — batch197 parse gate (rules count) + contracts gate (distinct-from markers present) + riders gate; kernel_opt slice; lib default; clippy `-D` ×3 postures (healer first for mechanicals)
 - [ ] T7: count pins walked (router + per-category table + tests.rs ×4 + mod.rs doc + AGENTS.md kernel bullet + kernel_opt.md seed row + README)
 - [ ] T8: score-bench + freeze regen — NOT owed (kernel_opt-only, zero clippy-corpus delta, P30) unless the clippy corpus moved
 - [ ] T9: `.raw/mlx-b197` removed at close (ephemeral-clone law); Research 227 → Status RECORD with the mine-time appendix (staging-claim corrections recorded there per the B192/B193 precedent)

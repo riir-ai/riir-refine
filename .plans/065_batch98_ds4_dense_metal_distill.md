@@ -36,8 +36,8 @@ mining queue snapshot ("NEXT BATCH LEADS ... dense.metal — DS4-native matvec f
       the dedup verdict per candidate (land / rider / drop, with reasons).
 - [x] **T4** Corpus entries + category counts + `batch98_pseudocode_parses` gate (cfg(not(kernel_verify)))
       + any mandatory verification gates (exhaustive oracle where numerics are claimed).
-- [x] **T5** GOAT: G1 parse gate; G2 kernel_heal lib tests; G3 clippy 0 in BOTH feature states +
-      retrieval floors 14/14 (`--features kernel_heal,latent_retrieval`) + score-bench recorded.
+- [x] **T5** GOAT: G1 parse gate; G2 kernel_opt lib tests; G3 clippy 0 in BOTH feature states +
+      retrieval floors 14/14 (`--features kernel_opt,latent_retrieval`) + score-bench recorded.
 - [x] **T6** Research note `.research/118_*.md` (with `**Status:**` line) + AGENTS.md batch entry +
       corpus-count bump + `.distill/001_mining_queue_snapshot.md` queue update (same commit).
 - [x] **T7** Commit `feat: batch 98: ...` + push.

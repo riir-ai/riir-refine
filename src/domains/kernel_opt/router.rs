@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn routed_heal_narrows_candidates_and_drafts_valid_fix() {
         // Verify the Plan 003/004 composition: route → narrow → draft.
-        // This is the automated test behind the `kernel_heal_demo` example —
+        // This is the automated test behind the `kernel_opt_demo` example —
         // it asserts the composition works, not just that it prints.
         use crate::domains::kernel_opt::corpus::build_kernel_seed_corpus;
         use crate::drafter::TernaryDrafter;

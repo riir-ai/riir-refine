@@ -60,7 +60,7 @@ Category deltas: A 29→32, D 31→32, L 6→7, M 7→9, N 12→13. Total 217 ac
 ## GOAT gate
 
 - **G1 (parses):** `batch31_pseudocode_parses` — 8/8 rules' ref_shape + opt_pattern syn-parse. PASS.
-- **G2 (tests):** kernel_heal lib suite 102 tests PASS (0.13s) incl. the new batch31 gates.
+- **G2 (tests):** kernel_opt lib suite 102 tests PASS (0.13s) incl. the new batch31 gates.
 - **G3 (no-regression):** default `cargo check` + clippy clean; full test suite to run at close.
 - **G4:** unchanged (no hot-path additions — corpus is static data).
 - **G5 (corpus):** 217 flat → G5-drafter reduction maintained.

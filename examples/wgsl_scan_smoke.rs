@@ -13,8 +13,8 @@
 //! fire).
 //!
 //! ```bash
-//! cargo run --features kernel_heal --example wgsl_scan_smoke -- [dir]
-//! cargo run --features kernel_heal --example wgsl_scan_smoke -- --rs [dir]
+//! cargo run --features kernel_opt --example wgsl_scan_smoke -- [dir]
+//! cargo run --features kernel_opt --example wgsl_scan_smoke -- --rs [dir]
 //! ```
 
 use std::collections::BTreeMap;

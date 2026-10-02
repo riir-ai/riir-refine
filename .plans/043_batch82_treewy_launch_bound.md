@@ -22,9 +22,9 @@ Research 096 (`.research/096_treewy_launch_bound_distill.md`): arXiv:2608.20961
 - [x] T4 Walk all count pins: tests.rs 393→396 (5 sites + the Plan-003
       expected-counts table), mod.rs header + doc, router.rs (3 sites),
       entries_gpu_08.rs header
-- [x] T5 GOAT: G1 kernel_heal lib (new gates + corpus counts) · G2 default
+- [x] T5 GOAT: G1 kernel_opt lib (new gates + corpus counts) · G2 default
       lib · G3 all-features + clippy both states + CI guard layers ·
-      retrieval floors (kernel_heal,latent_retrieval) HELD
+      retrieval floors (kernel_opt,latent_retrieval) HELD
       (all-features + ternary_inference guard rows environmentally blocked
       by the riir-ai sibling's live riir-gpu WIP — isolated-worktree run
       green on every row that compiles; main-tree all-features lib passed

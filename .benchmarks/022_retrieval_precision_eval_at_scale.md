@@ -1,7 +1,7 @@
 # Bench 022 — Issue 017: retrieval-precision eval at scale
 
 **Date:** 2026-08-16
-**Feature:** `latent_retrieval` (eval module) + `kernel_heal` (kernel probe)
+**Feature:** `latent_retrieval` (eval module) + `kernel_opt` (kernel probe)
 **Verdict:** GOAT G1–G4 PASS; **the 12-fixture 100% top-1 claim is dead at
 scale — clippy top-1 is 58.3% at 48 spans / 40-rule corpus. The crowding
 concern was justified.**
@@ -18,7 +18,7 @@ clippy + 50 rust_perf + 343 kernel rules at land time).
   `cargo test --features latent_retrieval --lib retrieval_precision_regression_gate -- --nocapture`
 - **Kernel-inclusive** (on-demand — the 343-rule multi-scale index makes this
   run ~54 s):
-  `cargo test --features latent_retrieval,kernel_heal --lib retrieval -- --nocapture`
+  `cargo test --features latent_retrieval,kernel_opt --lib retrieval -- --nocapture`
 
 ## Fixture composition (honest provenance)
 
@@ -30,7 +30,7 @@ clippy + 50 rust_perf + 343 kernel rules at land time).
 | clean | 12 | REAL production excerpts from this crate (`corpus_index.rs`, `edit_emitter.rs`, proposers, structs) | `clean_spans_fire_no_lint` vs the 37 STRUCTURAL lints |
 
 Total: 118 labeled + 12 clean = **130 spans** (100 static without
-`kernel_heal`; the `fixture_counts_meet_the_issue_floor` test pins the ≥100
+`kernel_opt`; the `fixture_counts_meet_the_issue_floor` test pins the ≥100
 floor across feature states).
 
 **Why the clean oracle excludes 3 lints:** the type-blind self_evolve-only
@@ -97,7 +97,7 @@ below floor FAILS the suite — re-measure, re-pin, record the delta in the
 batch's Research note. Never weaken silently.
 
 For KERNEL batches (the frequent case), the mining GOAT's `--features
-kernel_heal` suite does NOT include the eval (no `latent_retrieval`) — run
+kernel_opt` suite does NOT include the eval (no `latent_retrieval`) — run
 the combined-state command above as the batch's re-measure step (SKILL.md
 Protocol A step 5 now says so).
 
@@ -127,7 +127,7 @@ the proposer to the `== ""` shape is a small follow-up.
   spans, multi-scale queries, 2 domains) — no per-tick hot path touched.
   Kernel-inclusive run ~54 s (on-demand only).
 - **G3 no-regression:** 370 default / 391 `latent_retrieval` / 526
-  `kernel_heal` lib tests pass; `clippy_verify` + `fix_verify` states
+  `kernel_opt` lib tests pass; `clippy_verify` + `fix_verify` states
   compile; clippy 0 new warnings in both standard states (the 1 remaining
   `latent_retrieval`-state warning is the sibling's pre-existing
   `heal.rs:415`).

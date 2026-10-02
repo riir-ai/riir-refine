@@ -79,7 +79,7 @@ impl RuleDomains {
         }
         corpus_domain!("clippy_lints", "clippy", crate::build_seed_corpus);
         corpus_domain!("rust_perf", "rust_perf", crate::build_perf_seed_corpus);
-        corpus_domain!("kernel_heal", "kernel_opt", crate::build_kernel_seed_corpus);
+        corpus_domain!("kernel_opt", "kernel_opt", crate::build_kernel_seed_corpus);
         corpus_domain!("sec", "sec", crate::build_sec_seed_corpus);
         corpus_domain!("docker", "docker", crate::build_docker_seed_corpus);
         corpus_domain!("dist", "dist", crate::build_dist_seed_corpus);

@@ -235,7 +235,7 @@ S5. `gfni-sign-mask-expand-cmpeq-fallback` (B) — grid+sign expansion: broadcas
 - Pins walked: corpus/tests.rs (total x4 sites + per-category table x7 deltas + the batch186
   parse gate), corpus/mod.rs (mods + extends + KERNEL_CATEGORIES lists x7 categories +
   comment counts), router.rs:472, rust_perf tests.rs (total + NotBenchable + annotated x3),
-  AGENTS.md x4 (kernel_opt bullet + kernel_heal line + rust_perf bullet + rust_perf line),
+  AGENTS.md x4 (kernel_opt bullet + kernel_opt line + rust_perf bullet + rust_perf line),
   README kernel row, kernel_opt.md (seed row + the Batch-186 ledger paragraph), rust_perf.md.
 - Landing defect (caught by the pins, fixed in-batch): the first pin pass wrote 671 (+16)
   — the ledger is 15 kernel_opt; the kernel-slice run failed 5 count pins and the 670 fix

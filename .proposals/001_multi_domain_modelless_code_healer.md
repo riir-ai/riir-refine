@@ -3,7 +3,7 @@
 Status: **implemented — executed by [Plan 001](../.plans/001_multi_domain_framework_refactor.md) (2026-08-13, GOAT [Bench 013](../.benchmarks/013_rust_perf_bench_pareto_goat.md))**. The `HealDomain` trait + the domain-as-feature architecture shipped as designed; `rust_perf` promoted default-on (76 rules, Batches 48–65); `kernel_opt` corpus COMPLETE (372 rules); the phased rollout below was fully discharged (Phase 5 L4 → the `l4_lora` seam, proven 0/60 — kept opt-in). Since extended far beyond the 3-domain sketch: `rustc_errors` (driver-based compile-repair domain, Bench 045: 105/105 where cargo fix is 0/105) + `sec` (4th retrieval domain, Bench 046). This file is the historical design record; the live surface is [AGENTS.md](../AGENTS.md) §Feature Flag Discipline.
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
-Fusion of: [Proposal 034](../../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) (clippy-healing — the original single-domain pipeline) × [Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) (kernel-heal domain — **supersedes its "new repo" conclusion**) × [`HealConflictDetector`](../../katgpt-rs/crates/katgpt-core/src/) (Issue 133 — heal-path validation trait precedent) × [`pick_domain`](../../katgpt-rs/crates/katgpt-core/src/variable_rank_domain_expert.rs) (Plan 558 — latent-MoE expert selection) × `rust-optimize` skill (~/.agents/skills/rust-optimize/SKILL.md) (perf-domain L0 rule distillation)
+Fusion of: [Proposal 034](../../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) (clippy-healing — the original single-domain pipeline) × [Proposal 012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md) (kernel-opt domain — **supersedes its "new repo" conclusion**) × [`HealConflictDetector`](../../katgpt-rs/crates/katgpt-core/src/) (Issue 133 — heal-path validation trait precedent) × [`pick_domain`](../../katgpt-rs/crates/katgpt-core/src/variable_rank_domain_expert.rs) (Plan 558 — latent-MoE expert selection) × `rust-optimize` skill (~/.agents/skills/rust-optimize/SKILL.md) (perf-domain L0 rule distillation)
 Related: [Bench 009](../.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) (cache-vs-compute silent-miss lesson — cross-domain), [Plan 001](../.plans/001_multi_domain_framework_refactor.md) (execution plan)
 
 ## TL;DR
@@ -12,7 +12,7 @@ Related: [Bench 009](../.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) (cache
 
 **Yes.** The current pipeline (`ClippyCorpus` → `ClippyTernaryDrafter` → `RustAnalyzerPruner` → `HealPipeline`) is domain-agnostic in mechanism but clippy-hardcoded in vocabulary. The generalization is a trait extraction + rename, not a new architecture. Three domains ship behind feature gates: `clippy_lints` (current, default — back-compat preserved via re-export), `rust_perf` (rules distilled from the `rust-optimize` skill's checklist), `kernel_opt` (Proposal 012's design, **4090 LoRA path deferred**). Future domains drop in by implementing the trait + a feature gate.
 
-**This SUPERSEDES Proposal 012's "new repo `riir-kernel-heal`" conclusion.** The user's correction (this session): same pipeline shape → same repo, domain as feature. The kernel domain is `feature = "kernel_heal"` in riir-clippy, not a separate repo. Proposal 012's *domain design* (thermal-tier routing + latent-MoE expert selection + numeric-compare validator) stands unchanged — only the *placement* changed. This is the substrate-first rule applied to our own prior proposal.
+**This SUPERSEDES Proposal 012's "new repo `riir-kernel-opt`" conclusion.** The user's correction (this session): same pipeline shape → same repo, domain as feature. The kernel domain is `feature = "kernel_opt"` in riir-clippy, not a separate repo. Proposal 012's *domain design* (thermal-tier routing + latent-MoE expert selection + numeric-compare validator) stands unchanged — only the *placement* changed. This is the substrate-first rule applied to our own prior proposal.
 
 **This is NOT a novel research idea.** It is an in-house refactoring that generalizes an already-shipped pipeline. The only genuinely new abstraction is the `HealDomain` trait (the seam between domain-agnostic core + domain-specific corpus/validator). Everything else is rename + re-export + feature-gate.
 
@@ -26,9 +26,9 @@ When the user asked "why can't this heal kernels?" (this session), the answer wa
 
 ### Problem 2: Proposal 012 proposed a new repo; the user corrected to "same repo, domain as feature"
 
-Proposal 012 (`katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md`) concluded "ship as a new repo `riir-kernel-heal`". The user's correction: *"why it can't be clippy? it's like clippy for kernel?"* — the boundary rule is about **dep surface** (katgpt-core only, no private siblings), not about **target domain**. The kernel healer preserves that dep surface exactly (pick_domain, thermal tier, ternary matvec all live in katgpt-core). The CubeCL compile validator is a subprocess behind `kernel_verify`, mirroring how `cargo clippy` is a subprocess behind `clippy_verify`.
+Proposal 012 (`katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md`) concluded "ship as a new repo `riir-kernel-opt`". The user's correction: *"why it can't be clippy? it's like clippy for kernel?"* — the boundary rule is about **dep surface** (katgpt-core only, no private siblings), not about **target domain**. The kernel healer preserves that dep surface exactly (pick_domain, thermal tier, ternary matvec all live in katgpt-core). The CubeCL compile validator is a subprocess behind `kernel_verify`, mirroring how `cargo clippy` is a subprocess behind `clippy_verify`.
 
-A new repo for each domain (riir-kernel-heal, riir-perf-heal, ...) would duplicate the entire drafter+pruner+self-evolve pipeline N times. The right shape is ONE pipeline, N domain plugins.
+A new repo for each domain (riir-kernel-opt, riir-perf-heal, ...) would duplicate the entire drafter+pruner+self-evolve pipeline N times. The right shape is ONE pipeline, N domain plugins.
 
 ### Problem 3: The `rust-optimize` skill is already a hand-written L0 corpus for the perf domain
 
@@ -173,7 +173,7 @@ src/
     │   ├── mod.rs      # RustPerfDomain: HealDomain
     │   ├── corpus.rs   # PerfRule entries from rust-optimize skill checklist
     │   └── verify.rs   # cargo test + cargo bench subprocess — Stage 2 validator
-    └── kernel_opt/     # feature "kernel_heal" (opt-in, 4090 deferred)
+    └── kernel_opt/     # feature "kernel_opt" (opt-in, 4090 deferred)
         ├── mod.rs      # KernelOptDomain: HealDomain
         ├── corpus.rs   # KernelRule entries (Proposal 012 §Phase 0 — popcorn distillation, DEFERRED)
         ├── router.rs   # pick_domain<N,A> — latent-MoE expert selection (Plan 558)
@@ -202,7 +202,7 @@ Each domain is selected by the caller enabling its feature flag — there is no 
 ## Fusion lineage
 
 1. **Proposal 034** (`riir-ai/.proposals/034_clippy_healing_drafter_pruner.md`) — the original single-domain pipeline. This proposal generalizes its vocabulary from clippy-specific to domain-pluggable.
-2. **Proposal 012** (`katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md`) — the kernel-domain design (thermal-tier + latent-MoE + numeric validator). This proposal adopts its domain design unchanged, supersedes its repo placement, and absorbs it as the `kernel_opt` domain module.
+2. **Proposal 012** (`katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md`) — the kernel-domain design (thermal-tier + latent-MoE + numeric validator). This proposal adopts its domain design unchanged, supersedes its repo placement, and absorbs it as the `kernel_opt` domain module.
 3. **`HealConflictDetector`** (katgpt-core Issue 133) — the precedent for heal-path validation traits. The `HealDomain::validate` method mirrors its shape (domain-specific verdict type, stronger than "parses").
 4. **`quest_grammar` 2-stage drafter** (`riir-ai/crates/riir-games-quest/src/quest_grammar/`) — the **Stage 1 + Stage 2 drafter pattern** this proposal adopts. `QuestGrammarPipeline` holds `plasma_draft` (Stage 1, `TernaryDraftModel`, always-on, ~µs) + `adaptive_drafter` (Stage 2, `AdaptiveQuestDrafter`, optional override loaded via `load_seal_corpus`). The `draft_text` routing function is the direct precedent for `draft_fix`. See `Issue 010` §"Fix direction" for the riir-clippy mapping.
 
@@ -220,7 +220,7 @@ This is a **framework refactor**, not a perf-gain primitive. The GOAT gate is:
 | **G4 (alloc-free)** | clippy domain hot path: 0 steady-state allocations (the trait dispatch + Stage 1→2 routing must not introduce boxing). Domain scaffolds: compile-only, no alloc gate yet. |
 | **G5 (Stage 2 generalization, DEFERRED to Issue 010 follow-up)** | clippy domain: Stage 1 + identity guard + Stage 2 adaptive drafter must beat 0/10 on the held-out fixture (`benches/fixtures/e2e_cases_heldout.json`). This is the Issue 010 GOAT target — NOT gated by this framework proposal (which ships the container, not the Stage 2 pool). |
 
-Promotion: `clippy_lints` stays default-on (it IS the current behavior under a new name). `rust_perf` + `kernel_heal` stay opt-in until their corpora + validators pass their own domain-specific GOAT gates (separate plans per domain).
+Promotion: `clippy_lints` stays default-on (it IS the current behavior under a new name). `rust_perf` + `kernel_opt` stay opt-in until their corpora + validators pass their own domain-specific GOAT gates (separate plans per domain).
 
 ## What ships now (riir-clippy) vs deferred
 
@@ -385,7 +385,7 @@ CLI binary is a future phase. The core design questions still open:
 ## References
 
 1. **Proposal 034** (`riir-ai/.proposals/034_clippy_healing_drafter_pruner.md`) — the direct precedent. Same pipeline shape, single domain (clippy lints).
-2. **Proposal 012** (`katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md`) — the kernel-domain design this proposal absorbs as `kernel_opt`. Its references (KernelBench, Sakana AI CUDA Engineer, AutoKernel, LatentMoE, popcorn, Bench 009) are the full prior-art survey — not duplicated here.
+2. **Proposal 012** (`katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md`) — the kernel-domain design this proposal absorbs as `kernel_opt`. Its references (KernelBench, Sakana AI CUDA Engineer, AutoKernel, LatentMoE, popcorn, Bench 009) are the full prior-art survey — not duplicated here.
 3. **`HealConflictDetector`** (katgpt-core Issue 133) — heal-path validation trait precedent.
 4. **`pick_domain`** (katgpt-core Plan 558 / Research 453, arXiv:2601.18089 LatentMoE) — latent-MoE expert selection substrate.
 5. **`rust-optimize` skill** (`~/.agents/skills/rust-optimize/SKILL.md`) — the L0 rule distillation for the `rust_perf` domain (its checklist maps 1:1 to corpus entries).

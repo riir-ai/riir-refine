@@ -81,8 +81,8 @@ leave-as-is).
 
 - G1 syn-parse: `batch71_pseudocode_parses` (both fixtures parse; the rule-1
   fixture uses let-else + `thread_local!`, the rule-2 fixture atomic ops).
-- G2 lib tests: kernel_heal 879/0/1i · default 669/0/0 · combined
-  kernel_heal+latent_retrieval 955/0/2i · all-features 1152/0/13i.
+- G2 lib tests: kernel_opt 879/0/1i · default 669/0/0 · combined
+  kernel_opt+latent_retrieval 955/0/2i · all-features 1152/0/13i.
 - G3: clippy 0 both states (`--all-targets -D warnings`); `ci_feature_guard.sh`
   ALL LAYERS PASS.
 - Retrieval floors HELD with zero decay: kernel self-variants 100/100/100,

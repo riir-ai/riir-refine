@@ -290,8 +290,8 @@ echo).
 - Fixtures: original minimal Rust reproductions (parse-only; suggestion-only
   rules — no `--fix` path, the B77/B92/B103 architectural precedent).
 - GOAT: batch106_rules_present + batch106_concepts_covered +
-  batch106_pseudocode_parses (cfg(not(kernel_verify)) per B70) + kernel_heal
-  lib + default lib + kernel_heal+latent retrieval floors + clippy 0 both
+  batch106_pseudocode_parses (cfg(not(kernel_verify)) per B70) + kernel_opt
+  lib + default lib + kernel_opt+latent retrieval floors + clippy 0 both
   states. Count pins walked (tests.rs 75/5368/5382 + expected-array D +
   router.rs 461 + mod.rs D header/list + the "464-rule" doc line — found
   2-batches stale at 464 post-B104/B105, repaired to 482).

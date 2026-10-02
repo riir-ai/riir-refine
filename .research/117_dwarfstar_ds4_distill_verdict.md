@@ -47,9 +47,9 @@
   3 clean rules and the provenance check rescued one candidate rather than killing the
   batch.
 - **GOAT:** batch97 rules_present + concepts_covered + pseudocode_parses
-  (cfg(not(kernel_verify))) + `batch97_mxfp4_half_band_exhaustive_oracle` + kernel_heal
+  (cfg(not(kernel_verify))) + `batch97_mxfp4_half_band_exhaustive_oracle` + kernel_opt
   lib 1252/0 + default lib 1008/0 + retrieval floors 14/14 HELD (~304 s, no re-pins) +
-  clippy lib kernel_heal/default/all-targets all 0 + score-bench 96.2/1.9/100/100 FLAT.
+  clippy lib kernel_opt/default/all-targets all 0 + score-bench 96.2/1.9/100/100 FLAT.
   Full CI guard not run (B95/B96 honest-skip shape — every affected state validated
   individually).
 - **Count pins walked:** tests.rs corpus-count + expected-array A/C/E/F/H/M/N (the

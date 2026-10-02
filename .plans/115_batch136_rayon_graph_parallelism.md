@@ -53,8 +53,8 @@ author's own closing verdict IS the ladder's decision content:
 - [x] T3 — Rider check: rayon `try_for_each_init` per-WORK-ITEM init (the 0.6.0 update post) —
       folded as a detection-shape note inside the ladder rule, not a standalone rule (upstream-
       known behaviour, 1-liner at authoring time).
-- [x] T4 — Gates: batch136 presence/parse gates; lib default count pin; kernel_heal +
-      kernel_heal+latent floors (rust_perf rules ride both); retrieval re-run byte-identical;
+- [x] T4 — Gates: batch136 presence/parse gates; lib default count pin; kernel_opt +
+      kernel_opt+latent floors (rust_perf rules ride both); retrieval re-run byte-identical;
       ROUTER annotation re-pin per the Issue 020 contract; clippy 0 ×3; score-bench FLAT.
       Isolated `CARGO_TARGET_DIR` per the shared-box rule; CPU-only (no GPU-adjacent claim).
 - [x] T5 — Count pins walked: corpus.rs header + entries.len + concurrency category comment +

@@ -46,8 +46,8 @@
 ## GOAT
 
 - **G1 PASS** — 6/6 new rules syn-parse (batch41_pseudocode_parses; 1 fix applied during landing: the type-bridge opt_pattern's fn-signature-without-body; the pruner requires bodies).
-- **G2 PASS** — 339 kernel_heal tests (336 + 3 new) + 201 default tests.
-- **G3 PASS** — clippy 0 warnings in all 4 states for MY files (default all-targets, kernel_heal lib, kernel_heal all-targets, latent_retrieval all-targets; the 1 latent_retrieval warning is the sibling's WIP `src/bin/heal.rs:415`, pre-existing — same class as the known `--all-features` breakage). All count-pin sites in sync at 316 (A 69, E 18; enforced by passing tests).
+- **G2 PASS** — 339 kernel_opt tests (336 + 3 new) + 201 default tests.
+- **G3 PASS** — clippy 0 warnings in all 4 states for MY files (default all-targets, kernel_opt lib, kernel_opt all-targets, latent_retrieval all-targets; the 1 latent_retrieval warning is the sibling's WIP `src/bin/heal.rs:415`, pre-existing — same class as the known `--all-features` breakage). All count-pin sites in sync at 316 (A 69, E 18; enforced by passing tests).
 - `--all-features` still broken by SIBLING WIP (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not mine.
 
 ## Landing lessons (generator)

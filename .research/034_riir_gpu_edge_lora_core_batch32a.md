@@ -54,8 +54,8 @@ Category deltas: A 32→35, B 34→37, C 22→24, D 32→33, H 9→10, L 7→8. 
 ## GOAT gate
 
 - **G1 (parses):** `batch32_pseudocode_parses` — 11/11 rules' ref_shape + opt_pattern syn-parse. PASS.
-- **G2 (tests):** kernel_heal lib suite **306 tests PASS** (0.15s) incl. the new batch32 gates (`batch32_rules_present`, `batch32_concepts_covered`, `batch32_pseudocode_parses`); default suite 201 PASS.
-- **G3 (no-regression):** clippy clean in BOTH compiled feature states (default + kernel_heal; fixed 13 doc-markdown warnings in the new batch entry before commit). `--all-features` is broken by the SIBLING's uncommitted WIP (`rust_perf/bench.rs:335` `alloc_axis` — 0 occurrences at HEAD, 161 uncommitted insertions; verified via `git show HEAD:... | grep -c`), NOT by this batch. Pre-existing relative to my commits.
+- **G2 (tests):** kernel_opt lib suite **306 tests PASS** (0.15s) incl. the new batch32 gates (`batch32_rules_present`, `batch32_concepts_covered`, `batch32_pseudocode_parses`); default suite 201 PASS.
+- **G3 (no-regression):** clippy clean in BOTH compiled feature states (default + kernel_opt; fixed 13 doc-markdown warnings in the new batch entry before commit). `--all-features` is broken by the SIBLING's uncommitted WIP (`rust_perf/bench.rs:335` `alloc_axis` — 0 occurrences at HEAD, 161 uncommitted insertions; verified via `git show HEAD:... | grep -c`), NOT by this batch. Pre-existing relative to my commits.
 - **G4:** unchanged (no hot-path additions — corpus is static data).
 - **G5 (corpus):** 228 flat → G5-drafter reduction maintained.
 

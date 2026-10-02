@@ -131,8 +131,8 @@ Filed as riir-ai `.issues/NNN` (see the issue for the failing-test recipes: ampl
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 correctness | 10 rules valid pseudocode (syn-parsed by the L2 pruner); 0 duplicates (16 substrate-first checks with explicit distinct-from/drop notes; 2-way subagent + synthesizer verification of every load-bearing quote) | ✅ PASS |
-| G2 perf | corpus build O(n); router O(1); 284 kernel_heal-scoped lib tests in 0.11s | ✅ PASS |
-| G3 no-regression | default 190 lib tests + kernel_heal 284 + clippy 0 warnings on `--features kernel_heal --all-targets` | ✅ PASS |
+| G2 perf | corpus build O(n); router O(1); 284 kernel_opt-scoped lib tests in 0.11s | ✅ PASS |
+| G3 no-regression | default 190 lib tests + kernel_opt 284 + clippy 0 warnings on `--features kernel_opt --all-targets` | ✅ PASS |
 | G4 alloc-free | static `KernelRule` entries; zero hot-path allocation (unchanged mechanism) | ✅ PASS |
 | G5 routed demo | 193 flat → 12.9 avg = **15.0× candidate reduction maintained** | ✅ PASS |
 

@@ -33,11 +33,11 @@ fixture pack (stays staged for the next clippy-corpus slot).
   kernel-shaped → kernel_opt, host/lane shapes → rust_perf).
 - [x] T4 — GOAT: G1 parse/syn (all new rules) · G2 lib tests pass · G3 no-regression
   (clippy -D clean BOTH feature states) · retrieval re-measure (kernel batch →
-  `CARGO_TARGET_DIR=/tmp/riir-clippy-b182 cargo test --features kernel_heal,latent_retrieval
+  `CARGO_TARGET_DIR=/tmp/riir-clippy-b182 cargo test --features kernel_opt,latent_retrieval
   --lib retrieval` — floors 21/21 must hold; a decay FAILS the batch) · score-bench NOT owed
   (zero clippy-corpus delta, P30) · NO freeze regen (kernel corpus untouched).
 - [x] T5 — Count pins walked: router.rs + per-category table + corpus tests pins + mod.rs doc
-  + AGENTS.md (kernel_opt bullet + kernel_heal feature line) + kernel_opt.md (seed row + batch
+  + AGENTS.md (kernel_opt bullet + kernel_opt feature line) + kernel_opt.md (seed row + batch
   paragraph) + README kernel row + corpus_history.
 - [x] T6 — Research note `.research/216_mlxfast_bonsai2_delta_distill.md` (next free number,
   highwater 215 → 216) with mine-time appendix (quotes re-verified at the clone); update

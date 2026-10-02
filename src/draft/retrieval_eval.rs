@@ -17,7 +17,7 @@
 //!   `buggy_code` shapes; the five proposer-covered rules are re-verified by
 //!   the committed label test, the rest are semantic labels authored against
 //!   the corpus entries (Batch 48 added the 8 online-search rules' spans).
-//! - **kernel (30, `kernel_heal` only)**: deterministic mutated variants —
+//! - **kernel (30, `kernel_opt` only)**: deterministic mutated variants —
 //!   the corpus `ref_shape` texts with identifiers renamed via a fixed map
 //!   (`mutate_shape`). A self-variant probe: optimistic by construction (it
 //!   bounds crowding from above), which is exactly the decay signal the
@@ -736,7 +736,7 @@ pub fn mutate_shape(text: &str) -> String {
 /// The kernel self-variant probe: every `step`-th corpus rule's `ref_shape`,
 /// mutated. Deterministic across runs; the SELECTED SET shifts as batches
 /// append entries (intended — the gate re-measures the moved set).
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 fn kernel_fixture_spans(target: usize) -> Vec<(String, String)> {
     let entries = crate::domains::kernel_opt::corpus::build_kernel_seed_corpus().entries;
     let step = (entries.len() / target).max(1);
@@ -797,7 +797,7 @@ pub fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
             acceptable: Vec::new(),
         });
     }
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     for (rule, code) in kernel_fixture_spans(30) {
         spans.push(OwnedEvalSpan {
             label: rule,
@@ -1539,7 +1539,7 @@ fn router_eval_domains() -> Vec<(DomainId, Vec<String>)> {
             .map(|e| e.buggy_code().to_string())
             .collect::<Vec<_>>(),
     ));
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     out.push((
         DomainId::Kernel,
         crate::domains::kernel_opt::KernelOptDomain::build_corpus()
@@ -1901,7 +1901,7 @@ mod tests {
         // the measurement rose): blended **94/97/99** of 101 (so TOP3 and TOP5
         // now carry TWO spans of margin, not one), clippy **43/45/46** of 48,
         // perf **51/52/53** of 53, kernel **30/30/30** of 30, router 74/101
-        // at `latent_retrieval` and 83/131 with `sec,kernel_heal`. Confirmed
+        // at `latent_retrieval` and 83/131 with `sec,kernel_opt`. Confirmed
         // in both feature states and across a two-arm A/B in one worktree.
         //
         // Issue 134 T3 re-arm re-pin (2026-09-24) — the thin-domain fixture
@@ -1960,7 +1960,7 @@ mod tests {
         // constant until something passes.
         pub const CLIPPY_TOP3: f32 = 43.0 / 48.0;
         pub const PERF_TOP3: f32 = 54.0 / 56.0;
-        #[cfg(feature = "kernel_heal")]
+        #[cfg(feature = "kernel_opt")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
         /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
         /// the TF-cosine-global annotation measured 71/101 (70.3%, 2-domain,
@@ -1974,11 +1974,11 @@ mod tests {
         /// (gating stays killed at the 85% bar).
         ///
         /// **Restructured with the docker landing (Plan 030 T0.4).** These
-        /// were four `#[cfg]`-gated consts keyed on `(kernel_heal, sec)`. A
+        /// were four `#[cfg]`-gated consts keyed on `(kernel_opt, sec)`. A
         /// 5th domain would have made it EIGHT consts whose declaration cfg
         /// and use cfg must match exactly — the precise shape that turned CI
         /// Layer 5a red on the sec landing (`ROUTER_ANNOTATION_3D` declared
-        /// under `kernel_heal` but used under `not(sec)` → `dead_code` under
+        /// under `kernel_opt` but used under `not(sec)` → `dead_code` under
         /// `-D warnings`). Selecting at RUNTIME with `cfg!` compiles every
         /// arm in every state, so that whole failure class is gone; the
         /// values stay per-state and measured.
@@ -2015,14 +2015,14 @@ mod tests {
             // features (states that mostly no longer build, see the
             // no-docker arms above). Re-measured at the promotion: canonical
             // `default + latent_retrieval` = 74/101 (73.3%, the pinned arm,
-            // floor 69 held); `kernel_heal + latent_retrieval` = 92/131
+            // floor 69 held); `kernel_opt + latent_retrieval` = 92/131
             // (70.2%) — IDENTICAL to its dist-off twin (delta 0; the floor
             // 87 it inherited was already the right pin). No re-pin owed.
             // (`dist` joined `default` 2026-09-13 — every docker-on arm below
             // is the dist-on state; the historical dist_on selector was
             // folded away at the Issue-134 re-pin.)
             match (
-                cfg!(feature = "kernel_heal"),
+                cfg!(feature = "kernel_opt"),
                 cfg!(feature = "sec"),
                 cfg!(feature = "docker"),
             ) {
@@ -2350,7 +2350,7 @@ mod tests {
             let m = &report.per_domain[1];
             assert!(ratio(m.hits_at_3, m.labeled) >= floors::PERF_TOP3);
         }
-        #[cfg(feature = "kernel_heal")]
+        #[cfg(feature = "kernel_opt")]
         if report.per_domain[2].labeled > 0 {
             let m = &report.per_domain[2];
             assert!(ratio(m.hits_at_3, m.labeled) >= floors::KERNEL_TOP3);
@@ -2609,7 +2609,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     #[test]
     fn kernel_mutation_is_deterministic_and_renames() {
         let spans = kernel_fixture_spans(30);
@@ -2647,7 +2647,7 @@ mod tests {
         {
             labeled += super::super::eval_fixtures_perf::PERF_SPANS.len();
         }
-        #[cfg(feature = "kernel_heal")]
+        #[cfg(feature = "kernel_opt")]
         {
             labeled += kernel_fixture_spans(30).len();
         }

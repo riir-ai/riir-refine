@@ -223,7 +223,7 @@ question about a 5th domain's router cost: for this domain there is none.
 | +sec+kernel | 78/131 (59.5%) | **82/131 (62.6%)** |
 
 The floors block was also **restructured**: four `#[cfg]`-gated consts keyed
-on `(kernel_heal, sec)` became one `cfg!`-selected function. A 5th domain
+on `(kernel_opt, sec)` became one `cfg!`-selected function. A 5th domain
 would have made it eight consts whose declaration cfg and use cfg must match
 exactly — the precise shape that turned CI Layer 5a red on the sec landing.
 Runtime selection compiles every arm in every state, so that failure class

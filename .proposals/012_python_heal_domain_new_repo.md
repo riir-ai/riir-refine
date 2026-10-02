@@ -3,7 +3,7 @@
 Status: **draft** (no plan opened, no code — owner decision pending)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
-Fusion of: Proposal 001 (HealDomain meta-architecture) × Proposal 006 (the docker playbook: non-Rust language, external-oracle ladder, two rule classes, close condition) × Proposal 005 (KAT service network — the monetization rail a Python market multiplies) × Proposal 003 (binary-only distribution — the separate product surface) × [katgpt-rs Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) (the repo-split precedent: a specialized healer as its own repo)
+Fusion of: Proposal 001 (HealDomain meta-architecture) × Proposal 006 (the docker playbook: non-Rust language, external-oracle ladder, two rule classes, close condition) × Proposal 005 (KAT service network — the monetization rail a Python market multiplies) × Proposal 003 (binary-only distribution — the separate product surface) × [katgpt-rs Proposal 012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md) (the repo-split precedent: a specialized healer as its own repo)
 Related: [Proposal 001](001_multi_domain_modelless_code_healer.md) · [Proposal 002](002_real_file_span_healing.md) §Deep fusion A (ruff named as the confidence-less incumbent) · [Proposal 006](006_docker_heal_domain_fifth_healdomain.md) · [Research 003](../../katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md) (secrecy posture the new repo inherits)
 
 ## TL;DR
@@ -151,7 +151,7 @@ Jupyter/notebook healing (separate surface, later proposal); Python packaging (u
 
 1. **ruff** (cited-only) — docs.astral.sh/ruff; the market proof: Rust tool, Python surface, ~10-100× incumbents (crmarsh.com "Python tooling could be much much faster" measures ~150× vs flake8 single-core). Not a mining source for code — rule *ideas* only, MIT/Apache, mined under the same distill discipline as clippy lints.
 2. **perflint** (cited-only) — github.com/tonybaloney/perflint; perf anti-pattern detection, self-described false-positive-prone, no fixes. The gap this proposal occupies; also the cautionary tale (precision bar).
-3. [katgpt-rs Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) — the specialized-healer-as-own-repo precedent (distilled).
+3. [katgpt-rs Proposal 012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md) — the specialized-healer-as-own-repo precedent (distilled).
 4. [riir-clippy Proposal 002](002_real_file_span_healing.md) — the confidence critique of clippy/ruff/eslint --fix (distilled, quoted).
 5. [Research 003](../../katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md) — "anything riir-* is internal"; the new repo inherits source secrecy + binary-only distribution (distilled, standing).
 

@@ -53,7 +53,7 @@ verification).
 - [x] Corpus entries landed (rust_perf; batch number assigned at mining —
       **Batch 147**)
 - [x] Standing gates: lib tests at default + full-feature, clippy 0
-      write-set ×3 states, kernel_heal corpus test if any entry touches
+      write-set ×3 states, kernel_opt corpus test if any entry touches
       shared files
 - [x] GOAT: G1 correctness (integer-exact for 1/2/4; dalek batch-verdict
       equality for 3), G2 perf (alloc-count axis for 1/4), G3

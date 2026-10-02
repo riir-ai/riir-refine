@@ -89,7 +89,7 @@ gate test:
 ```bash
 cargo test --features latent_retrieval --lib retrieval_precision_regression_gate -- --nocapture
 # kernel-inclusive (on-demand, ~54 s at 343 rules):
-cargo test --features latent_retrieval,kernel_heal --lib retrieval -- --nocapture
+cargo test --features latent_retrieval,kernel_opt --lib retrieval -- --nocapture
 ```
 
 **Baseline (Bench 022, 2026-08-16; RE-PINNED same day by Issue 022 — Bench

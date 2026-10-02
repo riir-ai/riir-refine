@@ -42,11 +42,11 @@ Skip ledger: `0bb323a` (pure tuning constant), Q2-down 64-token crossover (twin 
 
 ## Gates (all green, isolated `CARGO_TARGET_DIR=/tmp/batch129_target`, removed at landing)
 
-- batch129 gates 4/4 FIRST-SHOT (rules_present + concepts_covered + pseudocode_parses under `kernel_heal`; rust_perf present_and_parse).
-- lib default **1168/0**; kernel_heal **1493/0/1i**; kernel_heal+latent **1610/0/2i** (B128 floors 1167/1489/1606 + the 4 new tests).
+- batch129 gates 4/4 FIRST-SHOT (rules_present + concepts_covered + pseudocode_parses under `kernel_opt`; rust_perf present_and_parse).
+- lib default **1168/0**; kernel_opt **1493/0/1i**; kernel_opt+latent **1610/0/2i** (B128 floors 1167/1489/1606 + the 4 new tests).
 - Retrieval re-run **byte-identical to B118–B128**: kernel 100/100/100, blended 94.7/96.9/97.7.
 - **Router annotation re-pinned per the Issue 020 contract**: re-measured 88/131 = 67.2% (was 94/131 = 71.8% at the B128-era pins); floor 89/131 → **83/131** per the measured−5 Plan-030 convention; delta + cause recorded in `retrieval_eval.rs` (the 7 corpus adds shifted the TF-cosine centroids; exactly one annotation flipped).
-- clippy 0 ×3 states (default / kernel_heal / kernel_heal+latent) — 6 doc_markdown findings in the new mod.rs doc block healed same-commit.
+- clippy 0 ×3 states (default / kernel_opt / kernel_opt+latent) — 6 doc_markdown findings in the new mod.rs doc block healed same-commit.
 - score-bench **#78 FLAT** 96.2/1.9/100/100 (gen-1 SATURATED advisory unchanged).
 
 ## Count pins walked
@@ -57,4 +57,4 @@ Totals ×5 (tests.rs ×4 + router.rs) 570→575; per-category table C 45→46, H
 
 - **Tool-mixing clobber (new lesson):** a shell `python3` write to mod.rs was silently reverted by a later `edit_file` on the same file (stale cached read) — the category inserts vanished while both `edit_file` changes survived; only the batch-gate run caught it. Rule: after ANY shell-side write to a file, do not `edit_file` that file in the same session without re-reading via shell first (or keep the file on one tool).
 - The count-pin python insert needed a no-trailing-comma anchor case (the Fusion list's last id); the first run's regex silently mis-anchored and the printed success was unverified — the second run verified post-write (`VERIFIED all 5`).
-- The batch gates run under `--features kernel_heal` (the domain is feature-gated; a default-state `cargo test -- batch129` reports a green zero for kernel-side gates — the docs-gate's green-zero rule, met again in the wild).
+- The batch gates run under `--features kernel_opt` (the domain is feature-gated; a default-state `cargo test -- batch129` reports a green zero for kernel-side gates — the docs-gate's green-zero rule, met again in the wild).

@@ -178,7 +178,7 @@ is intra-block uniformity after a reduction.
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 (correctness) | All 4 rules valid pseudocode; 0 duplicates (4 substrate-first checks passed); concept strings + rule shapes internally consistent | ✅ PASS |
-| G2 (perf) | Corpus build O(n); router `rules_for_expert()` O(1); 177 lib tests `kernel_heal` in 0.11s; 294 all-features in 0.38s | ✅ PASS |
+| G2 (perf) | Corpus build O(n); router `rules_for_expert()` O(1); 177 lib tests `kernel_opt` in 0.11s; 294 all-features in 0.38s | ✅ PASS |
 | G3 (no-regression) | All existing tests pass (294 all-features, 0 failed, 9 ignored; +2 new batch24 tests); clippy clean under `-D warnings` | ✅ PASS |
 | G4 (alloc-free) | New rules are static `KernelRule` entries, zero hot-path alloc | ✅ PASS |
 | G5 (routed demo) | Routed heal pipeline maintains 15.0× candidate reduction (164 flat → 10.9 avg per category) | ✅ PASS |

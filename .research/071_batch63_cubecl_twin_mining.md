@@ -35,11 +35,11 @@ Both lanes independently dropped the same mechanisms as B58 duplicates (rotation
 
 ## Process lessons
 
-- **The 18th count-pin site**: `router.rs::rules_for_expert_total_matches_corpus` ("experts cover all 364") — the router's expert coverage derives from KERNEL_CATEGORIES, so the pin broke the moment the table grew. Found by the full kernel_heal suite (not the targeted run).
+- **The 18th count-pin site**: `router.rs::rules_for_expert_total_matches_corpus` ("experts cover all 364") — the router's expert coverage derives from KERNEL_CATEGORIES, so the pin broke the moment the table grew. Found by the full kernel_opt suite (not the targeted run).
 - **The B51 case-sensitivity lesson struck a 5th time**: concepts-covered needle "next loop iteration" vs the concept's "NEXT loop iteration".
 - **The B37 line-initial `+` lesson did NOT recur** (the generator discipline held this time — all doc text was generator-written except the header line, which had 3 backtick misses instead: bare `CubeCL` ×2 + `create_from_slice`).
 - **Template placeholder discipline**: my generator's `ref_shape: CODE1_REF,` template lacked `.to_string()` — 6 E0308s; the fix-by-line-scan caught exactly the 6 (existing entries already carried it).
 
 ## GOAT
 
-G1: all 3 rules' ref_shape/opt_pattern syn-parse (batch63_pseudocode_parses) + concepts carry the verified quotes. G3: kernel_heal 811/0/1i + default 607/0 + retrieval floors HELD + clippy 0 all-targets (both feature states). G4: no new deps. The kernel domain has no timing benches (standing discipline — corpus patterns, not Pareto candidates).
+G1: all 3 rules' ref_shape/opt_pattern syn-parse (batch63_pseudocode_parses) + concepts carry the verified quotes. G3: kernel_opt 811/0/1i + default 607/0 + retrieval floors HELD + clippy 0 all-targets (both feature states). G4: no new deps. The kernel domain has no timing benches (standing discipline — corpus patterns, not Pareto candidates).

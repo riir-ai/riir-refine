@@ -94,11 +94,11 @@ Category deltas: A 103→105, C 39→41, H 16→17, N 27→28.
 
 - `batch102_rules_present` + `batch102_concepts_covered` +
   `batch102_pseudocode_parses` (cfg(not(kernel_verify)) per B70): all 3 first-shot PASS.
-- kernel_heal lib: **1282/0/1i**; default lib: **1029/0**; kernel_heal+latent:
+- kernel_opt lib: **1282/0/1i**; default lib: **1029/0**; kernel_opt+latent:
   **1389/0/2i** with `retrieval_precision_regression_gate` PASS — kernel 30
   labeled, top-1/3/5 **100/100/100** (floors HELD, zero re-pins, 13th
   consecutive batch).
-- clippy 0 both states (`--lib --features kernel_heal` + default) — one
+- clippy 0 both states (`--lib --features kernel_opt` + default) — one
   doc_markdown round on the new //! header (`ternary/Q4_K` needed backticks;
   the caret's column pointed at the slashed token, not the kebab-case chain
   suspected first — the B37 lesson's continuing strikes).

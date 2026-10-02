@@ -97,7 +97,7 @@ First new domain. Corpus from the `rust-optimize` skill checklist. Validator is 
 
 Second new domain. Consumes Proposal 012's design (thermal-tier + latent-MoE + numeric validator). Corpus distillation from popcorn is DEFERRED (Proposal 012 §Phase 0, ~2 weeks reading job). 4090 LoRA path is DEFERRED.
 
-**Status: DONE (2026-08-13).** All tasks `[x]`. 51 lib tests pass for `kernel_heal` alone; 189 with all features. Thermal router returns Plasma for all calls (modelless-first); 4090 Warm/Cold/Freeze tiers deferred. `pick_domain` (Plan 558) wired via `katgpt-core/variable_rank_domain_expert` feature.
+**Status: DONE (2026-08-13).** All tasks `[x]`. 51 lib tests pass for `kernel_opt` alone; 189 with all features. Thermal router returns Plasma for all calls (modelless-first); 4090 Warm/Cold/Freeze tiers deferred. `pick_domain` (Plan 558) wired via `katgpt-core/variable_rank_domain_expert` feature.
 
 ### Tasks
 
@@ -107,9 +107,9 @@ Second new domain. Consumes Proposal 012's design (thermal-tier + latent-MoE + n
   - `router.rs`: `KernelExpertRouter` — wraps `pick_domain<NUM_KERNEL_EXPERTS, ACTIVITY_DIM>` (Plan 558). Activity vector = kernel signature (5 dims: M, N, K, dtype, hw). Domain directions = identity vectors (placeholder until popcorn distillation lands).
   - `thermal.rs`: `KernelThermalRouter` + `ThermalTier` enum (`#[repr(u8)]`) — Plasma→Hot→Warm→Cold→Freeze tier dispatch. Stub returns Plasma for all calls until 4090 path lands. `is_local()` / `is_shipped()` helpers document the deferred tiers.
   - `verify.rs`: `KernelVerifier` — **compile-only stub** (delegates to shared `RustAnalyzerPruner`). Behind `kernel_verify` feature. Full numeric compare deferred per Proposal 012 §Phase 0.
-- [x] **T3.2** Add `kernel_heal` + `kernel_verify` features to `Cargo.toml` (opt-in, default-off). `kernel_heal` enables `katgpt-core/variable_rank_domain_expert` for the `pick_domain` router. `kernel_verify` gates the compile validator (mirrors `clippy_verify` pattern).
-- [x] **T3.3** G1 check: `cargo test --features kernel_heal --lib` — domain scaffold compiles + trait impl exercised by 2 placeholder rules (51 tests pass).
-- [x] **T3.4** G3 check: `cargo check --features kernel_heal` + clippy clean.
+- [x] **T3.2** Add `kernel_opt` + `kernel_verify` features to `Cargo.toml` (opt-in, default-off). `kernel_opt` enables `katgpt-core/variable_rank_domain_expert` for the `pick_domain` router. `kernel_verify` gates the compile validator (mirrors `clippy_verify` pattern).
+- [x] **T3.3** G1 check: `cargo test --features kernel_opt --lib` — domain scaffold compiles + trait impl exercised by 2 placeholder rules (51 tests pass).
+- [x] **T3.4** G3 check: `cargo check --features kernel_opt` + clippy clean.
 
 ### Phase 3 exit criteria — MET
 - `kernel_opt` domain scaffold compiles, `pick_domain` router wired (identity directions placeholder), thermal-tier stub in place (returns Plasma), compile-only validator behind `kernel_verify`. Real corpus + full numeric validator + 4090 LoRA all DEFERRED to Proposal 012's follow-up plans. NOT promoted to default-on.
@@ -138,11 +138,11 @@ across all feature combinations.
 - [x] **T5.3 (G3 no-regression)** `./scripts/ci_feature_guard.sh` — **all 5 layers pass** (was: layer 4 `--all-features` failed on pre-existing `ternary_inference`/`riir-gpu` compile error; fixed in riir-ai commit `4bfe3b30`).
 - [x] **T5.4 (G4 alloc-free)** clippy domain hot path unchanged — no new boxing introduced (the domain modules are behind feature gates; the hot path stays generic over `E: HealEntry`).
 - [x] **T5.5** `.docs/` book index updated (AGENTS.md table reflects the 11-folder layout including `11_domains/` for Plan 001 Phase 2+3).
-- [x] **T5.6** `README.md` updated: three domains (clippy_lints default, rust_perf opt-in, kernel_heal opt-in), feature matrix table, multi-domain architecture diagram, kernel_opt-specific layers diagram.
+- [x] **T5.6** `README.md` updated: three domains (clippy_lints default, rust_perf opt-in, kernel_opt opt-in), feature matrix table, multi-domain architecture diagram, kernel_opt-specific layers diagram.
 - [x] **T5.7** `AGENTS.md` updated: multi-domain design, the `HealDomain` trait, the supersession of Proposal 012's repo placement, `kernel_opt`-specific layers (router + thermal).
 
 ### Phase 5 exit criteria — MET
-- G1–G4 PASS (measured in-place). `.docs/` index + README + AGENTS.md reflect the multi-domain architecture. clippy stays default-on; rust_perf + kernel_heal opt-in.
+- G1–G4 PASS (measured in-place). `.docs/` index + README + AGENTS.md reflect the multi-domain architecture. clippy stays default-on; rust_perf + kernel_opt opt-in.
 
 ## Out of scope (per Proposal 001)
 

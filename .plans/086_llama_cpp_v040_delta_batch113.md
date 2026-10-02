@@ -18,6 +18,6 @@
 - [x] T8 `1f3d318` Kronecker FWHT: read the REVERT reason (#28184) at T1; record as regime evidence in the note or a B96 rider — never as a rule (upstream reverted it)
 - [x] T9 Standing gates: `batch113_rules_present` + `batch113_pseudocode_parses` (cfg(not(kernel_verify)) per B70) + concepts coverage; fixtures ORIGINAL (no verbatim source)
 - [x] T10 Count pins walk: corpus total, category expected-array, sums ×2, grouped, router total, mod.rs doc line + category comments + member-list tails; new-slice mod/extend wiring
-- [x] T11 GOAT: kernel_heal lib + default lib + kernel_heal+latent floors HELD zero re-pins + clippy 0 all states + retrieval_precision_regression_gate; count-identical default surface
+- [x] T11 GOAT: kernel_opt lib + default lib + kernel_opt+latent floors HELD zero re-pins + clippy 0 all states + retrieval_precision_regression_gate; count-identical default surface
 - [x] T12 League flag: record upstream fa-vec M3 Max completion (`8f83678` #28373 at v0.4.0) in `.docs/09_performance/perf_rematch_league.md` opponent-watch — the fork pin `e311ed38f` lacks fa-vec; a future re-pin to upstream ≥ v0.4.0 moves the opponent's M3 prefill cells
 - [x] T13 Docs/AGENTS/queue-snapshot updates (corpus counts, Last-landed line); commit+push; rm `.raw/llama-cpp-v040` if re-cloned

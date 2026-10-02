@@ -60,7 +60,7 @@ vendor binary at `e311ed38f`, never maintained.
 - [x] T4 Count pins walked (tests.rs totals/expected-array/sums/grouped +
   router.rs expert total + mod.rs doc line + category comments + member-list
   tails; the AGENTS.md corpus count + batch line; snapshot addendum).
-- [x] T5 GOAT: kernel_heal lib + default lib + kernel_heal+latent floors HELD
+- [x] T5 GOAT: kernel_opt lib + default lib + kernel_opt+latent floors HELD
   (zero re-pins) + clippy 0 both states + score-bench FLAT. CPU-only, no GPU.
 - [x] T6 Research note `.research/140_prism_fork_ternary_batch116.md` (Status:
   RECORD; league-structural PTQ1_0 half recorded for the owner's fork-repin

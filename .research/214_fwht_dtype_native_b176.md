@@ -104,7 +104,7 @@ is unchanged); recorded for the next re-pin cycle's context.
 - batch176 ×2 (`batch176_rules_present` + `batch176_riders_present`): kernel slice 374/0.
 - lib default 2340/0; count pins 648→649 at router.rs:472, tests.rs ×4 (incl. the
   DtypeAlignment 50→51 category row), mod.rs doc.
-- Retrieval floors 21/21 (kernel_heal,latent_retrieval).
+- Retrieval floors 21/21 (kernel_opt,latent_retrieval).
 - clippy -D clean ×2 postures (one doc_markdown mechanical healed in-passing — the
   module doc's `ggml_cuda_cast`).
 - score-bench NOT owed (zero clippy-corpus delta — the P30 precedent; freeze tables

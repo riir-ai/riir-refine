@@ -80,8 +80,8 @@ Subagent 2's seed #2 (activation-save granularity) also resolved DUPLICATE (cons
 ## 7. GOAT
 
 - **G1:** `batch35_pseudocode_parses` 8/8 + `batch35_rules_present` + `batch35_concepts_covered` (3 new tests).
-- **G2:** 321 kernel_heal (was 318) + 201 default lib tests PASS.
-- **G3:** clippy 0 warnings in all 4 states (kernel_heal/default × lib/all-targets).
+- **G2:** 321 kernel_opt (was 318) + 201 default lib tests PASS.
+- **G3:** clippy 0 warnings in all 4 states (kernel_opt/default × lib/all-targets).
 - Orphan-`rule_id` scan: 0/275.
 
 ## 8. Progress

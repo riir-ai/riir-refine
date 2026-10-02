@@ -62,8 +62,8 @@ Total: 3 rules, 9+ falsifications/dedups — consistent with the predicted high 
 ## GOAT
 
 - **G1** (parse): `batch45_pseudocode_parses` — all 3 rules' ref_shape + opt_pattern syn-parse (L2 pruner verdict). 3/3 PASS by name.
-- **G2** (tests): 351 kernel_heal + 201 default lib tests, 0 failed (351 = 348 + the 3 new gate tests, exactly as predicted).
-- **G3** (no-regression): clippy 0 warnings in both feature states (default + `kernel_heal`). `--all-features` remains broken by SIBLING WIP (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not this batch's.
+- **G2** (tests): 351 kernel_opt + 201 default lib tests, 0 failed (351 = 348 + the 3 new gate tests, exactly as predicted).
+- **G3** (no-regression): clippy 0 warnings in both feature states (default + `kernel_opt`). `--all-features` remains broken by SIBLING WIP (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not this batch's.
 - 10 `doc_markdown` warnings fixed pre-commit (the standing gotcha family: bare `seq_len`/`sum_exp`/`head_dim`/`attention_head`/`lora_buf`/`lora_rank`/`get_unchecked_mut`/`kvd`/`out_dim`/`apply_meta_lora` in `//!` prose need backticks — the sixth occurrence of this class).
 
 ## Landing notes (generator discipline)

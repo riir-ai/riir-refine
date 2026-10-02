@@ -127,7 +127,7 @@ scaffolding around it (the `n_tiles` parameter, the reduce kernel, the
 - **G1:** `batch33_pseudocode_parses` 7/7 (all ref_shape + opt_pattern
   syn-parse) + `batch33_rules_present` + `batch33_concepts_covered` (3 new
   tests).
-- **G2:** 315 kernel_heal (was 312) + 201 default lib tests PASS.
+- **G2:** 315 kernel_opt (was 312) + 201 default lib tests PASS.
 - **G3:** clippy 0 warnings in both feature states, `--lib` and
   `--all-targets` alike.
 

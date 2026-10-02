@@ -35,7 +35,7 @@ Scope per the verdict: 4 keep-grade kernel_opt candidates + 1 rust_perf crossove
 
 ## Phase 5 — GOAT + records
 
-- [x] T5.1 GOAT: kernel_heal + default + all-features lib tests green; `clippy --all-targets` 0 both states; full `ci_feature_guard.sh` ALL LAYERS; retrieval floors HELD zero decay (kernel 100/100/100, blend@1, perf@1 if the crossover lands, clippy@1); verdict-stable ×2.
+- [x] T5.1 GOAT: kernel_opt + default + all-features lib tests green; `clippy --all-targets` 0 both states; full `ci_feature_guard.sh` ALL LAYERS; retrieval floors HELD zero decay (kernel 100/100/100, blend@1, perf@1 if the crossover lands, clippy@1); verdict-stable ×2.
 - [x] T5.2 Update: Research 091 status line → RECORD with the landed count; queue snapshot entry; `.docs/11_domains/rust_perf.md` + kernel_opt doc rows; AGENTS.md batch row.
 - [x] T5.3 Commit + push (`feat:` prefix, develop).
 

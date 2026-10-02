@@ -25,6 +25,6 @@
   2763/0 ✓ · retrieval floors HELD 21/21 ✓ · clippy -D both postures ✓ (healer took 1
   doc_markdown mechanical); score-bench + freeze not owed (zero clippy-corpus delta).
 - [x] T5 — Research 218 landing-record paragraph + AGENTS.md counts (kernel_opt bullet +
-  kernel_heal line) + `.docs/11_domains/kernel_opt.md` ledger row + README kernel row.
+  kernel_opt line) + `.docs/11_domains/kernel_opt.md` ledger row + README kernel row.
 - [x] T6 — Snapshot update (.distill/001: staged pack consumed, staging queue EMPTY) +
   commit `feat: batch 187: ggml-cpu staged kernel pack (5 rules)` + push.

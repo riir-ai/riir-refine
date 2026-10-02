@@ -1,6 +1,6 @@
 # Plan 075 — Batch 105: uzu + lily combined kernel batch (Research 127 + 128)
 
-**Status:** LANDED 2026-09-05 — 11 rules, corpus 466 → 477 (A +1, C +1, D +3, E +1, F +1, H +3, M +1); all gates green (batch105 3/3, kernel_heal 1338/0/1i, default 1076/0, retrieval floors HELD, router 23/23, count pins walked). T7 (the GOAT-lead M3 A/B fixture) deferred with reason — GPU lane claimed by the 851 Phase A run at landing; re-arms when quiet. En-route correction: three rules were initially filed into the wrong KERNEL_CATEGORIES lists (the count pin caught it — Compute +1 / L +3 instead of A +1 / H +3); fixed same-session before commit, the pin doing exactly its job.
+**Status:** LANDED 2026-09-05 — 11 rules, corpus 466 → 477 (A +1, C +1, D +3, E +1, F +1, H +3, M +1); all gates green (batch105 3/3, kernel_opt 1338/0/1i, default 1076/0, retrieval floors HELD, router 23/23, count pins walked). T7 (the GOAT-lead M3 A/B fixture) deferred with reason — GPU lane claimed by the 851 Phase A run at landing; re-arms when quiet. En-route correction: three rules were initially filed into the wrong KERNEL_CATEGORIES lists (the count pin caught it — Compute +1 / L +3 instead of A +1 / H +3); fixed same-session before commit, the pin doing exactly its job.
 
 ## Decision: COMBINE (the mine-time mandate resolved)
 
@@ -71,7 +71,7 @@ walk) executes. The combined batch is **Batch 105**; the "Batch 106" slot merges
       = opposite postures both landed; scatter determinism = contrast carried; count-scan deferred).
 - [x] T4: author rules — 11 rules in entries_gpu_18.rs (original fixtures, parse-gated; no
       killed quotes; corrections carried).
-- [x] T5: GOAT — batch105 3/3 (present/concepts/parse), kernel_heal lib 1338/0/1i, default lib
+- [x] T5: GOAT — batch105 3/3 (present/concepts/parse), kernel_opt lib 1338/0/1i, default lib
       1076/0, retrieval floors HELD, router 23/23 at 477, count pins walked (tests.rs totals +
       batch-list + expected-array + sums + grouped; router.rs; mod.rs member lists + 7 category
       comments). Clippy both states = the one gate the fd-starved terminal blocked at close
@@ -103,8 +103,8 @@ walk) executes. The combined batch is **Batch 105**; the "Batch 106" slot merges
 
 - [x] New gates green (present/parses/concepts per batch file) — 3/3 FIRST RUN
       (one concepts needle caught pre-landing; gate doing its job).
-- [x] kernel_heal lib + default lib green, count-identical pre/post except the new
-      gates — kernel_heal 1338/0/1i, default 1076/0.
+- [x] kernel_opt lib + default lib green, count-identical pre/post except the new
+      gates — kernel_opt 1338/0/1i, default 1076/0.
 - [x] Retrieval floors HELD (no re-pins) — retrieval_precision_regression_gate PASS.
 - [x] clippy -D warnings clean, both states — landed clean; the residual clippy
       batch105_concepts_covered `too_many_lines` discharged post-close 2026-09-04 by

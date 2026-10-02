@@ -19,8 +19,8 @@
 //! the commit message + diff prove the fix is genuine).
 //!
 //! ```bash
-//! cargo run --features kernel_heal --example wgsl_mine -- ../riir-ai
-//! cargo run --features kernel_heal --example wgsl_mine -- ../riir-ai --rs
+//! cargo run --features kernel_opt --example wgsl_mine -- ../riir-ai
+//! cargo run --features kernel_opt --example wgsl_mine -- ../riir-ai --rs
 //! ```
 
 use std::process::Command;

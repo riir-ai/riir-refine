@@ -33,7 +33,7 @@ Two parallel subagents (Protocol A step 3) read the lanes and proposed 9 candida
 
 - rust_perf `batch123_rules_present/pseudocode_parses/concepts_covered` 3/3 (the parse gate caught the caller-side top-level `if`/`match` — fn-wrapped; second consecutive batch where the gate earned its keep).
 - kernel_opt: entries registered in `KERNEL_CATEGORIES` (A +1, H +2) — the exhaustive-coverage gate verifies category membership, count pins walked: 552→**555** (tests ×3 sites, router ×1, mod doc comment), A 116→117, H 24→26.
-- Lib default **1165/0**; kernel_heal **1478/0/1i**; kernel_heal+latent **1595/0/2i**; retrieval re-run **kernel 100/100/100, blended 94.7/96.9/97.7** (byte-identical to B118/119/121/122); score-bench **FLAT 96.2/1.9**; clippy 0 (default, kernel_heal, rust_perf).
+- Lib default **1165/0**; kernel_opt **1478/0/1i**; kernel_opt+latent **1595/0/2i**; retrieval re-run **kernel 100/100/100, blended 94.7/96.9/97.7** (byte-identical to B118/119/121/122); score-bench **FLAT 96.2/1.9**; clippy 0 (default, kernel_opt, rust_perf).
 
 ## Walk #8 riders (same session)
 

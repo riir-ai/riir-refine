@@ -122,8 +122,8 @@ lane runs on M3/4090 — both consumer). Record the verdict explicitly either wa
       table, KERNEL_CATEGORIES slices + slice comments, mod.rs history + doc).
       rule_id-anchored edits throughout; python pin-phrase check + rustfmt-parse
       pre-validation before any compile claim.
-- [x] T4 — GOAT: G1 batch138 gates by name; G2 lib default + kernel_heal +
-      kernel_heal+latent counts; G3 clippy 0 ×3 all-targets + retrieval floors
+- [x] T4 — GOAT: G1 batch138 gates by name; G2 lib default + kernel_opt +
+      kernel_opt+latent counts; G3 clippy 0 ×3 all-targets + retrieval floors
       (kernel 100/100/100, blended 94.7/96.9/97.7) + router annotation
       re-measure per the Issue 020 contract (re-pin ONLY on measured decay,
       recorded never silent) + `--corpus-stats` + `--score-bench` #84.

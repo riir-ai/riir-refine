@@ -119,8 +119,8 @@ collapses ~200+ duplicated lines.
 
 - **G1:** `batch32c_pseudocode_parses` 13/13 (26 pseudocode blocks syn-parse) +
   `batch32c_rules_present` + `batch32c_concepts_covered` — 3 new tests, all PASS.
-- **G2:** 312 kernel_heal lib tests (was 309) + 201 default lib tests PASS.
-- **G3:** clippy 0 warnings in BOTH feature states (default + kernel_heal) incl.
+- **G2:** 312 kernel_opt lib tests (was 309) + 201 default lib tests PASS.
+- **G3:** clippy 0 warnings in BOTH feature states (default + kernel_opt) incl.
   `--tests`; 4 doc_markdown warnings fixed pre-commit (missing backticks on `max_by`,
   `hidden_dim`, `legal_buf`, `warm_start` in the new header block).
 - `--all-features` still broken by SIBLING WIP (`rust_perf/bench.rs:335 alloc_axis`) —

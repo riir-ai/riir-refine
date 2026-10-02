@@ -43,10 +43,10 @@ becomes a rule the same day.
 - [x] T5 — Standing gates: `batch60_rules_present` + `batch60_concepts_covered`
       (5 exact-case substrings) + `batch60_pseudocode_parses`.
 - [x] T6 — GOAT G1+G2: awk orphan-`rule_id` scan clean; first compile clean;
-      kernel_heal lib **778/0/1** (baseline 775 + 3 new gates; the +6 vs
+      kernel_opt lib **778/0/1** (baseline 775 + 3 new gates; the +6 vs
       Batch 58's 769 = sibling commits between, verified 0-fail).
 - [x] T7 — GOAT G3: default lib **577/0/0**; clippy **0 warnings/errors**
-      in BOTH states (kernel_heal + default).
+      in BOTH states (kernel_opt + default).
 - [x] T8 — Retrieval-precision re-measure: kernel self-variants **100/100/100**,
       blended **94.7/97.7/97.7** of 131 — floors HELD (pinned 94.6/97.7/97.7 of
       130; +1 denominator = the sibling B59 perf span; top-1 improved

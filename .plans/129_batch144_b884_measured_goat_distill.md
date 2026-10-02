@@ -71,7 +71,7 @@ folded into (e) (zero dedup hits vs the B20 byte_perm crumb per the intake).
       (file verified clean before touching). DONE.
 - [x] T5 — (CARGO-GATED) GOAT: G1 batch gates 3/3 (one phrase-pin correction:
       rule (i)'s second distinct-from is "and from", not "Distinct from"); G2
-      kernel_heal lib 1869/0 + default 1526/0; retrieval-precision kernel
+      kernel_opt lib 1869/0 + default 1526/0; retrieval-precision kernel
       100/100/100 + blended 94.7/96.9/97.7 — HELD byte-identical, no re-pin;
       G3 clippy 0 in all three states (2 doc_markdown warnings on the new
       headers healed-0-then-manual); score-bench FLAT row #116 (96.2/1.9/64/

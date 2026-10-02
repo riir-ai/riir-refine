@@ -123,9 +123,9 @@ queued verdict; 8 kernel_opt D rules + 1 rust_perf io rule + 3 riders; corpus
   8/8 ref+opt parse.
 - Presence + concept-needle gates: `batch94_rules_present`,
   `batch94_concepts_covered`.
-- G2: kernel_heal lib **1238/0** (+3 gates = 1235 baseline) · default lib
+- G2: kernel_opt lib **1238/0** (+3 gates = 1235 baseline) · default lib
   **1001/0** · all-features lib **1728/0**.
-- G3: clippy `--all-targets` **0 findings** in default and kernel_heal
+- G3: clippy `--all-targets` **0 findings** in default and kernel_opt
   states (4 doc_markdown backtick warnings in the new file fixed
   pre-commit — the B37 lesson, 8th strike; `MoE-Infinity` etc. need
   backticks in `//!` prose) · retrieval floors **14/14 HELD** (kernel
@@ -151,7 +151,7 @@ queued verdict; 8 kernel_opt D rules + 1 rust_perf io rule + 3 riders; corpus
   (Plan 058's draft said 423 — a transposition); caught by
   `kernel_categories_counts_match_plan_003_table` (422 ≠ 423), fixed in the
   same session before any commit.
-- Full CI guard not run this cycle (the affected states — kernel_heal,
+- Full CI guard not run this cycle (the affected states — kernel_opt,
   default, all-features, clippy both states, retrieval, score-bench — were
   each validated; same honest-skip shape as Batch 95). The B84-guard repair
   commit already established Layer-5a green at a nearby HEAD.

@@ -61,7 +61,7 @@ whenever a corpus batch moves a floor.
 ## GOAT
 
 G1 module tests 23 (13 uc + 10 coc) + corpus suite green · G2 lib default
-2060/0 + kernel_heal 2413/0 (1 pre-existing ignore) · G3 clippy `-D` clean ×2
+2060/0 + kernel_opt 2413/0 (1 pre-existing ignore) · G3 clippy `-D` clean ×2
 feature states · freeze regen 88/17 + 88/21, bad sets UNCHANGED, 0 newly
 excluded, solve 100.0% every k, M4 + stratification PASS · retrieval floors
 HELD byte-identical (A/B-verified) · score-bench **96.4% FLAT** (147 runs;

@@ -140,8 +140,8 @@ The file is a second production instance (no new rule) for:
 
 - **G1** `batch36_pseudocode_parses` 7/7 + `batch36_rules_present` +
   `batch36_concepts_covered` — all inside the suite.
-- **G2** **324 kernel_heal** (was 321) + **201 default** lib tests PASS.
-- **G3** clippy 0 warnings in all 4 states (kernel_heal/default ×
+- **G2** **324 kernel_opt** (was 321) + **201 default** lib tests PASS.
+- **G3** clippy 0 warnings in all 4 states (kernel_opt/default ×
   lib/all-targets). 7 doc_markdown backtick fixes pre-commit (`481/482`,
   `read_batched`, `param-grad`, `g_logits_all`, `LoRA`, `RoPE`, `all-GPU`'s
   neighbor).

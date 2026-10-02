@@ -98,8 +98,8 @@ Three sound-looking mechanisms from the Plan 078 section were rejected for kerne
 | Gate | Verdict | Evidence |
 |---|---|---|
 | G1 correctness | **PASS** | `batch30_pseudocode_parses` standing syn-parse gate (6/6 ref_shape + opt_pattern parse via the L2 pruner); quotes verified against source by the synthesizer; 0 duplicates (2-way subagent + corpus greps) |
-| G2 perf | **PASS** | 290 kernel_heal lib tests in 0.18s; router lookup O(1) unchanged |
-| G3 no-regression | **PASS** | default 190 lib tests; clippy 0 warnings (`--features kernel_heal --all-targets`); full 5-layer `ci_feature_guard.sh` PASS (405 tests final layer) |
+| G2 perf | **PASS** | 290 kernel_opt lib tests in 0.18s; router lookup O(1) unchanged |
+| G3 no-regression | **PASS** | default 190 lib tests; clippy 0 warnings (`--features kernel_opt --all-targets`); full 5-layer `ci_feature_guard.sh` PASS (405 tests final layer) |
 | G4 alloc-free | **PASS** | static corpus entries; no hot-path change (mechanism unchanged since Batch 1) |
 | G5 candidate reduction | **PASS** | 209 flat → 13.9 avg per routed expert = **15.0× reduction maintained** (15 categories; was 15.0× at 203) |
 

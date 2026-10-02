@@ -83,7 +83,7 @@ tokenized + 142 items extracted + scanned in the same sub-second run as the
 | G1 real anti-patterns | ≥5 | 30 (live tree) | ✅ PASS |
 | G-clean control FPs | 0 | 0 (7/7 adjudicated real; pair rule discriminates exactly) | ✅ PASS |
 | G2 latency | <1 ms/file | 41.19 µs/file | ✅ PASS |
-| G3 no-regression | lib tests green | 419 default / 598 kernel_heal / 724 all-features + 4 t5_control tests; clippy 0 this crate | ✅ PASS |
+| G3 no-regression | lib tests green | 419 default / 598 kernel_opt / 724 all-features + 4 t5_control tests; clippy 0 this crate | ✅ PASS |
 
 ## What this licenses
 
@@ -96,9 +96,9 @@ tokenized + 142 items extracted + scanned in the same sub-second run as the
 ## Reproduce
 
 ```bash
-cargo test --features kernel_heal --test wgsl_t5_control
-cargo test --release --features kernel_heal --lib g2_scan_latency -- --nocapture
-cargo run --features kernel_heal --example wgsl_scan_smoke           # .wgsl mode
-cargo run --features kernel_heal --example wgsl_scan_smoke -- --rs   # cube-body mode
-cargo run --features latent_retrieval,kernel_heal --bin cargo-heal -- --suggest --domain kernel ../riir-ai/crates/riir-gpu/src/kernels
+cargo test --features kernel_opt --test wgsl_t5_control
+cargo test --release --features kernel_opt --lib g2_scan_latency -- --nocapture
+cargo run --features kernel_opt --example wgsl_scan_smoke           # .wgsl mode
+cargo run --features kernel_opt --example wgsl_scan_smoke -- --rs   # cube-body mode
+cargo run --features latent_retrieval,kernel_opt --bin cargo-heal -- --suggest --domain kernel ../riir-ai/crates/riir-gpu/src/kernels
 ```

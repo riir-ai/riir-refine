@@ -65,7 +65,7 @@ The result: `cargo heal --fix` gives you clippy lints + perf wins + kernel-launc
 
 ### Problem 1: `kernel_opt`/`rust_perf` heal pseudocode, not your code
 
-Right now, `kernel_heal_demo` + `perf_heal_demo` draft a fix from a corpus *template* (`ref_shape` → `opt_pattern`) and validate it *parses*. They do **not** read `riir-gpu/src/gemv_q4k_batched_rmsnorm_cubecl.rs` and say "this launch has 8 redundant planes — here's the 1-plane rewrite." The 123 kernel rules + 46 perf rules are a knowledge base that nothing applies to real files. That's the gap.
+Right now, `kernel_opt_demo` + `perf_heal_demo` draft a fix from a corpus *template* (`ref_shape` → `opt_pattern`) and validate it *parses*. They do **not** read `riir-gpu/src/gemv_q4k_batched_rmsnorm_cubecl.rs` and say "this launch has 8 redundant planes — here's the 1-plane rewrite." The 123 kernel rules + 46 perf rules are a knowledge base that nothing applies to real files. That's the gap.
 
 ### Problem 2: clippy is already ruliology — our value-add must be "clippy + shallow reasoning"
 

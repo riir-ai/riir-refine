@@ -17,9 +17,9 @@
 //!
 //! Pair 3 is a `#[cube]` BODY pair (CubeCL Rust) — the T3 extraction surface.
 //!
-//! Run: `cargo test --features kernel_heal --test wgsl_mine_pairs`
+//! Run: `cargo test --features kernel_opt --test wgsl_mine_pairs`
 
-#![cfg(feature = "kernel_heal")]
+#![cfg(feature = "kernel_opt")]
 
 use riir_refine::domains::kernel_opt::wgsl_scan::{WgslFinding, WgslScanner};
 

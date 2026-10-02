@@ -1,11 +1,11 @@
 # Plan 004 — kernel_opt Activity Vector Extension (5 → 8 dims)
 
-**Proposal:** [012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
+**Proposal:** [012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md) §"The
 latent-MoE expert selector" — the activity vector must discriminate operation
 classes, not just kernel shapes.
 **Branch:** `develop` (per global rule — no feature branches)
 **Status:** COMPLETE 2026-08-14. All phases landed: Phase 1 (8-dim activity vector + build_activity helper + 8-dim centroids), Phase 2 (15/15 reachability test + per-category canonical routing), Phase 3 (docs + CI), Phase 4 (commit + push).
-**Domain:** `kernel_opt` (opt-in `kernel_heal` feature)
+**Domain:** `kernel_opt` (opt-in `kernel_opt` feature)
 **Predecessor:** [Plan 003](003_kernel_opt_router_corpus_wiring.md) — corpus
 wiring landed the 15 category experts + documented C+O unreachability.
 
@@ -152,8 +152,8 @@ unwired scaffolding in Plan 003; nothing calls `route()` outside tests). The
 
 ### Phase 3 — Validation + docs
 
-- [x] 3.1 `cargo clippy --features kernel_heal --all-targets` clean.
-- [x] 3.2 `cargo test --features kernel_heal --lib` — all tests pass.
+- [x] 3.1 `cargo clippy --features kernel_opt --all-targets` clean.
+- [x] 3.2 `cargo test --features kernel_opt --lib` — all tests pass.
 - [x] 3.3 Update `mod.rs` "What ships now" table (router row: "✅ (8-dim
       activity, 15/15 reachable, Plan 004)").
 - [x] 3.4 Update `AGENTS.md` + `README.md` router references.
@@ -175,7 +175,7 @@ Infrastructure + correctness GOAT (same shape as Plan 003 — not a perf gain).
 | G3 (no-regression) | All existing tests pass | ✅ PASS (251 tests, 0 failed, 9 ignored) |
 | G4 (alloc-free) | `route()` + `build_activity()` allocate zero bytes | ✅ PASS (stack only) |
 
-No promotion target — `kernel_heal` stays opt-in (corpus is still pseudocode;
+No promotion target — `kernel_opt` stays opt-in (corpus is still pseudocode;
 the GOAT for promotion is the deferred `kernel_perf_bench` numeric validator,
 blocked on GPU).
 
@@ -193,7 +193,7 @@ blocked on GPU).
 - [Plan 003](003_kernel_opt_router_corpus_wiring.md) — documented the C+O
   unreachability + recommended "extend ACTIVITY_DIM from 5 to ~8 with
   operation-class one-hot axes" as the next step.
-- [Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md)
+- [Proposal 012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md)
   §"The latent-MoE expert selector"
 - `Plan 558` —
   `pick_domain<N, A>` substrate (already generic over A).

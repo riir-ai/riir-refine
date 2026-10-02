@@ -128,7 +128,7 @@ workgroup saturates the fused region; past that, tile.
 ## GOAT (all gates green)
 
 - **G1**: `batch80_pseudocode_parses` ✓ (all 3 entries' ref+opt syn-parse)
-- **G2**: kernel_heal lib **926/0/1i** (exactly B79's 923 + 3); default lib
+- **G2**: kernel_opt lib **926/0/1i** (exactly B79's 923 + 3); default lib
   **703/0** (unchanged — corpus is feature-gated)
 - **G3**: clippy `--all-targets` **0 warnings both states**; CI guard
   layers 1-4 + 5a (`-D warnings` no-default + all-features) + 5b-default +

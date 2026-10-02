@@ -42,7 +42,7 @@ default-firing candidates probed this pack (probe crate
       excluded v2+v3); the stride shuffle staled 6+6 exclusion ids and re-exposed ep's
       unreadable_literal co-fire in new eld+ep windows; tables 92/15 v2, 91/21 v3;
       e2es PASS ×2 (31.7s / 20.3s)
-- [x] T10 G2: lib default 2083/0 (floor 2060) + kernel_heal 2436/0 (floor 2413)
+- [x] T10 G2: lib default 2083/0 (floor 2060) + kernel_opt 2436/0 (floor 2413)
 - [x] T11 retrieval gate: latent_retrieval suite 17/17 + full latent_retrieval,score_bench
       lib 2396/0
 - [x] T12 G3: clippy -D clean both states (default + all-features; the all-features lane

@@ -208,7 +208,7 @@ fn main() {
     let dim = riir_rag::query::LATENT_DIM;
 
     // The span canon: the two pub fixture consts (the kernel probes are
-    // kernel_heal-gated and left out of this PoC by design).
+    // kernel_opt-gated and left out of this PoC by design).
     let canon: Vec<(DomainId, &str, &str)> = CLIPPY_SPANS
         .iter()
         .map(|(l, c)| (DomainId::Clippy, *l, *c))

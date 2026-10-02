@@ -102,7 +102,7 @@ Branch: `develop` (per global rule — no feature branches)
   - `--corpus-stats` live: docker **2 → 31** (runtime-corpus, compiled), sec
     11 → **12** (the needle picked up today's P8 rule — correct), clippy_lints 45 /
     rust_perf 97 via runtime-corpus (needle cross-validation: identical),
-    kernel_opt 422 via source-walk (kernel_heal off in this build). Today's row
+    kernel_opt 422 via source-walk (kernel_opt off in this build). Today's row
     stamped to the store; the committed jsonl row corrected (B3).
 - The `.plans/.highwater` malformation (`57\n58\n` — two lines) repaired in the same
   commit (found while bumping; the stray 57 line predates this session).

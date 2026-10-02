@@ -21,7 +21,7 @@ grouped-tiling swizzle shape); the B66 simd-chunk rider precedent applies.
 - [x] T3 Rider: extend `l2-grouped-tile-schedule` doc comment (applicability conditions + N≈16 + Morton-negative + 47%/L2-hit evidence; the pinned concept phrase `swizzled L2-cache-aware tile mapping` kept EXACT — batch4's concepts test is an exact-match `.contains(&str)`, the rider first landed in gpu_concept and was moved to the doc comment after that test failed)
 - [x] T4 `KERNEL_CATEGORIES` A-list +1; count pins 372→373 / A 88→89 (mod.rs doc + ledger, tests.rs plan-003 table + 4 comments + the seed-count pin `seed_corpus_has_expected_entry_count` — the 19th count-pin site, found by test failure; router.rs comment + assert)
 - [x] T5 Standing gates: `batch72_rules_present` + `batch72_concepts_covered` + `batch72_pseudocode_parses` (with the B70 `#[cfg(not(feature = "kernel_verify"))]` guard — re-hit once, fixed in-WIP)
-- [x] T6 GOAT: G1 syn-parse ✓, G2 lib 677/0 default + 890/0/1i kernel_heal + 1221/0/13i all-features, G3 clippy 0 both states + **ci_feature_guard ALL LAYERS PASS** + retrieval floors HELD zero decay (blend@1 94.7, clippy@1 89.6, perf@1 96.2)
+- [x] T6 GOAT: G1 syn-parse ✓, G2 lib 677/0 default + 890/0/1i kernel_opt + 1221/0/13i all-features, G3 clippy 0 both states + **ci_feature_guard ALL LAYERS PASS** + retrieval floors HELD zero decay (blend@1 94.7, clippy@1 89.6, perf@1 96.2)
 - [x] T7 Research note `.research/084_*`; AGENTS.md corpus count 372→373 + batch line; `.docs/11_domains/kernel_opt.md` count + batch row
 - [x] T8 Snapshot update (`.distill/001_mining_queue_snapshot.md`) — same commit
 - [x] T9 Commit `feat: batch 72 ...` + push

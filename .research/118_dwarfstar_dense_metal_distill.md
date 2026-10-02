@@ -84,10 +84,10 @@ the Batch 97 provenance work.
 
 - **G1**: `batch98_rules_present` + `batch98_concepts_covered` + `batch98_pseudocode_parses`
   (cfg(not(kernel_verify)) per B70) — 3/3. All 10 ref/opt shapes parse.
-- **G2**: kernel_heal lib **1255/0/1i** (Batch 97 baseline 1252 + 3 new gates; ALL count pins
+- **G2**: kernel_opt lib **1255/0/1i** (Batch 97 baseline 1252 + 3 new gates; ALL count pins
   green — corpus-count, expected-array, sums, grouped, router expert-total); default lib
   **1008/0** (unchanged — no default-visible tests added).
-- **G3**: clippy `-D warnings` clean in BOTH states (default + kernel_heal); retrieval floors
+- **G3**: clippy `-D warnings` clean in BOTH states (default + kernel_opt); retrieval floors
   **14/14 HELD** (no re-pins, ~307 s); score-bench run #29 **96.2/1.9/100/100 FLAT** (the batch
   is kernel_opt-only; the clippy --fix path untouched).
 - **Gate-catch**: one case-mismatched needle in `batch98_concepts_covered`

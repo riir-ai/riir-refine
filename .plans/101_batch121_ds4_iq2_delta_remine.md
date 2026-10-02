@@ -1,6 +1,6 @@
 # Plan 101 — Batch 121: ds4 PR #991 delta re-mine — the calibrated IQ2_XXS build commit (`c5ae2eb5`)
 
-**Status:** RECORD — Batch 121 landed 2026-09-07 (3 rust_perf io rules, corpus 102 → 105, all NotBenchable-annotated; GOAT green: batch121 gates 3/3 first-shot, lib 1159/0, kernel_heal+latent 1589/0/2i, retrieval floors byte-identical, score-bench FLAT, clippy clean; commit on `develop`; `.raw/ds4-metal` removed). Yield matched the plan's expectation exactly (3 rules + 1 rider-folded-in; no kernel_opt entries — no kernel code in the delta).
+**Status:** RECORD — Batch 121 landed 2026-09-07 (3 rust_perf io rules, corpus 102 → 105, all NotBenchable-annotated; GOAT green: batch121 gates 3/3 first-shot, lib 1159/0, kernel_opt+latent 1589/0/2i, retrieval floors byte-identical, score-bench FLAT, clippy clean; commit on `develop`; `.raw/ds4-metal` removed). Yield matched the plan's expectation exactly (3 rules + 1 rider-folded-in; no kernel_opt entries — no kernel code in the delta).
 
 ## Source + provenance
 
@@ -45,7 +45,7 @@ Expected yield after falsification: 2–3 rules + 1 rider. All build-orchestrati
 
 ### T4 — GOAT
 
-- [x] G1 parse/syn 3/3; G2 lib 1159/0; G3 clippy 0 in default + kernel_heal lib states; retrieval re-run kernel 100/100/100 + blended 94.7/96.9/97.7 HELD (byte-identical to B118/119); kernel_heal+latent lib 1589/0/2i (floor 1574 held).
+- [x] G1 parse/syn 3/3; G2 lib 1159/0; G3 clippy 0 in default + kernel_opt lib states; retrieval re-run kernel 100/100/100 + blended 94.7/96.9/97.7 HELD (byte-identical to B118/119); kernel_opt+latent lib 1589/0/2i (floor 1574 held).
 - [x] score-bench FLAT 96.2/1.9/100 (row appended UTC 21:37Z).
 
 ### T5 — records + landing

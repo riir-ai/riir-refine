@@ -90,6 +90,6 @@ companions; v3 shuffled 4↔4 net-zero at 16). Bad-atom set UNCHANGED (6).
 ## Counts
 
 corpus 80 → 82, FIXABLE 61 → 63, atoms 61 → 63, lib 1966/0 · latent 2119/0 ·
-frontier_miner,score_bench 2283/0 · kernel_heal,latent retrieval 15/15 +
+frontier_miner,score_bench 2283/0 · kernel_opt,latent retrieval 15/15 +
 regression gate · clippy `-D` clean ×3 states (2 doc_markdown +
 2 nonminimal_bool healed in the new modules).

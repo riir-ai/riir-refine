@@ -39,7 +39,7 @@ read LOCAL files, no network dependency.
   standing gate
 - [x] T8 Count pins: entries.len 387→N (×3 sites) + KERNEL_CATEGORIES
   table + Plan-003 table + router experts-cover + STALE header re-scan
-- [x] T9 GOAT: kernel_heal lib + default lib + all-features + clippy 0
+- [x] T9 GOAT: kernel_opt lib + default lib + all-features + clippy 0
   both states (`--all-targets`) + CI guard layers + retrieval floors
   (kernel 100/100/100, blended — re-pinned only if decay, record honestly)
 - [x] T10 Research 095 Status → RECORD + batch results appended

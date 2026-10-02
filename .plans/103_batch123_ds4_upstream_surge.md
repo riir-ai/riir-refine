@@ -1,6 +1,6 @@
 # Plan 103 — Batch 123: the ds4 upstream-surge distill (GLM/Metal SSD-expert caching + ROCm DSpark + agent tooling, 48 commits)
 
-**Status:** RECORD 2026-09-07 — Batch 123 landed: kernel_opt +3 (552 → 555, A 117 / H 26) + rust_perf io +2 (108 → 110), all gates green (lib 1165/0, kernel_heal 1478/0/1i, kernel_heal+latent 1595/0/2i, retrieval floors byte-identical, score-bench FLAT 96.2/1.9, clippy 0 ×3 states), Research 146. 4 candidates recorded-not-landed with reasons (in-rule ledger).
+**Status:** RECORD 2026-09-07 — Batch 123 landed: kernel_opt +3 (552 → 555, A 117 / H 26) + rust_perf io +2 (108 → 110), all gates green (lib 1165/0, kernel_opt 1478/0/1i, kernel_opt+latent 1595/0/2i, retrieval floors byte-identical, score-bench FLAT 96.2/1.9, clippy 0 ×3 states), Research 146. 4 candidates recorded-not-landed with reasons (in-rule ledger).
 
 ## Source + pins
 
@@ -29,5 +29,5 @@ Grep `ssd|state.space|expert|cache|prefill|stream|resid` across `src/domains/ker
 - [x] T2 — 2 parallel subagents (lane 1+3 kernel / lanes 2+4+5 tooling+methodology) propose rules with pattern + bounded fix-space + source quotes; re-verify every quote at the pin
 - [x] T3 — author entries + `batch123_pseudocode_parses` gate
 - [x] T4 — count pins walked (kernel_opt corpus count, rust_perf if io rules land, header ledgers, doc lines)
-- [x] T5 — GOAT: batch gates FIRST-SHOT + lib default / kernel_heal / kernel_heal+latent floors + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
+- [x] T5 — GOAT: batch gates FIRST-SHOT + lib default / kernel_opt / kernel_opt+latent floors + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
 - [x] T6 — Research 146 + AGENTS.md counts + `.docs/11_domains/` ledger rows + snapshot row (same commit) + `.raw` removal + push

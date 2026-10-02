@@ -84,9 +84,9 @@ distillation — the class recurs):
 - **G1 parse/syn:** `batch55_pseudocode_parses` PASS (both rules, both
   shapes); first-compile clean (generator method; all 23 anchors unique on the
   dry run — zero aborted attempts).
-- **G2 lib tests:** 738 kernel_heal (B54: 735; +3 = the batch55 trio) /
+- **G2 lib tests:** 738 kernel_opt (B54: 735; +3 = the batch55 trio) /
   549 default / 163 corpus subset.
-- **G3 no-regression:** clippy 0 in default + kernel_heal states (2
+- **G3 no-regression:** clippy 0 in default + kernel_opt states (2
   doc_markdown backtick fixes pre-commit — `handle.size_in_used()` +
   `BufferArg` in `//!` header prose, the recurring identifiers-in-header
   gotcha); retrieval floors HELD with zero decay: kernel self-variants

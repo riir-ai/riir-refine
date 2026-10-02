@@ -28,7 +28,7 @@
 //!   the shipped shape) vs single-scale index (whole patterns only, the
 //!   pre-multi-scale shape) — the issue's named "chunking" space lever.
 //!
-//! That is 12 population-distinct points with `kernel_heal` (8 without).
+//! That is 12 population-distinct points with `kernel_opt` (8 without).
 //!
 //! **Population for the oracle:** the index chunk embeddings, replicated
 //! exactly (`RuleIndex::build_with`'s chunk set: whole text + each
@@ -50,8 +50,8 @@
 //! **Tier:** diagnostic only — never gates a heal decision (the issue's
 //! constraint; the L4 relevance-gate lesson).
 //!
-//! Run: `cargo test --features latent_retrieval,kernel_heal --test
-//! modelability_sweep -- --nocapture` (drop `kernel_heal` for the 8-point
+//! Run: `cargo test --features latent_retrieval,kernel_opt --test
+//! modelability_sweep -- --nocapture` (drop `kernel_opt` for the 8-point
 //! surface).
 
 #![cfg(feature = "latent_retrieval")]
@@ -60,14 +60,14 @@ use std::collections::HashSet;
 
 use riir_refine::domain::{HealDomain, HealEntry};
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 use riir_refine::domains::kernel_opt::corpus::build_kernel_seed_corpus;
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 use riir_refine::domains::kernel_opt::KernelOptDomain;
 use riir_refine::domains::rust_perf::RustPerfDomain;
 use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
 use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 use riir_refine::draft::retrieval_eval::mutate_shape;
 use riir_refine::draft::retrieval_eval::{canonical_rank, run_eval_with};
 use riir_refine::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
@@ -127,7 +127,7 @@ fn perf_data() -> DomainData {
     }
 }
 
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 fn kernel_data() -> DomainData {
     DomainData {
         name: "kernel",
@@ -156,9 +156,9 @@ fn kernel_data() -> DomainData {
 }
 
 fn all_domains() -> Vec<DomainData> {
-    #[cfg_attr(not(feature = "kernel_heal"), allow(unused_mut))]
+    #[cfg_attr(not(feature = "kernel_opt"), allow(unused_mut))]
     let mut v = vec![clippy_data(), perf_data()];
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     v.push(kernel_data());
     v
 }
@@ -334,7 +334,7 @@ fn modelability_tracks_downstream_top1() {
         ));
     }
 
-    let expected_points = if cfg!(feature = "kernel_heal") { 12 } else { 8 };
+    let expected_points = if cfg!(feature = "kernel_opt") { 12 } else { 8 };
     assert_eq!(points.len(), expected_points, "sweep point count");
 
     // Non-vacuity: both axes must actually vary — a constant x or y makes

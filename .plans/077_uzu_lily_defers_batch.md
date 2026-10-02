@@ -26,7 +26,7 @@ Lane B (lily, 5): `chunk-command-buffer-prefill`, `cross-level-fused-residual-no
 - [x] T3 Coordinator re-verification of every landed quote + grade adjudication; kill/merge per dedup.
 - [x] T4 Author corpus entries (Python heredoc generator, ensure_ascii=False, needle pre-verification) into `entries_gpu_20.rs`; bump all count pins (tests.rs totals/expected-array/sums/grouped, router.rs expert total, mod.rs doc line + category headers).
 - [x] T5 Standing gates: `batch107_rules_present` + `batch107_concepts_covered` + `batch107_pseudocode_parses` (cfg(not(kernel_verify)) per B70) + one falsifiable content gate per novel mechanism where warranted.
-- [x] T6 GOAT: kernel_heal lib + default lib + kernel_heal+latent (retrieval floors HELD, zero re-pins) + clippy 0 both states; walk every count pin.
+- [x] T6 GOAT: kernel_opt lib + default lib + kernel_opt+latent (retrieval floors HELD, zero re-pins) + clippy 0 both states; walk every count pin.
 - [x] T7 Research 130 note + AGENTS.md Batch 107 entry + kernel count line + `.docs/11_domains/kernel_opt.md` D-row + queue snapshot row consumed.
 - [x] T8 Commit `feat: batch 107: ...` + push; `rm -rf .raw/*`; scratch cleaned.
 

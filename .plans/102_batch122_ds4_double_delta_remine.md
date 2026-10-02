@@ -35,7 +35,7 @@ GLM attention/rope rework + NEW Metal SSD-experts machinery + session-state + SS
 - [x] T1 — Part A: author 3–4 entries (re-verify every quoted line against `.raw/ds4-metal` at entry time)
 - [x] T2 — extend the standing parse gate (`batch122_pseudocode_parses`)
 - [x] T3 — count pins: rust_perf io 9 → N, total 105 → N, annotated 48 → N; walk every manifest/doc line
-- [x] T4 — GOAT: batch gates FIRST-SHOT + lib default/kernel_heal/kernel_heal+latent + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
+- [x] T4 — GOAT: batch gates FIRST-SHOT + lib default/kernel_opt/kernel_opt+latent + retrieval re-run (kernel 100/100/100, blended ≥94.7/96.9/97.7) + clippy 3 states + score-bench FLAT
 - [x] T5 — Research 145 note + AGENTS.md corpus count + `.docs/11_domains/` + snapshot row (same commit)
 - [x] T6 — remove `.raw/ds4-metal`; commit `feat: batch 122: ...` + push
 - [x] T7 — Part B re-scan: after Batch 122 lands, re-check `c0a6119f` for movement; open Plan 123 if still current. **DISCHARGED 2026-09-07 09:15 +07 (API, zero-build): upstream UNCHANGED at `c0a6119f` (the B123 pin held); the PR axis fired instead — head `69c38d23` → `ffd85d42` (re-based onto upstream main, ~47 new commits, 09-05 21:48Z..09-06 23:11Z window; the compare-vs-pin trap recorded in-plan). Part B itself had already opened as Plan 103 / Batch 123. Next: `.plans/106_batch125_ds4_rebase_surge.md` (Batches 125/126).**

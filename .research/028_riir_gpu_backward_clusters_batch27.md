@@ -95,8 +95,8 @@ Distinct from `defer-readback-until-after-submit` (Batch 26 — the TIMING rule:
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 correctness | 6 rules valid pseudocode; 0 duplicates (20 substrate-first checks with explicit distinct-from/drop notes; 3-way subagent convergence on the zeros-clear rule, 2-way on three others) | ✅ PASS |
-| G2 perf | corpus build O(n); router O(1); 278 kernel_heal-scoped lib tests in 0.10s | ✅ PASS |
-| G3 no-regression | default 186 lib tests + kernel_heal 278 + full CI guard on the committed state (isolated worktree — the sibling's in-flight WIP breaks the working tree) | ✅ PASS |
+| G2 perf | corpus build O(n); router O(1); 278 kernel_opt-scoped lib tests in 0.10s | ✅ PASS |
+| G3 no-regression | default 186 lib tests + kernel_opt 278 + full CI guard on the committed state (isolated worktree — the sibling's in-flight WIP breaks the working tree) | ✅ PASS |
 | G4 alloc-free | static `KernelRule` entries; zero hot-path allocation (unchanged mechanism) | ✅ PASS |
 | G5 routed demo | 183 flat → 12.2 avg = **15.0× candidate reduction maintained** | ✅ PASS |
 

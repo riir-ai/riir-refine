@@ -232,11 +232,11 @@ Exact for unsigned operands.
 
 ## Validation
 
-- **130 lib tests** pass with `--features kernel_heal` (was 128 at Batch 7;
+- **130 lib tests** pass with `--features kernel_opt` (was 128 at Batch 7;
   +2 Batch 8 tests: `batch8_rules_present` +
   `batch8_polymorphism_dtype_strength_concepts_covered`).
 - **91 default lib tests** pass (no regression).
-- **Clippy clean** with `--features kernel_heal --all-targets`.
+- **Clippy clean** with `--features kernel_opt --all-targets`.
 - Count assertion updated: `seed_corpus_has_expected_entry_count` now asserts
   68 (was 59).
 - All 9 pseudocode patterns validated by `RustAnalyzerPruner` (via

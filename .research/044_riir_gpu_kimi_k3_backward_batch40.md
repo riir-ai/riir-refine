@@ -144,8 +144,8 @@ ping-pong, ...). Full inventory + a fix order in `.issues/693` (riir-ai).
 ## GOAT
 
 - **G1**: `batch40_pseudocode_parses` PASS (7/7 after the pruner fix).
-- **G2**: 336 kernel_heal + 201 default lib tests PASS.
-- **G3**: clippy 0 warnings in 4 states (default / kernel_heal /
-  kernel_heal+latent_retrieval / rust_perf).
+- **G2**: 336 kernel_opt + 201 default lib tests PASS.
+- **G3**: clippy 0 warnings in 4 states (default / kernel_opt /
+  kernel_opt+latent_retrieval / rust_perf).
 - Count pins: all 20+ sites in sync at 310 (the generator updated corpus.rs ×19
   + router.rs ×4; enforced by the passing count tests).

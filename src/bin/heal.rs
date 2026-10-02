@@ -3820,7 +3820,7 @@ USAGE:
                     #![warn(clippy::...)] — and is reported as skipped
                     otherwise, never silently.
     <path>...       Files or directories to scan. `.rs` always; with the
-                    kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
+                    kernel_opt feature, `--suggest` ALSO scans `.wgsl` files
                     + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
                     suggest-only citations, never touched by --fix); with
                     the dist feature, `Cargo.toml` manifests join the walk
@@ -3830,7 +3830,7 @@ Domains are feature-gated: clippy + perf + docker + rustc_errors + dist are
 default-on (docker: Dockerfiles are matched by NAME — `Dockerfile`,
 `<n>.Dockerfile`, `Dockerfile.<n>`; `docker_verify` adds the hadolint
 agreement oracle. dist: Cargo.toml manifests are matched by NAME;
-suggest-only, Issue 085); kernel needs --features kernel_heal, sec needs
+suggest-only, Issue 085); kernel needs --features kernel_opt, sec needs
 --features sec.
 Requesting a domain whose feature is off is an error (T2.4 gating). --verify needs --features fix_verify.
 --fix-compile ships default-on (rustc_errors).",
@@ -5385,7 +5385,7 @@ fn domain_corpus_sections() -> Vec<(&'static str, Vec<String>)> {
             .map(|e| e.rule_id().to_string())
             .collect(),
     ));
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     out.push((
         "kernel",
         riir_refine::build_kernel_seed_corpus()
@@ -6780,7 +6780,7 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
 #[allow(clippy::match_like_matches_macro)] // cfg! arms are compile-time, not a pattern set
 fn domain_compiled(domain: &str) -> bool {
     match domain {
-        "kernel_opt" => cfg!(feature = "kernel_heal"),
+        "kernel_opt" => cfg!(feature = "kernel_opt"),
         "rust_perf" => cfg!(feature = "rust_perf"),
         "clippy_lints" => cfg!(feature = "clippy_lints"),
         "sec" => cfg!(feature = "sec"),
@@ -6806,7 +6806,7 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
         "rust_perf" => Some(
             u32::try_from(riir_refine::build_perf_seed_corpus().entries.len()).unwrap_or(u32::MAX),
         ),
-        #[cfg(feature = "kernel_heal")]
+        #[cfg(feature = "kernel_opt")]
         "kernel_opt" => Some(
             u32::try_from(riir_refine::build_kernel_seed_corpus().entries.len())
                 .unwrap_or(u32::MAX),
@@ -7054,7 +7054,7 @@ fn other_domain_rule_ids() -> std::collections::BTreeMap<String, Vec<String>> {
         };
     }
     domain_rules!("rust_perf", "rust_perf", riir_refine::build_perf_seed_corpus);
-    domain_rules!("kernel_heal", "kernel_opt", riir_refine::build_kernel_seed_corpus);
+    domain_rules!("kernel_opt", "kernel_opt", riir_refine::build_kernel_seed_corpus);
     domain_rules!("sec", "sec", riir_refine::build_sec_seed_corpus);
     domain_rules!("docker", "docker", riir_refine::build_docker_seed_corpus);
     domain_rules!("dist", "dist", riir_refine::build_dist_seed_corpus);
@@ -9226,7 +9226,7 @@ fn main() {
         collect_source_files(path, ".rs", &mut files);
     }
     // Issue 025 T4: the non-syn surface (.wgsl kernel files) joins the
-    // suggest walk when kernel_heal is enabled.
+    // suggest walk when kernel_opt is enabled.
     let mut wgsl_files = Vec::new();
     for path in &args.paths {
         collect_source_files(path, ".wgsl", &mut wgsl_files);
@@ -9264,10 +9264,10 @@ fn main() {
             cargo_tomls.len()
         );
     }
-    #[cfg(not(feature = "kernel_heal"))]
+    #[cfg(not(feature = "kernel_opt"))]
     if !wgsl_files.is_empty() {
         eprintln!(
-            "note: {} .wgsl file(s) found but the non-syn scanner needs --features kernel_heal (Issue 025)",
+            "note: {} .wgsl file(s) found but the non-syn scanner needs --features kernel_opt (Issue 025)",
             wgsl_files.len()
         );
     }
@@ -10431,7 +10431,7 @@ fn main() {
     // domain. SUGGEST-ONLY by construction: findings are corpus-rule
     // citations, no proposer exists for these surfaces, and this pass
     // runs outside the --fix edit path entirely (pure --suggest mode).
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     let n_non_syn = if args.suggest && args.domain.is_none_or(|d| d == DomainId::Kernel) {
         let scanner = riir_refine::domains::kernel_opt::wgsl_scan::WgslScanner::default();
         let mut n = 0usize;
@@ -10478,7 +10478,7 @@ fn main() {
     } else {
         0
     };
-    #[cfg(not(feature = "kernel_heal"))]
+    #[cfg(not(feature = "kernel_opt"))]
     let n_non_syn = 0usize;
 
     // ── Plan 134 T0.2/T1.4: the shader_perf lane — the RENDER-stage half

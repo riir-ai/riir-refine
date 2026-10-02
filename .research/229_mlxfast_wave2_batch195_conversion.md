@@ -76,5 +76,5 @@ M3 light-work rule).
 ## Gates (all green)
 
 batch195 parse gate (9) + contracts gate + riders gate · kernel slice 396/0 · lib default 2423/0 ·
-clippy `-D` clean ×3 postures (default / kernel_heal / rust_perf+kernel_heal) · retrieval 21/21
+clippy `-D` clean ×3 postures (default / kernel_opt / rust_perf+kernel_opt) · retrieval 21/21
 floors HELD (234s) · score-bench + freeze NOT owed (kernel_opt-only, zero clippy-corpus delta, P30).

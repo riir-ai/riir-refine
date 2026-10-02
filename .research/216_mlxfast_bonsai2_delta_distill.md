@@ -107,8 +107,8 @@ graph-dependency fence spelling).
 ## Gates (all green this session)
 
 - batch182 ×2 (rules_present incl. the 6 rider assertions + pseudocode_parses) — 2/2
-- lib default 2340/0; kernel_heal slice 2716/0; rust_perf annotation pins 106→109 ×3 sites
-- clippy -D clean ×3 postures (default / kernel_heal / all-features; 2 doc_markdown
+- lib default 2340/0; kernel_opt slice 2716/0; rust_perf annotation pins 106→109 ×3 sites
+- clippy -D clean ×3 postures (default / kernel_opt / all-features; 2 doc_markdown
   mechanicals healed in-passing)
 - retrieval 21/21 floors HELD (277 s)
 - score-bench NOT owed (zero clippy-corpus delta, P30); freeze regen NOT owed (kernel corpus)

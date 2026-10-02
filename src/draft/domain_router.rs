@@ -11,7 +11,7 @@
 //!
 //! `pick_domain` is `const`-generic over the domain count `N`, but the
 //! enabled-domain set here is **feature-dependent** (clippy+perf by default;
-//! +kernel with `kernel_heal`) — a runtime-sized direction list. `route()`
+//! +kernel with `kernel_opt`) — a runtime-sized direction list. `route()`
 //! therefore implements the identical dot-product argmax (ties → lowest
 //! index) over `Vec` directions, mirroring
 //! `katgpt_core::variable_rank_domain_expert::pick_domain` (Plan 558) — the

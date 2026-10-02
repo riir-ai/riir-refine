@@ -45,8 +45,8 @@ FIRST MTPLX row with an in-stack analog (Issue 742 GDN+KV prefix cache, 441× TT
   cross-references (B103 ×2, B94 ×2, B77, B36, B25, B23, B105); ledger in Research 129.
 - [x] T5: landed via the file-form Python generator (the heredoc form hit a shell
   length limit — new tooling lesson) + parse-only fixtures + the 3 standing gates.
-- [x] T6: GOAT — batch106 gates 3/3 first-shot + kernel_heal lib 1343/0/1i + default lib
-  1078/0 + kernel_heal+latent 1451/0/2i (floors HELD zero re-pins) + clippy 0 both
+- [x] T6: GOAT — batch106 gates 3/3 first-shot + kernel_opt lib 1343/0/1i + default lib
+  1078/0 + kernel_opt+latent 1451/0/2i (floors HELD zero re-pins) + clippy 0 both
   states; count pins walked + the "464-rule" mod.rs doc line repaired 464 → 482 (2
   batches stale).
 - [x] T7: records — Research 129, AGENTS.md Batch-106 entry + kernel count line, queue

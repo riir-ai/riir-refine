@@ -61,7 +61,7 @@ lint, silent everywhere — recorded in plan158's probe).
       (31.3s); v3 91/0/22 stratification PASS (23.3s); generations module
       invariants 35/0. Regen record paragraph landed in generations.rs;
       temp example + Cargo.toml row + splice script deleted.
-- [x] T8 G2: lib default **2115/0** (B168: 2083) + kernel_heal
+- [x] T8 G2: lib default **2115/0** (B168: 2083) + kernel_opt
       **2468/0** (2436)
 - [x] T9 retrieval gate: latent_retrieval suite 17/17 + full
       latent_retrieval,score_bench lib **2428/0** (floors held, no re-pins)

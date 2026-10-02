@@ -77,7 +77,7 @@ Floors re-pinned: BLENDED 67/96, 79/96, 86/96; PERF_TOP3 45/48 (tightened from 3
 
 - **G1 (correctness):** all 8 corpus entries parse; 8/8 eval spans labeled + retrievable; the 2 compile-failure harness iterations were caught + fixed pre-record (call-site rename + the dual-`use` lesson).
 - **G2 (latency):** scoped bench runs ~2-4 min for 8 rules. The full 48-rule re-run was **deliberately killed ~15 min in** (13/48 done): the pre-existing `btreemap-sorted-iteration` harness alone costs ~40+ min (its `run_buggy` at n=50K executes 5000 inner queries × ~1-2ms collect+sort each ≈ 5-10s PER CALL, × calibration probe × 21 samples × 4 sizes × 3 determinism repeats — a slow-by-design harness, not a bug; same cost class as its original Bench 020 appearance). The 40 untouched rules keep their Bench 020 record; the 8 new rules' scoped runs (above) are the batch evidence.
-- **G3 (no-regression):** 415 default lib tests; retrieval gate PASS both states; clippy 0 warnings in 4 states (default / latent_retrieval / rust_perf_bench / kernel_heal+latent_retrieval — 2 `doc_markdown` backtick misses fixed pre-commit, the standing gotcha family).
+- **G3 (no-regression):** 415 default lib tests; retrieval gate PASS both states; clippy 0 warnings in 4 states (default / latent_retrieval / rust_perf_bench / kernel_opt+latent_retrieval — 2 `doc_markdown` backtick misses fixed pre-commit, the standing gotcha family).
 - **G5 (Pareto):** 6/8 new rules ParetoDominant (13.06× best: `collect-append-to-extend`; 115× at 4K: `vec-insert-front-deque`); 2 honestly annotated losers/regime-fragile — never promote a perf gain on a wrong result.
 - **G-det (alloc determinism):** stable across 3 repeat runs for every benchable rule (0 nondeterministic).
 

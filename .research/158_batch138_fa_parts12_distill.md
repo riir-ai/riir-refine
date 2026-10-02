@@ -54,7 +54,7 @@ The 4090 lane (Bench 896/897 prefill arm) is consumer Blackwell-class: **the hon
 
 ## Gates (the full GOAT row)
 
-batch138 gates **3/3 FIRST-SHOT** (rules_present / concepts_covered incl. 4 rider assertions / pseudocode_parses) · lib default **1187/0** · kernel_heal **1521/0/1i** · kernel_heal+latent **1643/0/2i** (was 1635/0/2i at B137) · retrieval floors **byte-identical** (kernel 100/100/100 @30, blended 94.7/96.9/97.7 @131 — 7th consecutive) · router annotation **measured 95/131 = 72.5%** (up from 91/131; floor 86 held — improvement, no re-pin) · clippy **0 ×3 all-targets** (2 doc_markdown + 1 too_many_lines in new code, fixed pre-claim) · `--corpus-stats` **601/120/49/14/31** · score-bench **#85 FLAT 96.2/1.9** (35 ran / parse 100% / decline 100%; 8th consecutive in the band; the OOD axis live with the sibling's entropy-gap rows: ref 3.840 vs ood 3.110 nats, gap −0.729, AnomalousNegative).
+batch138 gates **3/3 FIRST-SHOT** (rules_present / concepts_covered incl. 4 rider assertions / pseudocode_parses) · lib default **1187/0** · kernel_opt **1521/0/1i** · kernel_opt+latent **1643/0/2i** (was 1635/0/2i at B137) · retrieval floors **byte-identical** (kernel 100/100/100 @30, blended 94.7/96.9/97.7 @131 — 7th consecutive) · router annotation **measured 95/131 = 72.5%** (up from 91/131; floor 86 held — improvement, no re-pin) · clippy **0 ×3 all-targets** (2 doc_markdown + 1 too_many_lines in new code, fixed pre-claim) · `--corpus-stats` **601/120/49/14/31** · score-bench **#85 FLAT 96.2/1.9** (35 ran / parse 100% / decline 100%; 8th consecutive in the band; the OOD axis live with the sibling's entropy-gap rows: ref 3.840 vs ood 3.110 nats, gap −0.729, AnomalousNegative).
 
 ## Queue snapshot
 

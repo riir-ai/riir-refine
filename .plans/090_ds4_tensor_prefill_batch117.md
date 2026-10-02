@@ -32,7 +32,7 @@ watch-coverage gap closed, `9639e7c50`).
 - [x] T5 — author corpus entries (Python generator, ensure_ascii=False, needle pre-verification)
 - [x] T6 — standing gates: `batch117_rules_present` + `batch117_concepts_covered` +
       `batch117_pseudocode_parses` (cfg(not(kernel_verify)))
-- [x] T7 — GOAT: kernel_heal lib + default lib + combined floors HELD zero re-pins + clippy 0
+- [x] T7 — GOAT: kernel_opt lib + default lib + combined floors HELD zero re-pins + clippy 0
       (all states incl. --all-targets) + score-bench flat
 - [x] T8 — count pins walked (tests.rs corpus count + expected-array + sums + router.rs + mod.rs
       headers/member lists + AGENTS.md + queue snapshot)

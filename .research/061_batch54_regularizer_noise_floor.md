@@ -78,8 +78,8 @@ format noise). Clean.
 ## GOAT
 
 - **G1**: `batch54_pseudocode_parses` PASS (both shapes syn-parse; first compile clean).
-- **G2**: kernel_heal lib **735/0/1** (the 1 ignored is pre-existing), default lib **549/0**.
-- **G3**: clippy 0 in BOTH feature states (default + kernel_heal); whole-crate per the B47
+- **G2**: kernel_opt lib **735/0/1** (the 1 ignored is pre-existing), default lib **549/0**.
+- **G3**: clippy 0 in BOTH feature states (default + kernel_opt); whole-crate per the B47
   standing check — zero findings.
 - **Retrieval floors**: HELD — 13 retrieval tests green; sweep clippy top-1 89.6% (floor
   87.5%), perf 96.2% (50/52), op-aware blend 94.6/97.7 (floors 92.7→ re-pinned values). No

@@ -40,7 +40,7 @@ newer same-author articles (Modern GPU Matmul Optimization 05-29; FA Part 1/2
       syn-parse gate as `batch130_*`; walk ALL count pins the batch touches
       (totals ×5, category table, mod.rs lists, AGENTS, README, .docs rows).
 - [x] T5: GOAT — G1 parse gates first-shot-or-fixed; G2 lib tests pass at
-      kernel_heal (+latent if touched); G3 clippy 0 in all touched feature states;
+      kernel_opt (+latent if touched); G3 clippy 0 in all touched feature states;
       retrieval floors byte-identical (kernel 100/100/100, blended 94.7/96.9/97.7)
       or re-pin + record delta in the Research note; score-bench appended FLAT or
       delta explained.

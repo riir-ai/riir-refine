@@ -125,8 +125,8 @@ Latent-hazard NOTES (not filed): SwiGLU≠GeGLU — `SwigluCubeCL` computes `x·
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 correctness | 10 rules valid pseudocode — NEW standing test `batch29_pseudocode_parses` syn-parses every new rule's ref_shape AND opt_pattern via the L2 pruner; 0 duplicates (13 substrate-first checks with explicit distinct-from/drop notes; 2-way subagent + synthesizer verification of every load-bearing quote) | ✅ PASS |
-| G2 perf | corpus build O(n); router O(1); 287 kernel_heal-scoped lib tests in 0.12s | ✅ PASS |
-| G3 no-regression | default 190 lib tests + kernel_heal 287 + clippy 0 warnings on `--features kernel_heal --all-targets` | ✅ PASS |
+| G2 perf | corpus build O(n); router O(1); 287 kernel_opt-scoped lib tests in 0.12s | ✅ PASS |
+| G3 no-regression | default 190 lib tests + kernel_opt 287 + clippy 0 warnings on `--features kernel_opt --all-targets` | ✅ PASS |
 | G4 alloc-free | static `KernelRule` entries; zero hot-path allocation (unchanged mechanism) | ✅ PASS |
 | G5 routed demo | 203 flat → 13.5 avg = **15.0× candidate reduction maintained** | ✅ PASS |
 

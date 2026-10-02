@@ -188,10 +188,10 @@ estimates (H13).
 
 ## GOAT
 
-- **G1:** 342 kernel_heal lib tests PASS (339 + 3 new: `batch42_rules_present`,
+- **G1:** 342 kernel_opt lib tests PASS (339 + 3 new: `batch42_rules_present`,
   `batch42_concepts_covered`, `batch42_pseudocode_parses`).
 - **G2:** 201 default lib tests PASS.
-- **G3:** clippy 0 warnings in all 4 states for my files (default, kernel_heal,
+- **G3:** clippy 0 warnings in all 4 states for my files (default, kernel_opt,
   rust_perf, latent_retrieval — the 1 latent_retrieval warning is the sibling's
   pre-existing WIP `heal.rs:415`, untouched).
 - All count-pin sites in sync at 320 (A 70, B 46, D 56; B 45, C 32, E 18, F 10, G 19,

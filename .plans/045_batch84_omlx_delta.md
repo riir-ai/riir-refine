@@ -30,7 +30,7 @@ into a measured-GOAT from our own `status=0x9` work instead of an external-only 
 - [x] T5 — standing syn-parse gate `batch84_pseudocode_parses` + concepts/count pins
       (walked: entries.len 396→398, Plan-003 table D 84/N 22, both sum asserts,
       router header + experts-cover assert, mod.rs headers + history block).
-- [x] T6 — GOAT: G1 parse PASS (batch84 gate); G2 kernel_heal 966/0/1i + default
+- [x] T6 — GOAT: G1 parse PASS (batch84 gate); G2 kernel_opt 966/0/1i + default
       736/0 + all-features 1471/0/14i; G3 clippy 0 in-repo under --all-features
       -D warnings + CI guard ALL LAYERS PASS (5 pre-existing latent breaks repaired
       in a separate commit first); retrieval floors HELD zero decay (kernel

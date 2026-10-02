@@ -122,8 +122,8 @@ Headline items (full list in the issue):
 
 - **G1**: `batch39_pseudocode_parses` — all 9 rules' ref_shape + opt_pattern
   syn-parse. PASS.
-- **G2**: 333 kernel_heal (330 + 3 new) + 201 default lib tests. PASS.
-- **G3**: clippy 0 warnings in all 4 states (kernel_heal/default ×
+- **G2**: 333 kernel_opt (330 + 3 new) + 201 default lib tests. PASS.
+- **G3**: clippy 0 warnings in all 4 states (kernel_opt/default ×
   lib/all-targets). PASS.
 - Orphan `rule_id:` scan: 0/303. All count-pin sites in sync at 303 (the
   count asserts are enforced by the passing test suite).

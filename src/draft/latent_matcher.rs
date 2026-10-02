@@ -301,7 +301,7 @@ impl LatentMatcher {
         #[cfg(not(feature = "rust_perf"))]
         let perf = None;
 
-        #[cfg(feature = "kernel_heal")]
+        #[cfg(feature = "kernel_opt")]
         let kernel = index_domain!(
             kernel,
             DomainId::Kernel,
@@ -318,7 +318,7 @@ impl LatentMatcher {
                     .collect::<Vec<_>>()
             })
         );
-        #[cfg(not(feature = "kernel_heal"))]
+        #[cfg(not(feature = "kernel_opt"))]
         let kernel = None;
 
         #[cfg(feature = "sec")]
@@ -407,7 +407,7 @@ impl LatentMatcher {
             // — reference them so the no-domain build stays warning-clean.
             let _ = (&config, &overlay_for);
             return Err(
-                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal/sec/docker/dist/shader_perf)"
+                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_opt/sec/docker/dist/shader_perf)"
                     .to_string(),
             );
         }

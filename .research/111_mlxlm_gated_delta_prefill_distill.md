@@ -134,11 +134,11 @@ kernels for every other shape.
 
 - G1: `batch95_pseudocode_parses` (cfg(not(kernel_verify)) per B70) — all
   3 ref_shapes + opt_patterns parse; PASS.
-- G2: kernel_heal lib **1235/0** (+1 = the new gate; B92 baseline 1234);
+- G2: kernel_opt lib **1235/0** (+1 = the new gate; B92 baseline 1234);
   default lib **1001/0**; PASS.
 - G3: clippy `--all-targets` 0 warnings in BOTH states (default +
-  kernel_heal); PASS.
-- Retrieval floors: `--features kernel_heal,latent_retrieval --lib
+  kernel_opt); PASS.
+- Retrieval floors: `--features kernel_opt,latent_retrieval --lib
   retrieval` **14/14 HELD** (blended 94.7/96.9/97.7 band unchanged — no
   re-pins); PASS.
 - Count pins walked: tests.rs L69-70 (414 "through Batch 95"), L5362/5364
@@ -151,7 +151,7 @@ kernels for every other shape.
   carried pre-existing drift at HEAD → left unfmt'd per house discipline.
 - Full CI guard: NOT run this cycle (background guard takes >60 min after a
   corpus edit; the three affected states + retrieval floors + count pins are
-  all validated above — the corpus is cfg'd under kernel_heal only and
+  all validated above — the corpus is cfg'd under kernel_opt only and
   those are the states that compile it). Recorded honestly.
 
 ## Snapshot queue state after this batch

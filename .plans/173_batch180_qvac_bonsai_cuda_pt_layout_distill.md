@@ -1,6 +1,6 @@
 # Plan 173 — Batch 180: qvac-fabric Bonsai CUDA PT-layout distill
 
-**Status:** COMPLETE 2026-09-26 ~20:4x +07 (the ~19:5x slot executed; 4 rules + 3 riders, corpus 638→642; all gates green — lib 2317/0 · kernel_heal 2684/0 · +latent 2858/0 · retrieval floors held · clippy -D ×2 · batch180 ×5; score-bench not owed, zero clippy-corpus delta; `.raw` removed at close)
+**Status:** COMPLETE 2026-09-26 ~20:4x +07 (the ~19:5x slot executed; 4 rules + 3 riders, corpus 638→642; all gates green — lib 2317/0 · kernel_opt 2684/0 · +latent 2858/0 · retrieval floors held · clippy -D ×2 · batch180 ×5; score-bench not owed, zero clippy-corpus delta; `.raw` removed at close)
 **Verdict:** Research 211 (YES, A− corpus / LANE INTEL HIGH / kernel_opt)
 **Source pin:** `tetherto/qvac-fabric-llm.cpp @ b9bf3a820731b70e5f05130484bdb1518a66beee` (temp-10549 tip; CUDA arm = merge `a95b44152`, PR #285) — MIT. **T0 re-clones at the pin** (the ephemeral-clone law).
 
@@ -22,7 +22,7 @@
 - [x] **T1** — dedup re-run vs the POST-B179 corpus under BOTH vocabularies per lead (the corpus may have moved — B176 may have landed between staging and the slot); confirm LEAD-2's kinship row is still the swar rule; write the six kinship/adjacency rows (occupancy twin, batch-invariance twin, B20/B116 family, weight-stream 4th proof, cast-at-load class, NMSE/tolerance class).
 - [x] **T2** — author the entries (original minimal fixtures; the SWAR exhaustive-equivalence gate applies to LEAD-2's integer arithmetic — the B59 ported-numeric mandate; LEAD-1's fixture pair demonstrates the layout-equivalence class with the bit-exactness assertion; LEAD-3's fixture pins the util-search boundary static_asserts; LEAD-4's fixture demonstrates fixed-order vs shuffle-order equivalence).
 - [x] **T3** — registration + pins: router table, per-category counts (N/D/E per lead's category at authoring), kernel_opt 638→N at FIVE+ sites (the B178 walk list: router + per-category + legacy test sites + the 638 doc rows), AGENTS.md feature row.
-- [x] **T4** — standing gates: batch180 e2e ×4; lib default; kernel_heal; kernel_heal+latent; retrieval floors; clippy -D ×2 postures; score-bench (expect FLAT — no clippy-corpus delta).
+- [x] **T4** — standing gates: batch180 e2e ×4; lib default; kernel_opt; kernel_opt+latent; retrieval floors; clippy -D ×2 postures; score-bench (expect FLAT — no clippy-corpus delta).
 - [x] **T5** — the lane-intel follow-through: a dated line in the 971 issue (riir-ai) noting the distill consumed the branch's kernel patterns (the watch's orbit-intel escalation; no trigger implication); the FWHT-twin annotation row feeds B176's addendum if armed.
 - [x] **T6** — records: Research 211 → Status RECORD + mine-time appendix; this plan → COMPLETE; queue snapshot row; `.raw/` removed at close.
 - [x] **T7** — commit + push (claim protocol: pre-flight claim commit, origin twin-check — the B177 discipline; RIDER adjudications at slot time on the then-current evidence).

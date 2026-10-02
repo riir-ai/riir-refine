@@ -54,7 +54,7 @@ Terminal grep (the project grep tool silently fails on this multi-root workspace
 ## 5. GOAT
 
 - **G1**: `batch57_pseudocode_parses` 3/3 (both rules' ref_shape + opt_pattern syn-parse).
-- **G2**: kernel_heal lib **766/0/1** + default lib **571/0/0**.
+- **G2**: kernel_opt lib **766/0/1** + default lib **571/0/0**.
 - **G3**: clippy **0** in both states (all `//!`-header backticks pre-emptively applied — zero fixes needed post-write).
 - **Retrieval floors HELD with zero decay**: kernel self-variants **100/100/100**, blended 3-domain **94.6/97.7/97.7** of 130 — identical to the B53/B55/B56 re-pin (fifth consecutive batch at these numbers). 13/13 retrieval tests green (179 s).
 - **Count-baseline note**: B56's recorded 760/568 predate the sibling's `c85ff1c` proposer fixtures (2 anyhow!/bail + 1 self-arg = 3 tests, landed via the `d8e614d` rebase after the B56 GOAT run). True HEAD baseline was 763/571; with batch57's 3 gates: 766/571. The sibling's own record ("571/571 default lib") corroborates.

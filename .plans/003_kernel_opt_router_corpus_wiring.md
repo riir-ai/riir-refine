@@ -1,11 +1,11 @@
 # Plan 003 — kernel_opt Router ↔ Corpus Wiring (Category-Keyed Experts)
 
-**Proposal:** [012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
+**Proposal:** [012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md) §"The
 latent-MoE expert selector" — the placeholder identity-direction router must be
 replaced with corpus-aware experts.
 **Branch:** `develop` (per global rule — no feature branches)
 **Status:** COMPLETE 2026-08-14. All phases landed: Phase 1 (category mapping substrate), Phase 2 (router rewiring), Phase 3 (validation + docs), Phase 4 (commit + push). 13/15 categories reachable; C+O documented as unreachable (5-dim activity vector limitation).
-**Domain:** `kernel_opt` (opt-in `kernel_heal` feature)
+**Domain:** `kernel_opt` (opt-in `kernel_opt` feature)
 
 ## Goal
 
@@ -166,8 +166,8 @@ centroids).
 
 ### Phase 3 — Validation + docs
 
-- [x] 3.1 `cargo clippy --features kernel_heal --all-targets` clean.
-- [x] 3.2 `cargo test --features kernel_heal --lib` — all tests pass (144).
+- [x] 3.1 `cargo clippy --features kernel_opt --all-targets` clean.
+- [x] 3.2 `cargo test --features kernel_opt --lib` — all tests pass (144).
 - [x] 3.3 Update `lib.rs` re-exports (add `KernelCategory` + `KERNEL_CATEGORIES`
       + `build_corpus_categorized`).
 - [x] 3.4 Update `mod.rs` "What ships now" table — router row moves from
@@ -195,7 +195,7 @@ pipeline can consult category-relevant rules first.
 | G3 (no-regression) | All existing tests pass (with updated expectations for the 4→15 expert change) | ✅ PASS (248 tests, 0 failed) |
 | G4 (alloc-free) | `route()` + accessors allocate zero bytes | ✅ PASS (stack arrays only) |
 
-No promotion target — `kernel_heal` stays opt-in (the corpus is pseudocode; the
+No promotion target — `kernel_opt` stays opt-in (the corpus is pseudocode; the
 GOAT gate for promotion is the deferred `kernel_perf_bench` numeric validator,
 blocked on GPU).
 
@@ -206,12 +206,12 @@ blocked on GPU).
 - **Centroid mining** via `CommittedFieldBlend` — needs (signature, speedup)
   tuples the pseudocode corpus doesn't carry.
 - **Heal pipeline wiring** (router actually consulted in the L1 drafter) —
-  needs a concrete consumer that exercises `kernel_heal` end-to-end.
+  needs a concrete consumer that exercises `kernel_opt` end-to-end.
 - **`kernel_perf_bench` numeric validator** — blocked on GPU.
 
 ## References
 
-- [Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
+- [Proposal 012](../../katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md) §"The
   latent-MoE expert selector"
 - `Plan 558` —
   `pick_domain` substrate

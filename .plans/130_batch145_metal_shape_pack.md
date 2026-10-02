@@ -91,7 +91,7 @@ Authoring discipline: `.docs/02_corpus/authoring_discipline.md` (Issue 102 T5).
       trigger + sparse per-slot validity) and renamed
       `kv-split-decode-underfill-per-slot-validity`.
 - [x] T6 — standing gates: `batch145_rules_present` / `batch145_concepts_covered` /
-      `batch145_pseudocode_parses` (3 kernel gates, kernel_heal-gated) +
+      `batch145_pseudocode_parses` (3 kernel gates, kernel_opt-gated) +
       `batch145_mincore_rule_present_and_annotated` (rust_perf) + count pins
       walked: tests.rs (corpus 612→614 ×4 + category table B 63→64 / F 14→15 +
       Batch-144 tail count + comment), router.rs (614), rust_perf tests
@@ -104,10 +104,10 @@ Authoring discipline: `.docs/02_corpus/authoring_discipline.md` (Issue 102 T5).
 - [x] T7 — (quiet window arrived mid-cycle: the seal-game-editor sibling test
       exited, load 10.7→4.0) GOAT: G1 batch gates 4/4 (two phrase-pin casing
       corrections: "SAME (code, scale) operand" + "no-empty-split clamp"); G2
-      kernel_heal lib 1877/0 + default 1531/0; retrieval-precision floors HELD
+      kernel_opt lib 1877/0 + default 1531/0; retrieval-precision floors HELD
       byte-identical (kernel self-variants 100%, blended op-bigram 94.7/96.9,
       clippy top-1 89.6% ≥ 80% bar — no re-pin); G3 clippy 0 on the write-set
-      in default / kernel_heal / all-features (3 PRE-EXISTING
+      in default / kernel_opt / all-features (3 PRE-EXISTING
       `unnecessary_hashes` warnings in orphan_report.rs are the sibling's
       landed `cbb0e40a` — noted, not mine); score-bench FLAT 96.2 row #117 +
       frontier snapshot appended (gen 8). En-route doc-lint lesson: a `+` at

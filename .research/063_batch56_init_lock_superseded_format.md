@@ -51,10 +51,10 @@ Vocabulary-translation greps over the corpus BEFORE proposing (terminal grep —
 ## 4. GOAT
 
 - **G1** syn-parse: `batch56_pseudocode_parses` PASS (both rules, ref + opt).
-- **G2** lib: kernel_heal **760 / 0 / 1** (757 + 3 new gates; 568 default / 0 / 0 — the default count is up from B55's 549 by sibling fixture additions since, not this batch).
+- **G2** lib: kernel_opt **760 / 0 / 1** (757 + 3 new gates; 568 default / 0 / 0 — the default count is up from B55's 549 by sibling fixture additions since, not this batch).
 - **G2-corpus**: `corpus::tests` **166 / 0 / 0** (163 + 3).
-- **G3** clippy: **0** warnings in BOTH default and kernel_heal states (6 `doc_markdown` backtick fixes applied pre-commit — `request_device`/`init_device`/`Q4_K` ×2/`skipped()`/`norms_only()` in the new `//!` header block; the standing `//!`-prose gotcha family).
-- **Retrieval re-measure** (Issue 017 gate, `kernel_heal,latent_retrieval`): **13 / 0 PASS, floors HELD with zero decay** — op-aware clippy@1 89.6, blend 94.6/97.7 — identical to the B53 re-pin that B55 also reproduced.
+- **G3** clippy: **0** warnings in BOTH default and kernel_opt states (6 `doc_markdown` backtick fixes applied pre-commit — `request_device`/`init_device`/`Q4_K` ×2/`skipped()`/`norms_only()` in the new `//!` header block; the standing `//!`-prose gotcha family).
+- **Retrieval re-measure** (Issue 017 gate, `kernel_opt,latent_retrieval`): **13 / 0 PASS, floors HELD with zero decay** — op-aware clippy@1 89.6, blend 94.6/97.7 — identical to the B53 re-pin that B55 also reproduced.
 
 ## 5. Generator + landing notes
 

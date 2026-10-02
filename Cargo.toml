@@ -162,7 +162,7 @@ frontier_miner = ["clippy_lints", "score_bench"]
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
 # (promoted to default-on 2026-08-13 after the perf-bench Pareto validator
-# GOAT gate passed — Bench 013 G1+G5). Phase 3 adds `kernel_heal`.
+# GOAT gate passed — Bench 013 G1+G5). Phase 3 adds `kernel_opt`.
 # `dist` joined default 2026-09-13 (Issue 085 promotion — see its comment).
 clippy_lints = []
 
@@ -197,7 +197,7 @@ rust_perf_bench = ["rust_perf"]
 # Enables `variable_rank_domain_expert` on katgpt-core for the latent-MoE
 # expert router (`pick_domain`, Plan 558). Also gates `dep:regex` for the
 # Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
-kernel_heal = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
+kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 
 # Plan 005 Phase 1: real-file span-level latent retrieval (`--suggest` MVP).
 # Indexes every enabled domain's corpus via riir-rag, routes spans via
@@ -254,12 +254,12 @@ demonstrability_gate = ["latent_retrieval"]
 # Opt-in and measurement-only: no default code path, no retrieval path
 # touched. `latent_retrieval` supplies the 8-D consumer state embedder
 # (`riir_rag::ModellessEmbedder`), which is the arm whose result can feed T4.
-# `kernel_heal` is in the set for the corpus, not the healer: it is what gates
+# `kernel_opt` is in the set for the corpus, not the healer: it is what gates
 # `domains::kernel_opt`, whose rules over their DECLARED categories are the
 # one arm whose role is not derived from the span text (Issue 062 T5b). Listed
 # rather than cfg'd away in the test, because an arm that silently disappears
 # on a feature is the vacuous-instrument failure this bench exists to avoid.
-tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_heal"]
+tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_opt"]
 
 # Issue 092 T1: cross-domain rule-corpus alignment PoC (GW on rule-similarity
 # spaces). Enables katgpt-core's `gw_alignment` primitive (Plan 594, opt-in)
@@ -449,8 +449,8 @@ bonsai_retrieval = ["latent_retrieval", "riir-rag/bonsai_embedder"]
 # Kernel rule resolution verification via CubeCL compile (Phase 3).
 # **STUB** — currently delegates to the shared RustAnalyzerPruner (syntax
 # check only). Full CubeCL compile + numeric compare vs reference deferred
-# (Proposal 012 §Phase 0). Implies `kernel_heal`.
-kernel_verify = ["kernel_heal"]
+# (Proposal 012 §Phase 0). Implies `kernel_opt`.
+kernel_verify = ["kernel_opt"]
 
 # Lint resolution verification via real `cargo clippy` re-run (Phase 3).
 # Opt-in because it's slow (seconds), requires cargo+clippy on PATH, and
@@ -509,7 +509,7 @@ sec = []
 # committed lock unsatisfiable), so 14 bounded rules ship, not 15.
 # ZERO new dependencies: the
 # stanza scanner is a hand-written line scanner (no `syn`, and no `regex`
-# either — the WGSL scanner's regex dep stays behind `kernel_heal`).
+# either — the WGSL scanner's regex dep stays behind `kernel_opt`).
 #
 # The measured delta: hadolint (71 DL rules) and `docker build --check`
 # (21 checks) are both DETECTION-ONLY, verified live — fixing is
@@ -734,17 +734,17 @@ required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
 # router → narrowed candidates → drafter → validator + thermal tier.
 # Closes the Plan 003/004 gap (router was corpus-wired but never called in
 # runnable code). Run with:
-#   cargo run --example kernel_heal_demo --features kernel_heal
+#   cargo run --example kernel_opt_demo --features kernel_opt
 [[example]]
-name = "kernel_heal_demo"
-required-features = ["kernel_heal"]
+name = "kernel_opt_demo"
+required-features = ["kernel_opt"]
 
 # Issue 025 T2: WGSL scanner calibration smoke (default = the riir-gpu
 # kernels dir). Run with:
-#   cargo run --example wgsl_scan_smoke --features kernel_heal -- [dir]
+#   cargo run --example wgsl_scan_smoke --features kernel_opt -- [dir]
 [[example]]
 name = "wgsl_scan_smoke"
-required-features = ["kernel_heal"]
+required-features = ["kernel_opt"]
 
 # Issue 035 T2: the G-floor measurement — every arm scored against
 # `cargo fix --broken-code` on the known-inverse mutation corpus.
@@ -769,10 +769,10 @@ required-features = ["rustc_errors"]
 
 # Issue 025 T6: the WGSL/cube git-history mining harness (default+experimental
 # patterns; the diff adjudicates). Same gating as wgsl_scan_smoke — the
-# scanner lives behind kernel_heal.
+# scanner lives behind kernel_opt.
 [[example]]
 name = "wgsl_mine"
-required-features = ["kernel_heal"]
+required-features = ["kernel_opt"]
 
 # Issue 066 T3: the ONE-SHOT store repair for the poisoned docker corpus rows
 # (first-hand source-walk stamps carrying the old plumbing count 2 against
@@ -844,11 +844,11 @@ required-features = ["clippy_lints"]
 
 # Issue 098 T1+T2: rule-corpus Cross-OOO axis driver — the absorption/
 # splitting audit over the pooled real oracle-labeled clippy spans + the
-# per-domain K>=2 population scan. kernel_heal/sec are for the population
+# per-domain K>=2 population scan. kernel_opt/sec are for the population
 # tables only (their corpora are 1-entry-per-rule; the scan proves it).
 [[example]]
 name = "cross_ooo_axis"
-required-features = ["score_bench", "kernel_heal", "sec", "docker"]
+required-features = ["score_bench", "kernel_opt", "sec", "docker"]
 
 # Issue 094: trajectory covariability-class mining POC — does the sliceTCA
 # drift-class share (leave-one-rule-out ΔEVR_time over X[rule, day,
@@ -1010,7 +1010,7 @@ required-features = ["latent_retrieval"]
 
 # Issue 64 Phase 2 — the pre-registered modelability ↔ top-1 Spearman sweep
 # (`tests/modelability_sweep.rs`). Domain points need `clippy_lints` +
-# `rust_perf`; the kernel points cfg-gate behind `kernel_heal` (run with it
+# `rust_perf`; the kernel points cfg-gate behind `kernel_opt` (run with it
 # for the full 12-point surface, without for 9).
 [[test]]
 name = "modelability_sweep"
@@ -1317,9 +1317,9 @@ required-features = ["demonstrability_gate"]
 # Issue 134 T3 — the ρ-prediction depth sweep (gain-from-depth vs the T1
 # demonstrability constant, Spearman + the ≥5-domain power floor). A
 # measurement harness: the verdict today is the standing REFUSAL (the
-# labeled-fixture population is 2 domains, 3 with kernel_heal — below the
+# labeled-fixture population is 2 domains, 3 with kernel_opt — below the
 # floor); the per-domain sweep data accumulates as thin domains gain
-# fixture sets. kernel_heal rides optionally (it adds the third domain).
+# fixture sets. kernel_opt rides optionally (it adds the third domain).
 [[example]]
 name = "demonstrability_t3_sweep"
 required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
@@ -1395,11 +1395,11 @@ required-features = ["clippy_verify", "latent_retrieval"]
 
 [[test]]
 name = "wgsl_mine_pairs"
-required-features = ["kernel_heal"]
+required-features = ["kernel_opt"]
 
 [[test]]
 name = "wgsl_t5_control"
-required-features = ["kernel_heal"]
+required-features = ["kernel_opt"]
 
 # Issue 086: a whole-file `#![cfg(feature = "dist")]` target with no row is
 # a silent-now green zero — the row makes `cargo test --features dist`

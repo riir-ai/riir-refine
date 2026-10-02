@@ -19,8 +19,8 @@
 //!
 //! Run with:
 //! ```sh
-//! cargo run --example kernel_heal_demo --features kernel_heal
-//! cargo run --example kernel_heal_demo --features kernel_verify  # with CubeCL compile
+//! cargo run --example kernel_opt_demo --features kernel_opt
+//! cargo run --example kernel_opt_demo --features kernel_verify  # with CubeCL compile
 //! ```
 //!
 //! ## What this demonstrates
@@ -215,7 +215,7 @@ fn main() {
                 let verdict = KernelOptDomain::validate(rule_id, &f.code);
 
                 // The verdict type differs by feature:
-                // - kernel_heal (default): KernelVerdict { parses }
+                // - kernel_opt (default): KernelVerdict { parses }
                 // - kernel_verify: KernelVerifyResult { compiles, ran, error }
                 #[cfg(not(feature = "kernel_verify"))]
                 let is_valid = verdict.parses;

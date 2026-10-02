@@ -31,7 +31,7 @@
 - [x] T10 router.rs expert-coverage pin 689 → 703 (honest label) + the per-category count pins + the two corpus-count pins (seed_corpus_has_expected_entry_count + batch116_rules_present).
 - [x] T11 Gates ALL GREEN: kernel slice 389/0; lib default 2398/0; clippy -D ×3 postures clean (1 doc_markdown backtick en route); retrieval floors 21/21 HELD (kernel 100% ×3, 235.41s).
 - [x] T12 Research note `.research/225_mlxfast_delta_batch193_conversion.md` (STATUS: RECORD; anti-lead ledger; coin-flip + instance/extension reasons; 4 staging-claim corrections).
-- [x] T13 AGENTS.md kernel_opt count bumped 689 → 703 + the Batch 193 narrative + the kernel_heal feature line 684 → 703.
+- [x] T13 AGENTS.md kernel_opt count bumped 689 → 703 + the Batch 193 narrative + the kernel_opt feature line 684 → 703.
 - [x] T14 `.distill/001` queue row updated (Batch 193 CONVERTED + rider re-armed unchanged).
 - [x] T15 Commit + push.
 

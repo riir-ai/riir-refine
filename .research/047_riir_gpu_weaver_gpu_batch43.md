@@ -160,8 +160,8 @@ the "behavior-identical to CPU" doc overclaim.
 
 - **G1** (syn-parse): `batch43_pseudocode_parses` PASS — all 5 rules' ref_shape +
   opt_pattern parse.
-- **G2**: 345 kernel_heal (342 + 3 new) + 201 default tests PASS.
-- **G3**: clippy 0 warnings in all 4 states (default / kernel_heal / rust_perf /
+- **G2**: 345 kernel_opt (342 + 3 new) + 201 default tests PASS.
+- **G3**: clippy 0 warnings in all 4 states (default / kernel_opt / rust_perf /
   latent_retrieval; the single latent_retrieval warning = the sibling's pre-existing
   WIP `heal.rs:415`, untouched).
 - Count pins: all sites in sync at 325 (A 73, B 47, D 57; C 32, E 18, F 10, G 19, H 14,

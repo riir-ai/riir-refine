@@ -76,7 +76,7 @@ repo with zero coverage).
 
 - **19th count-pin site**: the Batch 116 test carried its OWN corpus-count pin
   (`batch116_rules_present` asserting 539) — missed by the pin walk until the
-  kernel_heal lib run red it. The count-pin-site inventory keeps growing; grep
+  kernel_opt lib run red it. The count-pin-site inventory keeps growing; grep
   `entries.len()` across the whole tests file, not just the named pins.
 - **B22 full-string-pin lesson re-proven**: `batch23_attention_cubecl_concepts_covered`
   pins the ENTIRE concept string of `hardcoded-fast-path-jit-specialization` (all
@@ -93,10 +93,10 @@ repo with zero coverage).
 - batch117 gates 3/3 (rules_present / concepts_covered / pseudocode_parses — the
   parse gate forced 3 entries' pseudocode to Rust-shaped rewrites: no `kernel fn`
   Metal syntax, no pointer arithmetic, no `...` varargs)
-- kernel_heal lib **1389/0**; default lib **1086/0** unchanged; combined
-  kernel_heal+latent_retrieval **1504/0/2i** with the retrieval-precision floor
+- kernel_opt lib **1389/0**; default lib **1086/0** unchanged; combined
+  kernel_opt+latent_retrieval **1504/0/2i** with the retrieval-precision floor
   gate PASSED explicitly (15.8s run)
-- clippy 0: kernel_heal lib + kernel_heal `--all-targets` + default `--all-targets`
+- clippy 0: kernel_opt lib + kernel_opt `--all-targets` + default `--all-targets`
   (one doc-markdown backtick fix en route — `DSpark` in the new `//!` header, the
   B37 lesson's 14th strike)
 - score-bench run #45 FLAT (heal 96.2 / created 1.9 / safety 100 / decline 100)

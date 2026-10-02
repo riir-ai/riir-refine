@@ -201,7 +201,7 @@ pin (TabbyAPI-primary, vLLM to plugin dir; no measurement content in the
 subjects) — the pin proved load-bearing exactly as the verdict warned.
 
 **Gates:** batch177 presence/concepts/parses ×3 (kernel) + presence+annotation
-(rust_perf) green; lib default 2286/0; kernel_heal 2645/0; kernel_heal+latent
+(rust_perf) green; lib default 2286/0; kernel_opt 2645/0; kernel_opt+latent
 2818/0; retrieval floors 21/21 (209 s); clippy `-D warnings` clean both
 postures (4 doc_markdown backticks healed mechanically via `cargo heal`, 4
 edits compile-gated); score-bench row #165 heal 0.96363634 / created 0.0182

@@ -9,7 +9,7 @@
 - [x] T2 Adjudicate the verdict per the distill law — YES (solo pack, the B176 shape); category O (the IR-strength-reduction family's first RUNTIME-divisor member); NotBenchable-by-domain with the PTX-assertion verification discipline
 - [x] T3 Author `entries_gpu_58.rs` (1 rule: `clamp-runtime-divisor-for-lsr-address-reduction`) + module tests + the batch190 parse gate (2 tests: parse + the unsigned-only contract gate)
 - [x] T4 Corpus pins walked: 684 → 685 (tests.rs ×4 + router.rs:472 + the category-table comment + the O slice) + the C-comment repair 49→50 (stale since B186, honest label)
-- [x] T5 GOAT gates: kernel_heal slice 2768/0; lib default 2385/0; clippy `-D` ×3 postures clean (1 doc_markdown backtick fix); retrieval floors 21/21 HELD (201.9s); score-bench + freeze NOT owed (zero clippy-corpus delta, P30)
+- [x] T5 GOAT gates: kernel_opt slice 2768/0; lib default 2385/0; clippy `-D` ×3 postures clean (1 doc_markdown backtick fix); retrieval floors 21/21 HELD (201.9s); score-bench + freeze NOT owed (zero clippy-corpus delta, P30)
 - [x] T6 Research note `.research/222_cubecl_umax_divisor_lsr_distill.md` (RECORD) + `.research/.highwater` 221→222
 - [x] T7 Docs: AGENTS.md kernel_opt 684→685 + batch row; `.docs/11_domains/kernel_opt.md` seed row + B190 pack; `.distill/001` queue row (same commit)
 - [x] T8 Global binary rebuild at the release set + `--corpus-stats` verify (kernel_opt 685) + symlink target refresh

@@ -74,7 +74,7 @@ Category deltas: D 71→73, B 52→53. Corpus 367→370.
 - [x] T5 GOAT G1: syn-parse gate green (needed the `not(kernel_verify)`
       cfg every prior `*_pseudocode_parses` gate carries — caught by CI
       Layer 5a, fixed in-batch)
-- [x] T6 GOAT G2: lib tests pass (kernel_heal 864/0/1i + default 657/0 +
+- [x] T6 GOAT G2: lib tests pass (kernel_opt 864/0/1i + default 657/0 +
       all-features 1115/0/13i)
 - [x] T7 GOAT G3: CI guard ALL LAYERS PASS + clippy 0 both states. Drive-by
       (pre-existing at HEAD, proven): fixed the sec landing's Layer-5a red

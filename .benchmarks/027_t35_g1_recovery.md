@@ -123,7 +123,7 @@ hook. **Zero substrate code reimplemented.**
 **Determinism:** bit-identical across 3 separate processes.
 
 **All three domains, kernel-inclusive state** (`--features
-latent_retrieval,kernel_heal`, ~52 s):
+latent_retrieval,kernel_opt`, ~52 s):
 
 | domain | labeled | top-1 | top-3 | top-5 |
 |---|---:|---:|---:|---:|

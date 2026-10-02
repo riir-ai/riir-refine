@@ -33,7 +33,7 @@
 //! domain set (Plan 001 + Plans 018/030/019/085):
 //! - **`clippy_lints`** (default-on) — `clippy::*` lint healing (the original domain)
 //! - **`rust_perf`** (default-on, Phase 2) — `rust-optimize` perf healing (promoted 2026-08-13 after Bench 013 GOAT)
-//! - **`kernel_heal`** (opt-in, Phase 3) — GPU kernel optimization healing (absorbs `Proposal 012`; 4090 `LoRA` deferred)
+//! - **`kernel_opt`** (opt-in, Phase 3) — GPU kernel optimization healing (absorbs `Proposal 012`; 4090 `LoRA` deferred)
 //! - **`sec`** (opt-in, Plan 018) — security-pattern bounded fixes
 //! - **`docker`** (default-on since 2026-08-28, Plan 030) — Dockerfile healing, the first no-`syn` scanner
 //! - **`rustc_errors`** (default-on since 2026-08-29, Plan 019) — `--fix-compile` compile-error repair (driver-shaped, inert until invoked)
@@ -577,20 +577,20 @@ pub use domains::rust_perf::bench::{
     SizeOutcome, SizeResult,
 };
 
-// ── kernel_opt domain re-exports (behind `kernel_heal` feature, opt-in) ────
-#[cfg(feature = "kernel_heal")]
+// ── kernel_opt domain re-exports (behind `kernel_opt` feature, opt-in) ────
+#[cfg(feature = "kernel_opt")]
 pub use domains::kernel_opt::{KernelCategory, KernelOptDomain, KernelRule, KernelVerdict};
 
-/// Back-compat: `build_kernel_seed_corpus` (behind `kernel_heal`).
-#[cfg(feature = "kernel_heal")]
+/// Back-compat: `build_kernel_seed_corpus` (behind `kernel_opt`).
+#[cfg(feature = "kernel_opt")]
 pub use domains::kernel_opt::corpus::build_kernel_seed_corpus;
 
 /// `kernel_opt` corpus category wiring (Plan 003) — category → `rule_ids` mapping + grouped corpus builder.
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 pub use domains::kernel_opt::corpus::{build_corpus_categorized, KERNEL_CATEGORIES};
 
-/// `kernel_opt` expert router (behind `kernel_heal`).
-#[cfg(feature = "kernel_heal")]
+/// `kernel_opt` expert router (behind `kernel_opt`).
+#[cfg(feature = "kernel_opt")]
 pub use domains::kernel_opt::router::{
     build_activity, KernelExpertRouter, ACTIVITY_DIM, AXIS_DTYPE, AXIS_HW, AXIS_IS_ATTENTION,
     AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM, AXIS_K, AXIS_M, AXIS_N, KERNEL_EXPERT_NAMES,
@@ -638,8 +638,8 @@ pub use domains::shader_perf::{
 #[cfg(feature = "shader_perf")]
 pub use domains::shader_perf::corpus::build_shader_seed_corpus;
 
-/// `kernel_opt` thermal router (behind `kernel_heal`).
-#[cfg(feature = "kernel_heal")]
+/// `kernel_opt` thermal router (behind `kernel_opt`).
+#[cfg(feature = "kernel_opt")]
 pub use domains::kernel_opt::thermal::{KernelThermalRouter, ThermalTier};
 
 /// `kernel_opt` verifier (behind `kernel_verify`).

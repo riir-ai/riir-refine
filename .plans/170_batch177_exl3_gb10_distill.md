@@ -65,7 +65,7 @@ domain — the B109/Batch-136 precedent, an annotation and not a demotion).
   quantity to ratio) + the machine-checkable surrogate (the A/A disagreement
   rate; the harness-class disclosure), citing B109/Batch-136.
 - [x] **T7 — Standing gates.** ALL GREEN — batch177 gates ×4; lib default
-  2286/0; kernel_heal 2645/0; kernel_heal+latent 2818/0; retrieval floors
+  2286/0; kernel_opt 2645/0; kernel_opt+latent 2818/0; retrieval floors
   21/21; clippy `-D warnings` clean both postures (4 doc_markdown healed
   mechanically); score-bench #165 heal 0.96363634 FLAT (clippy corpus
   untouched — no freeze regen owed).

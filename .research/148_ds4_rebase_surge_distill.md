@@ -1,6 +1,6 @@
 # Research 148 — Batch 125: the ds4 PR rebase-surge distill
 
-**Status:** RECORD 2026-09-07 — Batch 125 landed: kernel_opt +4 (555 → 559: A 117→118, D 128→129, E 45→46, N 37→38) + rust_perf io +1 (111 → 112, io 15 → 16), all NotBenchable-annotated where honest. Gates: batch125 4/4 FIRST-SHOT + lib default 1167/0 + kernel_heal 1483/0/1i + kernel_heal+latent 1600/0/2i + retrieval re-run kernel 100/100/100 blended 94.7/96.9/97.7 (byte-identical to B118–B124) + clippy 0 ×3 + score-bench #75 FLAT 96.2/1.9/100/100. Source `ivanfioravanti/ds4-metal` @ `ffd85d42` (MIT; fresh clone staged by Plan 106 T0, HEAD re-verified == ls-remote, quotes re-verified at the pin, clone removed at landing). Plan 106 / this note.
+**Status:** RECORD 2026-09-07 — Batch 125 landed: kernel_opt +4 (555 → 559: A 117→118, D 128→129, E 45→46, N 37→38) + rust_perf io +1 (111 → 112, io 15 → 16), all NotBenchable-annotated where honest. Gates: batch125 4/4 FIRST-SHOT + lib default 1167/0 + kernel_opt 1483/0/1i + kernel_opt+latent 1600/0/2i + retrieval re-run kernel 100/100/100 blended 94.7/96.9/97.7 (byte-identical to B118–B124) + clippy 0 ×3 + score-bench #75 FLAT 96.2/1.9/100/100. Source `ivanfioravanti/ds4-metal` @ `ffd85d42` (MIT; fresh clone staged by Plan 106 T0, HEAD re-verified == ls-remote, quotes re-verified at the pin, clone removed at landing). Plan 106 / this note.
 
 ## The trigger was SMALL — the rebase-rewrite trap (the batch's own lesson)
 
@@ -38,5 +38,5 @@ None new — the DSpark EOS-early-stop + ROCm gfx1151 rows are upstream-side (B1
 ## Provenance
 
 - Clone: `.raw/ds4-metal` @ `ffd85d426313ace6dae805e9f2fb4424d5b427fd` (branch `qwen3.8-flash-next`, HEAD == ls-remote at stage time 2026-09-07 09:24 +07; LICENSE MIT verified; quotes verified via sed at the pin by both lanes + coordinator spot-check; clone removed at landing).
-- Gates: batch125_rules_present + batch125_concepts_covered + batch125_pseudocode_parses (fn-wrapped snippets, the B122/123 lesson) + rust_perf batch125_rule_present_and_parses — 4/4 FIRST-SHOT; lib 1167/0 default, 1483/0/1i kernel_heal, 1600/0/2i kernel_heal+latent; retrieval 100/100/100 + 94.7/96.9/97.7 byte-identical; clippy 0 default/kernel_heal/kernel_heal+latent; score-bench #75 FLAT 96.2/1.9/100/100.
+- Gates: batch125_rules_present + batch125_concepts_covered + batch125_pseudocode_parses (fn-wrapped snippets, the B122/123 lesson) + rust_perf batch125_rule_present_and_parses — 4/4 FIRST-SHOT; lib 1167/0 default, 1483/0/1i kernel_opt, 1600/0/2i kernel_opt+latent; retrieval 100/100/100 + 94.7/96.9/97.7 byte-identical; clippy 0 default/kernel_opt/kernel_opt+latent; score-bench #75 FLAT 96.2/1.9/100/100.
 - Count pins walked: tests.rs totals 555→559 ×2 + per-category (A/D/E/N +1 each) + the batch116-era 555 pin + router.rs expert total 555→559 + rust_perf total 111→112 + annotated 54→55 (×2 sites) + mod.rs category lists + the corpus.rs doc count line (112/io 16/25 NotBenchable).

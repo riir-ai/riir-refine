@@ -15,7 +15,7 @@
 - DFT block: k=1..=8 coefficient pairs (re+im, 16 dims), twiddle tables precomputed at construction (route-time is pure FMAs), L2-normalized. Optional structural-4 suffix (the 8-D embedding's dims 4-7, BLAKE3 dims dropped).
 - **Ablation reference:** `TfCosine` — full-128 TF cosine, no DFT compression. Upper-bounds any projection of the lexical signal.
 
-## Measurement (the one-command harness: `cargo test --features latent_retrieval[,kernel_heal] --lib router_spectral_poc -- --nocapture`)
+## Measurement (the one-command harness: `cargo test --features latent_retrieval[,kernel_opt] --lib router_spectral_poc -- --nocapture`)
 
 ### 2-domain state (clippy + perf, 88 labeled spans)
 

@@ -72,11 +72,11 @@ from build orchestration. No collisions; the three rules are new axes
 - lib default 1159/0 (was 1156; +3 gates; count pins walked: total 102→105,
   annotated 45→48 ×2, serde 45→48, io 6→9, header member-list +3, benchable
   ratio line 87/102→87/105, doc line 101→105)
-- kernel_heal+latent lib 1589/0/2i (floor 1574 held)
+- kernel_opt+latent lib 1589/0/2i (floor 1574 held)
 - retrieval re-run: kernel 100/100/100, blended 94.7/96.9/97.7 of 131 —
   byte-identical to Batches 118/119
 - score-bench FLAT 96.2/1.9/100 (row appended)
-- clippy `-D warnings` clean in default + kernel_heal lib states
+- clippy `-D warnings` clean in default + kernel_opt lib states
 - Isolated `CARGO_TARGET_DIR=/tmp/b121_target` (sibling session gating in
   riir-chain concurrently); removed at landing.
 

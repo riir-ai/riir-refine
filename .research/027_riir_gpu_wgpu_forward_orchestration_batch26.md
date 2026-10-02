@@ -98,7 +98,7 @@ Distinct from `no-blocking-sync-in-async-pipeline` (D — don't block the HOST t
 | Gate | Criterion | Status |
 |---|---|---|
 | G1 correctness | 8 rules valid pseudocode; 0 duplicates (11 substrate-first checks with explicit distinct-from/drop notes) | ✅ PASS |
-| G2 perf | corpus build O(n); router O(1); 354 lib tests in 0.39s (kernel_heal-scoped 237 in 0.09s) | ✅ PASS |
+| G2 perf | corpus build O(n); router O(1); 354 lib tests in 0.39s (kernel_opt-scoped 237 in 0.09s) | ✅ PASS |
 | G3 no-regression | full CI guard all 5 layers PASS on the committed state + batch (via isolated /tmp worktree — the sibling's in-flight `edit_emitter.rs` WIP breaks the working tree, not this batch) | ✅ PASS |
 | G4 alloc-free | static `KernelRule` entries; zero hot-path allocation (unchanged mechanism) | ✅ PASS |
 | G5 routed demo | 177 flat → 11.8 avg = **15.0× candidate reduction maintained** | ✅ PASS |

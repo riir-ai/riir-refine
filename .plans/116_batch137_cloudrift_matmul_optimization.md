@@ -134,8 +134,8 @@ explicitly either way.
       Blog-vs-repo divergences recorded in-rule (the washes: article
       measured, repo encodes as doctrine).
 - [x] T4 — (DONE 2026-09-09, `4c2e94a` + `b638e71`) GOAT: G1 batch137 gates 3/3
-      by name; G2 lib default 1187/0 + kernel_heal 1518/0/1i +
-      kernel_heal+latent 1635/0/2i; G3 clippy 0 ×3 all-targets + retrieval
+      by name; G2 lib default 1187/0 + kernel_opt 1518/0/1i +
+      kernel_opt+latent 1635/0/2i; G3 clippy 0 ×3 all-targets + retrieval
       floors HELD byte-identical (kernel 100/100/100, blended 94.7/96.9/97.7) +
       router annotation re-pinned 88→86/131 per the Issue 020 contract (measured
       91/131 = 69.5%, was 93/131 — the dense B137 concept vocabulary attracts 2

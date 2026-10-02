@@ -22,5 +22,5 @@
 - [x] `.docs/11_domains/rust_perf.md` count + Batch-141 paragraph + 67-of-124; `.docs/11_domains/README.md` index (repaired a pre-existing 120 stale)
 - [x] Research 162 Status: DISTILLED → RECORD (cite plan + batch)
 - [x] Queue snapshot live-state: Part-B queued → LANDED + "Last landed: Batch 141" record
-- [x] Gates: rust_perf lib 1193/0 + default 1193/0 + kernel_heal 1530/0/1i + kernel_heal+latent 1652/0/2i (retrieval + router floors held) + clippy 0 ×2 + score-bench #90 FLAT 96.2/1.9 + corpus-stats 124
+- [x] Gates: rust_perf lib 1193/0 + default 1193/0 + kernel_opt 1530/0/1i + kernel_opt+latent 1652/0/2i (retrieval + router floors held) + clippy 0 ×2 + score-bench #90 FLAT 96.2/1.9 + corpus-stats 124
 - [x] `rm -rf .raw/ds4b` at landing; ONE commit; push

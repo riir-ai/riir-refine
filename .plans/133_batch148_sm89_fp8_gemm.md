@@ -55,9 +55,9 @@
   three assert sites (+ comment/message updates through Batch 148) + KERNEL_CATEGORIES
   E +1 / B +1 + per-category count test (E 54→55, B 64→65, sum 616 ×2) +
   `mod entries_gpu_43` wiring in corpus/mod.rs.
-- [x] T4 — GOAT: G1 parse gate; G2 lib tests at default + kernel_heal + the
-  kernel_heal,latent_retrieval retrieval floors re-measure; G3 clippy 0 on the write-set
-  (default + kernel_heal feature states). kernel_verify is a STUB — these land as
+- [x] T4 — GOAT: G1 parse gate; G2 lib tests at default + kernel_opt + the
+  kernel_opt,latent_retrieval retrieval floors re-measure; G3 clippy 0 on the write-set
+  (default + kernel_opt feature states). kernel_verify is a STUB — these land as
   measured-source records (Batch-129/144/145 convention; the numbers ARE the decision
   content, Bench 933 + Research 174 the G-evidence).
 - [x] T5 — Docs: Research 174 status DISTILLED → RECORD (consumed by Batch 148, admission
@@ -85,9 +85,9 @@
 ## GOAT gate
 
 - G1: both new rules' ref_shape + opt_pattern parse (syn gate) + present in corpus.
-- G2: `cargo test --lib` default + `--features kernel_heal` + the retrieval floor re-run
-  (`--features kernel_heal,latent_retrieval --lib retrieval`): kernel self-variants 100%,
+- G2: `cargo test --lib` default + `--features kernel_opt` + the retrieval floor re-run
+  (`--features kernel_opt,latent_retrieval --lib retrieval`): kernel self-variants 100%,
   blended floors hold (adding 2 entries grows the population; floors are minimums).
-- G3: clippy 0 on the write-set at default + kernel_heal feature states.
+- G3: clippy 0 on the write-set at default + kernel_opt feature states.
 - G4 (benchability): N/A-in-repo by design (kernel_verify STUB; Batch-129/145 convention —
   measured-source records; the 4090 re-grade IS the bench evidence, read-only cited).

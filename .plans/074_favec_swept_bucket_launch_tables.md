@@ -41,7 +41,7 @@ dispatch" (2026-09-02 late, league opponent watch #5 — upstream `8963a9bdc` ad
       assert; KERNEL_CATEGORIES K member list + the "(5 rules)" header comment; tests.rs
       `kernel_categories_cover_all_corpus_rules_exhaustively` needs no edit (derived); AGENTS.md
       kernel_opt line + rust_perf/clippy/sec/docker lines unchanged; snapshot corpus counts line.
-- [x] T7 GOAT standing: kernel_heal lib + default lib + retrieval floors + clippy both states
+- [x] T7 GOAT standing: kernel_opt lib + default lib + retrieval floors + clippy both states
       (the B95 honest-skip shape for the full CI guard if the box is loaded — each affected state
       validated individually + recorded).
 - [x] T8 research note status → RECORD; AGENTS.md Batch 104 entry; snapshot queue update

@@ -155,7 +155,7 @@ Based on batch 1's yield (19 new rules from ~8 kernels read in depth):
 
 This batch is a **corpus expansion** — no new substrate, no new trait, no new feature
 gate. The GOAT is:
-- **G1 (compile):** the corpus builds with `--features kernel_heal`.
+- **G1 (compile):** the corpus builds with `--features kernel_opt`.
 - **G3 (no-regression):** existing kernel_opt tests pass with the expanded corpus.
 - No G2/G4/G5 — this is content, not a primitive. The perf gate is the bench framework
   (`rust_perf_bench` analog), which lands when the corpus is large enough to warrant a
@@ -174,6 +174,6 @@ gate. The GOAT is:
 ## References
 
 1. **popcorn** — `/Users/katopz/git/popcorn` (local fork of `tilde-research/popcorn`)
-2. **Proposal 012** — `katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md` §Phase 0
+2. **Proposal 012** — `katgpt-rs/.proposals/012_kernel_opt_thermal_moe.md` §Phase 0
 3. **Plan 001** — `riir-clippy/.plans/001_multi_domain_framework_refactor.md` Phase 3
 4. **Proposal 001** — `riir-clippy/.proposals/001_multi_domain_modelless_code_healer.md`

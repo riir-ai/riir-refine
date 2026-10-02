@@ -128,7 +128,7 @@ shape. SILENT: ref-bind on owned scrutinee; match-ergonomics form.
       worktree run's stale-copy lesson: verify the copied files BY
       CONTENT (grep), not by exit code — 0-atom tables landed once from
       an unverified copy]**
-- [x] T8 G2: lib default + kernel_heal floors green **2257/0 + 2613/0**
+- [x] T8 G2: lib default + kernel_opt floors green **2257/0 + 2613/0**
 - [x] T9 retrieval gate floors held **18/18, floors HELD**
 - [x] T10 G3: clippy -D clean at both feature postures (healer first for
       mechanical findings) **CLEAN ×2 [healer took 1 doc_markdown in

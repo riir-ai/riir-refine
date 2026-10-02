@@ -92,7 +92,7 @@ lane). The PERF-SEARCH intake row staged at `cf9e44ae` (queue item 11).
   "Wall-time" is capitalized in the quote), `batch143_log_gate_computation_parity`
   (the four-arm G1 above), `batch143_pareto_benches` (the measured verdict).
 - lib counts: default **1192/0**; `rust_perf_bench` **1210/0** (2 ignored =
-  the B135+B143 Pareto runners); `dist` **1212/0**; `kernel_heal,latent_retrieval`
+  the B135+B143 Pareto runners); `dist` **1212/0**; `kernel_opt,latent_retrieval`
   **1654/0**; `--all-features` **2241/0**.
 - Count pins walked (7 sites — the corpus now has MORE count sites than
   B141's ledger named): entries.len 124→126; with_spec 90→91; without_spec

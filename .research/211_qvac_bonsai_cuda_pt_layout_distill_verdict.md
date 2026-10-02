@@ -1,6 +1,6 @@
 # Research 211 — qvac-fabric Bonsai CUDA backend (QVAC-25280) distill verdict
 
-**Status:** RECORD — Batch 180 LANDED 2026-09-26 (~19:5x slot, +4 rules / +3 riders, corpus 638→642; gates lib 2317/0 · kernel_heal 2684/0 · +latent 2858/0 · retrieval floors held · clippy -D ×2 clean; the plan-time re-clone re-verified every quote verbatim — see the mine-time appendix below)
+**Status:** RECORD — Batch 180 LANDED 2026-09-26 (~19:5x slot, +4 rules / +3 riders, corpus 638→642; gates lib 2317/0 · kernel_opt 2684/0 · +latent 2858/0 · retrieval floors held · clippy -D ×2 clean; the plan-time re-clone re-verified every quote verbatim — see the mine-time appendix below)
 **Date:** 2026-09-25 (~20:1x–21:0x +07, 4090 box — the post-envelope B180 pre-stage)
 **Source:** `tetherto/qvac-fabric-llm.cpp` @ `b9bf3a820731b70e5f05130484bdb1518a66beee` (branch `temp-10549` tip = the #286 Vulkan merge; MIT — "Copyright (c) 2023-2026 The ggml authors"; shallow clone `.raw/qvac-bonsai`, **removed at verdict close**). The CUDA arm's merge commit: `a95b44152` (PR #285, 2026-09-25T10:31Z, +2102/−123 across 27 files).
 
@@ -102,7 +102,7 @@ beyond the plan's list (the exhaustive isum identity test caught a real
 sign-extension subtlety: the biased form consumes SIGNED weight lanes —
 the vsub4 wraps 0→0xFF = −1 as i8) + the util-search boundary port. T4
 gates: batch180 ×5 green; lib default 2317/0 (+28 vs B178's 2289 — my 5 +
-the sibling's Issue-135/OOD additions); kernel_heal 2684/0; kernel_heal+
+the sibling's Issue-135/OOD additions); kernel_opt 2684/0; kernel_opt+
 latent 2858/0; retrieval floors held (the regression gate green with the 4
 new rules in the corpus); clippy -D clean at both postures (3 doc_markdown
 healed in-passing, compile-gated); score-bench NOT owed (zero clippy-corpus

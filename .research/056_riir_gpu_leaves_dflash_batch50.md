@@ -143,7 +143,7 @@ on this basis — it would have put a broken mechanism in the corpus as wisdom
 No corpus files were touched (corpus stays 344; no count-pin sites to update).
 The standing gates were spot-run to confirm the tree is green post-Batch-49
 (no changes since `80f0b9e`, so this is a confirmation, not a re-gate):
-default + kernel_heal lib tests pass, clippy 0 both states — see the commit's
+default + kernel_opt lib tests pass, clippy 0 both states — see the commit's
 validation block. Retrieval floors: unchanged corpus ⇒ floors mechanically
 hold (no re-measure needed; the Issue 017 gate runs on corpus content, which
 did not change).

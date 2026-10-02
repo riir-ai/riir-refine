@@ -155,9 +155,9 @@ zone registry, legacy pair — test-only, but `pub` API).
 
 | Gate | Result |
 |---|---|
-| G1 (syn-parse of all 9 new rules' ref_shape + opt_pattern) | ✅ PASS (348 kernel_heal tests incl. `batch44_pseudocode_parses`) |
-| G2 (lib tests) | ✅ PASS — 348 kernel_heal (345+3) + 201 default |
-| G3 (no-regression) | ✅ PASS — clippy 0 warnings in all 4 states (default / kernel_heal / rust_perf / latent_retrieval, `--lib`) |
+| G1 (syn-parse of all 9 new rules' ref_shape + opt_pattern) | ✅ PASS (348 kernel_opt tests incl. `batch44_pseudocode_parses`) |
+| G2 (lib tests) | ✅ PASS — 348 kernel_opt (345+3) + 201 default |
+| G3 (no-regression) | ✅ PASS — clippy 0 warnings in all 4 states (default / kernel_opt / rust_perf / latent_retrieval, `--lib`) |
 | Count pins | ✅ all sites in sync at 334 (entries.len(), KERNEL_CATEGORIES + per-category comments, Plan-003 expected table, grouped totals ×2, router doc ×2 + comment + assert, batch-list comment, 2 stale-corpus comments) |
 
 ## Landing notes

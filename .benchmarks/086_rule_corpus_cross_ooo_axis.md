@@ -2,7 +2,7 @@
 
 > **Status:** MEASURED + WIRED (2026-09-12) — T3 verdict: **PASS** (3 absorption candidates at cross < 0.6); axis wired into `frontier-report` (additive section) + `score_history.jsonl` (`cross_ooo` field, the `ood` additive law).
 > **Source:** katgpt-rs Research 552 (bioRxiv 2026.09.05.748439 PoC, Bench 758 GOAT) + riir-ai Research 378; primitive `katgpt_core::ooo_audit` behind `direction_bank_audit`.
-> **Driver:** `cargo run --example cross_ooo_axis --features "score_bench kernel_heal sec docker" --release`
+> **Driver:** `cargo run --example cross_ooo_axis --features "score_bench kernel_opt sec docker" --release`
 
 ## What was measured
 

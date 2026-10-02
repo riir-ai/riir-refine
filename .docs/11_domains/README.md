@@ -35,8 +35,8 @@
 | `clippy_lints` | ✅ on | — | clippy lint healing |
 | `rust_perf` | ✅ on (since 2026-08-13) | — | rust perf healing (Phase 2) |
 | `rust_perf_verify` | off | `rust_perf` | `cargo test` verifier |
-| `kernel_heal` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt (Phase 3) |
-| `kernel_verify` | off | `kernel_heal` | CubeCL compile verifier (STUB) |
+| `kernel_opt` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt (Phase 3) |
+| `kernel_verify` | off | `kernel_opt` | CubeCL compile verifier (STUB) |
 | `sec` | off | — | security-pattern healing (Plan 018) |
 | `docker` | ✅ on (since 2026-08-28) | — | Dockerfile bounded-fix healing (Plan 030) |
 | `docker_verify` | off | `docker` | hadolint agreement oracle |

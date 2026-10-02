@@ -150,7 +150,7 @@ fn corpus_triples() -> Vec<(String, String, String)> {
                 )
             }),
     );
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     triples.extend(
         riir_refine::domains::kernel_opt::KernelOptDomain::build_corpus()
             .into_iter()

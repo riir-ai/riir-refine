@@ -148,7 +148,7 @@ permanent shape of `--suggest`.
       `--domain auto` runs all enabled feature-gated domains via the dMoE router.
       Explicitly requesting a feature-off domain is a hard error with the
       enabled list in the message (verified on `--domain kernel` without
-      `kernel_heal`).
+      `kernel_opt`).
 
 ### Phase 2 exit criteria
 - `cargo heal --suggest src/` prints real suggestions on real files. The product exists

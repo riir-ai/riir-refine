@@ -169,8 +169,8 @@ pass over-deleted two F entries — both restored, verified by the clean
 git diff).
 
 **GOAT (measured, isolated same-parent worktree at `3d567f9` + exactly the
-4 batch files):** kernel_heal lib **944/0/1i** (941+3 gates) + default lib
-**715/0/0** + clippy `--all-targets --features kernel_heal` **0 warnings in
+4 batch files):** kernel_opt lib **944/0/1i** (941+3 gates) + default lib
+**715/0/0** + clippy `--all-targets --features kernel_opt` **0 warnings in
 the batch files** (5 doc_markdown backtick fixes pre-commit — the B37
 line-family lesson struck again: `TreeWY`, `O(N*d_v)`, `N+1`,
 `record_function`) + retrieval floors **14/14 HELD** (kernel self-variants

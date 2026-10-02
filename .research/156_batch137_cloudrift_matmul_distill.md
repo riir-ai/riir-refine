@@ -88,7 +88,7 @@ the two batches compose rather than contradict.
 ## Gates (T4, run post-unblock 2026-09-09)
 
 batch137 gates 3/3 by name (presence / concepts-covered / syn-parse) · lib
-default 1187/0 · kernel_heal 1518/0/1i · kernel_heal+latent 1635/0/2i ·
+default 1187/0 · kernel_opt 1518/0/1i · kernel_opt+latent 1635/0/2i ·
 retrieval floors HELD byte-identical (kernel 100/100/100, blended 94.7/96.9/97.7
 — sixth consecutive batch) · router annotation re-pinned 88→86/131 per the
 Issue 020 contract (measured 91/131 = 69.5%, was 93/131 = 71.0% at B130/B136 —

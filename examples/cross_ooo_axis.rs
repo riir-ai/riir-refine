@@ -11,7 +11,7 @@
 //! network. Run:
 //!
 //! ```text
-//! cargo run --example cross_ooo_axis --features "score_bench kernel_heal sec docker" --release
+//! cargo run --example cross_ooo_axis --features "score_bench kernel_opt sec docker" --release
 //! ```
 
 use std::collections::BTreeMap;
@@ -62,7 +62,7 @@ fn main() {
         let corpus = riir_refine::build_perf_seed_corpus();
         populations.push(fold("rust_perf (corpus)", &corpus.entries, corpus.entries.len()));
     }
-    #[cfg(feature = "kernel_heal")]
+    #[cfg(feature = "kernel_opt")]
     {
         let corpus = riir_refine::build_kernel_seed_corpus();
         populations.push(fold("kernel_opt (corpus)", &corpus.entries, corpus.entries.len()));

@@ -97,10 +97,10 @@ The intake text drifted in nine places; the corpus carries the corrected facts:
 
 - G1: batch144_rules_present / _concepts_covered / _pseudocode_parses 3/3
   (10 pseudocode blocks parse via the syn gate).
-- G2: kernel_heal lib 1869/0, default 1526/0; retrieval-precision re-measure —
+- G2: kernel_opt lib 1869/0, default 1526/0; retrieval-precision re-measure —
   kernel 100/100/100 (10th consecutive), blended 94.7/96.9/97.7 (floors HELD,
   byte-identical; no re-pin).
-- G3: clippy 0 in all three states (default / kernel_heal / +latent). Two
+- G3: clippy 0 in all three states (default / kernel_opt / +latent). Two
   doc_markdown warnings on the new header text fixed (healer 0 edits —
   doc-comment backticks outside its fix-space — manual per the documented
   fallback).

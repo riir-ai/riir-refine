@@ -14247,7 +14247,7 @@ fn batch181_negative_scale_bias_bit_gate() {
 }
 
 #[test]
-#[cfg(feature = "kernel_heal")]
+#[cfg(feature = "kernel_opt")]
 fn batch181_neg_bias_proof_is_not_vacuous() {
     // Runtime probe made permanent (the batch29 exact-element lesson): the
     // corpus text carries BOTH the old needle (element-equality tests in

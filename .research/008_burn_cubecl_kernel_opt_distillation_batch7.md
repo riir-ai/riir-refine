@@ -146,7 +146,7 @@ batch) while preserving config quality (a 224-tile config is fine for 225).
 
 Same as batches 1-6: corpus expansion, no new substrate. G1 (compile + all
 pseudocode parses via `RustAnalyzerPruner`) + G3 (no-regression: 128 lib tests
-pass with `--features kernel_heal`, 91 default, clippy clean).
+pass with `--features kernel_opt`, 91 default, clippy clean).
 
 ## Next steps
 

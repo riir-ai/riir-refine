@@ -51,6 +51,6 @@
 ## GOAT (all green at final state)
 
 - batch107 gates 3/3 (rules_present + concepts_covered + pseudocode_parses cfg(not(kernel_verify))); one concepts needle caught by the gate pre-landing (case mismatch "FIXED" — the B51 lesson, the gate doing its job).
-- kernel_heal lib **1346/0/1i** (was 1343; +3 gates) · default lib **1078/0** (unchanged — the kernel_opt domain is kernel_heal-gated) · kernel_heal+latent **1454/0/2i** with `retrieval_precision_regression_gate` PASS — floors HELD, zero re-pins (the two rider text additions + 8 new rules did not decay retrieval).
-- clippy `-D warnings` 0 in default + kernel_heal states (one doc_markdown fix en route: `counts_offsets_fused` backticks in the new //! header — the B37 lesson).
+- kernel_opt lib **1346/0/1i** (was 1343; +3 gates) · default lib **1078/0** (unchanged — the kernel_opt domain is kernel_opt-gated) · kernel_opt+latent **1454/0/2i** with `retrieval_precision_regression_gate` PASS — floors HELD, zero re-pins (the two rider text additions + 8 new rules did not decay retrieval).
+- clippy `-D warnings` 0 in default + kernel_opt states (one doc_markdown fix en route: `counts_offsets_fused` backticks in the new //! header — the B37 lesson).
 - Count pins walked: tests.rs total 482→490 + message + expected-array A/C/D/E/H/N + both sums + cover-all comment; router.rs expert total 482→490; mod.rs doc line 482→490 + 6 category comments (A 108, C 43, D 112, E 35, H 21, N 29 — the N comment was stale at 27 pre-batch, actual 28; repaired to 29).

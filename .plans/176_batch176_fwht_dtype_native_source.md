@@ -116,7 +116,7 @@ set complete (prior session).
       original guess).
 - [x] T3 count pins 648→649: router.rs:472; tests.rs:106 + :5437/:5448
       (category table: DtypeAlignment 50→51) + :9556; mod.rs:2016 doc;
-      AGENTS.md (kernel_opt bullet + kernel_heal feature line);
+      AGENTS.md (kernel_opt bullet + kernel_opt feature line);
       `.docs/11_domains/kernel_opt.md` (seed-corpus row + the batch paragraph);
       README kernel_opt row; corpus_history.jsonl 09-27 second row. DONE.
 - [x] T4 standing gate: `batch176_rules_present` + `batch176_riders_present` in
@@ -125,7 +125,7 @@ set complete (prior session).
       unclosed-delimiter compile error, repaired to the original body + two
       top-level fns; the miss recorded here).
 - [x] T5 GOAT: G1 syn-parse (kernel slice 374/0); G2 lib default 2340/0 +
-      kernel_heal 2714/0; G3 clippy -D at default + kernel_heal postures (one
+      kernel_opt 2714/0; G3 clippy -D at default + kernel_opt postures (one
       doc_markdown mechanical healed); retrieval floors 21/21. DONE.
 - [x] T6 research note `.research/214_fwht_dtype_native_b176.md` (highwater
       213→214) + snapshot row + this plan closed. DONE.

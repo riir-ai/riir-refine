@@ -56,7 +56,7 @@
 ## GOAT (measured)
 
 - **G1** parse: `batch84_pseudocode_parses` PASS (both rules, both shapes).
-- **G2** lib: kernel_heal 966/0/1i (944 + 22 net), default 736/0, all-features
+- **G2** lib: kernel_opt 966/0/1i (944 + 22 net), default 736/0, all-features
   1471/0/14i.
 - **G3** clippy + CI guard: `cargo clippy --all-targets --all-features -- -D
   warnings` 0 errors in-repo + **ci_feature_guard.sh ALL LAYERS PASS** — after

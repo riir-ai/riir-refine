@@ -13,7 +13,7 @@
 //! | `KernelOptDomain: HealDomain` | ✅ | |
 //! | Seed corpus | ✅ 183 rules (popcorn 1-13 + riir-gpu 14-27) | riir-gpu mining continues |
 //! | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
-//! | Routed heal pipeline (`kernel_heal_demo` example) | ✅ (Plan 003/004 composition) | |
+//! | Routed heal pipeline (`kernel_opt_demo` example) | ✅ (Plan 003/004 composition) | |
 //! | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold `LoRA` (4090, riir-train) |
 //! | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 //! | L4 `LoRA` fallback | | ✅ Deferred across all domains |

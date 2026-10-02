@@ -102,13 +102,13 @@ distinct-from rows in both directions (rule text + rider).
   Phrase-pin corrections en route (the batch144 precedent repeated): the
   pin must carry the entry's actual casing ("SAME (code, scale) operand")
   and reference the concept's actual words ("no-empty-split clamp").
-- **G2:** kernel_heal lib **1877/0** (was 1875 + 2 new gates) + default lib
+- **G2:** kernel_opt lib **1877/0** (was 1875 + 2 new gates) + default lib
   **1531/0** (was 1530 + 1 new gate).
 - **Retrieval floors HELD byte-identical** (Issue 022/Bench 024 pins):
   kernel self-variants 100%, blended 3-domain 94.7/96.9 (op-bigram, =
   Batch 144's numbers) vs floors 77.1/86.4/92.4; clippy top-1 89.6% ≥ the
   80% bar. No re-pin.
-- **G3:** clippy 0 on the write-set in default / kernel_heal / all-features
+- **G3:** clippy 0 on the write-set in default / kernel_opt / all-features
   (all-targets). En-route doc-lint repairs (rustdoc parses the `//!`
   header as markdown): a `+` at line start inside a `//!` history
   paragraph IS a markdown list bullet — one line starting with

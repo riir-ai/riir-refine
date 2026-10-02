@@ -43,7 +43,7 @@ Lane B (spectralquant.rs): H1 `validate()` never takes/checks `compressed_k` (no
 ## GOAT
 
 - G1: `batch46_pseudocode_parses` PASS (3/3 rules syn-parse both shapes).
-- G2: 354 kernel_heal (351 + 3) + 201 default lib tests PASS.
+- G2: 354 kernel_opt (351 + 3) + 201 default lib tests PASS.
 - G3: clippy 0 in both feature states (15 doc warnings fixed pre-commit — the B37 line-initial `+` family RECURRED plus the CamelCase/underscore backtick family: `MaxSim`/`SpectralQuant`/`gpu_m2p`/`d_eff`/`d_h`/`validate()`/`compressed_k`/`bitstream_offset`).
 - G4: N/A (corpus data only).
 

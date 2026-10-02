@@ -196,8 +196,8 @@ Merged from both agents, coordinator-verified with line numbers:
   `batch37_concepts_covered`. First compile clean after the generator's 2
   clean aborts (redundant-op anchor + wrong final-count assert — both caught
   before write by the assert-before-write design).
-- **G2 PASS** — 327 kernel_heal (was 324) + 201 default lib tests.
-- **G3 PASS** — clippy 0 warnings in all 4 states (kernel_heal/default ×
+- **G2 PASS** — 327 kernel_opt (was 324) + 201 default lib tests.
+- **G3 PASS** — clippy 0 warnings in all 4 states (kernel_opt/default ×
   lib/all-targets) after fixing 45 `doc_lazy_continuation` + 8 doc-markdown
   warnings, all in the new header block.
 - **Corpus integrity** — orphan-`rule_id:` scan clean; 290 `rule_id:` literals;

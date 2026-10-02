@@ -125,7 +125,7 @@ mechanically pinned by the new batch146 gate test.
 - **G1** parse/presence/annotation: `batch146_rules_present_and_annotated` +
   `batch146_pseudocode_parses` + `batch146_dual_evidence_and_distinct_rows_present`.
 - **G2** lib tests: default **1544/0**; `latent_retrieval` **1694/0**;
-  `kernel_heal,latent_retrieval` **2041/0**; `rust_perf_bench` corpus slice
+  `kernel_opt,latent_retrieval` **2041/0**; `rust_perf_bench` corpus slice
   **146/0**. Retrieval floors HELD byte-identical: blended **94.7/96.9**
   (op-bigram), clippy top-1 **89.6%** — the 4 new suggestion-only rules
   joined the fan-out without decay.

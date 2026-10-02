@@ -133,8 +133,8 @@ cluster — three independent models, one pattern.
 - **G1:** `batch34_pseudocode_parses` 9/9 (all ref_shape + opt_pattern
   syn-parse) + `batch34_rules_present` + `batch34_concepts_covered` (3
   new tests).
-- **G2:** 318 kernel_heal (was 315) + 201 default lib tests PASS.
-- **G3:** clippy 0 warnings in all 4 states (kernel_heal/default ×
+- **G2:** 318 kernel_opt (was 315) + 201 default lib tests PASS.
+- **G3:** clippy 0 warnings in all 4 states (kernel_opt/default ×
   lib/all-targets); 8 doc warnings fixed pre-commit (backticks + a
   leading `+` that markdown parsed as a list item — new lint variant).
 - Orphan-`rule_id` scan: 0/267.

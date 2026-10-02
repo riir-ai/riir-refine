@@ -23,9 +23,9 @@
 //!   positive; ZERO unadjudicated findings.
 //! - **G2 latency** lives in the wgsl_scan unit tests (release-gated).
 //!
-//! Run: `cargo test --features kernel_heal --test wgsl_t5_control`
+//! Run: `cargo test --features kernel_opt --test wgsl_t5_control`
 
-#![cfg(feature = "kernel_heal")]
+#![cfg(feature = "kernel_opt")]
 
 use riir_refine::domains::kernel_opt::wgsl_scan::WgslScanner;
 

@@ -142,11 +142,11 @@ All 4 candidates passed novelty verification.
 
 ## Validation
 
-- **263 lib tests** pass with `--features kernel_heal` (was 259 at Batch 13; +4 Batch 14
+- **263 lib tests** pass with `--features kernel_opt` (was 259 at Batch 13; +4 Batch 14
   tests: `batch14_rules_present` + `batch14_norm_fold_reduction_split_offload_concepts_covered`
   + the 2 updated count assertions).
 - **91 default lib tests** pass (no regression).
-- **Clippy clean** with `--features kernel_heal --all-targets`.
+- **Clippy clean** with `--features kernel_opt --all-targets`.
 - Count assertion updated: `seed_corpus_has_expected_entry_count` now asserts 123 (was 119).
 - Category counts updated: `kernel_categories_counts_match_plan_003_table` A:6→7, C:10→11,
   E:6→8; total 119→123.
@@ -161,7 +161,7 @@ All 4 candidates passed novelty verification.
 
 Same as batches 1-13: corpus expansion, no new substrate. G1 (compile + all pseudocode
 parses via `RustAnalyzerPruner`) + G3 (no-regression: 263 lib tests pass with
-`--features kernel_heal`, 91 default, clippy clean).
+`--features kernel_opt`, 91 default, clippy clean).
 
 ## Next steps
 

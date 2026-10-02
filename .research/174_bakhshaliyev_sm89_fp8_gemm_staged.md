@@ -142,9 +142,9 @@ Yield exactly as staged: 2 new rules (`occupancy-before-async-consumer-ada` E,
 ldmatrix sm_89 loser cell, stream-k compute-bound loser cell, cpasync regime-split rider,
 mma-fragment-layout QMMA swap + hardware-facts row). Corpus 614 → 616 (E 54 → 55,
 B 64 → 65). All GOAT gates green: G1 parse+presence+rider-marks test
-(`batch148_pseudocode_parses`), G2 lib tests at default (1564) + kernel_heal (1911) + the
+(`batch148_pseudocode_parses`), G2 lib tests at default (1564) + kernel_opt (1911) + the
 retrieval floors re-measured (15/15 incl. `retrieval_precision_regression_gate`), G3 clippy 0
-at default `--all-targets` + kernel_heal + rust_perf_bench states.
+at default `--all-targets` + kernel_opt + rust_perf_bench states.
 
 **The GOAT re-grade EXECUTED** (the charter's open precondition): the rung-A lane landed as
 riir-ai Bench 933 the same window this note was staged, and the re-grade SPLIT the rule's

@@ -51,7 +51,7 @@
 
 - `entries_gpu_58.rs`: 1 rule, `clamp-runtime-divisor-for-lsr-address-reduction` (O).
 - Pins walked 684→685: `corpus/tests.rs` ×4 sites (entry count, category table O 4→5 + sum, round-trip, the rolling batch116 counter) + the category-table comment + `router.rs` expert-coverage pin (auto-wired through `KERNEL_CATEGORIES`; only the pin text moved). PLUS the C-category comment repaired 49→50 (stale since B186's `consumer-offset-absorption` C+1 — the honest-label pattern; measured by the slice-count script, the comment-sum said 683 against the pinned 684).
-- Gates: `batch190_pseudocode_parses` + `batch190_unsigned_only_contract_rides_the_rule` (2 new tests); kernel_heal lib **2768/0**; default lib **2385/0**; clippy `-D warnings` clean at default / no-default / all-features (one doc_markdown backtick fix in the new file's header — `SamuelBelanger`, caught by the all-features posture); retrieval floors **21/21 HELD** (201.9s, no decay); score-bench + freeze regen NOT owed (zero clippy-corpus delta, P30).
+- Gates: `batch190_pseudocode_parses` + `batch190_unsigned_only_contract_rides_the_rule` (2 new tests); kernel_opt lib **2768/0**; default lib **2385/0**; clippy `-D warnings` clean at default / no-default / all-features (one doc_markdown backtick fix in the new file's header — `SamuelBelanger`, caught by the all-features posture); retrieval floors **21/21 HELD** (201.9s, no decay); score-bench + freeze regen NOT owed (zero clippy-corpus delta, P30).
 - Global binary rebuilt at the release set post-landing (kernel_opt 685).
 
 ## Cadence disclosure

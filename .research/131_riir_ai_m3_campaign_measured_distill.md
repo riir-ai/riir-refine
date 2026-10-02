@@ -65,10 +65,10 @@ verdict) all VERIFIED. Two honest offsets recorded:
 
 - batch108_rules_present / batch108_concepts_covered / batch108_pseudocode_parses — 3/3 FIRST-SHOT
   (cfg(not(kernel_verify)) per the B70 convention).
-- kernel_heal lib **1349/0/1i** (B107 baseline 1346 + 3 gates); default lib **1078/0** unchanged;
-  kernel_heal+latent **1457/0/2i** (1454 + 3) with retrieval floors HELD (kernel self-variants 100/100/100,
+- kernel_opt lib **1349/0/1i** (B107 baseline 1346 + 3 gates); default lib **1078/0** unchanged;
+  kernel_opt+latent **1457/0/2i** (1454 + 3) with retrieval floors HELD (kernel self-variants 100/100/100,
   zero re-pins).
-- clippy −D warnings 0: default / kernel_heal / kernel_heal+latent lib + all-targets kernel_heal.
+- clippy −D warnings 0: default / kernel_opt / kernel_opt+latent lib + all-targets kernel_opt.
   7 doc_markdown backtick fixes in the new `//!` header — the B37 lesson, 12th strike.
 - Count pins walked: tests.rs 490→494 total + message + batch-list + current-494 comment + expected-array
   (A 108→109, E 35→37, G 26→27) + sums ×2 + grouped + the stale 464 cover-all comment repaired;

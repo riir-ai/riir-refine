@@ -26,12 +26,12 @@ The **boundary complement** of B79's `first-order-affine-recurrence-associative-
 | Gate | Result |
 |---|---|
 | G1 parse | `batch87_pseudocode_parses` PASS (both rules, ref + opt; `#[cfg(not(feature = "kernel_verify"))]` per the B70 lesson) |
-| G2 lib tests | kernel_heal 984/0/1i (was 982+1i pre-batch: +2 gates); default 752/0 unchanged-path |
-| G3 no-regression | clippy 0 default + kernel_heal (3 self-inflicted doc_markdown backticks fixed — the B37 lesson, `LaCT`/`gpu_concept`); `kernel_verify` state compiles (the cfg'd-out gate shape) |
+| G2 lib tests | kernel_opt 984/0/1i (was 982+1i pre-batch: +2 gates); default 752/0 unchanged-path |
+| G3 no-regression | clippy 0 default + kernel_opt (3 self-inflicted doc_markdown backticks fixed — the B37 lesson, `LaCT`/`gpu_concept`); `kernel_verify` state compiles (the cfg'd-out gate shape) |
 | G4 content | NEW `batch87_state_norm_breaks_associative_scan` — the falsifiable breaker gate: with h0 = 0 the scan computes the raw trajectory `B_t` while the truth is `l2n(B_t)`; asserts (a) truth states are unit-norm (the normalization is live), (b) `|scan − truth| > 1e-3 · scale` at some position (material, structural wrongness — not fp association noise, which B79's own rel-error gate already bounds) |
 | Retrieval floors | 14/14 HELD (kernel-inclusive run, ~17 min) |
 
-**CI guard: deliberately NOT run this cycle** — the shared checkout carried the sibling's in-flight B85/docker WIP (`rust_perf/corpus.rs`, `docker/rules.rs`), so a full-guard run would compile + verdict THEIR mid-flight code and hammer the box during their GOAT runs. Targeted states (default, kernel_heal, kernel_verify) all validated instead; the guard should re-run at the sibling's next quiet window.
+**CI guard: deliberately NOT run this cycle** — the shared checkout carried the sibling's in-flight B85/docker WIP (`rust_perf/corpus.rs`, `docker/rules.rs`), so a full-guard run would compile + verdict THEIR mid-flight code and hammer the box during their GOAT runs. Targeted states (default, kernel_opt, kernel_verify) all validated instead; the guard should re-run at the sibling's next quiet window.
 
 ## Provenance discipline
 

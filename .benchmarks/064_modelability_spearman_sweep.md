@@ -2,8 +2,8 @@
 
 **Status:** RECORD — pre-registered protocol executed 2026-09-02; **verdict: NEGATIVE (kill branch, ρ = 0.2256 < 0.5)** — the scaffold-value oracle does not predict downstream retrieval top-1 on the healer's real retrieval populations. The oracle primitive (Phase 1) and this harness are kept as the standing artifacts per the pre-registration's falsification clause.
 
-**Harness:** `tests/modelability_sweep.rs` (feature `latent_retrieval` + `clippy_lints` + `rust_perf`; add `kernel_heal` for the full 12-point surface).
-Re-run: `cargo test --features latent_retrieval,kernel_heal --test modelability_sweep -- --nocapture` (~42 s debug).
+**Harness:** `tests/modelability_sweep.rs` (feature `latent_retrieval` + `clippy_lints` + `rust_perf`; add `kernel_opt` for the full 12-point surface).
+Re-run: `cargo test --features latent_retrieval,kernel_opt --test modelability_sweep -- --nocapture` (~42 s debug).
 
 ## Protocol (pre-registered in Issue 64 — executed, not restated)
 
@@ -15,7 +15,7 @@ The issue's Phase 2 recon map proposed the `IndexTokenizer` ladder × domain sur
 
 ## Sweep points (the corpus/chunking axis — the levers the issue names)
 
-12 population-distinct points with `kernel_heal` (8 without): per domain (clippy / perf / kernel),
+12 population-distinct points with `kernel_opt` (8 without): per domain (clippy / perf / kernel),
 `full-ms` (multi-scale index, shipped shape) × `slice-a` / `slice-b` (deterministic even/odd halves of the rule-id-sorted rule set; top-1 over the slice's own labeled spans) × `full-ss` (single-scale index — whole patterns only, the pre-multi-scale shape).
 
 Oracle population = the index chunk set replicated exactly (whole text + significant trimmed > 8-char lines, content-deduped in first-occurrence order — the substrate upserts duplicate zone hashes), embedded by the same `ModellessEmbedder`. Defaults: k=8, holdout 1/5, 32 Lloyd iters.

@@ -114,7 +114,7 @@ this domain, there is none.
    fired only because the eval fixture set carries no sec-labeled spans. A 5th
    domain would have made it two indices out. Now sized by `DomainId::ALL.len()`.
 2. **The Issue 020 floors block was 4 `#[cfg]`-gated consts** keyed on
-   `(kernel_heal, sec)`. A 5th domain doubles that to 8, each of whose
+   `(kernel_opt, sec)`. A 5th domain doubles that to 8, each of whose
    declaration cfg must match its use cfg exactly — the precise shape that
    turned CI Layer 5a red on the sec landing. Replaced with ONE `cfg!`-selected
    function: every arm compiles in every state, so the dead-code failure class

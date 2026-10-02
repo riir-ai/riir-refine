@@ -64,10 +64,10 @@ address-space placement of per-thread state). All three distinctions are encoded
 ## GOAT
 
 - **G1 parse/syn:** `batch49_pseudocode_parses` PASS (ref_shape + opt_pattern syn-parse).
-- **G2 lib tests:** 574 kernel_heal / 415 default / 9 retrieval-gate — 0 failures.
-- **G3 no-regression:** clippy **0 warnings** in default + kernel_heal states; the
+- **G2 lib tests:** 574 kernel_opt / 415 default / 9 retrieval-gate — 0 failures.
+- **G3 no-regression:** clippy **0 warnings** in default + kernel_opt states; the
   all-but-ternary combo check (`clippy_lints,clippy_verify,rust_perf,rust_perf_verify,
-  rust_perf_bench,kernel_heal,kernel_verify,ruliology_search,latent_retrieval,self_evolve,
+  rust_perf_bench,kernel_opt,kernel_verify,ruliology_search,latent_retrieval,self_evolve,
   fix_verify,wasm_pruner,clippy_lora`) PASSES (9.44s).
 - **CI guard caveat (pre-existing, filed):** layers 3/4/5 fail on Windows ONLY via
   `ternary_inference` → riir-gpu's un-gated optional `metal` dep (L80 general `[dependencies]`

@@ -38,7 +38,7 @@ re-read mandatory — moving main).
       contents; coordinator re-verified every quoted line byte-accurate.
 - [x] T4 — Author corpus entries (entries_gpu_09.rs, E+G+D) +
       `batch95_pseudocode_parses` gate (cfg(not(kernel_verify)) per B70).
-- [x] T5 — GOAT: batch95 gate green; kernel_heal lib 1235/0; default lib
+- [x] T5 — GOAT: batch95 gate green; kernel_opt lib 1235/0; default lib
       1001/0; clippy 0 --all-targets both states; retrieval floors 14/14
       HELD (no re-pins); count pins walked (tests.rs 69-70/5362/5364/5375 +
       expected-array D85/E26/G26 + stale "current 400" comment + router.rs

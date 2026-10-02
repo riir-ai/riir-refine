@@ -49,12 +49,12 @@ is the designated kernel-slot content. TAKEN. No twin rows on origin (checked 10
   tests.rs (batch186 parse gate + 655->670 x4 + per-category table A139->145 B69->71 C49->50
   D143->146 H29->30 M20->21 N51->52), router.rs:472, rust_perf pins (163->165, notbench 64->66,
   annotated 109->111 x3 sites).
-- [x] T5 — GOAT gates: batch186 parse gate · lib default · kernel slice (--features kernel_heal)
+- [x] T5 — GOAT gates: batch186 parse gate · lib default · kernel slice (--features kernel_opt)
   · rust_perf annotation pins (--features rust_perf) · retrieval floors 21/21 (isolated
   CARGO_TARGET_DIR) · clippy -D both postures · score-bench NOT owed (zero clippy-corpus delta,
   P30) · NO freeze regen (clippy corpus untouched).
 - [x] T6 — Research 218 (`.research/.highwater` 217->218) + AGENTS.md (kernel_opt bullet +
-  kernel_heal line + rust_perf bullet) + kernel_opt.md + rust_perf.md + README rows +
+  kernel_opt line + rust_perf bullet) + kernel_opt.md + rust_perf.md + README rows +
   `.distill/001_mining_queue_snapshot.md` landing row (same commit).
 - [x] T7 — Commit `feat: batch 186: ggml-cpu tiled mul_mat distill (17 rules)` + push; plan
   COMPLETE. No .raw cleanup owed (source read from the standing vendor clone — flagged-not-mine,

@@ -22,7 +22,7 @@ All hand-authored variants of the corpus anti-patterns (the `eval_fixtures_perf`
 
 ## 2. The T1 standing column — seven domains, real spread
 
-Full state (`latent_retrieval,kernel_heal,sec,shader_perf`), 192 labeled spans:
+Full state (`latent_retrieval,kernel_opt,sec,shader_perf`), 192 labeled spans:
 
 | domain | labeled | top1@28 | top1@56 | top1@112 | constant |
 |---|---|---|---|---|---|
@@ -69,10 +69,10 @@ Re-open triggers (recorded in the issue): corpus growth past the pool (a domain 
 ## 5. Validation
 
 - `cargo test --features latent_retrieval --lib`: **2457/0**
-- `cargo test --features latent_retrieval,kernel_heal,sec,shader_perf --lib`: **2963/0** (813 s)
+- `cargo test --features latent_retrieval,kernel_opt,sec,shader_perf --lib`: **2963/0** (813 s)
 - Regression gate green at ALL FIVE feature states (default / +kernel / +sec / +shader / ALL)
 - `cargo test --features rule_embed_poc --test rule_embed_gate`: 1/0 (re-pinned)
-- `cargo test --features latent_retrieval,kernel_heal --test modelability_sweep`: 2/0
+- `cargo test --features latent_retrieval,kernel_opt --test modelability_sweep`: 2/0
 - `cargo test --features demonstrability_gate --test demonstrability_gate_wiring`: 3/0
 - `cargo test --lib` (default): **2285/0**
 - `cargo clippy --all-targets -- -D warnings` / `--all-features --all-targets` / `--no-default-features --all-targets`: **0 errors** each (3 pre-existing Batch-174-era doc_markdown sites healed in passing)

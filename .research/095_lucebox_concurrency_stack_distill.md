@@ -100,11 +100,11 @@ the retained arena never alias in the address-keyed backend cache —
 cache, not the target graph (the target invalidates via identity-key
 mismatch + park/unpark teardown).
 
-**GOAT:** kernel_heal lib 929/0/1i (926 + 3 gates) · default lib 703/0 ·
+**GOAT:** kernel_opt lib 929/0/1i (926 + 3 gates) · default lib 703/0 ·
 all-features 1348/4/13i (the 4 = the KNOWN environmental l4_daemon
 Windows-spawn failures, identical B79/B80 signature; count-consistent —
 the parses gate is cfg-compiled-out under all-features) · clippy
-`--all-targets` 0 lint warnings both default + kernel_heal states (the
+`--all-targets` 0 lint warnings both default + kernel_opt states (the
 exFAT hardlink cargo noise excepted; 1 doc_markdown backtick fix
 pre-commit) · retrieval floors 14/14 HELD zero decay (kernel
 self-variants 100/100/100, blended 93.9/96.9/97.7 — 10th consecutive

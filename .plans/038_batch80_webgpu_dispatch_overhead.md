@@ -78,7 +78,7 @@ GPU kernel literature:
       caught**: router.rs doc-header "379-rule" (pre-B79 stale), tests.rs
       exhaustive comment "379-rule", the "current 370" snapshot comment
       (2 batches stale) — all fixed to 387
-- [x] T5 GOAT: G1 syn-parse (3/3 first run) ✓; G2 kernel_heal lib
+- [x] T5 GOAT: G1 syn-parse (3/3 first run) ✓; G2 kernel_opt lib
       **926/0/1i** (exactly 923+3) + default **703/0** ✓; G3 clippy
       `--all-targets` **0 both states** (2 doc-markdown backtick fixes
       pre-commit: `RMSNorm` + `dispatches_saved` in the mod.rs `//!` note)

@@ -94,7 +94,7 @@ before; pre-existing limitation exposed by the first 4-domain build).
 - default lib: 657 (unchanged — sec is opt-in)
 - `--features sec`: 687 (+30: 26 sec unit + 2 boundary-gate-adjacent lib + 2
   retrieval-eval)
-- `sec,kernel_heal,latent_retrieval`: 953
+- `sec,kernel_opt,latent_retrieval`: 953
 
 ## Verdict
 
