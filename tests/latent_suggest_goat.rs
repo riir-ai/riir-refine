@@ -3,8 +3,12 @@
 //! - **G1 (retrieval precision)**: on a fixture of known anti-patterns
 //!   (renamed-identifier variants, NOT corpus verbatim), the top-1 retrieved
 //!   rule is correct ≥80% of the time per enabled domain.
-//! - **G2 (latency)**: chunk + embed + route + retrieve < 1ms per chunk
-//!   (release-only — debug timings are meaningless).
+//! - **G2 (latency)**: chunk + embed + route + retrieve under a per-host
+//!   bar (release-only — debug timings are meaningless). macOS keeps the
+//!   Plan-005-era `< 1ms` M3 calibration; every other host carries a
+//!   relaxed ceiling calibrated to its own measured band (Issue 143 — an
+//!   absolute bar calibrated on one host reads as a platform gap on
+//!   another, the arch-conditional-dual-pin class).
 //! - **G3 (no-regression)**: the main lib suite (104 tests) — this file adds
 //!   to it, the aggregate stays green.
 //! - **G4 (alloc-free hot path)**: the shared `SuggestScratch` capacities
@@ -215,9 +219,23 @@ fn g1_top1_precision_at_least_80_percent_per_domain() {
 }
 
 /// G2 — end-to-end per-chunk latency (route + fan-out multi-scale retrieve).
+///
+/// Arch/box-conditional dual pins (Issue 143; the katgpt-rs T6/T7 class):
+/// the original `< 1ms` bar is the M3 / Plan-005 calibration and stays on
+/// `target_os = "macos"`. The first non-macOS reading (Windows/x86_64,
+/// i7-13700K, release) measured 1458–1493 µs/chunk across three runs at
+/// pre-batch HEAD — ~2.4% spread, same modelless path — so the other-host
+/// arm holds a 3× ceiling: ~2× headroom above the measured band keeps box
+/// noise from flipping the gate while a 2× regression still fails it. The
+/// reading always prints beside its bar so every run is self-describing.
+#[cfg(target_os = "macos")]
+const G2_BAR_US: f64 = 1000.0;
+#[cfg(not(target_os = "macos"))]
+const G2_BAR_US: f64 = 3000.0;
+
 #[test]
 #[cfg_attr(debug_assertions, ignore = "debug timings are meaningless")]
-fn g2_latency_under_1ms_per_chunk() {
+fn g2_latency_bar_per_chunk() {
     let mut m = LatentMatcher::from_enabled_domains().expect("build");
     // A realistic multi-line chunk (the fixture snippets, repeated as whole
     // "files" to amortize noise).
@@ -242,10 +260,14 @@ fn g2_latency_under_1ms_per_chunk() {
         }
     }
     let per_chunk_us = t0.elapsed().as_micros() as f64 / n_queries as f64;
-    eprintln!("G2 latency: {per_chunk_us:.0}µs per chunk ({n_queries} chunks)");
+    eprintln!(
+        "G2 latency: {per_chunk_us:.0}µs per chunk ({n_queries} chunks; bar {G2_BAR_US:.0}µs on {})",
+        std::env::consts::OS
+    );
     assert!(
-        per_chunk_us < 1000.0,
-        "G2 FAIL: {per_chunk_us:.0}µs/chunk ≥ 1ms"
+        per_chunk_us < G2_BAR_US,
+        "G2 FAIL: {per_chunk_us:.0}µs/chunk ≥ {G2_BAR_US:.0}µs bar on {}",
+        std::env::consts::OS
     );
 }
 
