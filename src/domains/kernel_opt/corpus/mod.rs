@@ -1949,6 +1949,7 @@ mod entries_gpu_60;
 mod entries_gpu_61;
 mod entries_gpu_62;
 mod entries_gpu_63;
+mod entries_gpu_64;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1988,6 +1989,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_61::entries());
     entries.extend(entries_gpu_62::entries());
     entries.extend(entries_gpu_63::entries());
+    entries.extend(entries_gpu_64::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2037,8 +2039,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 675-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances).
+/// - **Exhaustive:** every `rule_id` in the 728-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 728 at Batch
+///   196 — the comment read 675 through B195, stale since ~B188, repaired here).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
 ///
@@ -2371,7 +2374,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "roundfuse-packed-embedding-gather",
         ],
     ),
-    // D: Dispatch patterns (162 rules; Batch 195 +3: the write-only touch side queue + the atexit registration-order shutdown law + the lazy-admission reservation TOCTOU fix; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
+    // D: Dispatch patterns (163 rules; Batch 196 +1: the register-width topk tiled-radix fallback; Batch 195 +3: the write-only touch side queue + the atexit registration-order shutdown law + the lazy-admission reservation TOCTOU fix; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
     // shape-truth + the descriptor-set binding memo with destroy-epoch +
     // the vendor-keyed reduction lane-partition; Batch 189 +2: the shape-bucketed
     // graph-cache LRU + the fused-serving measured-negative ledger;
@@ -2550,6 +2553,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "write-only-touch-side-queue",
             "atexit-registration-order-shutdown",
             "lazy-admission-reservation-atomic-register",
+            "register-width-topk-falls-back-to-tiled-radix-select",
         ],
     ),
     // E: Parallelism patterns (68 rules; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
@@ -2788,7 +2792,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "issue-latency-priced-mad-cost-model"
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (17 rules)
+    // L: Conv-as-GEMM + memory layout (19 rules; Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -2811,6 +2815,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "device-affine-scratch-admission-with-pool-fallback",
             "window-recurrence-halo-snapshot-block-parallel",
             "register-built-right-operand-lane-contiguous-plane-layout",
+            "affine-block-address-lets-pipeliner-fly",
         ],
     ),
     // M: Kernel parametric polymorphism (21 rules; Batch 186 +1: the

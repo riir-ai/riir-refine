@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 726, "Plan 003: experts cover all 726 corpus rules (Batch 195 +9, the mlxfast-bonsai2 wave-2 distill — the io32 count-pinned text narrowing, the strided-view offset fit32 launch proof, the write-only touch side queue, the last-query rect projection, the roundfuse packed embedding gather, the enumerable-domain bit-identity admission gate, the cross-queue output retention, the atexit registration-order shutdown law, the lazy-admission reservation TOCTOU fix; re-pinned 726 with the honest label)");
+        assert_eq!(total, 728, "Plan 003: experts cover all 728 corpus rules (Batch 196 +2, the TensorFold v0.6.0 A− pack — the affine block address pipeliner lead + the register-width topk tiled-radix fallback, plus the lane_fuse g32 admission rider on B176; re-pinned 728 with the honest label)");
     }
 
     #[test]

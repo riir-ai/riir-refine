@@ -25,7 +25,37 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 165 rules — Batch 186 (2026-09-28, +2 measurement-honesty members from the ggml-cpu tiled mul_mat distill, Plan 181 / Research 218: `fallthrough-toggle-oracle` (the ORACLE member — same graph through one admission switch, magnitude-scaled tolerance) + `cold-l3-evict-min-of-n` (the COLD member — 256MB LLC flush between reps, min-of-5; inverse polarity of B181's seed-warm); both NotBenchable, both complexity-annotated) — Batch 182 (2026-09-28,
+profiling guide, Research 032; **now 167 rules — Batch 196 (2026-10-02,
+Plan 195 — the TensorFold v0.6.0 A− serving/host distill, source
+`ashhart/tensorfold` @ `c4646171`, Apache-2.0 — license flipped
+MIT→Apache-2.0 at 0.6.0): two NotBenchable annotated rules —
+`grammar-window-draft-prune-path-local-mask` (complexity — a
+grammar-constrained reply walks the drafted verify tree depth-first
+BEFORE the verify forward (accept going down, rollback coming back up),
+drops every draft no accepted path can hold (a grammar-rejected token, a
+stop token, and the rows under either — "the parent's masked row could
+never choose it"), fills each kept row's allowed-token bitmask from its
+path, −infs the rest before sampling; row-locality is the exactness law
+("A row's logits do not depend on the other rows, and its mask depends
+only on its path"), so the prune is exact and the forward is paid only
+for rows an accepted path could use; bounded refusal surface (400: no
+engine / xgrammar missing / schema won't compile) + the TP face ("both
+ranks then walk and mask the same rows") — the corpus's FIRST
+grammar/constrained-decoding content, NOVEL) +
+`startup-estimate-derived-from-allocation-shapes` (allocation — a startup
+capacity plan derives EVERY term from the allocation shapes the engine
+allocates (a helper mirroring the allocator's own formula,
+`exl3_expert_scratch`, consumed where the plan sums terms) and proves it
+with a FAKE-ALLOCATOR RECONCILIATION at real shapes (allocated ≤
+estimate, == per shape; the harm: the EXL3 term was a fixed 1.125 GiB/rank
+guess while the engine allocated a Scratch per buffer set + 1 GiB prompt
+split-K partials nothing counted → ~2.5 GiB under, admission lied;
+measured correction +2.52/+2.60 GiB, commit-message); sub-arms folded:
+NVFP4-widening estimator blindness 4.00×→1.01× ("the admission estimate,
+which counts file bytes, could not see why") + the `--checkpoint-slots`
+knob joins the estimate and is refused pre-download); both NotBenchable,
+both corpus-only (the B182/B186 precedent — no proposer files)) — Batch
+186 (2026-09-28, +2 measurement-honesty members from the ggml-cpu tiled mul_mat distill, Plan 181 / Research 218: `fallthrough-toggle-oracle` (the ORACLE member — same graph through one admission switch, magnitude-scaled tolerance) + `cold-l3-evict-min-of-n` (the COLD member — 256MB LLC flush between reps, min-of-5; inverse polarity of B181's seed-warm); both NotBenchable, both complexity-annotated) — Batch 182 (2026-09-28,
 Plan 177 / Research 216 — the mlxfast-bonsai2 DELTA distill, delta
 cfb35b0d..831fae7): three NotBenchable annotated rules —
 `host-mirror-shared-scalar-advance-one-time-verdict` (dispatch — N layers

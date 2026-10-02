@@ -396,16 +396,27 @@ mod entries_07;
 mod entries_08;
 mod entries_09;
 mod entries_10;
+mod entries_11;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 163 entries/// covering the main perf pattern categories (complexity, allocation, simd,
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 167 entries
+/// (Batch 196, 2026-10-02, Plan 195: +2 from the `TensorFold` v0.6.0 distill —
+/// the grammar-window draft prune (complexity) + the startup-estimate
+/// allocation-shapes rule; the 163 figure below was the Batch 182 state and
+/// had gone stale — B186's +2 never moved it) covering the main perf
+/// pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (28 rules — Batch 173 added the two
-/// serde zero-copy rules); complexity has 24 (the measurement-honesty family
+/// wasm; live counts repaired at Batch 196 — complexity 31 (24 in the prior
+/// prose was stale through B177/B179/B181/B182/B186's complexity adds),
+/// allocation 29, io 26, concurrency 23, layout 13, iterators 11, simd 9,
+/// caching 8, arithmetic 8, dispatch 6, bevy 2, wasm 1).
+/// Allocation is the deepest family (29 — Batch 173 added the two
+/// serde zero-copy rules; Batch 196 added the startup-estimate
+/// allocation-shapes rule); complexity has 31 (the measurement-honesty family
 /// lives here — B109 the work, the 2609.04040 rule the design, B115 the
 /// config, Batch 177 the comparator (A/A control) + the observer-consumer
 /// bias); concurrency has 23
@@ -420,9 +431,11 @@ mod tests;
 /// hygiene + the bounded-channel-cycle deadlock; Batch 172 added the
 /// crossbeam steal-batch rule; Batch 174 added the host-lock re-entrant
 /// release rule + the deferred-command flush-hoist);
-/// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
+/// arithmetic has 8 (Batch 74 added 1); dispatch has 6 (Batch 61 + 74 added
 /// 1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist); caching has 7; io has 26 (the
+/// the runtime-table handler-pair hoist; Batch 182 added the host-mirror
+/// shared-scalar rule); caching has 8 (Batch 181 added the mask-memo owner-lifetime
+/// rule); io has 26 (the
 /// measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
 /// prefault-admission rule; Batch 141 added the tail-boundary and
 /// stream-holdback rules; Batch 153 added the `TCP_NODELAY` request-response
@@ -443,5 +456,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_08::entries());
     entries.extend(entries_09::entries());
     entries.extend(entries_10::entries());
+    entries.extend(entries_11::entries());
     Corpus::new(entries)
 }

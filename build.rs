@@ -10,7 +10,7 @@
 //! Cargo already computes the answer: it exports `CARGO_FEATURE_<NAME>` to the
 //! build script for every feature that is ON for THIS compilation, including
 //! the ones turned on transitively. Lower-casing the suffix recovers the
-//! feature name exactly, because every feature in this manifest is snake_case
+//! feature name exactly, because every feature in this manifest is `snake_case`
 //! (cargo's mangling only differs for `-`-bearing names, and there are none).
 //! So the stamp is a projection of the real build, not a claim about it.
 fn main() {
