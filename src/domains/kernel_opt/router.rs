@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 717, "Plan 003: experts cover all 717 corpus rules (Batch 194 +14, the DeepGEMM-Ascend distill — the FP4 gather-LUT dequant, the decode sidecar writing the consumer's ring, the distance-K ring-overwrite gate, the empty-participant credit, the issue-latency MAD cost model, the dual-decode admission gate, the 32 MiB overlap-reduce mode, the A− l1-resident address-identity rewind, the SF sidecar's own granularity, the coprime source interleave, the deferred-permutation bitmask, the parity stage ownership, the dependency-wave lookahead picker, the in-order credit collapse; re-pinned 717 with the honest label)");
+        assert_eq!(total, 726, "Plan 003: experts cover all 726 corpus rules (Batch 195 +9, the mlxfast-bonsai2 wave-2 distill — the io32 count-pinned text narrowing, the strided-view offset fit32 launch proof, the write-only touch side queue, the last-query rect projection, the roundfuse packed embedding gather, the enumerable-domain bit-identity admission gate, the cross-queue output retention, the atexit registration-order shutdown law, the lazy-admission reservation TOCTOU fix; re-pinned 726 with the honest label)");
     }
 
     #[test]

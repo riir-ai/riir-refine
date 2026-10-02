@@ -1948,6 +1948,7 @@ mod entries_gpu_59;
 mod entries_gpu_60;
 mod entries_gpu_61;
 mod entries_gpu_62;
+mod entries_gpu_63;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1986,6 +1987,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_60::entries());
     entries.extend(entries_gpu_61::entries());
     entries.extend(entries_gpu_62::entries());
+    entries.extend(entries_gpu_63::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2213,7 +2215,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "in-order-pipe-credit-release-completion-collapse"
         ],
     ),
-    // B: Compute patterns (75 rules) -- was 64 in the comment while the
+    // B: Compute patterns (77 rules) -- was 64 in the comment while the
     // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
     // Batch 166, 67 at Batch 170 (scale-identity-elide); 68 at Batch 178
     // (warp-bitonic-topk-merge-shuffle); 69 at Batch 181
@@ -2221,7 +2223,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
     // Batch 186 (the maddubs overflow selector + the scale-hoist epilogue);
     // 74 at Batch 187 (the register-band partition, the lut16-pshufb
     // folded-bias expansion, the GFNI sign-mask expand); 75 at Batch 189
-    // (the exact bf16-domain activation LUT)
+    // (the exact bf16-domain activation LUT); 76 at Batch 193
+    // (register-built-right-operand — the comment missed it, repaired at
+    // Batch 195); 77 at Batch 195 (last-query-rect-projection)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2302,9 +2306,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gfni-sign-mask-expand-cmpeq-fallback",
             "exact-bf16-domain-activation-lut",
             "branch-free-top2-insert-order-invariant-guard",
+            "last-query-rect-projection",
         ],
     ),
-    // C: Fusion patterns (50 rules; Batch 181 +1:
+    // C: Fusion patterns (51 rules; Batch 195 +1:
+    // roundfuse-packed-embedding-gather; Batch 181 +1:
     // fused-transform-quantize-writer; Batch 182 +1: the argmax/top-k
     // epilogue swap; Batch 186 +1: consumer-offset-absorption — the
     // comment read 49 through B186..B189, repaired at Batch 190)
@@ -2362,9 +2368,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-transform-quantize-writer",
             "argmax-epilogue-replaces-output-materialization",
             "consumer-offset-absorption-precomputed-weight-row-correction",
+            "roundfuse-packed-embedding-gather",
         ],
     ),
-    // D: Dispatch patterns (159 rules; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
+    // D: Dispatch patterns (162 rules; Batch 195 +3: the write-only touch side queue + the atexit registration-order shutdown law + the lazy-admission reservation TOCTOU fix; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
     // shape-truth + the descriptor-set binding memo with destroy-epoch +
     // the vendor-keyed reduction lane-partition; Batch 189 +2: the shape-bucketed
     // graph-cache LRU + the fused-serving measured-negative ledger;
@@ -2539,10 +2546,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "adoption-staged-leading-layers-gpu-idle-fill",
             "seed-first-command-buffer-earliest-submission",
             "adoption-trial-rotate-operands-per-launch-dram-streaming",
-            "multiwave-dual-decode-admission-gate"
+            "multiwave-dual-decode-admission-gate",
+            "write-only-touch-side-queue",
+            "atexit-registration-order-shutdown",
+            "lazy-admission-reservation-atomic-register",
         ],
     ),
-    // E: Parallelism patterns (67 rules; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (68 rules; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2618,7 +2628,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "simdgroup-redundant-small-reduction-over-barrier-broadcast",
             "chunk-downsize-work-stealing-microtile-floor",
             "redundant-row-reduction-per-width-block-grid-split",
-            "dual-consumer-alternating-stage-ownership-scale-lane"
+            "dual-consumer-alternating-stage-ownership-scale-lane",
+            "cross-queue-output-retention-until-completion",
         ],
     ),
     // F: Flash-attention tiling (18 rules; Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
@@ -2831,7 +2842,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (55 rules; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
+    // N: dtype + alignment specialization (56 rules; Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
     // macro family that widens at load + f32 accumulation — the CPU refusal
     // pole of the accumulator-dtype family; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
@@ -2896,12 +2907,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "widen-metadata-once-to-mac-native-widths",
             "dot-macro-family-widens-at-load-f32-accumulate",
             "construction-identity-row-classes-replace-probe",
-            "fp4-nibble-gather-lut-replicated-index-width"
+            "fp4-nibble-gather-lut-replicated-index-width",
+            "enumerable-domain-bit-identity-admission-gate",
         ],
     ),
-    // O: IR strength reduction (5 rules; Batch 190 +1: the runtime-divisor
-    // umax clamp that admits LSR — the family's first RUNTIME-divisor
-    // member, generalizing the constant pow2 shift arms)
+    // O: IR strength reduction (7 rules; Batch 195 +2: the io32
+    // count-pinned kernel-source-text narrowing (the TEXT-level static
+    // member) + the strided-view offset fit32 launch proof (the
+    // launch-proven arbitrary-view member — the family's admission half);
+    // Batch 190 +1: the runtime-divisor umax clamp that admits LSR — the
+    // family's first RUNTIME-divisor member, generalizing the constant
+    // pow2 shift arms)
     (
         KernelCategory::IrStrengthReduction,
         "O: IR strength reduction",
@@ -2911,6 +2927,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "strength-reduce-div-pow2",
             "strength-reduce-mod-pow2",
             "clamp-runtime-divisor-for-lsr-address-reduction",
+            "io32-count-pinned-text-narrowing",
+            "strided-view-offset-fit32-launch-proof",
         ],
     ),
 ];
