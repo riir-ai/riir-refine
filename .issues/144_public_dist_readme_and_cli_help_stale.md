@@ -38,7 +38,18 @@ install, docs, releases" link is the site's only docs link).
 
 - [ ] T1 dist README rewrite for v0.2.x (+ CHANGELOG.md for v0.1.x caveats)
 - [ ] T2 repo description renamed
-- [ ] T3 `--help` flag + user/advanced help split; no internal plan/issue ids in user help
-- [ ] T4 `--domain` choices derived from compiled features
+- [x] T3 `--help` flag + user/advanced help split; no internal plan/issue ids in user help —
+      `69727010`: `--help`/`-h` → short user page on stdout, exit 0 (user verbs, compiled domains,
+      `cargo refine --help-all` pointer); `--help-all` → the full reference, exit 0; the arg-error
+      page is unchanged (exit 2). `tests/heal_usage_flag_parity.rs` now audits both pages.
+- [x] T4 `--domain` choices derived from compiled features — `69727010`:
+      `DomainId::{is_compiled, compiled, from_label}` (same feature gates the matcher indexes
+      under); a known-but-absent domain refuses at parse time naming this build's set
+      (`--domain sec is not in this build (this build has: auto|clippy|perf|docker|dist)`).
+      Ships with the next release; v0.2.0 still prints the old text.
 - [ ] T5 LICENSE / EULA in the dist repo (owner)
-- [ ] T6 drop `testnet.ai.gist.rs` from the next release
+- [-] T6 drop `testnet.ai.gist.rs` from the next release — DEFERRED to riir-kat: the host is
+      `TESTNET_SERVICE_URL` in riir-kat `src/kat_service_urls.rs`, one of the three PINNED
+      `devnet|testnet|mainnet` aliases (`kat_service_config.rs` `PINNED_NETWORKS`, pinned by tests
+      there). Removing a pinned network alias is a protocol-tier change for every consumer, not a
+      refine help-text edit; re-point or drop it in riir-kat if testnet stays down.

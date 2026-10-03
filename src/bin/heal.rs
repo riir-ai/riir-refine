@@ -853,7 +853,7 @@ fn run_unmine() {
     //    decides).
     let watermark = resolve_heal_root(&[])
         .join(".refine")
-        .join("kat_sync_watermark.json");
+        .join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME);
     match std::fs::remove_file(&watermark) {
         Ok(()) => println!(
             "UNSYNC: cleared the sync watermark ({})",
@@ -1046,7 +1046,7 @@ fn run_unmine_purge() {
             }
             let watermark = resolve_heal_root(&[])
                 .join(".refine")
-                .join("kat_sync_watermark.json");
+                .join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME);
             match std::fs::remove_file(&watermark) {
                 Ok(()) => println!("  watermark cleared: {}", watermark.display()),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -3799,7 +3799,7 @@ USAGE:
                     default-on; see src/fmt.rs for the discipline it encodes).
     login           KAT account identity (Proposal 005 T0.1): generate an
                     Ed25519 keypair in OpenSSH format under the account dir
-                    (RIIR_REFINE_KAT_ACCOUNT_DIR / ~/.config/riir-heal), or
+                    (RIIR_AUTH_ACCOUNT_DIR / ~/.config/riir-auth), or
                     import one with --key <path>. Idempotent — an existing
                     key is loaded, never regenerated. Records the free-tier
                     grant as a LOCAL projection (accounting-only, G9d).

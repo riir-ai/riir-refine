@@ -148,6 +148,27 @@ fn unmine_deletes_no_queued_batch() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `--unmine` clears the REAL sync watermark — the file `sync` writes
+/// (`SyncWatermark::FILE_NAME`). It used to delete a never-written
+/// `kat_sync_watermark.json`, so the watermark survived every opt-out.
+#[test]
+fn unmine_clears_the_sync_watermark_sync_writes() {
+    let dir = scratch("watermark");
+    let refine = dir.join(".refine");
+    std::fs::create_dir_all(&refine).expect(".refine");
+    let wm = refine.join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME);
+    std::fs::write(&wm, "{}").expect("plant a watermark");
+
+    let (code, text) = heal(&dir, &["--unmine"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(
+        !wm.exists(),
+        "--unmine must clear the watermark sync writes. output:\n{text}"
+    );
+    assert!(text.contains("cleared the sync watermark"), "output:\n{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Idempotency: the second `--unmine` is a no-op that says so, exit 0.
 #[test]
 fn unmine_is_idempotent() {
