@@ -1,5 +1,19 @@
 # HISTORY.md — riir-refine
 
+## 2026-10-03 — Issue 145 CLOSED: first-run output reads like hand-written Rust (`d40f7b5e`)
+
+Filed and fixed the same day while generating the refine.gist.rs demo capture (riir-dapps Issue
+112 T1). On a five-line crate, `cargo refine --fix` wrote `for __elem in values { … *__elem … }` and
+the dry run listed `[docker]`/`[dist]` rows under a `.rs` span in a crate with no Dockerfile.
+- **Binding name:** the needless_range_loop binding is the collection's singular (`values` →
+  `value`), else `item`; keyword singulars fall back; the Plan 097 T2 uniquing holds over the new
+  family (`value2` when the body says `value`).
+- **Off-domain rows:** `DomainId::applies_to_path` + a display filter in `print_suggestion` — a span
+  lists only domains that can touch its file kind (display-only; `--fix` unchanged).
+- Verified on the repro with a release build; lib 2425 (default) + 2654 (release feature set),
+  integration tests and clippy `-D warnings` green. T2 (`for &value` on proven-Copy elements)
+  deferred as optional polish. Issue file removed per the noise rule.
+
 ## 2026-10-02 — Issue 143 LANDED: the retrieval GOAT's G2 bar dual-pinned per host (the Issue-filed platform gap closed at root cause)
 
 Filed 2026-10-02 by the Batch-196 session: `g2_latency_under_1ms_per_chunk` failed on this Windows box at PRE-batch HEAD (1458–1493 µs/chunk across three runs, ~2.4% spread; G1 + the latent_retrieval lib suite green) — the `< 1ms` bar is the M3 / Plan-005 calibration, and this host had never run the gate. Fixed in the issue's own recorded shape, the katgpt-rs T6/T7 arch-conditional-dual-pin class: `tests/latent_suggest_goat.rs` now carries `G2_BAR_US` — `1000.0` under `#[cfg(target_os = "macos")]` (the historical GOAT bar stands unchanged on the M3 lane), `3000.0` elsewhere (a 3× ceiling over the measured 1458–1493 band: ~2× headroom above the band keeps box noise from flipping the gate while a 2× regression still fails it). One assert consumes the const (no duplicated arm bodies); the reading always prints beside its bar + `std::env::consts::OS` so every run is self-describing (the G2 box-state law's proportionate form for an in-test gate). Test renamed `g2_latency_under_1ms_per_chunk` → `g2_latency_bar_per_chunk` (the old name read as a false pass on non-macOS hosts — a green run there would have meant "1ms held" when it asserted 3×; no pins referenced the old name). Validated on this box: `cargo test --release --features latent_retrieval,clippy_lints,rust_perf --test latent_suggest_goat` 5/5, G2 reading **1505 µs/chunk PASS** (consistent with the issue's band + corpus growth since); clippy `-D warnings` clean at the target's feature set. Retrieval batches on this host now adjudicate on G1 + G2(Windows arm) + the latent_retrieval lib suite — the issue's interim permission clause is obsolete and the file is removed per the noise-reduction rule.
