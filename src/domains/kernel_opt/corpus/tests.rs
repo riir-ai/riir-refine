@@ -105,10 +105,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 195 (9): the mlxfast-bonsai2 POST-REORG wave-2 distill (Plan 194, vendor delta 0c61273..0c7c392) -- io32-count-pinned-text-narrowing (O +1: swap size_t index math to uint at the kernel-source-text level, count-pinned per kernel + launch-time bounds guards, stock-64-bit fallback on drift), strided-view-offset-fit32-launch-proof (O +1: the general member — prove every element offset of an arbitrary strided view below 2^31 by the 64-bit span sum, dispatch 32-bit only then), write-only-touch-side-queue (D +1: provably write-only touches commit on a dedicated second queue + serial side thread — never interleaved between prompt CBs, never stalling the engine thread on first-touch wiring; bounded drain at the emit boundary), last-query-rect-projection (B +1: when the last-query prework provably consumes only the chunk's newest rows, the q|gate projection computes those rows only via a rect-partitioned packed matmul — every element the full product's, bit-checked at prepare), roundfuse-packed-embedding-gather (C +1: three packed-table row gathers fuse to ONE launch under a pure-copy contract, per-geometry verdict cache + bitwise self-test incl. negative-id wrap), enumerable-domain-bit-identity-admission-gate (N +1: admit-or-refuse a rewrite by exhaustive enumeration of its whole 16-bit input domain — never sampling, load-time, binary verdict), cross-queue-output-retention-until-completion (E +1: side-queue write outputs retained until their CB's completion event — allocator hazard tracking does not span unordered queues), atexit-registration-order-shutdown (D +1: teardown by registration order — the cleanup hook registered AFTER the resources whose destructors must run after it, shared-lock handoff refusal, bounded final wait), lazy-admission-reservation-atomic-register (D +1: lazy-allocation admission = per-row reservations at max(actual, estimate) + capacity check and registration in one critical section — the TOCTOU fix; adoption reserves the exact-or-maximal span before the staging reservation drops) + 3 riders (kv-first-append += the adopt/install contract + ready gate; dtype-native-source-read += the Metal BF16 head-rotation pad-in-read instance; rust_perf prompt-continuation += the draft-vocab-cutoff honesty law); source Layr-Labs/mlxfast-bonsai2-27b-engine @ 0c7c392 (MIT; delta 0c61273..0c7c392 = 25 commits, 22 files, +9150/-777; the standing vendor clone; 2 staging subagents over disjoint slices, every load-bearing quote delta-freshness-checked — the GPUWake staging lead was killed as a B193 duplicate by exactly that check).
     // Batch 196 (2): the TensorFold v0.6.0 A− pack (Plan 195, pin c4646171, Apache-2.0 — license flipped MIT→Apache-2.0 at 0.6.0) -- affine-block-address-lets-pipeliner-fly (L +1: the stored nvfp4 macro-block address `(b // 4) * 32 * SBN + ((b % 4) * 16) // 2 * SBN` is a STAIRCASE in the loop step and the same address is `b * (8 * SBN)` — make the ADVANCING loop address affine so the hardware pipeliner puts the weight traffic in flight, the step's actual wait; nvfp4.py:312 VERBATIM + commit 443ad4a at-sha), register-width-topk-falls-back-to-tiled-radix-select (D +1: _select holds next_pow2(blocks) scores in registers up to SELECT_REGS = 32768 and SPILLS past — dispatch _select_tiles past the cliff, THE SAME LISTS (radix select one byte a pass from the top, ties by lowest block id, in block order); attention.py:13/:353/:357 VERBATIM + commit a2dba9c; every timing figure commit-message-only) + 1 rider (dtype-native-source-read (B176) += the lane_fuse g32 admission instance — the admission hardcoded `!= 64` while the kernels took (32, 64), g32 checkpoints silently lost fused projections; 50588fbb).
     // Batch 197 (6): the ml-explore/mlx VJP kernel distill (Research 227 / Plan 193; PRs #4563+#4565, merges 83b976ea438466418dea20c89709601201851fe1 + 9295197533d586dc26d6814b92899fa088320ab3, MIT, merged 2026-09-29; every quote verified at the pins — .research/230, 22/22) -- sdpa-backward-as-tiled-matmul-bounded-materialization (E +1, the A− GOAT lead: the attention VJP COMPOSED from tiled library GEMMs through ONE bounded score tile (1024² default, MLX_SDPA_VJP_BLOCK) beats the full-matrix fallback AND the fused flash-style kernel on unified memory — the fused attempt CLOSED UNMERGED as PR #3241, its own text conceding 0.36–0.70× dense; riders folded: save_lse forward output (function_constant 303), the NaN dead-row guard (exp(-inf − −inf)), the causal tile skip with diag_off = kL − qL, the HasTail compile-time segment tag, the dummy-binding fc-gated outputs), segmented-checkpoint-cheap-replay-backward (G +1, A−: checkpoint the ENTRY state every Ckpt-th step (dense cache at T=4096/B=4/Hv=32 = 34 GB in-source) and replay the state recurrence in the backward — delta cached per chunk so the replay is ~a tenth of a chunk's work; the entry-state-not-exit clause pinned by test; lead 6's register seg[Ckpt][n_per_t] arm FOLDED as the second posture), gqa-zero-stride-batch-broadcast (A +1, B+: k_bs innermost stride 0 broadcasts one kv head over its query group through the batched GEMM — no expanded tensor; the GQA-operand family's stride-0 member beside B182's row-fold), threadgroup-scope-reduction-single-writer (E +1, B: reduce_tile_tg folds the kNSG simdgroup partials in threadgroup memory and commits with a single non-atomic store — the atomic paid only on the GQA axis that genuinely crosses threadgroups), cache-symmetric-intermediates-per-chunk (G +1, B: the forward-save pass caches the expensive chunk-local set (KKt, the 15-step Neumann T-inv, QKt_raw, delta) with the dv_idx == 0 single-writer guard — the cache-what's-expensive half of the hierarchy beside #2's recompute-what's-cheap), chain-rule-postprocess-kernel (G +1, C+: the kernel differentiates the TRANSFORMED variable (dgamma, 'computes the gradient with respect to the log') and gated_delta_dgamma_to_dg applies the Jacobian in an O(T) reverse suffix cumsum with the max(g, 1e-6) floor) + 1 rider (dot-macro-family-widens-at-load-f32-accumulate (B192) += the OPERAND-TYPED MACRO instance — the macro-side pole: 'Operand and accumulator types are taken from the tiles rather than pinned to float' + the C-stays-float accumulator clause, gated_delta_nax_ops.h:399-404,576-579); source ml-explore/mlx @ the two merge shas (MIT; T0 re-clone at full shas, 22/22 quotes verified — the 34 GB comment + entry-state clause live in the FORWARD file, a provenance sharpening over the research draft).
+    // Batch 199 (7): the TensorFold v0.6.0 kernel half (Plan 197, pin c4646171, Apache-2.0 — the staged B/B−/C+ pool's kernel items 9/10/12/13/15/17/22; items 21/24 landed as riders; the serving half stages for Batch 200) -- splitk-reduce-one-launch-slice-order-pinned (C +1: both split-K faces reduced by ONE kernel with the summation order PINNED bit-identical to the per-slice loop, pinned by test; the qmm.cu cluster DSMEM + exl3 linear.cu last-block atomicAdd election ride as in-entry instances), per-group-epilogue-deferred-between-mma-bursts (B +1: the per-group scale/bias FMA epilogue parked in registers, applied BETWEEN the next group's MMA bursts — group order preserved; renamed from the staged moe- name: qmm.cu is the general decode lane; the PIPE arm is DORMANT at the pin — disclosed decision-content-not-evidence), declared-uncapturable-expert-declines-graphs (D +1: the capability DECLARATION axis — an expert that reads its plan on the host declares capturable=false and the engine declines graphs with one loud line BEFORE a capture fails; the capture tests ran EMPTY plans and could not see the class), draft-context-ring-window-bounded (A +1: drafter KV in a ring of window+block+tile−1 rows — the block pass reads exactly the rows it always read; the capacity ESTIMATOR counts the ring not capacity, and kept-state snapshots copy the WINDOW rows first), row-independent-pass-block-bounded-scratch (A +1: prompt-chunk passes whose rows read no other row run in FIXED 512-row blocks — GiB-class fp32 partials shrink to ONE block each, block-vs-whole equality bitwise-pinned), quantized-stored-bytes-not-widened-patterns (N +1: the widened-pattern ANTI-PATTERN — hold the checkpoint's wire bytes, decode in-kernel; decode-from-wire is the corpus's ambient default so the GOAT framing is REFUSED in-rule), visibility-bounded-scan-shape-stable-allocations (I +1: tiles past the last visible complete pool store −inf WITHOUT dot products while KEEPING bucket-sized allocations for graph reuse; the radix select keeps max(K,·) well-defined; parity by torch.equal incl. ties UNDER capture+replay) + 11 riders (argmax-epilogue += the bit-preserving gate splice; verify-fold += streams-folded-into-row-axis; fwht-ladder += the CUDA warp tier + the twin-transcription hazard; gdn-transition-replay += the mamba deferred-commit window replay; ancestor-mask += the dflash2 analytic contiguous-window band; exact-bf16-lut += act_mode constexpr; exact-widening += the FP8_PB_WO stored-bytes form; consumer-offset-absorption += the Q8_0→affine-g32 writer-side converter with the |d|>511 loud refusal; cuda-graph-scalar += the capture-time derived-table arm; fp4-nibble += the parity-nibble + exact bitcast; shape-only += the FP8_PB_WO recipe + the n-gram weight_scale); source ashhart/tensorfold @ c4646171139ee8a3c38103eaa1699dad226ec12b (v0.6.0, Apache-2.0 — license flipped MIT→Apache-2.0 at 0.6.0; 3 authoring subagents over disjoint slices + the coordinator; every Tier-1 quote re-verified at the pin, ~20 staging drifts disclosed in-entry incl. the capturable flip commit 603d3bc and 2 provenance upgrades message-only→in-source).
     assert_eq!(
         corpus.entries.len(),
-        739,
-        "kernel batches through Batch 198 should have 739 rules",
+        746,
+        "kernel batches through Batch 199 should have 746 rules",
     );
 }
 
@@ -1232,7 +1233,13 @@ fn batch22_cudarc_kernels_concepts_covered() {
     // C: fused-activation-quantize-for-gemv-consumer (riir-gpu cudarc_kernels/mod.rs L191-289 + L407-554)
     assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- fused_kimi_k3_mla_key_concat_kv_cache_kernel.cu:15-24 + cache_kernels_fused.cu:108-145): the RoPE rotation is computed in-registers and the rotated pair is written DIRECTLY to its quantized cache slot in the producing kernel (qk_t rotate -> optional scaled_convert -> kv_cache_ptr[...]) -- the consumer-side quantize/store fused into the producer, three in-source kernel families (deepseek-v4, minimax-m3, kimi-k3). RIDER (Batch 113 external instance, ggml-org/llama.cpp @ 5266f24da v0.4.0 -- commit 662a0b0 #27310 -- CUDA-side): the DFlash encoder is fused INTO the KV injection, and the sibling commit 8663224 #27877 DISABLES the non-fused GDN/LID paths -- the fused-path preference posture: when the fused kernel exists, the non-fused path is a liability, not a fallback."));
     // D: cuda-graph-scalar-via-device-pointer (riir-gpu cudarc_kernels/embedding.rs L76-105 + attention.rs L421-610)
-    assert!(concepts.contains(&"when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call"));
+    // Prefix assert (Batch 199): riders APPEND to the concept tail (the house
+    // rider law -- the Batch-199 derived-table arm rides this host), so the
+    // exact-equality form this assert used before is rider-fragile. The
+    // documented mechanism text stays pinned as the concept's HEAD.
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call")));
 }
 
 #[test]
@@ -5359,8 +5366,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 734-rule corpus must appear in exactly one category
-    // (re-pinned 734 at Batch 197; the comment read 728 through B196).
+    // Every rule_id in the 746-rule corpus must appear in exactly one category
+    // (re-pinned 746 at Batch 199; the comment read 734 through B198).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5442,21 +5449,27 @@ fn kernel_categories_counts_match_plan_003_table() {
     // B +1 the fewrow tensor tile with the decode fused into the RHS
     // operand, D +2 the ids-path stride rebind + the single-seq contiguity
     // copy elision, N +1 the tied-Hadamard fold at load; the PrismML pack.
+    // Batch 199 before that: A +2 the drafter context ring + the
+    // row-independent block-bounded scratch, B +1 the per-group epilogue
+    // deferred between MMA bursts, C +1 the split-K reduce one-launch
+    // order-pinned, D +1 the declared-uncapturable graph declination,
+    // I +1 the visibility-bounded scan, N +1 the quantized stored-bytes
+    // rule; the TensorFold kernel half (Plan 197).
     let expected = [
-        (KernelCategory::MemoryAccess, 157),
-        (KernelCategory::Compute, 78),
-        (KernelCategory::Fusion, 51),
-        (KernelCategory::Dispatch, 165),
+        (KernelCategory::MemoryAccess, 159),
+        (KernelCategory::Compute, 79),
+        (KernelCategory::Fusion, 52),
+        (KernelCategory::Dispatch, 166),
         (KernelCategory::Parallelism, 70),
         (KernelCategory::FlashAttnTiling, 18),
         (KernelCategory::LinearAttnRecurrence, 34),
         (KernelCategory::MoeDispatchBackward, 36),
-        (KernelCategory::NsaBlockSparse, 7),
+        (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 14),
         (KernelCategory::ConvGemmLayout, 19),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 57),
+        (KernelCategory::DtypeAlignment, 58),
         (KernelCategory::IrStrengthReduction, 7),
     ];
     for (cat, count) in expected {
@@ -5471,9 +5484,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 739.
+    // Sum must equal 746.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 739, "Plan 003: category totals must sum to 739 (Batch 198 +5: A +1 the weight-decode column amortization, B +1 the fewrow tensor tile with the decode fused into the RHS operand, D +2 the ids-path stride rebind + the single-seq contiguity copy elision, N +1 the tied-Hadamard fold at load; the PrismML pack; re-pinned 739 with the honest label)");
+    assert_eq!(total, 746, "Plan 003: category totals must sum to 746 (Batch 199 +7: A +2 the drafter context ring + the row-independent block-bounded scratch, B +1 the per-group epilogue deferred between MMA bursts, C +1 the split-K reduce one-launch order-pinned, D +1 the declared-uncapturable graph declination, I +1 the visibility-bounded scan, N +1 the quantized stored-bytes rule; the TensorFold kernel half; re-pinned 746 with the honest label)");
 }
 
 #[test]
@@ -5484,8 +5497,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 739,
-        "Plan 003: grouped corpus has {total} rules, expected 739"
+        total, 746,
+        "Plan 003: grouped corpus has {total} rules, expected 746"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9592,8 +9605,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        739,
-        "corpus count re-pinned at Batch 198 (the PrismML fork pack: 5 rules — the fewrow tensor tile with the PQ2_0 decode fused into the RHS cooperative tensor, the weight-decode amortized across output columns, the ids-path stride rebind correctness law, the tied-Hadamard fold at load with the versioned metadata contract, and the single-seq contiguity copy elision; was 734 at Batch 197)",
+        746,
+        "corpus count re-pinned at Batch 199 (the TensorFold v0.6.0 kernel half: 7 rules — the split-K reduce one-launch order pin, the per-group epilogue deferred between MMA bursts, the declared-uncapturable graph declination, the drafter context ring, the row-independent block-bounded scratch, the quantized stored-bytes rule, the visibility-bounded scan; was 739 at Batch 198)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -14019,6 +14032,158 @@ fn batch198_riders_landed_on_their_hosts() {
         assert!(
             rule.gpu_concept.contains(marker),
             "Batch-198 rider marker '{marker}' missing on host '{host}'"
+        );
+    }
+}
+
+#[test]
+fn batch199_pseudocode_parses() {
+    // G1 for Batch 199: syn-parse gate (the TensorFold v0.6.0 kernel half
+    // of 7 -- Plan 197: the split-K reduce one-launch order pin, the
+    // per-group epilogue deferred between MMA bursts, the declared-
+    // uncapturable graph declination, the drafter context ring, the
+    // row-independent block-bounded scratch, the quantized stored-bytes
+    // rule, and the visibility-bounded scan).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "splitk-reduce-one-launch-slice-order-pinned",
+        "per-group-epilogue-deferred-between-mma-bursts",
+        "declared-uncapturable-expert-declines-graphs",
+        "draft-context-ring-window-bounded",
+        "row-independent-pass-block-bounded-scratch",
+        "quantized-stored-bytes-not-widened-patterns",
+        "visibility-bounded-scan-shape-stable-allocations",
+    ];
+    assert_eq!(ids.len(), 7, "batch-199 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-199 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-199 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-199 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch199_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-199 decision-content contracts (the batch196/197/198
+    // precedent): each rule's load-bearing caveat must ride the rule text.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "splitk-reduce-one-launch-slice-order-pinned",
+            "bit-identical to the loop's",
+        ),
+        (
+            "per-group-epilogue-deferred-between-mma-bursts",
+            "dormant arm",
+        ),
+        (
+            "declared-uncapturable-expert-declines-graphs",
+            "operation failed due to a previous error during capture",
+        ),
+        (
+            "draft-context-ring-window-bounded",
+            "torn window",
+        ),
+        (
+            "row-independent-pass-block-bounded-scratch",
+            "bitwise",
+        ),
+        (
+            "quantized-stored-bytes-not-widened-patterns",
+            "four times",
+        ),
+        (
+            "visibility-bounded-scan-shape-stable-allocations",
+            "the same allocations",
+        ),
+    ];
+    for (id, marker) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-199 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-199 contract marker '{marker}' missing on '{id}'"
+        );
+    }
+}
+
+#[test]
+fn batch199_riders_landed_on_their_hosts() {
+    // The Batch-199 riders (the batch196/197/198 membership precedent -- a
+    // rider that never landed is a staging note, not corpus): the 11
+    // instance riders across their 11 host rules.
+    let corpus = build_kernel_seed_corpus();
+    let hosts = [
+        (
+            "argmax-epilogue-replaces-output-materialization",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "verify-fold-gqa-repeats-into-row-axis-tile-fill",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "fwht-wide-block-row-per-threadgroup-exchange-ladder",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "gdn-transition-replay-log-commit-many",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "ancestor-mask-bit-visibility-block-skip-tree-attention",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "exact-bf16-domain-activation-lut",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "exact-widening-enables-fp16-pv-accumulation",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "consumer-offset-absorption-precomputed-weight-row-correction",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "cuda-graph-scalar-via-device-pointer",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "fp4-nibble-gather-lut-replicated-index-width",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+        (
+            "shape-only-plan-row-invariant-kernel",
+            "RIDER (Batch 199 / Plan 197",
+        ),
+    ];
+    for (host, marker) in hosts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == host)
+            .unwrap_or_else(|| panic!("rider host '{host}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "Batch-199 rider marker '{marker}' missing on host '{host}'"
         );
     }
 }

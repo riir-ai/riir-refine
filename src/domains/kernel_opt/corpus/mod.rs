@@ -1952,6 +1952,9 @@ mod entries_gpu_63;
 mod entries_gpu_64;
 mod entries_gpu_65;
 mod entries_gpu_66;
+mod entries_gpu_67;
+mod entries_gpu_68;
+mod entries_gpu_69;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1994,6 +1997,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_64::entries());
     entries.extend(entries_gpu_65::entries());
     entries.extend(entries_gpu_66::entries());
+    entries.extend(entries_gpu_67::entries());
+    entries.extend(entries_gpu_68::entries());
+    entries.extend(entries_gpu_69::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2052,7 +2058,10 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (157 rules; Batch 198 +1: the weight-decode
+    // A: Memory access patterns (159 rules; Batch 199 +2: the drafter
+    // context ring (the CONTEXT ring, window+block+tile bounded) + the
+    // row-independent pass block-bounded scratch (the TensorFold kernel
+    // half); Batch 198 +1: the weight-decode
     // amortized across output columns (the column-axis register amortization
     // beside the staging amortizations); Batch 197 +1: the GQA zero-stride batch broadcast (the family's stride-0 member beside B182's row-fold); Batch 194 +4: the decode sidecar ring write, the l1-resident address-identity rewind, the SF sidecar own-granularity, the in-order credit collapse; was 148; Batch 188 +2: the\n    // low-bit warp-run load + the register prefetch-ring cutoff;
     // pair -- evict-last producer stores + dead-line discard;
@@ -2223,10 +2232,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "l1-resident-operand-reuse-address-identity-rewind",
             "decoupled-sf-sidecar-pipeline-own-granularity",
             "in-order-pipe-credit-release-completion-collapse",
-            "weight-decode-amortized-across-output-columns"
+            "weight-decode-amortized-across-output-columns",
+            "draft-context-ring-window-bounded",
+            "row-independent-pass-block-bounded-scratch"
         ],
     ),
-    // B: Compute patterns (78 rules; Batch 198 +1: the fewrow tensor tile
+    // B: Compute patterns (79 rules; Batch 199 +1: the per-group epilogue
+    // deferred between MMA bursts (renamed from the staged moe- name --
+    // qmm.cu is the general decode lane, not MoE); Batch 198 +1: the fewrow tensor tile
     // with the PQ2_0 decode fused into the RHS operand -- the A− lead of the
     // PrismML pack) -- was 64 in the comment while the
     // pinned truth was 65 (stale en passant, fixed at Batch 166); 66 at
@@ -2320,10 +2333,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "exact-bf16-domain-activation-lut",
             "branch-free-top2-insert-order-invariant-guard",
             "last-query-rect-projection",
-            "fewrow-tensor-tile-decode-into-rhs-operand"
+            "fewrow-tensor-tile-decode-into-rhs-operand",
+            "per-group-epilogue-deferred-between-mma-bursts"
         ],
     ),
-    // C: Fusion patterns (51 rules; Batch 195 +1:
+    // C: Fusion patterns (52 rules; Batch 199 +1: the split-K reduce in
+    // one launch with the summation order pinned (the split-k family's
+    // launch-count + order member); Batch 195 +1:
     // roundfuse-packed-embedding-gather; Batch 181 +1:
     // fused-transform-quantize-writer; Batch 182 +1: the argmax/top-k
     // epilogue swap; Batch 186 +1: consumer-offset-absorption — the
@@ -2383,9 +2399,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "argmax-epilogue-replaces-output-materialization",
             "consumer-offset-absorption-precomputed-weight-row-correction",
             "roundfuse-packed-embedding-gather",
+            "splitk-reduce-one-launch-slice-order-pinned"
         ],
     ),
-    // D: Dispatch patterns (165 rules; Batch 198 +2: the ids-path stride
+    // D: Dispatch patterns (166 rules; Batch 199 +1: the declared-
+    // uncapturable capability axis (the expert class DECLINES graphs);
+    // Batch 198 +2: the ids-path stride
     // rebind correctness law (the #258 per-slot bound) + the single-seq
     // contiguity copy elision; Batch 196 +1: the register-width topk tiled-radix fallback; Batch 195 +3: the write-only touch side queue + the atexit registration-order shutdown law + the lazy-admission reservation TOCTOU fix; Batch 194 +1: the multiwave dual-decode admission gate; was 152; Batch 192 +3: the MoE tile-picker
     // shape-truth + the descriptor-set binding memo with destroy-epoch +
@@ -2568,7 +2587,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lazy-admission-reservation-atomic-register",
             "register-width-topk-falls-back-to-tiled-radix-select",
             "ids-path-rebinds-stride-meaning",
-            "single-seq-slice-contiguity-copy-elision"
+            "single-seq-slice-contiguity-copy-elision",
+            "declared-uncapturable-expert-declines-graphs"
         ],
     ),
     // E: Parallelism patterns (70 rules; Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
@@ -2765,7 +2785,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dependency-wave-task-picker-one-wave-lookahead"
         ],
     ),
-    // I: NSA block-sparse selection (7 rules)
+    // I: NSA block-sparse selection (8 rules; Batch 199 +1: the
+    // visibility-bounded scan with shape-stable allocations -- the
+    // scored-range suffix skip + the graph-reuse bucket contract)
     (
         KernelCategory::NsaBlockSparse,
         "I: NSA block-sparse",
@@ -2777,6 +2799,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sparse-kv-index-list-sentinel-padded",
             "running-threshold-prune-compaction-aliasing-guard",
             "tile-max-prefiltered-exact-topk",
+            "visibility-bounded-scan-shape-stable-allocations"
         ],
     ),
     // J: Varlen packing + chunked reductions (5 rules)
@@ -2867,7 +2890,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (57 rules; Batch 198 +1: the tied-Hadamard output fold at load (the versioned metadata contract); Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
+    // N: dtype + alignment specialization (58 rules; Batch 199 +1: the
+    // quantized stored-bytes rule (hold the wire bytes, never widened
+    // patterns -- the storage-form pole beside B176's kernel-path axis);
+    // Batch 198 +1: the tied-Hadamard output fold at load (the versioned metadata contract); Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
     // macro family that widens at load + f32 accumulation — the CPU refusal
     // pole of the accumulator-dtype family; Batch 177 +2: the
     // residency-audit + bpw-axis rules, both quantization-format decisions;
@@ -2934,7 +2960,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "construction-identity-row-classes-replace-probe",
             "fp4-nibble-gather-lut-replicated-index-width",
             "enumerable-domain-bit-identity-admission-gate",
-            "tied-hadamard-output-fold-at-load"
+            "tied-hadamard-output-fold-at-load",
+            "quantized-stored-bytes-not-widened-patterns"
         ],
     ),
     // O: IR strength reduction (7 rules; Batch 195 +2: the io32

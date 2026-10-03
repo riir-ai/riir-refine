@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 739, "Plan 003: experts cover all 739 corpus rules (Batch 198 +5, the PrismML fork pack — A +1 the weight-decode column amortization, B +1 the fewrow tensor tile with the decode fused into the RHS operand, D +2 the ids-path stride rebind + the single-seq contiguity copy elision, N +1 the tied-Hadamard fold at load; re-pinned 739 with the honest label)");
+        assert_eq!(total, 746, "Plan 003: experts cover all 746 corpus rules (Batch 199 +7, the TensorFold kernel half — A +2 the drafter context ring + the row-independent block-bounded scratch, B +1 the per-group epilogue deferred between MMA bursts, C +1 the split-K reduce one-launch order pin, D +1 the declared-uncapturable graph declination, I +1 the visibility-bounded scan, N +1 the quantized stored-bytes rule; re-pinned 746 with the honest label)");
     }
 
     #[test]
