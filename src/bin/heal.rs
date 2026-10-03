@@ -3404,8 +3404,64 @@ fn write_with_fmt(
     }
 }
 
-/// Print usage + exit 2 (arg-error convention).
+/// Print the full usage page + exit 2 (arg-error convention).
 fn usage() -> ! {
+    eprintln!("{}", usage_text());
+    std::process::exit(2);
+}
+
+/// `auto` + the domains THIS build compiled, `|`-joined (Issue 144 T4).
+fn domain_choices() -> String {
+    std::iter::once("auto")
+        .chain(DomainId::compiled().map(DomainId::label))
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+/// The everyday help — `cargo refine --help` (Issue 144 T3). User verbs
+/// only: no internal plan/issue ids, no maintainer reports, no flags this
+/// build cannot run. Everything else is `--help-all`.
+fn user_help() -> String {
+    let domains = domain_choices();
+    let compile = if cfg!(feature = "rustc_errors") {
+        "    cargo refine --fix-compile [--write] <path>...\n\
+         \x20                                      Plan (or with --write, apply) fixes for compile errors\n"
+    } else {
+        ""
+    };
+    let account = if cfg!(feature = "kat_service") {
+        "    cargo refine login                 Sign in to your KAT account (or create one)\n\
+         \x20   cargo refine account               Your balance, spend and earnings\n\
+         \x20   cargo refine --info                Account, contribution and local work in one view\n"
+    } else {
+        ""
+    };
+    format!(
+        "cargo-refine {version} — Refine, the code fixer that learns (https://refine.gist.rs)
+
+USAGE:
+    cargo refine [<path>...]           Dry run: show what would be fixed, no edits (default path: .)
+    cargo refine --fix <path>...       Apply the fixes; edits that break the build are reverted
+    cargo refine --suggest [--domain <{domains}>] <path>...
+                                       Show the matching rules per code span, no edits
+{compile}{account}    cargo refine --mine                What contributing is, the policy, and how to earn KAT
+    cargo refine --unmine              Stop contributing (fixing keeps working)
+    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
+    cargo refine config get            Show which service this install talks to
+    cargo refine --version             Version and the features this build carries
+    cargo refine --help-all            Every flag, including maintainer reports
+
+Rule domains in this build: {list}",
+        version = env!("CARGO_PKG_VERSION"),
+        list = DomainId::compiled()
+            .map(DomainId::label)
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
+}
+
+/// The full flag reference — `--help-all`, and the arg-error page.
+fn usage_text() -> String {
     #[cfg(feature = "fix_verify")]
     let verify_help = format!(
         "    --verify        With --fix: write, cargo-check, auto-revert the offending edits\n\
@@ -3421,13 +3477,14 @@ fn usage() -> ! {
     let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8|9>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold); 9 = the CRB corruption ladder (Issue 137: compile-clean/test-failing known-position localization + the DLM remask arming gate — own runner, no clippy oracle, never appended to the heal score history). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
-    eprintln!(
+    let domains = domain_choices();
+    format!(
         "cargo-refine (Plan 005) — modelless code healing via latent corpus retrieval
 
 USAGE:
     cargo refine                                        <- DRY RUN: review what would be fixed (no edits)
     cargo refine --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
-    cargo refine --suggest [--domain <auto|clippy|perf|kernel|sec|docker|dist>] [--top-k <N>] [--clippy-json <path>] <path>...
+    cargo refine --suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
     cargo refine --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo refine --mine                                 <- what mining is + policy + how to earn KAT
     cargo refine --unmine                               <- opt OUT of contributing (healing keeps working)
@@ -3840,8 +3897,7 @@ Requesting a domain whose feature is off is an error (T2.4 gating). --verify nee
         FIXABLE_LINTS.join(", "),
         verify_help,
         score_help
-    );
-    std::process::exit(2);
+    )
 }
 
 #[derive(Default)]
@@ -4407,6 +4463,16 @@ fn parse_args() -> Args {
                 }
             }
             "--version" | "-V" => args.version = true,
+            // Issue 144 T3: asking for help is not an error — stdout, exit 0
+            // (it used to print `unknown flag "--help"` + the page, exit 2).
+            "--help" | "-h" => {
+                println!("{}", user_help());
+                std::process::exit(0);
+            }
+            "--help-all" => {
+                println!("{}", usage_text());
+                std::process::exit(0);
+            }
             // ONE global `--yes`: non-interactive consent for every y/N prompt
             // AND the vote arm it used to serve exclusively (the later
             // duplicate arm is gone — first-match would have shadowed it).
@@ -4611,20 +4677,25 @@ fn parse_args() -> Args {
                     eprintln!("--domain requires a value");
                     usage();
                 };
-                match value.as_str() {
-                    "auto" => args.domain = None,
-                    "clippy" => args.domain = Some(DomainId::Clippy),
-                    "perf" => args.domain = Some(DomainId::Perf),
-                    "kernel" => args.domain = Some(DomainId::Kernel),
-                    "sec" => args.domain = Some(DomainId::Sec),
-                    "docker" => args.domain = Some(DomainId::Docker),
-                    "dist" => args.domain = Some(DomainId::Dist),
-                    "shader" => args.domain = Some(DomainId::ShaderPerf),
-                    other => {
-                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec|docker|dist|shader)");
-                        usage();
+                // Issue 144 T4: the choices are the domains THIS build
+                // compiled, never the full enum — a release binary used to
+                // advertise `sec`/`kernel` and then refuse them.
+                args.domain = match (value.as_str(), DomainId::from_label(&value)) {
+                    ("auto", _) => None,
+                    (_, Some(d)) if d.is_compiled() => Some(d),
+                    (_, Some(d)) => {
+                        eprintln!(
+                            "--domain {} is not in this build (this build has: {})",
+                            d.label(),
+                            domain_choices()
+                        );
+                        std::process::exit(2);
                     }
-                }
+                    (other, None) => {
+                        eprintln!("unknown --domain {other:?} (want {})", domain_choices());
+                        std::process::exit(2);
+                    }
+                };
             }
             "--top-k" => {
                 let Some(value) = it.next() else {

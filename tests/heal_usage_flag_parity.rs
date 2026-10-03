@@ -40,17 +40,28 @@ fn heal_source() -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()))
 }
 
-/// Long flags mentioned inside `fn usage()`'s body.
+/// Long flags mentioned in the help text — BOTH pages (Issue 144 T3 split
+/// it): `fn user_help()` (`--help`) and `fn usage_text()` (`--help-all` +
+/// the arg-error page). `fn usage()` only prints the latter, so auditing it
+/// would read a near-empty body and trip the population floor below.
 fn usage_flags(src: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for sig in ["fn user_help()", "fn usage_text()"] {
+        out.extend(scan_flags(fn_body(src, sig)));
+    }
+    out
+}
+
+fn fn_body<'a>(src: &'a str, sig: &str) -> &'a str {
     let start = src
-        .find("fn usage()")
-        .expect("heal.rs must define `fn usage()` — the audit has nothing to read without it");
+        .find(sig)
+        .unwrap_or_else(|| panic!("heal.rs must define `{sig}` — the audit has nothing to read"));
     // The body ends at the first column-0 `}` after the signature.
     let end = src[start..]
         .find("\n}\n")
         .map(|o| start + o)
-        .expect("`fn usage()` must be closed at column 0");
-    scan_flags(&src[start..end])
+        .unwrap_or_else(|| panic!("`{sig}` must be closed at column 0"));
+    &src[start..end]
 }
 
 /// Long flags the parser matches (`"--flag" =>` and `"--flag" | ...`).
@@ -130,7 +141,14 @@ fn the_audit_can_see_what_it_audits() {
     // `--unmine` is the plain-arm pin for the consent tier (owner mandate
     // 2026-09-08): a tier the usage text stops advertising is a tier
     // nobody can find.
-    for f in ["--suggest", "--fix", "--history", "--dry-run", "--unmine"] {
+    for f in [
+        "--suggest",
+        "--fix",
+        "--history",
+        "--dry-run",
+        "--unmine",
+        "--help-all",
+    ] {
         assert!(usage.contains(f), "usage extractor missed {f}");
         assert!(parser.contains(f), "parser extractor missed {f}");
     }

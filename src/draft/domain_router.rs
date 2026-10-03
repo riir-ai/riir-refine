@@ -94,6 +94,33 @@ impl DomainId {
             Self::ShaderPerf => "shader",
         }
     }
+
+    /// Inverse of [`DomainId::label`] (`None` for an unknown label).
+    #[must_use]
+    pub fn from_label(label: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|d| d.label() == label)
+    }
+
+    /// Whether this domain's corpus feature is compiled into THIS build —
+    /// the same gates `LatentMatcher` indexes under, so a CLI can list the
+    /// domains it can actually run without building a matcher.
+    #[must_use]
+    pub const fn is_compiled(self) -> bool {
+        match self {
+            Self::Clippy => cfg!(feature = "clippy_lints"),
+            Self::Perf => cfg!(feature = "rust_perf"),
+            Self::Kernel => cfg!(feature = "kernel_opt"),
+            Self::Sec => cfg!(feature = "sec"),
+            Self::Docker => cfg!(feature = "docker"),
+            Self::Dist => cfg!(feature = "dist"),
+            Self::ShaderPerf => cfg!(feature = "shader_perf"),
+        }
+    }
+
+    /// The compiled domains, in router order.
+    pub fn compiled() -> impl Iterator<Item = Self> {
+        Self::ALL.into_iter().filter(|d| d.is_compiled())
+    }
 }
 
 /// Cross-domain centroid router.
@@ -613,6 +640,22 @@ fn for_each_token<'a>(text: &'a str, f: &mut impl FnMut(&'a str)) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn label_round_trips_and_compiled_matches_features() {
+        for d in DomainId::ALL {
+            assert_eq!(DomainId::from_label(d.label()), Some(d));
+        }
+        assert_eq!(DomainId::from_label("auto"), None);
+        // Clippy's arm reads the feature, not a constant: flip-checked
+        // against the build's own cfg so a hard-coded `true` reds here.
+        assert_eq!(
+            DomainId::Clippy.is_compiled(),
+            cfg!(feature = "clippy_lints")
+        );
+        assert_eq!(DomainId::Sec.is_compiled(), cfg!(feature = "sec"));
+        assert!(DomainId::compiled().all(DomainId::is_compiled));
+    }
 
     fn fixture_domains() -> Vec<(DomainId, Vec<String>)> {
         vec![
