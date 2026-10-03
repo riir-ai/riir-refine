@@ -607,6 +607,18 @@ const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
   "allow_redacted": false
 }"#;
 
+/// The gate [`DEFAULT_SYNC_POLICY_JSON`] defines — what an opted-in repo
+/// gets. Fail-closed (deny-all) if the constant ever stops parsing; the
+/// `default_sync_policy_parses` test pins that it does not.
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+fn default_sync_policy_gate() -> riir_refine::kat_redact::RedactionGate {
+    serde_json::from_str::<riir_refine::kat_redact::SyncPolicy>(DEFAULT_SYNC_POLICY_JSON)
+        .map_or_else(
+            |_| riir_refine::kat_redact::RedactionGate::deny_all(),
+            riir_refine::kat_redact::RedactionGate::from_policy,
+        )
+}
+
 fn run_mine_intro() {
     println!("KAT mining — turn your healing work into network credit");
     println!();
@@ -1514,6 +1526,145 @@ fn print_mine_push(outcome: &MinePush) {
     }
 }
 
+/// The rows + redaction policy a mining batch is built from — SHARED by the
+/// push ([`push_mining_batch`]) and the local export ([`run_kat_sync_export`],
+/// riir-dapps Issue 112 T4), so an exported file is exactly what a push would
+/// gate. `None` = nothing to build (no store, or an unreadable one), already
+/// reported under `label` when `verbose`.
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+fn load_mining_rows(
+    root: &Path,
+    verbose: bool,
+    label: &str,
+) -> Option<(
+    Vec<riir_refine::traj_store::TrajRowDoc>,
+    riir_refine::kat_redact::LoadedPolicy,
+)> {
+    let kv = root.join(".refine").join("trajectories.kv");
+    if !kv.exists() {
+        if verbose {
+            println!(
+                "{label}: no trajectory store at {} — run any --fix in this repo first",
+                kv.display()
+            );
+        }
+        return None;
+    }
+    let (traj, bad) = match riir_refine::traj_store::TrajStore::open(root) {
+        Ok(t) => t,
+        Err(e) => {
+            if verbose {
+                eprintln!("{label}: trajectory store unreadable: {e}");
+            }
+            return None;
+        }
+    };
+    if bad > 0 {
+        eprintln!("{label}: {bad} corrupt row(s) skipped");
+    }
+    let loaded = riir_refine::kat_redact::RedactionGate::discover(None);
+    if let Some(w) = &loaded.warning {
+        eprintln!("{label}: redaction policy — {w}");
+    }
+    Some((traj.dump(), loaded))
+}
+
+/// The deny-by-default remedy (2026-09-09 fresh-machine find): with no
+/// `.refine-sync-policy` every row is blocked, so name the file and the fix.
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+fn print_no_policy_remedy(
+    root: &Path,
+    payload: &riir_refine::kat_sync_payload::SyncPayload,
+    label: &str,
+) {
+    let no_policy = payload.outcomes.iter().any(|o| {
+        matches!(
+            o,
+            riir_refine::kat_sync_payload::RowOutcome::Blocked {
+                reason: riir_refine::kat_redact::BlockReason::NoPolicy,
+                ..
+            }
+        )
+    });
+    if !no_policy {
+        return;
+    }
+    let policy_path = root.join(".refine-sync-policy");
+    eprintln!(
+        "{label}: {} row(s) BLOCKED — no {} (the redaction gate is deny-by-default)",
+        payload.rows_blocked,
+        policy_path.display()
+    );
+    eprintln!(
+        "{label}: run `cargo refine --mine` in this repo to write the default policy, \
+         then run again (queued batches stay queued)"
+    );
+}
+
+/// riir-dapps Issue 112 T4: `cargo refine sync --export <file|->` — build the
+/// redacted mining batch exactly as `sync` would and WRITE it instead of
+/// sending it. No network, no login, no consent change: the batch is signed
+/// with a throwaway key ([`riir_refine::kat_sync_payload::ephemeral_signer`])
+/// so it verifies like a real push but attributes to no account a person
+/// holds. This is how anyone (including the refine page's published sample)
+/// inspects what `--mine` would upload before opting in.
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+fn run_kat_sync_export(target: &Path) {
+    use riir_refine::kat_redact::SpanOrigin;
+    use riir_refine::kat_sync_payload::{ephemeral_signer, SyncPayloadBuilder};
+
+    let root = resolve_heal_root(&[]);
+    let Some((rows, loaded)) = load_mining_rows(&root, true, "export") else {
+        std::process::exit(1);
+    };
+    // No policy file at all = the state BEFORE opting in: preview the default
+    // policy `--mine` would write, so the export answers "what would joining
+    // upload". An existing (even broken) policy is always the one used.
+    let gate = match &loaded.path {
+        Some(p) => {
+            eprintln!("export: policy {}", p.display());
+            loaded.gate
+        }
+        None => {
+            eprintln!(
+                "export: no .refine-sync-policy here — previewing the default policy \
+                 `cargo refine --mine` would write"
+            );
+            default_sync_policy_gate()
+        }
+    };
+    let signer = ephemeral_signer();
+    let payload = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build(&rows);
+    print_no_policy_remedy(&root, &payload, "export");
+    let to_stdout = target.as_os_str() == "-";
+    let written = if to_stdout {
+        use std::io::Write as _;
+        std::io::stdout().write_all(payload.ndjson.as_bytes())
+    } else {
+        std::fs::write(target, &payload.ndjson)
+    };
+    if let Err(e) = written {
+        eprintln!("export: could not write {}: {e}", target.display());
+        std::process::exit(1);
+    }
+    // stderr, so `--export -` keeps stdout pure NDJSON.
+    eprintln!(
+        "export: {} row(s) included, {} blocked (batch {}) → {}",
+        payload.rows_included,
+        payload.rows_blocked,
+        &payload.commitment[..12.min(payload.commitment.len())],
+        if to_stdout {
+            "stdout".to_string()
+        } else {
+            target.display().to_string()
+        }
+    );
+    eprintln!(
+        "export: NOT sent — signed with a throwaway key (no account, no login); \
+         `cargo refine sync` builds and pushes the same rows under your account"
+    );
+}
+
 /// The mining-batch push half, SHARED by `cargo refine sync` (verbose — the
 /// caller has already gated on consent and prints its opted-out report)
 /// and the opted-in run tails (quiet: one line via [`print_mine_push`],
@@ -1534,36 +1685,9 @@ fn push_mining_batch(
 
     let sv = !quiet; // verbose mode = the `cargo refine sync` report
     let root = resolve_heal_root(&[]);
-    let kv = root.join(".refine").join("trajectories.kv");
-    if !kv.exists() {
-        if sv {
-            println!(
-                "sync: no trajectory store at {} — run any --fix in this repo first",
-                kv.display()
-            );
-        }
+    let Some((rows, loaded)) = load_mining_rows(&root, sv, "sync") else {
         return MinePush::Skipped;
-    }
-    let (traj, bad) = match riir_refine::traj_store::TrajStore::open(&root) {
-        Ok(t) => t,
-        Err(e) => {
-            if sv {
-                eprintln!("sync: trajectory store unreadable: {e}");
-            }
-            return MinePush::Skipped;
-        }
     };
-    if bad > 0 {
-        eprintln!("sync: {bad} corrupt row(s) skipped");
-    }
-    let rows = traj.dump();
-    let loaded = riir_refine::kat_redact::RedactionGate::discover(None);
-    if loaded.warning.is_some() {
-        eprintln!(
-            "sync: redaction policy — {}",
-            loaded.warning.clone().unwrap_or_default()
-        );
-    }
     // Payload v2 is SIGNED with the account key (Issue 008) — the receiver
     // derives the submitter from it, so an account is required to sync.
     let account = match riir_refine::kat_account::KatAccount::load(
@@ -1605,29 +1729,10 @@ fn push_mining_batch(
     if payload.rows_included == 0 {
         return MinePush::Skipped;
     }
-    // The deny-by-default remedy (2026-09-09 fresh-machine find) — verbose
-    // only; the quiet tail's reader gets the same answer from `sync`.
-    if sv
-        && payload.outcomes.iter().any(|o| {
-            matches!(
-                o,
-                riir_refine::kat_sync_payload::RowOutcome::Blocked {
-                    reason: riir_refine::kat_redact::BlockReason::NoPolicy,
-                    ..
-                }
-            )
-        })
-    {
-        let policy_path = root.join(".refine-sync-policy");
-        eprintln!(
-            "sync: {} row(s) BLOCKED — no {} (the redaction gate is deny-by-default)",
-            payload.rows_blocked,
-            policy_path.display()
-        );
-        eprintln!(
-            "sync: run `cargo refine --mine` in this repo to write the default policy, \
-             then sync again (queued batches stay queued)"
-        );
+    // The deny-by-default remedy — verbose only; the quiet tail's reader
+    // gets the same answer from `sync`.
+    if sv {
+        print_no_policy_remedy(&root, &payload, "sync");
     }
     match transport.post_sync(&payload.ndjson) {
         riir_refine::kat_lease_client::HttpResponse::Ok(body) => {
@@ -3517,6 +3622,7 @@ USAGE:
     cargo refine account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
     cargo refine update                                 (corpus lease refresh, kat_transport)
     cargo refine sync                                   (push redacted batches + pull lease, kat_transport)
+    cargo refine sync --export <file|->                 (WRITE the redacted batch, send nothing — no login, throwaway key)
     cargo refine claim --tx <sig>                       (queue/submit a payment claim, kat_service)
     cargo refine stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
     cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
@@ -3751,6 +3857,13 @@ USAGE:
                     follows when the original was already rustfmt-clean — pre-existing
                     drift + CRLF files are skipped — no formatting churn enters a
                     mechanical diff.)
+    --export <file|->
+                    With `sync` ONLY: build the redacted mining batch exactly as
+                    `sync` would, and write it to <file> (`-` = stdout) instead
+                    of sending it. No network, no login, no consent change: it
+                    is signed with a throwaway key, so it verifies like a push
+                    but belongs to no account. With no .refine-sync-policy in
+                    the repo it previews the default policy --mine would write.
     --mine          What KAT mining is, the policy warning, the web link, and
                     the login → heal → sync loop (Proposal 008); LOGS YOU IN
                     when no account exists and RUNS THE SYNC at the end (owner
@@ -4156,6 +4269,9 @@ struct Args {
     /// riir-dapps Plan 023: the `config set` subcommand modifier (bare
     /// `config` / `config get` is the pure read).
     config_set: bool,
+    /// riir-dapps Issue 112 T4: `--export <file|->` — with `sync` ONLY: write
+    /// the redacted batch locally instead of pushing it.
+    sync_export: Option<PathBuf>,
     /// Proposal 007 T2.1: `--usd <N>` — the stake amount (dollars, ≤6
     /// fractional digits, integer-exact into base units).
     stake_usd: Option<String>,
@@ -4379,6 +4495,7 @@ fn parse_args() -> Args {
         claim_tx: None,
         config_url: None,
         config_set: false,
+        sync_export: None,
         stake_usd: None,
         stake_info: false,
         stake_restake: None,
@@ -4814,6 +4931,13 @@ fn parse_args() -> Args {
                 };
                 args.config_url = Some(value);
             }
+            "--export" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--export requires a value (a file path, or - for stdout)");
+                    usage();
+                };
+                args.sync_export = Some(PathBuf::from(value));
+            }
             "--history" => args.account_history = true,
             "--no-reheat" => args.no_reheat = true,
             "--candidates" => {
@@ -4889,6 +5013,10 @@ fn parse_args() -> Args {
     }
     if args.config_url.is_some() && !(args.config_set && args.command == Some(KatCommand::Config)) {
         eprintln!("--url requires `config set`");
+        usage();
+    }
+    if args.sync_export.is_some() && args.command != Some(KatCommand::Sync) {
+        eprintln!("--export requires the `sync` command (cargo refine sync --export <file|->)");
         usage();
     }
     if args.purge && !args.unmine {
@@ -7717,6 +7845,11 @@ fn main() {
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),
+            // Issue 112 T4: the local export sends nothing, so it needs no
+            // transport — it dispatches ahead of the transport-gated push.
+            KatCommand::Sync if args.sync_export.is_some() => {
+                run_kat_sync_export(args.sync_export.as_deref().unwrap_or(Path::new("-")));
+            }
             #[cfg(feature = "kat_transport")]
             KatCommand::Sync => run_kat_sync(),
             KatCommand::Stake => run_kat_stake(
@@ -12318,6 +12451,22 @@ fn run_reheat_pass(
             Some((report, Some(line)))
         }
         _ => None,
+    }
+}
+
+#[cfg(all(test, feature = "kat_service", feature = "latent_retrieval"))]
+mod sync_export_tests {
+    use super::*;
+
+    /// Issue 112 T4: the export's no-policy preview is the policy `--mine`
+    /// writes. If the constant stopped parsing (or drifted off the compiled
+    /// schema version) the preview would silently deny everything.
+    #[test]
+    fn default_sync_policy_parses_at_the_compiled_version() {
+        let policy: riir_refine::kat_redact::SyncPolicy =
+            serde_json::from_str(DEFAULT_SYNC_POLICY_JSON).expect("default policy parses");
+        assert_eq!(policy.version, riir_refine::kat_redact::REDACT_VERSION);
+        assert!(policy.sync_enabled);
     }
 }
 

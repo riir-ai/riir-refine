@@ -285,6 +285,7 @@ The loop (every step is honest about what is local vs server):
 cargo refine login      # account key (Ed25519, OpenSSH format) + once-per-key welcome grant
 cargo refine --fix      # heal — metered locally (accounting-only projection)
 cargo refine sync       # PUSH the redacted signed batch (mining) + PULL the corpus lease
+cargo refine sync --export batch.ndjson  # WRITE that batch locally, send nothing (no login; throwaway key)
 cargo refine account    # burn / balance / grant / network state
 cargo refine --refill   # out of KAT? dev/test faucet refill (see below)
 ```

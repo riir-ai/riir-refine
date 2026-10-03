@@ -658,6 +658,29 @@ pub fn parse_rows(ndjson: &str) -> Result<Vec<PayloadRow>, (usize, String)> {
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+/// A throwaway signing key for a LOCAL export (`cargo refine sync --export`,
+/// riir-dapps Issue 112 T4). The exported batch is the push's exact shape and
+/// verifies under [`verify_payload`], but no one holds this key once the
+/// process exits — the file attributes to no account a person can claim, and
+/// producing it needs no login. Seeded from the std hasher's per-thread OS
+/// randomness plus the clock, mixed through blake3: the key only has to be
+/// unguessable, never recoverable.
+#[must_use]
+pub fn ephemeral_signer() -> ed25519_dalek::SigningKey {
+    use std::hash::BuildHasher as _;
+    let mut h = blake3::Hasher::new_derive_key("riir-refine sync-export ephemeral key v1");
+    let state = std::collections::hash_map::RandomState::new();
+    for i in 0u64..4 {
+        h.update(&state.hash_one(i).to_le_bytes());
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    h.update(&nanos.to_le_bytes());
+    h.update(&std::process::id().to_le_bytes());
+    ed25519_dalek::SigningKey::from_bytes(h.finalize().as_bytes())
+}
+
 /// The cross-repo GOLDEN signing seed — the deterministic test key both
 /// repos' fixture payloads are signed with (the `[42; 32]` answer-seed;
 /// distinct from every real-key convention in the worker shell). NOT for
@@ -1028,5 +1051,23 @@ mod tests {
         // The value the dapps-side test pins as GOLDEN_SUBMITTER_HEX.
         assert_eq!(hex.len(), 32);
         assert_eq!(hex, hex_encode(&account));
+    }
+
+    /// Issue 112 T4: two ephemeral keys differ (the export is attributable to
+    /// no stable identity), and a batch signed with one verifies like a push.
+    #[test]
+    fn ephemeral_signer_is_fresh_and_verifies() {
+        let a = ephemeral_signer();
+        let b = ephemeral_signer();
+        assert_ne!(a.verifying_key().to_bytes(), b.verifying_key().to_bytes());
+        assert_ne!(
+            a.verifying_key().to_bytes(),
+            golden_signer().verifying_key().to_bytes()
+        );
+        let gate = RedactionGate::from_policy(allow_policy());
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &a)
+            .build_at(&[row("a", "let x = 1;", "let x = 1;")], 1);
+        assert_eq!(p.rows_included, 1);
+        assert!(verify_payload(&p.ndjson).is_ok());
     }
 }
