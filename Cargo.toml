@@ -1181,6 +1181,13 @@ required-features = ["kat_service", "latent_retrieval"]
 name = "unmine_consent_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# riir-dapps Issue 112 T4: `sync --export` through the real binary. The
+# export needs no transport, so only the bin's own required-features —
+# without them CARGO_BIN_EXE_cargo-refine does not exist.
+[[test]]
+name = "sync_export_cli"
+required-features = ["kat_service", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 # Issue 076 (owner mandate): the burn auto-sync STACKING test — the git
 # analogy through the real binary (closed port → one stacked line + no ack;
 # live mock → ONE report carrying the FULL cumulative total + ack advance +
