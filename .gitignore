@@ -5,12 +5,11 @@ Cargo.lock
 
 # Plan 019 runtime state — the heal self-evolution store + miss queue
 # (per-repo runtime data, never committed; see README "Watch mode")
-.heal/
 .refine/
 # Issue 128 T5: the MINTED ring corpora live under .benchmarks/data and are
 # the COMMITTED measurement substrate (per-file BLAKE3 manifests; the
 # --fixseq-stats/--horizon-report loader reads them in place). The runtime
-# .heal/ rule above stays; this negation re-includes only the committed
+# .refine/ rule above stays; this negation re-includes only the committed
 # data tree.
 !.benchmarks/data/**
 CLAUDE.md
