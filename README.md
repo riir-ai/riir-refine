@@ -2,7 +2,7 @@
 
 > **Boundary contract:** [BOUNDARY.md](BOUNDARY.md) — what lives here, what may depend on it, known drift.
 
-**Multi-domain modelless code healer** — a pluggable framework behind the
+**The code fixer that learns** — a multi-domain modelless framework behind the
 `HealDomain` trait that distills code rules into a ruliology-style search
 space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 `syn`-based syntax pruner. The shipped domain set (Plan 001 + Plans 018/030/019/085):
