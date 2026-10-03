@@ -25,7 +25,15 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 168 rules — Batch 198 (2026-10-02,
+profiling guide, Research 032; **now 179 rules — Batch 200 (2026-10-03,
+Plan 198 — the TensorFold staged pool's serving half, source
+`ashhart/tensorfold` @ `c4646171` v0.6.0, Apache-2.0 — the kernel half
+landed as Batch 199; all eleven NotBenchable annotated: prefix-cache-entry,
+butterfly-piggyback, doorbell, per-kernel-measured item width, parity
+construction, mode switch, snapshot-release, pool handle, AIMD ramp,
+pinned-staging release, madvise-random; most serving-stack decision
+content — the B182/B186 precedent; ~10 staging drifts disclosed). Previously
+168 rules — Batch 198 (2026-10-02,
 Plan 196 — the PrismML fork #284 pack, source `PrismML-Eng/llama.cpp` @
 `3285e757a6`, MIT): `selector-lattice-beam-over-greedy-walk`
 (complexity, NotBenchable annotated — the NOT-ISOLATED caveat rides

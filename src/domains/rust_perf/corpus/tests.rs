@@ -16,7 +16,7 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 168); // Batch 198 (+1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
+    assert_eq!(corpus.entries.len(), 179); // Batch 200 (+11: the TensorFold staged pool's serving half -- prefix-cache-entry-one-token-early, dual-reduction-shared-butterfly-ladder, idle-rank-doorbell-on-rendezvous-store, prompt-item-per-consumer-kernel-measured, concurrent-round-parity-solo-equal, lone-stream-graph-replay-mode-switch, snapshot-then-release-shared-drafter-context, graph-pool-handle-fresh-per-generation, spec-copy-window-aimd-ramp-alone-gated, one-shot-staging-release-to-system, madvise-random-for-key-gather-tables -- all NotBenchable annotated, Plan 198) on the 168 base (Batch 198 +1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
     // Per-category standing counts (repaired to the LIVE numbers at Batch
     // 196, the TensorFold pair +1 complexity +1 allocation — complexity 25,
     // caching 7 and dispatch 5 in the prior prose had gone stale before this
@@ -1765,7 +1765,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 69); // 168 total − 99 benchable — Batch 198 added its rule as NotBenchable (host-behavior-shaped; the NOT-ISOLATED caveat rides context_notes); Batch 196 added BOTH its rules as NotBenchable (rows-not-paid-for in a serving verify forward + host accounting); Batch 182 added all THREE its rules as NotBenchable (dispatch/framework-shaped + acceptance-rate + measurement-methodology); Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
+    assert_eq!(without_spec.len(), 80); // 179 total − 99 benchable — Batch 200 added ALL ELEVEN its rules as NotBenchable (serving-stack decision content: parity properties, mode switches, pool lifecycles, AIMD ramps, pinned-staging + madvise hygiene); Batch 198 added its rule as NotBenchable (host-behavior-shaped; the NOT-ISOLATED caveat rides context_notes); Batch 196 added BOTH its rules as NotBenchable (rows-not-paid-for in a serving verify forward + host accounting); Batch 182 added all THREE its rules as NotBenchable (dispatch/framework-shaped + acceptance-rate + measurement-methodology); Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1882,7 +1882,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 114, "expected 114 context-annotated rules (Batch 198: 113 → 114 — the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 — the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
+    assert_eq!(annotated.len(), 125, "expected 125 context-annotated rules (Batch 200: 114 → 125 — the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 — the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 — the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
     assert!(annotated.contains(&"selector-lattice-beam-over-greedy-walk")); // Batch 198 — the NOT-ISOLATED caveat (the commit's e2e number is the fewrow kernel's)
     assert!(annotated.contains(&"grammar-window-draft-prune-path-local-mask")); // Batch 196 — the exactness-law + refusal-surface annotation
     assert!(annotated.contains(&"startup-estimate-derived-from-allocation-shapes")); // Batch 196 — the reconciliation + sub-arm annotation
@@ -1966,7 +1966,7 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 54, "expected 54 unannotated rules (168 total - 114 annotated; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat in context_notes, so the unannotated count is unchanged; Batch 186 added both its rules annotated: the toggle-oracle + cold-LLC members)");
+    assert_eq!(unannotated, 54, "expected 54 unannotated rules (179 total - 125 annotated; Batch 200 +11 ALL ANNOTATED -- the TensorFold serving half, so both sides move +11 and the unannotated count is UNCHANGED; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat in context_notes, so the unannotated count is unchanged; Batch 186 added both its rules annotated: the toggle-oracle + cold-LLC members)");
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1978,7 +1978,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 114); // Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113 (the TensorFold grammar-window + startup-estimate pair); Batch 186: 109 -> 111 (the ggml-cpu tiled measurement pair); Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider); Batch 181: 104 → 106 (the mlxfast mask-memo + seed-warm annotations); Batch 182: 106 → 109 (the mlxfast-delta trio)
+    assert_eq!(annotated, 125); // Batch 200: 114 -> 125 (the TensorFold serving-half ELEVEN, all annotated); Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113 (the TensorFold grammar-window + startup-estimate pair); Batch 186: 109 -> 111 (the ggml-cpu tiled measurement pair); Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider); Batch 181: 104 → 106 (the mlxfast mask-memo + seed-warm annotations); Batch 182: 106 → 109 (the mlxfast-delta trio)
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2019,7 +2019,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 114, "expected 114 annotated rules (Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta trio)");
+    assert_eq!(annotated.len(), 125, "expected 125 annotated rules (Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta trio)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2058,7 +2058,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (168 total − 114 annotated; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat, unannotated unchanged)");
+    assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules (179 total − 125 annotated; Batch 200 +11 ALL ANNOTATED -- both sides +11, unannotated UNCHANGED; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat, unannotated unchanged)");
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -5433,6 +5433,159 @@ fn batch196_rules_present_and_parse() {
             assert!(
                 notes.contains(needle),
                 "batch-196 '{id}' notes missing needle: {needle}"
+            );
+        }
+    }
+}
+
+/// Batch 200 — the `TensorFold` staged pool's serving half (Plan 198):
+/// presence + category + syn-parse gate over all eleven fixtures of every
+/// rule, plus the load-bearing needles from the verified quotes (every
+/// quote re-verified VERBATIM at the pin `c4646171` by three authoring
+/// subagents + the coordinator's 5-quote spot-check).
+#[test]
+fn batch200_rules_present_and_parse() {
+    let corpus = build_perf_seed_corpus();
+    let expected = [
+        (
+            "prefix-cache-entry-one-token-early",
+            "caching",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "prompt[:keep_at]",
+            ],
+        ),
+        (
+            "dual-reduction-shared-butterfly-ladder",
+            "simd",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "waits on one, not two",
+            ],
+        ),
+        (
+            "idle-rank-doorbell-on-rendezvous-store",
+            "concurrency",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "doorbell",
+            ],
+        ),
+        (
+            "prompt-item-per-consumer-kernel-measured",
+            "dispatch",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "1.64x slower",
+                "1.53x slower",
+            ],
+        ),
+        (
+            "concurrent-round-parity-solo-equal",
+            "concurrency",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "no row affects another",
+                "same bits at any row count",
+            ],
+        ),
+        (
+            "lone-stream-graph-replay-mode-switch",
+            "dispatch",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "token SHAs",
+            ],
+        ),
+        (
+            "snapshot-then-release-shared-drafter-context",
+            "allocation",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "no reference of its own",
+            ],
+        ),
+        (
+            "graph-pool-handle-fresh-per-generation",
+            "allocation",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "graph_pool_handle",
+                "capture into a new one",
+            ],
+        ),
+        (
+            "spec-copy-window-aimd-ramp-alone-gated",
+            "complexity",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "breaks starts over",
+                "halves",
+            ],
+        ),
+        (
+            "one-shot-staging-release-to-system",
+            "allocation",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "Give the pinned staging back to the system",
+            ],
+        ),
+        (
+            "madvise-random-for-key-gather-tables",
+            "io",
+            vec![
+                "NotBenchable",
+                "c4646171",
+                "license flipped MIT→Apache-2.0 at 0.6.0",
+                "MADV_RANDOM",
+                "read-ahead only evicts useful pages",
+            ],
+        ),
+    ];
+    for (id, category, notes_needles) in expected {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-200 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-200 '{id}' category");
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-200 '{id}' fixtures must parse"
+        );
+        assert!(e.context_notes.is_some(), "batch-200 '{id}' must be annotated");
+        let notes = e.context_notes.as_deref().unwrap_or_default();
+        assert!(
+            notes.contains("license flipped MIT→Apache-2.0 at 0.6.0"),
+            "batch-200 '{id}' must carry the Apache-2.0 provenance line"
+        );
+        for needle in notes_needles {
+            assert!(
+                notes.contains(needle),
+                "batch-200 '{id}' notes missing needle: {needle}"
             );
         }
     }

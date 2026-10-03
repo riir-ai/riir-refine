@@ -1,0 +1,27 @@
+# Plan 198 — Batch 200: the TensorFold staged pool's serving half
+
+**Status:** LANDED 2026-10-03 (4090 slot, shikuwa) — Batch 200 = 11 new rust_perf rules (the staged serving half: leads 5/6/7/8/11/14/16/18/19/20/23; the kernel half landed as Batch 199 / Plan 197). Quotes re-verified VERBATIM at the pin `c4646171139ee8a3c38103eaa1699dad226ec12b` (v0.6.0 tag, **Apache-2.0, license flipped MIT→Apache-2.0 at 0.6.0**; ephemeral clone `.raw/tensorfold-b200`, removed at close; T0 re-confirmed **147 commits past the pin at tip v0.6.3** — unchanged from B199's T0, pool graded AT the pin, drifts disclosed). Method: 3 authoring subagents over disjoint write sets (A: leads 5/6/7/8 → `entries_13.rs`; B: leads 11/14/16/18 → `entries_14.rs`; C: leads 19/20/23 → `entries_15.rs`), everything left UNCOMMITTED per the B198 method note; coordinator spot-verified 5 Tier-1 quotes at the pin (leads 5/6/8/18/19 — all verbatim).
+
+## Tasks
+
+- [x] T0 source clone + drift re-check (147-commit tip drift confirmed unchanged; pin checkout `c4646171`).
+- [x] T1 slice A (4 rules) — `prefix-cache-entry-one-token-early` caching · `dual-reduction-shared-butterfly-ladder` simd · `idle-rank-doorbell-on-rendezvous-store` concurrency · `prompt-item-per-consumer-kernel-measured` dispatch. All in-source quotes verbatim at the pin; DGX numbers + "ceiling and the count" trap + the 9933492 tile numbers labeled message-only; 6 drifts disclosed (gdn.cu real path, the doorbell kinship is B193 not the staged B189, `64e2374` flipped the general kernel BACK to 64 — the flip-flop IS the per-kernel-measured evidence, the MTP tail is ONE row not rows, the two butterfly sums are mutually INDEPENDENT, the 1.64x/1.53x numbers are IN-SOURCE).
+- [x] T2 slice B (4 rules) — `concurrent-round-parity-solo-equal` concurrency · `lone-stream-graph-replay-mode-switch` dispatch · `snapshot-then-release-shared-drafter-context` allocation · `graph-pool-handle-fresh-per-generation` allocation. Drifts: the parity TEST MATRIX is IN-SOURCE (staged message-only claim corrected — `tests/cuda/test_qwen36_moe.py` at the pin carries 16-stream/mixed/greedy/keyed/join-leave/constrained arms with round-parity asserts); lead 14's "quarter more" dropped a "the"; lead 16's multi.py is qwen3_5's (a different file from lead 14's qwen3_5_moe); the ambiguous qmm.py/graphs.py cites resolved to full paths.
+- [x] T3 slice C (3 rules, the B− set) — `spec-copy-window-aimd-ramp-alone-gated` complexity · `one-shot-staging-release-to-system` allocation · `madvise-random-for-key-gather-tables` io. The staged lead-19 correction VERIFIED TRUE (commit d23087c says "halves", the landed code RESETS to `first_copy` — TIP wins, carried in-entry); the 128-row cap is in-source (`COPY_ROWS_LIMIT = 128`); lead 23's madvise named the OPPOSITE pole of the B139 WILLNEED prefault family as staged.
+- [x] T4 coordinator landing — mod.rs wiring (13/14/15) · batch200 gate (11 rules: presence + category + syn-parse + provenance line + quote needles) · count pins (tests.rs ×6, AGENTS.md ×2, README ×1, `.docs/11_domains/rust_perf.md` ×1) · 4 doc_markdown header mechanicals healed by hand (`TensorFold` ×3, `context_notes` ×1 — the B192 class).
+- [x] T5 retrieval floors — FIRST RUN RED (blended top-5 133/141 < 134/141 floor). Attribution MEASURED: pre-batch run in a detached worktree at the landing HEAD (`E:/git/riir-refine.w200`, isolated `CARGO_TARGET_DIR`, removed after) — the ENTIRE delta is ONE span, the `dyn-to-enum` perf fixture, rank 4 → 5 (one new serving fixture outranks it inside the pool); blended top-1/top-3 + clippy/perf/docker per-domain UNCHANGED; the rust_perf domain column unchanged (54/56 top-1, 55/56 top-3, demonstrability 0.964). `BLENDED_TOP5` re-pinned 134/141 → 132/141 (measured − ONE span) with the full delta recorded in the const comment; TOP1/TOP3 left at their PRE-EXISTING zero-margin state (not this batch's delta). Post-re-pin: 20/20 green.
+- [x] T6 gates — batch200 11/11 · rust_perf slice **285/0** · lib default **2426/0** · lib +rust_perf_bench **2457/0** (the without_spec 69→80 pin) · retrieval **20/20** incl. the regression gate (re-pinned) · clippy `-D` ×3 postures (default / all-features / no-default; residual warnings = the known sibling hardlink box artifacts, none in the write set). Freeze + score-bench NOT owed (zero clippy-corpus delta, P30).
+- [x] T7 ephemeral cleanup — `.raw/tensorfold-b200` removed; worktree `riir-refine.w200` + its isolated target removed; temp scripts/logs removed.
+
+## Corpus delta
+
+168 → **179** rust_perf rules (caching +1, simd +1, concurrency +2, dispatch +2, allocation +3, complexity +1, io +1); annotated 114 → **125** (all eleven annotated; unannotated UNCHANGED at 54 — both sides +11); without_spec 69 → **80** (all eleven NotBenchable — serving-stack decision content, the B182/B186 precedent).
+
+## Queue after
+
+- **MTP-slice leads** (12 verified, Research 229) — the next kernel slot.
+- The **nnethercote min-rank worklist** lead rides the next rust_perf slot.
+- The **10-03 fork pool** (f450c76 A−/B+ > a14c7de B+ > 2459f68 B > f132654 C+) stages behind those per slot discipline; full quote verification owed at ITS batch composition; the 147-commit tip drift re-check owed at T0.
+- Upstream +14 (shared-experts-into-MMVQ fuse `bed0a85`, Metal tensor-API FA F16 `926862e`) = lane intel.
+
+NOTHING INVENTED — every quote read at the pin (3 subagents + coordinator spot-check); the staged-lead texts came from the 10-01 grading row and were re-verified, never trusted.

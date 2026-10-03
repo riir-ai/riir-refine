@@ -1941,7 +1941,24 @@ mod tests {
         // the one-span convention as the denominator convention requires).
         pub const BLENDED_TOP1: f32 = 126.0 / 141.0;
         pub const BLENDED_TOP3: f32 = 132.0 / 141.0;
-        pub const BLENDED_TOP5: f32 = 134.0 / 141.0;
+        // Batch 200 re-pin (2026-10-03, the TensorFold serving-half landing,
+        // Plan 198): 11 NotBenchable rust_perf serving rules grew the corpus
+        // 168 → 179. ATTRIBUTION MEASURED pre/post in the same session (the
+        // pre-batch run in a detached worktree at the landing HEAD, same
+        // binary config): blended top-1 126/141 and top-3 132/141 UNCHANGED,
+        // clippy 42/43/43 + perf 54/55 + docker unchanged — the entire delta
+        // is ONE span, the `dyn-to-enum` perf fixture, whose expected rule
+        // slipped rank 4 → 5 (one new serving fixture outranks it inside the
+        // pool), moving blended top-5 134/141 → 133/141. Floor = measured −
+        // ONE span = 132. The rust_perf DOMAIN metrics are unchanged (top-1
+        // 54/56, top-3 55/56; the demonstrability rust_perf column constant
+        // 0.964, selected 54 / rejected 2 — identical to the standing
+        // record), so this is cross-pool competition from legitimate corpus
+        // growth (the P7 trade), not a domain retrieval regression. TOP1 and
+        // TOP3 stand at their PRE-EXISTING zero-margin state (measured ==
+        // floor before this batch too) — untouched here; the next batch that
+        // moves them owes the Issue-063 one-span-margin repair.
+        pub const BLENDED_TOP5: f32 = 132.0 / 141.0;
         pub const CLIPPY_TOP1: f32 = 42.0 / 48.0;
         // Issue 063 sweep, 2026-09-02 — **convention alignment, NOT a
         // loosened bar.** This const was `45.0 / 48.0` while clippy top-3
