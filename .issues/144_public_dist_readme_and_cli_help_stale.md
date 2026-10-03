@@ -1,5 +1,5 @@
 # Issue 144 — gist-rs/cargo-refine public README + `cargo refine` help: stale names, stale caveats, domains the release cannot run
-**Status:** OPEN — 2026-10-03 (web trust audit, riir-ai Issue 1028)
+**Status:** OPEN — owner-gated remainder only (T5 licence terms; T6 deferred to riir-kat). T1-T4 DONE 2026-10-03 (web trust audit, riir-ai Issue 1028)
 
 **Priority:** P0 (instructions/claims that are wrong for the current release) + P2 (help-text jargon).
 **Audience:** developer installing from refine.gist.rs → GitHub (the "cargo-refine on GitHub —
@@ -25,6 +25,14 @@ install, docs, releases" link is the site's only docs link).
 | 12 | Install lines (curl/iwr/brew with `brew trust`/scoop) | TRUE | every URL 200; tarball = `cargo-refine` + `THIRD_PARTY_LICENSES.md`; scoop manifest `cargo-refine.json` present |
 | 13 | Licence | — | **MISSING** | `license: null` on the dist repo; no EULA/terms for a closed-source binary that moves service credit |
 
+## Found while fixing (2026-10-03)
+
+| # | Where | Verdict | Fix |
+|---|---|---|---|
+| 14 | `--mine` explainer, refine.gist.rs glossary/FAQ, miner role flow + SVG, umbrella glossary, agent SKILL.md | **FALSE privacy claim** — "rule verdicts and counters, never your source". The sync payload's `shape`/`fix` fields ARE the replaced code span and its replacement (`kat_sync_payload.rs` `PayloadRow`; `record_traj(restore, replacement)`), secret-scanned, row dropped on any finding, no paths, own-repo src/tests/benches/examples only | riir-refine `a25a0a4a`; riir-dapps `2b6852d`, deployed apex `bc08bd93` (ai + refine.gist.rs) + devnet `aac7f186`, curl-verified |
+| 15 | `--unmine` / `--purge` | **BUG** — deleted `.refine/kat_sync_watermark.json`, a file nothing writes; sync saves `kat_sync_state.json`, so the watermark survived every opt-out | `595d0eef` (+ regression test) |
+| 16 | `login` help text | STALE — key dir named `~/.config/riir-heal` | `595d0eef` → `~/.config/riir-auth` |
+
 ## Proposed fix
 
 - Rewrite the dist README top half for v0.2.x: Refine naming, no env-var caveat, shipped domain
@@ -36,8 +44,15 @@ install, docs, releases" link is the site's only docs link).
 
 ## Tasks
 
-- [ ] T1 dist README rewrite for v0.2.x (+ CHANGELOG.md for v0.1.x caveats)
-- [ ] T2 repo description renamed
+- [x] T1 dist README rewrite for v0.2.x (+ CHANGELOG.md for v0.1.x caveats) — gist-rs/cargo-refine
+      `5802123`, every claim checked against v0.2.0 source. Corrected beyond the evidence table:
+      the free grant was printed as 100,000,000 KAT (it is 100 KAT = 100,000,000 µKAT, and signup
+      now grants TUNA — riir-kat `kat_units.rs:344`); the FAQ said `--fix` without `--write`
+      only reviews (it writes; bare `cargo refine` is the dry run); the kill switch was spelled
+      `RIIR_HEAL_KAT_METER` (only `RIIR_REFINE_KAT_METER` is read); the account key is under
+      `~/.config/riir-auth/`, not `riir-heal/`.
+- [x] T2 repo description renamed — "cargo-refine — binary releases of Refine, the code fixer
+      that learns", homepage https://refine.gist.rs (`gh repo edit`, 2026-10-03).
 - [x] T3 `--help` flag + user/advanced help split; no internal plan/issue ids in user help —
       `69727010`: `--help`/`-h` → short user page on stdout, exit 0 (user verbs, compiled domains,
       `cargo refine --help-all` pointer); `--help-all` → the full reference, exit 0; the arg-error
