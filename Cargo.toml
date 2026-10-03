@@ -2,7 +2,9 @@
 name = "riir-refine"
 version = "0.2.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+# The shipped binary is proprietary freeware (binary-only distribution): the
+# EULA it ships with is its licence. The source is private.
+license-file = "release/LICENSE.md"
 description = "Clippy-healing drafter+pruner pipeline: modelless ternary drafter x rust-analyzer validator x additive self-evolution loop (LoRA fallback deferred)"
 publish = false
 

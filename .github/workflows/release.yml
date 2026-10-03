@@ -258,14 +258,16 @@ jobs:
               exit 1
             fi
             cp THIRD_PARTY_LICENSES.md "$stage/THIRD_PARTY_LICENSES.md"
+            cp release/LICENSE.md "$stage/LICENSE.md"
             if [ -f "$stage/cargo-refine.exe" ]; then
-              (cd "$stage" && zip -q "../../dist/cargo-refine-${TAG}-${target}.zip" cargo-refine.exe THIRD_PARTY_LICENSES.md)
+              (cd "$stage" && zip -q "../../dist/cargo-refine-${TAG}-${target}.zip" cargo-refine.exe LICENSE.md THIRD_PARTY_LICENSES.md)
             else
-              tar -czf "dist/cargo-refine-${TAG}-${target}.tar.gz" -C "$stage" cargo-refine THIRD_PARTY_LICENSES.md
+              tar -czf "dist/cargo-refine-${TAG}-${target}.tar.gz" -C "$stage" cargo-refine LICENSE.md THIRD_PARTY_LICENSES.md
             fi
           done
           (cd dist && sha256sum -- * > SHA256SUMS)
           cp THIRD_PARTY_LICENSES.md dist/
+          cp release/LICENSE.md dist/LICENSE.md
           ls -la dist/
 
       - name: Binary size gate (ceiling, fires upward only — see script header)

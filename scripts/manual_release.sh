@@ -49,6 +49,9 @@ cargo zigbuild --release --target x86_64-pc-windows-gnu --features "$FEATURES" -
 
 echo "== package + G2 leak scan"
 DIST="/tmp/manual_release_dist"
+# The binary's licence (the EULA) rides every archive next to the third-party list.
+ROOT_EULA="$(cd "$(dirname "$0")/.." && pwd)/release/LICENSE.md"
+[ -f "$ROOT_EULA" ] || { echo "missing $ROOT_EULA" >&2; exit 1; }
 rm -rf "$DIST" /tmp/manual_release_stage
 mkdir -p "$DIST"
 for t in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl x86_64-pc-windows-gnu; do
@@ -57,16 +60,19 @@ for t in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86
         bin="target/$t/release/cargo-refine.exe"
         cp "$bin" "$stage/cargo-refine.exe"
         cp /tmp/manual_release_licenses.md "$stage/THIRD_PARTY_LICENSES.md"
-        (cd "$stage" && zip -q "$DIST/cargo-refine-${TAG}-${t}.zip" cargo-refine.exe THIRD_PARTY_LICENSES.md)
+        cp "$ROOT_EULA" "$stage/LICENSE.md"
+        (cd "$stage" && zip -q "$DIST/cargo-refine-${TAG}-${t}.zip" cargo-refine.exe LICENSE.md THIRD_PARTY_LICENSES.md)
     else
         bin="target/$t/release/cargo-refine"
         cp "$bin" "$stage/cargo-refine"
         cp /tmp/manual_release_licenses.md "$stage/THIRD_PARTY_LICENSES.md"
-        tar -czf "$DIST/cargo-refine-${TAG}-${t}.tar.gz" -C "$stage" cargo-refine THIRD_PARTY_LICENSES.md
+        cp "$ROOT_EULA" "$stage/LICENSE.md"
+        tar -czf "$DIST/cargo-refine-${TAG}-${t}.tar.gz" -C "$stage" cargo-refine LICENSE.md THIRD_PARTY_LICENSES.md
     fi
     ./scripts/binary_leak_scan.sh "$bin"
 done
 cp /tmp/manual_release_licenses.md "$DIST/THIRD_PARTY_LICENSES.md"
+cp "$ROOT_EULA" "$DIST/LICENSE.md"
 (cd "$DIST" && { if command -v sha256sum > /dev/null; then sha256sum -- *; else shasum -a 256 -- *; fi; } > SHA256SUMS)
 
 echo "== publish"

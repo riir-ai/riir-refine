@@ -14,6 +14,12 @@
 # frees results). Not viral, no notice burden beyond the shipped license
 # text. ureq/rustls/qrcode and the rest of the transport tree resolve to
 # already-accepted SPDX ids.
+# Our own unpublished crates (publish = false: riir-refine itself, riir-kat,
+# riir-auth, riir-neuron-db, riir-rag) are NOT third-party and are not open
+# source — they ship under the binary's EULA (release/LICENSE.md), so they are
+# left out of THIRD_PARTY_LICENSES.md. Public crates (katgpt-*, crates.io) stay.
+private = { ignore = true }
+
 accepted = [
     "MIT",
     "MIT-0",

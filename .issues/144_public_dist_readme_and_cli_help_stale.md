@@ -1,5 +1,5 @@
 # Issue 144 — gist-rs/cargo-refine public README + `cargo refine` help: stale names, stale caveats, domains the release cannot run
-**Status:** OPEN — owner-gated remainder only (T5 licence terms; T6 deferred to riir-kat). T1-T4 DONE 2026-10-03 (web trust audit, riir-ai Issue 1028)
+**Status:** OPEN — T6 deferred to riir-kat only. T1-T5 DONE 2026-10-03 (T5: owner approved the drafted EULA and asked for it to be published). Filed 2026-10-03 (web trust audit, riir-ai Issue 1028)
 
 **Priority:** P0 (instructions/claims that are wrong for the current release) + P2 (help-text jargon).
 **Audience:** developer installing from refine.gist.rs → GitHub (the "cargo-refine on GitHub —
@@ -62,7 +62,16 @@ install, docs, releases" link is the site's only docs link).
       under); a known-but-absent domain refuses at parse time naming this build's set
       (`--domain sec is not in this build (this build has: auto|clippy|perf|docker|dist)`).
       Ships with the next release; v0.2.0 still prints the old text.
-- [ ] T5 LICENSE / EULA in the dist repo (owner)
+- [x] T5 LICENSE / EULA in the dist repo — owner said "draft it, protect me, publish" (2026-10-03).
+      The binary is proprietary freeware from 2026-10-03: `release/LICENSE.md` (EULA v1) ships in
+      every archive (`release.yml` + `scripts/manual_release.sh`) and as `LICENSE.md` in
+      gist-rs/cargo-refine; README §License summarises it. `Cargo.toml` `license` → `license-file`.
+      v0.2.0 and earlier keep their "MIT OR Apache-2.0" notice (irrevocable for those copies — the
+      EULA says so). Found while drafting: v0.2.0's THIRD_PARTY_LICENSES.md listed our private
+      crates (riir-neuron-db, riir-auth, riir-kat, riir-rag) under MIT. `about.toml` now sets
+      `private = { ignore = true }`, and riir-auth + riir-rag gained `publish = false`. Verified:
+      `cargo about generate` with the release features exits 0 with no riir-* crate listed, and
+      katgpt-* (public MIT) kept.
 - [-] T6 drop `testnet.ai.gist.rs` from the next release — DEFERRED to riir-kat: the host is
       `TESTNET_SERVICE_URL` in riir-kat `src/kat_service_urls.rs`, one of the three PINNED
       `devnet|testnet|mainnet` aliases (`kat_service_config.rs` `PINNED_NETWORKS`, pinned by tests
