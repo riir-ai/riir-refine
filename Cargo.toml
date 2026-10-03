@@ -931,16 +931,6 @@ wgpu-hal = { path = "../riir-infer/vendor/wgpu-hal-30.0.0" }
 # The cubecl-wgpu fork row (as_raw_metal_* accessors) is GONE: it existed for
 # the old riir-gpu edge; the moved riir-infer-gpu metal_tensor family never
 # calls the fork API (measured, S6) so plain crates.io cubecl-wgpu compiles.
-# The arc-swap genlock-load fork row STAYS: riir-rag (kept for
-# latent_retrieval) carries an OPTIONAL riir-engine dep, and cargo resolves
-# optional deps' features BEFORE feature-pruning — so as long as riir-rag is
-# in this graph at all, riir-engine's `genlock-load` requirement is checked
-# even though no active lane enables `riir-rag/bonsai_embedder` (the only
-# activator). Measured: deleting the row fails resolution for every posture.
-# It leaves when riir-rag's bonsai_embedder edge retargets to riir-infer
-# (its natural next step — the embedder is inference-only), or when upstream
-# ships the #156/#164 fix.
-arc-swap = { git = "https://github.com/katopz/arc-swap", branch = "genlock-load" }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build profiles — dev debuginfo budget (riir-ai .issues/723 Phase 1)
