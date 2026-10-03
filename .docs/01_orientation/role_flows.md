@@ -27,9 +27,9 @@ earnings promise.
 flowchart LR
     INST["install cargo-refine"] --> DRY["cargo refine — dry run<br/>private · nothing sent"]
     DRY --> FIX["cargo refine --fix<br/>compile-gated writes"]
-    FIX --> GET["GET — healed code<br/>warnings · errors · perf · sec<br/>docker · compile errors"]
-    FIX -.-> COST["COST — the burn meter<br/>1 KAT-equiv / 1M code-word tokens<br/>TUNA trial credit pays first"]
-    INST -.-> LITE["no login = lite tier<br/>free forever · anonymous<br/>earns nothing"]
+    FIX --> GET["GET — fixed code<br/>clippy · perf · docker · dist<br/>+ compile errors"]
+    FIX -.-> COST["COST — logged in only<br/>1 KAT-equiv / 1M code-word tokens<br/>TUNA trial credit pays first"]
+    INST -.-> LITE["no login = lite tier<br/>never billed · anonymous<br/>earns nothing"]
     LOGIN["login — optional"] -.-> GRANT["100 TUNA trial grant<br/>30 days from claim"]
 ```
 
@@ -66,11 +66,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    QUEUE["the unproven queue"] --> DRAIN["the drain lane — live today<br/>groq → infron → CF · cap-guarded"]
+    QUEUE["the unproven queue"] --> DRAIN["the drain lane — live today<br/>hosted LLM lane · cap-guarded"]
     DRAIN --> VERIFY["compile gate + clippy oracle"]
     VERIFY --> SETTLE["GET — accepted work settles<br/>through the miner rows on the board"]
     REPLAY["designed — replay on YOUR rig<br/>K=2 with a second verifier"] -.->|"reward class does not settle yet<br/>cut = 0 until ratified"| SETTLE
-    REPLAY -.-> COST["COST — CPU box · 2–4 vCPU · 4–8 GB<br/>free-leg API or the CF USD cap"]
+    REPLAY -.-> COST["COST — CPU box · 2–4 vCPU · 4–8 GB<br/>a USD-capped hosted LLM API"]
 ```
 
 | | |
@@ -125,7 +125,7 @@ is the full spec):
 
 | role | tier | does | gets | pays | status |
 |---|---|---|---|---|---|
-| coder | lite | dry run + fix, anonymous | healed code (warn · error · perf · sec · docker · compile) | nothing — free forever | shipped |
+| coder | lite | dry run + fix, anonymous | fixed code (clippy · perf · docker · dist · compile errors; sec is preview, not in the release) | nothing — free forever | shipped |
 | coder | pro (login) | same install, logged in | + the TUNA trial grant, the balance surfaces | the burn meter (TUNA first) | shipped |
 | miner | pro | `--mine` once; auto-sync redacted batches | 70% pool share at the epoch settle · never re-gated · corpus lease-back | own burn + consent | shipped |
 | fixer | max | operator drain lane over the unproven queue | settles through the miner rows | CPU box + free-leg API / CF cap | operator lane live · replay designed (P015), does **not** settle |
