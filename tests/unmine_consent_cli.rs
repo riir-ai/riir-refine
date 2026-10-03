@@ -165,7 +165,10 @@ fn unmine_clears_the_sync_watermark_sync_writes() {
         !wm.exists(),
         "--unmine must clear the watermark sync writes. output:\n{text}"
     );
-    assert!(text.contains("cleared the sync watermark"), "output:\n{text}");
+    assert!(
+        text.contains("cleared the sync watermark"),
+        "output:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -203,7 +206,14 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
         "KAT mining — turn your healing work into network credit",
         "WHAT: every cargo refine run records HOW the healer behaved",
         "POLICY (read before contributing):",
-        "Devnet: KAT carries NO cash value and NO redemption right.",
+        // Issue 144 (2026-10-03): "Devnet:" dropped — the default service
+        // is mainnet; the no-cash-value statement itself stays pinned.
+        "KAT is service credit: NO cash value and NO redemption right.",
+        // The privacy disclosure must name what actually leaves: the
+        // payload carries the gated code snippet (`shape`/`fix`), so the
+        // old "never your code" wording was false.
+        "the CODE SNIPPET",
+        "a snippet",
         "START (3 steps):",
         "https://ai.gist.rs",
         "cargo refine login",
