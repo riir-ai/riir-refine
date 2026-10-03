@@ -5301,8 +5301,16 @@ fn print_suggestion(
     for lint in &s.anchored_missing {
         println!("  [oracle] {lint:<32} NO CORPUS RULE (gap signal)");
     }
+    // Issue 145 T4: list only domains that can touch this file kind — a
+    // `.rs` span never shows Dockerfile or manifest rules. A path no
+    // domain claims (an unusual extension) keeps the full list rather than
+    // going silent.
+    let fits_any = s.by_domain.iter().any(|(d, _)| d.applies_to_path(&s.path));
     for (domain, rules) in &s.by_domain {
         if domain_filter.is_some_and(|want| want != *domain) {
+            continue;
+        }
+        if fits_any && !domain.applies_to_path(&s.path) {
             continue;
         }
         for rule in rules {

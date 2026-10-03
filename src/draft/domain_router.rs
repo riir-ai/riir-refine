@@ -95,6 +95,27 @@ impl DomainId {
         }
     }
 
+    /// Whether this domain's rules can apply to a file at `path` (Issue
+    /// 145 T4): Rust-source domains to `.rs`, `docker` to Dockerfiles,
+    /// `dist` to Cargo manifests, shaders to `.wgsl` (`kernel` also covers
+    /// `@compute` WGSL and CUDA/Metal sources). Display-side only — a span's
+    /// suggestion list drops domains that cannot touch its file kind.
+    #[must_use]
+    pub fn applies_to_path(self, path: &str) -> bool {
+        let p = path.replace('\\', "/");
+        let name = p.rsplit('/').next().unwrap_or(&p);
+        let ext = |e: &str| name.ends_with(e);
+        match self {
+            Self::Clippy | Self::Perf | Self::Sec => ext(".rs"),
+            Self::Kernel => ext(".rs") || ext(".wgsl") || ext(".cu") || ext(".metal"),
+            Self::ShaderPerf => ext(".wgsl"),
+            Self::Docker => {
+                name.starts_with("Dockerfile") || name == "Containerfile" || ext(".dockerfile")
+            }
+            Self::Dist => name == "Cargo.toml" || p.ends_with(".cargo/config.toml"),
+        }
+    }
+
     /// Inverse of [`DomainId::label`] (`None` for an unknown label).
     #[must_use]
     pub fn from_label(label: &str) -> Option<Self> {
@@ -639,6 +660,28 @@ fn for_each_token<'a>(text: &'a str, f: &mut impl FnMut(&'a str)) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn domains_apply_to_their_file_kinds_only() {
+        use DomainId::*;
+        for (path, yes, no) in [
+            ("./src/lib.rs", &[Clippy, Perf, Sec, Kernel][..], &[Docker, Dist, ShaderPerf][..]),
+            ("deploy/Dockerfile", &[Docker][..], &[Clippy, Perf, Dist][..]),
+            ("Dockerfile.release", &[Docker][..], &[Dist][..]),
+            ("crates/x/Cargo.toml", &[Dist][..], &[Clippy, Docker][..]),
+            (".cargo/config.toml", &[Dist][..], &[Clippy][..]),
+            ("shaders/blur.wgsl", &[ShaderPerf, Kernel][..], &[Clippy, Docker][..]),
+            ("C:\\repo\\src\\main.rs", &[Clippy][..], &[Docker][..]),
+        ] {
+            for d in yes {
+                assert!(d.applies_to_path(path), "{d:?} applies to {path}");
+            }
+            for d in no {
+                assert!(!d.applies_to_path(path), "{d:?} must not apply to {path}");
+            }
+        }
+    }
+
     use super::*;
 
     #[test]

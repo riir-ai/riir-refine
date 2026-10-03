@@ -1,24 +1,24 @@
 //! `clippy::needless_range_loop` — `for i in 0..v.len() { body_using(v[i]) }`
-//! → `for __elem in &v { body_with_elem }`.
+//! → `for item in &v { body_with_item }` (Issue 145: the binding is the collection's singular — `values` → `value` — else `item`).
 //!
 //! Span-preserving (T6.4): ONE atomic edit covering the whole loop, whose
 //! replacement is the loop's original text with three substitution kinds
 //! spliced in — the loop pat (`i` → the fresh binding), the iterable
 //! (`0..v.len()` → the collection, by-reference form chosen by param
-//! resolution), and each exact `v[i]` index expression (→ `*__elem`, the
+//! resolution), and each exact `v[i]` index expression (→ `*item`, the
 //! universal deref splice, Plan 097 T1). All replacement fragments are
 //! ORIGINAL source text.
 //!
 //! ## The slot splice (Plan 097 T1 — the P11 comparison-slot class)
 //!
-//! The reference binding `__elem: &T` fails E0308 in more positions than
+//! The reference binding `item: &T` fails E0308 in more positions than
 //! one might expect — measured (clippy 1.98.1 probe): comparison operands
-//! (`if __elem > 2`), typed lets (`let x: u32 = __elem`), AND value-arg
-//! method receivers (`__elem.max(3)` — `&T: Ord` resolves on the reference
-//! and the value argument mismatches). The universal splice `*__elem` is
+//! (`if item > 2`), typed lets (`let x: u32 = item`), AND value-arg
+//! method receivers (`item.max(3)` — `&T: Ord` resolves on the reference
+//! and the value argument mismatches). The universal splice `*item` is
 //! DESUGAR-IDENTICAL to `v[i]` (`*Index::index(&v, i)`) in every rvalue
 //! context, so it is correct wherever the original compiled. Parenthesized
-//! `(*__elem)` ONLY where the slot is the direct base of a postfix
+//! `(*item)` ONLY where the slot is the direct base of a postfix
 //! expression (method receiver, field base, call func — `*` binds looser
 //! than `.`); everywhere else parenless (bare parens trigger rustc's
 //! `unused_parens` at assigned-value positions, probe-measured). Known
@@ -33,7 +33,7 @@
 //! invalid half-applied. As separate edits, a foreign same-pass fix
 //! overlapping one slot (`identity_op` on `hits[i] * 1` — same start, longer
 //! end) was dropped by `apply_edits_traced`'s outer-first overlap selection
-//! while the header edits survived → `for __elem in hits { hits[i] }`
+//! while the header edits survived → `for item in hits { hits[i] }`
 //! (dangling `i`). One whole-loop edit is all-or-nothing under the same
 //! selection; a nested foreign edit is dropped instead and re-fires on the
 //! next fixpoint pass (the documented nesting semantics — an outer edit's
@@ -44,7 +44,7 @@
 //! The mutation-based version counted identifier occurrences in the body's
 //! token stream — substring-based, so `minimum` counted as a use of `i`
 //! (false negatives) and nested `v[v[i]]` slipped through as a false
-//! POSITIVE (it rewrote to `v[__elem]`, indexing by an element). It also
+//! POSITIVE (it rewrote to `v[item]`, indexing by an element). It also
 //! emitted `&v` unconditionally — for a `v: &Vec<_>` param that iterates
 //! `&&Vec`, which is not an iterator (the fixture compiled only because
 //! nothing ever compiled it). The exact visitor tracks:
@@ -87,15 +87,15 @@
 //! ## Fresh-binding uniquing (Plan 097 T2 — the P11 nested-loop persist)
 //!
 //! The old binary guard refused whenever the body mentioned ANY
-//! `__elem`-prefixed identifier — which made a nested `needless_range_loop` a
-//! hard persist: level 1's rewrite introduces `__elem`, and level 2 (whose
+//! `item`-prefixed identifier — which made a nested `needless_range_loop` a
+//! hard persist: level 1's rewrite introduces `item`, and level 2 (whose
 //! body references it) refused forever. The guard is now a TAKEN-SET
-//! enumeration over the family `__elem` | `__elem<digits>` (path idents,
+//! enumeration over the family `item` | `item<digits>` (path idents,
 //! pattern bindings, macro token idents) plus the format-family template
-//! literals (an implicit `{__elem}` capture re-binds to our fresh name —
+//! literals (an implicit `{item}` capture re-binds to our fresh name —
 //! each candidate is checked against the template words). The rewrite picks
-//! the smallest free suffix, so level 2 becomes `__elem2` and heals at the
-//! next fixpoint pass. Nonfamily prefix mentions (`__elem_x`) are distinct
+//! the smallest free suffix, so level 2 becomes `item2` and heals at the
+//! next fixpoint pass. Nonfamily prefix mentions (`item_x`) are distinct
 //! identifiers and no longer block (the old guard was over-broad).
 //!
 //! ## Iterable form (param resolution)
@@ -138,17 +138,20 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprForLoop, ExprLit, ExprMacro, ExprRange, File, Lit, Signature};
 
-/// Fresh binding introduced by the rewrite. The binding NAME is uniqued
-/// against the family `__elem` | `__elem<digits>` (Plan 097 T2): a nested
-/// loop whose body already mentions an outer rewrite's binding picks the
-/// next free suffix instead of refusing.
-const FRESH_PREFIX: &str = "__elem";
+/// Fallback base for the fresh binding when the collection's name has no
+/// readable singular (`v`, `data`, `buf`). Issue 145: the binding reads the
+/// way a person would write it — `for value in values`, `for item in v` —
+/// instead of the old opaque `item`. The NAME is uniqued against the
+/// family `<base>` | `<base><digits>` (Plan 097 T2): a nested loop whose body
+/// already mentions an outer rewrite's binding picks the next free suffix
+/// instead of refusing.
+const FALLBACK_BASE: &str = "item";
 /// Uniquing bound: past this many candidate suffixes something is deeply
 /// wrong — refuse rather than emit an opaque name.
 const FRESH_NAME_LIMIT: u32 = 64;
 
 /// Known `&mut self` receiver methods (Plan 100 T1): a slot receiving one of
-/// these needs the mutable-iterable header — `(*__elem).push(x)` behind a
+/// these needs the mutable-iterable header — `(*item).push(x)` behind a
 /// shared iter is E0596. Bounded by design and NON-exhaustive: a custom
 /// `&mut self` method is invisible to a parse-only proposer, so unknown
 /// mutators keep today's shape and stay `--verify`-backstopped. Consuming
@@ -262,9 +265,9 @@ impl Collector<'_, '_> {
         }
 
         // Fresh binding: uniqued against the family, not a binary refuse —
-        // the nested-loop case (level 1's `__elem` visible in level 2's body)
-        // now picks `__elem2` instead of persisting (Plan 097 T2).
-        let fresh = fresh_binding_name(&fl.body)?;
+        // the nested-loop case (level 1's `item` visible in level 2's body)
+        // now picks `item2` instead of persisting (Plan 097 T2).
+        let fresh = fresh_binding_name(&fl.body, &binding_base(collection_path))?;
 
         // Iterable form: resolve the collection against the fn params —
         // shared-ref params iterate bare, owned by reference. Unresolvable
@@ -308,14 +311,14 @@ impl Collector<'_, '_> {
         // every slot substitution must land together; as separate edits a
         // foreign same-pass fix overlapping one slot (identity_op on
         // `hits[i] * 1`) dropped just that slot while the headers survived
-        // → `for __elem in hits { hits[i] }` (dangling `i`). One edit is
+        // → `for item in hits { hits[i] }` (dangling `i`). One edit is
         // all-or-nothing under the outer-first overlap selection; nested
         // foreign edits re-fire on the next fixpoint pass.
         let span = fl.span().byte_range();
         let loop_text = self.source.get(span.start..span.end)?;
         let mut subs = vec![edit(&fl.pat, fresh.clone()), edit(&fl.expr, iter_text)];
         for (start, end) in usage.exact {
-            // Universal deref splice (Plan 097 T1): `*__elem` is
+            // Universal deref splice (Plan 097 T1): `*item` is
             // desugar-identical to `v[i]` in every rvalue context (the bare
             // reference binding fails E0308 on comparison operands, typed
             // lets, and value-arg method receivers). Parens only where the
@@ -411,7 +414,7 @@ struct IndexUsage {
     exact: Vec<(usize, usize)>,
     /// Slot ranges that are the direct base of a postfix expression (method
     /// receiver, field base, call func) — those need the parenthesized
-    /// `(*__elem)` form; every other slot takes parenless `*__elem` (Plan
+    /// `(*item)` form; every other slot takes parenless `*item` (Plan
     /// 097 T1).
     paren: BTreeSet<(usize, usize)>,
     /// Every bare `Expr::Path` that IS the loop ident in the body.
@@ -529,7 +532,7 @@ impl<'ast> Visit<'ast> for Scan<'_> {
 
     // `&v[i]` / `&mut v[i]` — address-of through the slot changes the
     // referent (`&T` → `&&T` under the deref splice it would become
-    // `&*__elem` = the same `&&T` shape change).
+    // `&*item` = the same `&&T` shape change).
     fn visit_expr_reference(&mut self, e: &'ast syn::ExprReference) {
         syn::visit::visit_expr_reference(self, e);
         if self.is_exact_slot(&e.expr) {
@@ -538,9 +541,9 @@ impl<'ast> Visit<'ast> for Scan<'_> {
     }
 
     // Postfix bases need the parenthesized splice: `v[i].len()` →
-    // `(*__elem).len()` (bare `*__elem.len()` would deref the RESULT).
+    // `(*item).len()` (bare `*item.len()` would deref the RESULT).
     // Plan 100 T1: a known-mutator receiver additionally needs the mutable
-    // header — behind a shared iter, `(*__elem).push(x)` is E0596.
+    // header — behind a shared iter, `(*item).push(x)` is E0596.
     fn visit_expr_method_call(&mut self, e: &'ast syn::ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, e);
         if self.is_exact_slot(&e.receiver) {
@@ -638,7 +641,7 @@ impl Scan<'_> {
         // sees the bare `i` and refuses — a missed heal. Every family arg is
         // an expression operand/condition: descend `all_expr_args` instead.
         // The universal deref splice keeps the healed operands compiling
-        // (`assert_eq!(*__elem, 2)` expands `&(*__elem)` = `&u32`).
+        // (`assert_eq!(*item, 2)` expands `&(*item)` = `&u32`).
         // With the template position unusable, a named capture can hide in
         // ANY string literal (`info!(target: "x", "msg {i}", v[i])`) — the
         // pat rename would dangle it. Refuse on a word mention inside any
@@ -766,17 +769,58 @@ fn expr_mentions_ident(e: &Expr, idx: &syn::Ident) -> bool {
     m.found
 }
 
+/// The readable base for the fresh binding (Issue 145): the singular of
+/// the collection's last path segment (`values` → `value`, `hits` → `hit`,
+/// `entries` → `entry`, `boxes` → `box` is a keyword → fallback), else
+/// [`FALLBACK_BASE`]. Only a plain, non-keyword identifier distinct from the
+/// collection itself is ever returned.
+fn binding_base(collection: &syn::ExprPath) -> String {
+    let Some(seg) = collection.path.segments.last() else {
+        return FALLBACK_BASE.to_string();
+    };
+    let plural = seg.ident.to_string();
+    let singular = if let Some(stem) = plural.strip_suffix("ies").filter(|s| s.len() >= 2) {
+        Some(format!("{stem}y"))
+    } else if ["sses", "shes", "ches", "xes"].iter().any(|e| plural.ends_with(e)) {
+        plural.strip_suffix("es").map(str::to_string)
+    } else if plural.len() >= 3 && plural.ends_with('s') && !plural.ends_with("ss") && !plural.ends_with("us") {
+        plural.strip_suffix('s').map(str::to_string)
+    } else {
+        None
+    };
+    singular
+        .filter(|s| *s != plural && is_plain_ident(s))
+        .unwrap_or_else(|| FALLBACK_BASE.to_string())
+}
+
+/// A lowercase-led ASCII identifier that is not a Rust keyword (strict,
+/// reserved, or weak-in-practice) — the only shapes a fresh binding may take.
+fn is_plain_ident(s: &str) -> bool {
+    const KEYWORDS: &[&str] = &[
+        "as", "async", "await", "box", "break", "const", "continue", "crate", "do", "dyn", "else",
+        "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let", "loop",
+        "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return", "self",
+        "static", "struct", "super", "trait", "true", "try", "type", "typeof", "union", "unsafe",
+        "unsized", "use", "virtual", "where", "while", "yield",
+    ];
+    let mut bytes = s.bytes();
+    bytes.next().is_some_and(|b| b.is_ascii_lowercase())
+        && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        && !KEYWORDS.contains(&s)
+}
+
 /// Pick the fresh binding name for the rewrite: the smallest name in the
-/// family `__elem` | `__elem<2..>` not taken by the body (Plan 097 T2).
-/// "Taken" = a path ident or macro token ident in the family, or the exact
-/// candidate word inside a format-family template literal (an implicit
-/// `{__elem}` / `{__elem2}` capture would silently re-bind to our fresh
-/// binding — the per-candidate template check closes that hole). Returns
-/// None past the uniquing bound.
-fn fresh_binding_name(body: &syn::Block) -> Option<String> {
-    let (taken, templates) = body_family_names(body);
+/// family `<base>` | `<base><2..>` not taken by the body (Plan 097 T2).
+/// "Taken" = a path ident, pattern ident or macro token ident in the
+/// family, or the exact candidate word inside a format-family template
+/// literal (an implicit `{value}` capture would silently re-bind to our
+/// fresh binding — the per-candidate template check closes that hole).
+/// Shadowing a name the body never mentions is harmless, so only the body
+/// is scanned. Returns None past the uniquing bound.
+fn fresh_binding_name(body: &syn::Block, base: &str) -> Option<String> {
+    let (taken, templates) = body_family_names(body, base);
     for k in 1..=FRESH_NAME_LIMIT {
-        let name = fresh_name_for(k);
+        let name = fresh_name_for(base, k);
         if !taken.contains(&k) && !templates.iter().any(|t| str_mentions_word(t, &name)) {
             return Some(name);
         }
@@ -784,11 +828,11 @@ fn fresh_binding_name(body: &syn::Block) -> Option<String> {
     None
 }
 
-fn fresh_name_for(k: u32) -> String {
+fn fresh_name_for(base: &str, k: u32) -> String {
     if k == 1 {
-        FRESH_PREFIX.to_string()
+        base.to_string()
     } else {
-        format!("{FRESH_PREFIX}{k}")
+        format!("{base}{k}")
     }
 }
 
@@ -796,15 +840,16 @@ fn fresh_name_for(k: u32) -> String {
 /// texts (for the per-candidate implicit-capture check).
 type BodyNames = (BTreeSet<u32>, Vec<String>);
 
-fn body_family_names(body: &syn::Block) -> BodyNames {
-    struct P {
+fn body_family_names(body: &syn::Block, base: &str) -> BodyNames {
+    struct P<'b> {
+        base: &'b str,
         taken: BTreeSet<u32>,
         templates: Vec<String>,
     }
-    impl<'ast> Visit<'ast> for P {
+    impl<'ast> Visit<'ast> for P<'_> {
         fn visit_pat(&mut self, p: &'ast syn::Pat) {
             if let syn::Pat::Ident(pi) = p {
-                if let Some(idx) = family_index(Some(&pi.ident)) {
+                if let Some(idx) = family_index(self.base, Some(&pi.ident)) {
                     self.taken.insert(idx);
                 }
             }
@@ -812,14 +857,14 @@ fn body_family_names(body: &syn::Block) -> BodyNames {
         }
 
         fn visit_expr_path(&mut self, p: &'ast syn::ExprPath) {
-            if let Some(idx) = family_index(p.path.get_ident()) {
+            if let Some(idx) = family_index(self.base, p.path.get_ident()) {
                 self.taken.insert(idx);
             }
             syn::visit::visit_expr_path(self, p);
         }
 
         fn visit_expr_macro(&mut self, m: &'ast ExprMacro) {
-            collect_token_indices(m.mac.tokens.clone().into_iter(), &mut self.taken);
+            collect_token_indices(self.base, m.mac.tokens.clone().into_iter(), &mut self.taken);
             if let Some(t) = template_literal(&m.mac) {
                 self.templates.push(t);
             }
@@ -835,7 +880,7 @@ fn body_family_names(body: &syn::Block) -> BodyNames {
         }
 
         fn visit_stmt_macro(&mut self, m: &'ast syn::StmtMacro) {
-            collect_token_indices(m.mac.tokens.clone().into_iter(), &mut self.taken);
+            collect_token_indices(self.base, m.mac.tokens.clone().into_iter(), &mut self.taken);
             if let Some(t) = template_literal(&m.mac) {
                 self.templates.push(t);
             }
@@ -849,6 +894,7 @@ fn body_family_names(body: &syn::Block) -> BodyNames {
         }
     }
     let mut p = P {
+        base,
         taken: BTreeSet::new(),
         templates: Vec::new(),
     };
@@ -856,13 +902,13 @@ fn body_family_names(body: &syn::Block) -> BodyNames {
     (p.taken, p.templates)
 }
 
-/// `__elem` → 1, `__elem2` → 2; other identifiers (including
-/// `__elem_x`-style nonfamily prefixes) → None — they are distinct
-/// identifiers and cannot be captured by the rewrite.
-fn family_index(ident: Option<&syn::Ident>) -> Option<u32> {
+/// `value` → 1, `value2` → 2 for base `value`; other identifiers (including
+/// `value_x`-style nonfamily prefixes and `values`) → None — they are
+/// distinct identifiers and cannot be captured by the rewrite.
+fn family_index(base: &str, ident: Option<&syn::Ident>) -> Option<u32> {
     let id = ident?;
     let s = id.to_string();
-    let suffix = s.strip_prefix(FRESH_PREFIX)?;
+    let suffix = s.strip_prefix(base)?;
     if suffix.is_empty() {
         return Some(1);
     }
@@ -872,16 +918,16 @@ fn family_index(ident: Option<&syn::Ident>) -> Option<u32> {
     suffix.parse::<u32>().ok().filter(|n| *n >= 2)
 }
 
-fn collect_token_indices(toks: impl Iterator<Item = TokenTree>, taken: &mut BTreeSet<u32>) {
+fn collect_token_indices(base: &str, toks: impl Iterator<Item = TokenTree>, taken: &mut BTreeSet<u32>) {
     for t in toks {
         match t {
             TokenTree::Ident(id) => {
-                if let Some(idx) = family_index(Some(&id)) {
+                if let Some(idx) = family_index(base, Some(&id)) {
                     taken.insert(idx);
                 }
             }
             TokenTree::Group(g) => {
-                collect_token_indices(g.stream().into_iter(), taken);
+                collect_token_indices(base, g.stream().into_iter(), taken);
             }
             _ => {}
         }
@@ -908,7 +954,7 @@ mod tests {
         let input = "fn double_all(v: &Vec<i32>) -> Vec<i32> {\n    let mut out = Vec::new();\n    for i in 0..v.len() { out.push(v[i] * 2); }\n    out\n}";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(
-            out.contains("for __elem in v { out.push(*__elem * 2); }"),
+            out.contains("for item in v { out.push(*item * 2); }"),
             "ref-param iter loop not produced: {out}"
         );
         assert!(!out.contains("0.."), "range not removed: {out}");
@@ -919,7 +965,7 @@ mod tests {
         let input =
             "fn sum(v: Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in &v { s += *__elem; }"), "{out}");
+        assert!(out.contains("for item in &v { s += *item; }"), "{out}");
     }
 
     #[test]
@@ -927,8 +973,8 @@ mod tests {
         let input =
             "fn sum(v: &[i32]) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in v {"), "{out}");
-        assert!(out.contains("s += *__elem;"), "{out}");
+        assert!(out.contains("for item in v {"), "{out}");
+        assert!(out.contains("s += *item;"), "{out}");
     }
 
     #[test]
@@ -954,7 +1000,7 @@ mod tests {
     }
 
     /// `v[v[i]]` — the outer index is not the bare ident: the old token
-    /// heuristic false-positived here (it rewrote to `v[__elem]`).
+    /// heuristic false-positived here (it rewrote to `v[item]`).
     #[test]
     fn leaves_loop_with_nested_index() {
         let input = "fn go(v: Vec<i32>) { for i in 0..v.len() { println!(\"{}\", v[v[i]]); } }";
@@ -1039,20 +1085,20 @@ mod tests {
     fn substring_identifiers_do_not_count_as_uses() {
         let input = "fn go(v: &[i32], minimum: i32) -> i32 { let mut s = 0; for i in 0..v.len() { if v[i] > minimum { s += v[i]; } } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in v {"), "{out}");
-        assert!(out.contains("if *__elem > minimum"), "{out}");
-        assert!(out.contains("s += *__elem"), "{out}");
+        assert!(out.contains("for item in v {"), "{out}");
+        assert!(out.contains("if *item > minimum"), "{out}");
+        assert!(out.contains("s += *item"), "{out}");
     }
 
     /// Plan 097 T1 — the P11 headline class: the comparison slot now emits
-    /// the deref splice (`if *__elem > 2`), which COMPILES — the bare
+    /// the deref splice (`if *item > 2`), which COMPILES — the bare
     /// reference binding was E0308 here (`&u32` vs the integer literal).
     #[test]
     fn comparison_slot_splices_deref() {
         let input = "pub fn measure(hits: &[u32]) -> u32 { let mut n = 0; for i in 0..hits.len() { if hits[i] > 2 { n += hits[i]; } } n }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("if *__elem > 2"), "{out}");
-        assert!(out.contains("n += *__elem;"), "{out}");
+        assert!(out.contains("if *hit > 2"), "{out}");
+        assert!(out.contains("n += *hit;"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -1063,51 +1109,83 @@ mod tests {
     fn typed_let_parenless_postfix_parenthesized() {
         let input = "pub fn stats(v: &[u32]) -> u32 { let mut t = 0u32; for i in 0..v.len() { let x: u32 = v[i]; t += v[i].max(x); } t }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("let x: u32 = *__elem;"), "{out}");
-        assert!(out.contains("(*__elem).max(x)"), "{out}");
+        assert!(out.contains("let x: u32 = *item;"), "{out}");
+        assert!(out.contains("(*item).max(x)"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
-    /// Plan 097 T2 — a body that already binds `__elem` no longer refuses:
-    /// the rewrite picks the next free family suffix (`__elem2`) and the
+    /// Plan 097 T2 — a body that already binds `item` no longer refuses:
+    /// the rewrite picks the next free family suffix (`item2`) and the
     /// pre-existing binding keeps its meaning.
     #[test]
     fn fresh_prefix_collision_uniques_fresh_name() {
-        let input = "fn go(v: &[i32]) -> i32 { let mut s = 0; let __elem = 1; for i in 0..v.len() { s += v[i] + __elem; } s }";
+        let input = "fn go(v: &[i32]) -> i32 { let mut s = 0; let item = 1; for i in 0..v.len() { s += v[i] + item; } s }";
         let out = propose_fix("needless_range_loop", input).expect("uniqued rewrite");
-        assert!(out.contains("for __elem2 in v"), "{out}");
-        assert!(out.contains("s += *__elem2 + __elem;"), "{out}");
+        assert!(out.contains("for item2 in v"), "{out}");
+        assert!(out.contains("s += *item2 + item;"), "{out}");
     }
 
-    /// Plan 097 T2 — the nested-loop persist: level 1 introduces `__elem`,
-    /// level 2's body references it; level 2 now heals with `__elem2` at the
+    /// Plan 097 T2 — the nested-loop persist: level 1 introduces `item`,
+    /// level 2's body references it; level 2 now heals with `item2` at the
     /// next fixpoint pass instead of persisting (the former gen7-ref-nrl-nrl
     /// shape, now gen7-d2-nrl-nrl).
     #[test]
     fn nested_range_loop_uniques_fresh_binding() {
         let input = "pub fn grid(outer: &[u32], inner: &[u32]) -> u32 { let mut acc = 0; for i in 0..outer.len() { for j in 0..inner.len() { acc += outer[i] * inner[j]; } } acc }";
         let healed = fixpoint_over(&["needless_range_loop"], input);
-        assert!(healed.contains("for __elem in outer"), "{healed}");
-        assert!(healed.contains("for __elem2 in inner"), "{healed}");
-        assert!(healed.contains("acc += *__elem * *__elem2;"), "{healed}");
+        assert!(healed.contains("for item in outer"), "{healed}");
+        assert!(healed.contains("for item2 in inner"), "{healed}");
+        assert!(healed.contains("acc += *item * *item2;"), "{healed}");
         assert!(!healed.contains("outer["), "{healed}");
         assert!(!healed.contains("inner["), "{healed}");
         syn::parse_file(&healed).expect("re-parses");
     }
 
-    /// Plan 097 T2 — a `{__elem}` implicit capture in a template would
+    /// Plan 097 T2 — a `{item}` implicit capture in a template would
     /// re-bind to the fresh name: the candidate is checked against the
-    /// template words and the rewrite bumps to `__elem2`.
+    /// template words and the rewrite bumps to `item2`.
     #[test]
     fn template_implicit_capture_bumps_name() {
-        let input = "pub fn go(v: &[i32]) { for __elem in v { for i in 0..v.len() { println!(\"{__elem}: {}\", v[i]); } } }";
+        let input = "pub fn go(v: &[i32]) { for item in v { for i in 0..v.len() { println!(\"{item}: {}\", v[i]); } } }";
         let healed = fixpoint_over(&["needless_range_loop"], input);
-        assert!(healed.contains("for __elem2 in v"), "{healed}");
+        assert!(healed.contains("for item2 in v"), "{healed}");
         assert!(
-            healed.contains("println!(\"{__elem}: {}\", *__elem2)"),
+            healed.contains("println!(\"{item}: {}\", *item2)"),
             "{healed}"
         );
         syn::parse_file(&healed).expect("re-parses");
+    }
+
+    /// Issue 145 — the binding reads like hand-written Rust: the
+    /// collection's singular, else `item`; a keyword singular falls back;
+    /// a body that already says the singular gets the next family name.
+    #[test]
+    fn readable_binding_from_collection_name() {
+        let base = |c: &str| super::binding_base(&syn::parse_str::<syn::ExprPath>(c).expect("path"));
+        assert_eq!(base("values"), "value");
+        assert_eq!(base("entries"), "entry");
+        assert_eq!(base("matches"), "item", "keyword singular falls back");
+        assert_eq!(base("boxes"), "item", "`box` is a keyword");
+        assert_eq!(base("batches"), "batch");
+        assert_eq!(base("self::hits"), "hit", "the last segment names it");
+        assert_eq!(base("v"), "item");
+        assert_eq!(base("status"), "item", "-us is not a plural");
+        assert_eq!(base("class"), "item", "-ss is not a plural");
+        let out = propose_fix(
+            "needless_range_loop",
+            "pub fn even_sum(values: &[u64]) -> u64 { let mut t = 0; for i in 0..values.len() { if values[i] % 2 == 0 { t += values[i]; } } t }",
+        )
+        .expect("matched");
+        assert!(out.contains("for value in values"), "{out}");
+        assert!(out.contains("t += *value;"), "{out}");
+        let out = propose_fix(
+            "needless_range_loop",
+            "pub fn scaled(values: &[u64], value: u64) -> u64 { let mut t = 0; for i in 0..values.len() { t += values[i] * value; } t }",
+        )
+        .expect("matched");
+        assert!(out.contains("for value2 in values"), "the body's `value` is never shadowed: {out}");
+        assert!(out.contains("t += *value2 * value;"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
@@ -1123,12 +1201,12 @@ mod tests {
     fn impl_method_param_resolves() {
         let input = "struct S;\nimpl S {\n    fn total(&self, v: &Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }\n}";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in v { s += *__elem; }"), "{out}");
+        assert!(out.contains("for item in v { s += *item; }"), "{out}");
     }
 
     /// Plan 097 T1 — a place write through a FIELD chain on the slot
     /// (`v[i].field = x`) must refuse: the deref splice is an rvalue, and
-    /// `(*__elem).field = x` is E0594.
+    /// `(*item).field = x` is E0594.
     #[test]
     fn slot_field_write_refuses() {
         let input = "struct P { f: u32 }\nfn go(v: Vec<P>) { for i in 0..v.len() { v[i].f = 1; } }";
@@ -1140,13 +1218,13 @@ mod tests {
 
     /// C1 (P12): an owned `mut` param whose slot is a known-mutator receiver
     /// needs the `&mut` header — the old `&v` emission was E0596
-    /// (`(*__elem).push(1)` behind a shared iter).
+    /// (`(*item).push(1)` behind a shared iter).
     #[test]
     fn mutator_receiver_owned_mut_param_uses_mut_header() {
         let input = "fn go(mut v: Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(1); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in &mut v {"), "{out}");
-        assert!(out.contains("(*__elem).push(1);"), "{out}");
+        assert!(out.contains("for item in &mut v {"), "{out}");
+        assert!(out.contains("(*item).push(1);"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -1189,8 +1267,8 @@ mod tests {
     fn mut_param_mutator_bare_iter_unchanged() {
         let input = "fn go(v: &mut Vec<Vec<u32>>) { for i in 0..v.len() { v[i].push(1); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in v {"), "{out}");
-        assert!(out.contains("(*__elem).push(1);"), "{out}");
+        assert!(out.contains("for item in v {"), "{out}");
+        assert!(out.contains("(*item).push(1);"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -1202,7 +1280,7 @@ mod tests {
         let input =
             "fn go(mut v: Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in &v {"), "{out}");
+        assert!(out.contains("for item in &v {"), "{out}");
         assert!(!out.contains("&mut v"), "{out}");
     }
 
@@ -1214,8 +1292,8 @@ mod tests {
     fn consuming_method_does_not_trigger_mut_header() {
         let input = "fn go(mut v: Vec<Vec<u32>>) -> usize { let mut n = 0; for i in 0..v.len() { n += v[i].into_iter().count(); } n }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("for __elem in &v {"), "{out}");
-        assert!(out.contains("(*__elem).into_iter()"), "{out}");
+        assert!(out.contains("for item in &v {"), "{out}");
+        assert!(out.contains("(*item).into_iter()"), "{out}");
     }
 
     /// An owned `mut` param + mutator receiver + ANOTHER collection use in
@@ -1235,13 +1313,13 @@ mod tests {
 
     /// C2 (P12): `assert_eq!` comparands are family args with the template
     /// position ABSENT — the old conservative walk refused; the descent
-    /// splices the deref form (`assert_eq!(*__elem, 2)` compiles: the
-    /// expansion takes `&($left)`, so `&(*__elem)` = `&u32`).
+    /// splices the deref form (`assert_eq!(*item, 2)` compiles: the
+    /// expansion takes `&($left)`, so `&(*item)` = `&u32`).
     #[test]
     fn assert_eq_slot_operand_splices_deref() {
         let input = "fn go(v: &[u32]) { for i in 0..v.len() { assert_eq!(v[i], 2); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("assert_eq!(*__elem, 2);"), "{out}");
+        assert!(out.contains("assert_eq!(*item, 2);"), "{out}");
         assert!(!out.contains("v["), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -1251,7 +1329,7 @@ mod tests {
     fn debug_assert_eq_variant_splices_deref() {
         let input = "fn go(v: &[u32]) { for i in 0..v.len() { debug_assert_eq!(v[i], 2); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("debug_assert_eq!(*__elem, 2);"), "{out}");
+        assert!(out.contains("debug_assert_eq!(*item, 2);"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -1260,7 +1338,7 @@ mod tests {
     fn assert_cond_slot_splices_deref() {
         let input = "fn go(v: &[u32]) { for i in 0..v.len() { assert!(v[i] > 2); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("assert!(*__elem > 2);"), "{out}");
+        assert!(out.contains("assert!(*item > 2);"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -1284,19 +1362,19 @@ mod tests {
         let input =
             "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {}\", v[i]); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("\"at {}\", *__elem"), "{out}");
+        assert!(out.contains("\"at {}\", *item"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
     /// C3 (P12): the transitive typed use rides the P11 universal splice —
-    /// `let x = *__elem` gives `x: T` by copy, which is EXACT for the only
+    /// `let x = *item` gives `x: T` by copy, which is EXACT for the only
     /// compiling input universe (a non-Copy `let x = v[i]` is E0507 in the
     /// ORIGINAL, so clippy never sees that shape).
     #[test]
     fn let_init_transitive_typed_use_splices_deref() {
         let input = "fn go(v: &[u32]) -> u32 { let mut n = 0; for i in 0..v.len() { let x = v[i]; if x > 2 { n += x; } } n }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
-        assert!(out.contains("let x = *__elem;"), "{out}");
+        assert!(out.contains("let x = *item;"), "{out}");
         assert!(out.contains("if x > 2"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -1306,7 +1384,7 @@ mod tests {
     /// The rewrite is ONE atomic edit covering the whole loop. As separate
     /// header/slot edits, a foreign same-pass fix overlapping one slot
     /// (`identity_op` on `hits[i] * 1`) dropped just that slot while the
-    /// header edits survived → `for __elem in hits { total += hits[i]; }`
+    /// header edits survived → `for hit in hits { total += hits[i]; }`
     /// (dangling `i`). Found by clippy-bench run #1 (Issue 032).
     #[test]
     fn rewrite_is_one_atomic_whole_loop_edit() {
@@ -1322,7 +1400,7 @@ mod tests {
             "the one edit must span the whole loop"
         );
         assert_eq!(
-            e.replacement, "for __elem in hits {\n        total += *__elem;\n    }",
+            e.replacement, "for hit in hits {\n        total += *hit;\n    }",
             "replacement carries header + slot rewrites together"
         );
     }
@@ -1339,7 +1417,7 @@ mod tests {
             input,
         );
         assert!(
-            healed.contains("for __elem in hits"),
+            healed.contains("for hit in hits"),
             "header rewritten: {healed}"
         );
         assert!(
@@ -1363,7 +1441,7 @@ mod tests {
             input,
         );
         assert!(
-            healed.contains("for __elem in values"),
+            healed.contains("for value in values"),
             "header rewritten: {healed}"
         );
         assert!(
@@ -1383,11 +1461,11 @@ mod tests {
         let input = "pub fn describe_all(names: &[String]) -> Vec<String> {\n    let mut out = Vec::new();\n    for i in 0..names.len() {\n        out.push(format!(\"{}\", names[i]));\n    }\n    out\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
         assert!(
-            out.contains("for __elem in names"),
+            out.contains("for name in names"),
             "header rewritten: {out}"
         );
         assert!(
-            out.contains("format!(\"{}\", *__elem)"),
+            out.contains("format!(\"{}\", *name)"),
             "macro slot substituted: {out}"
         );
         assert!(!out.contains("names["), "dangling index survived: {out}");
@@ -1400,7 +1478,7 @@ mod tests {
         let input = "pub fn dump(v: &[u32]) {\n    for i in 0..v.len() {\n        println!(\"{}\", v[i]);\n    }\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
         assert!(
-            out.contains("println!(\"{}\", *__elem)"),
+            out.contains("println!(\"{}\", *item)"),
             "slot substituted: {out}"
         );
         assert!(!out.contains("v["), "{out}");
@@ -1435,13 +1513,13 @@ mod tests {
 
     #[test]
     fn nonfamily_prefix_mention_no_longer_blocks() {
-        // `__elem_x` is a DISTINCT identifier (not in the `__elem<digits>`
+        // `name_x` is a DISTINCT identifier (not in the `name<digits>`
         // family) — the old binary guard refused on any prefix mention; the
         // enumeration ignores it and the rewrite heals.
-        let input = "pub fn show(names: &[String]) -> String {\n    let mut out = String::new();\n    for i in 0..names.len() {\n        out.push_str(&format!(\"{}\", { let __elem_x = names[i]; __elem_x }));\n    }\n    out\n}\n";
+        let input = "pub fn show(names: &[String]) -> String {\n    let mut out = String::new();\n    for i in 0..names.len() {\n        out.push_str(&format!(\"{}\", { let name_x = names[i]; name_x }));\n    }\n    out\n}\n";
         let out =
             propose_fix("needless_range_loop", input).expect("nonfamily mention must not block");
-        assert!(out.contains("let __elem_x = *__elem; __elem_x"), "{out}");
+        assert!(out.contains("let name_x = *name; name_x"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
