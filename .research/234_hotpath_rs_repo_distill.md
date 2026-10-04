@@ -1,6 +1,6 @@
 # Research 234 — hotpath-rs Repo-Code Distill (3rd hotpath pass): Fast Clock, Random-Draw Sampling, SPSC Drain
 
-**Status:** DISTILLED — pending owner decision (staged behind B201 + nnethercote + the 10-03 fork pool; conversion opens the plan per the PRISMML precedent)
+**Status:** DISTILLED — pending owner decision (staged behind B201 + nnethercote + the 10-03 fork pool; conversion opens the plan per the PRISMML precedent). §8 conversion-prep addendum (2026-10-04 22:2x +07): C4 drop-overturn adjudicated POSITIVE; C1 clock bench smoke-prevalidated on M3 at 2.83× (official calm-box run pending); B65 cross-reference rider drafted; B201 plan-counter collision re-verified.
 
 **Date:** 2026-10-04
 **Source:** [pawurb/hotpath-rs](https://github.com/pawurb/hotpath-rs) @ `ac4096ec8f3c8515bededbeafb0f34a47ed9367b` (MIT, shallow clone, tip = the same day's readme update — pin load-bearing; `.raw/hotpath-rs` deleted at close, every cite below is re-checkable via `git show ac4096e:<path>`).
@@ -91,3 +91,108 @@ The prior-source check missed because the live queue snapshot's 3-day window (po
 ## 7. Queue slot
 
 Staged behind **B201 (in flight on shikuwa/4090 — the Issue-665 yield)** → nnethercote (R134) → the 10-03 fork pool. **Conversion opens the plan (plan-first Protocol A step 0) at that slot** — no `.plans/` number is allocated now because B201's session holds an uncommitted `.plans/.highwater` bump on the 4090 and a same-file edit from this box is exactly the dual-allocation collision the gate exists to catch. The clock rule benches on M3 at conversion. Nothing invented — every quote read at the pin.
+
+## 8. Conversion-prep addendum (2026-10-04 22:2x +07 — the "do remains" pass; zero-collision prep while B201 holds the plan counter)
+
+### (a) Queue/collision state re-verified (dated)
+
+shikuwa/4090 `E:\git\riir-refine` at 22:0x +07: `.plans/.highwater` = **200, uncommitted**; `.plans/200_batch201_mlxfast_mtp_slice.md` + `src/domains/kernel_opt/corpus/entries_gpu_70.rs` untracked; `.raw/mlxfast-b201` present; zero cargo/rustc/clippy processes live. B201 is unchanged-stalled since 10-04 00:08 — the plan-number allocation stays BLOCKED, and the conversion session allocates its plan number from the then-current `.highwater` AFTER B201 lands (dual_allocation_gate run at allocation, per the standing law).
+
+### (b) C4 drop-overturn — ADJUDICATED POSITIVE (the recast holds; author as the GENERAL rule)
+
+Dedup greps re-run 2026-10-04 against the live corpus (179 rust_perf rules):
+
+- `tokio-guard-across-await` (entries_02.rs:419) — LOCK-scoped: parking_lot/tokio/async-lock `MutexGuard` across `.await`, hazard = **contention** (other lockers blocked); its own note says clippy `await_holding_lock` covers std guards only.
+- `host-lock-across-reentrant-blocking-call` (entries_08.rs, B174) — LOCK-scoped, hazard = **re-entrant self-deadlock**; carries its own DISTINCT-FROM against the tokio rule.
+- The corpus's ONLY `thread_local` surface is `vec-reuse-across-lifetime-change` (entries_06.rs bench spec, Batch 135 — allocation family, buffer reuse).
+- ZERO corpus hits under `task_local` / `task-local` / `instrument()` / `!Send` vocabularies.
+
+The recast (`thread-local context set by a guard must not live across .await`) is a **THIRD failure-mode axis**: WRONG-THREAD context — the guard/binding belongs to the WORKER THREAD, not the task; after migration across `.await` the context is another thread's (or the borrow unsound). No lock is involved; no lint oracle exists for the value-copy shape (the Send bound catches only the guard shape, and only when the future must be `Send` — `block_on`/`LocalSet`/`spawn_local` are silent). Bounded fix-space, 4 shapes: pass the VALUE not the guard / re-enter `with()` after the await / `tokio::task_local!` for task-scoped context / per-poll enter (tracing `instrument()`) instead of holding `enter()`. Ecosystem reach: tracing's `Span::enter()`-across-await is the canonical documented footgun; request-ID middleware; thread-local allocator scopes. The B65-era drop reason ("instrument-at-poll is hotpath's implementation detail") does not touch the general framing — the recast is about the GUARD/CONTEXT shape, not the poll wiring. Source instance stays functions.rs:109-113 (the compiler-guaranteed-await-free-scoping law) + the cross-thread Drop tid-compare (timing/guard.rs). Naming suggestion for the batch: `thread-local-context-not-across-await` (general) with attribution as the named instance — final call at authoring.
+
+### (c) C1 bench harness PREPARED + SMOKE-PREVALIDATED (NOT the official gate number)
+
+`/tmp/hotpath_clock_bench/{main.rs,run.sh}` — zero-dep (`rustc -O --edition 2021`), mirroring the source's `benchmark_instant.rs` (10M `black_box` reads, std outer timer) + this workspace's interleaved position-balanced 7-round discipline with min+median (the sequential_ab_timing law). Full source embedded in §8.1 below (/tmp is ephemeral).
+
+**Smoke run 2026-10-04 22:21 +07 — NON-QUOTABLE (load average 13.99, no preflight; mechanism-confirmation only):** std `Instant::now()` min 18.56 / median 21.63 ns; direct `mach_absolute_time` min 6.57 / median 6.96 ns; **ratio 2.83× (min/min), 3.11× (median/median)**; mach timebase 125/3. The direct arm is load-insensitive (a register read — 6.57..7.36 across rounds under load 14), and the magnitude class REPRODUCES the source's M2 Pro figures (6.1 vs 17.2 = 2.8×). **GOAT-pending → GOAT-prevalidated; the official gate = calm-box re-run (load < ~4) + the riir-reflex `scripts/bench_preflight.sh` PROVENANCE line quoted beside the number, then the in-repo `bench_spec` at authoring.**
+
+### (d) B65 cross-reference rider — DRAFTED (lands with C3 at conversion; placement entries_02.rs:488-489, appended to the `name` field per the B113 rider precedent)
+
+> "SUPERSEDED-IN-SOURCE (Batch NNN, hotpath-rs repo @ ac4096e — the post-0.28 engine's final answer for its OWN measurement channel): per-thread chunked SPSC queues + a single 50ms sweeper (`per-thread-spsc-chunk-drain-single-sweeper`) replace the batched shared channel — no mutex, no RMW atomic on the event hot path. REGIME SPLIT: per-thread SPSC + periodic sweep when the consumer tolerates ~50ms latency; THIS rule (batched shared-channel sends) when consumers must wake immediately — the llama.cpp quantizer rider's regime."
+
+### (e) Conversion checklist as it now stands
+
+Open plan (after B201 frees the counter) → author entries: C1 (benchable + `bench_spec`, carrying the three verdict-round caveats: platform scope / unsafe-FFI annotation / clock-semantics-not-precision clause) + C2 (decision-content, the two-regime pair with the MTPLX stride rule) + C3 (successor-framed + rider (d)) + C4 (the general rule per (b)) + the 2 C+ riders → standing gates + count pins (rust_perf 179→182/183, annotated count walk) → GOAT: G1 parse/G2 lib/G3 clippy ×3 postures + the calm-box C1 run with preflight provenance → research-note status flip + docs/AGENTS/queue-snapshot updates → commit+push. Estimated yield after the (b) upgrade: **3-4 rules + 2 riders + 1 rider-edit**.
+
+### 8.1 Bench source (verbatim, reproducible)
+
+```rust
+// (embedded from /tmp/hotpath_clock_bench/main.rs — the runnable copy is
+// ephemeral; rebuild from this block)
+use std::hint::black_box;
+use std::time::Instant;
+
+mod sys {
+    #[repr(C)]
+    pub struct Timebase { pub numer: u32, pub denom: u32 }
+    extern "C" {
+        pub fn mach_absolute_time() -> u64;
+        pub fn mach_timebase_info(info: *mut Timebase) -> i32;
+    }
+}
+
+const N: u64 = 10_000_000;
+const ROUNDS: usize = 7;
+
+fn time_std() -> f64 {
+    let t0 = Instant::now();
+    for _ in 0..N { black_box(Instant::now()); }
+    t0.elapsed().as_nanos() as f64 / N as f64
+}
+
+fn time_mach() -> f64 {
+    let t0 = Instant::now();
+    for _ in 0..N {
+        // SAFETY: mach_absolute_time is a pure counter read (no locks, no
+        // allocation); calling it from any thread is always sound.
+        black_box(unsafe { sys::mach_absolute_time() });
+    }
+    t0.elapsed().as_nanos() as f64 / N as f64
+}
+
+fn main() {
+    unsafe {
+        let mut tb = sys::Timebase { numer: 0, denom: 0 };
+        assert_eq!(sys::mach_timebase_info(&mut tb), 0);
+        println!("# mach timebase numer/denom = {}/{} (ns per tick)", tb.numer, tb.denom);
+    }
+    println!("# N={} reads/round, {} position-balanced interleaved rounds", N, ROUNDS);
+    println!("# source figures (M2 Pro, hotpath overhead doc): mach 6.1ns vs std 17.2ns");
+    let mut std_ns: Vec<f64> = Vec::with_capacity(ROUNDS);
+    let mut mach_ns: Vec<f64> = Vec::with_capacity(ROUNDS);
+    for r in 0..ROUNDS {
+        let (a, b) = if r % 2 == 0 {
+            (time_std(), time_mach())
+        } else {
+            let b = time_mach();
+            let a = time_std();
+            (a, b)
+        };
+        std_ns.push(a);
+        mach_ns.push(b);
+        println!("round {}: std {:>6.2} ns/op | direct {:>6.2} ns/op", r, a, b);
+    }
+    let stat = |v: &Vec<f64>| {
+        let mut s = v.clone();
+        s.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        (s[0], s[s.len() / 2])
+    };
+    let (smin, smed) = stat(&std_ns);
+    let (mmin, mmed) = stat(&mach_ns);
+    println!("----");
+    println!("std   Instant::now(): min {:>6.2}  median {:>6.2} ns/read", smin, smed);
+    println!("direct mach_absolute: min {:>6.2}  median {:>6.2} ns/read", mmin, mmed);
+    println!("ratio min/min {:.3}x  median/median {:.3}x", smin / mmin, smed / mmed);
+}
+```
+
+Run law: `rustc -O --edition 2021 main.rs -o bench && ./bench`, CALM BOX ONLY, with `sh ../riir-reflex/scripts/bench_preflight.sh` provenance quoted beside any published figure.
