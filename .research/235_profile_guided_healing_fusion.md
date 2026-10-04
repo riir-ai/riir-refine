@@ -1,6 +1,6 @@
 # Research 235 — Profile-Guided Healing: hotpath as the Healer's Dynamic Oracle (hotness → reason → Elo/MCTS → verified fix → corpus growth)
 
-**Status:** FUSION PROPOSAL — novelty RE-PINNED at verdict round 1 against the closest art (Google ECO / Uber PerfInsights / MOA: the loop shape is ESTABLISHED 2025-2026 architecture; our deltas = the modelless quadrant + frontier growth + persisted credit); GOAT-tier integration for the healer surface (fusion priority #2), POC-gated via Issue 146; not Super-GOAT (no new katgpt-rs primitive — it consumes shipped `mcts`/`rating`/`best_belief`)
+**Status:** FUSION PROPOSAL — novelty RE-PINNED at verdict round 1 against the closest art (Google ECO / Uber PerfInsights / MOA: the loop shape is ESTABLISHED 2025-2026 architecture; our deltas = the modelless quadrant + frontier growth + persisted credit); GOAT-tier integration for the healer surface (fusion priority #2), POC-gated via Issue 146; not Super-GOAT (no new katgpt-rs primitive — it consumes shipped `mcts`/`rating`/`best_belief`). **Delta 2026-10-04 (the md-refinement pass): design home = [Proposal 020](../.proposals/020_profile_guided_healing.md) (verdict re-called there) + Issue 146 refined (T0.6 the rethink serve-lane real-workload arm, owner addition "we even can use rethink"; the 019 one-plane boundary; plan-yield recorded).**
 
 **Date:** 2026-10-04
 **Proposer:** owner, in-conversation ("should we use it to find hot part and reason about it too? not just distill? we even can ELO and maybe MTCS it and fix it? novel fusion?")
@@ -91,4 +91,8 @@ Oracle lanes (`clippy_oracle.rs` pattern) · rust_perf corpus + Pareto/alloc-axi
 
 ## §5 Verdict ping-pong
 
-Round 1 (2026-10-04): **REVISE** — the reviewer surfaced ECO (arXiv 2503.15669) / PerfInsights / (search-verified additionally: MOA) as the closest art the first sweep missed, endorsed GOAT-not-Super-GOAT + the MCTS phase gate, and added 8 hazards. All incorporated above (novelty re-pinned to the 2×2 quadrant + L5 + persisted credit; hazards §4.4–4.11; the T2 go/no-go test; the T3 API-fit check). Rounds continue to AGREE before commit.
+Round 1 (2026-10-04): **REVISE** — the reviewer surfaced ECO (arXiv 2503.15669) / PerfInsights / (search-verified additionally: MOA) as the closest art the first sweep missed, endorsed GOAT-not-Super-GOAT + the MCTS phase gate, and added 8 hazards. All incorporated above (novelty re-pinned to the 2×2 quadrant + L5 + persisted credit; hazards §4.4–4.11; the T2 go/no-go test; the T3 API-fit check).
+
+Round 2 (2026-10-04): **AGREE — CLOSED before commit `74a0cfa4`** (all round-1 reasons verified against the tree then incorporated; the reviewer's optional plan-time rider — the classic non-LLM detector re-check list, Toddler/Caramel/Coccinelle/clippy-perf — was incorporated verbatim into §3.3 as the reviewer's own suggestion, marked "(r2 rider)"). This note + Issue 146 committed on that AGREE.
+
+**Re-call lineage (2026-10-04, the md-refinement pass)**: the verdict was RE-CALLED in [Proposal 020](../.proposals/020_profile_guided_healing.md) §Verdict (a second 2-round ping-pong, session `93a8e8b3`, REVISE→AGREE) when the design home was filed — that round governed the rethink-axis additions (the G4-pin oracle, the Issue-798 cross-repo landing law, the private-forever boundary), NOT a re-litigation of this note's rulings, which stand as recorded here.
