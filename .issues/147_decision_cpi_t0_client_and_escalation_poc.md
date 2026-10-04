@@ -1,6 +1,6 @@
 # Issue 147 — Decision-CPI T0: headroom kill first, then the suite-agnostic client + guards + the contribution lane (Proposal 021's POC)
 
-**Status:** OPEN (T0′+T0+T0.8; Proposal 021 rev 3's POC — the client half T0.1–T0.7 is GATED on T0′'s go; no dapps dependency, no suite dependency for the client half; the escalation USE is corpus-gated)
+**Status:** OPEN (T0′+T0+T0.8; Proposal 021 rev 3's POC — the client half T0.1–T0.7 is GATED on T0′'s go; no dapps dependency, no suite dependency for the client half; the escalation USE is corpus-gated; alignment re-call 2026-10-04: T0′ clean-baseline + T0.8's NO-GO disposition)
 
 ## What
 
@@ -8,7 +8,7 @@ The healer's decision-CPI tier, staged per Proposal 021 rev 3: **T0′ measures 
 
 ## Tasks
 
-- [ ] **T0′ THE HEADROOM + CORPUS KILL (FIRST — hours, before any client code)**: replay the retrieval eval fixtures; count spans below a pre-registered `margin_weight` threshold (`draft::margin_weight` — the existing substrate); measure structural top-1 on that subset; AND count today's gate-passing mined traj rows against Bench 098's 101 gold contexts and the 10⁴ target. **CLOSE the issue with the record if the subset is empty, structurally saturated, OR the corpus is far off and not growing.** Record: threshold, subset size, structural top-1, corpus count, the go/no-go.
+- [ ] **T0′ THE HEADROOM + CORPUS KILL (FIRST — hours, before any client code)**: replay the retrieval eval fixtures; count spans below a pre-registered `margin_weight` threshold (`draft::margin_weight` — the existing substrate); measure structural top-1 on that subset; AND count today's gate-passing mined traj rows against Bench 098's 101 gold contexts and the 10⁴ target. **Clean baseline (alignment re-call): runs with NO `--hotpath-json` feed** (P020's hot-span anchoring must not contaminate the baseline) **at a pinned refine SHA**. **CLOSE the tier with the record if the subset is empty, structurally saturated, OR the corpus is far off and not growing — T0.8 then moves to its own issue** (its corpus value is standalone: it feeds self_evolve/Elo + mining regardless; the tier closes, the contribution lane does not). Record: threshold, subset size, structural top-1, corpus count, the go/no-go.
 - [ ] **T0.1 The seam** (`decision_cpi` feature, default-off): `DecisionEscalation` at the margin_weight low-margin branch — input: span text + the candidate set + context; output: choice/abstain + receipt. **The wire = the SERVE-EDGE ENVELOPE** (`DecideReq {suite, state, options|questions}` — what the edge parses; NOT `katgpt-core::decision_wire`, which is opt-in and multi-question-path only). Envelope pinned by contract test.
 - [ ] **T0.2 The thin client**: std-only (~120 lines, the riir-ai `decision_client` pattern: hand-built envelope, per-call L3 deadline, 250ms connect cap); `RIIR_REFINE_DECISION_URL` (unset = never called); client-kept receipts under `.refine/` (gitignored) — **as AUDIT MIRROR only** (content hashes are recomputable by any same-release caller; they meter nothing). P019 Move-1 riir-kat promotion recorded as the follow-up home.
 - [ ] **T0.3 The guards**: `RIIR_REFINE_CPI_BUDGET=N` (default 0); circuit breaker (3 consecutive failures → disable + loud); run-summary disclosure (calls, fallbacks, receipts, "unpriced — dapps ingest pending").
