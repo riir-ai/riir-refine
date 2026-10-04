@@ -3971,9 +3971,19 @@ USAGE:
                     cargo project runs the oracle itself (default features,
                     loud, compiles the project — RIIR_REFINE_AUTO_ORACLE=0
                     disables; RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv> re-aims
-                    the auto run at a feature set, for diagnostics that
+                    auto run at a feature set, for diagnostics that
                     only fire behind a non-default feature; a manual
                     --clippy-json wins outright).
+    --hotpath-json <path>  Feed a hotpath JSON report measured on the
+                    target repo (Issue 146 / Proposal 020 — the
+                    profile-guided-healing oracle lane). T0 validates +
+                    inspects: the report is keyed to the repo's git HEAD
+                    (a MISMATCH refuses exit 2 — a stale profile must not
+                    anchor spans at a different commit; an unkeyed report
+                    proceeds with a loud disclosure) and the ranked hot
+                    spans print in the summary (time share = calls x avg,
+                    ranking-only; alloc bytes = the verification axis).
+                    Span anchoring into the retrieval lane lands with T0.2.
     --repo-posture  With --fix ONLY: apply clippy-lane edits the TARGET
                     repo's own clippy actually flagged — an edit lands only
                     where the feed carries a same-lint diagnostic whose
@@ -4116,6 +4126,19 @@ struct Args {
     /// feature set — Issue 115) — this flag remains the explicit/curated
     /// override and wins outright.
     clippy_json: Option<String>,
+    /// `--hotpath-json <path>` (Issue 146 T0.1/T0.5, Proposal 020 — the
+    /// profile-guided-healing oracle lane): feed a [hotpath](https://github.com/pawurb/hotpath-rs)
+    /// JSON report measured on the TARGET repo. T0 honors the feed as a
+    /// VALIDATION + INSPECTION surface: the report is parsed, keyed to the
+    /// repo (`meta.git.sha` vs the project root's `git rev-parse HEAD` —
+    /// a MISMATCH REFUSES exit 2, the stale-profile hazard; an unkeyed
+    /// report proceeds with a loud disclosure), and the ranked hot spans
+    /// print in the run summary (time share = calls × avg, RANKING-only;
+    /// alloc bytes/count = the deterministic verification axis). The
+    /// ANCHORING into the retrieval lane (spans force-included ahead of
+    /// similarity ranking, tagged `[hot: …]`) is T0.2 — the flag parses,
+    /// validates, and discloses today so the wire is pinned early.
+    hotpath_json: Option<String>,
     /// `--repo-posture` (Plan 165, the 2026-09-21 riir-ai intake): gate the
     /// CLIPPY-lane fix edits on the target repo's OWN clippy diagnostics —
     /// an edit applies only where the feed (manual `--clippy-json` or the
@@ -4462,6 +4485,7 @@ fn parse_args() -> Args {
         no_fmt: false,
         domain: None,
         clippy_json: None,
+        hotpath_json: None,
         repo_posture: false,
         apply_notbenchable: false,
         fix_groups: Vec::new(),
@@ -4733,6 +4757,13 @@ fn parse_args() -> Args {
                     usage();
                 };
                 args.clippy_json = Some(value);
+            }
+            "--hotpath-json" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--hotpath-json requires a value (a hotpath JSON report path)");
+                    usage();
+                };
+                args.hotpath_json = Some(value);
             }
             "--repo-posture" => {
                 args.repo_posture = true;
@@ -9633,6 +9664,115 @@ fn main() {
     // reproduce under the proof oracle and can credit) become the default
     // instead of a flag nobody discovers. RIIR_REFINE_AUTO_ORACLE=0 restores
     // the old never-spawn posture; docker/dist lanes have no rust spans.
+
+    // ── Issue 146 T0.1/T0.5: the hotpath report lane (validate + inspect) ──
+    // Parsed, keyed to the project root's git HEAD (mismatch = REFUSE exit 2,
+    // the stale-profile hazard; unkeyed = loud disclosure), top hot spans
+    // printed in the run summary. T0.2 wires the anchoring (`[hot: …]`
+    // spans ahead of similarity ranking) — the flag pins the wire early.
+    let hotpath_spans: Option<Vec<riir_refine::hotpath_report::HotSpan>> =
+        if let Some(path) = args.hotpath_json.as_ref() {
+            let text = match std::fs::read_to_string(path) {
+                Ok(t) => t,
+                // The clippy-feed precedent: a requested oracle that cannot
+                // be read is a HARD error — a silent fallback to ranking-only
+                // would re-create the confident miss this flag exists to
+                // prevent.
+                Err(e) => {
+                    eprintln!("hotpath feed: cannot read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let report: riir_refine::hotpath_report::HotpathReport =
+                match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("hotpath feed: cannot parse {path}: {e}");
+                        std::process::exit(2);
+                    }
+                };
+            let spans = riir_refine::hotpath_report::hot_spans(&report);
+            let n_entries = report
+                .functions_timing
+                .as_ref()
+                .map_or(0, |l| l.data.len());
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let report_keyed = report.meta.git.is_some();
+            match riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd) {
+                Some(root) => {
+                    let repo_sha = std::process::Command::new("git")
+                        .arg("-C")
+                        .arg(&root)
+                        .arg("rev-parse")
+                        .arg("HEAD")
+                        .output()
+                        .ok()
+                        .filter(|o| o.status.success())
+                        .and_then(|o| String::from_utf8(o.stdout).ok())
+                        .map(|s| s.trim().to_string());
+                    match repo_sha.as_deref().map(|sha| {
+                        riir_refine::hotpath_report::key_verdict(&report, sha)
+                    }) {
+                        Some(riir_refine::hotpath_report::KeyVerdict::Matched { sha }) => {
+                            eprintln!(
+                                "hotpath feed: keyed MATCHED at repo HEAD {sha} — {n_entries} timed entr(ies), {} located hot span(s)",
+                                spans.len()
+                            );
+                        }
+                        Some(riir_refine::hotpath_report::KeyVerdict::Mismatched { report_sha, repo_sha }) => {
+                            eprintln!(
+                                "hotpath feed: STALE PROFILE REFUSED — report was taken at {report_sha} but the repo is at {repo_sha}; re-profile at the current HEAD or checkout that SHA"
+                            );
+                            std::process::exit(2);
+                        }
+                        _ => {
+                            if report_keyed {
+                                eprintln!(
+                                    "hotpath feed: the report carries meta.git but the project root's git HEAD could not be read (not a git checkout / git failed) — CANNOT VERIFY the key; {} located hot span(s) shown best-effort",
+                                    spans.len()
+                                );
+                            } else {
+                                eprintln!(
+                                    "hotpath feed: report is UNKEYED (no meta.git — plain hotpath without hotpath-cloud); proceeding with a loud disclosure: span lines are best-effort against the current tree — {} located hot span(s)",
+                                    spans.len()
+                                );
+                            }
+                        }
+                    }
+                }
+                None => {
+                    eprintln!(
+                        "hotpath feed: no project root detected — cannot key the report; {} located hot span(s) shown best-effort",
+                        spans.len()
+                    );
+                }
+            }
+            Some(spans)
+        } else {
+            None
+        };
+    // The T0 inspection surface: the ranked hot spans, printed beside the
+    // keying verdict (anchoring into the retrieval lane is T0.2; this print
+    // is what makes the feed useful TODAY — the operator sees what reality
+    // measured before the lane exists).
+    if let Some(spans) = hotpath_spans.as_ref() {
+        eprintln!(
+            "hotpath feed: top {} of {} hot span(s) by time share (calls x avg — RANKING-only attribution; alloc = the verification axis):",
+            spans.len().min(10),
+            spans.len()
+        );
+        for s in spans.iter().take(10) {
+            let avg = s.avg_ns.map_or("n/a".to_string(), |ns| format!("{ns} ns"));
+            let alloc = s
+                .alloc_bytes
+                .map_or(String::new(), |b| format!(" | alloc {b} B"));
+            eprintln!(
+                "  [hot] {} — {}:{} — {} calls x {} avg{alloc}",
+                s.name, s.file, s.line, s.calls, avg
+            );
+        }
+    }
+
     let clippy_feed: Option<Vec<ClippyDiagnostic>> = if let Some(path) = args.clippy_json.as_ref() {
         match std::fs::read_to_string(path) {
             Ok(text) => {

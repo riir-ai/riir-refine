@@ -194,6 +194,12 @@ pub mod draft;
 // required-feature set would not compile.
 pub mod clippy_oracle;
 
+// Issue 146 T0.1 / Proposal 020: the hotpath report subset — parse + SHA
+// keying + hot-span derivation for the profile-guided-healing oracle lane
+// (the `--clippy-json` anchor-lane pattern over runtime profiles). Ungated:
+// pure data plumbing, lib-tested at default features; zero new deps.
+pub mod hotpath_report;
+
 // Plan 019 T0.3: the retrieval-free compile-oracle substrate shared by
 // `fix_verify` and the `rustc_errors` `--fix-compile` driver — the cargo
 // check runner, the rustc-reported-path resolution, and the package /
