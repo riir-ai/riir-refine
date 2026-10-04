@@ -68,7 +68,7 @@ L3 — RULIOLOGY SEARCH (opt-in)                      ← L3 (06_ruliology)
 The Plan 005 latent path is **suggest + fix** at the CLI — the Phase 4
 rust_perf `propose_fix` proposers + the T6.4 clippy emitter migration are
 wired into `cargo refine --fix` (span-preserving edits; the proposer visitor
-is the gate). See [`07_examples/cargo_heal.md`](07_examples/cargo_heal.md).
+is the gate). See [`07_examples/cargo_refine.md`](07_examples/cargo_refine.md).
 
 ## Resolved validation
 

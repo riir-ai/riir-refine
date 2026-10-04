@@ -131,7 +131,7 @@ reproducible across backing-map iteration orders.
 ## CLI
 
 The `cargo-refine` bin wraps this layer: see
-[`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md).
+[`../07_examples/cargo_refine.md`](../07_examples/cargo_refine.md).
 
 ## See also
 

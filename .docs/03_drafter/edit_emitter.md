@@ -49,12 +49,12 @@ feature gate — both domains' proposer modules re-export it
   destroyed the caller's formatting).
 - `bin/heal.rs` — composes both domains' edits per file, then iterates to
   a bounded fixpoint (see
-  [`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md)). Uses
+  [`../07_examples/cargo_refine.md`](../07_examples/cargo_refine.md)). Uses
   `apply_edits_traced` + `map_through_splices` to report per-edit lines
   against the final written source.
 
 ## See also
 
-- [`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md) — the CLI wiring
+- [`../07_examples/cargo_refine.md`](../07_examples/cargo_refine.md) — the CLI wiring
 - [`../11_domains/rust_perf.md`](../11_domains/rust_perf.md) §Proposers
 - [Bench 019](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)
