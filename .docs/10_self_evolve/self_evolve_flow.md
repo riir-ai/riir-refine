@@ -8,33 +8,97 @@
 
 Two renders exist:
 
-- **The hero SVG** — `self_evolve_flow.svg`, rendered from the COMPACT
-  source below (short labels: it must read at front-page scale on
-  `ai.gist.rs`). This is the pinned mirror the KAT network pages embed.
+- **The hero SVG** — `self_evolve_flow.svg` (+ the 390 px card list
+  `self_evolve_flow_m.svg`), rendered from the ` ```gfflow ` block below
+  (short labels: it must read at front-page scale on `refine.gist.rs`).
+  This is the pinned mirror the KAT network pages embed — the family
+  flow-figure shape (numbered steps in path order, grouped into
+  swimlanes; design guide §8, riir-ai Plan 620).
 - **The annotated diagram** — the full mermaid in this doc, with the
   honest edge-by-edge reading. The source of truth for what the loop
   actually does.
 
-## The compact hero source (renders `self_evolve_flow.svg`)
+## The hero source (renders `self_evolve_flow.svg`) — the gfflow block
 
-```mermaid
-flowchart TB
-    subgraph LOCAL["your crate"]
-        direction LR
-        SCAN["scan"] --> RET["retrieve"] --> DRAFT["draft"] --> VAL["validate"] --> FIX["fix"] --> REC["record"]
-        REC -->|"verified outcomes"| LEARN["learn"]
-        LEARN --> RET
-    end
+Four lanes group the flywheel: your machine (the local pipeline), the
+learning loop, the opt-in KAT fleet, and the lease-back lane that closes
+the wheel. The local pipeline counts 1→5; the record step branches —
+6a learns locally, 6b.1/6b.2 are the opt-in fleet loop, and step 7
+leases the fleet corpus back. Two back edges never take numbers:
+learning returns to retrieval, and the lease returns to retrieval.
 
-    REC -->|"--mine (opt-in)"| MINE["mining batch"]
+```gfflow
+file  = "self_evolve_flow.svg"
+title = "cargo refine: the self-evolve flywheel — the local loop and the opt-in fleet loop"
+accent = "refine"
 
-    subgraph NET["the KAT fleet"]
-        direction LR
-        MINE -->|"auto-sync"| PROOF["proof queue"] --> SETTLE["KAT payout"]
-        PROOF --> GROW["corpus grows"]
-    end
+[[lane]]
+id = "local"; label = "Your machine"; note = "every cargo refine run · free · private"; color = "refine"
+[[lane]]
+id = "loop"; label = "The learning loop"; note = "your outcomes, your machine"; color = "refine"
+[[lane]]
+id = "fleet"; label = "The KAT fleet"; note = "opt-in · the network side"; color = "ai"
+[[lane]]
+id = "lease"; label = "Back to your machine"; note = "the wheel closes"; color = "refine"
 
-    GROW -->|"leased back"| RET
+[[step]]
+id = "scan"; n = "1"; lane = "local"; col = 0
+title = "Scan"; body = "the span pool over your crate — a dry run writes nothing"
+status = "live"
+[[step]]
+id = "ret"; n = "2"; lane = "local"; col = 1
+title = "Retrieve"; body = "corpus rules + your past fixes, top-K"
+status = "live"
+[[step]]
+id = "dv"; n = "3"; lane = "local"; col = 2
+title = "Draft + validate"; body = "modelless proposers draft; a real-clippy oracle judges"
+status = "live"
+[[step]]
+id = "fix"; n = "4"; lane = "local"; col = 3
+title = "Fix, compile-gated"; body = "kept only if your crate still compiles"
+status = "live"
+[[step]]
+id = "rec"; n = "5"; lane = "local"; col = 4
+title = "Record"; body = "every verified outcome becomes a trajectory"
+status = "live"
+[[step]]
+id = "learn"; n = "6a"; lane = "loop"; col = 5
+title = "Learn"; body = "skill memory updates from verified outcomes"
+status = "live"
+[[step]]
+id = "mine"; n = "6b.1"; lane = "fleet"; col = 4
+title = "Mining batch"; body = "opt-in: redacted records queue to leave"
+status = "test network"
+tag = { text = "opt-in · off by default", color = "refine" }
+[[step]]
+id = "proof"; n = "6b.2"; lane = "fleet"; col = 5
+title = "Proof + payout"; body = "verified at real clippy; the epoch settle pays KAT"
+status = "test network"
+[[step]]
+id = "lse"; n = "7"; lane = "lease"; col = 1
+title = "Leased corpus"; body = "the fleet corpus refreshes retrieval on every machine"
+status = "test network"
+
+[[edge]]
+from = "scan"; to = "ret"
+[[edge]]
+from = "ret"; to = "dv"
+[[edge]]
+from = "dv"; to = "fix"
+[[edge]]
+from = "fix"; to = "rec"
+[[edge]]
+from = "rec"; to = "learn"; label = "verified outcomes"
+[[edge]]
+from = "rec"; to = "mine"; label = "opt-in"
+[[edge]]
+from = "mine"; to = "proof"; label = "syncs"
+[[edge]]
+from = "proof"; to = "lse"; label = "the corpus grows"
+[[edge]]
+from = "learn"; to = "ret"; back = true; label = "sharper retrieval next run"
+[[edge]]
+from = "lse"; to = "ret"; back = true; label = "every machine retrieves more"
 ```
 
 ## The annotated source (full detail)
@@ -103,17 +167,18 @@ flowchart TB
 
 ## Re-rendering the hero SVG
 
-The SVG is rendered from the COMPACT source above with the KAT dark
-palette (transparent background, `#161b22` nodes, `#3fb950` accents,
-`#8b949e` lines) and stripped of every external reference (no
-`@import`, no webfont) so the worker can embed the bytes verbatim. The
-band order in the render is fleet-above-local — the cycle reads as a
-loop (local L→R, up into the fleet, fleet L→R, back down), which is the
-point. After editing either mermaid source: re-render, strip externals,
-copy the result over `self_evolve_flow.svg` here AND over
-`riir-dapps/cloudflare/kat-service/src/self_evolve_flow.svg` (the
-pinned mirror the worker embeds via `include_str!` — the two must move
-in the same commit).
+The SVGs are rendered from the ` ```gfflow ` block above by reflex-site's
+`scripts/render_flows.py`, which writes BOTH mirrors in one run — this
+directory's `self_evolve_flow.svg` + `self_evolve_flow_m.svg` and
+`riir-dapps/cloudflare/kat-service/src/assets/self_evolve_flow.svg` +
+`_m` (the pinned mirror the worker embeds via `include_str!` — the two
+must move in the same commit). Family tokens, the Refine green on the
+local lanes and the network cyan on the fleet lane; the root `<svg>`
+carries `data-gfflow="1"`, `role="img"`, `<title>` and a generated
+`<desc>`, and every CSS rule is scoped under the SVG's own id, so the
+worker can inline the bytes with no JS and no external reference. After
+editing the block: re-render, then commit this doc + both mirror pairs
+together.
 
 ## See also
 
