@@ -99,6 +99,46 @@ from = "proof"; to = "lse"; label = "the corpus grows"
 from = "learn"; to = "ret"; back = true; label = "sharper retrieval next run"
 [[edge]]
 from = "lse"; to = "ret"; back = true; label = "every machine retrieves more"
+
+[[walk]]
+title = "Scan"
+text  = "cargo refine scans your crate and collects the spans a fix could touch — the bare dry run writes nothing. No listing is published here: your code never leaves the machine, so the walk shows real bytes only where a step crosses to the fleet."
+steps = ["scan"]
+[[walk]]
+title = "Retrieve"
+text  = "Corpus rules and your own past fixes are ranked against each span (top-K). The fleet corpus arrives through the lease (step 7), so a fresh machine already retrieves what the network learned."
+steps = ["ret"]
+[[walk]]
+title = "Draft + validate"
+text  = "Modelless proposers draft fixes from the retrieved rules; a real-clippy oracle judges each draft before anything is written. No LLM is on this path."
+steps = ["dv"]
+[[walk]]
+title = "Fix, compile-gated"
+text  = "--fix writes only what the compile gate keeps: a fix that breaks your crate's build is reverted automatically. Divergence classes the gate cannot judge stay manual."
+steps = ["fix"]
+[[walk]]
+title = "Record"
+text  = "Every applied fix becomes a trajectory row — the span, the rule, the verdict — in the local memory store. Recording runs in every build; nothing is uploaded by default."
+steps = ["rec"]
+[[walk]]
+title = "Learn"
+text  = "Learning is measured, not claimed: after corpus and memory changes the score bench re-runs the fixture corpus and appends a row to the recorded history — heal rate, parse safety, the rule vocabulary. This row is the last simple-shape row in that history."
+steps = ["learn"]
+out   = { lang = "json", src = "data/flows/self_evolve/01_learn.json", label = "one recorded score-bench row" }
+[[walk]]
+title = "The mining batch (opt-in)"
+text  = "Only with consent do redacted records queue to leave: rule verdicts plus the short snippets each fix touched, secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch — inspect what mining uploads before opting in."
+steps = ["mine"]
+in    = { lang = "json", src = "data/flows/self_evolve/02_batch.json", label = "one --mine batch (published sample)" }
+[[walk]]
+title = "Proof + payout"
+text  = "On sync, rows enter the proof queue and are credited at a real clippy re-run; the epoch settle pays KAT to miners (mining = processing, minted = paid). Test network today."
+steps = ["proof"]
+[[walk]]
+title = "The lease-back"
+text  = "The fleet corpus — every verified pattern class the network observed — refreshes retrieval on every machine. This is the newest row of the recorded corpus history: rules per domain, today."
+steps = ["lse"]
+out   = { lang = "json", src = "data/flows/self_evolve/03_corpus.json", label = "the fleet corpus per domain" }
 ```
 
 ## The annotated source (full detail)
@@ -176,9 +216,14 @@ must move in the same commit). Family tokens, the Refine green on the
 local lanes and the network cyan on the fleet lane; the root `<svg>`
 carries `data-gfflow="1"`, `role="img"`, `<title>` and a generated
 `<desc>`, and every CSS rule is scoped under the SVG's own id, so the
-worker can inline the bytes with no JS and no external reference. After
-editing the block: re-render, then commit this doc + both mirror pairs
-together.
+worker can inline the bytes with no JS and no external reference. The
+walk's IN/OUT payloads live in the kat-service tree
+(`cloudflare/kat-service/src/data/flows/self_evolve/`), derived from
+recorded captures by `riir-dapps scripts/build_flow_walks.py` (never
+typed); the no-JS fallback the worker serves is filled by the renderer
+into `assets/self_evolve_walk.html`. After editing the block: re-run the
+payload script (if a capture moved), re-render, then commit this doc +
+both mirror pairs together.
 
 ## See also
 

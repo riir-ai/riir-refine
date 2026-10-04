@@ -1,0 +1,71 @@
+{
+ "gfflow_walk": 1,
+ "generated_by": "reflex-site scripts/render_flows.py",
+ "file": "role_trainer_flow.svg",
+ "title": "The trainer loop: stake, host the daily window — ours only at launch; the reward class is designed",
+ "accent": "#3fd68a",
+ "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
+ "steps": {
+  "stake": {
+   "n": "1",
+   "title": "Stake 1K KAT",
+   "lane": "net",
+   "color": "#5cc8e8"
+  },
+  "win": {
+   "n": "2",
+   "title": "The daily window",
+   "lane": "win",
+   "color": "#3fd68a"
+  },
+  "get": {
+   "n": "3",
+   "title": "Endorsements",
+   "lane": "win",
+   "color": "#3fd68a"
+  }
+ },
+ "edges": [
+  {
+   "id": "stake->win",
+   "back": false
+  },
+  {
+   "id": "win->get",
+   "back": false
+  }
+ ],
+ "walk": [
+  {
+   "title": "Stake 1K KAT",
+   "text": "The operator bond for hosting a window — designed for third parties; the stake machinery matures first. Local models stay optional and unarmed (measured quality + latency fail; a reopen bar is on record).",
+   "steps": [
+    "stake"
+   ],
+   "edges": [],
+   "illustrative": false
+  },
+  {
+   "title": "The daily window",
+   "text": "One container, cron-start, sleep-after — billing is the run window only. The LLM lane is API-first with free legs and a USD cap. It runs today on our replicas only, and the page says so.",
+   "steps": [
+    "win"
+   ],
+   "edges": [
+    "stake->win"
+   ],
+   "illustrative": false
+  },
+  {
+   "title": "Endorsements (a designed class)",
+   "text": "Trainer endorsements plus an epoch pool share — the reward class settles when third-party hosts open; until then nothing is promised. v1 windows are fleet-funded from the USD treasury.",
+   "steps": [
+    "get"
+   ],
+   "edges": [
+    "win->get"
+   ],
+   "illustrative": false
+  }
+ ]
+}

@@ -1,0 +1,118 @@
+{
+ "gfflow_walk": 1,
+ "generated_by": "reflex-site scripts/render_flows.py",
+ "file": "role_fixer_flow.svg",
+ "title": "The fixer loop: the operator drains the queue today; third-party replay is designed and settles nothing yet",
+ "accent": "#3fd68a",
+ "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
+ "steps": {
+  "q": {
+   "n": "1",
+   "title": "Unproven queue",
+   "lane": "fleet",
+   "color": "#5cc8e8"
+  },
+  "drain": {
+   "n": "2a",
+   "title": "The drain lane",
+   "lane": "ops",
+   "color": "#3fd68a"
+  },
+  "rep": {
+   "n": "2b",
+   "title": "Replay, your rig",
+   "lane": "rig",
+   "color": "#3fd68a"
+  },
+  "gates": {
+   "n": "3",
+   "title": "The gates",
+   "lane": "ops",
+   "color": "#3fd68a"
+  },
+  "pay": {
+   "n": "4",
+   "title": "Pays on the board",
+   "lane": "fleet",
+   "color": "#5cc8e8"
+  }
+ },
+ "edges": [
+  {
+   "id": "q->drain",
+   "back": false
+  },
+  {
+   "id": "q->rep",
+   "back": false
+  },
+  {
+   "id": "drain->gates",
+   "back": false
+  },
+  {
+   "id": "rep->gates",
+   "back": false
+  },
+  {
+   "id": "gates->pay",
+   "back": false
+  }
+ ],
+ "walk": [
+  {
+   "title": "The unproven queue",
+   "text": "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Test network today.",
+   "steps": [
+    "q"
+   ],
+   "edges": [],
+   "illustrative": false
+  },
+  {
+   "title": "The operator's drain lane (live today)",
+   "text": "Our nodes draft fixes for queued rows over a hosted-LLM lane — free-legs first, USD-capped, redaction-gated. It is a node lane, not a download: nothing for you to install yet.",
+   "steps": [
+    "drain"
+   ],
+   "edges": [
+    "q->drain"
+   ],
+   "illustrative": false
+  },
+  {
+   "title": "Replay on your rig (designed)",
+   "text": "The third-party lane would lease queued fixes to your own CPU box, re-run the gate and the oracle locally, and — on K=2 agreement with a second verifier — share a bounded cut of the row's reward. The cut is pinned at zero until ratified; nothing is promised until it settles.",
+   "steps": [
+    "rep"
+   ],
+   "edges": [
+    "q->rep"
+   ],
+   "illustrative": true
+  },
+  {
+   "title": "The gates",
+   "text": "Every candidate, whichever lane drafted it, passes the same two gates: your crate still compiles, and real clippy is silent on the result. A replay verdict is measured, never guessed — that is why the replay client needs an oracle build.",
+   "steps": [
+    "gates"
+   ],
+   "edges": [
+    "drain->gates",
+    "rep->gates"
+   ],
+   "illustrative": false
+  },
+  {
+   "title": "Pays on the board",
+   "text": "Accepted work settles through the miner rows on the public board — the operator lane's earn path today, in public.",
+   "steps": [
+    "pay"
+   ],
+   "edges": [
+    "gates->pay"
+   ],
+   "illustrative": false
+  }
+ ]
+}

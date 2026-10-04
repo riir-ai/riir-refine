@@ -93,6 +93,27 @@ from = "dry"; to = "fix"
 from = "fix"; to = "get"
 [[edge]]
 from = "fix"; to = "meter"; label = "logged in"
+
+[[walk]]
+title = "Install"
+text  = "One prebuilt binary (brew, scoop, or the install script) lands in ~/.cargo/bin — no repo clone, no build. Logged out it stays anonymous and is never billed."
+steps = ["inst"]
+[[walk]]
+title = "Dry run first"
+text  = "The bare `cargo refine` is a review: it lists the fixes it would make across your crate and writes nothing. No listing is published as a fixture — your code never leaves the machine, so this walk shows real bytes only where a step crosses to the fleet."
+steps = ["dry"]
+[[walk]]
+title = "The compile gate"
+text  = "`--fix` writes an edit only if your crate still compiles after it; a breaking fix is reverted automatically. Divergence classes the gate cannot judge (comment-guarded matches, array-literal defaults) stay manual and are listed, not applied."
+steps = ["fix"]
+[[walk]]
+title = "What you get"
+text  = "Healed code across the shipped domains — clippy lints, compile errors, Rust perf, Dockerfiles, release profiles — plus the local self-evolve loop: memory always records, learning runs when the oracle is present."
+steps = ["get"]
+[[walk]]
+title = "What a logged-in run costs"
+text  = "The meter counts code-word tokens and bills one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed burn report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code."
+steps = ["meter"]
 ```
 
 ## miner — contribute batches, earn KAT (the pro tier)
@@ -164,6 +185,29 @@ from = "proof"; to = "pay"; label = "pays"
 from = "proof"; to = "grow"; label = "grows"
 [[edge]]
 from = "grow"; to = "bat"; back = true; label = "leased back — your own retrieval improves"
+
+[[walk]]
+title = "Join once"
+text  = "`cargo refine --mine` opts in, auto-logs-in, and runs the first sync — one command, reversible (`--unmine` stops the push half; healing was always local). Consent tiers: Unset never pushes; running sync IS the consent."
+steps = ["join"]
+[[walk]]
+title = "The redacted batch"
+text  = "Every heal run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in."
+steps = ["bat"]
+in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one --mine batch (published sample)" }
+[[walk]]
+title = "Proof queue"
+text  = "On push, rows enter the proof queue and are credited only at a real clippy re-run on the queue's own fixture — a verdict is measured, never trusted from the client. Test network today."
+steps = ["proof"]
+[[walk]]
+title = "KAT at the settle"
+text  = "The epoch settle pays the pool to miners (mining = processing, minted = paid), within seven days of an accepted push. Contributed accounts are never re-gated while depleted. Test network today."
+steps = ["pay"]
+[[walk]]
+title = "The corpus grows — and leases back"
+text  = "Every verified row grows the fleet's pattern corpus, and the corpus leases back to every machine's retrieval — the flywheel closing. This is the newest row of the recorded corpus history: rules per domain, today."
+steps = ["grow"]
+out   = { lang = "json", src = "data/flows/role_miner/02_corpus.json", label = "the fleet corpus per domain" }
 ```
 
 ## fixer — verify & fix the network's queue (the max tier)
@@ -236,6 +280,28 @@ from = "drain"; to = "gates"
 from = "rep"; to = "gates"
 [[edge]]
 from = "gates"; to = "pay"
+
+[[walk]]
+title = "The unproven queue"
+text  = "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Test network today."
+steps = ["q"]
+[[walk]]
+title = "The operator's drain lane (live today)"
+text  = "Our nodes draft fixes for queued rows over a hosted-LLM lane — free-legs first, USD-capped, redaction-gated. It is a node lane, not a download: nothing for you to install yet."
+steps = ["drain"]
+[[walk]]
+title = "Replay on your rig (designed)"
+text  = "The third-party lane would lease queued fixes to your own CPU box, re-run the gate and the oracle locally, and — on K=2 agreement with a second verifier — share a bounded cut of the row's reward. The cut is pinned at zero until ratified; nothing is promised until it settles."
+steps = ["rep"]
+illustrative = true
+[[walk]]
+title = "The gates"
+text  = "Every candidate, whichever lane drafted it, passes the same two gates: your crate still compiles, and real clippy is silent on the result. A replay verdict is measured, never guessed — that is why the replay client needs an oracle build."
+steps = ["gates"]
+[[walk]]
+title = "Pays on the board"
+text  = "Accepted work settles through the miner rows on the public board — the operator lane's earn path today, in public."
+steps = ["pay"]
 ```
 
 ## trainer — host the daily training window (the ultra tier)
@@ -291,6 +357,19 @@ tag = { text = "local models: unarmed", color = "ai" }
 from = "stake"; to = "win"
 [[edge]]
 from = "win"; to = "get"
+
+[[walk]]
+title = "Stake 1K KAT"
+text  = "The operator bond for hosting a window — designed for third parties; the stake machinery matures first. Local models stay optional and unarmed (measured quality + latency fail; a reopen bar is on record)."
+steps = ["stake"]
+[[walk]]
+title = "The daily window"
+text  = "One container, cron-start, sleep-after — billing is the run window only. The LLM lane is API-first with free legs and a USD cap. It runs today on our replicas only, and the page says so."
+steps = ["win"]
+[[walk]]
+title = "Endorsements (a designed class)"
+text  = "Trainer endorsements plus an epoch pool share — the reward class settles when third-party hosts open; until then nothing is promised. v1 windows are fleet-funded from the USD treasury."
+steps = ["get"]
 ```
 
 ## The shared cost plane (what every COST edge means)
@@ -377,6 +456,32 @@ from = "pool"; to = "settle"; label = "the epoch closes"
 from = "settle"; to = "lease"; label = "the corpus grows"
 [[edge]]
 from = "lease"; to = "meter"; back = true; label = "every machine refines better"
+
+[[walk]]
+title = "The run is metered"
+text  = "The meter counts code-word tokens on your machine and bills a fixed µ rate per million. Logged out, nothing is billed anywhere — anonymous is outside the economy by design. Offline, the burn is a local commit; the next run pushes the cumulative total."
+steps = ["meter"]
+[[walk]]
+title = "TUNA pays first"
+text  = "Where the deployment funds trial credit, the server draws TUNA first — one grant per account, thirty days, heals only. Trial burns fund nothing and expired credit is inert; the public TUNA counters show the reservoir. Test network today."
+steps = ["tuna"]
+[[walk]]
+title = "KAT pays"
+text  = "After the trial (or where it is not funded), KAT pays — metered totals, signed, watermark-deduped so replays are no-ops. No debt exists: the server clamps warn-and-pay and never goes negative. Test network today."
+steps = ["kat"]
+[[walk]]
+title = "Every burn funds the pool"
+text  = "Each KAT burn is split by the network's published parameters — mostly into the next epoch's mining pool. The live split renders from parameters on the leaderboard and the explorer; the figure names where the money lands, never a typed percentage."
+steps = ["pool"]
+[[walk]]
+title = "The settle pays"
+text  = "The once-per-epoch settle fixes each miner's share of the pool and mints it (mining = processing, minted = paid), with mint receipts in public. Test network today."
+steps = ["settle"]
+[[walk]]
+title = "The lease-back"
+text  = "The fleet corpus every machine leases back — the newest row of the recorded corpus history: rules per domain, today. The wheel closes where it started: your next run retrieves more."
+steps = ["lease"]
+out   = { lang = "json", src = "data/flows/kat_economy/01_corpus.json", label = "the fleet corpus per domain" }
 ```
 
 ## The role × tier grid (what the tabs and the matrix share)
@@ -414,6 +519,15 @@ via `include_str!` — the two must move in the same commit (the Issue
 131 mirror law). Each SVG's CSS is scoped under its own root id (unique
 per figure), so the five inline figures never collide and the worker
 needs no id-suffixing.
+
+Each block also carries a **walk** (the step-through, design guide §8.4).
+Its IN/OUT payloads live in the kat-service tree
+(`cloudflare/kat-service/src/data/flows/{role_miner,kat_economy}/`),
+derived from recorded captures by `riir-dapps
+scripts/build_flow_walks.py` — never typed; steps with no committed
+capture stay payload-less. The no-JS fallback the worker serves is
+filled by the renderer into `assets/<figure>_walk.html` (the include
+target beside the SVGs).
 
 **The gfflow re-expression landed 2026-10-04** (superseding the
 mermaid.ink renders of Issue 132 Phase 2 — the four `role_*.svg`

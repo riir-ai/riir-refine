@@ -1,0 +1,113 @@
+{
+ "gfflow_walk": 1,
+ "generated_by": "reflex-site scripts/render_flows.py",
+ "file": "role_coder_flow.svg",
+ "title": "The coder loop: dry-run first, then the compile-gated fix — the meter draws TUNA before KAT",
+ "accent": "#3fd68a",
+ "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
+ "steps": {
+  "inst": {
+   "n": "1",
+   "title": "Install",
+   "lane": "me",
+   "color": "#3fd68a"
+  },
+  "dry": {
+   "n": "2",
+   "title": "Dry run",
+   "lane": "me",
+   "color": "#3fd68a"
+  },
+  "fix": {
+   "n": "3",
+   "title": "The compile gate",
+   "lane": "me",
+   "color": "#3fd68a"
+  },
+  "get": {
+   "n": "4a",
+   "title": "Fixed code",
+   "lane": "me",
+   "color": "#3fd68a"
+  },
+  "meter": {
+   "n": "4b",
+   "title": "The burn meter",
+   "lane": "bill",
+   "color": "#5cc8e8"
+  }
+ },
+ "edges": [
+  {
+   "id": "inst->dry",
+   "back": false
+  },
+  {
+   "id": "dry->fix",
+   "back": false
+  },
+  {
+   "id": "fix->get",
+   "back": false
+  },
+  {
+   "id": "fix->meter",
+   "back": false
+  }
+ ],
+ "walk": [
+  {
+   "title": "Install",
+   "text": "One prebuilt binary (brew, scoop, or the install script) lands in ~/.cargo/bin — no repo clone, no build. Logged out it stays anonymous and is never billed.",
+   "steps": [
+    "inst"
+   ],
+   "edges": [],
+   "illustrative": false
+  },
+  {
+   "title": "Dry run first",
+   "text": "The bare `cargo refine` is a review: it lists the fixes it would make across your crate and writes nothing. No listing is published as a fixture — your code never leaves the machine, so this walk shows real bytes only where a step crosses to the fleet.",
+   "steps": [
+    "dry"
+   ],
+   "edges": [
+    "inst->dry"
+   ],
+   "illustrative": false
+  },
+  {
+   "title": "The compile gate",
+   "text": "`--fix` writes an edit only if your crate still compiles after it; a breaking fix is reverted automatically. Divergence classes the gate cannot judge (comment-guarded matches, array-literal defaults) stay manual and are listed, not applied.",
+   "steps": [
+    "fix"
+   ],
+   "edges": [
+    "dry->fix"
+   ],
+   "illustrative": false
+  },
+  {
+   "title": "What you get",
+   "text": "Healed code across the shipped domains — clippy lints, compile errors, Rust perf, Dockerfiles, release profiles — plus the local self-evolve loop: memory always records, learning runs when the oracle is present.",
+   "steps": [
+    "get"
+   ],
+   "edges": [
+    "fix->get"
+   ],
+   "illustrative": false
+  },
+  {
+   "title": "What a logged-in run costs",
+   "text": "The meter counts code-word tokens and bills one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed burn report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code.",
+   "steps": [
+    "meter"
+   ],
+   "edges": [
+    "fix->meter"
+   ],
+   "illustrative": false
+  }
+ ]
+}
