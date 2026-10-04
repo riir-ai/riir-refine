@@ -82,7 +82,7 @@ title = "Fixed code"; body = "clippy · perf · docker · dist + compile errors"
 status = "live"
 [[step]]
 id = "meter"; n = "4b"; lane = "bill"; col = 3
-title = "The burn meter"; body = "1 KAT-equiv / 1M code-word tokens; TUNA pays first"
+title = "The burn meter"; body = "1 KAT-equiv / 1M tokens; TUNA first where funded"
 status = "live"
 
 [[edge]]
@@ -346,7 +346,7 @@ title = "The run is metered"; body = "counts code-word tokens; logged out = neve
 status = "live"
 [[step]]
 id = "tuna"; n = "2a"; lane = "led"; col = 1
-title = "TUNA pays first"; body = "one grant · 30 days — funds nothing, expires"
+title = "TUNA pays first"; body = "where funded: one grant · 30 days, expires"
 status = "test network"
 [[step]]
 id = "kat"; n = "2b"; lane = "led"; col = 2
@@ -366,7 +366,7 @@ title = "The lease-back"; body = "the fleet corpus refreshes every machine"
 status = "test network"
 
 [[edge]]
-from = "meter"; to = "tuna"; label = "trial credit left · logged in"
+from = "meter"; to = "tuna"; label = "trial credit left"
 [[edge]]
 from = "meter"; to = "kat"; label = "after TUNA · logged in"
 [[edge]]
