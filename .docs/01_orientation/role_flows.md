@@ -2,13 +2,16 @@
 
 > **Purpose:** the four "Get started" roles on ai.gist.rs (coder / miner /
 > fixer / trainer), each as one end-to-end flow: what you DO, what you GET,
-> and what it COSTS. Issue 132. The mermaid blocks below are the exact
-> render sources for the per-role SVGs beside this doc — the front-page
-> role tabs embed those (web delivery: Issue 132 Phase 2). The companion
-> docs carry the other two axes of the same facts:
-> [`node_tiers.md`](node_tiers.md) is the TIER axis (what a rig can run),
-> [`kat_billing.md`](kat_billing.md) is the billing plane every COST edge
-> points into.
+> and what it COSTS. Issue 132. Each role renders TWICE: the ` ```gfflow `
+> block in its section is the render source for the per-role web figures
+> (the family flow shape — numbered steps, grouped lanes; design guide §8),
+> and the mermaid block beside it is the annotated source of truth (the
+> honest edge-by-edge reading). The front-page role tabs embed the gfflow
+> renders (web delivery: Issue 132 Phase 2; the gfflow re-expression
+> 2026-10-04). The companion docs carry the other two axes of the same
+> facts: [`node_tiers.md`](node_tiers.md) is the TIER axis (what a rig can
+> run), [`kat_billing.md`](kat_billing.md) is the billing plane every COST
+> edge points into.
 
 ## How to read the diagrams
 
@@ -42,6 +45,56 @@ flowchart LR
 The miner tab's join step upgrades the same install to **pro** — one
 binary, two postures.
 
+### The coder render source (renders `role_coder_flow.svg`)
+
+Two lanes: your machine (the fixing pipeline) and the billing plane
+(logged-in runs only). The fix step branches — 4a is what you get on
+every run, 4b is what a logged-in run costs. The lite posture rides a
+tag on the dry run, not a step: logging out is the absence of billing,
+not a thing that happens.
+
+```gfflow
+file  = "role_coder_flow.svg"
+title = "The coder loop: dry-run first, then the compile-gated fix — the meter draws TUNA before KAT"
+accent = "refine"
+
+[[lane]]
+id = "me"; label = "Your machine"; note = "every run · free · private"; color = "refine"
+[[lane]]
+id = "bill"; label = "The billing plane"; note = "logged-in runs only"; color = "ai"
+
+[[step]]
+id = "inst"; n = "1"; lane = "me"; col = 0
+title = "Install"; body = "one prebuilt binary lands in ~/.cargo/bin"
+status = "live"
+[[step]]
+id = "dry"; n = "2"; lane = "me"; col = 1
+title = "Dry run"; body = "lists the fixes it would make, writes nothing"
+status = "live"
+tag = { text = "logged out = never billed", color = "refine" }
+[[step]]
+id = "fix"; n = "3"; lane = "me"; col = 2
+title = "The compile gate"; body = "kept only if your crate still compiles"
+status = "live"
+[[step]]
+id = "get"; n = "4a"; lane = "me"; col = 3
+title = "Fixed code"; body = "clippy · perf · docker · dist + compile errors"
+status = "live"
+[[step]]
+id = "meter"; n = "4b"; lane = "bill"; col = 3
+title = "The burn meter"; body = "1 KAT-equiv / 1M code-word tokens; TUNA pays first"
+status = "live"
+
+[[edge]]
+from = "inst"; to = "dry"
+[[edge]]
+from = "dry"; to = "fix"
+[[edge]]
+from = "fix"; to = "get"
+[[edge]]
+from = "fix"; to = "meter"; label = "logged in"
+```
+
 ## miner — contribute batches, earn KAT (the pro tier)
 
 ```mermaid
@@ -62,6 +115,57 @@ flowchart LR
 | **Gets** | mining KAT — the only earn class that settles today: rows enter the proof queue on push, are credited at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a miner. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
 | **Pays** | your own heal burn (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. `--unmine` stops the push half (the lease pull half still runs — a read is not a contribution); healing was always local. |
 
+### The miner render source (renders `role_miner_flow.svg`)
+
+Two lanes: your machine (join, record, push) and the KAT fleet (proof,
+payout, corpus). The fleet corpus step carries a back edge — the lease
+returns to your own retrieval, which is the flywheel closing.
+
+```gfflow
+file  = "role_miner_flow.svg"
+title = "The miner loop: redacted records up, proof at real clippy, KAT at the epoch settle — and the corpus leases back"
+accent = "refine"
+
+[[lane]]
+id = "me"; label = "Your machine"; note = "the pro tier · opt-in"; color = "refine"
+[[lane]]
+id = "fleet"; label = "The KAT fleet"; note = "the network side"; color = "ai"
+
+[[step]]
+id = "join"; n = "1"; lane = "me"; col = 0
+title = "Join once"; body = "--mine: consent · login · first sync"
+status = "live"
+tag = { text = "opt-in · reversible", color = "refine" }
+[[step]]
+id = "bat"; n = "2"; lane = "me"; col = 1
+title = "The redacted batch"; body = "verdicts + touched snippets, secret-scanned, signed"
+status = "live"
+[[step]]
+id = "proof"; n = "3"; lane = "fleet"; col = 2
+title = "Proof queue"; body = "rows are credited at a real clippy re-run"
+status = "test network"
+[[step]]
+id = "pay"; n = "4a"; lane = "fleet"; col = 3
+title = "KAT at the settle"; body = "the pool pays — mining = processing, minted = paid"
+status = "test network"
+tag = { text = "never re-gated", color = "ai" }
+[[step]]
+id = "grow"; n = "4b"; lane = "fleet"; col = 4
+title = "The corpus grows"; body = "the network's observed pattern classes"
+status = "test network"
+
+[[edge]]
+from = "join"; to = "bat"
+[[edge]]
+from = "bat"; to = "proof"; label = "sync"
+[[edge]]
+from = "proof"; to = "pay"; label = "pays"
+[[edge]]
+from = "proof"; to = "grow"; label = "grows"
+[[edge]]
+from = "grow"; to = "bat"; back = true; label = "leased back — your own retrieval improves"
+```
+
 ## fixer — verify & fix the network's queue (the max tier)
 
 ```mermaid
@@ -79,6 +183,61 @@ flowchart LR
 | **Gets** | accepted work settles through the **miner rows** on the board — the operator lane's earn path today. The third-party half is **designed, not settling**: replay verification (Proposal 015) would lease queued fixes, re-run the gate + oracle on your own rig, and — on K=2 agreement with a second verifier — share a bounded cut of the row's reward. The cut is pinned at 0 until ratified; nothing is promised until it settles. |
 | **Pays** | a CPU box (~2–4 vCPU, 4–8 GB, no GPU) · API costs ride the free legs or the CF USD cap · the replay client (when it opens) needs a `--features kat_transport,clippy_verify` build — the release binary carries no oracle, because a replay verdict is measured, never guessed. |
 
+### The fixer render source (renders `role_fixer_flow.svg`)
+
+Three lanes: the queue (network), the operator's nodes (live today), and
+your rig (the designed third-party lane). The queue branches — 2a is the
+operator drain that runs today, 2b is the replay lane your rig would run;
+both converge on the gates, and accepted work settles through the miner
+rows. The replay's reward class does not settle yet — the tag says so,
+never an earnings promise.
+
+```gfflow
+file  = "role_fixer_flow.svg"
+title = "The fixer loop: the operator drains the queue today; third-party replay is designed and settles nothing yet"
+accent = "refine"
+
+[[lane]]
+id = "fleet"; label = "The unproven queue"; note = "the network side"; color = "ai"
+[[lane]]
+id = "ops"; label = "The operator's nodes"; note = "live today"; color = "refine"
+[[lane]]
+id = "rig"; label = "Your rig"; note = "the max tier · designed"; color = "refine"
+
+[[step]]
+id = "q"; n = "1"; lane = "fleet"; col = 0
+title = "Unproven queue"; body = "pushed rows await proof"
+status = "test network"
+[[step]]
+id = "drain"; n = "2a"; lane = "ops"; col = 1
+title = "The drain lane"; body = "hosted LLM drafts · cap-guarded · redaction-gated"
+status = "live"
+[[step]]
+id = "rep"; n = "2b"; lane = "rig"; col = 1
+title = "Replay, your rig"; body = "lease fixes, re-run gates, K=2 verifier"
+status = "planned"
+tag = { text = "cut = 0 until ratified", color = "ai" }
+[[step]]
+id = "gates"; n = "3"; lane = "ops"; col = 2
+title = "The gates"; body = "compile gate + the real clippy oracle"
+status = "live"
+[[step]]
+id = "pay"; n = "4"; lane = "fleet"; col = 3
+title = "Pays on the board"; body = "accepted work settles through the miner rows"
+status = "live"
+
+[[edge]]
+from = "q"; to = "drain"; label = "the operator lane today"
+[[edge]]
+from = "q"; to = "rep"; label = "designed · not open yet"
+[[edge]]
+from = "drain"; to = "gates"
+[[edge]]
+from = "rep"; to = "gates"
+[[edge]]
+from = "gates"; to = "pay"
+```
+
 ## trainer — host the daily training window (the ultra tier)
 
 ```mermaid
@@ -95,6 +254,44 @@ flowchart LR
 | **Does** | stakes 1K KAT and hosts the daily trainer window: one container, cron-start, sleep-after. LLM lane is API-first (groq → infron free legs → CF, cap-guarded); local models stay optional and **UNARMED** — measured quality + latency FAIL, reopening only per the `l4_fallback.md` reopen bar. |
 | **Gets** | trainer endorsements + the epoch pool share — a **designed** class: the window runs today on **our replicas only**, and we say so rather than market it. Third-party hosts open when the vessel/stake machinery matures. |
 | **Pays** | the GPU rig or container VPS — billing is the run window only · the 1K KAT stake · v1 windows are fleet-funded from the USD treasury. |
+
+### The trainer render source (renders `role_trainer_flow.svg`)
+
+Two lanes: the network (the stake — designed for third parties) and the
+trainer window (running on our replicas today). The window step is live
+but ours-only — the tag says so; the GET class stays planned, and the
+local-model option rides a tag because it is unarmed, not a lane.
+
+```gfflow
+file  = "role_trainer_flow.svg"
+title = "The trainer loop: stake, host the daily window — ours only at launch; the reward class is designed"
+accent = "refine"
+
+[[lane]]
+id = "net"; label = "The network"; note = "the stake · designed"; color = "ai"
+[[lane]]
+id = "win"; label = "The trainer window"; note = "ours today · third parties planned"; color = "refine"
+
+[[step]]
+id = "stake"; n = "1"; lane = "net"; col = 0
+title = "Stake 1K KAT"; body = "the operator bond for hosting a window"
+status = "planned"
+[[step]]
+id = "win"; n = "2"; lane = "win"; col = 1
+title = "The daily window"; body = "cron start · sleep after — the run window only"
+status = "live"
+tag = { text = "runs on our replicas only", color = "refine" }
+[[step]]
+id = "get"; n = "3"; lane = "win"; col = 2
+title = "Endorsements"; body = "a designed class — settles when hosts open"
+status = "planned"
+tag = { text = "local models: unarmed", color = "ai" }
+
+[[edge]]
+from = "stake"; to = "win"
+[[edge]]
+from = "win"; to = "get"
+```
 
 ## The shared cost plane (what every COST edge means)
 
@@ -121,6 +318,67 @@ is the full spec):
   machines are outside the economy — the lite tier's free-forever is a
   design property, not a promo.
 
+### The economy render source (renders `kat_economy_flow.svg`)
+
+The money loop as one figure — the trust section's companion on
+`refine.gist.rs/#trust`. The meter branches on which tank pays (TUNA
+trial credit is terminal: trial burns fund nothing and expire); every
+KAT burn funds the next epoch's pool, the settle pays the fleet, and
+the corpus leases back to close the loop. The split itself is NOT drawn
+as numbers — the live split renders from parameters on the pages; the
+figure names where the money lands, never a typed percentage.
+
+```gfflow
+file  = "kat_economy_flow.svg"
+title = "The KAT economy: the meter runs locally, burns fund the pool, the settle pays the fleet — and the corpus leases back"
+accent = "refine"
+
+[[lane]]
+id = "me"; label = "Your machine"; note = "the meter runs locally"; color = "refine"
+[[lane]]
+id = "led"; label = "The ledger"; note = "every burn, public"; color = "ai"
+[[lane]]
+id = "flt"; label = "Miners"; note = "the fleet that earns"; color = "ai"
+
+[[step]]
+id = "meter"; n = "1"; lane = "me"; col = 0
+title = "The run is metered"; body = "counts code-word tokens; logged out = never billed"
+status = "live"
+[[step]]
+id = "tuna"; n = "2a"; lane = "led"; col = 1
+title = "TUNA pays first"; body = "one grant · 30 days — funds nothing, expires"
+status = "test network"
+[[step]]
+id = "kat"; n = "2b"; lane = "led"; col = 2
+title = "KAT pays"; body = "after the trial — metered totals, signed"
+status = "test network"
+[[step]]
+id = "pool"; n = "3"; lane = "led"; col = 3
+title = "The mining pool"; body = "every KAT burn funds the next epoch's rewards"
+status = "test network"
+[[step]]
+id = "settle"; n = "4"; lane = "flt"; col = 4
+title = "The settle pays"; body = "rows mint — mining = processing, minted = paid"
+status = "test network"
+[[step]]
+id = "lease"; n = "5"; lane = "me"; col = 5
+title = "The lease-back"; body = "the fleet corpus refreshes every machine"
+status = "test network"
+
+[[edge]]
+from = "meter"; to = "tuna"; label = "trial credit left · logged in"
+[[edge]]
+from = "meter"; to = "kat"; label = "after TUNA · logged in"
+[[edge]]
+from = "kat"; to = "pool"; label = "burns"
+[[edge]]
+from = "pool"; to = "settle"; label = "the epoch closes"
+[[edge]]
+from = "settle"; to = "lease"; label = "the corpus grows"
+[[edge]]
+from = "lease"; to = "meter"; back = true; label = "every machine refines better"
+```
+
 ## The role × tier grid (what the tabs and the matrix share)
 
 | role | tier | does | gets | pays | status |
@@ -137,38 +395,33 @@ and the leaderboard stays honest about that.
 
 ## The SVG renders (the web-delivery assets)
 
-| File | Renders | Front-page tab |
+| File | Renders | Serves on |
 |---|---|---|
-| [`role_coder.svg`](role_coder.svg) | the coder diagram above | Get started › coder |
-| [`role_miner.svg`](role_miner.svg) | the miner diagram | Get started › miner |
-| [`role_fixer.svg`](role_fixer.svg) | the fixer diagram | Get started › fixer |
-| [`role_trainer.svg`](role_trainer.svg) | the trainer diagram | Get started › trainer |
+| [`role_coder_flow.svg`](role_coder_flow.svg) + `_m` | the coder gfflow block above | Get started › coder |
+| [`role_miner_flow.svg`](role_miner_flow.svg) + `_m` | the miner gfflow block | Get started › miner |
+| [`role_fixer_flow.svg`](role_fixer_flow.svg) + `_m` | the fixer gfflow block | Get started › fixer |
+| [`role_trainer_flow.svg`](role_trainer_flow.svg) + `_m` | the trainer gfflow block | Get started › trainer |
+| [`kat_economy_flow.svg`](kat_economy_flow.svg) + `_m` | the economy gfflow block | the trust section (`#trust`) |
 
-Each is a canonical mermaid.ink render of this doc's own mermaid block
-(JSON-state URL, KAT dark palette — `primaryColor #1f2020` on
-`#0d1117`, cluster `#10151c`/`#30363d`, edges `#8b949e`, monospace
-labels), post-processed per the Issue 131 conventions: the `@import`
-stripped, every CSS selector scoped to `#mermaid-svg`, `role="img"` +
-an aria-label. The doc block is the source of truth — re-render from
-it, never hand-edit the SVG.
+Each is rendered from this doc's own ` ```gfflow ` block by
+reflex-site's `scripts/render_flows.py` — the family flow shape
+(numbered step cards in path order, grouped into swimlanes, the 390 px
+card list as `_m`). The doc block is the source of truth — re-render
+from it, never hand-edit the SVG. The renderer writes BOTH mirrors in
+one run: the canonical copies beside this doc and the pinned mirrors in
+`riir-dapps/cloudflare/kat-service/src/assets/` that the worker embeds
+via `include_str!` — the two must move in the same commit (the Issue
+131 mirror law). Each SVG's CSS is scoped under its own root id (unique
+per figure), so the five inline figures never collide and the worker
+needs no id-suffixing.
 
-**Phase 2 LANDED (Issue 132 closed 2026-09-23):** each role pane embeds
-its SVG the way the self-evolve hero does — the pinned mirror lives in
-the riir-dapps worker (`cloudflare/kat-service/src/role_*.svg`, loaded
-by `role_flows.rs` via `include_str!`, one slot per pane in
-`front_page.rs`). The mirror law is the Issue 131 one: re-render from
-the doc block HERE, then copy the four files to the worker in the SAME
-commit (the worker's tests pin the mirror's self-containedness + CSS
-scoping, so a stale or hand-edited copy reds there). Because five
-inline mermaid SVGs now share the front page (the Issue 131 hero +
-these four), the worker suffixes every internal id of each copy with
-the role key (`scope_ids` in `role_flows.rs`) — defs and every
-`url()` reference together. Landed at riir-dapps `eefd8cd`; deployed
-to devnet + apex the same day, curl-verified (4 flow wrappers, the
-hero keeping the only bare root id). Testnet stays parked (owner
-timing). The miner diagram is the widest render — legible at tab
-scale; if it ever reads too dense, a stacked `flowchart TB` re-render
-of the same doc block swaps in at zero drift cost.
+**The gfflow re-expression landed 2026-10-04** (superseding the
+mermaid.ink renders of Issue 132 Phase 2 — the four `role_*.svg`
+mermaid files and the worker's `scope_ids` suffixing died with it;
+the mermaid blocks above stay as the annotated sources of truth, the
+`self_evolve_flow.md` convention). The worker embeds both shapes per
+role and a CSS media query swaps them — the no-JS `<picture>`
+equivalent, the self-evolve hero's convention.
 
 ## Refs
 
