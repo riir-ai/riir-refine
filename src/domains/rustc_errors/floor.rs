@@ -66,6 +66,10 @@ pub enum MutatorKind {
     FlattenScope,
     /// Move a binding's declaration into an inner scope.
     NarrowScope,
+    /// Swap the move statement with the borrowed/moved value's use
+    /// statement (the seed reads before the move; the broken form uses
+    /// after it — Plan 432's non-`Clone` saddle stratum).
+    SwapMoveUse,
 }
 
 impl MutatorKind {
@@ -79,6 +83,7 @@ impl MutatorKind {
             Self::AddDerefStar => "add-deref-star",
             Self::FlattenScope => "flatten-scope",
             Self::NarrowScope => "narrow-scope",
+            Self::SwapMoveUse => "swap-move-use",
         }
     }
 }

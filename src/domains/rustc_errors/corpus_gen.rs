@@ -76,6 +76,9 @@ pub fn generate_corpus() -> Vec<GeneratedCase> {
     e0502_copy_index(&mut out);
     e0502_string_len(&mut out);
     e0505_drop_clone(&mut out);
+    e0505_nonclone_borrow_move(&mut out);
+    e0382_nonclone_use_after_move(&mut out);
+    e0382_clone_use_after_move(&mut out);
     e0596_drop_mut(&mut out);
     e0382_drop_clone(&mut out);
     e0507_drop_clone(&mut out);
@@ -649,6 +652,133 @@ fn e0505_drop_clone(out: &mut Vec<GeneratedCase>) {
             format!("gen_e0505_clone_{i:02}_{ty}"),
             "E0505",
             MutatorKind::DropCloneCall,
+            seed,
+            broken,
+        );
+    }
+}
+
+// ── E0505/E0382: the non-Clone saddle stratum (Plan 432 corpus expansion) ──
+//
+// The borrowck ladder's second rungs (`e0505-use-before-move`,
+// `e0382-use-before-move`) exist so a site can SADDLE: the clone rung is
+// tried first (min-delta ordering) and REVERTS on non-`Clone` types (E0599
+// at equal count — no strict lexicographic decrease), then the swap rung
+// keeps. These families manufacture that fail→resolve shape on codes the
+// interacting corpus never covers — the tuple-diversity expansion the
+// RLTL;DR teacher pass needs (riir-train plan 432's diversity tripwire:
+// the 10-01 corpus was E0502-only).
+
+/// E0505 on a deliberately non-`Clone` struct: the seed reads through the
+/// borrow BEFORE the move; the broken form swaps those statements so the
+/// borrow is live across the move. Clone-at-move reverts (E0599);
+/// use-before-move recovers — the saddle.
+fn e0505_nonclone_borrow_move(out: &mut Vec<GeneratedCase>) {
+    // (field type, field value) — `Tkn` derives NOTHING (not Clone, not
+    // Copy): the clone rung's `t.clone()` is E0599 here.
+    const TABLE: [(&str, &str); 12] = [
+        ("u8", "7u8"),
+        ("u8", "13u8"),
+        ("u16", "9u16"),
+        ("u16", "21u16"),
+        ("u32", "11u32"),
+        ("u32", "35u32"),
+        ("u64", "7u64"),
+        ("u64", "42u64"),
+        ("i16", "5i16"),
+        ("i32", "19i32"),
+        ("i64", "23i64"),
+        ("usize", "17usize"),
+    ];
+    for (i, (ty, val)) in TABLE.iter().enumerate() {
+        let gt = gt_module(&format!(
+            "assert_eq!(super::probe(Tkn {{ v: {val} }}), 2 * {val});"
+        ));
+        let wrap = |pair: &str| {
+            format!(
+                "pub struct Tkn {{ pub v: {ty} }}\n\npub fn probe(t: Tkn) -> {ty} {{\n    {pair}\n}}\n{gt}"
+            )
+        };
+        let seed = wrap("let r = &t;\n    let n = r.v;\n    let w = t;\n    n + w.v");
+        let broken = wrap("let r = &t;\n    let w = t;\n    let n = r.v;\n    n + w.v");
+        push_case(
+            out,
+            format!("gen_e0505_ncswap_{i:02}_{ty}"),
+            "E0505",
+            MutatorKind::SwapMoveUse,
+            seed,
+            broken,
+        );
+    }
+}
+
+/// E0382 on the same non-`Clone` struct: the seed reads the field BEFORE
+/// the move; the broken form uses after it. Same ladder, one code over —
+/// clone reverts (E0599), the statement swap recovers.
+fn e0382_nonclone_use_after_move(out: &mut Vec<GeneratedCase>) {
+    const TABLE: [(&str, &str); 12] = [
+        ("u8", "3u8"),
+        ("u8", "29u8"),
+        ("u16", "15u16"),
+        ("u16", "31u16"),
+        ("u32", "13u32"),
+        ("u32", "37u32"),
+        ("u64", "11u64"),
+        ("u64", "50u64"),
+        ("i16", "7i16"),
+        ("i32", "23i32"),
+        ("i64", "31i64"),
+        ("usize", "19usize"),
+    ];
+    for (i, (ty, val)) in TABLE.iter().enumerate() {
+        let gt = gt_module(&format!(
+            "assert_eq!(super::probe(Tkn {{ v: {val} }}), 2 * {val});"
+        ));
+        let wrap = |pair: &str| {
+            format!(
+                "pub struct Tkn {{ pub v: {ty} }}\n\npub fn probe(t: Tkn) -> {ty} {{\n    {pair}\n}}\n{gt}"
+            )
+        };
+        let seed = wrap("let n = t.v;\n    let w = t;\n    n + w.v");
+        let broken = wrap("let w = t;\n    let n = t.v;\n    n + w.v");
+        push_case(
+            out,
+            format!("gen_e0382_ncswap_{i:02}_{ty}"),
+            "E0382",
+            MutatorKind::SwapMoveUse,
+            seed,
+            broken,
+        );
+    }
+}
+
+/// E0382 on `Clone` types — the CONTRAST stratum: the clone rung KEEPS
+/// here (no saddle; the first-tried candidate resolves), which keeps the
+/// ladder's ordering honest rather than tuned for saddles alone.
+fn e0382_clone_use_after_move(out: &mut Vec<GeneratedCase>) {
+    // (kind, init-expr, len-expr) — Vec/String are Clone.
+    const TABLE: [(&str, &str, usize); 6] = [
+        ("u8", "vec![1u8, 2, 3]", 3),
+        ("u8", "vec![9u8]", 1),
+        ("u32", "vec![10u32, 20]", 2),
+        ("u32", "vec![5u32]", 1),
+        ("u64", "vec![7u64, 8, 9]", 3),
+        ("u64", "vec![100u64]", 1),
+    ];
+    for (i, (ty, init, n)) in TABLE.iter().enumerate() {
+        let gt = gt_module(&format!(
+            "assert_eq!(super::probe({init}), 2 * {n});"
+        ));
+        let wrap = |pair: &str| {
+            format!("pub fn probe(v: Vec<{ty}>) -> usize {{\n    {pair}\n}}\n{gt}")
+        };
+        let seed = wrap("let n = v.len();\n    let w = v;\n    n + w.len()");
+        let broken = wrap("let w = v;\n    let n = v.len();\n    n + w.len()");
+        push_case(
+            out,
+            format!("gen_e0382_clone_swap_{i:02}_{ty}"),
+            "E0382",
+            MutatorKind::SwapMoveUse,
             seed,
             broken,
         );

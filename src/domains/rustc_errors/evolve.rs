@@ -477,6 +477,29 @@ pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[
         code: "E0502",
         strategy: "e0502-read-relocate",
     },
+    FrontierLanding {
+        // riir-train plan 432's corpus-expansion landing (the diversity
+        // tripwire): the E0505 ladder's second rung — clone-at-move reverts
+        // on non-`Clone` types, this recovers.
+        commit: "da59eead",
+        unix_secs: 1_791_120_874,
+        code: "E0505",
+        strategy: "e0505-use-before-move",
+    },
+    FrontierLanding {
+        // Same landing: E0382's first rung (the clone side of the ladder).
+        commit: "da59eead",
+        unix_secs: 1_791_120_874,
+        code: "E0382",
+        strategy: "e0382-clone-at-move",
+    },
+    FrontierLanding {
+        // Same landing: E0382's second rung (the statement swap).
+        commit: "da59eead",
+        unix_secs: 1_791_120_874,
+        code: "E0382",
+        strategy: "e0382-use-before-move",
+    },
 ];
 
 /// Which authoring era a playbook strategy belongs to. `Unrecorded` is a

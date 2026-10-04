@@ -58,7 +58,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprReference, Local, Pat, UnOp};
 
 use super::{anchor, cand, CompileProposer, FixCandidate, Playbooks, SpanEdit};
-use crate::domains::rustc_errors::diag::RustcErrorDiag;
+use crate::domains::rustc_errors::diag::{LabeledSpan, RustcErrorDiag};
 
 // ── shared syn extraction ─────────────────────────────────────────────
 
@@ -613,6 +613,203 @@ impl CompileProposer for E0505CloneAtMove {
     }
 }
 
+// ── E0505 — hoist the borrow's use above the move (the non-Clone rung) ──
+
+/// `let r = &t; let w = t; let n = r.v;` → swap the move statement with the
+/// borrow's first-use statement (they must be adjacent) — NLL ends the
+/// borrow before the move, no trait requirement. The SECOND rung of the
+/// E0505 ladder: [`E0505CloneAtMove`] keeps on `Clone` types but reverts on
+/// non-`Clone` ones (E0599 at equal count — no strict lexicographic
+/// decrease), and this strategy recovers the site the clone rung cannot.
+/// Anchors on rustc's own `borrow later used here` label, never on a
+/// guessed binding name.
+pub struct E0505UseBeforeMove;
+
+impl CompileProposer for E0505UseBeforeMove {
+    fn name(&self) -> &'static str {
+        "e0505-use-before-move"
+    }
+
+    fn code(&self) -> &'static str {
+        "E0505"
+    }
+
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
+        if diag.code != self.code() {
+            return Vec::new();
+        }
+        let Some(moved) = anchor(diag, |l| {
+            l.contains("move out of") && l.contains("occurs here")
+        }) else {
+            return Vec::new();
+        };
+        let Some(borrow_use) = anchor(diag, |l| l.contains("borrow later used here")) else {
+            return Vec::new();
+        };
+        swap_move_with_use(diag, file, source, moved, borrow_use, self.name())
+    }
+}
+
+// ── E0382 — the move ladder (clone rung + use-before-move rung) ────────
+
+/// `let w = t; let n = t.v;` → `let w = t.clone();` — insert `.clone()` at
+/// the indicted `value moved here` place. The FIRST rung of the E0382
+/// ladder: keeps on `Clone` types, reverts on non-`Clone` (E0599 at equal
+/// count) so the [`E0382UseBeforeMove`] rung takes over — the same ladder
+/// shape [`E0505CloneAtMove`] established one code over.
+pub struct E0382CloneAtMove;
+
+impl CompileProposer for E0382CloneAtMove {
+    fn name(&self) -> &'static str {
+        "e0382-clone-at-move"
+    }
+
+    fn code(&self) -> &'static str {
+        "E0382"
+    }
+
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
+        if diag.code != self.code() {
+            return Vec::new();
+        }
+        let Some(moved) = anchor(diag, |l| l.contains("value moved here")) else {
+            return Vec::new();
+        };
+        let end = moved.byte_end;
+        if source[end..].starts_with(".clone()") {
+            return Vec::new(); // already cloned here
+        }
+        vec![cand(
+            diag,
+            file,
+            moved.line_start,
+            (end, end),
+            ".clone()".to_string(),
+            self.name(),
+        )
+        .with_note(
+            "clones at the move — the destination owns a copy; the source stays live",
+        )]
+    }
+}
+
+/// `let w = t; let n = t.v;` → swap the two statements (they must be
+/// adjacent) — the use lands before the move. The SECOND rung of the E0382
+/// ladder and the only one available on non-`Clone` types.
+pub struct E0382UseBeforeMove;
+
+impl CompileProposer for E0382UseBeforeMove {
+    fn name(&self) -> &'static str {
+        "e0382-use-before-move"
+    }
+
+    fn code(&self) -> &'static str {
+        "E0382"
+    }
+
+    fn propose(
+        &self,
+        diag: &RustcErrorDiag,
+        file: &std::path::Path,
+        source: &str,
+    ) -> Vec<FixCandidate> {
+        if diag.code != self.code() {
+            return Vec::new();
+        }
+        let Some(moved) = anchor(diag, |l| l.contains("value moved here")) else {
+            return Vec::new();
+        };
+        let Some(usex) = anchor(diag, |l| {
+            l.contains("value used here after move")
+        }) else {
+            return Vec::new();
+        };
+        swap_move_with_use(diag, file, source, moved, usex, self.name())
+    }
+}
+
+/// The shared adjacent-statement swap behind both use-before-move rungs —
+/// the [`E0499SwapSecondDecl`] discipline applied to moves: the use must
+/// come AFTER the move, the two statements must be ADJACENT
+/// (whitespace-only gap), single-line and comment-free, and the use must
+/// not reference the move's DESTINATION binding (that would be a use
+/// before its new declaration site after the swap).
+fn swap_move_with_use(
+    diag: &RustcErrorDiag,
+    file: &std::path::Path,
+    source: &str,
+    moved: &LabeledSpan,
+    usex: &LabeledSpan,
+    strategy: &'static str,
+) -> Vec<FixCandidate> {
+    let stmts = stmt_ranges(source);
+    let Some(m) = stmt_containing(&stmts, moved.byte_start) else {
+        return Vec::new();
+    };
+    let Some(u) = stmt_containing(&stmts, usex.byte_start) else {
+        return Vec::new();
+    };
+    if u.start < m.end {
+        return Vec::new(); // the use is not after the move — nothing to swap
+    }
+    let Some(gap) = source.get(m.end..u.start) else {
+        return Vec::new();
+    };
+    if !gap.trim().is_empty() {
+        return Vec::new(); // foreign statements between — refuse
+    }
+    let Some(m_text) = source.get(m.start..m.end) else {
+        return Vec::new();
+    };
+    let Some(u_text) = source.get(u.start..u.end) else {
+        return Vec::new();
+    };
+    if m_text.contains('\n')
+        || u_text.contains('\n')
+        || m_text.contains("//")
+        || u_text.contains("//")
+        || m_text.contains("/*")
+        || u_text.contains("/*")
+    {
+        return Vec::new();
+    }
+    // The destination binding: `let NAME = place;` — the use must not
+    // mention NAME (post-swap that would read the binding before its
+    // declaration).
+    let Some(dest) = m_text
+        .strip_prefix("let ")
+        .and_then(|rest| rest.split_whitespace().next())
+    else {
+        return Vec::new();
+    };
+    if contains_ident(u_text, dest) {
+        return Vec::new();
+    }
+    let repl = format!("{u_text}{gap}{m_text}");
+    vec![cand(
+        diag,
+        file,
+        moved.line_start,
+        (m.start, u.end),
+        repl,
+        strategy,
+    )
+    .with_note(
+        "swaps the move with the use — evaluation order of the two statements \
+         exchanges; legal only when neither reads the other's result",
+    )]
+}
+
 // ── the family registry ───────────────────────────────────────────────
 
 /// The Phase 3 registry: the uncontested pair (E0502, E0499) plus the one
@@ -626,6 +823,9 @@ pub fn family() -> Playbooks {
         .with(Box::new(E0502ReadRelocate))
         .with(Box::new(E0499SwapSecondDecl))
         .with(Box::new(E0505CloneAtMove))
+        .with(Box::new(E0505UseBeforeMove))
+        .with(Box::new(E0382CloneAtMove))
+        .with(Box::new(E0382UseBeforeMove))
 }
 
 // ── fixtures (proposer discipline: buggy/clean pairs + negative
@@ -1036,7 +1236,7 @@ mod tests {
             diag_for("E0505", E0505_SRC, "let w = v;", &[]),
         ];
         let pb = family();
-        assert_eq!(pb.len(), 5);
+        assert_eq!(pb.len(), 8);
         for (src, diag) in srcs.iter().zip(&diags) {
             for c in pb.propose(diag, Path::new("/x/src/lib.rs"), src) {
                 for text in std::iter::once(&c.replacement)
@@ -1050,5 +1250,150 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ── E0505 use-before-move (the non-Clone rung) ───────────────────
+
+    /// The Plan-432 non-`Clone` saddle shape: the borrow's use is its own
+    /// statement AFTER the move. The swap restores the seed exactly.
+    const E0505_NC_SRC: &str =
+        "pub fn probe(t: Tkn) -> u64 {\n    let r = &t;\n    let w = t;\n    let n = r.v;\n    n + w.v\n}\n";
+
+    fn e0505_nc_diag() -> RustcErrorDiag {
+        let mut d = diag_for(
+            "E0505",
+            E0505_NC_SRC,
+            "let w = t;",
+            &[
+                ("move out of `t` occurs here", "w = t;\n"),
+                ("borrow of `t` occurs here", "&t"),
+                ("borrow later used here", "r.v"),
+            ],
+        );
+        // The move label covers just the moved `t` (the operand, probed).
+        let t_at = E0505_NC_SRC.find("w = t;").unwrap() + "w = ".len();
+        for ls in &mut d.labeled_spans {
+            if ls.label.contains("move out of") {
+                ls.byte_start = t_at;
+                ls.byte_end = t_at + 1;
+            }
+        }
+        d
+    }
+
+    #[test]
+    fn e0505_use_before_move_swaps_adjacent_stmts() {
+        let d = e0505_nc_diag();
+        let out = propose_all(&E0505UseBeforeMove, E0505_NC_SRC, &d);
+        assert_eq!(out.len(), 1, "{out:?}");
+        let fixed = apply(E0505_NC_SRC, &out[0]);
+        assert_eq!(
+            fixed,
+            "pub fn probe(t: Tkn) -> u64 {\n    let r = &t;\n    let n = r.v;\n    let w = t;\n    n + w.v\n}\n",
+            "byte-identical to the corpus seed — the saddle's resolving rung"
+        );
+        assert_eq!(out[0].strategy_id, "e0505-use-before-move");
+    }
+
+    #[test]
+    fn e0505_use_before_move_refuses_inline_tail_use() {
+        // The committed `E0505_SRC` shape: the borrow's use is inline in the
+        // tail and mentions the move destination — the swap would read `w`
+        // before its declaration. Refuse.
+        let d = diag_for(
+            "E0505",
+            E0505_SRC,
+            "let w = v;",
+            &[
+                ("move out of `v` occurs here", "v;\n"),
+                ("borrow of `v` occurs here", "&v"),
+                ("borrow later used here", "r.len()"),
+            ],
+        );
+        assert!(propose_all(&E0505UseBeforeMove, E0505_SRC, &d).is_empty());
+    }
+
+    #[test]
+    fn e0505_use_before_move_refuses_foreign_stmt_between() {
+        let src = "pub fn probe(t: Tkn) -> u64 {\n    let r = &t;\n    let w = t;\n    let k = 5u64;\n    let n = r.v;\n    n + w.v + k\n}\n";
+        let d = diag_for(
+            "E0505",
+            src,
+            "let w = t;",
+            &[
+                ("move out of `t` occurs here", "w = t;\n"),
+                ("borrow of `t` occurs here", "&t"),
+                ("borrow later used here", "r.v"),
+            ],
+        );
+        assert!(propose_all(&E0505UseBeforeMove, src, &d).is_empty());
+    }
+
+    // ── E0382 — the move ladder ───────────────────────────────────────
+
+    const E0382_NC_SRC: &str =
+        "pub fn probe(t: Tkn) -> u64 {\n    let w = t;\n    let n = t.v;\n    n + w.v\n}\n";
+
+    fn e0382_nc_diag() -> RustcErrorDiag {
+        let mut d = diag_for(
+            "E0382",
+            E0382_NC_SRC,
+            "let n = t.v;",
+            &[
+                ("value moved here", "w = t;\n"),
+                ("value used here after move", "t.v"),
+            ],
+        );
+        // The moved-here label covers just the operand `t` (probed).
+        let t_at = E0382_NC_SRC.find("w = t;").unwrap() + "w = ".len();
+        for ls in &mut d.labeled_spans {
+            if ls.label.contains("value moved here") {
+                ls.byte_start = t_at;
+                ls.byte_end = t_at + 1;
+            }
+        }
+        d
+    }
+
+    #[test]
+    fn e0382_clone_at_move_inserts_after_the_moved_place() {
+        let d = e0382_nc_diag();
+        let out = propose_all(&E0382CloneAtMove, E0382_NC_SRC, &d);
+        assert_eq!(out.len(), 1, "{out:?}");
+        let fixed = apply(E0382_NC_SRC, &out[0]);
+        assert_eq!(
+            fixed,
+            "pub fn probe(t: Tkn) -> u64 {\n    let w = t.clone();\n    let n = t.v;\n    n + w.v\n}\n",
+            "clone inserted at the move — the first rung (E0599 on non-Clone)"
+        );
+    }
+
+    #[test]
+    fn e0382_use_before_move_swaps_adjacent_stmts() {
+        let d = e0382_nc_diag();
+        let out = propose_all(&E0382UseBeforeMove, E0382_NC_SRC, &d);
+        assert_eq!(out.len(), 1, "{out:?}");
+        let fixed = apply(E0382_NC_SRC, &out[0]);
+        assert_eq!(
+            fixed,
+            "pub fn probe(t: Tkn) -> u64 {\n    let n = t.v;\n    let w = t;\n    n + w.v\n}\n",
+            "byte-identical to the corpus seed"
+        );
+    }
+
+    #[test]
+    fn e0382_use_before_move_refuses_foreign_stmt_between() {
+        let src =
+            "pub fn probe(t: Tkn) -> u64 {\n    let w = t;\n    let k = 5u64;\n    let n = t.v;\n    n + w.v + k\n}\n";
+        let d = diag_for(
+            "E0382",
+            src,
+            "let n = t.v;",
+            &[
+                ("value moved here", "w = t;\n"),
+                ("value used here after move", "t.v"),
+            ],
+        );
+        assert!(propose_all(&E0382UseBeforeMove, src, &d).is_empty());
     }
 }
