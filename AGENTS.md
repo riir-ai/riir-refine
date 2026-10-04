@@ -102,11 +102,13 @@ Plan 001 generalized the framework from a clippy-only healer into a pluggable mu
                           copies; the T2.3 retarget, reflex Issue 008 — the
                           ternary lane no longer touches riir-ai)
 /git/riir-ai              ← OPTIONAL dep (feature-gated arm: latent_retrieval →
-                          riir-rag, Plan 005. Default build: NOT a dep. Its
-                          riir-rag keeps an OPTIONAL riir-engine dep whose
-                          genlock-load feature requirement is resolved even
-                          when unactivated — the arc-swap fork row in the root
-                          manifest stays for that reason alone)
+                          riir-rag, Plan 005. Default build: NOT a dep — a plain
+                          optional path dep (default-features = false) since the
+                          arc-swap genlock-load seam was RETIRED 2026-10-03
+                          (riir-ai fa904dde7, Issue 950 T7 moved the versioned
+                          readers to std RwLock<Arc<_>>; the [patch.crates-io]
+                          fork row this manifest carried was dropped in the
+                          same wave — fd9aead7 here)
 /git/riir-train           ← OPTIONAL dep (only for L4 LoRA fallback, deferred)
 /git/riir-chain           ← NOT a dep
 /git/riir-neuron-db       ← transitive only (via riir-rag under latent_retrieval)
