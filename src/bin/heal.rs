@@ -619,7 +619,31 @@ fn default_sync_policy_gate() -> riir_refine::kat_redact::RedactionGate {
         )
 }
 
+/// riir-dapps Plan 045 Phase A1 (Proposal 008 §2): the first-join
+/// environment choice. Fires ONLY on the no-config path — a machine with a
+/// config record OR an env override (any source) is never prompted and
+/// sees zero output (the consent / soft-gate flows stay byte-identical).
+/// The choice records through the EXISTING `config set` record
+/// (`service_url.json`), so `config get` reports it and
+/// `service_url_for_command` resolves it. A refusal prints loud and exits
+/// 2 with the remedy named — a fresh non-TTY join never silently rides the
+/// old default, and never hangs.
+fn ensure_join_env_recorded() {
+    if let Err(msg) =
+        riir_refine::kat_join::run(PROMPT_YES.load(std::sync::atomic::Ordering::Relaxed))
+    {
+        eprintln!("{msg}");
+        std::process::exit(2);
+    }
+}
+
 fn run_mine_intro() {
+    // Plan 045 A1: the first-join choice runs before the explainer so a
+    // fresh machine's join output opens with its network decision (and a
+    // mainnet joiner's posture copy sits up-front, never after the first
+    // 503). A configured machine: no prompt, no output — the explainer
+    // below is byte-identical to the pre-A1 shape.
+    ensure_join_env_recorded();
     println!("KAT mining — turn your healing work into network credit");
     println!();
     println!("WHAT: every cargo refine run records HOW the healer behaved (which rules");
@@ -1175,6 +1199,9 @@ fn ensure_logged_in() -> Option<riir_refine::kat_account::KatAccount> {
 fn run_kat_login(import_key: Option<&Path>) {
     use riir_refine::kat_account::KatAccount;
 
+    // Plan 045 A1: the explicit login is a join path too — a fresh machine
+    // chooses its network here (the same no-config-only prompt as `--mine`).
+    ensure_join_env_recorded();
     let dir = KatAccount::default_dir();
     let result = match import_key {
         Some(source) => KatAccount::login_import(&dir, source),
@@ -3850,8 +3877,11 @@ USAGE:
                     --refill/burn-push out while this usage page still
                     lists them).
     --yes           Non-interactive consent: every y/N prompt answers yes
-                    (the flag form of RIIR_REFINE_YES=1 — agents/CI). Currently
-                    arms the depleted-run contribute-now offer (Issue 079).
+                    (the flag form of RIIR_REFINE_YES=1 — agents/CI). Arms the
+                    depleted-run contribute-now offer (Issue 079) and answers the
+                    first-join network prompt with its devnet default (Plan 045:
+                    --mine/login with no service config asks devnet/mainnet once;
+                    RIIR_REFINE_JOIN_ENV=devnet|mainnet forces instead).
     --write         With --fix-compile: write the edits in place. (--fix already
                     writes — the explicit flag is the consent; rustfmt AUTOMATICALLY
                     follows when the original was already rustfmt-clean — pre-existing
@@ -4039,8 +4069,10 @@ struct Args {
     /// `--version` / `-V` — print the version and exit (standalone).
     version: bool,
     /// `--yes` — non-interactive consent: every y/N prompt answers yes
-    /// (the flag form of `RIIR_REFINE_YES=1`; agents and CI). Currently arms
-    /// the depleted-run contribute-now offer (Issue 079).
+    /// (the flag form of `RIIR_REFINE_YES=1`; agents and CI). Arms the
+    /// depleted-run contribute-now offer (Issue 079) and answers the
+    /// first-join network prompt with its devnet default (Plan 045 A1 —
+    /// `RIIR_REFINE_JOIN_ENV=devnet|mainnet` forces instead).
     yes: bool,
     /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
     /// 2026-09-08, the ai.gist.rs three-tier engagement story). Records
@@ -7887,6 +7919,17 @@ fn main() {
     riir_refine::install_env_rename_compat();
     let args = parse_args();
 
+    // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
+    // set the run-global HERE, before every dispatch: the subcommand arm
+    // below (`login`, `claim`, …) runs before the mode-flag section ever
+    // did, and Plan 045 A1's first-join prompt reads the same run-global
+    // from the `login` path. The deep prompt sites (the 079 offer) read it
+    // later as before; nothing between here and there resets it.
+    PROMPT_YES.store(
+        args.yes || prompt_yes_env(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+
     // ── riir-dapps Plan 023: `config` — the LOCAL service-url surface ────
     // Ungated (the kat_mining_consent precedent): a local record must be
     // writable/readable in EVERY feature build, including before `login`.
@@ -8126,13 +8169,8 @@ fn main() {
         }
         return;
     }
-    // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) — set
-    // the run-global here so the deep prompt sites read it without plumbing
-    // Args through every flow.
-    PROMPT_YES.store(
-        args.yes || prompt_yes_env(),
-        std::sync::atomic::Ordering::Relaxed,
-    );
+    // `--yes` was armed at the top of main (before every dispatch — the
+    // `login` path and the Plan 045 A1 first-join prompt read it).
     if riir_refine::kat_mining_consent::flags_conflict(args.mine, args.unmine) {
         eprintln!("{}", riir_refine::kat_mining_consent::CONFLICT_MESSAGE);
         std::process::exit(2);

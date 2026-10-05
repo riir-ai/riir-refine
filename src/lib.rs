@@ -310,6 +310,15 @@ pub use riir_kat::{kat_mining_consent, kat_service_urls, kat_soft_gate};
 // Proposal 004 Half-2 server route.
 pub mod kat_stats_consent;
 
+// riir-dapps Plan 045 Phase A (Proposal 008 §2): the first-join environment
+// choice — `--mine` / `login` with NO service config offers devnet
+// (default) / mainnet once, recorded through the EXISTING `config set`
+// record (`service_url.json`). Ungated in-crate (the consent-module rule:
+// `--mine` is the join command in every feature build); `testnet` is never
+// offered (host torn down 2026-10-03 — the `config set` alias stays valid
+// for wire compat); `DEFAULT_SERVICE_URL` never moves (the QR-goldens law).
+pub mod kat_join;
+
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
 // gated rows + BLAKE3 batch commitment + the account-key Ed25519 signature

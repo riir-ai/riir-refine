@@ -1,0 +1,264 @@
+//! riir-dapps Plan 045 Phase A1/A2 — the first-join environment choice, AT
+//! THE PROCESS BOUNDARY (the `repo_posture_cli.rs` hermetic pattern).
+//!
+//! The class this guards: the A1 prompt must fire ONLY on the no-config
+//! first-join path. An existing machine (config record OR env override)
+//! must see ZERO new output and ZERO new refusals — the consent /
+//! soft-gate flows stay byte-identical — while a fresh non-TTY join
+//! refuses loud with the env remedy instead of silently riding the old
+//! mainnet default or hanging on a closed pipe.
+//!
+//! | arm | asserted |
+//! |---|---|
+//! | env force devnet | `RIIR_REFINE_JOIN_ENV=devnet` records the devnet URL through the config-set record; the recorded line prints |
+//! | env force mainnet | records mainnet + the A3 posture copy names every unarmed plane (pool 0, TUNA, crank, settles nothing) |
+//! | `--yes` | no env, no TTY → devnet recorded (the bracketed default) |
+//! | no env, no `--yes`, non-TTY | exits **2**, names `RIIR_REFINE_JOIN_ENV`, records NOTHING |
+//! | invalid env value | exits **2**, names the value AND the `devnet\|mainnet` set, records NOTHING |
+//! | existing config | exits 0 (login proceeds), NEVER prompts, the record is untouched |
+//! | `config get` after a join | reports the recorded URL with `source: config` (the same record `config set` writes) |
+//!
+//! Hermetic: `RIIR_REFINE_KAT_ACCOUNT_DIR` isolates the whole account dir
+//! (the join record, the keys, the grant projection), the service-url env
+//! overrides are REMOVED (an inherited value would read as configured and
+//! silently skip the prompt arm), and stdin is a pipe — the non-TTY arm
+//! needs it and the TTY-less refusal must be the default shape a CI
+//! process sees.
+
+#![cfg(all(
+    feature = "latent_retrieval",
+    feature = "rust_perf",
+    feature = "clippy_lints",
+    feature = "kat_service"
+))]
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+/// The config-set record's file name (the ONE record format — the join
+/// writes through `config set`'s writer).
+const RECORD_FILE: &str = "service_url.json";
+
+fn scratch(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "riir_join_cli_{tag}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    ));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    dir
+}
+
+/// One `cargo refine <args>` with the hermetic join env. `extra_env` wins
+/// over the removals (applied after). stdin is ALWAYS a pipe — the
+/// non-TTY refusal is the shape every spawned process sees, and the arms
+/// that should never prompt must prove it by refusing, not hanging.
+fn run_heal(
+    dir: &Path,
+    extra_env: &[(&str, &str)],
+    args: &[&str],
+) -> (Option<i32>, String, String) {
+    let out = {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
+        cmd.args(args)
+            .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir.display().to_string())
+            .env("RIIR_AUTH_ACCOUNT_DIR", dir.display().to_string())
+            // The join decision must not see an inherited service-url
+            // value (either spelling): any-source-is-configured would
+            // skip the prompt arm silently.
+            .env_remove("RIIR_REFINE_KAT_SERVICE_URL")
+            .env_remove("RIIR_HEAL_KAT_SERVICE_URL")
+            .env_remove("RIIR_REFINE_JOIN_ENV")
+            .env_remove("RIIR_REFINE_YES")
+            .stdin(Stdio::null());
+        for (k, v) in extra_env {
+            cmd.env(k, v);
+        }
+        cmd.output().expect("spawn cargo-refine")
+    };
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout).to_string(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
+}
+
+fn record_url(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(dir.join(RECORD_FILE))
+        .ok()
+        .map(|text| {
+            text.lines()
+                .find_map(|l| l.trim().strip_prefix("\"url\": \"")?.strip_suffix("\","))
+                .unwrap_or_default()
+                .to_string()
+        })
+}
+
+#[test]
+fn join_env_forces_devnet_through_the_config_set_record() {
+    let dir = scratch("devnet");
+    let (code, stdout, stderr) = run_heal(
+        &dir,
+        &[("RIIR_REFINE_JOIN_ENV", "devnet")],
+        &["login"],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(
+        record_url(&dir).as_deref(),
+        Some("https://devnet.ai.gist.rs"),
+        "the choice records through the config-set record"
+    );
+    assert!(
+        stdout.contains("recorded to config (cargo refine config set --url devnet)"),
+        "the recorded line: {stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn join_env_forces_mainnet_and_names_every_unarmed_plane() {
+    let dir = scratch("mainnet");
+    let (code, stdout, stderr) = run_heal(
+        &dir,
+        &[("RIIR_REFINE_JOIN_ENV", "mainnet")],
+        &["login"],
+    );
+    assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(
+        record_url(&dir).as_deref(),
+        Some("https://ai.gist.rs"),
+        "mainnet records the apex (the const never moved)"
+    );
+    for needle in [
+        "recorded to config (cargo refine config set --url mainnet)",
+        "mainnet posture",
+        "reward pool is 0",
+        "TUNA trial credit is unconfigured",
+        "crank",
+        "503 fail-closed",
+        "settles nothing",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "the mainnet posture copy must name {needle}: {stdout}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn yes_answers_the_devnet_default_without_a_tty() {
+    let dir = scratch("yes");
+    let (code, stdout, stderr) = run_heal(&dir, &[], &["--yes", "login"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(
+        record_url(&dir).as_deref(),
+        Some("https://devnet.ai.gist.rs"),
+        "--yes takes the bracketed default"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn non_tty_without_force_or_yes_refuses_and_records_nothing() {
+    let dir = scratch("refuse");
+    let (code, stdout, stderr) = run_heal(&dir, &[], &["login"]);
+    assert_eq!(
+        code,
+        Some(2),
+        "a fresh non-TTY join refuses; stdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("RIIR_REFINE_JOIN_ENV"),
+        "the remedy names the env var: {stderr}"
+    );
+    assert!(stderr.contains("--yes"), "the remedy names the flag: {stderr}");
+    assert!(
+        !stdout.contains("Join which kat network"),
+        "no prompt raced the refusal: {stdout}"
+    );
+    assert!(
+        !dir.join(RECORD_FILE).exists(),
+        "a refused join records nothing"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn invalid_env_value_refuses_loud_and_records_nothing() {
+    let dir = scratch("badenv");
+    let (code, _stdout, stderr) = run_heal(
+        &dir,
+        &[("RIIR_REFINE_JOIN_ENV", "staging")],
+        &["login"],
+    );
+    assert_eq!(code, Some(2), "stderr: {stderr}");
+    assert!(
+        stderr.contains("staging") && stderr.contains("devnet|mainnet"),
+        "the error names the value AND the valid set: {stderr}"
+    );
+    assert!(
+        !dir.join(RECORD_FILE).exists(),
+        "an invalid force records nothing"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_existing_config_is_never_prompted_and_never_rewritten() {
+    let dir = scratch("existing");
+    std::fs::write(
+        dir.join(RECORD_FILE),
+        "{\n  \"version\": 1,\n  \"url\": \"https://devnet.ai.gist.rs\",\n  \"recorded_unix_secs\": 0\n}\n",
+    )
+    .expect("seed the record the config-set shape");
+    // NO env force, NO --yes, non-TTY: the pre-A1 posture for a configured
+    // machine — the login must proceed (exit 0) with NO prompt and NO
+    // refusal, and the record stays exactly as seeded.
+    let (code, stdout, stderr) = run_heal(&dir, &[], &["login"]);
+    assert_eq!(
+        code,
+        Some(0),
+        "a configured machine is never refused: stdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        !stdout.contains("Join which kat network"),
+        "no prompt for a configured machine: {stdout}"
+    );
+    assert!(
+        !stderr.contains("RIIR_REFINE_JOIN_ENV"),
+        "no join refusal for a configured machine: {stderr}"
+    );
+    assert!(
+        !stdout.contains("recorded to config"),
+        "no rewrite of an existing record: {stdout}"
+    );
+    assert_eq!(
+        record_url(&dir).as_deref(),
+        Some("https://devnet.ai.gist.rs"),
+        "the existing record is untouched"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn config_get_reports_the_joined_record() {
+    let dir = scratch("configget");
+    let (code, _stdout, stderr) = run_heal(
+        &dir,
+        &[("RIIR_REFINE_JOIN_ENV", "devnet")],
+        &["login"],
+    );
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    // The same surface `config set` feeds: source = config, url = devnet.
+    let (code, stdout, stderr) = run_heal(&dir, &[], &["config", "get"]);
+    assert_eq!(code, Some(0), "stderr: {stderr}");
+    assert!(stdout.contains("https://devnet.ai.gist.rs"), "url: {stdout}");
+    assert!(
+        stdout.contains("source: config"),
+        "the join record reads as `config` source: {stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
