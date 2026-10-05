@@ -1,5 +1,48 @@
 # HISTORY.md — riir-refine
 
+## 2026-10-05 — Issue 147 CLOSED (T0′ executed): the Decision-CPI escalation tier killed on the corpus axis — headroom GO, corpus 19× off + converged
+
+The cheap dual kill Proposal 021 designed worked exactly as intended: hours of
+measurement, one clean negative, days of client-building (T0.1–T0.7) never
+spent serving a converged flywheel. Issue file removed per the noise-reduction
+rule (the record lives here + in the Proposal 021 status); **T0.8 moved to
+[Issue 148](.issues/148_traj_mining_lane_contribution_claim.md)** per the
+pre-registered disposition.
+
+**Pre-registration discipline held**: the margin threshold (θ_M = 0.05 primary
+on `span_margin().min`), the sensitivity set {0.02, 0.10, 0.20}, the top-1
+semantics, and the saturation bars (|subset| ≥ 8 AND subset_top1 ≤ overall −
+0.05) were written into the issue file BEFORE any margin measurement ran.
+
+- **Instrument** (kept, rerunnable): `decision_cpi_t0_headroom_baseline` — an
+  `#[ignore]`d test in `src/draft/retrieval_eval.rs` printing the full record;
+  `cargo test --features latent_retrieval --lib decision_cpi_t0 -- --ignored
+  --nocapture`. Run at `2bc1385a` + the test itself (test-only, corpus-inert),
+  NO hotpath feed, **byte-identical across 3 runs**.
+- **Headroom half — GO.** 141 labeled spans (all contested), overall structural
+  top-1 0.894; margin quantiles p10=0.041/p25=0.148/p50=0.357/p75=1.031/
+  p90=1.718. PRIMARY θ=0.05: subset 16/141 (11.3%), top-1 **0.750**, complement
+  0.912, gap −0.144 — both bars pass. Sensitivity monotone (the theorized
+  gradient, thinner → worse at every rung): θ=0.02 → 10 spans top-1 0.600
+  (−0.294); θ=0.10 → 28/0.821; θ=0.20 → 44/0.841. Subset membership: Perf=9,
+  Docker=4, Clippy=3. **Max recoverable ceiling: +2.8pp** — real, shaped,
+  and small; banked for the re-open.
+- **Corpus half — KILL.** Fleet (devnet `/mining/adoption`, live 2026-10-05):
+  contributed 7,513 (SHIKUWA 7,210 / m3 301+2), credited **533** = **19× off
+  the 10⁴ un-refute target**, 92.9% non-credited; the lane is CONVERGED, not
+  idle — m3's sync state was rewritten 2026-10-05 04:31 (the auto-sync tail
+  after a live `--fix`) with rows unchanged at 301 ("duplicate shapes earn
+  nothing"); last fleet contributions 2026-09-16/18. Distinct usable
+  server-side contexts bounded [533, 7,513] (duplicate-vs-quarantine not
+  publicly decomposable). m3 distinct pushed: 301; the other local stores
+  (riir-game-sdk 12M, riir-ai 6.2M, …) were never pushed.
+- **Verdict**: the closure rule is disjunctive — the corpus condition fires,
+  the tier CLOSES, the client half is not built, and the never-per-span law
+  (Research 200 / Bench 098's 27.7-vs-88.0 prior) stands un-inverted at this
+  corpus scale. **Re-open condition: the corpus at the 10³–10⁴ clean-context
+  class** (new machines/repos/rules contributing — Issue 148 T-c's levers),
+  with the headroom baseline already banked.
+
 ## 2026-10-05 — Issue 138 CLOSED (owner-gate pickup): E7 ruled free-tier-only — operative DENY until a cap lands; E8 C8/C9 draft ADOPTED (master riir-ai `.issues/1016`; plan 181 / issue 138)
 
 Delegated Claude verdicts 2026-10-05, recorded per the issue's record-only

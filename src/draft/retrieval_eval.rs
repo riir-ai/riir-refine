@@ -1820,6 +1820,138 @@ pub fn print_rerank_sweep(rows: &[RerankSweepRow]) {
 mod tests {
     use super::*;
 
+    /// Issue 147 T0′ — the Decision-CPI escalation-headroom baseline (the
+    /// tier's cheap dual kill, headroom half). PRE-REGISTERED before this
+    /// test ever ran (the issue file's T0′ block, 2026-10-05):
+    ///
+    /// - primary `θ_M` = 0.05 on `span_margin(..).min` (sensitivity 0.02 /
+    ///   0.10 / 0.20 reported, never deciding);
+    /// - structural top-1 = the eval's own blended accounting (own-domain
+    ///   `canonical_rank` first id == label);
+    /// - headroom bar: `|subset| ≥ 8` AND `subset_top1 ≤ overall − 0.05`;
+    /// - clean baseline: NO hotpath feed, no oracles — the matcher alone.
+    ///
+    /// `#[ignore]`d because it is a MEASUREMENT (prints the record; asserts
+    /// nothing about the numbers — the go/no-go is a recorded decision in
+    /// the issue, not a gate). Rerun at any SHA with:
+    /// `cargo test --features latent_retrieval --lib decision_cpi_t0 -- --ignored --nocapture`
+    #[test]
+    #[ignore = "T0′ measurement (Issue 147): prints the escalation-headroom record; not a gate"]
+    fn decision_cpi_t0_headroom_baseline() {
+        let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let spans = labeled_eval_spans();
+        let mut n = 0usize;
+        let mut top1 = 0usize;
+        let mut uncontested = 0usize;
+        // (min margin, top-1 correct) — finite margins only.
+        let mut rows: Vec<(f32, bool)> = Vec::new();
+        let mut subset_domains: Vec<(DomainId, usize)> =
+            DomainId::ALL.iter().map(|d| (*d, 0usize)).collect();
+        for span in &spans {
+            if !matcher.has_domain(span.domain) {
+                continue;
+            }
+            let sm = crate::draft::margin_weight::span_margin(&mut matcher, &span.code);
+            let (_, by_domain) = matcher.suggest_span(&span.code, PROBE_TOP_K);
+            let ranked = by_domain
+                .iter()
+                .find(|(d, _)| *d == span.domain)
+                .map_or(Vec::new(), |(_, rules)| canonical_rank(rules));
+            let correct = ranked.first().is_some_and(|r| r.rule_id == span.label);
+            n += 1;
+            top1 += usize::from(correct);
+            if sm.min.is_finite() {
+                rows.push((sm.min, correct));
+                if sm.min < 0.05 {
+                    let di = DomainId::ALL
+                        .iter()
+                        .position(|d| *d == span.domain)
+                        .expect("labeled domain in ALL");
+                    subset_domains[di].1 += 1;
+                }
+            } else {
+                uncontested += 1;
+            }
+        }
+        assert!(n > 0, "no labeled spans evaluated — features wrong?");
+        rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        println!("== Issue 147 T0′ headroom baseline ==");
+        println!(
+            "spans: {n} (uncontested/INFINITY-margin: {uncontested}, contested: {})",
+            rows.len()
+        );
+        // Count→ratio casts over fixture populations (≤ ~150 here); allowed
+        // with cause — the same posture as margin_weight's concentration stat.
+        #[allow(clippy::cast_precision_loss)]
+        let overall_t1 = top1 as f32 / n as f32;
+        println!("overall structural top-1: {top1}/{n} = {overall_t1:.3}");
+        print_margin_quantiles(&rows);
+        // Sensitivity table — θ ascending; the PRIMARY decision row is 0.05.
+        for (theta, primary) in [(0.02f32, false), (0.05, true), (0.10, false), (0.20, false)] {
+            print_threshold_row(theta, primary, &rows, n, overall_t1);
+        }
+        let per_dom: Vec<String> = subset_domains
+            .iter()
+            .filter(|(_, c)| *c > 0)
+            .map(|(d, c)| format!("{d:?}={c}"))
+            .collect();
+        println!("primary-subset per-domain membership: {}", per_dom.join(", "));
+        println!("pre-registered bars: |subset| >= 8 AND subset_top1 <= overall - 0.05 for headroom");
+    }
+
+    /// The T0′ record's margin-spectrum row (finite margins, ascending).
+    fn print_margin_quantiles(rows: &[(f32, bool)]) {
+        // Fixture populations (≤ ~150) are exact in f32; the index cast is
+        // clamped below — allowed with cause.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        let q = |p: f32| -> f32 {
+            if rows.is_empty() {
+                return f32::NAN;
+            }
+            let idx = (((rows.len() - 1) as f32 * p).round() as usize).min(rows.len() - 1);
+            rows[idx].0
+        };
+        println!(
+            "contested-margin quantiles: p10={:.4} p25={:.4} p50={:.4} p75={:.4} p90={:.4}",
+            q(0.10),
+            q(0.25),
+            q(0.50),
+            q(0.75),
+            q(0.90)
+        );
+    }
+
+    /// One sensitivity-table row: subset/complement size + top-1 + the gap
+    /// vs overall, at one margin threshold.
+    fn print_threshold_row(theta: f32, primary: bool, rows: &[(f32, bool)], n: usize, overall_t1: f32) {
+        let sub: Vec<bool> = rows.iter().filter(|(m, _)| *m < theta).map(|(_, c)| *c).collect();
+        let comp: Vec<bool> = rows
+            .iter()
+            .filter(|(m, _)| *m >= theta)
+            .map(|(_, c)| *c)
+            .collect();
+        let tag = if primary { " [PRIMARY]" } else { "" };
+        if sub.is_empty() {
+            println!("theta={theta:.2}{tag}: subset EMPTY (0 spans) — kill criterion 'empty subset'");
+            return;
+        }
+        let s_hits = sub.iter().filter(|c| **c).count();
+        let c_hits = comp.iter().filter(|c| **c).count();
+        // Count→ratio casts over fixture populations (≤ ~150 here); allowed
+        // with cause.
+        #[allow(clippy::cast_precision_loss)]
+        let (s_t1, c_t1) = (
+            s_hits as f32 / sub.len() as f32,
+            c_hits as f32 / comp.len() as f32,
+        );
+        println!(
+            "theta={theta:.2}{tag}: subset {}/{} spans, subset top-1 {s_t1:.3} ({s_hits}), complement top-1 {c_t1:.3} ({c_hits}), gap {:+.3}",
+            sub.len(),
+            n,
+            s_t1 - overall_t1
+        );
+    }
+
     /// Baseline floors for the regression gate (Bench 022, 2026-08-16;
     /// RE-PINNED by Issue 022 same day — see Bench 024). A corpus batch that
     /// decays precision below these fails the suite — re-measure + re-pin
