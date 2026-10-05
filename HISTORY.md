@@ -1,5 +1,51 @@
 # HISTORY.md — riir-refine
 
+## 2026-10-05 — Issue 146 T0.2+T0.3+T0.4: the profile-guided-healing oracle lane LANDED end-to-end — the T0 POC gate PASSED on a real hotpath run (alloc −51.1%)
+
+The fusion's first measured gate (Research 235's T0 / Proposal 020): hotpath's
+JSON report is now a SECOND oracle beside `--clippy-json`, and the whole loop
+— profile → heal → re-profile → verified alloc-delta — ran green on a real
+`hotpath` 0.28.4 report from crates.io. Zero new cargo deps (the toy repo
+carries the hotpath dep; the healer consumes only JSON).
+
+- **T0.2 (the anchor lane)**: `SpanSuggestion.hot: Vec<HotSpan>` +
+  `LatentMatcher::suggest_file_hot_anchored` — the clippy-anchor machinery
+  (containing-chunk attach, gap-span synthesis, additive-never-re-rank)
+  applied to the profile's entries, with its OWN type + attach path (the
+  lint-shaped `ClippyDiagnostic` was not abused). Gap synthesis routes to
+  `DomainId::Perf` (the clippy-synthetic Clippy precedent). CLI: hot spans
+  hoisted first by max time-share (the B129 ranking signal made literal as a
+  review schedule); `[hot]` marker precedence [oracle] > [hot] > [heuristic];
+  the profile's rows print verbatim (calls × avg, % of measured time, alloc
+  bytes/calls).
+- **T0.3 (the guards)**: (a) bench-target routing inherited from P30 + a new
+  doubly-measurement-sensitive disclosure on hot spans in bench targets;
+  (b) `hotpath_report::attribute_line_ranges` — the fix lane DECLINES any
+  edit overlapping a line carrying hotpath's own vocabulary (any `hotpath::`
+  form incl. the import, the bare imported `#[measure*]` spellings),
+  recomputed per pass on `current`, pass-0 counting + per-file + run-total
+  loud lines (the bench-guard law; conservative by the cries-wolf
+  asymmetry); (c) the instrumentation coverage-bias disclosure at feed load.
+- **T0.4 (the e2e POC gate) — PASS** (`scripts/hotpath_e2e_poc.sh`, rerunnable,
+  workstation-only, completion-sentinel'd): toy = `#[hotpath::measure] fn
+  build_squares(n)` with `Vec::new()` + `0..n` push; 3 baseline profiles →
+  `--hotpath-json base.json --fix --verify --domain perf src/` → `cargo test`
+  → 3 re-profiles. **Measured: alloc bytes 4.7 GB → 2.3 GB (−51.1%, all 3
+  post-heal runs strictly below all 3 baselines); timing avg 1.49 ms → 698 µs
+  (2.1× faster — corroborating, B129); peak RSS 556 MB → 12.7 MB; toy tests
+  green; program output byte-identical; `#[hotpath::measure]` survived the
+  heal byte-identical (T0.3's positive proof); `vec-with-capacity` ranked
+  TOP (score 118.64) on the hot span and its compile-gated edit landed.**
+- **The wire is pinned by execution**: hotpath 0.28.4's real report shape
+  parses clean through the T0.1 subset — the module doc's schema-read-at-tip
+  disclosure is CLOSED (`src/hotpath_report.rs`).
+- Gates: lib 2619/0 + latent matcher 18/18 + hotpath_report 9/9 +
+  `hotpath_json_cli` 5/5 + `repo_posture_cli` 6/6; clippy clean both
+  postures (the one pre-existing `too_many_lines` in rust_perf corpus tests
+  untouched); global binary rebuilt from this tree (release set) for the e2e.
+- **Remaining in 146: T0.6 only** (the rethink real-workload arm — owner-
+  added; coordinate with the rethink session before touching its G4 gate).
+
 ## 2026-10-05 — Issue 147 CLOSED (T0′ executed): the Decision-CPI escalation tier killed on the corpus axis — headroom GO, corpus 19× off + converged
 
 The cheap dual kill Proposal 021 designed worked exactly as intended: hours of

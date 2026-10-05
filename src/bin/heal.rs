@@ -5423,17 +5423,46 @@ fn print_suggestion(
 ) {
     let routed = s.routed_domain.label();
     let anchored = !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty();
+    let hot = !s.hot.is_empty();
     let mark = if anchored {
         " [oracle]"
+    } else if hot {
+        " [hot]"
     } else if feed_present && s.heuristic_only {
         " [heuristic]"
     } else {
         ""
     };
+    // T0.3 disclosure: a measured-hot span in a bench target is doubly
+    // measurement-sensitive — the profile saw the harness itself.
+    let hot_bench_note = if hot && bench_target {
+        " — ⚠ bench target: the profile measured the bench's own harness; perf edits here are measurement-altering"
+    } else {
+        ""
+    };
     println!(
-        "{}:{}-{} (routed: {routed}){mark}",
+        "{}:{}-{} (routed: {routed}){mark}{hot_bench_note}",
         s.path, s.start_line, s.end_line
     );
+    // Issue 146 T0.2: the measured-hot marks print FIRST — the profile's
+    // own rows, verbatim quantities (timing = attribution, B129; alloc =
+    // the deterministic verification axis). This is the review anchor the
+    // operator acts on.
+    for h in &s.hot {
+        let avg = h.avg_ns.map_or("n/a".to_string(), |ns| format!("{ns} ns"));
+        let pct = h
+            .percent_total
+            .map_or(String::new(), |p| format!(" ({p:.1}% of measured time)"));
+        let alloc = match (h.alloc_bytes, h.alloc_calls) {
+            (Some(b), Some(c)) => format!(" | alloc {b} B in {c} call(s)"),
+            (Some(b), None) => format!(" | alloc {b} B"),
+            _ => String::new(),
+        };
+        println!(
+            "  [hot   ] {:<32} {} calls × {} avg{pct}{alloc}",
+            h.name, h.calls, avg
+        );
+    }
     // Oracle-anchored rules first: these are KNOWN findings — force-included
     // ahead of similarity ranking (the 2026-09-13 intake's miss mechanism
     // cannot eat them).
@@ -9771,6 +9800,14 @@ fn main() {
                 s.name, s.file, s.line, s.calls, avg
             );
         }
+        // Issue 146 T0.3: the instrumentation coverage-bias disclosure —
+        // hotpath sees ONLY functions carrying its own instrumentation, so
+        // "no hot span here" is NEVER evidence of coldness. The report's
+        // coverage is disclosed, never treated as exhaustive.
+        eprintln!(
+            "hotpath feed: coverage bias — only instrumented functions (#[hotpath::measure] et al.) \
+             are measured; un-annotated code never reads hot and is invisible to this feed"
+        );
     }
 
     let clippy_feed: Option<Vec<ClippyDiagnostic>> = if let Some(path) = args.clippy_json.as_ref() {
@@ -9942,6 +9979,13 @@ fn main() {
     // Issue 118 T2: oracle suggestions declined on bench targets (the P21
     // lane rides the P30 door), run total.
     let mut n_bench_oracle_declined = 0usize;
+    // Issue 146 T0.3: edits declined for touching hotpath's own
+    // instrumentation lines, run total (the fix lane must never eat the
+    // oracle it consumes — pass-0 counting, the bench-guard law).
+    let mut n_hotattr_declined_total = 0usize;
+    // Issue 146 T0.2: spans carrying measured-hot marks, run total (the
+    // hotpath-fed oracle lane's review population).
+    let mut n_hot_spans = 0usize;
     // P12: re-proposal suppression. Default-on; the kill-switch re-enables
     // unconditional re-proposal (force retry of previously-reverted edits).
     let suppress_reverted = !suppression_disabled();
@@ -10071,6 +10115,9 @@ fn main() {
                 run_perf && args.repo_posture && !args.apply_notbenchable;
             let mut n_bench_declined = 0usize;
             let mut n_notbench_declined = 0usize;
+            // Issue 146 T0.3: hotpath-instrumentation-line declines, this
+            // file (pass-0 count; the filter itself runs every pass).
+            let mut n_hotattr_declined_file = 0usize;
                              // fxhashmap dep gate (Issue 015): skip the rule for files in
                              // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
@@ -10439,6 +10486,33 @@ fn main() {
                         false
                     });
                 }
+                // ── Issue 146 T0.3: the instrumentation-attribute guard.
+                // Edits that would remove or rewrite bytes on a line carrying
+                // hotpath's own vocabulary (attributes, the block macro, the
+                // init/finish calls, the import) are DECLINED — the fix lane
+                // must never eat the oracle it consumes; a silently-removed
+                // `#[measure]` breaks the user's next profile exactly where
+                // this lane anchored. Recomputed per pass on `current`
+                // (applied splices shift coordinates); counted at pass 0
+                // only, the bench-guard re-proposal law. A false decline is
+                // loud + manually overridable; a missed one is silent
+                // breakage — the asymmetry picks conservative.
+                let hot_attr_lines =
+                    riir_refine::hotpath_report::attribute_line_ranges(&current);
+                if !hot_attr_lines.is_empty() {
+                    let before = edits.len();
+                    edits.retain(|re| {
+                        !hot_attr_lines.iter().any(|&(a_start, a_end)| {
+                            (re.edit.start < a_end && a_start < re.edit.end)
+                                || (re.edit.start == re.edit.end
+                                    && a_start < re.edit.start
+                                    && re.edit.start < a_end)
+                        })
+                    });
+                    if pass == 0 {
+                        n_hotattr_declined_file += before - edits.len();
+                    }
+                }
                 if edits.is_empty() {
                     break;
                 }
@@ -10492,6 +10566,17 @@ fn main() {
                     "repo-posture: declined {n_notbench_declined} NotBenchable rust_perf edit(s) \
                      on {display} — never benchmarked, and the posture mode applies only what a \
                      gate verified (--apply-notbenchable overrides)"
+                );
+            }
+            // Issue 146 T0.3: the instrumentation-guard decline line — same
+            // law (loud, named, actionable; the manual path keeps the
+            // attribute visible).
+            if n_hotattr_declined_file > 0 {
+                n_hotattr_declined_total += n_hotattr_declined_file;
+                eprintln!(
+                    "hotpath-guard: declined {n_hotattr_declined_file} edit(s) on {display} \
+                     touching hotpath instrumentation line(s) — removing instrumentation breaks \
+                     the profile oracle this lane consumes; apply manually only if judged safe"
                 );
             }
             // Plan 165: the posture decline line — what the target repo's
@@ -10703,16 +10788,53 @@ fn main() {
                         .collect()
                 })
                 .unwrap_or_default();
-            let suggestions = if clippy_feed.is_some() {
-                matcher.suggest_file_anchored(&src, &display, args.top_k, &file_anchors)
+            // Issue 146 T0.2: this file's measured-hot spans, same tail-based
+            // matching (the report's `file!()` paths are workspace-relative
+            // too). Feed order is time-share desc — the ranking signal.
+            let file_hot: Vec<riir_refine::hotpath_report::HotSpan> = hotpath_spans
+                .as_ref()
+                .map(|spans| {
+                    spans
+                        .iter()
+                        .filter(|hs| paths_ref_match(&hs.file, &display))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            let hot_present = hotpath_spans.is_some();
+            let mut suggestions = if clippy_feed.is_some() || hot_present {
+                matcher.suggest_file_hot_anchored(
+                    &src,
+                    &display,
+                    args.top_k,
+                    &file_anchors,
+                    &file_hot,
+                )
             } else {
                 matcher.suggest_file(&src, &display, args.top_k)
             };
+            // T0.2's ranking signal made literal: hot spans surface FIRST in
+            // the review output, ordered by their max time share (calls ×
+            // avg — B129: instrumented timing ATTRIBUTES, never verifies),
+            // then the rest in file order. Anchoring is additive recall;
+            // this order is the review schedule, not a re-rank of rules.
+            if file_hot.is_empty() {
+                // hot_present but no span in THIS file: nothing to hoist.
+            } else if suggestions.iter().any(|s| !s.hot.is_empty()) {
+                suggestions.sort_by_key(|s| {
+                    let max_share = s.hot.iter().map(|h| h.time_share_ns).max().unwrap_or(0);
+                    std::cmp::Reverse(max_share)
+                });
+            }
             for s in suggestions {
                 n_chunks += 1;
+                if !s.hot.is_empty() {
+                    n_hot_spans += 1;
+                }
                 if s.all_rules().is_empty()
                     && s.anchored_rules.is_empty()
                     && s.anchored_missing.is_empty()
+                    && s.hot.is_empty()
                 {
                     continue;
                 }
@@ -10724,7 +10846,13 @@ fn main() {
                     }
                 }
                 n_suggestions += 1;
-                print_suggestion(&s, &matcher, args.domain, clippy_feed.is_some(), bench_target);
+                print_suggestion(
+                    &s,
+                    &matcher,
+                    args.domain,
+                    clippy_feed.is_some() || hot_present,
+                    bench_target,
+                );
             }
         }
 
@@ -11348,6 +11476,25 @@ fn main() {
         println!(
             "repo-posture: declined {n_notbench_declined_total} NotBenchable rust_perf edit(s) \
              (never benchmarked — --apply-notbenchable overrides; see the per-file lines above)"
+        );
+    }
+    // Issue 146 T0.3: the instrumentation-guard declines ride the same
+    // summary law.
+    if n_hotattr_declined_total > 0 {
+        println!(
+            "hotpath-guard: declined {n_hotattr_declined_total} edit(s) touching hotpath \
+             instrumentation line(s) (removing instrumentation breaks the profile oracle — \
+             see the per-file lines above)"
+        );
+    }
+    // Issue 146 T0.2: the hot-span review population rides the summary —
+    // the feed's coverage + the spans actually anchored into suggestions.
+    if let Some(spans) = hotpath_spans.as_ref() {
+        println!(
+            "hotpath feed: {n_hot_spans} span(s) carry measured-hot marks across the scan \
+             (of {} located hot span(s) in the report) — timing is ranking-only attribution \
+             (B129); alloc bytes/count are the verification axis",
+            spans.len()
         );
     }
     // P12: report the suppressed re-proposals — the operator must see what

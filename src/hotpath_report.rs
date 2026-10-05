@@ -10,8 +10,12 @@
 //! ## What this module owns (T0.1)
 //! - A MINIMAL serde subset of hotpath's `JsonReport` (schema read from the
 //!   source at `pawurb/hotpath-rs` tip 2026-10-04; the R234 pin `ac4096e`
-//!   was not fetchable by SHA — disclosed here; the compat gate is T0.4's
-//!   e2e with a REAL hotpath run, which is what actually pins the wire).
+//!   was not fetchable by SHA — disclosed here; ~~the compat gate is T0.4's
+//!   e2e with a REAL hotpath run~~ **compat CLOSED BY EXECUTION 2026-10-05**:
+//!   a real `hotpath` 0.28.4 report (crates.io, `hotpath`+`hotpath-alloc`
+//!   features) parses clean through this subset — sections, `location`,
+//!   `meta.source_root`, and the human-number forms all round-trip — in
+//!   Issue 146 T0.4's e2e gate `scripts/hotpath_e2e_poc.sh`).
 //! - Tolerant parsing of hotpath's human-formatted numbers (durations
 //!   `"123 ns"` / `"1.5 µs"` / `"2.3 ms"` / `"1.00 s"`; bytes `"12 B"` /
 //!   `"1.2 KB"` / …; `"N/A"` → `None`) — the inverse of hotpath's own
@@ -28,12 +32,11 @@
 //!   (Research 032's law: instrumented timing is attribution, never a
 //!   verification target — B129).
 //!
-//! ## What it deliberately does NOT do (T0.2+/T0.3)
-//! - No span anchoring into the retrieval lane (`SpanSuggestion`'s `[hot]`
-//!   marker + a `rust_perf` anchor path — the `ClippyDiagnostic` anchor seam
-//!   is lint-shaped and must not be abused for hot spans).
-//! - No fix-lane guards (bench-target routing, never editing hotpath's own
-//!   attributes) — T0.3.
+//! ## What this deliberately does NOT do (T0.2+/T0.3)
+//! - Span anchoring lives in `draft::latent_matcher`
+//!   (`SpanSuggestion::hot` + `suggest_file_hot_anchored`, T0.2).
+//! - The fix-lane attribute guard DOES live here ([`attribute_line_ranges`],
+//!   T0.3): the one place that knows hotpath's own attribute vocabulary.
 //!
 //! Zero new dependencies: `serde_json` is already in the lock. Ungated —
 //! pure data plumbing, lib-tested at default features (the house law).
@@ -221,7 +224,10 @@ pub enum KeyVerdict {
     /// The report's `meta.git.sha` equals the repo's HEAD.
     Matched { sha: String },
     /// MISMATCH — the report must be REFUSED (the stale-profile hazard).
-    Mismatched { report_sha: String, repo_sha: String },
+    Mismatched {
+        report_sha: String,
+        repo_sha: String,
+    },
     /// The report carries no git info (plain `hotpath` without
     /// `hotpath-cloud`). Cannot mismatch; proceeds with a loud disclosure.
     Unkeyed,
@@ -309,9 +315,9 @@ pub fn hot_spans(report: &HotpathReport) -> Vec<HotSpan> {
         // alloc-profiled is the same instrumented item).
         let twin = alloc.iter().find(|a| {
             a.name == entry.name
-                && a.location.as_ref().is_some_and(|l| {
-                    l.line == loc.line && join_root(prefix, &l.file) == file
-                })
+                && a.location
+                    .as_ref()
+                    .is_some_and(|l| l.line == loc.line && join_root(prefix, &l.file) == file)
         });
         out.push(HotSpan {
             file,
@@ -321,9 +327,7 @@ pub fn hot_spans(report: &HotpathReport) -> Vec<HotSpan> {
             avg_ns,
             time_share_ns,
             percent_total: entry.percent_total.as_deref().and_then(parse_percent),
-            alloc_bytes: twin
-                .and_then(|t| t.total.as_deref())
-                .and_then(parse_bytes),
+            alloc_bytes: twin.and_then(|t| t.total.as_deref()).and_then(parse_bytes),
             alloc_calls: twin.map(|t| t.calls),
         });
     }
@@ -345,6 +349,62 @@ fn join_root(prefix: &str, file: &str) -> String {
     } else {
         format!("{prefix}/{file}")
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The fix-lane attribute guard (Issue 146 T0.3)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Byte ranges `(line_start, line_end_exclusive)` of every line carrying
+/// hotpath's OWN instrumentation vocabulary — the attributes and macro
+/// invocations the profiler injected. The fix lane declines any edit that
+/// would remove or rewrite bytes on one of these lines (T0.3: eating the
+/// instrumentation silently breaks the user's next profile — the exact
+/// oracle this lane consumes).
+///
+/// Matched forms: `#[hotpath::measure]` / `#[hotpath::measure_block]` /
+/// any `#[hotpath::…]` attribute, the imported spellings `#[measure]` /
+/// `#[measure_block]` / `#[measure_with]`, the block macro
+/// `hotpath::measure_block!`, and the finish/init calls
+/// `hotpath::finish` / `hotpath::init`. Bare `#[measure]` risks a false
+/// decline against another crate's same-named macro — deliberately
+/// conservative: a false DECLINE is loud + overridable (apply manually),
+/// a missed decline silently breaks instrumentation (the cries-wolf
+/// asymmetry).
+#[must_use]
+pub fn attribute_line_ranges(src: &str) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut off = 0usize;
+    for line in src.lines() {
+        let start = off;
+        let end = off + line.len();
+        off = end + 1; // the consumed '\n' (last line without one is fine)
+        if line_contains_hotpath_attr(line) {
+            out.push((start, end));
+        }
+    }
+    out
+}
+
+/// One line's test: contains a hotpath instrumentation token. Any
+/// `hotpath::` occurrence qualifies (attributes `#[hotpath::measure]`, the
+/// block macro `hotpath::measure_block!`, `hotpath::finish`/`init` calls,
+/// AND the `use hotpath::measure;` import — removing the import breaks the
+/// attributes just as surely). The imported bare spellings are anchored as
+/// attribute tokens so an unrelated `measure` identifier alone never
+/// matches; a false DECLINE is loud + overridable, a missed one silently
+/// breaks instrumentation (the cries-wolf asymmetry).
+fn line_contains_hotpath_attr(line: &str) -> bool {
+    let t = line.trim();
+    if t.contains("hotpath::") {
+        return true;
+    }
+    for attr in ["#[measure]", "#[measure_block]", "#[measure_with]"] {
+        if t.starts_with(attr) || t.contains(&format!(" {attr}")) {
+            return true;
+        }
+    }
+    false
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -461,15 +521,19 @@ mod tests {
 
     #[test]
     fn key_verdict_refuses_mismatch_and_passes_match() {
-        let report: HotpathReport =
-            serde_json::from_str(&fixture_report(true, None)).unwrap();
+        let report: HotpathReport = serde_json::from_str(&fixture_report(true, None)).unwrap();
         assert_eq!(
             key_verdict(&report, "ABC123DEF456"),
-            KeyVerdict::Matched { sha: "abc123def456".into() },
+            KeyVerdict::Matched {
+                sha: "abc123def456".into()
+            },
             "case-insensitive SHA comparison"
         );
         match key_verdict(&report, "deadbeef") {
-            KeyVerdict::Mismatched { report_sha, repo_sha } => {
+            KeyVerdict::Mismatched {
+                report_sha,
+                repo_sha,
+            } => {
                 assert_eq!(report_sha, "abc123def456");
                 assert_eq!(repo_sha, "deadbeef");
             }
@@ -479,15 +543,13 @@ mod tests {
 
     #[test]
     fn unkeyed_reports_cannot_mismatch() {
-        let report: HotpathReport =
-            serde_json::from_str(&fixture_report(false, None)).unwrap();
+        let report: HotpathReport = serde_json::from_str(&fixture_report(false, None)).unwrap();
         assert_eq!(key_verdict(&report, "anything"), KeyVerdict::Unkeyed);
     }
 
     #[test]
     fn hot_spans_skip_unlocated_join_alloc_and_rank_by_time_share() {
-        let report: HotpathReport =
-            serde_json::from_str(&fixture_report(true, None)).unwrap();
+        let report: HotpathReport = serde_json::from_str(&fixture_report(true, None)).unwrap();
         let spans = hot_spans(&report);
         // The unlocated entry is dropped; the two located ones remain.
         assert_eq!(spans.len(), 2);
@@ -511,7 +573,11 @@ mod tests {
         let report: HotpathReport =
             serde_json::from_str(&fixture_report(true, Some("crates/app"))).unwrap();
         let spans = hot_spans(&report);
-        assert!(spans[0].file.starts_with("crates/app/"), "{}", spans[0].file);
+        assert!(
+            spans[0].file.starts_with("crates/app/"),
+            "{}",
+            spans[0].file
+        );
         assert_eq!(spans[0].file, "crates/app/src/engine/decode.rs");
     }
 
@@ -548,11 +614,52 @@ mod tests {
             }),
         };
         let report = HotpathReport {
-            meta: HotpathMeta { git: None, source_root: None },
+            meta: HotpathMeta {
+                git: None,
+                source_root: None,
+            },
             functions_timing: Some(HotpathFunctionsList { data: vec![entry] }),
             functions_alloc: None,
         };
         let spans = hot_spans(&report);
         assert_eq!(spans[0].time_share_ns, u64::MAX);
+    }
+
+    // ── T0.3: the instrumentation-attribute guard ──────────────────────
+
+    #[test]
+    fn attribute_lines_cover_every_hotpath_spelling() {
+        let src = "use hotpath::measure;\n\
+\n\
+#[hotpath::measure]\n\
+fn timed() -> u32 { 1 }\n\
+\n\
+#[measure]\n\
+fn imported() -> u32 { 2 }\n\
+\n\
+fn body() -> u32 {\n\
+    hotpath::measure_block!({ 3 })\n\
+}\n\
+\n\
+fn plain() -> u32 {
+\
+    let measure = 4; // an unrelated identifier — never a hit\n\
+    measure\n\
+}\n";
+        let ranges = attribute_line_ranges(src);
+        // Lines (1-based) carrying hotpath vocabulary: 1 (use), 3 (qualified
+        // attr), 6 (bare attr), 10 (block macro). The `measure` local (13)
+        // and everything else must NOT hit.
+        let hit_lines: Vec<usize> = ranges
+            .iter()
+            .map(|&(s, _)| src[..s].matches('\n').count() + 1)
+            .collect();
+        assert_eq!(hit_lines, vec![1, 3, 6, 10]);
+    }
+
+    #[test]
+    fn attribute_lines_empty_on_clean_source() {
+        let src = "fn a() -> u32 { 1 }\nfn b() -> u32 { measure(2) }\n";
+        assert!(attribute_line_ranges(src).is_empty());
     }
 }

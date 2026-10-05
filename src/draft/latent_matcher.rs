@@ -11,12 +11,15 @@
 //! Phase 4/5 proposers). Composes riir-rag as-is; nothing here reimplements
 //! chunking, embedding, or retrieval.
 
-use riir_rag::ast_chunker::AstChunker;
 use riir_rag::Chunker;
+use riir_rag::ast_chunker::AstChunker;
 
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
-#[cfg_attr(not(all(feature = "clippy_lints", feature = "rust_perf")), allow(unused_imports))]
+#[cfg_attr(
+    not(all(feature = "clippy_lints", feature = "rust_perf")),
+    allow(unused_imports)
+)]
 use crate::domain::{HealDomain, HealEntry};
 
 use super::clippy_feed::ClippyDiagnostic;
@@ -59,6 +62,14 @@ pub struct SpanSuggestion {
     /// false-positive datum). False when no feed covered the file (the
     /// plain path claims nothing either way) and on anchored spans.
     pub heuristic_only: bool,
+    /// Measured-hot annotations covering this span (Issue 146 T0.2, the
+    /// hotpath-fed mode): the profile's ranked entries whose `(file, line)`
+    /// falls inside. Timing (`calls × avg`) is the RANKING signal only
+    /// (B129 — instrumented attribution, never a verification target);
+    /// `alloc_bytes`/`alloc_calls` ride as the DETERMINISTIC verification
+    /// axis. Empty on the plain (feed-less) path. A hot-marked span is an
+    /// oracle-signal span: it is never `heuristic_only`.
+    pub hot: Vec<crate::hotpath_report::HotSpan>,
 }
 
 impl SpanSuggestion {
@@ -521,10 +532,7 @@ impl LatentMatcher {
     /// (the auto-arm path, guarded by `RIIR_REFINE_DEMONSTRABILITY=0`).
     #[cfg(feature = "demonstrability_gate")]
     #[must_use]
-    pub fn with_depth_policy(
-        mut self,
-        policy: crate::demonstrability_gate::DepthPolicy,
-    ) -> Self {
+    pub fn with_depth_policy(mut self, policy: crate::demonstrability_gate::DepthPolicy) -> Self {
         self.depth_policy = policy;
         self
     }
@@ -589,10 +597,7 @@ impl LatentMatcher {
     /// BASELINE slates the A/B compares against. Measurement only.
     #[cfg(feature = "set_rerank")]
     #[must_use]
-    pub fn certify_slate_ids(
-        &self,
-        ids: &[&str],
-    ) -> katgpt_core::set_admission::CertificateReport {
+    pub fn certify_slate_ids(&self, ids: &[&str]) -> katgpt_core::set_admission::CertificateReport {
         let latents: Vec<[f32; katgpt_core::set_admission::DIM]> = ids
             .iter()
             .filter_map(|id| self.rule_latents.latent_of(self.set_cfg.latent, id))
@@ -737,10 +742,7 @@ impl LatentMatcher {
                 // preserved under positive scaling, so pool >= k holds); K is
                 // clamped to >= 1 — a depth is never zeroed.
                 #[cfg(feature = "demonstrability_gate")]
-                let top_k = self
-                    .depth_policy
-                    .scale(domain.label(), top_k)
-                    .min(pool);
+                let top_k = self.depth_policy.scale(domain.label(), top_k).min(pool);
                 rules.truncate(top_k);
                 out.push((domain, rules));
             }
@@ -823,14 +825,7 @@ impl LatentMatcher {
         } else {
             let super::set_rerank::MatcherSetScratch { admission, fan } = &mut self.set_scratch;
             super::set_rerank::counter_anchored_slate(
-                &cfg,
-                &by_domain,
-                lookup,
-                corpus,
-                query,
-                k,
-                admission,
-                fan,
+                &cfg, &by_domain, lookup, corpus, query, k, admission, fan,
             )
         }
     }
@@ -838,10 +833,7 @@ impl LatentMatcher {
     /// Issue 121: override the set-rerank weights (the A/B knob).
     #[cfg(feature = "set_rerank")]
     #[must_use]
-    pub fn with_set_config(
-        mut self,
-        cfg: super::set_rerank::SetRerankConfig,
-    ) -> Self {
+    pub fn with_set_config(mut self, cfg: super::set_rerank::SetRerankConfig) -> Self {
         self.set_cfg = cfg;
         self
     }
@@ -853,7 +845,7 @@ impl LatentMatcher {
     /// (see [`Self::suggest_span`]); the router verdict annotates each span.
     /// Takes `&mut self` — the G4 scratch is reused across every span.
     pub fn suggest_file(&mut self, src: &str, path: &str, top_k: usize) -> Vec<SpanSuggestion> {
-        self.suggest_file_inner(src, path, top_k, None)
+        self.suggest_file_inner(src, path, top_k, None, None)
     }
 
     /// [`Self::suggest_file`] with oracle anchoring (the clippy-fed mode,
@@ -880,17 +872,43 @@ impl LatentMatcher {
         top_k: usize,
         anchors: &[ClippyDiagnostic],
     ) -> Vec<SpanSuggestion> {
-        self.suggest_file_inner(src, path, top_k, Some(anchors))
+        self.suggest_file_inner(src, path, top_k, Some(anchors), None)
+    }
+
+    /// Issue 146 T0.2: [`Self::suggest_file_anchored`] with the hotpath
+    /// oracle beside the clippy one. Hot spans (measured at runtime, keyed
+    /// to this tree by the report's git SHA) attach to the chunk containing
+    /// their line — same mapping machinery as clippy anchors, including
+    /// gap-span synthesis (an oracle finding is never dropped for a chunk
+    /// coverage gap; a synthetic hot span routes to [`DomainId::Perf`], the
+    /// clippy-synthetic `DomainId::Clippy` precedent — hotness IS a perf
+    /// signal). Either feed may be empty: the clippy-only call is exactly
+    /// [`Self::suggest_file_anchored`], and a hot-only call anchors spans
+    /// the profile measured with no lint knowledge at all. Anchoring is
+    /// ADDITIVE recall — ranking itself is untouched (the hot spans' own
+    /// order, by `time_share_ns`, is a display/scheduling concern of the
+    /// caller, not a re-rank).
+    pub fn suggest_file_hot_anchored(
+        &mut self,
+        src: &str,
+        path: &str,
+        top_k: usize,
+        anchors: &[ClippyDiagnostic],
+        hot: &[crate::hotpath_report::HotSpan],
+    ) -> Vec<SpanSuggestion> {
+        self.suggest_file_inner(src, path, top_k, Some(anchors), Some(hot))
     }
 
     /// The shared file walk. `anchors` (when `Some`) carries this file's
-    /// real clippy findings; `None` is the plain feed-less path.
+    /// real clippy findings; `hot` (when `Some`) carries this file's
+    /// measured-hot spans; `None` is the plain feed-less path.
     fn suggest_file_inner(
         &mut self,
         src: &str,
         path: &str,
         top_k: usize,
         anchors: Option<&[ClippyDiagnostic]>,
+        hot: Option<&[crate::hotpath_report::HotSpan]>,
     ) -> Vec<SpanSuggestion> {
         let chunker = AstChunker;
         let chunks = chunker.chunk(src, path);
@@ -906,9 +924,18 @@ impl LatentMatcher {
                 anchored_rules: Vec::new(),
                 anchored_missing: Vec::new(),
                 heuristic_only: false,
+                hot: Vec::new(),
             });
         }
         let Some(anchors) = anchors else {
+            // The clippy-less path still anchors hot spans when present
+            // (hot-only feed: `Some(&[])` for clippy).
+            if let Some(hot) = hot {
+                attach_hot_spans(&mut out, path, hot);
+                for span in &mut out {
+                    span.heuristic_only = span.hot.is_empty();
+                }
+            }
             return out;
         };
         for anchor in anchors {
@@ -936,6 +963,7 @@ impl LatentMatcher {
                     anchored_rules: Vec::new(),
                     anchored_missing: Vec::new(),
                     heuristic_only: false,
+                    hot: Vec::new(),
                 };
                 push_anchor(&mut synthetic, &self.rule_book, anchor);
                 let pos = out
@@ -945,10 +973,56 @@ impl LatentMatcher {
                 out.insert(pos, synthetic);
             }
         }
+        if let Some(hot) = hot {
+            attach_hot_spans(&mut out, path, hot);
+        }
         for span in &mut out {
-            span.heuristic_only = span.anchored_rules.is_empty() && span.anchored_missing.is_empty();
+            span.heuristic_only = span.anchored_rules.is_empty()
+                && span.anchored_missing.is_empty()
+                && span.hot.is_empty();
         }
         out
+    }
+}
+
+/// Attach the file's measured-hot spans to their containing chunks
+/// (Issue 146 T0.2 — the clippy-anchor mapping machinery applied to the
+/// profile's entries). A hot line falling in a CHUNK GAP synthesizes a
+/// line-span routed to [`DomainId::Perf`] — hotness is a perf signal by
+/// construction (the `DomainId::Clippy` synthetic precedent) — inserted in
+/// line order. Multiple entries may cover one chunk (nested/adjacent
+/// instrumented items): each attaches; the span's `hot` vec carries them
+/// in the feed's ranked order (time share desc).
+fn attach_hot_spans(
+    out: &mut Vec<SpanSuggestion>,
+    path: &str,
+    hot: &[crate::hotpath_report::HotSpan],
+) {
+    for hs in hot {
+        let line = usize::try_from(hs.line).unwrap_or(usize::MAX);
+        if let Some(span) = out
+            .iter_mut()
+            .find(|s| line >= s.start_line && line <= s.end_line)
+        {
+            span.hot.push(hs.clone());
+        } else {
+            let synthetic = SpanSuggestion {
+                path: path.to_string(),
+                start_line: line,
+                end_line: line,
+                routed_domain: DomainId::Perf,
+                by_domain: Vec::new(),
+                anchored_rules: Vec::new(),
+                anchored_missing: Vec::new(),
+                heuristic_only: false,
+                hot: vec![hs.clone()],
+            };
+            let pos = out
+                .iter()
+                .position(|s| s.start_line > line)
+                .unwrap_or(out.len());
+            out.insert(pos, synthetic);
+        }
     }
 }
 
@@ -971,11 +1045,7 @@ fn push_anchor(
     anchor: &ClippyDiagnostic,
 ) {
     if let Some(info) = rule_book.get(&anchor.lint) {
-        if !span
-            .anchored_rules
-            .iter()
-            .any(|(_, id)| *id == anchor.lint)
-        {
+        if !span.anchored_rules.iter().any(|(_, id)| *id == anchor.lint) {
             span.anchored_rules.push((info.domain, anchor.lint.clone()));
         }
     } else if !span.anchored_missing.contains(&anchor.lint) {
@@ -988,7 +1058,12 @@ fn push_anchor(
 // clippy corpus rules, and `matcher_builds_from_enabled_domains` asserts
 // >= 2 domains. A latent-only build (the matcher refuses a domain-less
 // build) correctly drops them.
-#[cfg(all(test, feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
+#[cfg(all(
+    test,
+    feature = "latent_retrieval",
+    feature = "clippy_lints",
+    feature = "rust_perf"
+))]
 mod tests {
     use super::*;
 
@@ -1135,13 +1210,17 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             by_domain: vec![
                 (
                     DomainId::Clippy,
-                    vec![mk("needless_return", 8.0, true), mk("needless_bool", 8.5, false)],
+                    vec![
+                        mk("needless_return", 8.0, true),
+                        mk("needless_bool", 8.5, false),
+                    ],
                 ),
                 (DomainId::Perf, vec![mk("vec-with-capacity", 9.0, false)]),
             ],
             anchored_rules: Vec::new(),
             anchored_missing: Vec::new(),
             heuristic_only: false,
+            hot: Vec::new(),
         };
         let order: Vec<&str> = s.all_rules().iter().map(|r| r.rule_id.as_str()).collect();
         assert_eq!(
@@ -1186,7 +1265,11 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
 
     // ── the clippy-fed anchored mode (2026-09-13 retrieval-miss intake) ──
 
-    fn anchor(file: &str, line: usize, lint_id: &str) -> super::super::clippy_feed::ClippyDiagnostic {
+    fn anchor(
+        file: &str,
+        line: usize,
+        lint_id: &str,
+    ) -> super::super::clippy_feed::ClippyDiagnostic {
         super::super::clippy_feed::ClippyDiagnostic {
             span: None,
             file: file.to_string(),
@@ -1199,11 +1282,12 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     #[test]
     fn anchored_feed_force_includes_the_rule_at_its_line() {
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
-        let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
+        let sugg = m.suggest_file_anchored(
+            SAMPLE,
             "sample.rs",
-            2,
-            "needless_return",
-        )]);
+            3,
+            &[anchor("sample.rs", 2, "needless_return")],
+        );
         let span = sugg
             .iter()
             .find(|s| s.start_line <= 2 && s.end_line >= 2)
@@ -1225,16 +1309,20 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     #[test]
     fn anchored_missing_lints_surface_as_gap_signal() {
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
-        let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
+        let sugg = m.suggest_file_anchored(
+            SAMPLE,
             "sample.rs",
-            2,
-            "definitely_not_a_corpus_rule",
-        )]);
+            3,
+            &[anchor("sample.rs", 2, "definitely_not_a_corpus_rule")],
+        );
         let span = sugg
             .iter()
             .find(|s| s.start_line <= 2 && s.end_line >= 2)
             .expect("a chunk covers line 2");
-        assert_eq!(span.anchored_missing, vec!["definitely_not_a_corpus_rule".to_string()]);
+        assert_eq!(
+            span.anchored_missing,
+            vec!["definitely_not_a_corpus_rule".to_string()]
+        );
         assert!(span.anchored_rules.is_empty());
         assert!(!span.heuristic_only, "a gap signal is still an oracle hit");
     }
@@ -1282,21 +1370,26 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         // oracle finding must still surface: a synthesized line-span
         // carrying the anchor, inserted in line order.
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
-        let sugg = m.suggest_file_anchored(SAMPLE, "sample.rs", 3, &[anchor(
+        let sugg = m.suggest_file_anchored(
+            SAMPLE,
             "sample.rs",
-            4,
-            "needless_return",
-        )]);
+            3,
+            &[anchor("sample.rs", 4, "needless_return")],
+        );
         let pos = sugg
             .iter()
             .position(|s| s.start_line == 4 && s.end_line == 4)
             .expect("synthesized line-span at the gap");
         let span = &sugg[pos];
-        assert!(span
-            .anchored_rules
-            .iter()
-            .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"));
-        assert!(span.by_domain.is_empty(), "no retrieval on a synthetic span");
+        assert!(
+            span.anchored_rules
+                .iter()
+                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return")
+        );
+        assert!(
+            span.by_domain.is_empty(),
+            "no retrieval on a synthetic span"
+        );
         assert!(!span.heuristic_only);
         // Line-order insertion: every earlier span starts before 4, every
         // later one starts after 4.
@@ -1307,6 +1400,101 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
                 assert!(s.start_line > 4);
             }
         }
+    }
+
+    // ── Issue 146 T0.2: the hotpath-fed anchored mode ──────────────────
+
+    fn hot(
+        file: &str,
+        line: u32,
+        name: &str,
+        time_share_ns: u64,
+    ) -> crate::hotpath_report::HotSpan {
+        crate::hotpath_report::HotSpan {
+            file: file.to_string(),
+            line,
+            name: name.to_string(),
+            calls: 100,
+            avg_ns: Some(50),
+            time_share_ns,
+            percent_total: Some(10.0),
+            alloc_bytes: Some(4096),
+            alloc_calls: Some(7),
+        }
+    }
+
+    #[test]
+    fn hot_anchored_marks_the_containing_chunk_and_never_heuristic() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file_hot_anchored(
+            SAMPLE,
+            "sample.rs",
+            3,
+            &[],
+            &[hot("sample.rs", 2, "app::area", 5_000)],
+        );
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line <= 2 && s.end_line >= 2)
+            .expect("a chunk covers line 2");
+        assert_eq!(span.hot.len(), 1, "the hot mark attaches");
+        assert_eq!(span.hot[0].name, "app::area");
+        assert_eq!(span.hot[0].alloc_bytes, Some(4096));
+        assert!(!span.heuristic_only, "a hot span has an oracle signal");
+        // The FP datum mirrors the clippy lane: a feed-covered file's
+        // un-marked chunks are heuristic-only.
+        assert!(
+            sugg.iter().any(|s| s.hot.is_empty() && s.heuristic_only),
+            "some other chunk carries the heuristic_only marker"
+        );
+    }
+
+    #[test]
+    fn hot_anchor_in_a_chunk_gap_synthesizes_a_perf_routed_span() {
+        // Line 4 (blank separator) sits in NO chunk — the clippy gap
+        // precedent: synthesize a line-span, routed to Perf (hotness IS a
+        // perf signal; the clippy-synthetic Clippy precedent).
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file_hot_anchored(
+            SAMPLE,
+            "sample.rs",
+            3,
+            &[],
+            &[hot("sample.rs", 4, "app::orphan", 1)],
+        );
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line == 4 && s.end_line == 4)
+            .expect("synthesized line-span at the gap");
+        assert_eq!(span.routed_domain, DomainId::Perf);
+        assert!(
+            span.by_domain.is_empty(),
+            "no retrieval on a synthetic span"
+        );
+        assert_eq!(span.hot.len(), 1);
+    }
+
+    #[test]
+    fn hot_and_clippy_anchors_compose_on_one_span() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file_hot_anchored(
+            SAMPLE,
+            "sample.rs",
+            3,
+            &[anchor("sample.rs", 2, "needless_return")],
+            &[hot("sample.rs", 2, "app::area", 5_000)],
+        );
+        let span = sugg
+            .iter()
+            .find(|s| s.start_line <= 2 && s.end_line >= 2)
+            .expect("a chunk covers line 2");
+        assert!(
+            span.anchored_rules
+                .iter()
+                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return")
+        );
+        assert_eq!(span.hot.len(), 1, "both oracles attach independently");
+        assert!(!span.heuristic_only);
     }
 
     // ── Issue 102 T2/T3: the active-set fan-out honor ──────────────────
@@ -1367,13 +1555,13 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .iter()
             .find(|(d, _)| *d == DomainId::Clippy)
             .expect("clippy index enabled");
-        let top = clippy.1.first().expect("clippy serves the span").rule_id.clone();
-        let others: Vec<String> = clippy
+        let top = clippy
             .1
-            .iter()
-            .skip(1)
-            .map(|r| r.rule_id.clone())
-            .collect();
+            .first()
+            .expect("clippy serves the span")
+            .rule_id
+            .clone();
+        let others: Vec<String> = clippy.1.iter().skip(1).map(|r| r.rule_id.clone()).collect();
         assert!(!others.is_empty(), "need a runner-up to prove survival");
 
         let mut set = crate::active_set::ActiveSet::empty();
@@ -1381,7 +1569,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         let mut m = LatentMatcher::from_enabled_domains()
             .expect("build")
             .with_active_set(set);
-        assert!(m.active_exclusions().excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top));
+        assert!(
+            m.active_exclusions()
+                .excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top)
+        );
         let (_, by_domain) = m.suggest_span(query, 3);
         // The domain ENTRY is not dropped — only the rule is gone, and the
         // freed top slot backfills from deeper ranks.
@@ -1401,8 +1592,14 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         }
         // The pool_and_ranked path honors the same set.
         let (pool, ranked) = m.pool_and_ranked(DomainId::Clippy, query).expect("clippy");
-        assert!(!pool.iter().any(|r| r.rule_id == top), "pool drops the demoted rule");
-        assert!(!ranked.iter().any(|r| r.rule_id == top), "ranked copy drops it too");
+        assert!(
+            !pool.iter().any(|r| r.rule_id == top),
+            "pool drops the demoted rule"
+        );
+        assert!(
+            !ranked.iter().any(|r| r.rule_id == top),
+            "ranked copy drops it too"
+        );
     }
 
     #[test]
@@ -1434,9 +1631,11 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             "the demoted rule still anchors — oracle truth is not demotable"
         );
         // ...while the same rule left the similarity list of that span.
-        assert!(!span
-            .by_domain
-            .iter()
-            .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return")));
+        assert!(
+            !span
+                .by_domain
+                .iter()
+                .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return"))
+        );
     }
 }
