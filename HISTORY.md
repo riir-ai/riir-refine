@@ -11183,3 +11183,39 @@ machine already consumed it at the caller).
 
 Issue file removed per the noise-reduction rule — this row is the durable
 record.
+
+## 2026-10-06 — Issue 144: the dist README + CLI-help audit — T1–T5 landed; T6 dispositioned on the owner's re-arm posture
+
+The 2026-10-03 web trust audit's cargo-refine half (filed from riir-ai
+Issue 1028) is fully dispositioned:
+
+- **T1–T5 landed 2026-10-03** with their commits named in the issue: the
+  dist README rewrite + CHANGELOG for the v0.1.x caveats (`5802123`,
+  every claim re-checked against the v0.2.0 binary — including three
+  corrections beyond the audit's own evidence table: the 100 KAT vs
+  100,000,000 µKAT grant confusion, the `--fix`-without-`--write` reads,
+  the `RIIR_HEAL_KAT_METER` vs `RIIR_REFINE_KAT_METER` kill-switch
+  spelling, the `riir-heal` → `riir-auth` key dir), the repo
+  description/homepage rename (T2), the `--help`/`--help-all` split with
+  internal plan/issue ids banned from the user page (`69727010`, T3),
+  `--domain` choices derived from the compiled feature set at parse time
+  (T4, ships with the next release), and the EULA/LICENSE in the dist
+  repo with the third-party-license private-crate leak fixed at the
+  `about.toml` level (T5, owner-drafted + owner-approved).
+- **T6 (drop `testnet.ai.gist.rs` from riir-kat) DISPOSITIONED, not
+  done — deliberately.** The owner tore the testnet deployment down on
+  2026-10-03 (riir-dapps owner call) but kept the re-arm posture on
+  record: the `[env.testnet]` wrangler block + `setup.sh --testnet`
+  survive so one deploy restores the env, and the client alias is
+  deliberately retained — `riir-kat/src/kat_service_urls.rs` still pins
+  `TESTNET_SERVICE_URL` ("testnet is the offline premise", module doc)
+  as one of the three pinned `devnet|testnet|mainnet` aliases, asserted
+  by its own test. Dropping a pinned network alias is a protocol-tier
+  change for every consumer; removing it now would break the recorded
+  re-arm path for a purely cosmetic help-text win. The stale host string
+  in the shipped binary resolves to a non-answering host, which is the
+  fail-closed direction — revisit only if the owner drops the re-arm
+  posture itself.
+
+Issue file removed per the noise-reduction rule — this row is the
+durable record.
