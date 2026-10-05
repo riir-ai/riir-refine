@@ -308,8 +308,15 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
         "mined perf-rule corpus: benchmark input-size ladders, not money",
     ),
     (
+
         "src/domains/rust_perf/bench.rs",
+
         "1_000_000 ns = the 1 ms bench-sample target — a TIME, not money",
+
+    ),
+    (
+        "src/hotpath_report.rs",
+        "ms → ns duration parsing (hotpath profile units) — a TIME, not money",
     ),
     (
         "src/domains/kernel_opt/corpus/tests.rs",

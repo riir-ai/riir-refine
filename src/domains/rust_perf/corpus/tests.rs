@@ -5443,6 +5443,7 @@ fn batch196_rules_present_and_parse() {
 /// rule, plus the load-bearing needles from the verified quotes (every
 /// quote re-verified VERBATIM at the pin `c4646171` by three authoring
 /// subagents + the coordinator's 5-quote spot-check).
+#[allow(clippy::too_many_lines)] // exhaustive registration table: one row per staged rule, the file's own gate style
 #[test]
 fn batch200_rules_present_and_parse() {
     let corpus = build_perf_seed_corpus();
