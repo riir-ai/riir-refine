@@ -1,5 +1,78 @@
 # HISTORY.md — riir-refine
 
+Resolved-issue records, landing narratives, batch narratives, and gate
+evidence. Removed issue files live here (git history carries the full
+text of every removed file).
+
+## 2026-10-05 — Issue 146 CLOSED (T0.6 executed): the profile-guided-healing REAL-workload arm — rethink ESC loop profiled end-to-end, alloc gate flat, the G4 pin held, the heal landed at rethink `4cd8dcf`
+
+The T0 POC (the entry below) ran on a toy repo; T0.6 — the owner's
+"we even can use rethink" arm — ran the same loop against a REAL
+served product: the riir-rethink ESC wrapper's decide loop on sst5
+(the G4 posture), 6 rounds × 200 cal states = 1205 decides, ~41%
+think-tier, Metal posture, at the pinned SHA `d01a8e5` in a detached
+worktree (hotpath 0.28 instrumentation WORKTREE-ONLY — never
+committed; not on rethink's allowlist). Box state provenance:
+`power=AC · load 4.4 · powermode=2(high)` (the reflex preflight
+PASSED for the baseline loop).
+
+**The first REAL-repo `[hot]` feed**: `decide_multi_armed` 8.8
+KB/decision (14.1% of measured time), `encoder_serve::decide_multi`
+2.7 KB (13.7% — mostly the Metal-encode channel wait), `flags` 5.7
+KB, `synth_case_value` 1.2 KB, `encode_features` 4.3 KB,
+`nleh_standardize` 0 B. **The verdict**: rethink's measured-path
+allocations are ownership-driven EXACT clones (the wire contract's
+labels/qid/instructions/options) — no growth-doubling waste exists
+for the corpus to heal on the path. The real reduction surface is
+STRUCTURAL and lives in riir-instinct (`synth_served_case`,
+`eval_seat` internals, the cheap lane's case construction) and
+riir-infer (the encode) — dependency spans, DECLINED per the row's
+rule, filed as leads to the owning repos.
+
+The healer landed 3 verified edits (compile-gated, behavior-identical):
+a test-collector `Vec::with_capacity(LANE_INFLIGHT_CAP)` (correct
+idiom, NOT a hot-path fix — the anchor was `decide_multi`'s span but
+the proposer matched the shape elsewhere in the file — the
+shape-match-outside-the-anchor lesson, worth carrying to any future
+profile-guided landing review) + `shrink_to_fit()` ×2 in the v2
+forward row and the trainer-side head (off the sst5/v1 path).
+**Verification**: the alloc gate read +0.0% EVERYWHERE (byte-identical
+×3 baseline and ×3 post-heal runs — the deterministic axis);
+`esc_g4_alloc` max_cheap **190 == the pin** (GREEN, 11 cheap / 9
+think — the T5 posture reproduced); the frozen parity replay
+(Bench-029 read) + encoder_shared_parity + esc_gates (17) + 29 lib
+tests green at the feature posture; clippy clean ×2 postures. Timing
+axis: baseline 6.33 ms/decide; the post-heal re-profile read +74–131%
+UNIFORMLY across fns with no edit in their path while a sibling
+session's dapps builds ran the box at load 8→25 (baseline was 4.4) —
+box-state noise, disclosed, not regression (B129: timing is
+ranking-only; no mechanism exists for off-path edits to slow the
+loop).
+
+En-route findings this session, worth the ink:
+- **The global `cargo-refine` binary had gone STALE again** (built
+  Oct 1, pre-hotpath-lane) — the last session's "rebuilt" claim never
+  reached `~/.cargo/bin/`, which turned out to be a PLAIN FILE COPY,
+  not the documented symlink — the exact 00:21-class footgun the
+  AGENTS.md warns about, silent because `--version` still printed a
+  complete feature set. Fixed at root cause: `~/.cargo/bin/cargo-refine`
+  is now the documented SYMLINK → `target/release/cargo-refine`, so
+  every future rebuild propagates. The binary was rebuilt from the
+  `3af66640` tree and the `--hotpath-json` flag verified live.
+- **Worktree sibling-symlink volatility**: the detached worktree's
+  relative path deps resolve through `/private/tmp/<sibling>`
+  symlinks, and something swept them mid-session (the G4 run then
+  correctly SKIP-louded — the skip-loud discipline catching the real
+  cause). Recreated; the verification runs pass the material via the
+  test-honored env overrides (`INSTINCT_ENCODER_ART` /
+  `INSTINCT_DATASETS_DIR` / `INSTINCT_WINNERS_DIR`) instead of
+  trusting /tmp.
+
+Issue file removed per the noise-reduction rule; the T0.6 row's full
+text lives in git history. T1+ (Elo credit, the iterative loop, MCTS,
+L5 leads) open as later issues per Proposal 020's phase plan; the
+lane ships in the release set.
+
 ## 2026-10-05 — Issue 146 T0.2+T0.3+T0.4: the profile-guided-healing oracle lane LANDED end-to-end — the T0 POC gate PASSED on a real hotpath run (alloc −51.1%)
 
 The fusion's first measured gate (Research 235's T0 / Proposal 020): hotpath's
