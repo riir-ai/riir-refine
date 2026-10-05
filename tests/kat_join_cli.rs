@@ -114,7 +114,53 @@ fn join_env_forces_devnet_through_the_config_set_record() {
         stdout.contains("recorded to config (cargo refine config set --url devnet)"),
         "the recorded line: {stdout}"
     );
+    assert!(
+        !stdout.contains("had an account key already"),
+        "a brand-new machine (no key seeded) keeps the proposal transcript byte-identical: {stdout}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_existing_account_key_makes_the_switch_visible_in_the_join_output() {
+    // The verdict's join-visibility clause: a machine with an account key
+    // but NO service config was silently riding the mainnet default — the
+    // recorded line must name that switch. The key is a REAL ssh key so
+    // the login chain after the join proceeds normally.
+    let dir = scratch("had_key");
+    let work = scratch("had_key_work");
+    let key = work.join("id_ed25519");
+    let gen = Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-C", "join-cli-clause", "-f"])
+        .arg(&key)
+        .stdin(Stdio::null())
+        .output()
+        .expect("spawn ssh-keygen");
+    assert!(gen.status.success(), "ssh-keygen failed: {}", String::from_utf8_lossy(&gen.stderr));
+    std::fs::copy(&key, dir.join("id_ed25519")).expect("seed the account key");
+    let (code, stdout, stderr) = run_heal(&dir, &[("RIIR_REFINE_JOIN_ENV", "devnet")], &["login"]);
+    assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(
+        record_url(&dir).as_deref(),
+        Some("https://devnet.ai.gist.rs"),
+        "the choice still records devnet"
+    );
+    let recorded_line = stdout
+        .lines()
+        .find(|l| l.starts_with("recorded to config"))
+        .expect("the recorded line prints");
+    assert!(
+        recorded_line.starts_with("recorded to config (cargo refine config set --url devnet). Change any time."),
+        "the base line is unchanged: {recorded_line}"
+    );
+    assert!(
+        recorded_line.contains(
+            "(this machine had an account key already; the pre-join default was mainnet)"
+        ),
+        "the clause is on the recorded line: {recorded_line}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&work);
 }
 
 #[test]

@@ -122,12 +122,18 @@ pub enum JoinDecision {
 pub enum JoinRefusal {
     /// [`JOIN_ENV_ENV_VAR`] was set to something other than `devnet|mainnet`.
     BadJoinEnv(String),
-    /// No force, no `--yes`, and stdin is not a terminal (or answered EOF).
+    /// No force, no `--yes`, and stdin is not a terminal.
     NonInteractive,
+    /// stdin WAS a terminal but closed (EOF / Ctrl-D) before an answer.
+    StdinClosed,
 }
 
 impl JoinRefusal {
-    /// The stderr line — the remedy named, always.
+    /// The stderr line — the remedy named, always. The two stdin arms are
+    /// named apart ON PURPOSE: "not a terminal" and "closed (EOF) before
+    /// answering" are different situations (a CI pipe vs a human who
+    /// pressed Ctrl-D), and a message that claims the wrong one sends the
+    /// reader debugging the wrong machine.
     #[must_use]
     pub fn message(&self) -> String {
         match self {
@@ -140,6 +146,11 @@ impl JoinRefusal {
                  (stdin is not a terminal; no --yes; no {JOIN_ENV_ENV_VAR}) — set \
                  {JOIN_ENV_ENV_VAR}=devnet|mainnet (or pass --yes for the devnet default) \
                  and re-run"
+            ),
+            Self::StdinClosed => format!(
+                "join: no service config and stdin closed (EOF) before answering \
+                 the first-join prompt — set {JOIN_ENV_ENV_VAR}=devnet|mainnet \
+                 (or pass --yes for the devnet default) and re-run"
             ),
         }
     }
@@ -214,14 +225,17 @@ pub const PROMPT_BLOCK: &str = "Join which kat network?  [devnet] / mainnet
 > ";
 
 /// The interactive half of [`JoinDecision::Ask`]. A non-TTY stdin refuses
-/// (the check runs BEFORE the first read — never a hang); EOF refuses
-/// (Ctrl-D is not an answer). An invalid line re-prompts once per read.
-/// `read_line` yields `None` at EOF/error; the caller owns the real stdin.
+/// (the check runs BEFORE the first read — never a hang); EOF refuses as
+/// its own arm — a closed stdin is a DIFFERENT situation from a non-terminal
+/// one (Ctrl-D on a live terminal vs a CI pipe) and the refusal names it
+/// apart. An invalid line re-prompts once per read. `read_line` yields
+/// `None` at EOF/error; the caller owns the real stdin.
 ///
 /// # Errors
 ///
-/// [`JoinRefusal::NonInteractive`] when the stdin is not a terminal or
-/// answers EOF — the caller prints [`JoinRefusal::message`] and exits 2.
+/// [`JoinRefusal::NonInteractive`] when the stdin is not a terminal;
+/// [`JoinRefusal::StdinClosed`] when it closes (EOF) before an answer —
+/// the caller prints [`JoinRefusal::message`] and exits 2.
 pub fn answer_ask(
     tty: bool,
     read_line: &mut dyn FnMut() -> Option<String>,
@@ -231,7 +245,7 @@ pub fn answer_ask(
     }
     loop {
         let Some(line) = read_line() else {
-            return Err(JoinRefusal::NonInteractive);
+            return Err(JoinRefusal::StdinClosed);
         };
         match parse_answer(&line) {
             Answer::Default => return Ok(JoinEnv::Devnet),
@@ -243,17 +257,46 @@ pub fn answer_ask(
     }
 }
 
+/// The account-dir key-file names whose presence marks "this machine
+/// already had an account key" — the canonical key and the legacy
+/// adoption chain's. The spellings cannot be read from the account module
+/// ungated (`kat_account` is feature-gated in the riir-kat leaf), so they
+/// are carried here and PINNED against the real consts by a gated test
+/// (`the_key_file_spellings_match_the_account_module`) — a rename there
+/// reds there.
+const ACCOUNT_KEY_FILES: &[&str] = &["id_ed25519", "kat_id_ed25519"];
+
+/// Whether the account dir already holds an account key (either spelling).
+/// The first-join clause's trigger: an EXISTING account was silently
+/// riding the mainnet default, so the switch the choice makes must be
+/// visible on the recorded line — a brand-new machine keeps the line
+/// unchanged.
+#[must_use]
+pub fn account_key_present(dir: &Path) -> bool {
+    ACCOUNT_KEY_FILES.iter().any(|f| dir.join(f).exists())
+}
+
 /// The post-record copy — local by construction (no network calls). Devnet:
 /// the recorded line. Mainnet: the recorded line + the A3 posture copy,
 /// three lines naming every unarmed plane up front (pool 0, TUNA
 /// unconfigured, crank unset) so the joiner never discovers them at the
-/// first 503.
+/// first 503. `had_account_key` appends the join-visibility clause to the
+/// recorded line — ONLY for a machine that already held a key (an existing
+/// account was on the pre-join mainnet default by construction; the
+/// choice's switch must be visible). A brand-new machine keeps the line
+/// byte-identical to the proposal transcript.
 #[must_use]
-pub fn join_lines(env: JoinEnv) -> Vec<String> {
-    let mut lines = vec![format!(
+pub fn join_lines(env: JoinEnv, had_account_key: bool) -> Vec<String> {
+    let mut recorded = format!(
         "recorded to config (cargo refine config set --url {}). Change any time.",
         env.alias()
-    )];
+    );
+    if had_account_key {
+        recorded.push_str(
+            " (this machine had an account key already; the pre-join default was mainnet)",
+        );
+    }
+    let mut lines = vec![recorded];
     if env == JoinEnv::Mainnet {
         lines.push(
             "mainnet posture: payout planes are owner-armed later — today the reward pool \
@@ -330,8 +373,11 @@ pub fn run(yes: bool) -> Result<(), String> {
             .map_err(|r| r.message())?
         }
     };
+    // The join-visibility clause is computed ONLY on the join path — an
+    // already-configured machine returns above and never stats a file.
+    let had_account_key = account_key_present(&dir);
     record(&dir, env)?;
-    for line in join_lines(env) {
+    for line in join_lines(env, had_account_key) {
         println!("{line}");
     }
     Ok(())
@@ -379,15 +425,77 @@ mod tests {
             JoinDecision::Choose(JoinEnv::Devnet)
         );
         let dir = scratch("yes_devnet");
+        assert!(!account_key_present(&dir), "a fresh machine has no key");
         record(&dir, JoinEnv::Devnet).expect("records");
         assert_eq!(
             riir_kat::kat_service_config::read(&dir).as_deref(),
             Some(JoinEnv::Devnet.url())
         );
-        let lines = join_lines(JoinEnv::Devnet);
+        // A brand-new machine's line is byte-identical to the proposal
+        // transcript — no visibility clause.
+        let lines = join_lines(JoinEnv::Devnet, false);
         assert_eq!(lines.len(), 1);
-        assert!(lines[0].contains("cargo refine config set --url devnet"));
+        assert_eq!(
+            lines[0],
+            "recorded to config (cargo refine config set --url devnet). Change any time."
+        );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_existing_account_key_makes_the_switch_visible() {
+        // The verdict's join-visibility clause: a machine that ALREADY held
+        // an account key was silently riding the mainnet default — the
+        // recorded line names that switch, on EITHER choice.
+        let dir = scratch("had_key");
+        std::fs::write(dir.join("id_ed25519"), b"not-a-real-key\n").expect("seed the key file");
+        assert!(account_key_present(&dir));
+        let lines = join_lines(JoinEnv::Devnet, true);
+        assert_eq!(lines.len(), 1, "the clause appends to the line, never a new one");
+        assert!(
+            lines[0].starts_with(
+                "recorded to config (cargo refine config set --url devnet). Change any time."
+            ),
+            "the base line is unchanged: {}",
+            lines[0]
+        );
+        assert!(
+            lines[0].contains("(this machine had an account key already; the pre-join default was mainnet)"),
+            "the clause: {}",
+            lines[0]
+        );
+        // …and the mainnet choice carries the same clause (it is about the
+        // MACHINE's prior state, not the choice).
+        let mainnet = join_lines(JoinEnv::Mainnet, true);
+        assert_eq!(mainnet.len(), 4, "clause on line 0, posture copy unchanged");
+        assert!(mainnet[0].contains("the pre-join default was mainnet"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_legacy_adopted_key_also_counts() {
+        // A machine adopted from the legacy chain holds kat_id_ed25519 —
+        // it had an account too, and the clause must fire for it.
+        let dir = scratch("legacy_key");
+        std::fs::write(dir.join("kat_id_ed25519"), b"legacy\n").expect("seed");
+        assert!(account_key_present(&dir));
+        // An unrelated file does not count.
+        let other = scratch("other_file");
+        std::fs::write(other.join("mining_consent.json"), b"{}").expect("seed");
+        assert!(!account_key_present(&other));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&other);
+    }
+
+    /// The spellings above cannot be read from the gated account module at
+    /// default features — this pin compiles where the module does and reds
+    /// on a rename there (the ungated detection would silently go blind).
+    #[cfg(feature = "kat_service")]
+    #[test]
+    fn the_key_file_spellings_match_the_account_module() {
+        use riir_kat::kat_account::KatAccount;
+        assert_eq!(ACCOUNT_KEY_FILES[0], KatAccount::KEY_FILE);
+        assert_eq!(ACCOUNT_KEY_FILES[1], KatAccount::LEGACY_KEY_FILE);
     }
 
     #[test]
@@ -477,7 +585,7 @@ mod tests {
             riir_kat::kat_service_config::read(&dir).as_deref(),
             Some(JoinEnv::Mainnet.url())
         );
-        let lines = join_lines(JoinEnv::Mainnet);
+        let lines = join_lines(JoinEnv::Mainnet, false);
         assert_eq!(
             lines.len(),
             4,
@@ -511,15 +619,29 @@ mod tests {
         assert!(msg.contains(JOIN_ENV_ENV_VAR), "names the env remedy: {msg}");
         assert!(msg.contains("--yes"), "names the flag remedy: {msg}");
         assert!(msg.contains("re-run"), "names the re-run: {msg}");
+        assert!(
+            msg.contains("not a terminal"),
+            "the non-TTY arm names its situation: {msg}"
+        );
+        assert!(!msg.contains("EOF"), "must not claim EOF: {msg}");
     }
 
     #[test]
-    fn eof_refuses_enter_is_the_default() {
-        // Ctrl-D is not an answer.
+    fn eof_refuses_as_its_own_arm_and_enter_is_the_default() {
+        // Ctrl-D is not an answer — and it is NOT the not-a-terminal arm:
+        // stdin WAS live; it closed. The two refusals name different
+        // situations so the reader debugs the right machine.
         assert_eq!(
             answer_ask(true, &mut || None),
-            Err(JoinRefusal::NonInteractive)
+            Err(JoinRefusal::StdinClosed)
         );
+        let eof_msg = JoinRefusal::StdinClosed.message();
+        assert!(eof_msg.contains("EOF"), "names EOF: {eof_msg}");
+        assert!(
+            !eof_msg.contains("not a terminal"),
+            "the EOF arm must not claim a non-terminal stdin: {eof_msg}"
+        );
+        assert!(eof_msg.contains(JOIN_ENV_ENV_VAR), "names the remedy: {eof_msg}");
         // A bare Enter is the bracketed default.
         assert_eq!(
             answer_ask(true, &mut || Some("\n".to_string())).expect("decides"),

@@ -109,6 +109,41 @@ SAMPLE="$WORK/sample"
 echo "stranger-drill: work dir $WORK (kept for forensics)"
 echo "stranger-drill: the client resolves its service through the A1 config record — no env override anywhere"
 
+# ── ambient-knob sanitation: the drill must run from ANY shell ───────────
+# Every knob the strangers' verdict depends on is stripped from each
+# invocation (run_leg); anything still visible AFTER that is a drill
+# defect, not a posture — fail loud. Run from a shell that exports
+# RIIR_REFINE_KAT_SERVICE_URL (the fleet posture) and the strangers still
+# resolve through the A1-recorded config, never the ambient value.
+MATERIAL_KNOBS=(
+  RIIR_REFINE_KAT_SERVICE_URL
+  RIIR_HEAL_KAT_SERVICE_URL
+  RIIR_REFINE_JOIN_ENV
+  RIIR_REFINE_YES
+  RIIR_REFINE_KAT_PROMPT_YES
+  RIIR_REFINE_KAT_GATE
+  RIIR_REFINE_KAT_METER
+  RIIR_REFINE_KAT_LEASE
+  RIIR_REFINE_AUTO_ORACLE
+  RIIR_REFINE_SELF_EVOLVE
+  RIIR_REFINE_KAT_ACCOUNT_DIR
+  RIIR_HEAL_KAT_ACCOUNT_DIR
+  RIIR_AUTH_ACCOUNT_DIR
+)
+SANITIZE_ARGS=()
+for knob in "${MATERIAL_KNOBS[@]}"; do
+  if [ -n "${!knob:-}" ]; then
+    echo "stranger-drill: ambient ${knob} was set — sanitized for every stranger invocation"
+  fi
+  SANITIZE_ARGS+=("-u" "$knob")
+done
+for knob in "${MATERIAL_KNOBS[@]}"; do
+  if env "${SANITIZE_ARGS[@]}" env 2>/dev/null | grep -q "^${knob}="; then
+    echo "stranger-drill: REFUSED — ${knob} survived the sanitation (unset it and report the drill bug)" >&2
+    exit 2
+  fi
+done
+
 fail() {
   echo "stranger-drill: FAIL — $1" >&2
   echo "stranger-drill: logs under $WORK" >&2
@@ -116,9 +151,10 @@ fail() {
 }
 
 # run_leg <log> <acct-dir> <cwd> [KEY=VALUE ...] -- <cargo-refine args...>
-# The extra env is a bash-3.2-safe expansion (an empty set must not trip
-# `set -u`); no billing-plane kill switches are set — the drill IS the
-# real metered loop.
+# The ambient material knobs are stripped at EVERY invocation (the
+# SANITIZE_ARGS list above — the drill runs from any shell); the extra env
+# is a bash-3.2-safe expansion (an empty set must not trip `set -u`); no
+# billing-plane kill switches are set — the drill IS the real metered loop.
 run_leg() {
   local log="$1" acct="$2" cwd="$3"
   shift 3
@@ -129,7 +165,8 @@ run_leg() {
   done
   shift
   (cd "$cwd" \
-    && env RIIR_REFINE_KAT_ACCOUNT_DIR="$acct" RIIR_AUTH_ACCOUNT_DIR="$acct" \
+    && env "${SANITIZE_ARGS[@]}" \
+      RIIR_REFINE_KAT_ACCOUNT_DIR="$acct" RIIR_AUTH_ACCOUNT_DIR="$acct" \
       ${envs[@]+"${envs[@]}"} "$BIN" "$@") >"$log" 2>&1
 }
 
