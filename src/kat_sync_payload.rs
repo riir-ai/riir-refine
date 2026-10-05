@@ -45,6 +45,24 @@
 //! design (a detection-rule change is not a wire-shape change), and the
 //! alignment rule is: the builder stamps the constant, input is never trusted.
 //!
+//! ## The training-source designation (Issue 148 / Proposal 021 §3, 2026-10-05)
+//!
+//! The gate-passed rows this module ships are the DESIGNATED training corpus
+//! for any future refine-rule suite mint (the artifact that would un-refute
+//! the decision-scorer class, Bench 098's negative prior). Designation, not
+//! new behavior: the lane already produces exactly what a mint consumes —
+//! `shape → fix → lint_key`, redaction-gated, BLAKE3-committed, signed,
+//! mining-consented. The corpus-side kill that closed the Decision-CPI tier
+//! (Issue 147's T0′: 533 credited fleet contexts = 19× off the 10⁴ target,
+//! converged since 2026-09-16/18) is the recorded bar for any re-open: growth
+//! needs NEW contexts (machines/repos/rules — never-pushed local stores, new
+//! corpus batches, fleet growth), all of which already flow through the
+//! per-repo `.refine-sync-policy` + mining-consent mechanism — no new
+//! consent surface is owed. decstat/fixstat CANNOT carry contexts (their
+//! stats-only redaction law); this lane is the one carrier. Any label-field
+//! additions (e.g. the rejected candidate set per span) are PAYLOAD_VERSION
+//! decisions — see [`PAYLOAD_CHANGELOG`] + the receiver's floor posture.
+//!
 //! ## Honest scope
 //!
 //! - The builder is the SANCTIONED egress path: a valid payload (commitment

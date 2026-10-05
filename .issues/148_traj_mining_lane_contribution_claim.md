@@ -1,6 +1,6 @@
 # Issue 148 — the traj-mining contribution claim: name the lane as the (future) refine-rule-suite training source + add the missing label fields
 
-**Status:** OPEN — moved from [Issue 147](147_decision_cpi_t0_client_and_escalation_poc.md) at the T0′ closure (2026-10-05, the pre-registered NO-GO disposition: the tier closed, the contribution lane does not). **Standalone value: the corpus feeds self_evolve/Elo + mining regardless of the (now-closed) Decision-CPI tier.**
+**Status:** OPEN — moved from Issue 147 at the T0′ closure (2026-10-05, the pre-registered NO-GO disposition: the tier closed, the contribution lane does not). **T-a LANDED + T-c analysis RECORDED 2026-10-05** (the module-doc designation in `src/kat_sync_payload.rs`; all three growth levers route through existing consent mechanisms — no healer-side code owed). **T-b (the label fields) is the remaining work** — a payload-version decision, yield-gated on P019 Move 1. **Standalone value: the corpus feeds self_evolve/Elo + mining regardless of the (now-closed) Decision-CPI tier.**
 
 ## What (Proposal 021 §3 carrier-corrected at verdict r2)
 
@@ -38,11 +38,14 @@ not a new lane and not decstat:
 
 ## Tasks
 
-- [ ] **T-a The claim**: record in the lane's module docs
+- [x] **T-a The claim**: record in the lane's module docs
       (`src/kat_sync_payload.rs`) that its gate-passed rows are the
       designated training source for any future refine-rule suite mint —
       one paragraph, no code. (This is the T0.8 "NAME the lane" half;
-      zero-behavior-change.)
+      zero-behavior-change.) **LANDED 2026-10-05** — the "training-source
+      designation" section in the module doc, carrying the Issue-147 T0′
+      corpus bar + the consent-mechanism note (T-c's third lever's record)
+      + the decstat exclusion + the label-field versioning law.
 - [ ] **T-b The label fields**: add the fields a suite mint needs and the
       lane lacks — per-span **the rejected candidate set** (the top-k
       rules the matcher proposed that were NOT applied), recorded at
@@ -51,7 +54,7 @@ not a new lane and not decstat:
       field is a payload-version decision (see `PAYLOAD_CHANGELOG`), not
       a silent append; coordinate with the receiver's `MIN_SYNC_PAYLOAD_VERSION`
       posture. YIELDS to P019 Move 1 if that move lands first.
-- [ ] **T-c The growth lever (analysis, then maybe code)**: the corpus is
+- [-] **T-c The growth lever (analysis, then maybe code)**: the corpus is
       converged on m3 — growth needs NEW contexts. Cheapest levers, in
       order: (1) the never-pushed local stores (riir-game-sdk 12M,
       riir-ai 6.2M, riir-dapps 708K, katgpt-rs 724K, … — Aug-era, consent
@@ -59,6 +62,17 @@ not a new lane and not decstat:
       new rules carry new spans); (3) fleet growth. Record which levers
       are owner-consent-gated (per-repo `.refine-sync-policy` + mining
       consent are already the mechanism — nothing new to build).
+      **ANALYSIS RECORDED 2026-10-05 (the code half DEFERRED — all three
+      levers route through mechanisms that already exist, so there is no
+      healer-side code to write):** every lever is owner-consent-gated BY
+      THE EXISTING MECHANISM — lever 1 (never-pushed stores) needs a
+      per-repo `.refine-sync-policy` + mining consent (both are the
+      owner's per-repo acts: `cargo refine --mine` in that repo); lever 2
+      rides the standing batch-mining queue (new rules → new spans,
+      no extra wiring); lever 3 is fleet ops. Nothing in THIS repo blocks
+      any of them; the record lives in the module doc's designation
+      section + here. Unblock for the tier re-open: any lever lifting the
+      credited corpus toward the 10³–10⁴ class.
 
 ## Non-goals
 
