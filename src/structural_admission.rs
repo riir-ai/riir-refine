@@ -1168,7 +1168,10 @@ mod tests {
             ),
             (
                 "github_pat_finegrained",
-                "token github_pat_ABCDEFGHIJKLMNOPQRSTUVWX ok",
+                // Real-shaped: the scanner floor is parity with gitleaks'
+                // `github_pat_\w{82}` (verdict R2 raised it from 22), so
+                // the fixture must be a real-length token.
+                "token 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 ok",
             ),
             ("aws_access_key_id", "key AKIAIOSFODNN7EXAMPLE rotated"),
             (

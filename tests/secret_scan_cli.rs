@@ -118,6 +118,10 @@ fn blind_transform_prints_redacted_text_and_writes_nothing() {
         !out.contains(AWS_KEY) && !out.contains(GITHUB_TOKEN),
         "{out}"
     );
+    // The shareable-output rule covers the fingerprint too (verdict R2):
+    // blind output is the paste-me text — no unkeyed fingerprint there.
+    let fp = blake3::hash(AWS_KEY.as_bytes()).to_hex()[..12].to_string();
+    assert!(!out.contains(&fp), "fingerprint leaked into blind output");
     // Read-only: the file on disk is untouched.
     assert_eq!(
         fs::read_to_string(dir.join("config.rs")).expect("read"),
@@ -153,6 +157,9 @@ fn suggest_run_discloses_findings_quiet_when_clean() {
     assert!(out.contains("secrets: "), "{out}");
     assert!(out.contains("[sec] secret-shaped literal"), "{out}");
     assert!(!out.contains(AWS_KEY), "warn leaked the value: {out}");
+    // The warn lines are shareable too — no unkeyed fingerprint (verdict R2).
+    let fp = blake3::hash(AWS_KEY.as_bytes()).to_hex()[..12].to_string();
+    assert!(!out.contains(&fp), "fingerprint leaked into warn lines");
     fs::remove_dir_all(&dir).ok();
 
     // Quiet-by-default: a clean file prints NO secrets line at all.
