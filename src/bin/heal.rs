@@ -527,6 +527,112 @@ fn mining_queued_batches() -> u32 {
     .unwrap_or(u32::MAX)
 }
 
+/// Issue 149 T1: one scan root's disclosure facts. `untracked: None` means
+/// the count is UNAVAILABLE (git absent, or the root is not inside a
+/// repository) — never read `None` as zero.
+#[derive(Debug, PartialEq, Eq)]
+struct ScanRootInfo {
+    /// The canonicalized scan root — absolute, which is the whole point.
+    root: PathBuf,
+    /// Collected source files under this root (.rs/.wgsl/Dockerfile/Cargo.toml).
+    files: usize,
+    /// Of those, how many git reports untracked. `None` = unavailable.
+    untracked: Option<usize>,
+}
+
+/// The pre-scan disclosure (Issue 149 T1): a bare `--fix` scans the whole
+/// working directory when given no paths — untracked WIP included — and the
+/// v0.2.1 capture incident (a generator healed the real kat-service tree
+/// after forgetting its `cd`) is exactly the shape this one line catches:
+/// WHICH absolute tree is about to be scanned, how many source files it
+/// holds, and how many of them git considers untracked. Disclosure, never a
+/// gate — the just-works contract (no paths → scan `.`) stays untouched.
+fn scan_root_infos(paths: &[PathBuf], collected: &[PathBuf]) -> Vec<ScanRootInfo> {
+    let mut infos: Vec<ScanRootInfo> = Vec::new();
+    for path in paths {
+        // git -C needs a directory; a single-file root discloses its parent.
+        let dir = if path.is_dir() {
+            path
+        } else {
+            match path.parent() {
+                Some(p) => p,
+                None => continue,
+            }
+        };
+        let Ok(root) = dir.canonicalize() else {
+            continue;
+        };
+        if infos.iter().any(|i| i.root == root) {
+            continue;
+        }
+        let files = collected
+            .iter()
+            .filter(|f| std::fs::canonicalize(f).is_ok_and(|c| c.starts_with(&root)))
+            .count();
+        let untracked = count_untracked_collected(&root, collected);
+        infos.push(ScanRootInfo {
+            root,
+            files,
+            untracked,
+        });
+    }
+    infos
+}
+
+/// How many of `collected` git reports untracked under `root` — one
+/// `git ls-files --others --exclude-standard` subprocess scoped to the root
+/// (respects .gitignore, so ignored build output never inflates the count).
+/// `None` on any git failure (absent binary, not a repository): the count is
+/// unavailable, not zero.
+fn count_untracked_collected(root: &Path, collected: &[PathBuf]) -> Option<usize> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let untracked: std::collections::HashSet<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    if untracked.is_empty() {
+        return Some(0);
+    }
+    let mut n = 0usize;
+    for f in collected {
+        let Ok(c) = std::fs::canonicalize(f) else {
+            continue;
+        };
+        let Ok(rel) = c.strip_prefix(root) else {
+            continue;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        if untracked.contains(&rel) {
+            n += 1;
+        }
+    }
+    Some(n)
+}
+
+/// The one-line render, split out for the tests (stdout is not capturable).
+fn render_scan_line(info: &ScanRootInfo) -> String {
+    match info.untracked {
+        Some(k) if k > 0 => format!(
+            "scan root: {} — {} source file(s), {k} untracked included",
+            info.root.display(),
+            info.files
+        ),
+        _ => format!(
+            "scan root: {} — {} source file(s)",
+            info.root.display(),
+            info.files
+        ),
+    }
+}
+
 /// The `--yes` run-global (the flag form of `RIIR_REFINE_YES`): every y/N
 /// prompt answers yes without a TTY — the agents/CI contract. A static
 /// rather than plumbed `Args`: the prompt sites sit deep in flows that do
@@ -9564,6 +9670,19 @@ fn main() {
         eprintln!("no .rs/.wgsl/Dockerfile/Cargo.toml files under the given paths");
         std::process::exit(1);
     }
+    // Issue 149 T1: the pre-scan disclosure — WHICH absolute tree (untracked
+    // WIP included) this run is about to scan. One line per distinct scan
+    // root; the untracked count is best-effort and never a gate.
+    let scanned: Vec<PathBuf> = files
+        .iter()
+        .chain(wgsl_files.iter())
+        .chain(dockerfiles.iter())
+        .chain(cargo_tomls.iter())
+        .cloned()
+        .collect();
+    for info in scan_root_infos(&args.paths, &scanned) {
+        println!("{}", render_scan_line(&info));
+    }
     #[cfg(not(feature = "docker"))]
     if !dockerfiles.is_empty() {
         eprintln!(
@@ -10585,6 +10704,31 @@ fn main() {
                 if !changed {
                     break;
                 }
+            }
+            // Issue 149 T2: cross-pass resplice dedup. The fixpoint loop
+            // legitimately re-fires lints on already-edited text (the capture's
+            // needless_return → let_and_return chain on one function: three
+            // applied splices, ONE visible repair), and every per-edit
+            // accounting surface downstream — the review, the verify count,
+            // fixstats, the trajectory rows — read those intermediate splices
+            // as separate fixes of the same span. The earlier edit no longer
+            // exists in the final text; the surviving replacement is the
+            // honest fix record. Accounting-only: the file text is untouched.
+            let resplice_dropped = dedup_respliced_edits(&mut all_edits, &pass_splices);
+            if !resplice_dropped.is_empty() {
+                let dropped_oracle = resplice_dropped
+                    .iter()
+                    .filter(|(pass, _, start, end, _)| {
+                        *pass == 0 && oracle_keys.contains(&(*start, *end))
+                    })
+                    .count();
+                n_oracle_edits = n_oracle_edits.saturating_sub(dropped_oracle);
+                eprintln!(
+                    "accounting: {} later-pass splice(s) on {display} re-edited an earlier \
+                     pass's span — the earlier edit(s) no longer exist in the final text; \
+                     counted once (Issue 149)",
+                    resplice_dropped.len()
+                );
             }
             // P30: the bench-guard decline line — loud, named, actionable
             // (the intake's "a flag, not silence").
@@ -12448,6 +12592,66 @@ fn breakdown_of(by_lint: &std::collections::BTreeMap<String, usize>) -> String {
         .join(", ")
 }
 
+/// Issue 149 T2: drop edits whose repair a LATER pass re-spliced. The
+/// fixpoint loop re-fires lints on already-edited text (the capture's
+/// `needless_return` → `let_and_return` chain on one function: three
+/// applied splices, ONE visible repair); an edit whose final span a LATER
+/// edit's final span overlaps no longer exists in the text it claims to
+/// describe — the last edit in the chain (the surviving replacement) is the
+/// honest fix record. Returns `(kept, dropped)` so the caller can keep the
+/// run-level oracle-edit count consistent. Accounting-only: the file text
+/// is untouched (the splices already happened), and `pass_texts`/
+/// `pass_splices` stay complete for the revert machinery — a dropped edit's
+/// restore would restore an intermediate text that no longer exists, so its
+/// revert record was already incoherent.
+fn dedup_respliced_edits(
+    edits: &mut Vec<(usize, String, usize, usize, String)>,
+    pass_splices: &[Vec<riir_refine::edit_emitter::SourceEdit>],
+) -> Vec<(usize, String, usize, usize, String)> {
+    // Final-coordinate span per edit — the same mapping the review's line
+    // numbers use, span-shaped (authority-follows-replacement: a span that
+    // intersects a later splice extends over its replacement).
+    let finals: Vec<(usize, usize)> = edits
+        .iter()
+        .map(|(pass, _, start, end, _)| {
+            let mut span = (*start, *end);
+            for applied in pass_splices.iter().skip(*pass) {
+                span = riir_refine::edit_emitter::map_span_through_splices(span, applied);
+            }
+            span
+        })
+        .collect();
+    // i is subsumed iff some LATER edit's final span overlaps its own.
+    // Same-pass spans never overlap (apply_edits' selection enforces that),
+    // and a span spliced away to a point still counts as covered when the
+    // later replacement contains the point.
+    let spans_overlap = |a: (usize, usize), b: (usize, usize)| {
+        (a.0 < b.1 && b.0 < a.1)
+            || (a.0 == a.1 && b.0 <= a.0 && a.0 < b.1)
+            || (b.0 == b.1 && a.0 <= b.0 && b.0 < a.1)
+    };
+    let mut subsumed = vec![false; edits.len()];
+    for i in 0..edits.len() {
+        for j in 0..edits.len() {
+            if edits[j].0 > edits[i].0 && spans_overlap(finals[i], finals[j]) {
+                subsumed[i] = true;
+                break;
+            }
+        }
+    }
+    let mut kept = Vec::new();
+    let mut dropped = Vec::new();
+    for (i, edit) in edits.drain(..).enumerate() {
+        if subsumed[i] {
+            dropped.push(edit);
+        } else {
+            kept.push(edit);
+        }
+    }
+    *edits = kept;
+    dropped
+}
+
 /// The compact pass-2 fix loop over one file — the same proposer machinery
 /// and span-preserving splice as pass 1, without the verify-batching /
 /// evolve recording / line-remapping surfaces (pass-1 concerns). Review
@@ -13259,5 +13463,178 @@ mod mode_flag_tests {
             .is_err(),
             "--write does not apply to --dump-trajectories"
         );
+    }
+}
+
+#[cfg(test)]
+mod issue_149_scan_banner_tests {
+    use super::*;
+
+    fn temp_root(tag: &str) -> PathBuf {
+        // The pid suffix keeps concurrent test runs off each other's scratch
+        // (the shared-temp-path lesson; katgpt-rs Issue 832).
+        let d = std::env::temp_dir().join(format!("refine149_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).expect("temp root");
+        d
+    }
+
+    fn git_ok(root: &Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["-c", "user.email=t@t", "-c", "user.name=t"])
+            .args(args)
+            .output()
+            .expect("git on PATH");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn untracked_files_among_collected_are_counted() {
+        let root = temp_root("untracked");
+        git_ok(&root, &["init", "-q"]);
+        std::fs::write(root.join("tracked.rs"), "fn a() {}\n").unwrap();
+        git_ok(&root, &["add", "."]);
+        git_ok(&root, &["commit", "-qm", "seed"]);
+        std::fs::write(root.join("wip.rs"), "fn b() {}\n").unwrap();
+        let collected = vec![root.join("tracked.rs"), root.join("wip.rs")];
+        let infos = scan_root_infos(std::slice::from_ref(&root), &collected);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].files, 2);
+        assert_eq!(infos[0].untracked, Some(1));
+        let line = render_scan_line(&infos[0]);
+        assert!(
+            line.contains("1 untracked included"),
+            "banner must name the untracked count: {line}"
+        );
+        assert!(line.starts_with("scan root: "), "absolute root: {line}");
+        assert!(infos[0].root.is_absolute(), "the root must be absolute");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn outside_a_repository_the_count_is_unavailable_not_zero() {
+        let root = temp_root("norepo");
+        std::fs::write(root.join("a.rs"), "fn a() {}\n").unwrap();
+        let collected = vec![root.join("a.rs")];
+        let infos = scan_root_infos(std::slice::from_ref(&root), &collected);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].files, 1);
+        assert_eq!(infos[0].untracked, None, "None = unavailable, never 0");
+        let line = render_scan_line(&infos[0]);
+        assert!(!line.contains("untracked"), "no fabricated term: {line}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn single_file_root_discloses_its_parent_and_dedups_roots() {
+        let root = temp_root("fileroot");
+        std::fs::write(root.join("a.rs"), "fn a() {}\n").unwrap();
+        let file = root.join("a.rs");
+        let collected = vec![file.clone()];
+        // The same directory twice (once as a file, once as the dir) → one line.
+        let infos = scan_root_infos(&[file, root.clone()], &collected);
+        assert_eq!(infos.len(), 1, "duplicate roots collapse");
+        assert_eq!(infos[0].files, 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod issue_149_resplice_dedup_tests {
+    use super::*;
+    use riir_refine::edit_emitter::SourceEdit;
+
+    fn edit(
+        pass: usize,
+        rule: &str,
+        start: usize,
+        end: usize,
+        replacement: &str,
+    ) -> (usize, String, usize, usize, String) {
+        (pass, rule.to_string(), start, end, replacement.to_string())
+    }
+
+    fn splice(start: usize, end: usize, replacement: &str) -> SourceEdit {
+        SourceEdit {
+            start,
+            end,
+            replacement: replacement.to_string(),
+        }
+    }
+
+    /// The capture's shape: needless_return (pass 0) rewrote `return cents;`,
+    /// then let_and_return (pass 1) collapsed the whole `let .. cents;`
+    /// region — three splices in the real run, one visible repair. The
+    /// earlier edit no longer exists in the final text; the later one is
+    /// the fix record.
+    #[test]
+    fn later_pass_resplice_keeps_only_the_surviving_edit() {
+        let mut edits = vec![
+            edit(0, "needless_return", 10, 25, "cents;"),
+            edit(1, "let_and_return", 2, 22, "expr"),
+        ];
+        let pass_splices = vec![
+            vec![splice(10, 25, "cents;")],
+            vec![splice(2, 22, "expr")],
+        ];
+        let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
+        assert_eq!(edits.len(), 1, "one visible repair, one record");
+        assert_eq!(edits[0].1, "let_and_return");
+        assert_eq!(dropped.len(), 1);
+        assert_eq!(dropped[0].1, "needless_return");
+    }
+
+    /// A ⊂ B ⊂ C across three passes: only the last survives.
+    #[test]
+    fn a_chain_of_resplices_collapses_to_the_last_edit() {
+        let mut edits = vec![
+            edit(0, "a", 0, 30, "one"),
+            edit(1, "b", 0, 25, "two"),
+            edit(2, "c", 0, 20, "three"),
+        ];
+        let pass_splices = vec![
+            vec![splice(0, 30, "one")],
+            vec![splice(0, 25, "two")],
+            vec![splice(0, 20, "three")],
+        ];
+        let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].1, "c");
+        assert_eq!(dropped.len(), 2);
+    }
+
+    #[test]
+    fn disjoint_repairs_across_passes_are_all_kept() {
+        // pass 0 shrank the file by 5 bytes; the pass-1 edit sits after the
+        // shifted region — different repairs of different spans.
+        let mut edits = vec![
+            edit(0, "collapsible_if", 4, 20, "compact"),
+            edit(1, "bool_comparison", 25, 40, "flag"),
+        ];
+        let pass_splices = vec![
+            vec![splice(4, 20, "compact")],
+            vec![splice(20, 35, "flag")],
+        ];
+        let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
+        assert_eq!(edits.len(), 2);
+        assert!(dropped.is_empty());
+    }
+
+    #[test]
+    fn same_pass_edits_never_subsume_each_other() {
+        let mut edits = vec![
+            edit(0, "a", 4, 20, "one"),
+            edit(0, "b", 30, 40, "two"),
+        ];
+        let pass_splices = vec![vec![splice(4, 20, "one"), splice(30, 40, "two")]];
+        let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
+        assert_eq!(edits.len(), 2);
+        assert!(dropped.is_empty());
     }
 }

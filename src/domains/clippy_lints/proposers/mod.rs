@@ -890,6 +890,20 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // indented code-block continuation would be dedented too — verify
         // the line is prose (clippy's MaybeIncorrect hedge, same standing).
         "doc_overindented_list_items" => Some("indent dedent — the continuation joins the list item's paragraph; verify it is not a deliberately indented code block"),
+        // Issue 149 T3 (2026-10-06, probed on clippy 0.1.98): the lint's live
+        // firing surface narrowed to BOTH bounds LITERAL — variable bounds,
+        // field-projection receivers, and every if/else clamp shape read
+        // SILENT, so the auto-oracle anchors none of those and a
+        // --repo-posture run declines the proposer's wider shape family
+        // there. The proposer stays pattern-based and still applies the
+        // wider shapes under plain --fix.
+        "manual_clamp" => Some("clippy 0.1.98 firing surface — only `x.max(L).min(L)` chains with LITERAL bounds still fire; variable bounds and every if/else clamp shape are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)"),
+        // Issue 149 T3 (2026-10-06, probed on clippy 0.1.98): fires iff the
+        // receiver is a LOCAL IDENT and BOTH bounds are LITERAL; a variable
+        // bound or a field-projection receiver (item.f >= a && item.f <= b)
+        // is SILENT upstream — no oracle anchor, and --repo-posture declines
+        // those shapes. The proposer stays pattern-based under plain --fix.
+        "manual_range_contains" => Some("clippy 0.1.98 firing surface — fires only with a local-ident receiver and BOTH bounds literal; variable bounds and field-projection receivers are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)"),
         _ => None,
     }
 }

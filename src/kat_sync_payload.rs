@@ -60,7 +60,7 @@
 //! per-repo `.refine-sync-policy` + mining-consent mechanism — no new
 //! consent surface is owed. decstat/fixstat CANNOT carry contexts (their
 //! stats-only redaction law); this lane is the one carrier. Any label-field
-//! additions (e.g. the rejected candidate set per span) are PAYLOAD_VERSION
+//! additions (e.g. the rejected candidate set per span) are `PAYLOAD_VERSION`
 //! decisions — see [`PAYLOAD_CHANGELOG`] + the receiver's floor posture.
 //!
 //! ## Honest scope

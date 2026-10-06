@@ -1,8 +1,64 @@
-# HISTORY.md — riir-refine
+## HISTORY.md — riir-refine
 
 Resolved-issue records, landing narratives, batch narratives, and gate
 evidence. Removed issue files live here (git history carries the full
 text of every removed file).
+
+## 2026-10-06 — Issue 149 RESOLVED: the v0.2.1 capture QA findings — pre-scan disclosure, cross-pass resplice dedup, and the measured 0.1.98 firing-surface correction
+
+The three P2 findings from the refine.gist.rs capture generator's
+real-workload run (riir-dapps Issue 112 T1), landed in one pass:
+
+- **T1 (the cwd-scan disclosure):** every scan run now prints one
+  `scan root: <absolute path> — N source file(s)[, K untracked included]`
+  line per distinct scan root BEFORE the first file is read. The
+  untracked count is taken among the COLLECTED files via one
+  `git ls-files --others --exclude-standard` per root (gitignore-
+  respecting); git absent or not-a-repo → no count, never a fabricated
+  zero. Disclosure-only — the no-paths → scan-`.` just-works contract is
+  untouched (the threshold-refusal half of the finding was deliberately
+  declined: it would break every big-repo bare run). 3 unit tests +
+  live smoke on a throwaway git crate.
+- **T2 (the double-count, mechanism corrected):** the charge ledger
+  carries NO per-edit counter — tokens only, metered per FILE read, so
+  the KAT billing was never double-billed. The real double-count was
+  the per-EDIT accounting: the fixpoint loop re-fires lints on
+  already-edited text (the capture's needless_return → let_and_return
+  chain on one 2-line function: 3 applied splices, 1 visible repair),
+  and the review lines / verify count / fixstats / trajectory rows read
+  those intermediate splices as separate fixes. `dedup_respliced_edits`
+  at the `all_edits` boundary drops an edit whose FINAL span a LATER
+  edit's final span overlaps (authority-follows-replacement via
+  `map_span_through_splices`), one loud `accounting:` line names the
+  subsumed count per file, and `n_oracle_edits` stays consistent.
+  File text + the revert machinery unchanged. Known smaller instance
+  left as-is: `reheat_fix_pass`'s `new_fixes` count (feeds only the
+  ReheatReport row). 4 unit tests incl. the capture's exact chain
+  shape (7→5 reproduced at the accounting boundary).
+- **T3 (the 0.1.98 drift, verdict corrected by probe):** the re-arm
+  (822 derived / 100 covered / 0 fix-set-only) showed both disputed
+  lints read COVERED — they still EXIST; the coverage report's axis is
+  the DECLARED lint, never its FIRING surface, so declared-but-narrowed
+  is invisible to it by construction. Probed the firing matrix on
+  clippy 0.1.98: **manual_range_contains fires iff the receiver is a
+  local ident AND both bounds are literal** (variable bounds,
+  field-projection receivers, mixed, let-bound+variables: silent);
+  **manual_clamp fires only on `x.max(L).min(L)` chains with literal
+  bounds** (every if/else clamp shape: silent). The issue's two claims
+  were each half-right: "local ident still fires" held only for its
+  literal-bounds specimen, and "manual_clamp no longer fires" held
+  only for the if/else shapes — the corpus fixture shapes
+  (`x >= 3 && x <= 5`, `x.max(3).min(5)`) STILL FIRE, so the corpus
+  fixtures were never stale and the score-bench oracle is unaffected.
+  Reconciliation: both rules carry context_notes in the clippy domain's
+  `context_note` table (the review-line channel) documenting the
+  measured surface + the `--repo-posture` consequence. En-route: the
+  pre-existing `kat_sync_payload.rs` doc_markdown backtick heal
+  (Issue-148 T-a's module doc).
+
+Follow-up candidates, deliberately not taken: the coverage report's
+firing-axis blind spot (a firing-axis probe would be a new instrument,
+owner-scope); the reheat pass's cross-pass `new_fixes` count.
 
 ## 2026-10-05 — Issue 146 CLOSED (T0.6 executed): the profile-guided-healing REAL-workload arm — rethink ESC loop profiled end-to-end, alloc gate flat, the G4 pin held, the heal landed at rethink `4cd8dcf`
 
