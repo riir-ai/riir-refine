@@ -360,8 +360,9 @@ impl PendingEstimate {
     #[must_use]
     pub fn blocked_line(&self) -> String {
         format!(
-            "Records blocked by redaction policy: {} (never synced; adjust \
-             .refine-sync-policy to include them)",
+            "Records blocked by redaction policy: {} (never synced: a secret \
+             finding, a file outside .refine-sync-policy, or a row recorded \
+             before its file was tracked — a later heal run re-records it)",
             thousands(self.blocked)
         )
     }

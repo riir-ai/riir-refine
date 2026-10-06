@@ -706,7 +706,11 @@ fn kat_gate_disabled() -> bool {
 /// when their feature compiled in — the explainer itself never needs one.
 /// The default `.refine-sync-policy` `--mine` writes (version 3, the
 /// [`riir_refine::kat_redact`] schema): own-repo rows sync, the standard
-/// source globs, findings redacted in place, secrets still blocked by the
+/// source globs (repo root + the `crates/*/` workspace layout — riir-dapps
+/// Issue 119: the gate binds rows by their recorded file since riir-refine
+/// `21f76593`, so a root-only glob set would block every workspace crate;
+/// the policy is allow-only, so `**/src/**` is NOT used — it would admit
+/// `vendor/*/src`), findings redacted in place, secrets still blocked by the
 /// gate itself. WITHOUT a policy the gate is deny-by-default and every sync
 /// prints `0 included, N blocked` — the friction this write removes. The
 /// user's existing policy is NEVER touched.
@@ -714,7 +718,8 @@ const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
   "version": 3,
   "sync_enabled": true,
   "allow_origins": ["own-repo"],
-  "allow_paths": ["src/**/*.rs", "tests/**/*.rs", "benches/**/*.rs", "examples/**/*.rs"],
+  "allow_paths": ["src/**/*.rs", "tests/**/*.rs", "benches/**/*.rs", "examples/**/*.rs",
+                  "crates/*/src/**/*.rs", "crates/*/tests/**/*.rs", "crates/*/benches/**/*.rs", "crates/*/examples/**/*.rs"],
   "max_span_bytes": 65536,
   "allow_redacted": false
 }"#;
@@ -768,10 +773,13 @@ fn run_mine_intro() {
     println!("  * What a record carries: the rule, its counters, and the CODE SNIPPET");
     println!("    the fix touched (the replaced span + its replacement — never a whole");
     println!("    file, never a file path), only from your own repo's src/ tests/");
-    println!("    benches/ examples/ (.refine-sync-policy). Every snippet is scanned for");
+    println!("    benches/ examples/, at the root or under crates/*/ (.refine-sync-policy).");
+    println!("    Every snippet is scanned for");
     println!("    secrets (keys, tokens, env values, high-entropy strings); a snippet");
     println!("    with ANY finding is dropped, not sent. Batches are SIGNED with your");
     println!("    account key.");
+    println!("  * Machine label: none unless you set RIIR_REFINE_MACHINE_LABEL; a label");
+    println!("    you set is shown on the public adoption card.");
     println!("  * Contributing is opt-in per MACHINE: after --mine, every heal run (the");
     println!("    dry run and --fix) auto-syncs the redacted batch — one line, fail-soft.");
     println!("    Before --mine, nothing leaves this machine (one exception: --mine/--unmine");
@@ -13205,6 +13213,43 @@ mod sync_export_tests {
             serde_json::from_str(DEFAULT_SYNC_POLICY_JSON).expect("default policy parses");
         assert_eq!(policy.version, riir_refine::kat_redact::REDACT_VERSION);
         assert!(policy.sync_enabled);
+    }
+
+    /// riir-dapps Issue 119: rows bind by recorded file, so the default
+    /// globs ARE the contribution surface — root + `crates/*/` sources in,
+    /// vendored / build-script / out-of-tree files out (allow-only policy).
+    #[test]
+    fn default_sync_policy_covers_root_and_workspace_crates_only() {
+        let policy: riir_refine::kat_redact::SyncPolicy =
+            serde_json::from_str(DEFAULT_SYNC_POLICY_JSON).expect("default policy parses");
+        let allowed = |p: &str| {
+            policy
+                .allow_paths
+                .iter()
+                .any(|g| riir_refine::kat_redact::glob_match(g, p))
+        };
+        for p in [
+            "src/lib.rs",
+            "tests/a/b.rs",
+            "benches/x.rs",
+            "examples/e.rs",
+            "crates/core/src/lib.rs",
+            "crates/core/tests/t.rs",
+            "crates/core/benches/b.rs",
+            "crates/core/examples/e.rs",
+        ] {
+            assert!(allowed(p), "{p} must sync");
+        }
+        for p in [
+            "build.rs",
+            "crates/core/build.rs",
+            "vendor/dep/src/lib.rs",
+            "crates/core/vendor/dep/src/lib.rs",
+            "target/debug/build/out.rs",
+            "",
+        ] {
+            assert!(!allowed(p), "{p:?} must not sync");
+        }
     }
 }
 
