@@ -3,7 +3,8 @@
 > Phase 0+1 shipped 2026-08-22 (Plan 018 / Proposal 004 / Research 078-079 /
 > Bench 046). Opt-in feature `sec`, default-off — promotion needs measured
 > consumer pull (the `rust_perf` precedent). **Phase 2 (Batch 88) landed
-> 2026-08-29** — see below.
+> 2026-08-29** — see below. **The secret-blind scan surface (Issue 151)
+> landed 2026-10-06 — see the section at the bottom.**
 
 ## What it is
 
@@ -230,3 +231,49 @@ proposer.
 - [Research 078](../../.research/078_sec_domain_seed_verdict_rust_secure_code_index.md) — the seed survey
 - [Research 079](../../.research/079_sec_domain_phase0_1.md) — the Phase-0+1 record
 - [Bench 046](../../.benchmarks/046_sec_domain_phase0_1_goat.md) — the GOAT numbers
+
+## The secret-blind surface (Issue 151, 2026-10-06)
+
+Detection of secrets in code is **scan-based, not corpus-match** — the
+verdict record: secret formats are exact enumerable facts (fixed prefix +
+body charset + length), so detection is deterministic and versioned
+(`redact v4`), while corpus-match (latent retrieval over buggy fixtures)
+stays the FIX-suggestion machinery. A "hardcoded secret" corpus entry would
+carry a fake key in its fixture (tripping our own scanners), match fuzzily
+where exactness matters, and its fix is a process change (env var / secret
+store) — never a mechanical rewrite.
+
+One canonical scanner, three consumers:
+
+| Consumer | Boundary | Posture |
+|---|---|---|
+| `kat_redact::RedactionGate` (riir-kat v4) | **egress** — mining sync, the LLM harness lanes | fail-closed deny-by-default; any finding drops the span |
+| `structural_admission::scan_secret_shapes` (reef P2) | **persistence** — structural proposals | the SAME table, post-filtered: prefix kinds ∪ private-key blocks only + the word-boundary check (entropy rules would block every payload carrying hashes) |
+| `secret_blind` (`--secret-scan`) | **developer surface** | suggest-only warn + report + blind transform; values and fingerprints never shown |
+
+The v4 pattern set consolidates the industry sources: gitleaks `b58d3f1`
+(MIT — the transcription source, parity-fixture-pinned),
+secrets-patterns-db (CC BY-SA 4.0 — coverage cross-check ONLY; ShareAlike
+forbids table copying), secret-regex-list (no license — reference only).
+Provider prefixes are functional facts, not creative expression; the
+scanner's transcription is prefix + charset predicate + length, not a regex
+copy (no ReDoS surface by construction).
+
+**The shareable-output rule:** a finding's fingerprint is an unkeyed
+`blake3(bytes)[..12]` — safe in the gate's LOCAL JSONL log, a
+dictionary-reversal leak on stdout. Every stdout surface (report, warn
+lines, `--blind`) carries kind + location only. Recorded upgrade path if
+cross-run correlation is ever needed: a per-install `blake3::keyed_hash`
+key.
+
+**Egress census (the trust claim's basis):** every span-text egress passes
+the gate — `push_mining_batch`/`load_mining_rows` (heal.rs), the
+`fixer_regate` harness (`gate_samples` before any arm), the `kat_drain`
+daily loop (same gate; all-blocked = exit 4). Transports that carry no code
+text: burn/lease/fixstat/replay (counts + rule ids only). Honest limits:
+unknown formats are caught only by the entropy rules (the Bench-052 hex
+story — 37% of hex-wrapped AWS-shaped keys pre-v2, unconditional since);
+arbitrary-transform classes (byte arrays, xor, split literals) are uncaught
+BY DISCLOSURE; PII is out of scope (the span itself is the asset — no
+pattern set closes that); a redacted payload is terminal and is never
+re-gated.

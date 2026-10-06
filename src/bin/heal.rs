@@ -775,8 +775,10 @@ fn run_mine_intro() {
     println!("    file, never a file path), only from your own repo's src/ tests/");
     println!("    benches/ examples/, at the root or under crates/*/ (.refine-sync-policy).");
     println!("    Every snippet is scanned for");
-    println!("    secrets (keys, tokens, env values, high-entropy strings); a snippet");
-    println!("    with ANY finding is dropped, not sent. Batches are SIGNED with your");
+    println!("    secrets (API keys, tokens, private keys — the consolidated redact v4 ");
+    println!("    provider-format set; a snippet with ANY finding is dropped, not ");
+    println!("    sent; `cargo refine --secret-scan` shows you the same findings ");
+    println!("    locally). Batches are SIGNED with your");
     println!("    account key.");
     println!("  * Machine label: none unless you set RIIR_REFINE_MACHINE_LABEL; a label");
     println!("    you set is shown on the public adoption card.");
@@ -4023,6 +4025,22 @@ USAGE:
                     Suggest-only, always exit 0; the detector sees only the
                     scanned set (sibling/upstream consumers under-reported).
                     Reads paths from the CLI (default `.`).
+    --secret-scan   Scan text sources for secret-shaped content (Issue 151) —
+                    API keys, tokens, private-key blocks, connection strings,
+                    high-entropy runs — in code, comments AND string literals
+                    alike, over the ONE canonical scanner (redact v4, the
+                    gitleaks-consolidated pattern set). Report per finding:
+                    kind + path:line:col + the context line BLINDED (never
+                    the value, never a fingerprint — output is safe to
+                    paste). Suggest-only, always exit 0 on a real scan;
+                    refuses exit 1 on an empty walk. The same scan prints a
+                    quiet `[sec]` warn line in normal suggest/fix runs when
+                    findings exist.
+    --secret-scan --blind <path>
+                    Print the whole FILE with every finding byte-replaced by
+                    its `[REDACTED:<kind>]` placeholder (byte-exact outside
+                    findings; read-only — nothing is ever written). Safe to
+                    share: paste into tickets, chats, LLM prompts.
     --corpus-delta  With an oracle feed: print the per-lint table behind the corpus-truth
                     delta line (Issue 116) — which [no corpus rule] lints the COMPILED
                     fix lane can already write (the leased corpus lags, so the marker
@@ -4717,6 +4735,19 @@ struct Args {
     /// knob that cannot be turned), and fields only ever asserted. Pure syn
     /// scan, zero new deps, ungated; always exit 0 (report, not a gate).
     config_audit: bool,
+    /// Issue 151: `--secret-scan` — the secret-blind report (the
+    /// consolidated v4 pattern set): kind + path:line:col + the context
+    /// line BLINDED per finding; never the bytes, never the fingerprint.
+    /// Pure scan, zero new deps, ungated; always exit 0 on a real scan,
+    /// refuses exit 1 on an empty walk (the frontier-report law).
+    /// `--blind` (requires this) prints whole-file text with findings
+    /// placeholder-substituted — safe-to-share, read-only.
+    secret_scan: bool,
+    /// Issue 151: `--blind` — the `--secret-scan` output transform (the
+    /// whole file text with every finding byte-replaced by its
+    /// `[REDACTED:<kind>]` placeholder). Never writes; usage error without
+    /// `--secret-scan`.
+    blind: bool,
     /// Intake class P22: `--platform-audit` — the platform-dead_code
     /// decl-vs-use cfg lattice: declarations whose every use sits inside
     /// a platform gate the declaration lacks (the `NEON_U8` class no
@@ -4860,6 +4891,8 @@ fn parse_args() -> Args {
         horizon_report: false,
         fixseq_stats: false,
         config_audit: false,
+        secret_scan: false,
+        blind: false,
         platform_audit: false,
         orphan_report: false,
         coverage_report: false,
@@ -5018,6 +5051,8 @@ fn parse_args() -> Args {
             "--horizon-report" => args.horizon_report = true,
             "--fixseq-stats" => args.fixseq_stats = true,
             "--config-audit" => args.config_audit = true,
+            "--secret-scan" => args.secret_scan = true,
+            "--blind" => args.blind = true,
             "--platform-audit" => args.platform_audit = true,
             "--orphan-report" => args.orphan_report = true,
             "--frame-time-report" => args.frame_time_report = true,
@@ -5560,6 +5595,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.horizon_report
         || args.fixseq_stats
         || args.config_audit
+        || args.secret_scan
         || args.platform_audit
         || args.orphan_report
         || args.frame_time_report
@@ -5720,6 +5756,11 @@ fn snippet_head(text: &str) -> &str {
         .find(|l| l.len() > 8)
         .unwrap_or("…")
 }
+
+/// Issue 151: the in-run secret-disclosure caps — the warn names the count
+/// in full and samples the lines, never a firehose on a tree-wide leak.
+const MAX_SECRET_DISCLOSURE_FILES: usize = 8;
+const MAX_SECRET_DISCLOSURE_PER_FILE: usize = 4;
 
 /// Clamp a message to `n` chars for one-line report output.
 /// The T6.10 semantic-note suffix for fix-compile report lines: names
@@ -8980,6 +9021,57 @@ fn main() {
         return;
     }
 
+    // ── Issue 151: --secret-scan — the secret-blind report ──────────────
+    // Report-first, gates nothing (the frontier-report law): the ONE
+    // canonical scanner (kat_redact v4 — the consolidated provider-format
+    // set) over the scanned tree. Always exit 0 on a real scan; refuses
+    // exit 1 on an EMPTY walk — a confident green zero is the failure mode
+    // this lane exists to prevent. Ungated: pure scan, zero new deps. The
+    // shareable-output rule: kind + path:line:col + the context line
+    // BLINDED — never the bytes, never the unkeyed fingerprint.
+    // `--blind` prints whole-file text with findings placeholder-
+    // substituted (read-only; safe to paste into a ticket/chat/LLM).
+    if args.secret_scan {
+        if args.blind {
+            // Blind transform: ONE path (a file), whole text, findings
+            // substituted. Refusal on an unreadable path is exit 1 (the
+            // same law as an empty walk).
+            if args.paths.len() != 1 {
+                eprintln!("--secret-scan --blind takes exactly ONE path (the file to blind)");
+                std::process::exit(2);
+            }
+            let path = &args.paths[0];
+            if path.is_dir() {
+                eprintln!(
+                    "--blind needs a FILE (got the directory {} — run --secret-scan first for the report)",
+                    path.display()
+                );
+                std::process::exit(2);
+            }
+            let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+                eprintln!("cannot read {}: {e}", path.display());
+                std::process::exit(1);
+            });
+            print!("{}", riir_refine::secret_blind::blind(&text));
+            return;
+        }
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        let report = riir_refine::secret_blind::audit_paths(&targets);
+        if report.scanned_files == 0 {
+            eprintln!(
+                "secret-scan: EMPTY WALK — no text files under {} (blind refusal, not a pass)",
+                targets[0].display()
+            );
+            std::process::exit(1);
+        }
+        print!("{}", report.render());
+        return;
+    }
+
     // ── Issue 119: --coverage-report — the corpus coverage-debt sweep ─────
     // The uncovered half of clippy's LIVE lint surface. Report-first, gates
     // nothing; refuses exit 1 on a blind derivation (the frontier-report
@@ -10392,12 +10484,26 @@ fn main() {
     }
     let mut fmt_summary = riir_refine::fmt::FmtSummary::default();
 
+    // Issue 151: the in-run secret disclosure — one canonical-scanner pass
+    // per read file (cheap, text-linear), reported once after the summary.
+    // Quiet when zero: a warn firing on every clean run is a warn nobody
+    // reads. SUGGEST-ONLY by construction — no proposer exists, --fix never
+    // touches these (a secret's fix is a process change, not a rewrite).
+    let mut secret_findings: Vec<(String, Vec<riir_refine::secret_blind::SpanFinding>)> =
+        Vec::new();
+
     for file in &files {
         let Ok(src) = std::fs::read_to_string(file) else {
             eprintln!("skip (unreadable): {}", file.display());
             continue;
         };
         let display = file.display().to_string();
+        // Issue 151: the same-file secret scan (suggest-only; values and
+        // fingerprints never shown — the shareable-output rule).
+        let file_secret_findings = riir_refine::secret_blind::scan_file(&src);
+        if !file_secret_findings.is_empty() {
+            secret_findings.push((display.clone(), file_secret_findings));
+        }
         // P30: bench-target detection, shared by both lanes — the fix lane
         // declines rust_perf edits on it, the suggest lane stamps perf rows.
         let bench_target =
@@ -12010,6 +12116,40 @@ fn main() {
         args.top_k
     );
 
+    // ── Issue 151: the in-run secret disclosure (after the summary, the
+    // corpus-delta placement convention — under the count it refines).
+    // Quiet at zero. The findings' context lines are BLINDED (shareable-
+    // output rule: no bytes, no fingerprint).
+    if !secret_findings.is_empty() {
+        let total: usize = secret_findings.iter().map(|(_, f)| f.len()).sum();
+        let file_pl2 = if secret_findings.len() == 1 { "file" } else { "files" };
+        println!(
+            "secrets: {total} finding(s) in {} {file_pl2} — suggest-only, never auto-fixed \
+             (run `cargo refine --secret-scan` for the report)",
+            secret_findings.len()
+        );
+        for (display, finds) in secret_findings.iter().take(MAX_SECRET_DISCLOSURE_FILES) {
+            for f in finds.iter().take(MAX_SECRET_DISCLOSURE_PER_FILE) {
+                println!(
+                    "  [sec] secret-shaped literal ({}) at {display}:{}:{} [suggest-only — never \
+                     auto-fixed; value not shown]",
+                    f.tag(),
+                    f.line,
+                    f.col
+                );
+            }
+        }
+        let shown_files = secret_findings.len().min(MAX_SECRET_DISCLOSURE_FILES);
+        let shown = secret_findings
+            .iter()
+            .take(MAX_SECRET_DISCLOSURE_FILES)
+            .map(|(_, f)| f.len().min(MAX_SECRET_DISCLOSURE_PER_FILE))
+            .sum::<usize>();
+        if shown < total || shown_files < secret_findings.len() {
+            println!("  … and {} more (the report lists every finding)", total - shown);
+        }
+    }
+
     // ── Issue 116: the corpus-truth delta surface ─────────────────────────
     // The two lanes read two corpus truths BY DESIGN — the fix lane the
     // compiled FIXABLE ∪ VERIFY set, the suggest lane a rule book a leased
@@ -13517,6 +13657,8 @@ mod mode_flag_tests {
             ("--fixseq-stats", Box::new(|m| m.fixseq_stats = true)),
             ("--coverage-report", Box::new(|m| m.coverage_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
+            ("--secret-scan", Box::new(|m| m.secret_scan = true)),
+            ("--blind", Box::new(|m| m.blind = true)),
             ("--platform-audit", Box::new(|m| m.platform_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
             ("--frame-time-report", Box::new(|m| m.frame_time_report = true)),

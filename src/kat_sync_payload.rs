@@ -1073,17 +1073,18 @@ mod tests {
         );
         let expected = concat!(
             // payload_version 3 (Issue 103). redact_version tracks
-            // REDACT_VERSION (3 since the Bench 053 declaration-scope bump).
-            // The batch_commitment is over the ROW lines only; the SIGNATURE
-            // covers the header — so a redact_version bump re-pins this
-            // golden (coordinated, both repos, same window). Rows now carry
+            // REDACT_VERSION (4 since the Issue-002 v4 consolidated pattern
+            // set). The batch_commitment is over the ROW lines only; the
+            // SIGNATURE covers the header — so a redact_version bump re-pins
+            // this golden (coordinated, both repos, same window — the v4
+            // re-pin). Rows now carry
             // `domain` (the fixture's EXPLICIT table — both rules → clippy),
             // placed between lint_key and shape in the serde field order.
-            "{\"payload_version\":3,\"redact_version\":3,\"origin\":\"own-repo\",",
+            "{\"payload_version\":3,\"redact_version\":4,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
             "\"batch_commitment\":\"bab3d27b5adee7427f696b8d8e66a52eb9690660b371c989d43507ecdf1dea1f\",",
             "\"account_pubkey_hex\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\",",
-            "\"signature_hex\":\"47b05a0249632bc73f79d660d4281751db9c3a8e42e82e8f003fd61c3fb88b13effb0dc4248909843e2d2527cf87d2a46c84ae880a523d4d6a4192696f0e3208\"}\n",
+            "\"signature_hex\":\"bcfcaebdf25bf0becd8d46d817383ccc2097dbefa0205a1467e3c346665930d7af98a2aa2e794471e1f82d5d774f0294162364ab0081cbd4a2fbeb53aeecdd0e\"}\n",
             "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",\"domain\":\"clippy\",",
             "\"shape\":\"fn g() { return 1; }\",\"fix\":\"fn g() { 1 }\",",
             "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",

@@ -90,7 +90,7 @@ ed25519-dalek = { version = "2", optional = true, default-features = false }
 # "riir-kat/kat_transport". Root dep rows for ssh-key / qrcode / riir-auth
 # are GONE (the member carries them); root keeps ed25519-dalek
 # (kat_sync_payload signs) + ureq (cf_workers_ai / groq_first).
-riir-kat = { path = "../riir-kat", default-features = false }
+riir-kat = { path = "../riir-kat", default-features = false, features = ["redact"] }
 
 # Proposal 011 Phase 1 T1.6: the QR dep moved to riir-kat with the lease
 # client (issue 088). Root no longer names qrcode.

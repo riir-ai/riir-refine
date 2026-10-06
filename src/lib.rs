@@ -278,13 +278,21 @@ pub mod scope_model;
 // member client tier; root kat_transport → member kat_transport tier;
 // refill/consent need BOTH). Keepers below (sync_payload, pending
 // estimator, promotion) stay healer-side: they import traj_store/score_bench.
+// Issue 088 re-export plane (see the block comment above). `kat_redact`
+// moved OUT of the kat_service-gated list (Issue 151 T1, verdict R1): the
+// secret scanner is std+blake3-only compute on riir-kat's own `redact` tier
+// (which this dep now enables at the BASE — never the client tier), so the
+// secret-blind surface is available at DEFAULT features and the
+// structural-admission reef scan consumes the ONE canonical table ungated.
+// Public path unchanged (`riir_refine::kat_redact`).
+pub use riir_kat::kat_redact;
 #[cfg(feature = "kat_service")]
 pub use riir_kat::{
     kat_account, kat_account_client, kat_adoption, kat_burn_client, kat_fixstat_client,
     kat_lease_client, kat_meter, kat_pay_client, kat_payreq_client, kat_protocol_account,
     kat_protocol_burn, kat_protocol_fixstat, kat_protocol_lease, kat_protocol_pay,
     kat_protocol_payreq, kat_protocol_replay, kat_protocol_stake, kat_protocol_vote,
-    kat_protocol_wetrun, kat_redact, kat_replay_client, kat_service_config, kat_stake_client,
+    kat_protocol_wetrun, kat_replay_client, kat_service_config, kat_stake_client,
     kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
@@ -688,6 +696,13 @@ pub use kat_meter::{
     FREE_TIER_GRANT_MICRO_KAT, KAT_WARN_REMAINING, METER_CHANGELOG, METER_VERSION,
 };
 
+// Issue 151: the secret-blind surface — scan, warn (suggest-only), blind.
+// UNGATED: consumes the canonical scanner (also ungated at the base dep
+// since T1) and is local-only compute — the config-audit precedent. The
+// shareable-output rule lives in the module doc (no fingerprint, no
+// finding bytes on stdout).
+pub mod secret_blind;
+
 // Proposal 005 Phase 0 T0.1 (Plan 025): the KAT account surface.
 #[cfg(feature = "kat_service")]
 pub use kat_account::{
@@ -696,7 +711,12 @@ pub use kat_account::{
 };
 
 // Proposal 005 Phase 0 T0.2 (Plan 026): the redaction-gate surface.
-#[cfg(feature = "kat_service")]
+// UNGATED since Issue 151 T1 (verdict R1): the scanner is std+blake3-only
+// compute on riir-kat's `redact` tier (enabled at the BASE dep — never
+// `client`, which would drag the account/crypto plane into every build),
+// so the secret-blind report lane and the reef P2 persistence scan consume
+// the ONE canonical table at default features. The path set is the
+// historical kat_service surface plus the ungated availability.
 pub use kat_redact::{
     glob_match, redact, scan_secrets, BlockReason, Finding, FindingKind, GateDecision,
     LoadedPolicy, RedactionGate, RedactionLog, SpanOrigin, SyncPolicy, DEFAULT_MAX_SPAN_BYTES,

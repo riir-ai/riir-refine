@@ -57,6 +57,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::active_set::KNOWN_DOMAIN_KEYS;
+use crate::kat_redact::FindingKind;
 
 /// Shape bound on every proposal payload body (and on the serialized
 /// artifact as a whole via the same cap). The reflexer vessel cap, reused:
@@ -298,7 +299,10 @@ impl fmt::Display for Refusal {
                  NotBenchable annotation — its verification shape is undeclarable"
             ),
             Refusal::UnknownDomain { domain } => {
-                write!(f, "refused: unknown domain key {domain:?} (not in the retrieval vocabulary)")
+                write!(
+                    f,
+                    "refused: unknown domain key {domain:?} (not in the retrieval vocabulary)"
+                )
             }
             Refusal::UnknownConfigKnob { knob } => write!(
                 f,
@@ -343,9 +347,16 @@ pub fn admit(proposal: &StructuralProposal, ctx: &AdmissionCtx<'_>) -> Result<()
         });
     }
     match &proposal.payload {
-        ProposalPayload::CorpusRule { domain, rule_id, bench, body } => {
+        ProposalPayload::CorpusRule {
+            domain,
+            rule_id,
+            bench,
+            body,
+        } => {
             if !KNOWN_DOMAIN_KEYS.contains(&domain.as_str()) {
-                return Err(Refusal::UnknownDomain { domain: domain.clone() });
+                return Err(Refusal::UnknownDomain {
+                    domain: domain.clone(),
+                });
             }
             check_token("rule_id", rule_id)?;
             if matches!(bench, BenchShape::Absent) {
@@ -353,7 +364,8 @@ pub fn admit(proposal: &StructuralProposal, ctx: &AdmissionCtx<'_>) -> Result<()
             }
             check_body(body)
         }
-        ProposalPayload::Fixture { rel_path, body } | ProposalPayload::Playbook { rel_path, body } => {
+        ProposalPayload::Fixture { rel_path, body }
+        | ProposalPayload::Playbook { rel_path, body } => {
             // Identical by design: both are (rel-path, bounded body) edits —
             // the kinds differ only in review class (reef P3), never in shape.
             check_rel_path(rel_path)?;
@@ -363,20 +375,28 @@ pub fn admit(proposal: &StructuralProposal, ctx: &AdmissionCtx<'_>) -> Result<()
             if !ctx.known_knobs.contains(&knob.as_str()) {
                 return Err(Refusal::UnknownConfigKnob { knob: knob.clone() });
             }
-            serde_json::from_str::<serde_json::Value>(value_json)
-                .map_err(|e| Refusal::MalformedJson { message: e.to_string() })?;
+            serde_json::from_str::<serde_json::Value>(value_json).map_err(|e| {
+                Refusal::MalformedJson {
+                    message: e.to_string(),
+                }
+            })?;
             check_body(value_json)
         }
         ProposalPayload::ActiveSetMarker { edit } => match edit {
-            ActiveSetEdit::Demote { domain, rule_id } | ActiveSetEdit::Readmit { domain, rule_id } => {
+            ActiveSetEdit::Demote { domain, rule_id }
+            | ActiveSetEdit::Readmit { domain, rule_id } => {
                 if !KNOWN_DOMAIN_KEYS.contains(&domain.as_str()) {
-                    return Err(Refusal::UnknownDomain { domain: domain.clone() });
+                    return Err(Refusal::UnknownDomain {
+                        domain: domain.clone(),
+                    });
                 }
                 check_token("rule_id", rule_id)
             }
             ActiveSetEdit::SetCap { domain, .. } => {
                 if !KNOWN_DOMAIN_KEYS.contains(&domain.as_str()) {
-                    return Err(Refusal::UnknownDomain { domain: domain.clone() });
+                    return Err(Refusal::UnknownDomain {
+                        domain: domain.clone(),
+                    });
                 }
                 Ok(())
             }
@@ -391,10 +411,16 @@ fn check_body(body: &str) -> Result<(), Refusal> {
         return Err(Refusal::EmptyBody);
     }
     if body.len() > MAX_PAYLOAD_BYTES {
-        return Err(Refusal::PayloadTooLarge { bytes: body.len(), cap: MAX_PAYLOAD_BYTES });
+        return Err(Refusal::PayloadTooLarge {
+            bytes: body.len(),
+            cap: MAX_PAYLOAD_BYTES,
+        });
     }
     if let Some(hit) = scan_secret_shapes(body).first() {
-        return Err(Refusal::SecretShapedText { shape: hit.shape, offset: hit.offset });
+        return Err(Refusal::SecretShapedText {
+            shape: hit.shape,
+            offset: hit.offset,
+        });
     }
     Ok(())
 }
@@ -410,7 +436,10 @@ fn check_token(field: &'static str, value: &str) -> Result<(), Refusal> {
     if ok {
         Ok(())
     } else {
-        Err(Refusal::MalformedToken { field, value: value.to_owned() })
+        Err(Refusal::MalformedToken {
+            field,
+            value: value.to_owned(),
+        })
     }
 }
 
@@ -421,7 +450,10 @@ fn check_token(field: &'static str, value: &str) -> Result<(), Refusal> {
 /// nowhere behind the reviewer's back.
 fn check_rel_path(path: &str) -> Result<(), Refusal> {
     if path.is_empty() {
-        return Err(Refusal::MalformedRelPath { path: path.to_owned(), reason: "empty" });
+        return Err(Refusal::MalformedRelPath {
+            path: path.to_owned(),
+            reason: "empty",
+        });
     }
     if path.contains('\\') {
         return Err(Refusal::MalformedRelPath {
@@ -430,21 +462,36 @@ fn check_rel_path(path: &str) -> Result<(), Refusal> {
         });
     }
     if path.starts_with('/') {
-        return Err(Refusal::MalformedRelPath { path: path.to_owned(), reason: "absolute path" });
+        return Err(Refusal::MalformedRelPath {
+            path: path.to_owned(),
+            reason: "absolute path",
+        });
     }
     let bytes = path.as_bytes();
     if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
-        return Err(Refusal::MalformedRelPath { path: path.to_owned(), reason: "windows drive letter" });
+        return Err(Refusal::MalformedRelPath {
+            path: path.to_owned(),
+            reason: "windows drive letter",
+        });
     }
     for seg in path.split('/') {
         if seg.is_empty() {
-            return Err(Refusal::MalformedRelPath { path: path.to_owned(), reason: "empty component" });
+            return Err(Refusal::MalformedRelPath {
+                path: path.to_owned(),
+                reason: "empty component",
+            });
         }
         if seg == ".." {
-            return Err(Refusal::MalformedRelPath { path: path.to_owned(), reason: "parent escape" });
+            return Err(Refusal::MalformedRelPath {
+                path: path.to_owned(),
+                reason: "parent escape",
+            });
         }
         if seg == "." {
-            return Err(Refusal::MalformedRelPath { path: path.to_owned(), reason: "redundant component" });
+            return Err(Refusal::MalformedRelPath {
+                path: path.to_owned(),
+                reason: "redundant component",
+            });
         }
     }
     Ok(())
@@ -460,88 +507,106 @@ pub struct SecretHit {
     pub offset: usize,
 }
 
-struct SecretShape {
-    name: &'static str,
-    prefix: &'static str,
-    min_run: usize,
-    class: RunClass,
-}
-
-/// Continuation charsets after a prefix.
-#[derive(Debug, Clone, Copy)]
-enum RunClass {
-    /// `[A-Za-z0-9_-]` — most tokens carry dashes/underscores.
-    Word,
-    /// `[A-Za-z0-9]`.
-    Alnum,
-    /// `[A-Z0-9]` — AWS access-key ids are uppercase.
-    UpperAlnum,
-}
-
-impl RunClass {
-    fn contains(self, b: u8) -> bool {
-        match self {
-            RunClass::Word => b.is_ascii_alphanumeric() || b == b'_' || b == b'-',
-            RunClass::Alnum => b.is_ascii_alphanumeric(),
-            RunClass::UpperAlnum => b.is_ascii_uppercase() || b.is_ascii_digit(),
+/// Legacy reef shape names for the kinds the private table used to carry.
+/// The names are pinned by the reef tests (refusal logs carry them) and are
+/// kept byte-identical through the Issue-151 T9 retirement of
+/// `SECRET_PREFIX_TABLE` — the vocabulary is now `kat_redact`'s `FindingKind`
+/// and this map is the persistence-boundary projection only.
+fn reef_shape_name(kind: FindingKind, text: &str, offset: usize) -> &'static str {
+    match kind {
+        FindingKind::OpenAiStyleKey => "openai_key",
+        FindingKind::GithubToken => {
+            // One kind covers every GitHub prefix; the legacy split resolves
+            // by peeking the text at the finding offset.
+            if text[offset..].starts_with("github_pat_") {
+                "github_pat_finegrained"
+            } else {
+                "github_pat_classic"
+            }
+        }
+        FindingKind::AwsAccessKey => "aws_access_key_id",
+        FindingKind::SlackToken => "slack_token",
+        FindingKind::GoogleApiKey => "google_api_key",
+        FindingKind::PrivateKeyBlock => "pem_private_key",
+        _ => {
+            // New families keep the canonical tag (the kebab spelling the
+            // egress gate logs) — no second vocabulary grows here.
+            leak_tag(kind)
         }
     }
 }
 
-/// (name, prefix, min continuation run, continuation class). A hit requires
-/// the prefix at a word boundary (the byte before must NOT continue the
-/// class — `task-` must not read as an `sk-` key) followed by at least
-/// `min_run` class characters, so short prefixes cannot fire on prose.
-const SECRET_PREFIX_TABLE: &[SecretShape] = &[
-    SecretShape { name: "openai_key", prefix: "sk-", min_run: 16, class: RunClass::Word },
-    SecretShape { name: "github_pat_classic", prefix: "ghp_", min_run: 16, class: RunClass::Alnum },
-    SecretShape { name: "github_pat_finegrained", prefix: "github_pat_", min_run: 16, class: RunClass::Word },
-    SecretShape { name: "aws_access_key_id", prefix: "AKIA", min_run: 16, class: RunClass::UpperAlnum },
-    SecretShape { name: "slack_token", prefix: "xoxb-", min_run: 16, class: RunClass::Word },
-    SecretShape { name: "slack_token", prefix: "xoxp-", min_run: 16, class: RunClass::Word },
-    SecretShape { name: "slack_token", prefix: "xoxa-", min_run: 16, class: RunClass::Word },
-    SecretShape { name: "slack_token", prefix: "xoxs-", min_run: 16, class: RunClass::Word },
-    SecretShape { name: "google_api_key", prefix: "AIza", min_run: 30, class: RunClass::Word },
-];
-
-fn run_len(bytes: &[u8], start: usize, class: RunClass) -> usize {
-    let mut n = 0;
-    while start + n < bytes.len() && class.contains(bytes[start + n]) {
-        n += 1;
+fn leak_tag(kind: FindingKind) -> &'static str {
+    // Box the leak: `FindingKind::tag` returns a 'static str, so this keeps
+    // the match arm above honest about the legacy names it pins.
+    match kind {
+        FindingKind::GitlabToken => "gitlab-token",
+        _ => "secret-shape",
     }
-    n
 }
 
 fn is_word_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
 }
 
-/// Scan text for credential shapes (reef P2, prefix-form). Returns every
-/// hit sorted by offset, so the FIRST reported one is deterministic.
-/// Deliberately conservative: a shape fires only at a word boundary with a
-/// full-length continuation, so prose mentioning these products does not
-/// trip the gate. The PEM block form (`-----BEGIN … PRIVATE KEY`) is
-/// checked separately — its signature is two needles, not a prefix.
+/// Scan text for credential shapes (reef P2). Since Issue 151 T9 this
+/// consumes the ONE canonical scanner (`kat_redact::scan_secrets` — the
+/// consolidated v4 pattern set) instead of a private prefix table; the
+/// `AIza` fragmentation that motivated the consolidation cannot recur.
+/// The persistence-boundary conservatism is the POST-FILTER, not a second
+/// vocabulary:
+/// - **prefix kinds + private-key blocks only** — entropy/env/bearer/conn/
+///   rust-literal/JWT/telegram/discord findings are NOT admitted here: a
+///   structural proposal legitimately carries hashes and quoted code, and
+///   the entropy rules would block every such payload;
+/// - **word boundary** — the byte before a finding must not continue the
+///   token (`task-` must not read as an `sk-` key), so prose mentioning
+///   these products does not trip the gate.
+///   Returns every hit sorted by offset, so the FIRST reported one is
+///   deterministic.
 #[must_use]
 pub fn scan_secret_shapes(text: &str) -> Vec<SecretHit> {
-    let mut hits = Vec::new();
     let bytes = text.as_bytes();
-    for shape in SECRET_PREFIX_TABLE {
-        let mut from = 0;
-        while let Some(rel) = text[from..].find(shape.prefix) {
-            let start = from + rel;
-            let boundary_ok = start == 0 || !is_word_byte(bytes[start - 1]);
-            if boundary_ok && run_len(bytes, start + shape.prefix.len(), shape.class) >= shape.min_run {
-                hits.push(SecretHit { shape: shape.name, offset: start });
-            }
-            from = start + shape.prefix.len();
-        }
-    }
-    if let Some(off) = text.find("-----BEGIN") {
-        if text.contains("PRIVATE KEY") {
-            hits.push(SecretHit { shape: "pem_private_key", offset: off });
-        }
-    }
+    let mut hits: Vec<SecretHit> = crate::kat_redact::scan_secrets(text)
+        .into_iter()
+        .filter(|f| {
+            matches!(
+                f.kind,
+                FindingKind::AwsAccessKey
+                    | FindingKind::GithubToken
+                    | FindingKind::GitlabToken
+                    | FindingKind::SlackToken
+                    | FindingKind::OpenAiStyleKey
+                    | FindingKind::GoogleApiKey
+                    | FindingKind::StripeLiveKey
+                    | FindingKind::SendGridToken
+                    | FindingKind::NpmToken
+                    | FindingKind::PypiToken
+                    | FindingKind::HuggingFaceToken
+                    | FindingKind::ShopifyToken
+                    | FindingKind::SquareToken
+                    | FindingKind::DatabricksToken
+                    | FindingKind::DigitalOceanToken
+                    | FindingKind::FigmaToken
+                    | FindingKind::SupabaseToken
+                    | FindingKind::NotionToken
+                    | FindingKind::LinearToken
+                    | FindingKind::PerplexityKey
+                    | FindingKind::XaiKey
+                    | FindingKind::GroqKey
+                    | FindingKind::MailgunKey
+                    | FindingKind::AgeKey
+                    | FindingKind::AtlassianToken
+                    | FindingKind::FacebookToken
+                    | FindingKind::PrivateKeyBlock,
+            )
+        })
+        .filter(|f| f.start == 0 || !is_word_byte(bytes[f.start - 1]))
+        .map(|f| SecretHit {
+            shape: reef_shape_name(f.kind, text, f.start),
+            offset: f.start,
+        })
+        .collect();
     hits.sort_by_key(|h| h.offset);
     hits
 }
@@ -556,7 +621,9 @@ pub fn scan_secret_shapes(text: &str) -> Vec<SecretHit> {
 /// self-contained proposal — carried as `Result` so the artifact bytes are
 /// never silently empty).
 pub fn canonical_artifact_bytes(proposal: &StructuralProposal) -> Result<Vec<u8>, Refusal> {
-    serde_json::to_vec(proposal).map_err(|e| Refusal::MalformedJson { message: e.to_string() })
+    serde_json::to_vec(proposal).map_err(|e| Refusal::MalformedJson {
+        message: e.to_string(),
+    })
 }
 
 /// Content address of a proposal artifact: full 64-hex lowercase BLAKE3 of
@@ -567,7 +634,9 @@ pub fn canonical_artifact_bytes(proposal: &StructuralProposal) -> Result<Vec<u8>
 ///
 /// As [`canonical_artifact_bytes`].
 pub fn artifact_hash(proposal: &StructuralProposal) -> Result<String, Refusal> {
-    Ok(blake3::hash(&canonical_artifact_bytes(proposal)?).to_hex().to_string())
+    Ok(blake3::hash(&canonical_artifact_bytes(proposal)?)
+        .to_hex()
+        .to_string())
 }
 
 /// Validate an artifact-hash spelling: 64 lowercase hex chars.
@@ -579,7 +648,10 @@ pub fn validate_artifact_hash(hash: &str) -> Result<(), &'static str> {
     if hash.len() != 64 {
         return Err("expected 64 hex chars");
     }
-    if !hash.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+    if !hash
+        .bytes()
+        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    {
         return Err("expected lowercase hex");
     }
     Ok(())
@@ -626,16 +698,29 @@ impl fmt::Display for HeadSlot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainError {
     /// CAS refused: the slot's observed seq is not what the caller saw.
-    CasMismatch { slot: HeadSlot, expected: Option<u64>, actual: Option<u64> },
-    MalformedArtifactHash { hash: String, why: &'static str },
+    CasMismatch {
+        slot: HeadSlot,
+        expected: Option<u64>,
+        actual: Option<u64>,
+    },
+    MalformedArtifactHash {
+        hash: String,
+        why: &'static str,
+    },
     /// `prepare_live` / `rollback_to_checkpoint` need a durable checkpoint.
-    NoCheckpoint { action: &'static str },
+    NoCheckpoint {
+        action: &'static str,
+    },
 }
 
 impl fmt::Display for ChainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ChainError::CasMismatch { slot, expected, actual } => write!(
+            ChainError::CasMismatch {
+                slot,
+                expected,
+                actual,
+            } => write!(
                 f,
                 "CAS refused on {slot}: expected {expected:?}, found {actual:?} — \
                  the chain moved under the caller; re-observe and retry"
@@ -644,7 +729,10 @@ impl fmt::Display for ChainError {
                 write!(f, "malformed artifact hash {hash:?} ({why})")
             }
             ChainError::NoCheckpoint { action } => {
-                write!(f, "{action} requires a durable checkpoint head; none exists")
+                write!(
+                    f,
+                    "{action} requires a durable checkpoint head; none exists"
+                )
             }
         }
     }
@@ -703,7 +791,10 @@ impl ChainState {
         note: impl Into<String>,
     ) -> Result<ChainState, ChainError> {
         if let Err(why) = validate_artifact_hash(artifact) {
-            return Err(ChainError::MalformedArtifactHash { hash: artifact.to_owned(), why });
+            return Err(ChainError::MalformedArtifactHash {
+                hash: artifact.to_owned(),
+                why,
+            });
         }
         let actual = self.current.as_ref().map(|h| h.seq);
         if actual != expected_current_seq {
@@ -743,7 +834,10 @@ impl ChainState {
         note: impl Into<String>,
     ) -> Result<ChainState, ChainError> {
         if let Err(why) = validate_artifact_hash(artifact) {
-            return Err(ChainError::MalformedArtifactHash { hash: artifact.to_owned(), why });
+            return Err(ChainError::MalformedArtifactHash {
+                hash: artifact.to_owned(),
+                why,
+            });
         }
         let actual = self.checkpoint.as_ref().map(|h| h.seq);
         if actual != expected_checkpoint_seq {
@@ -783,12 +877,14 @@ impl ChainState {
         note: impl Into<String>,
     ) -> Result<ChainState, ChainError> {
         if let Err(why) = validate_artifact_hash(candidate_artifact) {
-            return Err(ChainError::MalformedArtifactHash { hash: candidate_artifact.to_owned(), why });
+            return Err(ChainError::MalformedArtifactHash {
+                hash: candidate_artifact.to_owned(),
+                why,
+            });
         }
-        let checkpoint = self
-            .checkpoint
-            .as_ref()
-            .ok_or(ChainError::NoCheckpoint { action: "prepare_live" })?;
+        let checkpoint = self.checkpoint.as_ref().ok_or(ChainError::NoCheckpoint {
+            action: "prepare_live",
+        })?;
         let parent = checkpoint.artifact.clone();
         let seq = self.seq + 1;
         self.live = Some(ChainHead {
@@ -818,7 +914,9 @@ impl ChainState {
         let artifact = self
             .checkpoint
             .as_ref()
-            .ok_or(ChainError::NoCheckpoint { action: "rollback_to_checkpoint" })?
+            .ok_or(ChainError::NoCheckpoint {
+                action: "rollback_to_checkpoint",
+            })?
             .artifact
             .clone();
         self.advance(expected_current_seq, &artifact, at_unix, note)
@@ -842,7 +940,9 @@ mod tests {
     }
 
     fn ctx() -> AdmissionCtx<'static> {
-        AdmissionCtx { known_knobs: &["self_evolve_enabled", "rayon_threads"] }
+        AdmissionCtx {
+            known_knobs: &["self_evolve_enabled", "rayon_threads"],
+        }
     }
 
     // ── review classes (reef P3) ────────────────────────────────────────
@@ -856,7 +956,11 @@ mod tests {
             (ProposalKind::ActiveSetMarker, ReviewClass::AlwaysReviewed),
             (ProposalKind::Playbook, ReviewClass::AlwaysReviewed),
         ];
-        assert_eq!(ProposalKind::ALL.len(), expected.len(), "a kind without a class row");
+        assert_eq!(
+            ProposalKind::ALL.len(),
+            expected.len(),
+            "a kind without a class row"
+        );
         for (kind, class) in expected {
             assert_eq!(review_class(kind), class, "kind {}", kind.label());
         }
@@ -864,7 +968,10 @@ mod tests {
 
     #[test]
     fn kind_is_derived_from_payload_not_carried() {
-        assert_eq!(corpus_proposal(BenchShape::NotBenchable).kind(), ProposalKind::CorpusRule);
+        assert_eq!(
+            corpus_proposal(BenchShape::NotBenchable).kind(),
+            ProposalKind::CorpusRule
+        );
         let fixture = StructuralProposal {
             title: "t".to_owned(),
             payload: ProposalPayload::Fixture {
@@ -879,7 +986,11 @@ mod tests {
 
     #[test]
     fn corpus_rule_admitted_with_bench_spec_or_not_benchable() {
-        assert!(admit(&corpus_proposal(BenchShape::BenchSpec("matvec_g1".to_owned())), &ctx()).is_ok());
+        assert!(admit(
+            &corpus_proposal(BenchShape::BenchSpec("matvec_g1".to_owned())),
+            &ctx()
+        )
+        .is_ok());
         assert!(admit(&corpus_proposal(BenchShape::NotBenchable), &ctx()).is_ok());
     }
 
@@ -897,7 +1008,12 @@ mod tests {
         if let ProposalPayload::CorpusRule { domain, .. } = &mut p.payload {
             *domain = "rustc_errors".to_owned();
         }
-        assert_eq!(admit(&p, &ctx()), Err(Refusal::UnknownDomain { domain: "rustc_errors".to_owned() }));
+        assert_eq!(
+            admit(&p, &ctx()),
+            Err(Refusal::UnknownDomain {
+                domain: "rustc_errors".to_owned()
+            })
+        );
     }
 
     #[test]
@@ -924,7 +1040,9 @@ mod tests {
         };
         assert_eq!(
             admit(&mk("nonexistent_knob"), &ctx()),
-            Err(Refusal::UnknownConfigKnob { knob: "nonexistent_knob".to_owned() })
+            Err(Refusal::UnknownConfigKnob {
+                knob: "nonexistent_knob".to_owned()
+            })
         );
         assert!(admit(&mk("self_evolve_enabled"), &ctx()).is_ok());
     }
@@ -938,7 +1056,10 @@ mod tests {
                 value_json: "{not json".to_owned(),
             },
         };
-        assert!(matches!(admit(&p, &ctx()), Err(Refusal::MalformedJson { .. })));
+        assert!(matches!(
+            admit(&p, &ctx()),
+            Err(Refusal::MalformedJson { .. })
+        ));
     }
 
     // ── active-set marker gate ──────────────────────────────────────────
@@ -959,12 +1080,17 @@ mod tests {
         let bad_domain = StructuralProposal {
             title: "t".to_owned(),
             payload: ProposalPayload::ActiveSetMarker {
-                edit: ActiveSetEdit::SetCap { domain: "nope".to_owned(), cap: 4 },
+                edit: ActiveSetEdit::SetCap {
+                    domain: "nope".to_owned(),
+                    cap: 4,
+                },
             },
         };
         assert_eq!(
             admit(&bad_domain, &ctx()),
-            Err(Refusal::UnknownDomain { domain: "nope".to_owned() })
+            Err(Refusal::UnknownDomain {
+                domain: "nope".to_owned()
+            })
         );
     }
 
@@ -993,7 +1119,10 @@ mod tests {
         ] {
             let got = admit(&playbook(path), &ctx());
             assert!(got.is_err(), "path {path:?} must refuse");
-            if let Err(Refusal::MalformedRelPath { reason: got_reason, .. }) = got {
+            if let Err(Refusal::MalformedRelPath {
+                reason: got_reason, ..
+            }) = got
+            {
                 assert_eq!(got_reason, reason, "path {path:?}");
             }
         }
@@ -1004,9 +1133,15 @@ mod tests {
         let big = "x".repeat(MAX_PAYLOAD_BYTES + 1);
         let p = StructuralProposal {
             title: "t".to_owned(),
-            payload: ProposalPayload::Playbook { rel_path: "a.sh".to_owned(), body: big },
+            payload: ProposalPayload::Playbook {
+                rel_path: "a.sh".to_owned(),
+                body: big,
+            },
         };
-        assert!(matches!(admit(&p, &ctx()), Err(Refusal::PayloadTooLarge { .. })));
+        assert!(matches!(
+            admit(&p, &ctx()),
+            Err(Refusal::PayloadTooLarge { .. })
+        ));
     }
 
     #[test]
@@ -1015,7 +1150,10 @@ mod tests {
         p.title = "   ".to_owned();
         assert_eq!(admit(&p, &ctx()), Err(Refusal::EmptyTitle));
         p.title = "x".repeat(MAX_TITLE_BYTES + 1);
-        assert!(matches!(admit(&p, &ctx()), Err(Refusal::TitleTooLong { .. })));
+        assert!(matches!(
+            admit(&p, &ctx()),
+            Err(Refusal::TitleTooLong { .. })
+        ));
     }
 
     // ── secret shapes (reef P2) ─────────────────────────────────────────
@@ -1024,12 +1162,24 @@ mod tests {
     fn secret_scan_fires_on_each_shape() {
         let samples: &[(&str, &str)] = &[
             ("openai_key", "carry sk-abc123XYZdef456GHI789 in config"),
-            ("github_pat_classic", "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"),
-            ("github_pat_finegrained", "token github_pat_ABCDEFGHIJKLMNOPQRSTUVWX ok"),
+            (
+                "github_pat_classic",
+                "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+            ),
+            (
+                "github_pat_finegrained",
+                "token github_pat_ABCDEFGHIJKLMNOPQRSTUVWX ok",
+            ),
             ("aws_access_key_id", "key AKIAIOSFODNN7EXAMPLE rotated"),
-            ("slack_token", "xoxb-123456789012-1234567890123-abcdefghijklmnop"),
+            (
+                "slack_token",
+                "xoxb-123456789012-1234567890123-abcdefghijklmnop",
+            ),
             ("slack_token", "xoxp-1234567890-1234567890123-abcdefabcdef"),
-            ("google_api_key", "AIzaSyA1234567890abcdefghijklmnopqrstuvwx"),
+            (
+                "google_api_key",
+                "AIzaSyA1234567890abcdefghijklmnopqrstuvwx",
+            ),
             ("pem_private_key", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA"),
         ];
         for (shape, text) in samples {
@@ -1044,12 +1194,15 @@ mod tests {
         for text in [
             "task-runner and risk-assessment do not fire", // "sk-" inside words
             "sk-short",                                    // boundary ok, run too short
-            "ghp_only_nine",                               // word class, but ghp_ wants alnum AND run is short
-            "akiaiosfodnn7example lowercase",              // AWS is uppercase-only
-            "-----BEGIN CERTIFICATE-----",                 // cert, not a private key
-            "see https://example.com/docs",                // plain prose
+            "ghp_only_nine", // word class, but ghp_ wants alnum AND run is short
+            "akiaiosfodnn7example lowercase", // AWS is uppercase-only
+            "-----BEGIN CERTIFICATE-----", // cert, not a private key
+            "see https://example.com/docs", // plain prose
         ] {
-            assert!(scan_secret_shapes(text).is_empty(), "near-miss fired: {text:?}");
+            assert!(
+                scan_secret_shapes(text).is_empty(),
+                "near-miss fired: {text:?}"
+            );
         }
     }
 
@@ -1062,7 +1215,10 @@ mod tests {
                 body: "const KEY: &str = \"AKIAIOSFODNN7EXAMPLE\";".to_owned(),
             },
         };
-        assert!(matches!(admit(&p, &ctx()), Err(Refusal::SecretShapedText { .. })));
+        assert!(matches!(
+            admit(&p, &ctx()),
+            Err(Refusal::SecretShapedText { .. })
+        ));
     }
 
     // ── content addressing ──────────────────────────────────────────────
@@ -1087,7 +1243,10 @@ mod tests {
         let upper = "A".repeat(64);
         let not_hex = "g".repeat(64);
         for bad in ["", "abc", upper.as_str(), not_hex.as_str()] {
-            assert!(validate_artifact_hash(bad).is_err(), "hash {bad:?} must refuse");
+            assert!(
+                validate_artifact_hash(bad).is_err(),
+                "hash {bad:?} must refuse"
+            );
         }
     }
 
@@ -1111,59 +1270,110 @@ mod tests {
 
     #[test]
     fn chain_cas_mismatch_names_slot_and_seqs() {
-        let s = ChainState::genesis().advance(None, A, 100, "first").unwrap();
-        let err = s.clone().advance(None, B, 101, "stale observer").unwrap_err();
+        let s = ChainState::genesis()
+            .advance(None, A, 100, "first")
+            .unwrap();
+        let err = s
+            .clone()
+            .advance(None, B, 101, "stale observer")
+            .unwrap_err();
         assert_eq!(
             err,
-            ChainError::CasMismatch { slot: HeadSlot::Current, expected: None, actual: Some(1) }
+            ChainError::CasMismatch {
+                slot: HeadSlot::Current,
+                expected: None,
+                actual: Some(1)
+            }
         );
         let err2 = s.advance(Some(99), B, 101, "wrong seq").unwrap_err();
-        assert!(matches!(err2, ChainError::CasMismatch { expected: Some(99), .. }));
+        assert!(matches!(
+            err2,
+            ChainError::CasMismatch {
+                expected: Some(99),
+                ..
+            }
+        ));
     }
 
     #[test]
     fn chain_checkpoint_cas_and_promote() {
-        let s = ChainState::genesis().advance(None, A, 100, "first").unwrap();
+        let s = ChainState::genesis()
+            .advance(None, A, 100, "first")
+            .unwrap();
         let s = s.install_checkpoint(None, A, 110, "durable").unwrap();
         let cp = s.checkpoint.as_ref().unwrap();
         assert_eq!(cp.artifact, A);
         assert_eq!(cp.seq, 2);
         assert_eq!(cp.parent.as_deref(), Some(A));
         // checkpoint CAS refuses a stale observer
-        let err = s.clone().install_checkpoint(None, B, 120, "stale").unwrap_err();
-        assert!(matches!(err, ChainError::CasMismatch { slot: HeadSlot::Checkpoint, .. }));
+        let err = s
+            .clone()
+            .install_checkpoint(None, B, 120, "stale")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            ChainError::CasMismatch {
+                slot: HeadSlot::Checkpoint,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn prepare_live_builds_child_without_moving_heads() {
-        let s = ChainState::genesis().advance(None, A, 100, "first").unwrap();
+        let s = ChainState::genesis()
+            .advance(None, A, 100, "first")
+            .unwrap();
         // no checkpoint yet -> refused
         assert_eq!(
             s.clone().prepare_live(B, 120, "candidate"),
-            Err(ChainError::NoCheckpoint { action: "prepare_live" })
+            Err(ChainError::NoCheckpoint {
+                action: "prepare_live"
+            })
         );
         let s = s.install_checkpoint(None, A, 110, "durable").unwrap();
-        let (cur_seq, cp_seq) = (s.current.as_ref().unwrap().seq, s.checkpoint.as_ref().unwrap().seq);
+        let (cur_seq, cp_seq) = (
+            s.current.as_ref().unwrap().seq,
+            s.checkpoint.as_ref().unwrap().seq,
+        );
         let s = s.prepare_live(B, 120, "candidate").unwrap();
         let live = s.live.as_ref().unwrap();
         assert_eq!(live.artifact, B);
-        assert_eq!(live.parent.as_deref(), Some(A), "live is a child of the checkpoint");
+        assert_eq!(
+            live.parent.as_deref(),
+            Some(A),
+            "live is a child of the checkpoint"
+        );
         assert_eq!(s.current.as_ref().unwrap().seq, cur_seq, "current unmoved");
-        assert_eq!(s.checkpoint.as_ref().unwrap().seq, cp_seq, "checkpoint unmoved");
+        assert_eq!(
+            s.checkpoint.as_ref().unwrap().seq,
+            cp_seq,
+            "checkpoint unmoved"
+        );
         assert_eq!(s.seq, 3, "allocation counter still monotone");
     }
 
     #[test]
     fn rollback_repoints_current_to_checkpoint() {
-        let s = ChainState::genesis().advance(None, A, 100, "first").unwrap();
+        let s = ChainState::genesis()
+            .advance(None, A, 100, "first")
+            .unwrap();
         assert_eq!(
             s.clone().rollback_to_checkpoint(None, 130, "rollback"),
-            Err(ChainError::NoCheckpoint { action: "rollback_to_checkpoint" })
+            Err(ChainError::NoCheckpoint {
+                action: "rollback_to_checkpoint"
+            })
         );
         let s = s.install_checkpoint(None, A, 110, "durable").unwrap();
         let s = s.advance(Some(1), B, 120, "bad batch").unwrap();
-        let s = s.rollback_to_checkpoint(Some(3), 130, "repoint to durable").unwrap();
-        assert_eq!(s.current.as_ref().unwrap().artifact, A, "current repointed to the checkpoint");
+        let s = s
+            .rollback_to_checkpoint(Some(3), 130, "repoint to durable")
+            .unwrap();
+        assert_eq!(
+            s.current.as_ref().unwrap().artifact,
+            A,
+            "current repointed to the checkpoint"
+        );
         assert_eq!(s.current.as_ref().unwrap().seq, 4, "rollback is a commit with a fresh allocation (1 advance, 2 checkpoint, 3 bad batch, 4 repoint)");
         // history intact: checkpoint still A
         assert_eq!(s.checkpoint.as_ref().unwrap().artifact, A);
