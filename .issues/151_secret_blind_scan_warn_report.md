@@ -100,4 +100,7 @@ feature exists to avoid.
 - **Golden re-pin:** `kat_sync_payload`'s `golden_payload_bytes_are_pinned`
   re-pinned to the v4 header bytes + signature (the golden's own comment
   prescribes the coordinated re-pin on a redact_version bump).
-- **Commits:** riir-kat `eed88c6`, riir-refine `deca02fc`.
+- **Commits:** riir-kat `9d31648` (the scanner), riir-refine this commit
+  (the surface; the sha sits in the git log beside this file — a record
+  carrying its own hash would drift through every amend, the Instrument
+  that re-types its own pin is a diary).
