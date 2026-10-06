@@ -529,6 +529,18 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
 /// (the caller's table — the builder passes its own; the estimator passes
 /// the compiled one) and is NOT gated: a generated vocabulary id, never
 /// user bytes.
+///
+/// ## The source path (riir-dapps Issue 119 T2)
+///
+/// Every field is checked WITH the row's [`TrajRowDoc::src_path`], so the
+/// policy's `allow_paths` actually binds (the `--mine` promise: snippets
+/// only from the allowed source globs). A row with NO recorded path (legacy
+/// rows, path-less writers) FAILS CLOSED whenever `allow_paths` is
+/// non-empty — blocked as [`BlockReason::PathNotAllowed`]`("")`, the same
+/// verdict an out-of-allowlist path gets; it syncs once a heal run
+/// re-records it with its file. An empty `allow_paths` means the policy
+/// does not restrict paths, so the unknown path passes there. The path is
+/// a gate INPUT only — never copied into the [`PayloadRow`].
 pub(crate) fn gate_row(
     gate: &RedactionGate,
     origin: SpanOrigin,
@@ -544,8 +556,9 @@ pub(crate) fn gate_row(
     let mut texts: [String; GATED_FIELDS.len()] =
         [String::new(), String::new(), String::new(), String::new()];
     let mut findings: Vec<FindingMeta> = Vec::new();
+    let path = (!row.src_path.is_empty()).then_some(row.src_path.as_str());
     for (i, (field, text)) in inputs.iter().enumerate() {
-        match gate.check(origin, None, text) {
+        match gate.check(origin, path, text) {
             GateDecision::Allow => texts[i] = (*text).to_string(),
             GateDecision::Redacted {
                 payload,
@@ -567,6 +580,12 @@ pub(crate) fn gate_row(
                 return Err((reason, fs));
             }
         }
+    }
+    // Fail closed on the unknown path (see the doc above). Checked after the
+    // field loop so the gate's own earlier verdicts (sync disabled, origin)
+    // keep their reasons; nothing has been emitted yet either way.
+    if path.is_none() && !gate.policy().allow_paths.is_empty() {
+        return Err((BlockReason::PathNotAllowed(String::new()), Vec::new()));
     }
     let [shape, fix, lint_key, last_run_id] = texts;
     let decision = if findings.is_empty() {
@@ -746,6 +765,7 @@ mod tests {
             component: None,
             journey_runs: 0,
             journey_taint_sum: 0,
+            src_path: "src/lib.rs".into(),
         }
     }
 
@@ -831,6 +851,90 @@ mod tests {
         // Restore sanity: original still verifies.
         lines[1] = &orig;
         assert!(verify_payload(&lines.join("\n")).is_ok());
+    }
+
+    /// riir-dapps Issue 119 T2: the `--mine` default policy's source globs
+    /// BIND — a row's recorded file decides whether its snippet may leave.
+    fn source_globs_policy() -> SyncPolicy {
+        SyncPolicy {
+            allow_paths: vec![
+                "src/**/*.rs".into(),
+                "tests/**/*.rs".into(),
+                "benches/**/*.rs".into(),
+                "examples/**/*.rs".into(),
+            ],
+            ..allow_policy()
+        }
+    }
+
+    fn row_at(lint_key: &str, shape: &str, src_path: &str) -> TrajRowDoc {
+        TrajRowDoc {
+            src_path: src_path.into(),
+            ..row(lint_key, shape, "fixed")
+        }
+    }
+
+    /// riir-dapps Issue 119 T2 — (a) a path outside `allow_paths` is not in
+    /// the payload, (b) a `src/` path is, (c) a legacy row with no recorded
+    /// path is dropped (fail-closed) while `allow_paths` is non-empty. The
+    /// pending estimator projects through the same `gate_row`, so it must
+    /// count the identical split.
+    #[test]
+    fn allow_paths_bind_by_recorded_src_path_and_unknown_fails_closed() {
+        let gate = RedactionGate::from_policy(source_globs_policy());
+        let rows = vec![
+            row_at("needless_return", "fn a() { return 1; }", "src/deep/a.rs"),
+            row_at("needless_return", "fn b() { return 2; }", "build.rs"),
+            row_at(
+                "needless_return",
+                "fn c() { return 3; }",
+                "vendor/x/src/lib.rs",
+            ),
+            row_at("needless_return", "fn d() { return 4; }", ""),
+        ];
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer())
+            .build_at(&rows, 1);
+        assert_eq!((p.rows_included, p.rows_blocked), (1, 3));
+        let parsed = parse_rows(&p.ndjson).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].shape, "fn a() { return 1; }");
+        // The path is a gate input only — never a payload byte.
+        assert!(!p.ndjson.contains("src/deep/a.rs"), "{}", p.ndjson);
+        assert!(!p.ndjson.contains("src_path"), "{}", p.ndjson);
+        let reasons: Vec<&BlockReason> = p
+            .outcomes
+            .iter()
+            .filter_map(|o| match o {
+                RowOutcome::Blocked { reason, .. } => Some(reason),
+                RowOutcome::Included { .. } => None,
+            })
+            .collect();
+        assert_eq!(
+            reasons,
+            [
+                &BlockReason::PathNotAllowed("build.rs".into()),
+                &BlockReason::PathNotAllowed("vendor/x/src/lib.rs".into()),
+                &BlockReason::PathNotAllowed(String::new()),
+            ]
+        );
+        let est = crate::kat_pending_estimator::estimate_pending(
+            &rows,
+            &gate,
+            SpanOrigin::OwnRepo,
+            &crate::kat_pending_estimator::SyncWatermark::default(),
+        );
+        assert_eq!((est.pending_unsynced, est.blocked), (1, 3));
+    }
+
+    /// The unknown path only fails closed against a path-RESTRICTING policy:
+    /// with `allow_paths` empty the policy names no source globs, so a
+    /// legacy row passes exactly as before the field existed.
+    #[test]
+    fn unknown_src_path_passes_when_allow_paths_is_empty() {
+        let gate = RedactionGate::from_policy(allow_policy());
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer())
+            .build_at(&[row_at("needless_return", "fn d() { return 4; }", "")], 1);
+        assert_eq!((p.rows_included, p.rows_blocked), (1, 0));
     }
 
     #[test]

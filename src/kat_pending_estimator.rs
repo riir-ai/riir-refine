@@ -462,6 +462,7 @@ mod tests {
             component: None,
             journey_runs: 0,
             journey_taint_sum: 0,
+            src_path: "src/lib.rs".into(),
         }
     }
 

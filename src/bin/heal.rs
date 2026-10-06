@@ -3508,6 +3508,10 @@ fn migrate_envelope_once(store: &riir_refine::traj_store::TrajStore) {
             component: t.component,
             journey_runs: 0,
             journey_taint_sum: 0,
+            // riir-dapps Issue 119 T2: the envelope never recorded a source
+            // file — unknown path, which the sync gate fails closed on
+            // until a later heal run re-records the row with its file.
+            src_path: String::new(),
         };
         if store.import_row(&row).is_ok() {
             imported += 1;
@@ -3571,11 +3575,14 @@ impl ReopenTrigger067 {
 /// Record one verdict event into the durable store (best-effort — a store
 /// failure warns once per event, never fails the heal). `component` is the
 /// Issue 047 decision-time failure attribution (`None` on successes and
-/// unattributed events).
+/// unattributed events). `src_path` is the edited file, repo-relative
+/// ([`TrajStore::src_path_of`](riir_refine::traj_store::TrajStore::src_path_of))
+/// — the row's sync-policy `allow_paths` input (riir-dapps Issue 119 T2).
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
-#[allow(clippy::too_many_arguments)] // the existing record shape + the one attribution param
+#[allow(clippy::too_many_arguments)] // the existing record shape + attribution + source
 fn record_traj(
     store: &Option<riir_refine::traj_store::TrajStore>,
+    src_path: &str,
     rule_id: &str,
     restore: &str,
     replacement: &str,
@@ -3585,7 +3592,7 @@ fn record_traj(
     component: Option<riir_refine::component::ComponentClass>,
 ) {
     if let Some(store) = store {
-        if let Err(e) = store.record_classified(
+        if let Err(e) = store.sourced(src_path).record_classified(
             rule_id,
             restore,
             replacement,
@@ -3606,6 +3613,7 @@ fn record_traj(
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
 fn record_traj_fail(
     store: &Option<riir_refine::traj_store::TrajStore>,
+    src_path: &str,
     rule_id: &str,
     restore: &str,
     replacement: &str,
@@ -3616,6 +3624,7 @@ fn record_traj_fail(
     ));
     record_traj(
         store,
+        src_path,
         rule_id,
         restore,
         replacement,
@@ -9522,7 +9531,11 @@ fn main() {
                     let taint = journey.tainted().then_some(journey.taint_composite_256());
                     for a in &report.applied {
                         reopen067.note(store, &traj_key(&a.code, &a.strategy_id));
-                        if let Err(e) = store.record(
+                        // riir-dapps Issue 119 T2: the row carries its file
+                        // (repo-relative) — the sync gate's allow_paths input.
+                        let src_path = store.src_path_of(&a.file);
+                        let sourced = store.sourced(&src_path);
+                        if let Err(e) = sourced.record(
                             &traj_key(&a.code, &a.strategy_id),
                             &a.shape,
                             &a.fix,
@@ -9532,7 +9545,7 @@ fn main() {
                         ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
-                        if let Err(e) = store.record_journey(
+                        if let Err(e) = sourced.record_journey(
                             &traj_key(&a.code, &a.strategy_id),
                             &a.shape,
                             &a.fix,
@@ -9555,7 +9568,8 @@ fn main() {
                                     },
                                 ),
                             );
-                        if let Err(e) = store.record_classified(
+                        let src_path = store.src_path_of(&r.file);
+                        if let Err(e) = store.sourced(&src_path).record_classified(
                             &traj_key(&r.code, &r.strategy_id),
                             &r.shape,
                             &r.fix,
@@ -11064,10 +11078,14 @@ fn main() {
                 }
                 #[cfg(feature = "latent_retrieval")]
                 if let Some(store) = &traj_store {
+                    // riir-dapps Issue 119 T2: every edit here is a snippet
+                    // of `file` — its repo-relative path rides the row.
+                    let src_path = store.src_path_of(file);
+                    let sourced = store.sourced(&src_path);
                     for (rule, _, replacement, restore, _) in &all_edits {
                         reopen067.note(store, rule);
                         if let Err(e) =
-                            store.record_applied(rule, restore, replacement, &heal_run_id)
+                            sourced.record_applied(rule, restore, replacement, &heal_run_id)
                         {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
@@ -11118,10 +11136,14 @@ fn main() {
                 }
                 #[cfg(feature = "latent_retrieval")]
                 if let Some(store) = &traj_store {
+                    // riir-dapps Issue 119 T2: every edit here is a snippet
+                    // of `file` — its repo-relative path rides the row.
+                    let src_path = store.src_path_of(file);
+                    let sourced = store.sourced(&src_path);
                     for (rule, _, replacement, restore, _) in &all_edits {
                         reopen067.note(store, rule);
                         if let Err(e) =
-                            store.record_applied(rule, restore, replacement, &heal_run_id)
+                            sourced.record_applied(rule, restore, replacement, &heal_run_id)
                         {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
@@ -11595,6 +11617,14 @@ fn main() {
         // Post-verify review: report what SURVIVED (the fix review for
         // reverted edits would be misleading).
         for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
+            // riir-dapps Issue 119 T2: every verdict below is a snippet of
+            // THIS file — its repo-relative path rides the row (the sync
+            // gate's allow_paths input).
+            #[cfg(feature = "latent_retrieval")]
+            let src_path = traj_store
+                .as_ref()
+                .map(|s| s.src_path_of(&b.path))
+                .unwrap_or_default();
             if *whole {
                 println!("fix {} — REVERTED (whole file):", b.path.display());
                 for e in &b.edits {
@@ -11617,6 +11647,7 @@ fn main() {
                     #[cfg(feature = "latent_retrieval")]
                     record_traj_fail(
                         &traj_store,
+                        &src_path,
                         &e.rule_id,
                         &e.restore,
                         &e.replacement,
@@ -11672,6 +11703,7 @@ fn main() {
                 #[cfg(feature = "latent_retrieval")]
                 record_traj(
                     &traj_store,
+                    &src_path,
                     &e.rule_id,
                     &e.restore,
                     &e.replacement,
@@ -11697,6 +11729,7 @@ fn main() {
                 #[cfg(feature = "latent_retrieval")]
                 record_traj_fail(
                     &traj_store,
+                    &src_path,
                     &e.rule_id,
                     &e.restore,
                     &e.replacement,

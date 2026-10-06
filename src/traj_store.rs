@@ -140,6 +140,21 @@ pub struct TrajRowDoc {
     /// rows (serde default keeps old rows decoding as unattributed).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub component: Option<crate::component::ComponentClass>,
+    /// riir-dapps Issue 119 T2: the repo-relative path (forward slashes) of
+    /// the file the CURRENT `shape`/`fix` snippet came from — refreshed by
+    /// every SOURCED write ([`TrajStore::sourced`]); unsourced writes leave
+    /// it as it was. `""` = unknown (rows written before the field existed
+    /// decode with the serde default, and so do rows whose writer had no
+    /// file — the envelope migration, the drain's re-records of a row that
+    /// never had one).
+    ///
+    /// LOCAL-ONLY: it is the input the sync gate checks against the policy's
+    /// `allow_paths` (an empty path FAILS CLOSED whenever `allow_paths` is
+    /// non-empty — [`crate::kat_sync_payload`]'s `gate_row`), and it is
+    /// never a payload field: the wire row stays path-free (the `--mine`
+    /// promise — "never a file path").
+    #[serde(default)]
+    pub src_path: String,
 }
 
 /// The ELO base rating (unrated) — re-exported from the math module
@@ -481,6 +496,150 @@ fn ensure_key_seed(heal_dir: &Path) -> std::io::Result<String> {
     Ok(seed)
 }
 
+/// Overwrite the row's source path when the write is SOURCED (riir-dapps
+/// Issue 119 T2); an unsourced write (`None`) keeps whatever path the row
+/// already carries.
+fn stamp_src(row: &mut TrajRowDoc, src: Option<&str>) {
+    if let Some(p) = src {
+        p.clone_into(&mut row.src_path);
+    }
+}
+
+/// `file` relative to `root`, forward slashes — both sides resolved to
+/// absolute + canonical form first (a relative `file` resolves against the
+/// cwd; a file that no longer exists resolves through its canonical parent,
+/// so a deleted file still normalizes). `""` when `file` is not under
+/// `root`.
+#[must_use]
+pub fn repo_relative_path(root: &Path, file: &Path) -> String {
+    fn resolve(p: &Path) -> Option<PathBuf> {
+        let abs = if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            std::env::current_dir().ok()?.join(p)
+        };
+        if let Ok(c) = abs.canonicalize() {
+            return Some(c);
+        }
+        let parent = abs.parent().and_then(|d| d.canonicalize().ok());
+        Some(match (parent, abs.file_name()) {
+            (Some(d), Some(name)) => d.join(name),
+            _ => abs,
+        })
+    }
+    let (Some(root), Some(file)) = (resolve(root), resolve(file)) else {
+        return String::new();
+    };
+    let Ok(rel) = file.strip_prefix(&root) else {
+        return String::new();
+    };
+    let parts: Vec<String> = rel
+        .components()
+        .map(|c| match c {
+            std::path::Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect::<Option<_>>()
+        .unwrap_or_default();
+    parts.join("/")
+}
+
+/// A [`TrajStore`] write view bound to one snippet source file
+/// ([`TrajStore::sourced`], riir-dapps Issue 119 T2). Same methods + call
+/// shapes as the store's own `record*`; each also refreshes the row's
+/// [`TrajRowDoc::src_path`].
+#[derive(Clone, Copy)]
+pub struct SourcedTraj<'a> {
+    store: &'a TrajStore,
+    src_path: &'a str,
+}
+
+impl SourcedTraj<'_> {
+    /// [`TrajStore::record`], sourced.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn record(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        success: bool,
+        verified: bool,
+        run_id: &str,
+    ) -> Result<(), String> {
+        self.record_classified(lint_key, shape, fix, success, verified, run_id, None)
+    }
+
+    /// [`TrajStore::record_classified`], sourced.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    #[allow(clippy::too_many_arguments)] // mirrors TrajStore::record_classified
+    pub fn record_classified(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        success: bool,
+        verified: bool,
+        run_id: &str,
+        component: Option<crate::component::ComponentClass>,
+    ) -> Result<(), String> {
+        self.store.record_classified_src(
+            lint_key,
+            shape,
+            fix,
+            success,
+            verified,
+            run_id,
+            component,
+            Some(self.src_path),
+        )
+    }
+
+    /// [`TrajStore::record_journey`], sourced.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn record_journey(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        run_id: &str,
+        taint_composite_256: Option<u32>,
+    ) -> Result<(), String> {
+        self.store.record_journey_src(
+            lint_key,
+            shape,
+            fix,
+            run_id,
+            taint_composite_256,
+            Some(self.src_path),
+        )
+    }
+
+    /// [`TrajStore::record_applied`], sourced.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn record_applied(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        run_id: &str,
+    ) -> Result<(), String> {
+        self.store
+            .record_applied_src(lint_key, shape, fix, run_id, Some(self.src_path))
+    }
+}
+
 impl TrajStore {
     /// Open (or create) the store under `<root>/.refine/trajectories.kv` and
     /// rebuild the BM25 axis from the rows.
@@ -572,11 +731,32 @@ impl TrajStore {
         run_id: &str,
         component: Option<crate::component::ComponentClass>,
     ) -> Result<(), String> {
+        self.record_classified_src(
+            lint_key, shape, fix, success, verified, run_id, component, None,
+        )
+    }
+
+    /// The one verdict-write body behind [`record_classified`](Self::record_classified)
+    /// and [`SourcedTraj::record_classified`]: `src = Some(path)` refreshes
+    /// the row's [`TrajRowDoc::src_path`]; `None` leaves it untouched.
+    #[allow(clippy::too_many_arguments)] // record_classified's shape + the source path
+    fn record_classified_src(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        success: bool,
+        verified: bool,
+        run_id: &str,
+        component: Option<crate::component::ComponentClass>,
+        src: Option<&str>,
+    ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
         // The text halves update with the latest sighting (the shape key
         // is stable, the fix may have been refined).
         row.fix = fix.to_string();
+        stamp_src(&mut row, src);
         row.last_run_id = run_id.to_string();
         row.last_seen_at = now_unix_secs();
         if let Some(class) = component {
@@ -636,8 +816,23 @@ impl TrajStore {
         run_id: &str,
         taint_composite_256: Option<u32>,
     ) -> Result<(), String> {
+        self.record_journey_src(lint_key, shape, fix, run_id, taint_composite_256, None)
+    }
+
+    /// The journey-write body (see [`record_journey`](Self::record_journey));
+    /// `src` as in [`record_classified_src`](Self::record_classified_src).
+    fn record_journey_src(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        run_id: &str,
+        taint_composite_256: Option<u32>,
+        src: Option<&str>,
+    ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
+        stamp_src(&mut row, src);
         row.journey_runs = row.journey_runs.saturating_add(1);
         if let Some(c) = taint_composite_256 {
             row.journey_taint_sum = row.journey_taint_sum.saturating_add(c);
@@ -663,12 +858,58 @@ impl TrajStore {
         fix: &str,
         run_id: &str,
     ) -> Result<(), String> {
+        self.record_applied_src(lint_key, shape, fix, run_id, None)
+    }
+
+    /// The apply-write body (see [`record_applied`](Self::record_applied));
+    /// `src` as in [`record_classified_src`](Self::record_classified_src).
+    fn record_applied_src(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        run_id: &str,
+        src: Option<&str>,
+    ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
         row.fix = fix.to_string();
+        stamp_src(&mut row, src);
         row.last_run_id = run_id.to_string();
         row.last_seen_at = now_unix_secs();
         self.put_row(&key, &row)
+    }
+
+    /// riir-dapps Issue 119 T2: a write view that stamps every row it
+    /// touches with `src_path` — the repo-relative path of the file the
+    /// snippet came from (normalize with [`src_path_of`](Self::src_path_of)).
+    /// The production heal write sites go through this; the plain `record*`
+    /// methods stay for callers with no file (tests, the drain's re-records,
+    /// proof-of-concept examples) and leave a row's path as it was.
+    #[must_use]
+    pub fn sourced<'a>(&'a self, src_path: &'a str) -> SourcedTraj<'a> {
+        SourcedTraj {
+            store: self,
+            src_path,
+        }
+    }
+
+    /// The repo root this store belongs to (`<root>` of
+    /// `<root>/.refine/trajectories.kv`).
+    #[must_use]
+    pub fn repo_root(&self) -> Option<&Path> {
+        self.root.parent()?.parent()
+    }
+
+    /// `file` as a repo-relative, forward-slash path under
+    /// [`repo_root`](Self::repo_root) — the [`TrajRowDoc::src_path`] form
+    /// the sync policy's `allow_paths` globs are written against. `""` when
+    /// the file is not under the repo root (or either side cannot be
+    /// resolved): the unknown path, which the sync gate fails closed on.
+    #[must_use]
+    pub fn src_path_of(&self, file: &Path) -> String {
+        self.repo_root()
+            .map_or_else(String::new, |root| repo_relative_path(root, file))
     }
 
     /// The stored consecutive-fail streak for the exact (`lint_key`, `shape`,
@@ -733,6 +974,7 @@ impl TrajStore {
                     component: None,
                     journey_runs: 0,
                     journey_taint_sum: 0,
+                    src_path: String::new(),
                 }
             })
     }
@@ -2049,6 +2291,97 @@ mod tests {
         assert_eq!(row.component, None, "pre-047 row must decode unattributed");
     }
 
+    /// riir-dapps Issue 119 T2 — (d) a row written before `src_path`
+    /// existed decodes with the unknown path `""` (which the sync gate then
+    /// fails closed on under a path-restricting policy).
+    #[test]
+    fn pre_119_row_json_decodes_with_empty_src_path() {
+        let old = r#"{"lint_key":"needless_return","shape":"return 1;","fix":"1",
+            "direction":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"success_count":1,
+            "fail_count":0,"consecutive_fails":0,"tier":0,"last_run_id":"r",
+            "last_seen_at":5,"elo":1200.0,"span_elo":1200.0}"#;
+        let row: TrajRowDoc = serde_json::from_str(old).expect("pre-119 row decodes");
+        assert_eq!(row.src_path, "");
+        assert_eq!(row.lint_key, "needless_return");
+    }
+
+    /// riir-dapps Issue 119 T2: a SOURCED write stamps the row's file (and a
+    /// later sourced write from another file overwrites it — the path tracks
+    /// the CURRENT snippet); an UNSOURCED write leaves the path as it was.
+    /// The path survives the reopen (it is a durable row field).
+    #[test]
+    fn sourced_writes_stamp_src_path_and_unsourced_keep_it() {
+        let root = tmp_root("src-path");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store
+                .record("unsourced_only", "s0", "f0", true, true, "r")
+                .unwrap();
+            store
+                .sourced("src/a.rs")
+                .record_applied("rule", "shape", "fix", "r1")
+                .unwrap();
+            store
+                .record("rule", "shape", "fix2", false, false, "r2")
+                .unwrap();
+            let src = |k: &str| {
+                store
+                    .dump()
+                    .into_iter()
+                    .find(|r| r.lint_key == k)
+                    .map(|r| r.src_path)
+                    .unwrap()
+            };
+            assert_eq!(src("unsourced_only"), "");
+            assert_eq!(src("rule"), "src/a.rs", "unsourced write kept the path");
+            store
+                .sourced("build.rs")
+                .record_journey("rule", "shape", "fix2", "r3", None)
+                .unwrap();
+            assert_eq!(src("rule"), "build.rs");
+            store
+                .sourced("tests/t.rs")
+                .record_classified("rule", "shape", "fix3", true, true, "r4", None)
+                .unwrap();
+            assert_eq!(src("rule"), "tests/t.rs");
+        }
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let row = store
+            .dump()
+            .into_iter()
+            .find(|r| r.lint_key == "rule")
+            .unwrap();
+        assert_eq!(row.src_path, "tests/t.rs");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// riir-dapps Issue 119 T2: `src_path_of` yields the repo-relative,
+    /// forward-slash form the policy globs are written against — through
+    /// symlinked temp dirs (canonicalized), for a deleted file (via its
+    /// parent), and `""` for a file outside the repo root.
+    #[test]
+    fn src_path_of_is_repo_relative_and_empty_outside_the_root() {
+        let root = tmp_root("src-path-of");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        std::fs::create_dir_all(root.join("src/deep")).unwrap();
+        std::fs::write(root.join("src/deep/x.rs"), "fn x() {}").unwrap();
+        assert_eq!(
+            store.src_path_of(&root.join("src/deep/x.rs")),
+            "src/deep/x.rs"
+        );
+        assert_eq!(
+            store.src_path_of(&root.join("src/deep/gone.rs")),
+            "src/deep/gone.rs"
+        );
+        assert_eq!(store.src_path_of(&root.join("src/../build.rs")), "build.rs");
+        let outside = tmp_root("src-path-of-outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("y.rs"), "").unwrap();
+        assert_eq!(store.src_path_of(&outside.join("y.rs")), "");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
     #[test]
     fn record_stamps_run_id_and_seen_at() {
         let root = tmp_root("runid");
@@ -2273,6 +2606,7 @@ mod tests {
                 component: None,
                 journey_runs: 0,
                 journey_taint_sum: 0,
+                src_path: String::new(),
             })
             .unwrap();
         let report = store.stats_report(0);
