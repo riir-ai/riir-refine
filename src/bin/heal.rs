@@ -86,6 +86,11 @@ enum KatCommand {
     /// Proposal 011 T1.3 (Plan 062): `pay --request [--amount N]` — the
     /// pay-request surface (signed create + link-first + poll-on-credit).
     Pay,
+    /// riir-dapps Plan 045 B7: `topup [--pack N]` — the USDC→KAT
+    /// checkout (signed intent + the `solana:` URL). A different lane
+    /// from `pay` (which ASKS a payer for KAT); this BUYS KAT with USDC.
+    /// Needs `kat_transport` (the catalog read + the signed POST).
+    Topup,
     /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
     /// preset. A separate command rather than a `pay` mode because it is a
     /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
@@ -412,6 +417,7 @@ fn enforce_kat_soft_gate(args: &Args) {
     eprintln!("Refuel with exactly one of:");
     eprintln!("  * contribute:  cargo refine --mine   (what mining is)  →  cargo refine sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
     eprintln!("  * top up:      {top_up}");
+    eprintln!("      (or open the checkout right here: cargo refine topup --pack 1)");
     // The owner's 2026-09-18 amendment: the refusal also SHOWS what the
     // run would have done — count-only. Still no meter, no charge ledger,
     // no fix content (the count is the advertisement; the fixes stay paid).
@@ -2536,6 +2542,154 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     }
 }
 
+/// riir-dapps Plan 045 B7: `topup [--pack N]` — the USDC→KAT checkout
+/// (the 075 gate's "top up" path, rendered actionable): the machine
+/// catalog read, the pack pick, the signed `POST /pay/intent`, and the
+/// `solana:` URL. Refuses honestly when the lane is not armed on the
+/// configured environment (the `503 unconfigured` code — the money-route
+/// convention, not a retryable outage). Agents/CI pass `--pack N`;
+/// an interactive TTY picks from the catalog; anything else refuses
+/// loud (nobody guesses a price).
+#[cfg(feature = "kat_service")]
+fn run_kat_topup(pack: Option<u8>) {
+    use riir_refine::kat_pay_client as topup;
+
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("topup: no account ({e}) — run `cargo refine login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("topup: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let host_label = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_string();
+
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, pack, host_label);
+        riir_refine::build_stamp::refuse("topup", &["kat_transport"]);
+    }
+
+    #[cfg(feature = "kat_transport")]
+    {
+        let transport = topup::HttpTopupTransport::new(&url, 10);
+        let catalog = match topup::catalog(&transport) {
+            topup::TopupOutcome::Ok(c) => c,
+            topup::TopupOutcome::Refused { status, code, detail } => {
+                if code.as_deref() == Some(riir_refine::kat_protocol_pay::CODE_UNCONFIGURED) {
+                    eprintln!(
+                        "topup: the pay lane is not armed on {host_label} ({status}) — the \
+                         posture and the catalog render at {url}/pay"
+                    );
+                } else {
+                    eprintln!(
+                        "topup: the catalog was refused ({status} {}{})",
+                        code.as_deref().unwrap_or("no code"),
+                        detail
+                    );
+                }
+                std::process::exit(1);
+            }
+            topup::TopupOutcome::Unexpected(e) => {
+                eprintln!("topup: catalog fetch failed: {e}");
+                std::process::exit(1);
+            }
+        };
+        for l in topup::catalog_lines(&catalog, &host_label) {
+            println!("{l}");
+        }
+
+        // The pack pick: explicit flag > TTY prompt > loud refusal.
+        let pack_id = match pack {
+            Some(p) => p,
+            None => {
+                if args_tty_stdin() {
+                    print!("pack to buy (id): ");
+                    use std::io::Write as _;
+                    std::io::stdout().flush().ok();
+                    let mut line = String::new();
+                    match std::io::stdin().read_line(&mut line) {
+                        Ok(0) | Err(_) => None,
+                        Ok(_) => line.trim().parse::<u8>().ok(),
+                    }
+                    .unwrap_or_else(|| {
+                        eprintln!("topup: no pack chosen — pass --pack N");
+                        std::process::exit(2);
+                    })
+                } else {
+                    eprintln!("topup: choose a pack — pass --pack N (agents/CI never guess a price)");
+                    std::process::exit(2);
+                }
+            }
+        };
+        let Some(chosen) = catalog.packs.iter().find(|p| p.id == pack_id) else {
+            eprintln!(
+                "topup: pack {pack_id} is not in the catalog ({})",
+                catalog
+                    .packs
+                    .iter()
+                    .map(|p| p.id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            std::process::exit(2);
+        };
+        println!(
+            "buying pack {pack_id}: {}",
+            topup::pack_line(chosen).trim_start()
+        );
+
+        match topup::create_intent(&transport, &signing_key, pack_id) {
+            topup::TopupOutcome::Ok(intent) => {
+                for l in topup::intent_lines(&intent) {
+                    println!("{l}");
+                }
+            }
+            topup::TopupOutcome::Refused { status, code, detail } => {
+                match code.as_deref() {
+                    Some(riir_refine::kat_protocol_pay::CODE_RATE_LIMITED) => {
+                        eprintln!("topup: a cap is full ({status}) — {detail}");
+                    }
+                    Some(riir_refine::kat_protocol_pay::CODE_TERMINAL_STATE) => {
+                        eprintln!("topup: this account cannot buy ({status}) — {detail}");
+                    }
+                    _ => {
+                        eprintln!(
+                            "topup: the intent was refused ({status} {}{})",
+                            code.as_deref().unwrap_or("no code"),
+                            detail
+                        );
+                    }
+                }
+                std::process::exit(1);
+            }
+            topup::TopupOutcome::Unexpected(e) => {
+                eprintln!("topup: intent failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+/// Whether stdin is a TTY (the interactive-pick gate). A non-TTY always
+/// answers false — the refusal path, never a hang (piped/agent runs).
+fn args_tty_stdin() -> bool {
+    use std::io::IsTerminal as _;
+    std::io::stdin().is_terminal()
+}
+
 /// Proposal 011 T1.3 (Plan 062): `pay --request [--amount N] [--label L]
 /// [--qr] [--wait SECS]` — the payee half of the §1 loop. Signs a create
 /// with the account key, prints the shareable LINK first (the QR is the
@@ -3761,6 +3915,7 @@ USAGE:
     cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
     cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
+    cargo refine topup [--pack N]                       (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL, kat_transport)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
@@ -4472,6 +4627,10 @@ struct Args {
     /// Proposal 011 T1.3: `--wait <secs>` — the poll-on-credit budget
     /// (default 600; `0` = don't poll — the credit surfaces via `account`).
     pay_wait: u64,
+    /// riir-dapps Plan 045 B7: `--pack <N>` — with `topup` ONLY: the
+    /// catalog pack to buy. Absent + a TTY = an interactive pick;
+    /// absent + non-TTY = a loud refusal (agents/CI never guess a price).
+    topup_pack: Option<u8>,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
@@ -4670,6 +4829,7 @@ fn parse_args() -> Args {
         pay_qr: false,
         pay_label: None,
         pay_wait: 600,
+        topup_pack: None,
         wetrun_dry_run: false,
         update_timeout: 4,
         no_update: false,
@@ -5057,6 +5217,16 @@ fn parse_args() -> Args {
                 args.pay_amount = Some(value);
             }
             "--request" => args.pay_request = true,
+            "--pack" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--pack requires a value (the catalog pack id, e.g. 1)");
+                    usage();
+                };
+                args.topup_pack = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--pack expects a number, got {value:?}");
+                    usage();
+                }));
+            }
             // `--dry-run` belongs to `wetrun` only (Proposal 011 T4.2) — the
             // heal modes' dry run is the bare no-mode default, not a flag.
             "--dry-run" if matches!(args.command, Some(KatCommand::Wetrun)) => {
@@ -5131,7 +5301,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
-            | "pay" | "faucet" | "wetrun" | "config" | "replay"
+            | "pay" | "topup" | "faucet" | "wetrun" | "config" | "replay"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -5143,6 +5313,7 @@ fn parse_args() -> Args {
                     "unstake" => KatCommand::Unstake,
                     "vote" => KatCommand::Vote,
                     "pay" => KatCommand::Pay,
+                    "topup" => KatCommand::Topup,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
@@ -5160,6 +5331,10 @@ fn parse_args() -> Args {
     }
     if args.account_history && !matches!(args.command, Some(KatCommand::Account)) {
         eprintln!("--history requires the `account` command");
+        usage();
+    }
+    if args.topup_pack.is_some() && !matches!(args.command, Some(KatCommand::Topup)) {
+        eprintln!("--pack requires the `topup` command");
         usage();
     }
     if args.info {
@@ -8075,6 +8250,7 @@ fn main() {
                 args.pay_qr,
                 args.pay_wait,
             ),
+            KatCommand::Topup => run_kat_topup(args.topup_pack),
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
             KatCommand::Wetrun => run_kat_wetrun(args.wetrun_dry_run),
             // P015 Phase 2 (Plan 127): the replay lane needs the oracle

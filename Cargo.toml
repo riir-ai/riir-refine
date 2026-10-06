@@ -1226,6 +1226,12 @@ required-features = ["kat_service", "latent_retrieval", "rust_perf", "clippy_lin
 name = "kat_refill_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
+# riir-dapps Plan 045 B7: `topup` (the USDC→KAT checkout) + the history
+# purchases render, through the REAL bin against the std-TCP mock.
+[[test]]
+name = "topup_cli"
+required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
+
 # Issue 117 T3: the compiled-feature stamp + the staleness refusal through
 # the REAL binary. The bin's own required-features ONLY — deliberately NOT
 # `kat_transport`, because the refusal arm is what a build LACKING the

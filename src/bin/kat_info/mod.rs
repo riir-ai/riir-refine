@@ -402,6 +402,9 @@ mod tests {
             events_truncated: false,
             tuna_balance_micro: tuna.0,
             tuna_expires_unix: tuna.1,
+            purchases: Vec::new(),
+            purchases_total: 0,
+            purchases_truncated: false,
         };
 
         // Post-TUNA server: the line names the balance, the expiry, and
