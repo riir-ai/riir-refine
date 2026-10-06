@@ -515,34 +515,33 @@ id = "run"; n = "1"; lane = "me"; col = 0
 title = "Your fix run"; body = "compile-gated, local; records each fix"
 status = "live"
 [[step]]
-id = "rows"; n = "2"; lane = "me"; col = 1
+id = "rows"; n = "2"; lane = "me"; col = 0
 title = "One row per fix"; body = "the span it replaced + the fix; no paths"
 status = "live"
-tag = { text = "never whole files", color = "refine" }
 [[step]]
-id = "scan"; n = "3"; lane = "me"; col = 2
+id = "scan"; n = "3"; lane = "me"; col = 0
 title = "Secret scan + sign"; body = "a finding drops the row; Ed25519 signed"
 status = "live"
 [[step]]
-id = "export"; n = "4a"; lane = "me"; col = 3
+id = "export"; n = "4a"; lane = "me"; col = 1
 title = "Export only"; body = "sync --export writes a file, sends nothing"
 status = "live"
 [[step]]
-id = "post"; n = "4b"; lane = "net"; col = 3
+id = "post"; n = "4b"; lane = "net"; col = 1
 title = "Sent over HTTPS"; body = "the signed batch; the server checks the key"
 status = "test network"
 tag = { text = "signed, not encrypted", color = "ai" }
 [[step]]
-id = "proof"; n = "5"; lane = "net"; col = 4
+id = "proof"; n = "5"; lane = "net"; col = 2
 title = "Proof queue"; body = "a real clippy re-run confirms the fix"
 status = "test network"
 [[step]]
-id = "pub"; n = "6"; lane = "pub"; col = 5
+id = "pub"; n = "6"; lane = "pub"; col = 2
 title = "Public corpus"; body = "proven before/after pairs, downloadable"
 status = "test network"
 [[step]]
-id = "lease"; n = "7"; lane = "me"; col = 6
-title = "Lease back"; body = "every machine downloads the corpus"
+id = "lease"; n = "7"; lane = "me"; col = 2
+title = "Lease back"; body = "downloads the corpus for your next run"
 status = "test network"
 
 [[edge]]
@@ -550,17 +549,17 @@ from = "run"; to = "rows"
 [[edge]]
 from = "rows"; to = "scan"
 [[edge]]
-from = "scan"; to = "export"; label = "export"
+from = "scan"; to = "export"; label = "export"; exit = "e"; enter = "s"
 [[edge]]
-from = "scan"; to = "post"; label = "send"
+from = "scan"; to = "post"; label = "send"; exit = "e"; enter = "n"
 [[edge]]
 from = "post"; to = "proof"; label = "queued"
 [[edge]]
 from = "proof"; to = "pub"; label = "proven"
 [[edge]]
-from = "pub"; to = "lease"; label = "pull"
+from = "pub"; to = "lease"; label = "pull"; via = "gutter"
 [[edge]]
-from = "lease"; to = "run"; back = true; label = "your next run retrieves more"
+from = "lease"; to = "run"; back = true
 
 [[walk]]
 title = "Your fix run"
