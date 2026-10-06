@@ -137,7 +137,12 @@ the file. Fixed: the predicate row, the post-parse `--blind requires
 process-boundary arm `blind_without_secret_scan_is_a_usage_error` —
 same commit, per this file's own T-law. The same red-window surfaced
 the v3 policy literals (`DEFAULT_SYNC_POLICY_JSON` + the tracked
-`.refine-sync-policy`) left behind by the v4/v5 REDACT_VERSION bumps —
+tracked `.refine-sync-policy`) left behind by the v4/v5 REDACT_VERSION bumps —
 both migrated to v5 + the const's ⛔ same-commit note; the G4 shipped-
 policy gate is green again (katgpt-rs's box-local policy file migrated
-in place, untracked there).
+in place, untracked there). The recorded all-features blocker itself —
+the riir-infer-gpu E0308 — was fixed the same day from the Mac it
+always broke on (riir-infer `d09d1ec`: the metal upload arm's `attn_wo`
+missed the `q4_refuse` wrapper, the one call site the landing box could
+not compile-verify); riir-refine Layer 5a's all-features arm is green
+again end to end.
