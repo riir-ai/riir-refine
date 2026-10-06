@@ -104,3 +104,21 @@ feature exists to avoid.
   (the surface; the sha sits in the git log beside this file — a record
   carrying its own hash would drift through every amend, the Instrument
   that re-types its own pin is a diary).
+
+## Verdict trail (closed AGREE, 2026-10-06)
+
+The scanner half (riir-kat Issue 002) went through four verdict rounds;
+the surface half rode R1's five items and the R2 fingerprint amendments.
+Final SHAs: riir-kat `eed88c6`/`e8ab39f`/`47057d3`/`4b4125a` (v4 + parity
+corrections + the twin-below-gitleaks-minimum guard, closed AGREE);
+riir-refine `56d73162` (the surface) · `675b2acf` (record) · `3d2c6208`
+(reef fixture at the parity floor + fingerprint asserts on --blind/warn);
+riir-dapps `79f3673` (the refine.gist.rs promise card, deploy owner-gated).
+
+Known follow-ups on record:
+- The `github_pat_` parity floor (82) is consumer-visible: reef's fixture
+  regenerates at the real length (this repo, `3d2c6208`).
+- facebook `app_id|secret` stays the scanner's one known gap (digits-
+  joined shape; a prefix scanner cannot express it — disclosed in the
+  parity table doc).
+- refine.gist.rs deploy rides the next manual wrangler push.
