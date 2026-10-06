@@ -873,6 +873,20 @@ fn run_mine_intro() {
     let policy_path = policy_root.join(".refine-sync-policy");
     if policy_path.exists() {
         println!("policy: using existing {}", policy_path.display());
+        // Issue 119 T9: a policy file written before the multi-crate
+        // default (riir-refine 3e8f87fb) allows only the ROOT's rows —
+        // every workspace `crates/*/` row is blocked by it, and the file
+        // is NEVER rewritten (the owner's edit is the only writer). One
+        // notice line, naming the glob; the blocked-count line on `sync`
+        // no longer blames the policy for these rows.
+        if let Ok(existing) = std::fs::read_to_string(&policy_path) {
+            if !existing.contains("crates/") {
+                println!(
+                    "policy: this file predates the multi-crate default — workspace crates are \
+                     blocked until it lists them, e.g. \"crates/*/{{src,tests,benches,examples}}/**/*.rs\""
+                );
+            }
+        }
     } else if policy_root.join(".git").exists() {
         match std::fs::write(&policy_path, DEFAULT_SYNC_POLICY_JSON) {
             Ok(()) => println!(
@@ -895,6 +909,17 @@ fn run_mine_intro() {
     {
         let base = riir_refine::kat_lease_client::service_url_for_command();
         let trimmed = base.trim_end_matches('/');
+        // Issue 119 T9: an override is INVISIBLE once set (the env outlives
+        // the shell that set it — a ~/.profile row, a direnv state) and
+        // every signed note lands wherever it points. Name it on first use.
+        if let Ok(url) = std::env::var(riir_refine::kat_service_config::SERVICE_URL_ENV_VAR) {
+            if !url.trim().is_empty() {
+                println!(
+                    "note: {} is set — this run talks to {trimmed} (unset it for the default service)",
+                    riir_refine::kat_service_config::SERVICE_URL_ENV_VAR
+                );
+            }
+        }
         match riir_refine::kat_consent_client::send_heartbeat(&base) {
             Ok("recorded") => println!("consent heartbeat: recorded (opted IN) at {trimmed}"),
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted IN)"),
@@ -948,7 +973,7 @@ fn run_mine_intro() {
 ///
 /// Standalone early-return mode (before `validate_mode_flags`), works in
 /// EVERY feature build, exits 0, and is idempotent.
-fn run_unmine() {
+fn run_unmine(purge_server: bool) {
     let dir = riir_refine::kat_mining_consent::default_dir();
     let (before, warning) = riir_refine::kat_mining_consent::read_with_warning(&dir);
     if let Some(w) = warning {
@@ -984,11 +1009,44 @@ fn run_unmine() {
     {
         let base = riir_refine::kat_lease_client::service_url_for_command();
         let trimmed = base.trim_end_matches('/');
+        // Issue 119 T9 — same override notice as --mine: an opted-OUT note
+        // must land where the machine is pointed, and the user must SEE
+        // where that is.
+        if let Ok(url) = std::env::var(riir_refine::kat_service_config::SERVICE_URL_ENV_VAR) {
+            if !url.trim().is_empty() {
+                println!(
+                    "note: {} is set — this run talks to {trimmed} (unset it for the default service)",
+                    riir_refine::kat_service_config::SERVICE_URL_ENV_VAR
+                );
+            }
+        }
         match riir_refine::kat_consent_client::send_heartbeat(&base) {
             Ok("recorded") => println!("consent heartbeat: recorded (opted OUT) at {trimmed}"),
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted OUT)"),
             Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
             Err(reason) => println!("consent heartbeat: skipped — {reason}"),
+        }
+        // riir-dapps Issue 119 T12: the self-serve server purge — signed
+        // like the heartbeat, so it MUST run while the key still exists
+        // (the `--purge` half below removes it). Best-effort by the same
+        // contract: a failure is one skipped line, never an exit code.
+        if purge_server {
+            match riir_refine::kat_consent_client::send_purge(&base) {
+                Ok(o) if o.deleted_unproven == 0 && o.quarantined_proven == 0 => {
+                    println!("server purge: nothing to purge at {trimmed}");
+                }
+                Ok(o) => println!(
+                    "server purge: {} unproven row(s) deleted, {} proven row(s) unpublished at {trimmed}",
+                    o.deleted_unproven,
+                    o.quarantined_proven,
+                ),
+                Err(reason) => println!(
+                    "server purge: skipped — {reason} (re-run `cargo refine --unmine --purge-server` while logged in)"
+                ),
+            }
+            println!(
+                "  unproven rows: deleted · proven rows: unpublished (audit + credit stay) · published pairs: unrecallable"
+            );
         }
     }
     println!();
@@ -1025,7 +1083,7 @@ fn run_unmine() {
         Err(e) => eprintln!("unmine: could not clear the watermark: {e}"),
     }
     println!(
-        "ACCOUNT: untouched — your key, balance and rewards stay exactly as they are.\n         This is fully reversible: `cargo refine --mine` re-enables contributing\n         with the SAME account. (To abandon the identity entirely — which\n         ORPHANS the server-side balance forever and starts fresh-grant\n         territory — use `cargo refine --unmine --purge`.)"
+        "ACCOUNT: untouched — your key, balance and rewards stay exactly as they are.\n         This is fully reversible: `cargo refine --mine` re-enables contributing\n         with the SAME account. To also take your rows back off the server,\n         re-run with --purge-server. (To abandon the identity entirely — which\n         ORPHANS the server-side balance forever and starts fresh-grant\n         territory — use `cargo refine --unmine --purge`.)"
     );
     println!();
 
@@ -4224,6 +4282,12 @@ USAGE:
                     rewards become permanently unclaimable (no recovery path),
                     and a purge + re-login cycle is the fresh-grant farm shape
                     (each new key gets a fresh once-per-key welcome grant).
+    --purge-server  With --unmine ONLY: also ask the SERVICE to purge this
+                    account's server-side mining rows — unproven rows are
+                    deleted, proven rows stop publishing in every future
+                    corpus (the audit record and earned credit stay; pairs
+                    already published cannot be recalled). Signed with your
+                    account key, so it runs BEFORE any --purge key removal.
     --refill        DEVNET-OPS ONLY (riir-dapps Issue 094 D4): credit a TEST
                     account on devnet — open a faucet request, force a crank
                     settle pass when RIIR_REFINE_KAT_CRANK_TOKEN is set, then
@@ -4397,6 +4461,11 @@ struct Args {
     /// shape, so it is never the default). Removes the local key + record
     /// + the outbox + the sync watermark.
     purge: bool,
+    /// `--purge-server` — with `--unmine` ONLY (riir-dapps Issue 119 T12):
+    /// ask the service to purge this account's server-side mining rows
+    /// (unproven deleted; proven unpublished). Signed, so it MUST run
+    /// before `--purge` removes the local key.
+    purge_server: bool,
     /// Plan 117 as amended by riir-dapps Issue 094 D4: `--refill` — the
     /// **devnet-ops** faucet credit. It is NO LONGER "the refuel path the
     /// 075 gate names": the daily faucet/drip user tier is retired, the
@@ -4819,6 +4888,7 @@ fn parse_args() -> Args {
         yes: false,
         unmine: false,
         purge: false,
+        purge_server: false,
         refill: false,
         refill_wait: 0,
         bare_default: false,
@@ -4974,6 +5044,7 @@ fn parse_args() -> Args {
                 args.vote_yes = true;
             }
             "--purge" => args.purge = true,
+            "--purge-server" => args.purge_server = true,
             "--refill" => args.refill = true,
             "--refill-wait" => {
                 let Some(value) = it.next() else {
@@ -5421,6 +5492,12 @@ fn parse_args() -> Args {
         );
         usage();
     }
+    if args.purge_server && !args.unmine {
+        eprintln!(
+            "--purge-server requires --unmine (it is the server-side half of opting out)"
+        );
+        usage();
+    }
     // Proposal 004 Half 1: `--stats` consent guards. (a) on/off are opposite
     // writes to one record — no defensible resolution, exit 2 (the
     // --mine/--unmine conflict code). (b) bare `--stats` followed by a path
@@ -5583,6 +5660,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.memory_stats
         || args.mine
         || args.unmine
+        || args.purge_server
         || args.stats_flag
         || args.version
         || args.misses
@@ -8524,7 +8602,7 @@ fn main() {
     // validate_mode_flags), works in EVERY build. Records consent = opted
     // out so `cargo refine sync` refuses its push half; deletes nothing.
     if args.unmine {
-        run_unmine();
+        run_unmine(args.purge_server);
         if args.purge {
             run_unmine_purge();
         }
@@ -13726,6 +13804,46 @@ mod mode_flag_tests {
             ..Args::default()
         };
         assert!(v(&ok).is_ok(), "--fix --repo-posture must validate");
+    }
+
+    /// riir-dapps Issue 119 T12: `--purge-server` is `--unmine`-scoped —
+    /// the server-side half of opting out (it signs with the account key,
+    /// which `--purge` is about to remove). The `requires --unmine` refusal
+    /// is a parse_args exit-2 guard (the `--purge` precedent — parse-level
+    /// guards exit before validate_mode_flags), so this pin covers what the
+    /// mode matrix owns: the standalone rows (never the bare default, and
+    /// through the paths guard) and the fact that the COMBINATION passes
+    /// the mode validator. The parse guard itself is the exact
+    /// `--purge`-shaped three-line block beside the flag's match arm.
+    #[test]
+    fn purge_server_requires_unmine() {
+        use super::is_bare_posture as bare;
+        use super::standalone_mode;
+        let m = Args {
+            purge_server: true,
+            ..Args::default()
+        };
+        assert!(!bare(&m), "--purge-server alone must not take the bare suggest default");
+        assert!(
+            standalone_mode(&m),
+            "--purge-server must pass the paths guard (no paths required)"
+        );
+        // `--unmine` NEVER reaches the mode validator (the standalone
+        // early-return in main precedes it) — so `--unmine` alone fails
+        // validate_mode_flags exactly like the combo would; the parse-level
+        // `requires --unmine` guard is the only validator this flag has,
+        // by the same construction as `--purge`.
+        let combo = Args {
+            purge_server: true,
+            unmine: true,
+            ..Args::default()
+        };
+        assert!(v(&combo).is_err(), "the combo exits at the --unmine early-return before validate_mode_flags");
+        let unmine_alone = Args {
+            unmine: true,
+            ..Args::default()
+        };
+        assert!(v(&unmine_alone).is_err(), "the --unmine early-return precedent");
     }
 
     /// Named-field construction keeps each matrix row self-describing —
