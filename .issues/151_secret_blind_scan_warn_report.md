@@ -122,3 +122,22 @@ Known follow-ups on record:
   joined shape; a prefix scanner cannot express it — disclosed in the
   parity table doc).
 - refine.gist.rs deploy rides the next manual wrangler push.
+
+## Follow-up fixed (2026-10-07): `--blind` standalone + the policy-version drift
+
+This issue's landing added the `("--blind", …)` row to
+`standalone_modes_are_never_bare` WITHOUT adding `args.blind` to
+`standalone_mode` and without the documented "usage error without
+`--secret-scan`" — the bin test sat red from landing until 2026-10-07
+(Layer 5b runs `--lib` only; Layer 5c all-features was blocked by the
+recorded riir-infer-gpu E0308, so no lane executed the bin tests). Bare
+`cargo refine --blind <file>` fell through to the suggest default over
+the file. Fixed: the predicate row, the post-parse `--blind requires
+--secret-scan` guard (order-independent, the `--purge` shape), and the
+process-boundary arm `blind_without_secret_scan_is_a_usage_error` —
+same commit, per this file's own T-law. The same red-window surfaced
+the v3 policy literals (`DEFAULT_SYNC_POLICY_JSON` + the tracked
+`.refine-sync-policy`) left behind by the v4/v5 REDACT_VERSION bumps —
+both migrated to v5 + the const's ⛔ same-commit note; the G4 shipped-
+policy gate is green again (katgpt-rs's box-local policy file migrated
+in place, untracked there).

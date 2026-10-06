@@ -704,8 +704,8 @@ fn kat_gate_disabled() -> bool {
 /// the policy warning, the web link, and the login → heal → sync →
 /// account loop. Feature halves (account status / outbox) appear only
 /// when their feature compiled in — the explainer itself never needs one.
-/// The default `.refine-sync-policy` `--mine` writes (version 3, the
-/// [`riir_refine::kat_redact`] schema): own-repo rows sync, the standard
+/// The default `.refine-sync-policy` `--mine` writes (version = the compiled
+/// [`riir_refine::kat_redact::REDACT_VERSION`], see the ⛔ note on the const): own-repo rows sync, the standard
 /// source globs (repo root + the `crates/*/` workspace layout — riir-dapps
 /// Issue 119: the gate binds rows by their recorded file since riir-refine
 /// `21f76593`, so a root-only glob set would block every workspace crate;
@@ -714,8 +714,18 @@ fn kat_gate_disabled() -> bool {
 /// gate itself. WITHOUT a policy the gate is deny-by-default and every sync
 /// prints `0 included, N blocked` — the friction this write removes. The
 /// user's existing policy is NEVER touched.
+///
+/// ⛔ The `version` literal must equal [`riir_refine::kat_redact::REDACT_VERSION`]
+/// at every build: the gate refuses a mismatched version deny-all, so a
+/// stale literal silently denies every row `--mine` opted in. It drifted 3
+/// behind the v4/v5 gate bumps (red 2026-09..10, caught by
+/// `default_sync_policy_parses_at_the_compiled_version`) — any
+/// REDACT_VERSION bump re-bumps this literal in the same commit. The JSON
+/// stays hand-typed ON PURPOSE: a struct-derived default would make that
+/// test a tautology (the restatement-theorem class — a check that cannot
+/// fail proves nothing).
 const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
-  "version": 3,
+  "version": 5,
   "sync_enabled": true,
   "allow_origins": ["own-repo"],
   "allow_paths": ["src/**/*.rs", "tests/**/*.rs", "benches/**/*.rs", "examples/**/*.rs",
@@ -5498,6 +5508,12 @@ fn parse_args() -> Args {
         );
         usage();
     }
+    if args.blind && !args.secret_scan {
+        eprintln!(
+            "--blind requires --secret-scan (it is the output transform of the secret-scan report)"
+        );
+        usage();
+    }
     // Proposal 004 Half 1: `--stats` consent guards. (a) on/off are opposite
     // writes to one record — no defensible resolution, exit 2 (the
     // --mine/--unmine conflict code). (b) bare `--stats` followed by a path
@@ -5674,6 +5690,15 @@ fn standalone_mode(args: &Args) -> bool {
         || args.fixseq_stats
         || args.config_audit
         || args.secret_scan
+        // Issue 151: `--blind` is the `--secret-scan` output transform and
+        // is handled inside the secret-scan early-return — but it must
+        // still break the bare posture AND pass the paths guard, or bare
+        // `cargo refine --blind <file>` would fire the suggest default over
+        // the file (the --misses trap class). Without `--secret-scan` it is
+        // a parse-level usage error (the --purge-shaped guard in
+        // parse_args), so the standalone half is about never falling
+        // through, never about running alone.
+        || args.blind
         || args.platform_audit
         || args.orphan_report
         || args.frame_time_report

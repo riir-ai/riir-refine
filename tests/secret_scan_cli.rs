@@ -7,7 +7,7 @@
 //! | the blind rule | the report NEVER contains the planted secret bytes NOR the unkeyed fingerprint (T2's shareable-output rule, at the process boundary) |
 //! | the blind transform | `--secret-scan --blind <file>` prints the whole text with `[REDACTED:<kind>]` placeholders, byte-exact outside findings, exit 0 |
 //! | the dir misuse | `--blind` on a DIRECTORY exits **2** (a file is the unit) |
-//! | the misuse | `--blind` without `--secret-scan`… is a free-standing flag — usage error not asserted here (the flag is accepted where harmless); the ONE-file arm is what matters |
+//! | the misuse | `--blind` without `--secret-scan` exits **2** (the parse-level `requires --secret-scan` guard — the flag is the transform OF the report, never free-standing; before the guard it silently fell through to the bare suggest default) |
 //! | the empty walk | `--secret-scan` over an empty dir exits **1** — a confident green zero is the failure mode (the frontier-report law) |
 //! | the in-run warn | `--suggest` over the fixture prints the `secrets: N finding(s)` summary + `[sec]` lines, quiet-by-default otherwise |
 //!
@@ -136,6 +136,21 @@ fn blind_on_a_directory_refuses() {
     let (code, out) = refine(&dir, &["--secret-scan", "--blind", "."]);
     assert_eq!(code, Some(2), "{out}");
     assert!(out.contains("needs a FILE"), "{out}");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn blind_without_secret_scan_is_a_usage_error() {
+    let dir = fixture_dir("blindalone");
+    // Order-independent: the guard is post-parse, so either spelling
+    // (and a scan path that would otherwise double as the bare-default
+    // target) must refuse.
+    let (code, out) = refine(&dir, &["--blind", "config.rs"]);
+    assert_eq!(code, Some(2), "{out}");
+    assert!(out.contains("--blind requires --secret-scan"), "{out}");
+    fs::write(dir.join("config.rs"), "let ok = \"hello world\";\n").expect("write");
+    let (code, out) = refine(&dir, &["--blind", "--secret-scan", "config.rs"]);
+    assert_eq!(code, Some(0), "{out}");
     fs::remove_dir_all(&dir).ok();
 }
 
