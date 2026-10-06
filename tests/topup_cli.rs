@@ -91,7 +91,7 @@ fn spawn_topup_mock(mode: &'static str) -> TopupMock {
                 ("ok", "/history") => (
                     200,
                     format!(
-                        r#"{{"account_id":"{}","balance_micro":8000000,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"purchases":[{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}},{{"seq":2,"pack_id":1,"status":"settled","usdc_base":1000000,"paid_base":1000000,"kat_micro":10000000,"created_unix":5,"settled_unix":9,"reference":"Old"}}],"purchases_total":2,"purchases_truncated":false}}"#,
+                        r#"{{"account_id":"{}","balance_micro":8000000,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"purchases":[{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}},{{"seq":2,"pack_id":1,"status":"settled","usdc_base":1000000,"paid_base":1000000,"kat_micro":10000000,"created_unix":5,"settled_unix":9,"reference":""}}],"purchases_total":2,"purchases_truncated":false}}"#,
                         "a".repeat(32)
                     ),
                 ),
