@@ -4,6 +4,39 @@ Resolved-issue records, landing narratives, batch narratives, and gate
 evidence. Removed issue files live here (git history carries the full
 text of every removed file).
 
+## 2026-10-06 — dapps plan 045 (issue 117): the refine-side lanes recorded (E1 sweep half) — A1/A2/A3, A8, the verdict follow-ups, B7
+
+The devnet-public-join plan ([riir-dapps Plan 045](../riir-dapps/.plans/045_devnet_public_join_v2_checklist.md)
+· [Proposal 008](../riir-dapps/.proposals/008_network_v2_devnet_public_join.md))
+landed its refine-side lanes in THIS repo across 2026-10-05/06; this entry
+is the E1 close-out sweep's refine half (the dapps-side entries live in
+riir-dapps HISTORY same date). Phase A and B are LIVE; the fixer gates
+(C1/C2/C5) and mainnet (Phase D) stay owner-gated.
+
+- **A1/A2/A3 — the first-join environment choice** (`8c4e67b0`, ships in
+  cargo-refine v0.2.1): recorded through the EXISTING config-set writer;
+  `DEFAULT_SERVICE_URL` untouched (the QR goldens stay green); the picker
+  offers EXACTLY devnet+mainnet (the `testnet` alias stays parseable,
+  pinned by test); the mainnet-joiner copy printed up front with zero
+  network calls — live-verified fail-closed in the A8 drill. En-route fix
+  moved `PROMPT_YES.store` to the top of `main`.
+- **A8 — the stranger drill** (`8b08ed43`): the replay_e2e-pattern drill
+  script, PASS live on devnet — a fresh stranger's first hour (join →
+  mine → sync) exercised against the deployed worker.
+- **The verdict follow-ups** (`e5a24918`): the join-visibility clause, the
+  EOF refusal honesty, the drill env sanitation (issue-117 verdict round
+  follow-through).
+- **B7 — `cargo refine topup [--pack N]`** (`c80a5794`): the USDC→KAT
+  checkout at the CLI — catalog-from-server (never a local price table),
+  pack pick (flag > TTY > loud refusal), signed `POST /pay/intent`, the
+  `solana:` URL, the honest 503 unarmed posture — plus the 075 soft-gate
+  inline hint and the `account --history` purchases render. The wire is
+  the Issue-082 one-definition law: the composer moved canonical to the
+  riir-kat leaf (`26ea7f4`), dapps re-exports, both contract suites pin
+  the same bytes. LIVE SMOKE PASS on devnet (dapps `.benchmarks/018` B7
+  addendum: catalog live, intent seq 3 opened for the fleet account, the
+  no-pack non-TTY refusal live); the global binary rebuilt v0.2.1.
+
 ## 2026-10-06 — Issue 149 RESOLVED: the v0.2.1 capture QA findings — pre-scan disclosure, cross-pass resplice dedup, and the measured 0.1.98 firing-surface correction
 
 The three P2 findings from the refine.gist.rs capture generator's
