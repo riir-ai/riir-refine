@@ -498,7 +498,7 @@ fn paint_dim(s: &str, color: bool) -> String {
 mod tests {
     use super::*;
 
-    const BOARD: &str = "https://devnet.ai.gist.rs/leaderboard";
+    const BOARD: &str = "https://devnet.gist.rs/leaderboard";
     const ACCT: &str = "c79c93b8615af9cc25968be2d0595345d1f03790910a2605d853f93af6192fd6";
 
     /// The no-truth fixture: no ack (never synced / pre-TUNA) — meter +

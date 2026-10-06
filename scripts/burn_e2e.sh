@@ -32,7 +32,7 @@
 #             not complete in this environment — the reason is printed).
 #
 # Env:
-#   BURN_E2E_URL        service URL. Default https://devnet.ai.gist.rs.
+#   BURN_E2E_URL        service URL. Default https://devnet.gist.rs.
 #                       MUST contain "devnet" (G4 — the apex IS mainnet;
 #                       mainnet is never touched by this rig).
 #   BURN_E2E_WORK       work dir. Default /tmp/kat-burn-e2e (recreated).
@@ -56,7 +56,7 @@ trap 'rc=$?; if [ "$COMPLETED" -ne 1 ] && [ $rc -eq 0 ]; then
 fi
 exit $rc' EXIT
 
-URL="${BURN_E2E_URL:-https://devnet.ai.gist.rs}"
+URL="${BURN_E2E_URL:-https://devnet.gist.rs}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="${BURN_E2E_WORK:-/tmp/kat-burn-e2e}"
 FUEL_SRC="${BURN_E2E_FUEL:-$ROOT/src}"

@@ -6,9 +6,9 @@
 //! ## The shape (Proposal 008 §2, byte-pinned in the module tests)
 //!
 //! ```text
-//! Join which kat network?  [devnet] / mainnet
-//!   devnet  — the live test network: real pipeline, test credit (KAT/TUNA carry no cash value)
-//!   mainnet — canonical host; payout planes are owner-armed later; today it settles nothing
+//! Join which kat network?  [devnet]
+//!   devnet  — the live network: real pipeline, test credit (KAT/TUNA carry no cash value)
+//!   (mainnet is not open yet)
 //! > devnet
 //! recorded to config (cargo refine config set --url devnet). Change any time.
 //! ```
@@ -97,9 +97,10 @@ impl JoinEnv {
 }
 
 /// The picker's choices — EXACTLY devnet + mainnet, devnet first (the
-/// bracketed default). `testnet` stays a valid `config set` alias (wire
-/// compat) and is deliberately absent: the host answers nothing
-/// (torn down 2026-10-03).
+/// bracketed default). `testnet` is absent and, since riir-dapps Plan 047,
+/// no longer a `config set` alias either (the deployment was torn down
+/// 2026-10-03). Mainnet is listed (a typed answer / the env force still
+/// choose it) but HIDDEN from the printed offer — see [`PROMPT_BLOCK`].
 pub const JOIN_CHOICES: &[(JoinEnv, &str)] = &[
     (JoinEnv::Devnet, "devnet"),
     (JoinEnv::Mainnet, "mainnet"),
@@ -218,10 +219,14 @@ pub fn parse_answer(line: &str) -> Answer {
 }
 
 /// The ask, byte-pinned (Proposal 008 §2's transcript; the trailing `> `
-/// is the answer prompt — printed without a trailing newline).
-pub const PROMPT_BLOCK: &str = "Join which kat network?  [devnet] / mainnet
-  devnet  — the live test network: real pipeline, test credit (KAT/TUNA carry no cash value)
-  mainnet — canonical host; payout planes are owner-armed later; today it settles nothing
+/// is the answer prompt — printed without a trailing newline). Mainnet is
+/// HIDDEN from the offer (riir-dapps Plan 047, owner call 2026-10-06:
+/// refine, reflex and rethink run on ONE live network first) — not closed:
+/// a typed `mainnet`, [`JOIN_ENV_ENV_VAR`]`=mainnet` and `config set --url
+/// mainnet` still choose it (the owner's dry-run door).
+pub const PROMPT_BLOCK: &str = "Join which kat network?  [devnet]
+  devnet  — the live network: real pipeline, test credit (KAT/TUNA carry no cash value)
+  (mainnet is not open yet)
 > ";
 
 /// The interactive half of [`JoinDecision::Ask`]. A non-TTY stdin refuses
@@ -251,7 +256,7 @@ pub fn answer_ask(
             Answer::Default => return Ok(JoinEnv::Devnet),
             Answer::Pick(env) => return Ok(env),
             Answer::Invalid => {
-                eprintln!("join: answer devnet or mainnet (Enter = devnet)");
+                eprintln!("join: answer devnet (Enter = devnet)");
             }
         }
     }
@@ -386,7 +391,6 @@ pub fn run(yes: bool) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use riir_kat::kat_service_urls::TESTNET_SERVICE_URL;
 
     /// A scratch dir that never touches the real account dir (the
     /// `kat_service_config` tests' shape).
@@ -408,13 +412,10 @@ mod tests {
         assert_eq!(aliases, ["devnet", "mainnet"]);
         assert!(!aliases.contains(&"testnet"), "A2: testnet is never offered");
         assert_eq!(JoinEnv::from_alias("testnet"), None);
-        // …while the alias itself stays VALID for wire compat (the config
-        // set surface is untouched — the host is gone, the word is not).
-        assert_eq!(
-            riir_kat::kat_service_config::resolve_alias("testnet"),
-            Some(TESTNET_SERVICE_URL)
-        );
-        assert!(riir_kat::kat_service_config::validate_service_url("testnet").is_ok());
+        // …and since riir-dapps Plan 047 the alias itself is RETIRED too:
+        // two networks, devnet + mainnet — the word resolves to nothing.
+        assert_eq!(riir_kat::kat_service_config::resolve_alias("testnet"), None);
+        assert!(riir_kat::kat_service_config::validate_service_url("testnet").is_err());
     }
 
     #[test]
@@ -683,22 +684,18 @@ mod tests {
         let mut lines = PROMPT_BLOCK.lines();
         assert_eq!(
             lines.next(),
-            Some("Join which kat network?  [devnet] / mainnet")
+            Some("Join which kat network?  [devnet]")
         );
         assert_eq!(
             lines.next(),
             Some(
-                "  devnet  — the live test network: real pipeline, test credit \
+                "  devnet  — the live network: real pipeline, test credit \
                  (KAT/TUNA carry no cash value)"
             )
         );
-        assert_eq!(
-            lines.next(),
-            Some(
-                "  mainnet — canonical host; payout planes are owner-armed later; \
-                 today it settles nothing"
-            )
-        );
+        // riir-dapps Plan 047: mainnet is hidden from the offer, not closed
+        assert_eq!(lines.next(), Some("  (mainnet is not open yet)"));
+        assert_eq!(parse_answer("mainnet"), Answer::Pick(JoinEnv::Mainnet), "the hidden door still opens");
         assert_eq!(lines.next(), Some("> "));
         assert!(lines.next().is_none(), "the block ends at the answer prompt");
         assert!(PROMPT_BLOCK.ends_with("> "));

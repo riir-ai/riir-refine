@@ -2011,7 +2011,7 @@ fn run_kat_config(set: bool, url: Option<&str>) {
             svc::ServiceUrlSource::Config => {}
             svc::ServiceUrlSource::Default => println!(
                 "             (the baked default never moves — opt in: cargo refine config set \
-                 --url devnet|testnet|mainnet)"
+                 --url devnet|mainnet)"
             ),
         }
         if svc::service_url_from_env().is_some() && file_url.is_some() {
@@ -2024,7 +2024,7 @@ fn run_kat_config(set: bool, url: Option<&str>) {
         return;
     }
     let Some(raw) = url else {
-        eprintln!("config set requires --url <devnet|testnet|mainnet|https://…>");
+        eprintln!("config set requires --url <devnet|mainnet|https://…>");
         usage();
     };
     // g1: validate BEFORE any write; the rejection names the rule.
@@ -3937,7 +3937,7 @@ USAGE:
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
     cargo refine config get                            (the ACTIVE service url + its source: env > config > default)
-    cargo refine config set --url <devnet|testnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
+    cargo refine config set --url <devnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
 
     (no mode)       DRY RUN (the just-works default): review what WOULD be
                     fixed — suggest output over the paths (default: `.`),
@@ -5281,7 +5281,7 @@ fn parse_args() -> Args {
             "--url" => {
                 let Some(value) = it.next() else {
                     eprintln!(
-                        "--url requires a value (devnet | testnet | mainnet | an absolute https url)"
+                        "--url requires a value (devnet | mainnet | an absolute https url)"
                     );
                     usage();
                 };

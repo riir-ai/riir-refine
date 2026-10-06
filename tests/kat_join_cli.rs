@@ -107,7 +107,7 @@ fn join_env_forces_devnet_through_the_config_set_record() {
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://devnet.ai.gist.rs"),
+        Some("https://devnet.gist.rs"),
         "the choice records through the config-set record"
     );
     assert!(
@@ -142,7 +142,7 @@ fn an_existing_account_key_makes_the_switch_visible_in_the_join_output() {
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://devnet.ai.gist.rs"),
+        Some("https://devnet.gist.rs"),
         "the choice still records devnet"
     );
     let recorded_line = stdout
@@ -174,8 +174,8 @@ fn join_env_forces_mainnet_and_names_every_unarmed_plane() {
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://ai.gist.rs"),
-        "mainnet records the apex (the const never moved)"
+        Some("https://mainnet.gist.rs"),
+        "mainnet records the mainnet API host (riir-dapps Plan 047)"
     );
     for needle in [
         "recorded to config (cargo refine config set --url mainnet)",
@@ -201,7 +201,7 @@ fn yes_answers_the_devnet_default_without_a_tty() {
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://devnet.ai.gist.rs"),
+        Some("https://devnet.gist.rs"),
         "--yes takes the bracketed default"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -257,7 +257,7 @@ fn an_existing_config_is_never_prompted_and_never_rewritten() {
     let dir = scratch("existing");
     std::fs::write(
         dir.join(RECORD_FILE),
-        "{\n  \"version\": 1,\n  \"url\": \"https://devnet.ai.gist.rs\",\n  \"recorded_unix_secs\": 0\n}\n",
+        "{\n  \"version\": 1,\n  \"url\": \"https://devnet.gist.rs\",\n  \"recorded_unix_secs\": 0\n}\n",
     )
     .expect("seed the record the config-set shape");
     // NO env force, NO --yes, non-TTY: the pre-A1 posture for a configured
@@ -283,7 +283,7 @@ fn an_existing_config_is_never_prompted_and_never_rewritten() {
     );
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://devnet.ai.gist.rs"),
+        Some("https://devnet.gist.rs"),
         "the existing record is untouched"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -301,7 +301,7 @@ fn config_get_reports_the_joined_record() {
     // The same surface `config set` feeds: source = config, url = devnet.
     let (code, stdout, stderr) = run_heal(&dir, &[], &["config", "get"]);
     assert_eq!(code, Some(0), "stderr: {stderr}");
-    assert!(stdout.contains("https://devnet.ai.gist.rs"), "url: {stdout}");
+    assert!(stdout.contains("https://devnet.gist.rs"), "url: {stdout}");
     assert!(
         stdout.contains("source: config"),
         "the join record reads as `config` source: {stdout}"

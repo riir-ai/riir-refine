@@ -12,7 +12,7 @@
 #
 # Env:
 #   STRANGER_DRILL_URL          service URL for the DEVNET preflight only.
-#                               Default https://devnet.ai.gist.rs. Must
+#                               Default https://devnet.gist.rs. Must
 #                               contain "devnet" unless
 #                               STRANGER_DRILL_ALLOW_ANY_URL=1 — the client
 #                               commands resolve their service through the
@@ -40,7 +40,7 @@ trap 'rc=$?; if [ "$COMPLETED" -ne 1 ] && [ $rc -eq 0 ]; then
 fi
 exit $rc' EXIT
 
-URL="${STRANGER_DRILL_URL:-https://devnet.ai.gist.rs}"
+URL="${STRANGER_DRILL_URL:-https://devnet.gist.rs}"
 FEATURES="latent_retrieval,kat_service,kat_transport,fix_verify"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WITH_SETTLE=0
@@ -78,11 +78,11 @@ fi
 echo "stranger-drill: preflight OK — $URL/health answered 200"
 # The MAINNET legs (stranger B, the A3 refusal arms) preflight separately:
 # an unreachable apex DEFERS them loud — it is not a pass and not a fail.
-apex_health="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "https://ai.gist.rs/health" 2>/dev/null || true)"
+apex_health="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "https://mainnet.gist.rs/health" 2>/dev/null || true)"
 MAINNET_OK=0
 if [ "$apex_health" = "200" ]; then
   MAINNET_OK=1
-  echo "stranger-drill: preflight OK — https://ai.gist.rs/health answered 200 (mainnet legs armed)"
+  echo "stranger-drill: preflight OK — https://mainnet.gist.rs/health answered 200 (mainnet legs armed)"
 else
   echo "stranger-drill: mainnet unreachable ('${apex_health:-nothing}') — the A3 legs DEFER loud"
 fi
@@ -190,7 +190,7 @@ if grep -q "Join which kat network" "$LOG_A_JOIN"; then
   fail "A1: the prompt block printed under --yes (the default must answer silently)"
 fi
 [ -f "$ACCT_A/service_url.json" ] || fail "A1: no service_url.json in the account dir"
-grep -q "https://devnet.ai.gist.rs" "$ACCT_A/service_url.json" \
+grep -q "https://devnet.gist.rs" "$ACCT_A/service_url.json" \
   || fail "A1: the record does not hold the devnet URL"
 LOG_A_CFG="$WORK/a-config-get.log"
 if ! run_leg "$LOG_A_CFG" "$ACCT_A" "$WORK" -- config get; then
@@ -200,7 +200,7 @@ fi
 show "$LOG_A_CFG" A-cfg
 grep -q "source: config" "$LOG_A_CFG" \
   || fail "A1: config get does not report the joined record (source: config)"
-grep -q "https://devnet.ai.gist.rs" "$LOG_A_CFG" \
+grep -q "https://devnet.gist.rs" "$LOG_A_CFG" \
   || fail "A1: config get does not show the devnet URL"
 echo "stranger-drill: [A] join recorded (devnet, config source) — config get agrees"
 

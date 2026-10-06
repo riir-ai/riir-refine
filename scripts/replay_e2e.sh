@@ -16,7 +16,7 @@
 #               leasable; remedy: push a real mining batch and re-run).
 #
 # Env:
-#   REPLAY_E2E_URL            service URL. Default https://devnet.ai.gist.rs.
+#   REPLAY_E2E_URL            service URL. Default https://devnet.gist.rs.
 #                             Must contain "devnet" unless
 #                             REPLAY_E2E_ALLOW_ANY_URL=1 (the apex IS
 #                             mainnet — throwaway e2e traffic never goes
@@ -48,7 +48,7 @@ trap 'rc=$?; if [ "$COMPLETED" -ne 1 ] && [ $rc -eq 0 ]; then
 fi
 exit $rc' EXIT
 
-URL="${REPLAY_E2E_URL:-https://devnet.ai.gist.rs}"
+URL="${REPLAY_E2E_URL:-https://devnet.gist.rs}"
 FEATURES="latent_retrieval,kat_service,kat_transport,fix_verify,clippy_verify"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
