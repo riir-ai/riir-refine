@@ -484,6 +484,120 @@ steps = ["lease"]
 out   = { lang = "json", src = "data/flows/kat_economy/01_corpus.json", label = "the fleet corpus per domain" }
 ```
 
+## What mining sends (the data path, request to public corpus)
+
+The trust section's answer to "what leaves my machine when I mine, and
+who sees it" (riir-dapps Plan 046, `refine.gist.rs/#mining-data`). Three
+lanes by WHO can read the data at that step: your machine, the network
+(the operator), and everyone (the public corpus every machine downloads).
+Every claim is code-backed — the batch fields are
+`src/kat_sync_payload.rs`, the scan is riir-kat `kat_redact.rs` (default
+policy drops a row with any finding), the publish is riir-dapps
+`cloudflare/kat-service/src/prove.rs` (proven `shape`/`fix` pairs land
+verbatim in the lease segment), and `GET /lease` + `GET /segment/<hex>`
+are unauthenticated (`routes.rs`). Not end-to-end encrypted: the
+network must read a row to re-run clippy on it.
+
+```gfflow
+file  = "mine_data_flow.svg"
+title = "What mining sends: your fix spans leave signed, the network proves them, and proven pairs join the public corpus"
+accent = "refine"
+
+[[lane]]
+id = "me"; label = "Your machine"; note = "nothing leaves before step 4b"; color = "refine"
+[[lane]]
+id = "net"; label = "The network"; note = "the operator reads it"; color = "ai"
+[[lane]]
+id = "pub"; label = "Everyone"; note = "public, no login"; color = "ai"
+
+[[step]]
+id = "run"; n = "1"; lane = "me"; col = 0
+title = "Your fix run"; body = "compile-gated, local; records each fix"
+status = "live"
+[[step]]
+id = "rows"; n = "2"; lane = "me"; col = 1
+title = "One row per fix"; body = "the span it replaced + the fix; no paths"
+status = "live"
+tag = { text = "never whole files", color = "refine" }
+[[step]]
+id = "scan"; n = "3"; lane = "me"; col = 2
+title = "Secret scan + sign"; body = "a finding drops the row; Ed25519 signed"
+status = "live"
+[[step]]
+id = "export"; n = "4a"; lane = "me"; col = 3
+title = "Export only"; body = "sync --export writes a file, sends nothing"
+status = "live"
+[[step]]
+id = "post"; n = "4b"; lane = "net"; col = 3
+title = "Sent over HTTPS"; body = "the signed batch; the server checks the key"
+status = "test network"
+tag = { text = "signed, not encrypted", color = "ai" }
+[[step]]
+id = "proof"; n = "5"; lane = "net"; col = 4
+title = "Proof queue"; body = "a real clippy re-run confirms the fix"
+status = "test network"
+[[step]]
+id = "pub"; n = "6"; lane = "pub"; col = 5
+title = "Public corpus"; body = "proven before/after pairs, downloadable"
+status = "test network"
+[[step]]
+id = "lease"; n = "7"; lane = "me"; col = 6
+title = "Lease back"; body = "every machine downloads the corpus"
+status = "test network"
+
+[[edge]]
+from = "run"; to = "rows"
+[[edge]]
+from = "rows"; to = "scan"
+[[edge]]
+from = "scan"; to = "export"; label = "export"
+[[edge]]
+from = "scan"; to = "post"; label = "send"
+[[edge]]
+from = "post"; to = "proof"; label = "queued"
+[[edge]]
+from = "proof"; to = "pub"; label = "proven"
+[[edge]]
+from = "pub"; to = "lease"; label = "pull"
+[[edge]]
+from = "lease"; to = "run"; back = true; label = "your next run retrieves more"
+
+[[walk]]
+title = "Your fix run"
+text  = "`cargo refine --fix` runs on your machine and keeps only fixes that still compile. Each fix is recorded locally under `.refine/`. Logged out, this is where the story ends: nothing is uploaded."
+steps = ["run"]
+[[walk]]
+title = "One row per fix"
+text  = "A mining row is the exact code span a fix replaced and its replacement, plus the rule name, a short numeric shape fingerprint and counters. File paths, crate names, repo URLs, git remotes and usernames are not fields. A span is your code verbatim, and one field may be up to 64 KiB — a long function a fix rewrote travels whole."
+steps = ["rows"]
+[[walk]]
+title = "Secret scan + sign"
+text  = "Every span runs through the secret scanner (cloud and API keys, private-key blocks, connection strings, bearer tokens, env secrets, long hex and base64 runs). Under the default policy any finding drops the whole row — it is never sent. The batch is signed with your account key, so the network can prove it is yours and untampered."
+steps = ["scan"]
+[[walk]]
+title = "Export only"
+text  = "`cargo refine sync --export batch.ndjson` writes the exact batch to a file and sends nothing, no login needed. Read it before you join; this is a real published sample of the same shape."
+steps = ["export"]
+in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one batch (published sample)" }
+[[walk]]
+title = "Sent over HTTPS"
+text  = "`--mine` (and every run after joining, or `cargo refine sync` itself) sends the signed batch over HTTPS. The signature proves who sent it; it does not hide the content — the network must read a row to verify it."
+steps = ["post"]
+[[walk]]
+title = "Proof queue"
+text  = "Rows wait in the proof queue until a real clippy re-run confirms the fix. A verdict is measured, never trusted from the client. Unproven rows stay with the operator."
+steps = ["proof"]
+[[walk]]
+title = "Public corpus"
+text  = "A proven row's before/after pair is published verbatim into the corpus segment — a public URL anyone can download without logging in. This is the shared corpus the flywheel promises; it is also why confidential code should not be mined."
+steps = ["pub"]
+[[walk]]
+title = "Lease back"
+text  = "Every machine's corpus pull downloads the segment. The request carries only the version your machine already has — no code, no account — and your next run retrieves from what the fleet proved."
+steps = ["lease"]
+
+```
+
 ## The role × tier grid (what the tabs and the matrix share)
 
 | role | tier | does | gets | pays | status |
@@ -506,7 +620,8 @@ and the leaderboard stays honest about that.
 | [`role_miner_flow.svg`](role_miner_flow.svg) + `_m` | the miner gfflow block | Get started › miner |
 | [`role_fixer_flow.svg`](role_fixer_flow.svg) + `_m` | the fixer gfflow block | Get started › fixer |
 | [`role_trainer_flow.svg`](role_trainer_flow.svg) + `_m` | the trainer gfflow block | Get started › trainer |
-| [`kat_economy_flow.svg`](kat_economy_flow.svg) + `_m` | the economy gfflow block | the trust section (`#trust`) |
+| [`kat_economy_flow.svg`](kat_economy_flow.svg) + `_m` | the economy gfflow block | the pricing section (`#buy`) |
+| [`mine_data_flow.svg`](mine_data_flow.svg) + `_m` | the mining data-path gfflow block | the trust section (`#mining-data`) |
 
 Each is rendered from this doc's own ` ```gfflow ` block by
 reflex-site's `scripts/render_flows.py` — the family flow shape
