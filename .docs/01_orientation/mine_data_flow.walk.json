@@ -112,7 +112,7 @@
   },
   {
    "title": "Secret scan + sign",
-   "text": "Every span runs through the secret scanner (cloud and API keys, private-key blocks, connection strings, bearer tokens, env secrets, long hex and base64 runs). Under the default policy any finding drops the whole row — it is never sent. The batch is signed with your account key, so the network can prove it is yours and untampered.",
+   "text": "Every span runs through the secret scanner — the consolidated provider-format set: API keys and tokens across the major AI, cloud and SaaS providers, private-key blocks (incl. PGP and PuTTY headers), credentialed connection strings, bearer tokens, secret assignments, long hex/base64 runs, and structured shapes like JWTs and bot tokens. Under the default policy any finding drops the whole row — it is never sent. The batch is signed with your account key, so the network can prove it is yours and untampered. The same scanner powers `cargo refine --secret-scan` and `--secret-scan --blind` on your side.",
    "steps": [
     "scan"
    ],

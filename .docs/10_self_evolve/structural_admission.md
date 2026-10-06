@@ -66,7 +66,15 @@
   `risk-assessment` WITHOUT firing — a prefix hit requires a non-word byte
   (or string start) before it plus a full-length continuation run.
   Prefix matching without the boundary + run guards fires on prose (the
-  test pins seven shapes and six near-misses).
+  test pins seven shapes and six near-misses). Since Issue 151 T9 the
+  scan CONSUMES the one canonical scanner
+  ([`kat_redact::scan_secrets`](../../../riir-kat/src/kat_redact.rs) — the
+  consolidated v4/v5 set), post-filtered to the persistence boundary's
+  posture: prefix-kind ∪ private-key findings only (entropy/env/bearer/
+  conn rules would block every payload carrying hashes) + the word
+  boundary; the private prefix table is gone (its `AIza`-vs-gate drift
+  was the fragmentation evidence). The legacy shape names are pinned by
+  the tests and preserved via a kind→name map.
 
 ## Provenance
 
