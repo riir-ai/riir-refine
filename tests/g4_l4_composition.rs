@@ -306,15 +306,21 @@ fn counting_double_records_what_it_was_asked() {
 // gate: 0/9 misses on real lints with no corpus entry (Bench 037).
 
 /// A real clippy lint the seed corpus has no entry for. Asserted, not assumed,
-/// so this test fails loudly if the corpus later grows to cover it.
+/// so this test fails loudly if the corpus later grows to cover it. (The
+/// original pick, `ptr_arg`, was exactly this tripwire firing: Batch 155
+/// (`fac3dc36`) mined it into the corpus and the assertion held the lane red
+/// until swapped.)
 fn out_of_corpus_rule() -> (&'static str, &'static str) {
     let corpus = build_seed_corpus();
-    let rule = "ptr_arg";
+    let rule = "module_inception";
     assert!(
         !corpus.entries.iter().any(|e| e.lint_name == rule),
         "`{rule}` was expected to be OUT of the seed corpus; pick another lint"
     );
-    (rule, "fn f(v: &Vec<u8>) -> usize { v.len() }")
+    (
+        rule,
+        "pub mod outer { pub mod inner { pub const X: u8 = 1; } }",
+    )
 }
 
 #[test]

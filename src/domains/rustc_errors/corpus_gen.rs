@@ -692,7 +692,7 @@ fn e0505_nonclone_borrow_move(out: &mut Vec<GeneratedCase>) {
     ];
     for (i, (ty, val)) in TABLE.iter().enumerate() {
         let gt = gt_module(&format!(
-            "assert_eq!(super::probe(Tkn {{ v: {val} }}), 2 * {val});"
+            "assert_eq!(super::probe(super::Tkn {{ v: {val} }}), 2 * {val});"
         ));
         let wrap = |pair: &str| {
             format!(
@@ -732,7 +732,7 @@ fn e0382_nonclone_use_after_move(out: &mut Vec<GeneratedCase>) {
     ];
     for (i, (ty, val)) in TABLE.iter().enumerate() {
         let gt = gt_module(&format!(
-            "assert_eq!(super::probe(Tkn {{ v: {val} }}), 2 * {val});"
+            "assert_eq!(super::probe(super::Tkn {{ v: {val} }}), 2 * {val});"
         ));
         let wrap = |pair: &str| {
             format!(
