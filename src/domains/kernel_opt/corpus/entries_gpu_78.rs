@@ -7,7 +7,7 @@
 //!
 //! Pack composition (category split D +3; corpus 773 → 776):
 //! - D +1 `fusion-residual-selected-by-identity-not-negation` (7e8324f5fe
-//!   #30100 — the fused MUL_MAT+ADD residual picker that mispicks when
+//!   #30100 — the fused `MUL_MAT+ADD` residual picker that mispicks when
 //!   BOTH ADD operands are mat-mul outputs)
 //! - D +1 `fa-fast-path-validated-exact-shape-admission-v-as-strided-view`
 //!   (d2a79e6046 #29171 — the MKL flash-attention exact-shape MLA
@@ -42,8 +42,8 @@
 //!   and `strided-view-offset-fit32-launch-proof` (B195 — 32-bit
 //!   offset safety, a different question); `MLA` hits are the cache
 //!   family (`append-cache-rewind-overwrite-in-place` B39, the
-//!   rewind_mla_caches_to lane — cited as family adjacency) and the
-//!   vLLM fused_mla_key_concat rider (quantize/store fusion); `DKQ`
+//!   `rewind_mla_caches_to` lane — cited as family adjacency) and the
+//!   vLLM `fused_mla_key_concat` rider (quantize/store fusion); `DKQ`
 //!   and `kv.view` zero. None owns an FA admission widening or a V-view
 //!   descriptor mode.
 //! - rule 3 (`headless|draft|catch-up|cache.write|mtp|nextn|crop`):
@@ -58,6 +58,7 @@
 //!   rows BECAUSE no consumer) and the nearest consumer-set elision kin
 //!   `lm-head-loss-positions-only` (B37 — a per-position subset inside
 //!   a live forward; this rule is the whole-graph zero-row case).
+//!
 //! Honesty flags: rule 2 records the F16-scores sub-commit as a watch
 //! (measured +4.6/+12.2/+13.5%, landed-then-reverted in the same PR,
 //! revert reason unstated — never adopt without one); rule 3 states

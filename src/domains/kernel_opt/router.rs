@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 773, "Plan 003: experts cover all 773 corpus rules (Batch 207 +2, the 10-07 staged leads — B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode + the emulated-conversion admission predicate) + D +1 the profile-window drain (a window opened behind unrelated queued work timed that work as its own; TimestampSampling names the backend fact once); Batch 206 +2, the 10-07 staged leads — D +2 the widening-conversion row-chunk staging budget with its ldc stride-respect admission half + the per-thread-stream blocking-op explicit-sync escape; re-pinned 773 with the honest label)");
+        assert_eq!(total, 776, "Plan 003: experts cover all 776 corpus rules (Batch 208 +3, all D — the fusion residual selected by identity not negation (llama.cpp #30100: a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs; the repair is a pointer compare against the fused op) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171: the allowlist names every dim + GQA + both dtypes; the stride exception is the shape-identity-view-shared-stride triple; pp8192 2.99x source-reported) + the headless draft forward cropped to output rows (llama.cpp #29928: a zero-output-row NextN forward persists only through its cache writes; prune 0.33 ms vs landed crop 2.9 ms, both in-commit); re-pinned 776 with the honest label)");
     }
 
     #[test]

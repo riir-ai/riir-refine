@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        773,
-        "kernel batches through Batch 207 should have 773 rules",
+        776,
+        "kernel batches through Batch 208 should have 776 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 773-rule corpus must appear in exactly one category
-    // (re-pinned 773 at Batch 207; read 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 776-rule corpus must appear in exactly one category
+    // (re-pinned 776 at Batch 208; read 773 through B207, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5467,7 +5467,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 159),
         (KernelCategory::Compute, 86),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 174),
+        (KernelCategory::Dispatch, 177),
         (KernelCategory::Parallelism, 72),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 773.
+    // Sum must equal 776.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 773, "Plan 003: category totals must sum to 773 (Batch 207 +2, the 10-07 staged leads: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain (a window opened behind unrelated queued work timed that work as its own and the autotuner elected the outliers); Batch 206 +2, the 10-07 staged leads: D +2 the widening-conversion row-chunk staging budget with its ldc stride-respect admission half + the per-thread-stream blocking-op explicit-sync escape; Batch 205 +8 before it)");
+    assert_eq!(total, 776, "Plan 003: category totals must sum to 776 (Batch 208 +3, all D: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2 before that: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 773,
-        "Plan 003: grouped corpus has {total} rules, expected 773"
+        total, 776,
+        "Plan 003: grouped corpus has {total} rules, expected 776"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        773,
-        "corpus count re-pinned at Batch 207 (the 10-07 staged leads: 2 rules — B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form, the placed E2M1 decode, the emulated-conversion admission predicate) + D +1 the profile-window drain (TimestampSampling names the backend fact once; the autotuner's cache-warming read no longer lands in the samples); was 771 at Batch 206, 769 at Batch 205)",
+        776,
+        "corpus count re-pinned at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -14716,6 +14716,170 @@ fn batch207_concepts_carry_their_load_bearing_contracts() {
     assert!(
         !b.gpu_concept.contains("E2M1_F16_LIFT"),
         "batch-207 cross-distinct: the profile rule must not cite the decode rule"
+    );
+}
+
+#[test]
+fn batch208_pseudocode_parses() {
+    // G1 for Batch 208: syn-parse gate (the 10-07 staged leads -- Plan 208:
+    // three ggml-org/llama.cpp commits, all D).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "fusion-residual-selected-by-identity-not-negation",
+        "fa-fast-path-validated-exact-shape-admission-v-as-strided-view",
+        "headless-draft-forward-crops-to-output-rows-cache-writes-persist",
+    ];
+    assert_eq!(ids.len(), 3, "batch-208 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-208 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-208 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-208 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch208_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-208 decision-content contracts (the batch207 precedent):
+    // each rule's load-bearing quotes must ride the rule text verbatim,
+    // the cross-distinct pairs must name each other, and the batch/plan
+    // stamp + the NotBenchable annotation must be present. The riders are
+    // asserted here too (the B202 annotated-rule lesson: the narrow batch
+    // gate must cover what the batch landed).
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "fusion-residual-selected-by-identity-not-negation",
+            vec![
+                "the ADD operand whose op is not MUL_MAT",
+                "never-written output and the kernel adds whatever that buffer holds",
+                "already selects the operand by identity; make the encoder do the same",
+                "probabilities collapse toward uniform",
+                "GGML_METAL_FUSION_DISABLE=1",
+                "fails 27 of 28 cases before this change",
+                "bit-exact-dispatch-fusion-boundary-emulation",
+            ],
+        ),
+        (
+            "fa-fast-path-validated-exact-shape-admission-v-as-strided-view",
+            vec![
+                "requires matching K/V widths and caps the head dimension at 512",
+                "Admit only the validated 576/576/512, GQA-20 F16 shape",
+                "Keep this narrow until other mismatched K/V shapes have independent correctness data",
+                "512-wide view of 576-wide K rows",
+                "only when K and V expose the same values",
+                "glm_v_stride",
+                "pp8192 improves from 432.80 to 1292.29 tok/s",
+                "sibling-kernel-admission-gap-absorbed-by-generalist",
+            ],
+        ),
+        (
+            "headless-draft-forward-crops-to-output-rows-cache-writes-persist",
+            vec![
+                "persists only through its cache writes",
+                "drops the query path, the indexer selection, the attention body, the FFN and the LM head",
+                "6.9 ms to 0.33 ms",
+                "crop pattern the other MTP graphs use",
+                "6.9 ms to 2.9 ms",
+                "greedy output hashes",
+                "gdn-transition-replay-log-commit-many",
+            ],
+        ),
+    ];
+    for (id, markers) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-208 rule '{id}' missing"));
+        for marker in markers {
+            assert!(
+                rule.gpu_concept.contains(marker),
+                "batch-208 contract marker missing on '{id}': '{marker}'"
+            );
+        }
+        assert!(
+            rule.gpu_concept.contains("Batch 208 / Plan 208"),
+            "batch-208 '{id}' must carry the batch/plan stamp"
+        );
+        assert!(
+            rule.gpu_concept.contains("NotBenchable"),
+            "batch-208 '{id}' must carry the NotBenchable annotation"
+        );
+    }
+    // Rider needles: the fewrow rule carries the #30065 per-type threshold
+    // table; the profile-window rule carries the #1770 compile-queue drain.
+    let fewrow = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fewrow-tensor-tile-decode-into-rhs-operand")
+        .unwrap();
+    for marker in [
+        "any type with a 16-weight dequantizer",
+        "5 rows TQ2_0, 4 BF16",
+        "Batch 208 rider / Plan 208",
+    ] {
+        assert!(
+            fewrow.gpu_concept.contains(marker),
+            "batch-208 fewrow rider marker missing: '{marker}'"
+        );
+    }
+    let drain = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "profile-window-drains-queued-work-before-open")
+        .unwrap();
+    for marker in [
+        "Every measurement starts with it",
+        "its measurement would carry every candidate's compilation",
+        "Batch 208 rider / Plan 208",
+    ] {
+        assert!(
+            drain.gpu_concept.contains(marker),
+            "batch-208 drain rider marker missing: '{marker}'"
+        );
+    }
+    // Cross-distinct: the three batch-208 rules carry disjoint mechanisms
+    // (fusion operand selection vs FA shape admission vs graph-construction
+    // dead compute) and must not cite each other's load-bearing ids.
+    let fusion = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fusion-residual-selected-by-identity-not-negation")
+        .unwrap();
+    let fa = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fa-fast-path-validated-exact-shape-admission-v-as-strided-view")
+        .unwrap();
+    let headless = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "headless-draft-forward-crops-to-output-rows-cache-writes-persist")
+        .unwrap();
+    assert!(
+        !fusion.gpu_concept.contains("glm_mla_shape"),
+        "batch-208 cross-distinct: fusion rule must not cite the FA rule"
+    );
+    assert!(
+        !fa.gpu_concept.contains("MUL_MAT_ADD_MM_MM"),
+        "batch-208 cross-distinct: FA rule must not cite the fusion rule"
+    );
+    assert!(
+        !headless.gpu_concept.contains("glm_mla_shape"),
+        "batch-208 cross-distinct: headless rule must not cite the FA rule"
     );
 }
 
