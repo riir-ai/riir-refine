@@ -1963,6 +1963,7 @@ mod entries_gpu_74;
 mod entries_gpu_75;
 mod entries_gpu_76;
 mod entries_gpu_77;
+mod entries_gpu_78;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2016,6 +2017,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_75::entries());
     entries.extend(entries_gpu_76::entries());
     entries.extend(entries_gpu_77::entries());
+    entries.extend(entries_gpu_78::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
