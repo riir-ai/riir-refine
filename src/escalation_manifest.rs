@@ -447,7 +447,7 @@ mod tests {
         assert_eq!(m, back);
     }
 
-    /// The mirror-pin: DOMAIN_LABELS must equal the draft router's
+    /// The mirror-pin: `DOMAIN_LABELS` must equal the draft router's
     /// `DomainId::ALL` labels whenever both features are on (the tpr
     /// truth-table-pin defense — a drift here means the manifest accepts
     /// a domain the router never routes, or rejects one it does).

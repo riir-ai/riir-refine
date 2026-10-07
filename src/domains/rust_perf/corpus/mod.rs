@@ -14,7 +14,7 @@
 //! here went stale repeatedly — 163 through the B182-era, before that
 //! 145/92/53 through B172–B174 — repaired here at B207 with the honest
 //! label; the gated count tests + `cargo refine --corpus-stats` are the
-//! live ledgers). The NotBenchable ledger was repaired by Batch 135 (the
+//! live ledgers). The `NotBenchable` ledger was repaired by Batch 135 (the
 //! pre-Batch-118 ledger said 25 while the gated test said 14; the Batch
 //! 118–129 ds4 io annotations were never counted) and again by the 09-24
 //! housekeeping pass
