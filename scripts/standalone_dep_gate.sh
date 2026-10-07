@@ -41,6 +41,10 @@
 #   riir-llm       (private)  riir-llm (issue 124 — the LLM-transport leaf;
 #                             optional, `groq_first`/`cf_workers_ai` enable
 #                             `riir-llm/transport`)
+#   riir-reflexer  (public)   reflexer-vessel (Plan 202 R4 — the vessel verify
+#                             path, opt-in `vessel_artifacts`; the public
+#                             format repo's leaf crate — blake3 +
+#                             ed25519-dalek only, no katgpt dep)
 #
 # Provisioning them is `.github/workflows/rust.yml`'s job (the feature-guard
 # job; the two private siblings need `SIBLING_REPOS_TOKEN`).
@@ -65,14 +69,17 @@ cd "$(dirname "$0")/.."
 
 # The pinned inventory: "<manifest-relative-path> <dep-name>", sorted.
 #
-# 12 rows as of 2026-10-07 (11 through 2026-09-24 + katgpt-percepta — Plan
-# 199 T3.2: the wasm validator lane's decoder/lowering substrate, opt-in
-# `wasm_validator`; same katgpt-rs checkout as katgpt-core, no new sibling
-# for CI to provision). Earlier: Plan 610 S6 / reflex Issue 008 T2.3 — the
-# ternary lane retargeted from riir-engine/riir-gpu to riir-infer-core/
-# riir-infer-gpu — same count, two rows swapped; the cubecl-wgpu patch row
-# dropped with the old edge, arc-swap's genlock fork was a git dep and was
-# never pinned here). `[patch]` entries resolve through the same lexical
+# 13 rows as of 2026-10-08 (12 through 2026-10-07 + reflexer-vessel — Plan
+# 202 R4: the vessel verify path, opt-in `vessel_artifacts`; the public
+# format repo's leaf crate, blake3 + ed25519-dalek only — a new sibling for
+# CI to provision, PUBLIC so it rides the token-free checkout lane).
+# Earlier: 2026-10-07 + katgpt-percepta — Plan 199 T3.2: the wasm validator
+# lane's decoder/lowering substrate, opt-in `wasm_validator`; same
+# katgpt-rs checkout as katgpt-core, no new sibling for CI to provision).
+# Earlier: Plan 610 S6 / reflex Issue 008 T2.3 — the ternary lane retargeted
+# from riir-engine/riir-gpu to riir-infer-core/riir-infer-gpu — same count,
+# two rows swapped; the cubecl-wgpu patch row dropped with the old edge,
+# arc-swap's genlock fork was a git dep and was never pinned here). `[patch]` entries resolve through the same lexical
 # scan (their lines are `name = { path = "…" }` exactly like dependency
 # lines) and are pinned — a new vendor patch is a new repo CI must
 # provision. `katgpt-core` appears twice in the root manifest (the
@@ -85,6 +92,7 @@ Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
 Cargo.toml katgpt-micro-belief
 Cargo.toml katgpt-percepta
+Cargo.toml reflexer-vessel
 Cargo.toml riir-infer-core
 Cargo.toml riir-infer-gpu
 Cargo.toml riir-kat
@@ -161,10 +169,12 @@ if [ "$ACTUAL" = "$EXPECTED" ]; then
     echo "✓ standalone-dep gate PASSED — $n escaping path deps, matching the pin"
     echo "  (this repo is still NOT standalone-buildable; the gate pins the gap,"
     echo "   it does not close it. CI provisions every sibling the resolve needs —"
-    echo "   seven checkouts: the five pinned siblings + riir-auth (riir-kat's"
+    echo "   eight checkouts: the five pinned siblings + riir-auth (riir-kat's"
     echo "   transitive) + riir-infer (the ternary lane's direct substrate since"
-    echo "   the T2.3 retarget — no longer transitive through riir-ai) — see"
-    echo "   .github/workflows/rust.yml, feature-guard job.)"
+    echo "   the T2.3 retarget — no longer transitive through riir-ai) +"
+    echo "   riir-reflexer (Plan 202 R4, the vessel verify path — PUBLIC, so it"
+    echo "   rides the token-free lane) — see .github/workflows/rust.yml,"
+    echo "   feature-guard job.)"
     exit 0
 fi
 

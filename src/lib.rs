@@ -156,6 +156,13 @@ pub mod active_set;
 // switches, ALL-EMPTY at ship. Opt-in (`escalation_manifest`).
 #[cfg(feature = "escalation_manifest")]
 pub mod escalation_manifest;
+// Plan 202 R4: the vessel verify path — ONE artifact protocol across the
+// decision stack (A1/A8), via the public format repo's crate. Verify-only
+// seam: refine never mints (A8), never embeds vessel bytes (A10). Opt-in
+// (`vessel_artifacts`); R2's HostedExpertL4 + the escalation lane's
+// artifact pins are the designed consumers.
+#[cfg(feature = "vessel_artifacts")]
+pub mod vessel_artifacts;
 // Issue 130 T1+T3: the admission-time generalization gate's REPORT half —
 // per-stratum δ calibration + the corpus-stall predicate. Report-only by
 // design (T0): nothing here gates admission until the strata support a δ.

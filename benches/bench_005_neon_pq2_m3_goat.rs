@@ -365,10 +365,10 @@ fn gen_sweep(rows: usize, k: usize, seed_offset: u64) -> Sweep {
     out
 }
 
-fn main() {
-    say("── bench_005: the NEON PQ2_0 M3-Max GOAT (Plan 204 T11) ──");
-
-    // ── the host gate: aarch64 + dotprod, or a LOUD refusal ──────────────
+/// The host gate: aarch64 + dotprod, or a LOUD refusal. On a non-aarch64
+/// host every aarch64 intrinsic compiles to nothing — refuse rather than
+/// silently measure a different (scalar) kernel.
+fn host_gate() {
     #[cfg(not(target_arch = "aarch64"))]
     {
         say("REFUSED — this bench prices an aarch64-only kernel (NEON/sdot) and");
@@ -385,6 +385,17 @@ fn main() {
             std::process::exit(2);
         }
     }
+}
+
+fn main() {
+    say("── bench_005: the NEON PQ2_0 M3-Max GOAT (Plan 204 T11) ──");
+
+    // ── the host gate: aarch64 + dotprod, or a LOUD refusal ──────────────
+    // In its own fn so the not-aarch64 arm's exit(2) divergence stays INSIDE
+    // it — inline in main, that arm made every following statement
+    // unreachable_code on an x86_64 host under -D warnings (found by the
+    // Plan 202 R4 gate triad, 2026-10-08). Refusal text byte-identical.
+    host_gate();
 
     // ── provenance (before any timing) ───────────────────────────────────
     let (prov_verdict, prov_line) = preflight();
@@ -499,6 +510,10 @@ fn main() {
             // correctness-coupled sinks: the reference is the SCALAR arm at
             // setup; the NEON arm must match it bit-for-bit or the bench
             // FAILS (a deleted loop reports a fast wrong number, never a pass).
+            // On x86_64 the NEON reads are cfg'd out — the binding is dead
+            // there BY CONSTRUCTION (host_gate refused above); not a latent
+            // defect, just unreachable. Same Plan 202 R4 gate-triad find.
+            #[cfg_attr(not(target_arch = "aarch64"), allow(unused_variables))]
             let reference = {
                 let (r, a) = alloc_armed(|| gemv_scalar(&sweep.rows, &sweep.ys));
                 assert_eq!(a, 0, "G2 setup: scalar GEMV allocated ({a})");

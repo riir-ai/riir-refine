@@ -134,6 +134,16 @@ jobs:
           ref: develop
           path: sibling/katgpt-rs
 
+      # Plan 202 R4: the vessel verify path (opt-in `vessel_artifacts`)
+      # path-deps the public format repo's leaf crate — public, so it rides
+      # the token-free lane beside katgpt-rs.
+      - name: Check out riir-reflexer (public, develop)
+        uses: actions/checkout@v6
+        with:
+          repository: gist-rs/riir-reflexer
+          ref: develop
+          path: sibling/riir-reflexer
+
       # Factored inline rather than shared — a composite action for six lines
       # is a file nobody reads (the riir-chain note).
       - name: Check out private siblings
@@ -155,6 +165,7 @@ jobs:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
 
       # $GITHUB_WORKSPACE is .../riir-refine; the manifest's `../katgpt-rs`,
+      # `../riir-reflexer` (Plan 202 R4 — the vessel verify path),
       # `../riir-ai`, `../riir-neuron-db`, `../riir-auth` (riir-kat's
       # transitive), `../riir-kat`, `../riir-llm` (issue 124) and — since the
       # riir-infer carve (riir-ai Issue 998, 2026-09-22) — riir-ai's own
@@ -192,13 +203,14 @@ jobs:
         if: steps.siblings.outputs.available != 'true'
         run: |
           MSG="riir-refine cannot load its workspace without katopz/katgpt-rs \
-          (public, checked out above) and gist-rs/riir-ai + \
-          gist-rs/riir-neuron-db, gist-rs/riir-auth (riir-kat's transitive), \
-          gist-rs/riir-kat (issue 088), gist-rs/riir-llm (issue 124, the \
-          LLM-transport leaf), gist-rs/riir-infer (the 09-22 carve — \
-          riir-ai Issue 998; riir-ai's riir-engine/riir-gpu escape to it \
-          transitively). Set/renew SIBLING_REPOS_TOKEN \
-          (a fine-grained PAT expires ~90 days)."
+          (public, checked out above) and gist-rs/riir-reflexer (public, \
+          Plan 202 R4) and gist-rs/riir-ai + gist-rs/riir-neuron-db, \
+          gist-rs/riir-auth (riir-kat's transitive), gist-rs/riir-kat \
+          (issue 088), gist-rs/riir-llm (issue 124, the LLM-transport \
+          leaf), gist-rs/riir-infer (the 09-22 carve — riir-ai Issue 998; \
+          riir-ai's riir-engine/riir-gpu escape to it transitively). \
+          Set/renew SIBLING_REPOS_TOKEN (a fine-grained PAT expires \
+          ~90 days)."
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "::warning title=Feature guard SKIPPED::$MSG"
           else
